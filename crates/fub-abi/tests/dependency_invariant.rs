@@ -703,8 +703,8 @@ fn the_diagram_declares_the_real_dependencies() {
         "/../../",
         "docs/03-uml/03-componenti-e-dipendenze.md"
     );
-    let source =
-        std::fs::read_to_string(doc).unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
+    let source = std::fs::read_to_string(doc)
+        .unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));
     let drawn = read_diagram(&source);
 
     // 1. I riquadri sono i crate del workspace, tutti e soli.

@@ -65,11 +65,11 @@ use fub_abi::settings::SettingScope;
 use fub_abi::traits::{EntryKind, JobId, JobProgress, JobSpec};
 use fub_abi::PluginError;
 
+use crate::borrow::State;
 use crate::contract::fub::abi::{
     errors as w_errors, events as w_events, host_events, jobs as w_jobs, model as w_model,
     settings as w_settings,
 };
-use crate::borrow::State;
 use crate::translate as tr;
 
 // ---------------------------------------------------------------------------
@@ -197,7 +197,9 @@ fn from_event(and: w_events::Event) -> Result<Event, PluginError> {
                 Err(error) => Err(tr::from_error(error)),
             },
         },
-        W::Overflow(and) => Event::Overflow { dropped: and.dropped },
+        W::Overflow(and) => Event::Overflow {
+            dropped: and.dropped,
+        },
         W::Custom(and) => Event::Custom {
             topic: and.topic,
             payload: tr::from_json(&and.payload)?,

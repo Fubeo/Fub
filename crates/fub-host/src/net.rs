@@ -156,15 +156,15 @@ impl UreqNetwork {
             .unwrap_or(&self.agent);
         let mut response = match &request.body {
             Some(body) => {
-                let req = builder
-                    .body(&body[..])
-                    .map_err(|and| PluginError::BadArgs(format!("{}: {and}", request.url).into()))?;
+                let req = builder.body(&body[..]).map_err(|and| {
+                    PluginError::BadArgs(format!("{}: {and}", request.url).into())
+                })?;
                 agent.run(req).map_err(io)?
             }
             None => {
-                let req = builder
-                    .body(())
-                    .map_err(|and| PluginError::BadArgs(format!("{}: {and}", request.url).into()))?;
+                let req = builder.body(()).map_err(|and| {
+                    PluginError::BadArgs(format!("{}: {and}", request.url).into())
+                })?;
                 agent.run(req).map_err(io)?
             }
         };
@@ -172,7 +172,12 @@ impl UreqNetwork {
         let headers = response
             .headers()
             .iter()
-            .filter_map(|(name, value)| value.to_str().ok().map(|v| HttpHeader::new(name.as_str(), v)))
+            .filter_map(|(name, value)| {
+                value
+                    .to_str()
+                    .ok()
+                    .map(|v| HttpHeader::new(name.as_str(), v))
+            })
             .collect();
         let body = match cancelled {
             Some(flag) => {
@@ -190,7 +195,11 @@ impl UreqNetwork {
                 PluginError::Io(format!("{}: the response body could not be read (host ceiling is {MAX_BODY} bytes): {and}", request.url).into())
             })?,
         };
-        Ok(HttpResponse { status, headers, body })
+        Ok(HttpResponse {
+            status,
+            headers,
+            body,
+        })
     }
 }
 
@@ -205,7 +214,9 @@ impl HostNetwork for UreqNetwork {
         cancelled: &AtomicBool,
     ) -> Result<HttpResponse, PluginError> {
         if cancelled.load(Ordering::Relaxed) {
-            return Err(PluginError::Cancelled("the network request was cancelled".into()));
+            return Err(PluginError::Cancelled(
+                "the network request was cancelled".into(),
+            ));
         }
         match self.fetch_with(request, Some(cancelled)) {
             Err(_) if cancelled.load(Ordering::Relaxed) => Err(PluginError::Cancelled(

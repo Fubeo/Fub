@@ -583,7 +583,10 @@ const V_ENABLED_DESC: &str = "versioning.enabled.desc";
 /// Adesso la somma è una funzione, la chiamano il montaggio e il banco, e non
 /// ci sono due copie da far divergere. Una seconda feature a cui l'host debba
 /// aggiungere delle chiavi aggiunge **un ramo qui**, e le eredita tutt'e due.
-pub fn catalog_assembled(feature_id: &str, feature_catalog: Vec<StringCatalog>) -> Vec<StringCatalog> {
+pub fn catalog_assembled(
+    feature_id: &str,
+    feature_catalog: Vec<StringCatalog>,
+) -> Vec<StringCatalog> {
     match feature_id {
         #[cfg(feature = "versioning")]
         fub_features::VERSIONING_ID => [versioning_settings_catalog(), feature_catalog].concat(),
@@ -683,8 +686,7 @@ mod tests {
     use super::*;
 
     fn map(rows: &[(&str, &str)]) -> BTreeMap<String, String> {
-        rows
-            .iter()
+        rows.iter()
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect()
     }

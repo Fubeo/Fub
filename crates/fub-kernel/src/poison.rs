@@ -338,11 +338,7 @@ mod tests {
         assert_eq!(r.acquire().len(), 1);
         r.acquire().push("b".into());
         assert_eq!(r.acquire().len(), 2);
-        assert_eq!(
-            r.reports(),
-            1,
-            "one incident counts one, not one per call"
-        );
+        assert_eq!(r.reports(), 1, "one incident counts one, not one per call");
     }
 
     /// Il gemello su `RwLock`, e serve perché è **un altro tipo**: la 0120 ha
@@ -382,22 +378,14 @@ mod tests {
     #[test]
     fn reported_once_for_incident() {
         let r = Shelter::new(0u32);
-        assert_eq!(
-            r.unreported(),
-            0,
-            "no incidents means nothing to report"
-        );
+        assert_eq!(r.unreported(), 0, "no incidents means nothing to report");
         poison(|| {
             let _g = r.acquire();
             panic!("boom");
         });
         drop(r.acquire());
         assert_eq!(r.unreported(), 1);
-        assert_eq!(
-            r.unreported(),
-            0,
-            "reporting twice would be reporting two"
-        );
+        assert_eq!(r.unreported(), 0, "reporting twice would be reporting two");
         assert_eq!(r.reports(), 1, "the total count is not consumed");
     }
 
@@ -418,10 +406,7 @@ mod tests {
             })
         };
         c.change(|q| *q += 1);
-        assert_eq!(
-            waker.join().expect("the waiter reached the end"),
-            1
-        );
+        assert_eq!(waker.join().expect("the waiter reached the end"), 1);
         assert_eq!(c.reports(), 1);
     }
 
@@ -466,12 +451,10 @@ mod tests {
                 panic!("someone dies changing the state");
             });
         });
-        let seen = rx
-            .recv_timeout(std::time::Duration::from_secs(5))
-            .expect(
-                "nobody rang the bell: the waiter is stuck on a condition that
+        let seen = rx.recv_timeout(std::time::Duration::from_secs(5)).expect(
+            "nobody rang the bell: the waiter is stuck on a condition that
                  already changed, and will hang until the process dies",
-            );
+        );
         assert_eq!(seen, 1, "it sees the state as the panic left it");
         waker.join().expect("the waiter reached the end");
         assert_eq!(c.reports(), 1);

@@ -98,13 +98,13 @@ pub use format::{
 };
 pub use gate::Gate;
 pub use locale::{HourCycle, Locale, Weekday};
+pub use model::Payload;
 pub use model::{
-    Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter,
-    Heading, HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate,
-    PropertyScalar, PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
+    Anchor, Block, ColumnAlign, DateFormats, DateOrder, DocId, DocumentModel, Frontmatter, Heading,
+    HeadingSlugs, Inline, Link, LinkTarget, ListItem, ParsedWikilink, PropertyDate, PropertyScalar,
+    PropertyTime, PropertyValue, Span, TableCell, TableRow, Tag, TaskMarker,
 };
 pub use net::{HttpHeader, HttpMethod, HttpRequest, HttpResponse};
-pub use model::Payload;
 pub use options::{OptionMap, OptionStatus};
 pub use organization::Organization;
 pub use query::{

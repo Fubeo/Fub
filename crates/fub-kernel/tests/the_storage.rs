@@ -200,17 +200,11 @@ fn the_two_implementations_answer_alike() {
 
         // `remove_dir_all` scende, e il default composto dalle sette deve dare
         // lo stesso esito dell'implementazione nativa del filesystem.
-        storage
-            .write(&root.join("old/2026/c.md"), b"c")
-            .unwrap();
+        storage.write(&root.join("old/2026/c.md"), b"c").unwrap();
         storage
             .remove_dir_all(&root.join("old"))
             .unwrap_or_else(|and| panic!("{} — {and}", tag("remove_dir_all")));
-        assert!(
-            !storage.exists(&root.join("old")),
-            "{}",
-            tag("it is gone")
-        );
+        assert!(!storage.exists(&root.join("old")), "{}", tag("it is gone"));
         assert!(
             !storage.exists(&root.join("old/2026/c.md")),
             "{}",
@@ -413,7 +407,10 @@ fn a_full_vault_on_a_storage_that_is_not_the_disk() {
     assert!(trashed.as_str().starts_with(".trash/"));
     let entries = vault.list_trash().unwrap();
     assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0].original, renamed, "the sidecar knows where it came from");
+    assert_eq!(
+        entries[0].original, renamed,
+        "the sidecar knows where it came from"
+    );
 
     // Svuotare toglie le voci **e** i sidecar.
     assert_eq!(vault.empty_trash().unwrap(), 1);
@@ -488,6 +485,11 @@ const CALLERS: &[(&str, &str, &str)] = &[
         "PLUGIN",
         "the bench 0198/0168: attaches and reads the per-document space of a broken rename",
     ),
+    (
+        "crates/fub-kernel/tests/the_timers.rs",
+        "ACME",
+        "the timer bench: verifies the cursors survive under the authoritative plugin root (§31.8)",
+    ),
 ];
 
 /// Le cartelle in cui non si entra.
@@ -505,8 +507,8 @@ fn sources() -> BTreeMap<String, String> {
 }
 
 fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
-    let entries =
-        std::fs::read_dir(dir).unwrap_or_else(|and| panic!("`{}` is not readable: {and}", dir.display()));
+    let entries = std::fs::read_dir(dir)
+        .unwrap_or_else(|and| panic!("`{}` is not readable: {and}", dir.display()));
     for entry in entries {
         let entry = entry.unwrap_or_else(|and| panic!("inside `{}`: {and}", dir.display()));
         let name = entry

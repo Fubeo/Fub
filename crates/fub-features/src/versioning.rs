@@ -967,7 +967,11 @@ impl Drop for Batch<'_> {
     }
 }
 
-fn write_metadata(id: &DocId, doc: &DocVersions, host: &mut dyn HostApi) -> Result<(), PluginError> {
+fn write_metadata(
+    id: &DocId,
+    doc: &DocVersions,
+    host: &mut dyn HostApi,
+) -> Result<(), PluginError> {
     let metadata = Meta {
         doc_id: id.to_string(),
         deleted_at: doc.deleted_at,
@@ -1960,8 +1964,8 @@ impl CommandProvider for VersioningCommands {
         };
 
         if mode.is_dry_run() {
-            let plan = CommandPlan::of_edits(when_for(PLAN_RESTORE, ts), Vec::new())
-                .with_doc(doc.clone());
+            let plan =
+                CommandPlan::of_edits(when_for(PLAN_RESTORE, ts), Vec::new()).with_doc(doc.clone());
             return Ok(CommandOutcome::done().with_effect(CommandEffect::Plan(plan)));
         }
 
@@ -2332,9 +2336,9 @@ mod tests {
         // l'altro: due nella stessa ora, poi un mese di distanza, poi un anno.
         for (n, salto) in [
             0,
-            60_000,          // stessa ora
+            60_000,       // stessa ora
             27 * MS_DAY,  // un mese dopo
-            MS_HOUR,          // stesso giorno
+            MS_HOUR,      // stesso giorno
             335 * MS_DAY, // un anno dopo la prima
             3 * MS_DAY,   // e infine "adesso"
         ]

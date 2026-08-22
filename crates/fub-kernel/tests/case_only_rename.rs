@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::DocId;
-use fub_kernel::storage::{DirEntry, FsStorage, Merge, MemStorage, Stat, VaultStorage};
+use fub_kernel::storage::{DirEntry, FsStorage, MemStorage, Merge, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, KernelError, MachineSettings, Workspace};
 use fub_testkit::SampleText;
 
@@ -122,7 +122,11 @@ fn on_a_case_insensitive_fs_the_draft_follows_the_case_correction() {
         .expect("una maiuscola non è una collisione");
 
     let drafts = ws.drafts().expect("lette");
-    assert_eq!(drafts.drafts.len(), 1, "nessuna bozza si è persa per strada");
+    assert_eq!(
+        drafts.drafts.len(),
+        1,
+        "nessuna bozza si è persa per strada"
+    );
     assert_eq!(
         drafts.drafts[0].doc,
         doc("Nota.md"),

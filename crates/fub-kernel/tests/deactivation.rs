@@ -649,11 +649,7 @@ fn a_job_requested_during_closing_is_refused_immediately() {
     );
 
     let results = results.lock().unwrap();
-    assert_eq!(
-        results.len(),
-        2,
-        "both triggers received their answer"
-    );
+    assert_eq!(results.len(), 2, "both triggers received their answer");
     for result in results.iter() {
         assert!(
             matches!(result, PluginError::Cancelled(msg) if msg.to_string().contains("si sta chiudendo")),
@@ -670,7 +666,10 @@ fn a_job_requested_during_closing_is_refused_immediately() {
         .try_iter()
         .filter(|n| matches!(n.event, Event::JobStarted { .. }))
         .count();
-    assert_eq!(started, 0, "a job that does not start does not announce itself");
+    assert_eq!(
+        started, 0,
+        "a job that does not start does not announce itself"
+    );
 }
 
 /// La guardia è **della generazione del workspace**: chiudere e riaprire il
@@ -685,13 +684,14 @@ fn the_closing_guard_does_not_survive_a_reopen() {
     drop(before);
 
     let mut after = bench.workspace();
-    after.with_host("test.one", |host| {
-        host.spawn_job(JobSpec {
-            job: "after".into(),
-            payload: serde_json::Value::Null,
+    after
+        .with_host("test.one", |host| {
+            host.spawn_job(JobSpec {
+                job: "after".into(),
+                payload: serde_json::Value::Null,
+            })
         })
-    })
-    .expect("the reopen accepts jobs again");
+        .expect("the reopen accepts jobs again");
     let queued = after.take_pending_jobs();
     assert_eq!(
         queued.len(),

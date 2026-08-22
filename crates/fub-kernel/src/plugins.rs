@@ -273,7 +273,11 @@ impl PluginRegistry {
 
     /// Dichiara un plugin. Id già dichiarato → conflitto.
     pub fn declare(&mut self, manifest: PluginManifest, trust: Trust) -> Result<(), RegistryError> {
-        if self.entries.iter().any(|and| and.manifest.id == manifest.id) {
+        if self
+            .entries
+            .iter()
+            .any(|and| and.manifest.id == manifest.id)
+        {
             return Err(RegistryError::DuplicatePlugin(manifest.id));
         }
         let granted = Granted::new(&manifest.id, &manifest.permissions, trust);
@@ -312,7 +316,11 @@ impl PluginRegistry {
     /// chiave di un componente spento, e non è un errore — la chiave resta nel
     /// file e tornerà a valere quando il componente si riaccende.
     pub(crate) fn restrict(&mut self, plugin: &str, denied: &[String]) -> bool {
-        let Some(entry) = self.entries.iter_mut().find(|and| and.manifest.id == plugin) else {
+        let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|and| and.manifest.id == plugin)
+        else {
             return false;
         };
         let mut permissions = entry.manifest.permissions.clone();
@@ -353,7 +361,11 @@ impl PluginRegistry {
     pub fn owner_of(&self, kind: RegistrationKind, id: &str) -> Option<&str> {
         self.entries
             .iter()
-            .find(|and| and.registrations.iter().any(|r| r.kind == kind && r.id == id))
+            .find(|and| {
+                and.registrations
+                    .iter()
+                    .any(|r| r.kind == kind && r.id == id)
+            })
             .map(|and| and.manifest.id.as_str())
     }
 
@@ -546,7 +558,11 @@ impl PluginRegistry {
     /// Segna ciò che un plugin ha registrato. Da chiamare **dopo** che
     /// [`admit`](PluginRegistry::admit) è passata.
     pub fn record(&mut self, plugin: &str, kind: RegistrationKind, ids: &[String]) {
-        let Some(entry) = self.entries.iter_mut().find(|and| and.manifest.id == plugin) else {
+        let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|and| and.manifest.id == plugin)
+        else {
             return;
         };
         if ids.is_empty() {
@@ -572,7 +588,11 @@ impl PluginRegistry {
     /// elenco vuoto è una risposta — un provider che non offre più niente non
     /// lascia una riga di ricordo.
     pub fn resettle(&mut self, plugin: &str, kind: RegistrationKind, ids: &[String]) {
-        let Some(entry) = self.entries.iter_mut().find(|and| and.manifest.id == plugin) else {
+        let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|and| and.manifest.id == plugin)
+        else {
             return;
         };
         entry.registrations.retain(|r| r.kind != kind);
@@ -613,7 +633,10 @@ impl PluginRegistry {
     /// nel posto in cui si va a leggere cosa è attivo. Riaccendere passa dalla
     /// stessa porta della prima volta: `register_plugin`, e poi i `register_*`.
     pub fn retire(&mut self, plugin: &str) -> Option<PluginEntry> {
-        let at = self.entries.iter().position(|and| and.manifest.id == plugin)?;
+        let at = self
+            .entries
+            .iter()
+            .position(|and| and.manifest.id == plugin)?;
         Some(self.entries.remove(at))
     }
 

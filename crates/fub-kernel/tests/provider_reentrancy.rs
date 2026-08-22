@@ -109,8 +109,7 @@ fn vault() -> (tempfile::TempDir, Workspace) {
         .expect("no extension conflict");
     let mut ws = Workspace::new(&root, registry).expect("vault opens successfully");
     for plugin in ["recorder", "scrivente", "prova.plugin"] {
-        ws.register_core_feature(plugin, plugin)
-            .expect("declared");
+        ws.register_core_feature(plugin, plugin).expect("declared");
     }
     (dir, ws)
 }

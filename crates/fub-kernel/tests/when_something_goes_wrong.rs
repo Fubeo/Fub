@@ -102,8 +102,7 @@ impl Fixture {
             .expect("plain");
         let mut ws = Workspace::new(&self.root, registry).expect("the vault opens");
         for plugin in ["test.rejects", "test.fails"] {
-            ws.register_core_feature(plugin, plugin)
-                .expect("declared");
+            ws.register_core_feature(plugin, plugin).expect("declared");
         }
         ws
     }

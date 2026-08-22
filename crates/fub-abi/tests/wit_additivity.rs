@@ -534,7 +534,9 @@ fn breaks(base: &Contract, now: &Contract) -> Vec<String> {
 fn frozen() -> Vec<(Version, Contract)> {
     let dir = std::path::Path::new(FROZEN_DIR);
     let entries = std::fs::read_dir(dir).unwrap_or_else(|and| {
-        panic!("{FROZEN_DIR} non è leggibile: {and} — la linea di base del contratto non è opzionale")
+        panic!(
+            "{FROZEN_DIR} non è leggibile: {and} — la linea di base del contratto non è opzionale"
+        )
     });
 
     let mut out = Vec::new();
@@ -874,7 +876,7 @@ fn every_form_of_breakage_turns_red() {
     }
 }
 
-            // che serve.
+// che serve.
 /// L'altra metà: ciò che è davvero un'aggiunta deve passare, o il presidio
 #[test]
 fn additions_at_the_end_pass() {
@@ -911,7 +913,7 @@ fn additions_at_the_end_pass() {
         (
             "un tipo nuovo",
             Box::new(|c: &mut Contract| {
-// blocca il lavoro che il §1 del piano deve poter fare.
+                // blocca il lavoro che il §1 del piano deve poter fare.
                 // Un tipo che il contratto NON ha (il §13.1 lo prevede): il
                 // segnaposto precedente era `property-value`, che nel frattempo
                 c.types
@@ -919,7 +921,7 @@ fn additions_at_the_end_pass() {
             }),
         ),
         (
-                // è nato davvero — e un tipo che esiste non è un'aggiunta.
+            // è nato davvero — e un tipo che esiste non è un'aggiunta.
             // Il gemello del caso rosso qui sopra, ed è la coppia che dice
             // dov'è il taglio: la STESSA aggiunta è additiva sull'interfaccia
             // che il plugin importa e rotta su quella che esporta. Chi importa

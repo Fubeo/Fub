@@ -160,7 +160,7 @@ const CEILING: usize = 10_000;
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 enum Mutation<E = BTreeMap<DocId, StoredEntry>> {
-/// `Snapshot { entries: &tabella }` senza copiare la tabella intera.
+    /// `Snapshot { entries: &tabella }` senza copiare la tabella intera.
     /// Una voce nuova o cambiata: si mette al suo posto, coprendo ciò che c'era.
     /// Il payload sta in un `Box` perché chi porta solo un `Remove` non deve
     /// pagare il posto di [`StoredEntry`] — e serde lo attraversa, quindi
@@ -172,7 +172,7 @@ enum Mutation<E = BTreeMap<DocId, StoredEntry>> {
     Snapshot { entries: E },
 }
 
-    /// della compattazione, e il primo record di un file che nasce.
+/// della compattazione, e il primo record di un file che nasce.
 /// Un record del file: la versione di schema e la mutazione.
 ///
 /// Generico come [`Mutazione`], per la stessa ragione: la compattazione
@@ -197,7 +197,7 @@ pub(crate) struct StoredMeta {
     pub(crate) outline: Vec<Heading>,
     #[serde(default)]
     pub(crate) links: Vec<Link>,
-/// vorrebbe dire scrivere l'intero vault una seconda volta accanto a sé stesso.
+    /// vorrebbe dire scrivere l'intero vault una seconda volta accanto a sé stesso.
     /// Le ancore di blocco (`^abc`), con lo span del blocco che le porta.
     ///
     /// Portano uno span come gli [`Heading`] dell'outline, e per la stessa
@@ -222,14 +222,14 @@ pub(crate) struct StoredMeta {
     pub(crate) tags: Vec<String>,
 }
 
-    /// span inventato sarebbe un dato falso scritto su disco.
+/// span inventato sarebbe un dato falso scritto su disco.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct StoredEntry {
     pub(crate) size: u64,
     pub(crate) mtime: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) fingerprint: Option<Revision>,
-/// Una voce come sta sul file.
+    /// Una voce come sta sul file.
     /// Assente per ciò che non è un documento: un PNG non ha un modello, e
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) metadata: Option<StoredMeta>,
@@ -246,9 +246,9 @@ impl StoredEntry {
     }
 }
 
-    /// lunghezza), la data da sola cambia anche quando il contenuto non cambia.
+/// lunghezza), la data da sola cambia anche quando il contenuto non cambia.
 pub(crate) struct EntryStore {
-/// Ciò che il kernel sapeva del vault l'ultima volta.
+    /// Ciò che il kernel sapeva del vault l'ultima volta.
     /// Dove sta il file. **Non** è opzionale come per la configurazione o
     /// l'organizzazione, che in memoria ci vanno davvero: qui una tabella senza
     /// disco è una tabella che non sa mai niente, cioè il comportamento di
@@ -349,7 +349,7 @@ impl EntryStore {
         let mut written = None;
         let mut known = self.known.write().map_err(|and| and.to_string())?;
         known.update(|| {
-    // lucchetto, e quelli non si buttano.
+            // lucchetto, e quelli non si buttano.
             // La coda che c'è adesso, e la tabella che ne esce. `None` per un
             // file che non c'è o che non è una coda nostra (v3, rotto): in
             // quel caso non c'è un diff da fare, c'è una fotografia da
@@ -361,7 +361,7 @@ impl EntryStore {
             }
             match &old {
                 Some(old) if table == *old => {
-            // scrivere.
+                    // scrivere.
                     // **Una tabella che il disco ha già non si riscrive.** Da
                     // quando l'anagrafe si scrive anche alla chiusura del
                     // vault, chi apre e chiude senza toccare niente passa di
@@ -507,10 +507,7 @@ fn count_records(raw: &[u8]) -> usize {
 /// È ciò che si appende, e la sua lunghezza è il costo di un salvataggio —
 /// non la dimensione della tabella (difetto 0112).
 /// Le righe dei record, ognuna auto-delimitante (`\n{…}\n`): chi appende dopo
-fn diff(
-    new: &BTreeMap<DocId, StoredEntry>,
-    old: &BTreeMap<DocId, StoredEntry>,
-) -> Vec<Mutation> {
+fn diff(new: &BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEntry>) -> Vec<Mutation> {
     let mut mutations = Vec::new();
     for (id, entry) in new {
         match old.get(id) {
@@ -555,8 +552,8 @@ fn serialize(mutations: &[Mutation]) -> Vec<u8> {
 /// lettura e il lucchetto, e quelli non si buttano — e una coda illeggibile non
 /// deve diventare uno snapshot vuoto. `scritta` riceve ciò che la fusione ha
 /// prodotto, perché la memoria adotti la tabella che il disco ha accettato.
-            // Il record si delimita da sé, come ogni riga del file: il `\n` in
-            // testa è ciò che [`decodifica`] usa per riconoscere una coda
+// Il record si delimita da sé, come ogni riga del file: il `\n` in
+// testa è ciò che [`decodifica`] usa per riconoscere una coda
 fn compact(
     path: &Utf8Path,
     storage: &dyn VaultStorage,
@@ -573,15 +570,15 @@ fn compact(
             let mut json = serde_json::to_vec(&record).map_err(std::io::Error::other)?;
             // nostra, e chi appenderà dopo di noi non deve sapere come siamo
             // finiti.
-        // Le cartelle mancanti le crea il supporto, che è dove quella riga sta
-        // scritta una volta sola (§15.1).
+            // Le cartelle mancanti le crea il supporto, che è dove quella riga sta
+            // scritta una volta sola (§15.1).
             json.insert(0, b'\n');
             json.push(b'\n');
             written.replace(table);
             Ok(Some(json))
         })
-// Legge la tabella.
-//
+        // Legge la tabella.
+        //
         .map_err(|and| format!("cannot write {path}: {and}"))
 }
 
@@ -594,8 +591,8 @@ fn compact(
 /// Qui non c'è più nessun vaglio *racily clean*, e non perché la regola sia
 /// caduta: è stata spostata dove si osserva, cioè al momento in cui una voce
 /// entra in anagrafe (difetto 0187). Ciò che è scritto qui è già passato di lì.
-    /// Un supporto che **conta come l'anagrafe passa dal disco**: le `append`
-    /// (le mutazioni incrementali) da una parte, le riscritture integrali —
+/// Un supporto che **conta come l'anagrafe passa dal disco**: le `append`
+/// (le mutazioni incrementali) da una parte, le riscritture integrali —
 fn load(path: &Utf8Path, storage: &dyn VaultStorage) -> Option<BTreeMap<DocId, StoredEntry>> {
     decode(&storage.read(path).ok()?)
 }
@@ -625,8 +622,8 @@ mod tests {
     /// la stessa cucitura di `SupportoCheConta`
     /// (`l_anagrafe_si_chiude_con_il_vault.rs`) stretta sulla domanda del
     /// difetto 0112.
-        /// La compattazione passa di qui e non dalla `write`, perché si fonde
-        /// con ciò che sul disco c'è adesso: a contare è la fusione che
+    /// La compattazione passa di qui e non dalla `write`, perché si fonde
+    /// con ciò che sul disco c'è adesso: a contare è la fusione che
     struct CountingBackingStore {
         inner: crate::storage::MemStorage,
         entry_store_appends: Arc<AtomicUsize>,
@@ -649,15 +646,14 @@ mod tests {
         }
         fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<crate::storage::Stat> {
             if path.as_str().ends_with("entries.json") {
-                self.entry_store_rewrites
-                    .fetch_add(1, Ordering::Relaxed);
+                self.entry_store_rewrites.fetch_add(1, Ordering::Relaxed);
             }
             self.inner.write(path, bytes)
         }
         /// risponde con dei byte, cioè il file che cambia davvero — un
         /// aggiornamento che risponde «non scrivo» non è una scrittura.
-    /// **Chi chiude per secondo non butta ciò che chi ha chiuso per primo aveva
-    /// letto** (difetto 0189).
+        /// **Chi chiude per secondo non butta ciò che chi ha chiuso per primo aveva
+        /// letto** (difetto 0189).
         fn update(
             &self,
             path: &Utf8Path,
@@ -732,17 +728,17 @@ mod tests {
     /// seconda no, e la seconda chiude dopo; senza la fusione la sua fotografia
     /// povera copre quella ricca e la riapertura successiva rilegge e riparsa
     /// l'intero vault — cioè la cosa che questa tabella esiste per non fare.
-        // La seconda installazione apre **prima** che la prima abbia scritto:
-        // ciò che scriverà alla chiusura è tutto ciò che sa, e non sa niente.
+    // La seconda installazione apre **prima** che la prima abbia scritto:
+    // ciò che scriverà alla chiusura è tutto ciò che sa, e non sa niente.
     #[test]
     fn second_closer_does_not_discard_footprints_of_the_first_reader() {
         let (_tmp, root) = tempdir();
         let fs = || Arc::new(crate::storage::FsStorage);
         let fingerprint = Revision::new("0123456789abcdef");
 
-                // Stesso file, stessa dimensione, stessa data: l'impronta che
-                // non ha è ancora buona.
-                // Lo stesso nome, ma il disco l'ha smentita: qui l'impronta
+        // Stesso file, stessa dimensione, stessa data: l'impronta che
+        // non ha è ancora buona.
+        // Lo stesso nome, ma il disco l'ha smentita: qui l'impronta
         let second = EntryStore::open(&root, fs());
 
         let first = EntryStore::open(&root, fs());
@@ -769,10 +765,10 @@ mod tests {
         second
             .store(BTreeMap::from([
                 // vecchia sarebbe una bugia scritta su disco.
-        // È la differenza con l'organizzazione (§11.3), che un file rotto lo
+                // È la differenza con l'organizzazione (§11.3), che un file rotto lo
                 (DocId::new("read.md"), entry(3, 1_000)),
-        // protegge: quello è autorevole, questo si rifà camminando il vault.
-    // **Una scrittura che non è avvenuta non si ricorda.**
+                // protegge: quello è autorevole, questo si rifà camminando il vault.
+                // **Una scrittura che non è avvenuta non si ricorda.**
                 (DocId::new("changed.md"), entry(4, 1_100)),
             ]))
             .expect("the second closes second, and it read nothing");
@@ -815,9 +811,9 @@ mod tests {
 
     #[test]
     fn an_unreadable_table_is_not_a_warning_and_does_not_block_anything() {
-    //
-    // Il guasto non si aspetta, si inietta, e qui non serve nemmeno un
-    // supporto finto: `.fub/data` è un **file** invece che una cartella, cioè
+        //
+        // Il guasto non si aspetta, si inietta, e qui non serve nemmeno un
+        // supporto finto: `.fub/data` è un **file** invece che una cartella, cioè
         let (_tmp, root) = tempdir();
         let path = data_root(&root).join(FILE);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -925,8 +921,8 @@ mod tests {
     /// cambiata su mille — dev'essere **un'append sola e zero riscritture**.
     /// Con il formato di prima il banco è rosso: la seconda scrittura è una
     /// riscrittura integrale, e il conto delle append resta a zero.
-        // E la coda si rilegge: chi riapre vede la voce cambiata e le altre
-        // novecentonovantanove ferme.
+    // E la coda si rilegge: chi riapre vede la voce cambiata e le altre
+    // novecentonovantanove ferme.
     /// **Una coda troncata non fa rifiutare il resto** (§15.7): la riga rotta
     /// in coda si scarta, e ciò che viene prima si legge tutto. È la promessa
     #[test]
@@ -936,7 +932,12 @@ mod tests {
         let store = EntryStore::open(root, Arc::clone(&storage) as Arc<dyn VaultStorage>);
 
         let thousand: BTreeMap<_, _> = (0..1_000)
-            .map(|the| (DocId::new(format!("note{the:04}.md")), entry(the as u64, 1_000)))
+            .map(|the| {
+                (
+                    DocId::new(format!("note{the:04}.md")),
+                    entry(the as u64, 1_000),
+                )
+            })
             .collect();
         store
             .store(thousand.clone())
@@ -961,8 +962,8 @@ mod tests {
              write did not rewrite the table"
         );
 
-    // che rende sicuro l'append senza atomicità — un crash a metà aggiunta
-    // lascia una riga rotta, non una tabella persa.
+        // che rende sicuro l'append senza atomicità — un crash a metà aggiunta
+        // lascia una riga rotta, non una tabella persa.
         let reread = EntryStore::open(root, storage as Arc<dyn VaultStorage>);
         assert!(
             reread
@@ -998,7 +999,10 @@ mod tests {
         raw.extend_from_slice(
             b"\n{\"v\":4,\"op\":\"upsert\",\"id\":\"b.md\",\"entry\":{\"size\":2,\"mtime\":20}",
         );
-        storage.inner.write(&path, &raw).expect("the mid-crash state");
+        storage
+            .inner
+            .write(&path, &raw)
+            .expect("the mid-crash state");
 
         let reread = EntryStore::open(root, storage as Arc<dyn VaultStorage>);
         assert!(

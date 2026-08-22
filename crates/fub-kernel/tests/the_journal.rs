@@ -420,11 +420,7 @@ fn the_journal_does_not_carry_the_document_inside() {
         .write_document(&id, secret, WriteBase::Dictated)
         .unwrap();
     bench
-        .write_document(
-            &id,
-            &format!("{secret} and then more"),
-            WriteBase::Dictated,
-        )
+        .write_document(&id, &format!("{secret} and then more"), WriteBase::Dictated)
         .unwrap();
     let base = bench.document_revision(&id).unwrap();
     bench
@@ -644,8 +640,7 @@ fn body<'a>(source: &'a str, block: &str, sig: &str) -> &'a str {
         .split_once(sig)
         .unwrap_or_else(|| panic!("signature `{sig}` no longer exists: the guard judges nothing"))
         .1;
-    body
-        .split_once("\n    }")
+    body.split_once("\n    }")
         .expect("a function closes at its indentation")
         .0
 }
@@ -653,8 +648,7 @@ fn body<'a>(source: &'a str, block: &str, sig: &str) -> &'a str {
 /// Il testo di un commento senza i `//` e senza gli a capo: così una frase si
 /// cerca per quello che dice, e non per come `rustfmt` l'ha spezzata.
 fn flat(code: &str) -> String {
-    code
-        .lines()
+    code.lines()
         .map(str::trim)
         .filter_map(|the| the.strip_prefix("//"))
         .collect::<Vec<_>>()

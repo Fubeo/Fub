@@ -31,17 +31,15 @@
 
 #![deny(missing_docs)]
 
+mod borrow;
 mod component;
 mod events;
+mod guest;
 mod limits;
 mod model;
-mod guest;
-mod borrow;
 mod translate;
 
-pub use component::{
-    Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin,
-};
+pub use component::{Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin};
 
 /// I binding **lato host** di `plugin-world`, generati dal contratto.
 ///

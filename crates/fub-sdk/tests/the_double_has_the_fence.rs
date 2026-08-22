@@ -118,7 +118,8 @@ fn a_name_born_in_the_double_is_portable_like_in_the_real_host() {
 #[test]
 fn the_doubles_restore_asks_the_trash_and_the_fence() {
     let mut host = MemoryHost::default();
-    host.create_document(&DocId::new("Idea.md"), "an idea").unwrap();
+    host.create_document(&DocId::new("Idea.md"), "an idea")
+        .unwrap();
     let trashed = host.trash_document(&DocId::new("Idea.md")).unwrap();
 
     must_refuse(

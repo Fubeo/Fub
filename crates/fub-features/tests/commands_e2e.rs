@@ -1219,10 +1219,7 @@ fn an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying() {
         .expect("importa ciò che può");
 
     let message = outcome.notify.expect("dice com'è andata");
-    assert!(
-        message.to_string().contains("applicate: 1"),
-        "{message}"
-    );
+    assert!(message.to_string().contains("applicate: 1"), "{message}");
     assert!(
         message.to_string().contains("privacy.telemetry"),
         "{message}"

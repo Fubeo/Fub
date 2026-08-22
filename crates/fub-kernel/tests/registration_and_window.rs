@@ -48,7 +48,7 @@ impl ViewProvider for Counter {
 
     fn views(&self) -> Vec<ViewSpec> {
         *self.views.lock().unwrap() += 1;
-    // una volta sola.
+        // una volta sola.
         let mut all = vec![Counter::spec("prova.view")];
         if *self.second.lock().unwrap() {
             all.push(Counter::spec("prova.altra"));
@@ -128,7 +128,7 @@ fn workspace(docs: &[&str]) -> (tempfile::TempDir, Workspace) {
     let mut registry = FormatRegistry::new();
     registry.register(Box::new(Text)).expect("registration");
     let mut ws = Workspace::new(&root, registry).expect("vault opens successfully");
-// --- un formato finto, per avere dei documenti ------------------------------
+    // --- un formato finto, per avere dei documenti ------------------------------
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     ws.register_core_feature("prova", "prova")
         .expect("declared");
@@ -136,7 +136,7 @@ fn workspace(docs: &[&str]) -> (tempfile::TempDir, Workspace) {
     (dir, ws)
 }
 
-    // kernel non presta capacità a una stringa.
+// kernel non presta capacità a una stringa.
 /// Le spec si chiedono **una volta**, alla registrazione.
 ///
 /// Prima `view_owner` interrogava ogni provider registrato per risolvere un id,
@@ -204,7 +204,7 @@ fn a_provider_that_changes_its_mind_declares_it() {
     ws.register_view_provider("prova", Box::new(provider))
         .expect("registered");
 
-// registrazione», ed è ciò che impedisce alla verità di stare in due posti.
+    // registrazione», ed è ciò che impedisce alla verità di stare in due posti.
     assert_eq!(
         ws.views().len(),
         1,

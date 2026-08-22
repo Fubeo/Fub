@@ -144,10 +144,7 @@ fn the_spec_of_a_component_are_in_the_record() {
         let count = &rich.params[0];
         assert_eq!(count.name, "quante");
         assert_eq!(count.kind, ParamKind::Number);
-        assert!(
-            count.required,
-            "è obbligatorio, e il kernel lo farà valere"
-        );
+        assert!(count.required, "è obbligatorio, e il kernel lo farà valere");
 
         let style = &rich.params[1];
         assert_eq!(style.name, "stile");
@@ -233,8 +230,7 @@ fn lstatus_complete_of_a_component_returns_whole() {
         panic!("l'effetto è un piano: {:?}", status.effect);
     };
     assert!(
-        plan
-            .summary
+        plan.summary
             .as_literal()
             .is_some_and(|s| s.starts_with("3 cose")),
         "il riassunto ha visto l'argomento: {:?}",

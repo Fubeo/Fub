@@ -53,10 +53,7 @@ impl std::fmt::Display for RendererConflict {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RendererConflict::UnnamespacedId(id) => {
-                write!(
-                    f,
-                    "renderer `{id}` has no namespace (requires `ns:name`)"
-                )
+                write!(f, "renderer `{id}` has no namespace (requires `ns:name`)")
             }
             RendererConflict::DuplicateId(id) => write!(f, "renderer `{id}` is already registered"),
             RendererConflict::NoKinds(id) => {

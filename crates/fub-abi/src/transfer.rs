@@ -1040,11 +1040,7 @@ mod tests {
         // qui non ci sarebbe niente da guardare e un dispatch potrebbe solo
         // fidarsi del nome — che è ciò che la 0006 dichiara insufficiente.
         assert_eq!(source.prologue(), b"PK\x03\x04");
-        assert_eq!(
-            source.len(),
-            bytes.len() as u64,
-            "length is the real one"
-        );
+        assert_eq!(source.len(), bytes.len() as u64, "length is the real one");
         assert!(
             source.bytes().is_none(),
             "bytes are not in the record: asking for them without a host must \

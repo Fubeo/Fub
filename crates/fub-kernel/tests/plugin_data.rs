@@ -92,8 +92,14 @@ fn cache_blobs_use_the_derived_root_without_mixing_authoritative_data() {
     ws.with_host("prova.plugin", |host| {
         host.data_write("authoritative.json", b"keep").unwrap();
         host.cache_write("index.json", b"rebuildable").unwrap();
-        assert_eq!(host.data_read("authoritative.json").unwrap().as_deref(), Some(&b"keep"[..]));
-        assert_eq!(host.cache_read("index.json").unwrap().as_deref(), Some(&b"rebuildable"[..]));
+        assert_eq!(
+            host.data_read("authoritative.json").unwrap().as_deref(),
+            Some(&b"keep"[..])
+        );
+        assert_eq!(
+            host.cache_read("index.json").unwrap().as_deref(),
+            Some(&b"rebuildable"[..])
+        );
         assert_eq!(
             host.data_read("index.json").unwrap(),
             None,
@@ -102,10 +108,15 @@ fn cache_blobs_use_the_derived_root_without_mixing_authoritative_data() {
         assert_eq!(host.cache_read("authoritative.json").unwrap(), None);
     });
 
-    assert!(root.join(".fub/plugins/prova.plugin/authoritative.json").exists());
-    assert!(root.join(".fub/data/plugins/prova.plugin/index.json").exists());
+    assert!(root
+        .join(".fub/plugins/prova.plugin/authoritative.json")
+        .exists());
+    assert!(root
+        .join(".fub/data/plugins/prova.plugin/index.json")
+        .exists());
     assert!(
-        root.join(".fub/data/plugins/prova.plugin/.fub-cache-root").exists(),
+        root.join(".fub/data/plugins/prova.plugin/.fub-cache-root")
+            .exists(),
         "a cache write marks the derived root so data_* cannot mistake it for legacy data"
     );
 }
@@ -136,8 +147,12 @@ fn a_cache_write_on_a_plugin_without_data_is_not_authoritative() {
         !root.join(".fub/plugins/prova.plugin").exists(),
         "cache-first does not invent a canonical tree"
     );
-    assert!(root.join(".fub/data/plugins/prova.plugin/index.json").exists());
-    assert!(root.join(".fub/data/plugins/prova.plugin/.fub-cache-root").exists());
+    assert!(root
+        .join(".fub/data/plugins/prova.plugin/index.json")
+        .exists());
+    assert!(root
+        .join(".fub/data/plugins/prova.plugin/.fub-cache-root")
+        .exists());
 }
 
 #[test]
@@ -156,15 +171,23 @@ fn a_cache_write_migrates_legacy_data_before_creating_cache() {
             "legacy bytes move to the canonical root before cache is written"
         );
         assert_eq!(host.data_read("index.json").unwrap(), None);
-        assert_eq!(host.cache_read("index.json").unwrap().as_deref(), Some(&b"rebuildable"[..]));
+        assert_eq!(
+            host.cache_read("index.json").unwrap().as_deref(),
+            Some(&b"rebuildable"[..])
+        );
     });
 
     assert_eq!(
         std::fs::read(root.join(".fub/plugins/prova.plugin/old.json")).unwrap(),
         b"legacy"
     );
-    assert!(!legacy.exists(), "the old tree is no longer a second source");
-    assert!(root.join(".fub/data/plugins/prova.plugin/.fub-cache-root").exists());
+    assert!(
+        !legacy.exists(),
+        "the old tree is no longer a second source"
+    );
+    assert!(root
+        .join(".fub/data/plugins/prova.plugin/.fub-cache-root")
+        .exists());
 }
 
 #[test]
@@ -176,17 +199,26 @@ fn removing_canonical_data_does_not_reveal_a_cache_copy() {
     ws.with_host("prova.plugin", |host| {
         host.data_write("shared.json", b"authoritative").unwrap();
         host.cache_write("shared.json", b"derived").unwrap();
-        assert_eq!(host.data_read("shared.json").unwrap().as_deref(), Some(&b"authoritative"[..]));
+        assert_eq!(
+            host.data_read("shared.json").unwrap().as_deref(),
+            Some(&b"authoritative"[..])
+        );
         host.data_remove("shared.json").unwrap();
         assert_eq!(
             host.data_read("shared.json").unwrap(),
             None,
             "removing visible data does not fall back to the cache tree"
         );
-        assert_eq!(host.cache_read("shared.json").unwrap().as_deref(), Some(&b"derived"[..]));
+        assert_eq!(
+            host.cache_read("shared.json").unwrap().as_deref(),
+            Some(&b"derived"[..])
+        );
     });
 
-    assert!(cache.exists(), "the cache copy remains available only through cache_*");
+    assert!(
+        cache.exists(),
+        "the cache copy remains available only through cache_*"
+    );
 }
 
 #[test]
@@ -194,10 +226,7 @@ fn kernel_cache_rejects_an_empty_path() {
     let mut ws = vault();
 
     ws.with_host("prova.plugin", |host| {
-        assert!(matches!(
-            host.cache_read(""),
-            Err(PluginError::BadArgs(_))
-        ));
+        assert!(matches!(host.cache_read(""), Err(PluginError::BadArgs(_))));
         assert!(matches!(
             host.cache_write("", b"nothing"),
             Err(PluginError::BadArgs(_))
@@ -214,8 +243,14 @@ fn an_old_plugin_data_root_remains_readable_without_migration() {
     std::fs::write(&legacy, b"legacy").unwrap();
 
     ws.with_host("prova.plugin", |host| {
-        assert_eq!(host.data_read("old.json").unwrap().as_deref(), Some(&b"legacy"[..]));
-        assert!(host.data_list("").unwrap().contains(&"old.json".to_string()));
+        assert_eq!(
+            host.data_read("old.json").unwrap().as_deref(),
+            Some(&b"legacy"[..])
+        );
+        assert!(host
+            .data_list("")
+            .unwrap()
+            .contains(&"old.json".to_string()));
         host.data_write("new.json", b"new").unwrap();
     });
 
@@ -333,8 +368,7 @@ fn a_plugin_can_look_around_the_vault_not_only_react_to_events() {
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["prova.plugin", "uno", "due"] {
-        ws.register_core_feature(plugin, plugin)
-            .expect("declared");
+        ws.register_core_feature(plugin, plugin).expect("declared");
     }
     ws.reindex().unwrap();
 

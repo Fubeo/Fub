@@ -310,7 +310,9 @@ fn every_language_of_the_core_says_the_same_things() {
                 acc
             });
         let mut languages = for_language.values();
-        let Some(before) = languages.next() else { continue };
+        let Some(before) = languages.next() else {
+            continue;
+        };
         for other in languages {
             let difference: Vec<_> = before.symmetric_difference(other).collect();
             assert!(

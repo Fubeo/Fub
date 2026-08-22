@@ -582,11 +582,13 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       el.style.height = `${node.height}px`;
       el.setAttribute("sandbox", "allow-scripts");
       // Un `<iframe>` senza `title` è, per chi lo incontra navigando, «frame»
-      // e basta — e non c'è modo di sapere se valga la pena entrarci. Il
-      // contratto non porta un titolo per questo nodo, quindi il meglio che si
-      // possa dire è l'indirizzo: è poco, ed è comunque l'unica cosa vera che
-      // la shell sappia. Un titolo vero è roba del contratto, non di qui.
-      el.setAttribute("aria-label", node.url);
+      // e basta — e non c'è modo di sapere se valga la pena entrarci. Per un
+      // frame il nome accessibile è il `title`, e solo lui: un `aria-label`
+      // l'audit non lo legge. Il contratto non porta un titolo per questo nodo,
+      // quindi il meglio che si possa dire è l'indirizzo: è poco, ed è comunque
+      // l'unica cosa vera che la shell sappia. Un titolo vero è roba del
+      // contratto, non di qui.
+      el.title = node.url;
       return el;
     }
     case "section": {

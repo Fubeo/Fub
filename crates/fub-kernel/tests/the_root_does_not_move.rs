@@ -47,10 +47,7 @@ impl AnnotatingStorage {
     }
 
     fn annotate(&self, path: &Utf8Path) {
-        self.seen
-            .lock()
-            .expect("annotations")
-            .push(path.to_owned());
+        self.seen.lock().expect("annotations").push(path.to_owned());
     }
 }
 
@@ -125,8 +122,7 @@ fn expected() -> Utf8PathBuf {
 /// ricetta invece di una cartella.
 #[test]
 fn a_vault_on_a_relative_name_keeps_an_absolute_root() {
-    let vault =
-        Vault::on(RELATIVE, Arc::new(MemStorage::new())).expect("the vault opens");
+    let vault = Vault::on(RELATIVE, Arc::new(MemStorage::new())).expect("the vault opens");
     assert!(
         vault.root().is_absolute(),
         "the root stayed relative: {}",

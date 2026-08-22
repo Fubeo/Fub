@@ -227,9 +227,8 @@ impl OrganizationStore {
         let mut changed = false;
         let mut icon_collision = false;
         self.update(|org| {
-            icon_collision = from != to
-                && org.icons.contains_key(from)
-                && org.icons.contains_key(to);
+            icon_collision =
+                from != to && org.icons.contains_key(from) && org.icons.contains_key(to);
             changed = migrate(org, from, to);
         })?;
         if icon_collision {
@@ -298,7 +297,8 @@ impl OrganizationStore {
         // il file non c'è: vedi il § in testa a `fondi`.
         let in_memory = (**data).clone();
         let mut pruned = Vec::new();
-        let outcome = data.update(|| merge_entries(storage.as_ref(), path, &in_memory, &mut pruned, f));
+        let outcome =
+            data.update(|| merge_entries(storage.as_ref(), path, &in_memory, &mut pruned, f));
         // Il file può essere stato riscritto a mano *dopo* l'apertura: la
         // fusione rilegge, e ciò che il recinto scarta lo si dice adesso.
         if let Some(warning) = notice_pruned(path, pruned) {

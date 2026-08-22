@@ -109,7 +109,7 @@ const MEMORY_CEILING: usize = 64 * 1024 * 1024;
 
 // Il motore, e il suo battito
 // ---------------------------------------------------------------------------
-/// L'`Engine` del processo. Nasce alla prima [`engine`] e non muore più.
+// L'`Engine` del processo. Nasce alla prima [`engine`] e non muore più.
 
 /// L'`Engine` con cui si compila ogni componente.
 static ENGINE: OnceLock<Engine> = OnceLock::new();

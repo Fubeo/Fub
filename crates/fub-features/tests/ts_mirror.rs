@@ -609,7 +609,7 @@ fn command_outcome_samples() -> Vec<Value> {
     }
     samples.push(to_value(CommandOutcome::notify("fatto").undoable(Undo {
         label: "la creazione di «a.md»".into(),
-        steps: steps,
+        steps,
     })));
     // Un esito **a metà** (§23.14), con le due specie di guasto: quello che ha
     // un documento da nominare e quello che non ce l'ha. Come per `undo` qui

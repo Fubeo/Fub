@@ -144,7 +144,7 @@ fn two_titles_different_not_end_on_the_same_id() {
 /// motivo per cui il difetto non si vedeva come link rotto — copriva il primo.
 /// Qui si prova il ramo dello slug **da solo**, con un titolo che il secondo
 /// ramo non aggancia perché il testo non è quello cercato.
-    // `Café Nero` cercato come slug (`café-nero`) non è il testo del titolo:
+// `Café Nero` cercato come slug (`café-nero`) non è il testo del titolo:
 #[test]
 fn the_slug_branch_hooks_too() {
     let heading = |text: &str| Heading {

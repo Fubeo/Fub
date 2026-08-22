@@ -155,10 +155,7 @@ fn an_unstable_file_is_not_swallowed_even_under_exclusive_borrow() {
     let mut ws =
         Workspace::on(&root, registry(), storage, MachineSettings::in_memory()).expect("open");
     let changed = ws.sync_path(&notes).expect("sync");
-    assert!(
-        !changed,
-        "an unstable file is not a change to apply"
-    );
+    assert!(!changed, "an unstable file is not a change to apply");
 }
 
 /// Il caso fermo: due `stat` uguali, il piano c'è, e i byte sono quelli.

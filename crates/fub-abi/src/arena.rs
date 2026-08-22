@@ -113,7 +113,8 @@ fn cycle(arena: &str, index: u32) -> ArenaError {
 /// un'arena con più di 4 miliardi di nodi non sarebbe esprimibile — e nemmeno
 /// costruibile, visto che ogni nodo occupa decine di byte.
 fn next_index(len: usize) -> u32 {
-    u32::try_from(len).expect("an arena with more than 2^32 nodes is not expressible in the contract")
+    u32::try_from(len)
+        .expect("an arena with more than 2^32 nodes is not expressible in the contract")
 }
 
 // ---------------------------------------------------------------------------
@@ -902,7 +903,10 @@ fn tree_push_inline(tree: &mut DocumentTree, the: &model::Inline) -> InlineRef {
 }
 
 fn tree_push_inlines(tree: &mut DocumentTree, inlines: &[model::Inline]) -> Vec<InlineRef> {
-    inlines.iter().map(|the| tree_push_inline(tree, the)).collect()
+    inlines
+        .iter()
+        .map(|the| tree_push_inline(tree, the))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

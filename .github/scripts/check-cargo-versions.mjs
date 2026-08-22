@@ -40,7 +40,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { workspaceCrates } from "./workspace-members.mjs";
+import { crateDelWorkspace } from "./workspace-members.mjs";
 
 // Dependencies that may repeat with a hand-written version, each with the
 // reason it is not promoted to the root. Empty is the correct state: every
@@ -180,7 +180,7 @@ function main() {
   // Which crates there are is decided by `[workspace] members`, not by the
   // `crates/` folder: the reason is in `workspace-members.mjs`, and the
   // divergences between the list and disk arrive there already written.
-  const { files, violations: onTheList } = workspaceCrates(root);
+  const { file: files, violazioni: onTheList } = crateDelWorkspace(root);
   const literals = new Map(); // name -> [{ crate, line, version }]
   const doubts = [];
   let declarations = 0;

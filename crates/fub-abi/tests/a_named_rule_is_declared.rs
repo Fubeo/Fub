@@ -562,8 +562,8 @@ fn sources_of_production() -> BTreeMap<String, String> {
 }
 
 fn walks(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
-    let entries =
-        std::fs::read_dir(dir).unwrap_or_else(|and| panic!("`{}` non si legge: {and}", dir.display()));
+    let entries = std::fs::read_dir(dir)
+        .unwrap_or_else(|and| panic!("`{}` non si legge: {and}", dir.display()));
     for entry in entries {
         let entry = entry.unwrap_or_else(|and| panic!("dentro `{}`: {and}", dir.display()));
         let name = entry

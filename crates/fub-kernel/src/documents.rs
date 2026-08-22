@@ -38,7 +38,7 @@ use crate::error::{KernelError, Result};
 use crate::registry::FormatRegistry;
 use crate::renderer::RendererRegistry;
 use crate::syntax::SyntaxRegistry;
-use crate::vault::{data_root, FUB_DIR, TrashEntry, Vault};
+use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
 
 /// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
 /// ha `<vault>/.fub/plugins/<id>/` per i dati autorevoli e non vede nient'altro;

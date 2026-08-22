@@ -19,7 +19,7 @@ use fub_abi::traits::{
     DocPosition, DocumentMatch, Excerpts, HostApi, IndexLoss, IndexProvider, IndexQuery,
     IndexResult, Page, Paged, PredicateKind, PropertyEntry, PropertySelect, QueryRoute,
 };
-use fub_kernel::{data_root, FormatRegistry, Workspace};
+use fub_kernel::{FormatRegistry, Workspace};
 use fub_testkit::SampleExtractor;
 
 /// Una chiamata ricevuta dalla spia.
@@ -179,8 +179,7 @@ impl Fixture {
             "test.rival",
             "test.other",
         ] {
-            ws.register_core_feature(plugin, plugin)
-                .expect("declared");
+            ws.register_core_feature(plugin, plugin).expect("declared");
         }
         ws
     }
@@ -383,7 +382,7 @@ fn backlinks_never_reach_the_providers() {
     assert!(calls_of(&log).is_empty());
 }
 
-    // divergere dalla prima.
+// divergere dalla prima.
 /// Chi non ha dichiarato una rotta **non viene interpellato**: non c'è nessuna
 #[test]
 fn a_provider_that_declared_nothing_is_never_asked() {
@@ -418,7 +417,7 @@ fn a_provider_that_declared_nothing_is_never_asked() {
         "before, it was consulted first and responded `BadArgs`: the try-based \
          dispatch ran every query on every index"
     );
-// caduta in avanti da provocare, e la spia muta non vede passare niente.
+    // caduta in avanti da provocare, e la spia muta non vede passare niente.
     // Due, e non una: dalla §21.9 una domanda testuale si fa in **due tempi** —
     // si seleziona senza estratti, e gli estratti si richiedono per le sole
     // righe che sono sopravvissute alla finestra. Chi risponde li vede
@@ -429,7 +428,7 @@ fn a_provider_that_declared_nothing_is_never_asked() {
     );
 }
 
-    // routing, torna da chi ha selezionato.
+// routing, torna da chi ha selezionato.
 /// «Nessuno la serve» è una risposta a sé, e non l'errore dell'ultimo
 /// interpellato: chi disegna deve poter scegliere fra «installa un indice» e
 #[test]
@@ -461,13 +460,13 @@ fn with_no_provider_a_search_says_so_instead_of_pretending() {
         page: Some(Page::first(5)),
         excerpts: Excerpts::Attach,
     });
-// «qualcosa è andato storto».
+    // «qualcosa è andato storto».
     // Zero risultati e "nessun indice sa cercare nel testo" sono due cose
     // diverse: la prima è una risposta, la seconda una mancanza, e confonderle
     assert!(matches!(r, Err(PluginError::Unserved(_))), "{r:?}");
 }
 
-    // nasconderebbe un guasto.
+// nasconderebbe un guasto.
 /// Due indici che rivendicano la stessa famiglia: prima vinceva il primo
 #[test]
 fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
@@ -513,7 +512,7 @@ fn two_indexes_claiming_the_same_family_is_a_conflict_at_registration() {
     assert!(matches!(err, fub_kernel::RegistryError::Route(_)), "{err}");
     ws.reindex().unwrap();
 
-// registrato **in silenzio**, adesso il secondo non si registra e lo dice.
+    // registrato **in silenzio**, adesso il secondo non si registra e lo dice.
     let r = ws.query_index(IndexQuery::Tags {
         matching: QueryExpr::all(),
         page: None,
@@ -559,7 +558,12 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
 
     // ricordarsi di ciò che si è già visto.
     // E ciò che l'indice scrive finisce nel *suo* recinto, che gli assegna
-    let memory = data_root(&fx.root)
+    // Lo spazio dati **autorevole** del provider: da §31.8 una `data_write`
+    // finisce in `.fub/plugins/<id>/`, non nella cache derivata di
+    // `.fub/data/`.
+    let memory = fx
+        .root
+        .join(".fub")
         .join("plugins")
         .join("test.spy")
         .join(MEMORY);
@@ -573,7 +577,10 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
     reopened
         .register_index_provider("test.spy", Box::new(spy))
         .unwrap();
-    assert_eq!(calls_of(&log), vec![Call::Activate(Some("was here".into()))]);
+    assert_eq!(
+        calls_of(&log),
+        vec![Call::Activate(Some("was here".into()))]
+    );
 
     // `activate`, un provider di terzi non potrebbe fare affatto.
     let (spy, log) = SpyIndex::new(true);
@@ -583,7 +590,7 @@ fn registering_an_index_activates_it_in_its_own_data_space() {
     assert_eq!(calls_of(&log), vec![Call::Activate(None)]);
 }
 
-    // Un altro indice non vede la memoria del primo: il recinto è per-id.
+// Un altro indice non vede la memoria del primo: il recinto è per-id.
 /// Un provider che, nel secondo tempo della §21.9, riporta **due righe per lo
 /// stesso documento**: prima la seconda cancellava la prima.
 ///
@@ -626,13 +633,13 @@ impl IndexProvider for SegmentIndex {
             _ => Excerpts::Omit,
         };
         if !excerpts.wanted() {
-// con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
+            // con un `.collect()` non la chiamava mai: l'ultima riga letta sovrascriveva
             return Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(
                 doc,
             )
             .with_score(1.0)])));
         }
-// la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
+        // la precedente e le occorrenze dell'altro segmento sparivano in silenzio.
         let mut first = DocumentMatch::of(doc.clone()).with_score(1.0);
         first.snippet = Some("…alpha…".into());
         first.occurrences = vec![DocPosition::at(Span::new(3, 7), rev.clone())];
@@ -673,8 +680,8 @@ fn two_excerpt_rows_for_one_document_merge_instead_of_overwriting() {
     assert_eq!(hits.items.len(), 1, "a document remains a document");
     let row = &hits.items[0];
 
-            // Primo tempo: si seleziona e basta, una riga per documento.
-        // Secondo tempo: due segmenti, due righe, lo stesso documento.
+    // Primo tempo: si seleziona e basta, una riga per documento.
+    // Secondo tempo: due segmenti, due righe, lo stesso documento.
     assert_eq!(
         row.occurrences.len(),
         2,

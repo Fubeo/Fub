@@ -301,9 +301,9 @@ impl ViewProvider for TrashView {
             EMPTY_CONFIRM => {
                 host.set_view_state(ASK, None)?;
                 let outcome = host.run_command(TRASH_EMPTY, serde_json::Value::Null);
-                let warning = outcome
-                    .err()
-                    .map(|and| Text::message(EMPTY_FAILED, vec![Arg::text("reason", and.to_string())]));
+                let warning = outcome.err().map(|and| {
+                    Text::message(EMPTY_FAILED, vec![Arg::text("reason", and.to_string())])
+                });
                 Ok(ViewUpdate::Replace {
                     root: tree(host, warning)?,
                 })

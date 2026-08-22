@@ -339,8 +339,7 @@ fn a_rewritten_source_drops_the_selection_under_it() {
     .expect("scrive");
 
     ws.set_active_context(Some(
-        context("Nota.md")
-            .with_selections(Some(SelectionSet::anchored(Span::new(2, 8), "Titolo"))),
+        context("Nota.md").with_selections(Some(SelectionSet::anchored(Span::new(2, 8), "Titolo"))),
     ));
 
     // Qualcuno riscrive il documento (l'utente, il watcher, un bulk fix): gli

@@ -236,9 +236,7 @@ pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &d
 /// aggiornarsi dentro un lotto — cioè proprio quando l'utente ha appena fatto
 /// la cosa più grossa. Nessun test la vede fallire, perché fuori dal lotto
 /// funziona.
-pub fn redrawing_on_index_updated_declares_batch_ended<V: ViewProvider + ?Sized>(
-    view: &V,
-) {
+pub fn redrawing_on_index_updated_declares_batch_ended<V: ViewProvider + ?Sized>(view: &V) {
     for spec in view.views() {
         // La regola vive in **un posto solo** ([decision
         // 0020](../../../../docs/decisions/0020-rules-in-one-place.md)):
@@ -543,13 +541,7 @@ pub fn the_model_matches_the_given_id(model: &DocumentModel, ctx: &ParseContext)
 /// che affetta perfettamente il pezzo di documento accanto.
 pub fn spans_slice_the_source(model: &DocumentModel, source: &str, claim: Claim) {
     let whole = Span::new(0, source.len());
-    blocks_are_disjoint_and_contained(
-        &model.body,
-        whole,
-        source,
-        "il corpo del documento",
-        claim,
-    );
+    blocks_are_disjoint_and_contained(&model.body, whole, source, "il corpo del documento", claim);
 
     // Le tabelle piatte non hanno un padre nell'tree: si affettano, e basta.
     for the in &model.links {
@@ -899,13 +891,15 @@ fn block_children(b: &Block, span: Span, source: &str, claim: Claim) {
         Block::Heading { inlines, .. } | Block::Paragraph { inlines, .. } => {
             inlines_are_disjoint_and_contained(inlines, span, source, "un blocco di testo", claim)
         }
-        Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => blocks_are_disjoint_and_contained(
-            blocks,
-            span,
-            source,
-            "un blocco che contiene blocchi",
-            claim,
-        ),
+        Block::Quote { blocks, .. } | Block::Custom { blocks, .. } => {
+            blocks_are_disjoint_and_contained(
+                blocks,
+                span,
+                source,
+                "un blocco che contiene blocchi",
+                claim,
+            )
+        }
         Block::List { items, .. } => {
             let mut spans = Vec::with_capacity(items.len());
             for it in items {

@@ -760,9 +760,9 @@ fn a_rename_external_that_not_is_rereads_not_leaves_live_the_name_old() {
     );
     let events: Vec<Event> = rx.try_iter().map(|n| n.event).collect();
     assert!(
-        events
-            .iter()
-            .any(|and| matches!(and, Event::DocumentRemoved { id, .. } if id.as_str() == "Nota.lnk")),
+        events.iter().any(
+            |and| matches!(and, Event::DocumentRemoved { id, .. } if id.as_str() == "Nota.lnk")
+        ),
         "e chi ascolta lo viene a sapere adesso, non alla prossima apertura: \
          {events:?}"
     );

@@ -133,10 +133,7 @@ fn a_view_sees_what_the_kernel_composed() {
     // Prima che la shell parli: il default del contratto, e non un italiano
     // qualsiasi cablato da qualche parte.
     ws.render_view(&ViewInstance::only("spia")).expect("render");
-    assert_eq!(
-        spy.seen.lock().unwrap().clone().unwrap(),
-        Locale::default()
-    );
+    assert_eq!(spy.seen.lock().unwrap().clone().unwrap(), Locale::default());
 
     // La shell riporta il sistema.
     assert!(system_state.publish(system()));
@@ -190,10 +187,7 @@ fn each_key_moves_only_its_own_field() {
     let seen = spy.seen.lock().unwrap().clone().unwrap();
     assert_eq!(seen.first_day_of_week, Weekday::Monday);
     assert_eq!(seen.hour_cycle, HourCycle::H23);
-    assert_eq!(
-        seen.language, "en-US",
-        "nobody touched the language"
-    );
+    assert_eq!(seen.language, "en-US", "nobody touched the language");
     assert_eq!(seen.timezone, "America/New_York");
 }
 
@@ -211,20 +205,14 @@ fn clearing_a_key_returns_to_the_system_and_not_to_nothing() {
     ws.set_setting(LANGUAGE, SettingValue::Text(String::new()))
         .expect("cleared");
     ws.render_view(&ViewInstance::only("spia")).expect("render");
-    assert_eq!(
-        spy.seen.lock().unwrap().clone().unwrap().language,
-        "en-US"
-    );
+    assert_eq!(spy.seen.lock().unwrap().clone().unwrap().language, "en-US");
 
     // E anche il reset, che è l'altra strada per lo stesso posto.
     ws.set_setting(LANGUAGE, SettingValue::Text("it-IT".into()))
         .expect("written");
     ws.reset_setting(LANGUAGE).expect("reset");
     ws.render_view(&ViewInstance::only("spia")).expect("render");
-    assert_eq!(
-        spy.seen.lock().unwrap().clone().unwrap().language,
-        "en-US"
-    );
+    assert_eq!(spy.seen.lock().unwrap().clone().unwrap().language, "en-US");
 }
 
 /// Il caso arriva fin dentro un `render_view`, e due giri non danno gli stessi

@@ -98,7 +98,7 @@ impl Bench {
     fn data_of(&self, doc: &str) -> Option<String> {
         let path = self
             .root
-            .join(".fub/data/plugins")
+            .join(".fub/plugins")
             .join(PLUGIN)
             .join(doc_data::DOC_SPACE)
             .join(doc_data::encode(doc))
@@ -425,13 +425,15 @@ fn the_internal_rename_migrates_data_before_moving_the_file() {
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     std::fs::write(root.join("a.txt"), "il contenuto\n").unwrap();
 
+    // Lo spazio dati autorevole (§31.8): è lì che la rinomina interna deve
+    // migrare i dati del documento, non nella cache derivata.
     let data_from = root
-        .join(".fub/data/plugins")
+        .join(".fub/plugins")
         .join(PLUGIN)
         .join(doc_data::DOC_SPACE)
         .join(doc_data::encode("a.txt"));
     let data_to = root
-        .join(".fub/data/plugins")
+        .join(".fub/plugins")
         .join(PLUGIN)
         .join(doc_data::DOC_SPACE)
         .join(doc_data::encode("b.txt"));

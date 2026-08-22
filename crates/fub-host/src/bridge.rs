@@ -130,10 +130,7 @@ pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
 /// quello che chi riceve ha in mano.
 fn delivers(sink: &dyn EventSink, notice: &Notice, debt: u64) -> u64 {
     if debt > 0 {
-        let backlog = Notice::new(
-            Event::Overflow { dropped: debt },
-            Origin::by(Actor::Kernel),
-        );
+        let backlog = Notice::new(Event::Overflow { dropped: debt }, Origin::by(Actor::Kernel));
         if sink.emit(&backlog) == Delivery::Dropped {
             return debt + 1;
         }

@@ -284,7 +284,9 @@ impl QueryEvaluator for Router<'_> {
             .evaluators(&kind)
             .first()
             .ok_or_else(|| {
-                PluginError::Unserved(format!("nobody knows how to evaluate this leaf: {kind:?}").into())
+                PluginError::Unserved(
+                    format!("nobody knows how to evaluate this leaf: {kind:?}").into(),
+                )
             })?;
         self.ask(target, QueryExpr::of(predicate.clone()))
     }

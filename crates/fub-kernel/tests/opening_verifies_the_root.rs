@@ -70,6 +70,7 @@ fn a_root_that_and_a_file_becomes_rejected_immediately() {
 /// comunque su una cartella 0500 — è la definizione di root — e il caso
 /// «permesso negato» non è dimostrabile: lo dice la stessa prova, non un
 /// elenco di utenti.
+#[cfg(unix)]
 #[test]
 fn a_root_without_permission_of_write_becomes_rejected() {
     use std::os::unix::fs::PermissionsExt;

@@ -331,7 +331,7 @@ mod tests {
         let to_the_nine = |day| CivilTime {
             year: 2026,
             month: 1,
-            day: day,
+            day,
             hour: 9,
             minute: 0,
             second: 0,
@@ -425,9 +425,7 @@ mod tests {
 
     #[test]
     fn restart_at_scheduled_instant_rings_with_no_recovery_window() {
-        let timer = WallClock::daily(9, 0)
-            .anchored("UTC")
-            .catching_up(0);
+        let timer = WallClock::daily(9, 0).anchored("UTC").catching_up(0);
         let zone = Zone::of(&timer, "").expect("zone");
         let yesterday = CivilTime {
             year: 2026,
@@ -441,7 +439,10 @@ mod tests {
             &timer,
             &zone,
             ts("2026-01-15T09:00:00Z"),
-            Position { last: Some(yesterday), wait_for: None },
+            Position {
+                last: Some(yesterday),
+                wait_for: None,
+            },
         );
         assert!(v.ring, "the exact scheduled instant is not a recovery");
     }

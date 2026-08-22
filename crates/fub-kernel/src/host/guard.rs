@@ -623,14 +623,15 @@ fn path_allowlist(permissions: &PluginPermissions, key: &str) -> Option<Arc<[Box
     match permissions.granted.get(key) {
         None | Some(serde_json::Value::Bool(_)) | Some(serde_json::Value::Null) => None,
         Some(serde_json::Value::Array(items)) if items.is_empty() => None,
-        Some(serde_json::Value::Array(items)) if items.iter().all(|v| v.as_str().is_some()) =>
+        Some(serde_json::Value::Array(items)) if items.iter().all(|v| v.as_str().is_some()) => {
             Some(Arc::from(
                 items
                     .iter()
                     .filter_map(|v| v.as_str())
                     .map(|path| folders::normalized(path).to_owned().into_boxed_str())
                     .collect::<Vec<_>>(),
-            )),
+            ))
+        }
         Some(_) => Some(Arc::from([])),
     }
 }
@@ -797,7 +798,9 @@ impl<H, P: Policy> Guard<H, P> {
         let action = what();
         self.check(cap, || action.clone())?;
         if let Some(why) = self.policy.denies_path(cap, path) {
-            return Err(PluginError::PermissionDenied(format!("{action}: {why}").into()));
+            return Err(PluginError::PermissionDenied(
+                format!("{action}: {why}").into(),
+            ));
         }
         Ok(())
     }
@@ -809,19 +812,25 @@ impl<H, P: Policy> Guard<H, P> {
 
 impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
     fn read_document(&self, id: &DocId) -> Result<String, PluginError> {
-        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading `{id}`"))?;
+        self.check_path(Capability::VaultRead, id.as_str(), || {
+            format!("reading `{id}`")
+        })?;
         self.inner.read_document(id)
     }
 
     fn read_document_bytes(&self, id: &DocId) -> Result<Vec<u8>, PluginError> {
         // Stesso permesso della lettura di testo, e non uno suo: vedi la firma
         // nel contratto — i byte non sono un grado di fiducia in più.
-        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading bytes of `{id}`"))?;
+        self.check_path(Capability::VaultRead, id.as_str(), || {
+            format!("reading bytes of `{id}`")
+        })?;
         self.inner.read_document_bytes(id)
     }
 
     fn document_revision(&self, id: &DocId) -> Result<Revision, PluginError> {
-        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading revision of `{id}`"))?;
+        self.check_path(Capability::VaultRead, id.as_str(), || {
+            format!("reading revision of `{id}`")
+        })?;
         self.inner.document_revision(id)
     }
 
@@ -829,7 +838,11 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
         self.check(Capability::VaultRead, || "listing documents".into())?;
         let mut page = self.inner.list_documents(page)?;
         let before = page.items.len();
-        page.items.retain(|id| self.policy.denies_path(Capability::VaultRead, id.as_str()).is_none());
+        page.items.retain(|id| {
+            self.policy
+                .denies_path(Capability::VaultRead, id.as_str())
+                .is_none()
+        });
         if page.items.len() != before {
             page.total = page.items.len() as u32;
         }
@@ -848,7 +861,9 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
     }
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
-        self.check_path(Capability::VaultRead, id.as_str(), || format!("reading model of `{id}`"))?;
+        self.check_path(Capability::VaultRead, id.as_str(), || {
+            format!("reading model of `{id}`")
+        })?;
         self.inner.read_model(id)
     }
 
@@ -866,7 +881,11 @@ impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
             .inner
             .list_trash()?
             .into_iter()
-            .filter(|entry| self.policy.denies_path(Capability::VaultRead, entry.original.as_str()).is_none())
+            .filter(|entry| {
+                self.policy
+                    .denies_path(Capability::VaultRead, entry.original.as_str())
+                    .is_none()
+            })
             .collect();
         Ok(entries)
     }
@@ -879,19 +898,25 @@ impl<H: VaultWrite, P: Policy> VaultWrite for Guard<H, P> {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.check_path(Capability::VaultWrite, id.as_str(), || format!("writing `{id}`"))?;
+        self.check_path(Capability::VaultWrite, id.as_str(), || {
+            format!("writing `{id}`")
+        })?;
         self.inner.write_document(id, source, base)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        self.check_path(Capability::VaultWrite, id.as_str(), || format!("editing `{id}`"))?;
+        self.check_path(Capability::VaultWrite, id.as_str(), || {
+            format!("editing `{id}`")
+        })?;
         self.inner.apply_edit(id, request)
     }
 }
 
 impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.check_path(Capability::VaultStructure, id.as_str(), || format!("creating `{id}`"))?;
+        self.check_path(Capability::VaultStructure, id.as_str(), || {
+            format!("creating `{id}`")
+        })?;
         self.inner.create_document(id, source)
     }
 
@@ -906,7 +931,9 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.check_path(Capability::VaultStructure, id.as_str(), || format!("trashing `{id}`"))?;
+        self.check_path(Capability::VaultStructure, id.as_str(), || {
+            format!("trashing `{id}`")
+        })?;
         self.inner.trash_document(id)
     }
 
@@ -939,23 +966,21 @@ impl<H: DataRead, P: Policy> DataRead for Guard<H, P> {
     }
 
     fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.check(Capability::DataRead, || format!("reading cache blob `{path}`"))?;
+        self.check(Capability::DataRead, || {
+            format!("reading cache blob `{path}`")
+        })?;
         self.inner.cache_read(path)
     }
 }
 
 impl<H: DataWrite, P: Policy> DataWrite for Guard<H, P> {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.check(Capability::DataWrite, || {
-            format!("writing blob `{path}`")
-        })?;
+        self.check(Capability::DataWrite, || format!("writing blob `{path}`"))?;
         self.inner.data_write(path, bytes)
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-        self.check(Capability::DataWrite, || {
-            format!("removing blob `{path}`")
-        })?;
+        self.check(Capability::DataWrite, || format!("removing blob `{path}`"))?;
         self.inner.data_remove(path)
     }
 
@@ -1069,16 +1094,18 @@ impl<H: HostEnv, P: Policy> HostEnv for Guard<H, P> {
             .allows(Capability::Session)
             .then(|| self.inner.active_context())
             .flatten()?;
+        if context.doc.as_ref().is_some_and(|doc| {
+            self.policy
+                .denies_path(Capability::Session, doc.as_str())
+                .is_some()
+        }) {
+            return None;
+        }
         if context
             .doc
             .as_ref()
-            .is_some_and(|doc| self.policy.denies_path(Capability::Session, doc.as_str()).is_some())
+            .is_none_or(|doc| !self.allows_path(Capability::SessionSelection, doc.as_str()))
         {
-            return None;
-        }
-        if context.doc.as_ref().is_none_or(|doc| {
-            !self.allows_path(Capability::SessionSelection, doc.as_str())
-        }) {
             context.selections = None;
         }
         Some(context)
@@ -1089,7 +1116,7 @@ impl<H: HostEvents, P: Policy> HostEvents for Guard<H, P> {
     fn emit(&mut self, event: Event) {
         // simulazione farebbe ricaricare l'editor su una modifica che non è
         // avvenuta.
-    // Quale famiglia governa **questa** domanda, e cosa si stava facendo.
+        // Quale famiglia governa **questa** domanda, e cosa si stava facendo.
         if self.allows(Capability::Events) {
             self.inner.emit(event);
         }
@@ -1110,7 +1137,9 @@ impl<H: HostQuery, P: Policy> HostQuery for Guard<H, P> {
             if let IndexResult::Drafts(mut page) = result {
                 let before = page.items.len();
                 page.items.retain(|draft| {
-                    self.policy.denies_path(Capability::Drafts, draft.doc.as_str()).is_none()
+                    self.policy
+                        .denies_path(Capability::Drafts, draft.doc.as_str())
+                        .is_none()
                 });
                 if page.items.len() != before {
                     page.total = page.items.len() as u32;
@@ -1138,7 +1167,7 @@ impl<H, P: Policy> Guard<H, P> {
     /// che continua a rispondere a nomi e a non sapere niente di query: è la
     /// stessa mossa di `undo_last`, che da un metodo ricava più famiglie perché
     /// più d'una sono le cose che fa.
-        // **Due cancelli**, e non è pignoleria. Annullare è invocare — i passi
+    // **Due cancelli**, e non è pignoleria. Annullare è invocare — i passi
     fn query_capability(kind: &fub_abi::traits::QueryKind) -> (Capability, &'static str) {
         use fub_abi::traits::QueryKind;
         match kind {
@@ -1206,8 +1235,8 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // cui `match` esaustivo obbliga una famiglia nuova a dichiararsi. Così
         // il giorno che il vault avesse una terza specie di scrittura, questo
         // cancello la eredita senza che nessuno se ne debba ricordare.
-    // Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
-    // posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
+        // Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
+        // posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
         self.check(Capability::Commands, || "undoing".into())?;
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
@@ -1226,9 +1255,7 @@ impl<H: TransferRead, P: Policy> TransferRead for Guard<H, P> {
         offset: u64,
         len: u32,
     ) -> Result<Vec<u8>, PluginError> {
-        self.check(Capability::Transfer, || {
-            "reading import source".to_string()
-        })?;
+        self.check(Capability::Transfer, || "reading import source".to_string())?;
         self.inner.read_source(handle, offset, len)
     }
 }
@@ -1245,8 +1272,8 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
     /// nella richiesta apposta: due posti in cui è scritto dove si va sono due
     /// posti che possono non essere d'accordo, e chi controlla ne guarderebbe
     /// uno solo.
-        // Lo schema si guarda **dopo** i permessi, perché «non ti è concesso»
-        // è una frase più utile di «l'URL è fatto male» a chi ha sbagliato
+    // Lo schema si guarda **dopo** i permessi, perché «non ti è concesso»
+    // è una frase più utile di «l'URL è fatto male» a chi ha sbagliato
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         let (scheme, host) = split_url(&request.url)?;
         self.check(Capability::Network, || format!("connecting to `{host}`"))?;
@@ -1256,8 +1283,8 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
             ));
         }
         // tutte e due.
-// Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
-//
+        // Lo schema e l'host di un URL, senza tirarsi dietro un parser di URL.
+        //
         if scheme != "https" && !is_loopback(&host) {
             return Err(PluginError::BadArgs(
                 format!(
@@ -1308,22 +1335,21 @@ impl<H: HostNetwork, P: Policy> HostNetwork for Guard<H, P> {
 /// `https://api.acme.com@evil.example/` avrebbe un «host» che comincia con un
 /// nome dichiarato e finisce su una macchina di qualcun altro. È il modo più
 /// vecchio di far leggere a un umano un indirizzo e a una macchina un altro.
-    // Dopo l'ultima `@` c'è l'host: prima ci sono le credenziali.
-        // IPv6 letterale: `[::1]:8080`.
+// Dopo l'ultima `@` c'è l'host: prima ci sono le credenziali.
+// IPv6 letterale: `[::1]:8080`.
 fn split_url(url: &str) -> Result<(String, String), PluginError> {
-    let malformed = || {
-        PluginError::BadArgs(format!("`{url}` is not a readable absolute URL").into())
-    };
+    let malformed =
+        || PluginError::BadArgs(format!("`{url}` is not a readable absolute URL").into());
     let (scheme, rest) = url.split_once("://").ok_or_else(malformed)?;
     let authority = rest
         .split(['/', '?', '#'])
         .next()
         .filter(|a| !a.is_empty())
         .ok_or_else(malformed)?;
-// L'host è **questa macchina**?
+    // L'host è **questa macchina**?
     let hostport = authority.rsplit('@').next().unwrap_or(authority);
     let host = match hostport.strip_prefix('[') {
-//
+        //
         Some(inside) => inside.split(']').next().unwrap_or(inside),
         None => hostport.split(':').next().unwrap_or(hostport),
     };
@@ -1352,7 +1378,7 @@ fn split_url(url: &str) -> Result<(String, String), PluginError> {
 /// conto lo sa fare per `127.0.0.0/8` e per `::1` insieme; `localhost` resta a
 /// parte perché è un nome, non un indirizzo.
 // ---------------------------------------------------------------------------
-    /// Una politica che nega una famiglia sola: serve a provare il cancello di
+/// Una politica che nega una famiglia sola: serve a provare il cancello di
 fn is_loopback(host: &str) -> bool {
     host == "localhost"
         || host
@@ -1374,7 +1400,7 @@ impl<H: HostServices, P: Policy> HostServices for Guard<H, P> {
     }
 }
 
-    /// [`Capability::Env`], che `ReadOnly` **concede** — leggere che ore sono
+// [`Capability::Env`], che `ReadOnly` **concede** — leggere che ore sono
 
 #[cfg(test)]
 mod tests {
@@ -1517,7 +1543,10 @@ mod tests {
             .into_iter()
             .collect(),
         };
-        let guard = Guard::new(WithContext, Granted::new("p", &permissions, Trust::Community));
+        let guard = Guard::new(
+            WithContext,
+            Granted::new("p", &permissions, Trust::Community),
+        );
         assert!(guard.active_context().is_some());
 
         let permissions = PluginPermissions {
@@ -1525,7 +1554,10 @@ mod tests {
                 .into_iter()
                 .collect(),
         };
-        let guard = Guard::new(WithContext, Granted::new("p", &permissions, Trust::Community));
+        let guard = Guard::new(
+            WithContext,
+            Granted::new("p", &permissions, Trust::Community),
+        );
         assert!(guard.active_context().is_none());
     }
 
@@ -1675,8 +1707,8 @@ mod tests {
     /// esattamente `0..len` vieta insieme i duplicati e i buchi. Duplicare una
     /// riga è rosso; dimenticare la variante nuova è rosso — **tranne in coda**,
     /// e per quello c'è `last_declared_family`.
-        // E ognuna al **posto** che l'enum le dà. L'aritmetica qui sotto
-        // ordina prima di confrontare, quindi due righe scambiate le sfuggono:
+    // E ognuna al **posto** che l'enum le dà. L'aritmetica qui sotto
+    // ordina prima di confrontare, quindi due righe scambiate le sfuggono:
     #[test]
     fn the_discriminants_cover_every_family() {
         assert_eq!(
@@ -1694,8 +1726,8 @@ mod tests {
         // ce l'aveva; questo, da cui quello aveva copiato la forma, no — ed è
         // la seconda zona cieca che si scopre guardando l'originale invece del
         // ricalco.
-    // **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
-    // mostra** (§23.17).
+        // **Ogni permesso che governa una famiglia ha un nome nell'elenco che si
+        // mostra** (§23.17).
         for &cap in &Capability::ALL {
             assert_eq!(
                 Capability::ALL[last_declared_family(cap) as usize],
@@ -1921,14 +1953,21 @@ mod tests {
         assert!(granted
             .denies_path(Capability::VaultRead, "Progetti-vecchi/Alpha.md")
             .is_some());
-        assert!(granted
-            .denies_path(Capability::Query, "Altro/Alpha.md")
-            .is_none(), "Query is aggregate and must not apply vault path prefixes");
+        assert!(
+            granted
+                .denies_path(Capability::Query, "Altro/Alpha.md")
+                .is_none(),
+            "Query is aggregate and must not apply vault path prefixes"
+        );
     }
 
     #[test]
     fn a_missing_path_parameter_keeps_the_vault_unrestricted() {
-        let granted = Granted::new("p", &PluginPermissions::of(&[permission::READ_VAULT]), Trust::Community);
+        let granted = Granted::new(
+            "p",
+            &PluginPermissions::of(&[permission::READ_VAULT]),
+            Trust::Community,
+        );
         assert!(granted
             .denies_path(Capability::VaultRead, "Altro/Alpha.md")
             .is_none());
@@ -2069,7 +2108,10 @@ mod tests {
     fn no_allowlist_means_anywhere_and_that_is_the_uniform_rule() {
         let mut permissions = PluginPermissions::of(&[]);
         permissions.granted.set(permission::NETWORK, true);
-        let guard = Guard::new(WithNetwork, Granted::new("p", &permissions, Trust::Community));
+        let guard = Guard::new(
+            WithNetwork,
+            Granted::new("p", &permissions, Trust::Community),
+        );
         guard
             .fetch(HttpRequest::get("https://ovunque.example/x"))
             .expect("no list means no fence: present = on");
@@ -2115,7 +2157,10 @@ mod tests {
     ///
     #[test]
     fn a_name_that_starts_like_a_loopback_address_is_not_this_machine() {
-        let guard = Guard::new(WithNetwork, with_network(&["*.evil.example", "127.0.0.1", "::1"]));
+        let guard = Guard::new(
+            WithNetwork,
+            with_network(&["*.evil.example", "127.0.0.1", "::1"]),
+        );
         let err = guard
             .fetch(HttpRequest::get("http://127.0.0.1.evil.example/x"))
             .expect_err("it is someone else's name, and in plaintext you do not go there");
@@ -2145,7 +2190,10 @@ mod tests {
         ] {
             let mut permissions = PluginPermissions::of(&[]);
             permissions.granted.set(permission::NETWORK, wrong.clone());
-            let guard = Guard::new(WithNetwork, Granted::new("p", &permissions, Trust::Community));
+            let guard = Guard::new(
+                WithNetwork,
+                Granted::new("p", &permissions, Trust::Community),
+            );
             let err = guard
                 .fetch(HttpRequest::get("https://api.acme.com/x"))
                 .expect_err("a malformed parameter grants nothing");
@@ -2154,9 +2202,7 @@ mod tests {
                 "and it says so as a denied permission ({wrong}): {err}"
             );
             assert!(
-                err.message()
-                    .to_string()
-                    .contains("is not a list of hosts"),
+                err.message().to_string().contains("is not a list of hosts"),
                 "sending you to look for the flaw in the manifest and not in \
                  the URL ({wrong}): {err}"
             );

@@ -563,7 +563,9 @@ mod tests {
         let after = before.clone().with_doc(Some(DocId::new("Altra.md")));
         assert_eq!(before.changes(&after), ContextMask::document());
 
-        let after = before.clone().with_selections(Some(SelectionSet::caret(10)));
+        let after = before
+            .clone()
+            .with_selections(Some(SelectionSet::caret(10)));
         assert_eq!(
             before.changes(&after),
             ContextMask(vec![ContextKind::Selection])

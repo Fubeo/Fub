@@ -410,7 +410,11 @@ mod tests {
         );
         // E un `!` sotto escape non apre un embed.
         let doc = parse("testo \\![[Nota]] qui");
-        assert!(!doc.links.iter().any(|the| the.embed), "links: {:?}", doc.links);
+        assert!(
+            !doc.links.iter().any(|the| the.embed),
+            "links: {:?}",
+            doc.links
+        );
     }
 
     #[test]
@@ -578,7 +582,8 @@ mod tests {
             .render_html(&doc, &RenderOptions::default())
             .unwrap();
         assert_eq!(
-            html.matches("class=\"wikilink\" data-wikilink-page=\"Nota\" href=\"#\"").count(),
+            html.matches("class=\"wikilink\" data-wikilink-page=\"Nota\" href=\"#\"")
+                .count(),
             2,
             "il fallback href vale anche senza opzioni: {html}"
         );

@@ -271,7 +271,11 @@ fn a_nested_batch_joins_the_one_that_is_open() {
         .map(|n| n.event)
         .filter(|and| matches!(and, Event::BatchEnded { .. }))
         .collect();
-    assert_eq!(terminal_events.len(), 1, "un terminale solo: {terminal_events:?}");
+    assert_eq!(
+        terminal_events.len(),
+        1,
+        "un terminale solo: {terminal_events:?}"
+    );
     let Event::BatchEnded { changed, .. } = &terminal_events[0] else {
         unreachable!()
     };

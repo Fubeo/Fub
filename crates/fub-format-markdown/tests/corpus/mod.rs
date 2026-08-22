@@ -304,7 +304,11 @@ pub struct Case64(u64);
 impl Case64 {
     pub fn new(seed_value: u64) -> Self {
         // Lo zero è il punto fisso di xorshift: un seme nullo darebbe sempre 0.
-        Case64(if seed_value == 0 { 0x9E3779B97F4A7C15 } else { seed_value })
+        Case64(if seed_value == 0 {
+            0x9E3779B97F4A7C15
+        } else {
+            seed_value
+        })
     }
 
     pub fn next(&mut self) -> u64 {

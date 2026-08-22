@@ -757,7 +757,7 @@ mod tests {
     /// passano di qui (difetto 0223), cambiare una delle due costanti non fa
     /// più fallire niente per conto suo — ogni archivio resta coerente con sé
     /// stesso — ma rende illeggibile ciò che è già su disco.
-        // Mangiata a pezzi o in un blocco solo è lo stesso numero: è ciò su cui
+    // Mangiata a pezzi o in un blocco solo è lo stesso numero: è ciò su cui
     #[test]
     fn the_fingerprint_not_is_moves() {
         assert_eq!(Fnv1a::hash(b""), 0xcbf2_9ce4_8422_2325);

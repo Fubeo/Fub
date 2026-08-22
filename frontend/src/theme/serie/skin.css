@@ -630,7 +630,10 @@ progress::-moz-progress-bar {
   color: var(--accent);
 }
 .tab-close {
-  opacity: 0.45;
+  /* Il pallino è secondario, ma resta testo: attenuato a 0.45 scendeva sotto
+     AA (2,8:1 nel chiaro). Il minimo per il peggior fondo è 0,63; 0,7 ci
+     lascia il margine. Al passaggio torna pieno. */
+  opacity: 0.7;
   padding: 0 var(--space-1);
   border-radius: var(--radius-xs);
   color: inherit;

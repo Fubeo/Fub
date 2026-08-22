@@ -86,8 +86,7 @@ use std::path::{Path, PathBuf};
 const CONTRACT: &str = include_str!("../src/format.rs");
 
 /// La frase, alla lettera.
-const THE_GUARANTEE: &str =
-    "Il kernel non riscrive mai un file esistente passando da qui";
+const THE_GUARANTEE: &str = "Il kernel non riscrive mai un file esistente passando da qui";
 
 /// La prosa di un sorgente Rust, tolti i marcatori di commento e appiattita su
 /// una riga sola.
@@ -117,7 +116,7 @@ fn prose_normalized(source: &str) -> String {
     out
 }
 
-/// l'impaginazione.
+// l'impaginazione.
 // ---------------------------------------------------------------------------
 // Le ragioni
 
@@ -129,7 +128,7 @@ fn prose_normalized(source: &str) -> String {
 /// terza: è che quella modifica va fatta con
 #[derive(Debug)]
 enum Reason {
-/// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
+    /// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
     /// **Non è questo `serialize`.** È l'altro — quello di `serde::Serializer`,
     /// che ha lo stesso nome e nessun rapporto con i documenti: qui sono i
     /// `u64_string::serialize` con cui un id numerico attraversa l'IPC come
@@ -243,8 +242,8 @@ fn production_sources() -> BTreeMap<String, String> {
 }
 
 fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
-    let entries =
-        std::fs::read_dir(dir).unwrap_or_else(|and| panic!("`{}` is unreadable: {and}", dir.display()));
+    let entries = std::fs::read_dir(dir)
+        .unwrap_or_else(|and| panic!("`{}` is unreadable: {and}", dir.display()));
     for entry in entries {
         let entry = entry.unwrap_or_else(|and| panic!("inside `{}`: {and}", dir.display()));
         let name = entry
@@ -272,7 +271,7 @@ fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
     }
 }
 
-/// dell'allowlist risulterebbero tutte sparite.
+// dell'allowlist risulterebbero tutte sparite.
 // ---------------------------------------------------------------------------
 // L'estrattore
 
@@ -353,7 +352,7 @@ fn forms(line: &str) -> Vec<String> {
 
         let before = &line[..the];
         let after = &line[the + NEEDLE.len()..];
-// percorso più lungo.
+        // percorso più lungo.
         // Confini di identificatore: `deserialize` e `serialize_with` non sono
         if before.chars().next_back().is_some_and(is_ident)
             || after.chars().next().is_some_and(is_ident)
@@ -427,7 +426,7 @@ fn list(points: &BTreeSet<(String, String)>) -> String {
         .join("\n")
 }
 
-/// Tutte le citazioni del codice di produzione, per `(file, forma)`.
+// Tutte le citazioni del codice di produzione, per `(file, forma)`.
 // ---------------------------------------------------------------------------
 // La rete
 
@@ -513,7 +512,7 @@ fn the_guarantee_is_still_written_in_the_contract() {
     );
 }
 
-/// garanzia meccanica deve rimandare a una frase che una macchina sa cercare.
+// garanzia meccanica deve rimandare a una frase che una macchina sa cercare.
 // ---------------------------------------------------------------------------
 // I test del test
 
@@ -594,7 +593,7 @@ mod tests {\n\
     assert_eq!(
         citations(fake),
         BTreeMap::from([
-    // Il doc, che cita `.serialize(` per spiegarsi.\n\
+            // Il doc, che cita `.serialize(` per spiegarsi.\n\
             // Il `use`: passa dal `::`, ed è il modo in cui una chiamata libera
             ("traits::serialize".to_string(), 1),
             // arriva senza nominare nessuno.
@@ -611,7 +610,7 @@ mod tests {\n\
     );
 }
 
-            // forme che un estrattore ingenuo lascerebbe passare.
+// forme che un estrattore ingenuo lascerebbe passare.
 /// Un `#[cfg(test)]` che non apre un modulo non fa saltare niente: succede due
 #[test]
 fn a_cfg_test_on_a_function_does_not_open_a_module() {

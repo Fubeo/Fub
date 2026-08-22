@@ -184,8 +184,7 @@ impl TagCounts {
     /// quelli che portano una sua sottochiave (`progetto` prende
     /// `progetto/casa`).
     pub(crate) fn docs_with(&self, canonical: &str, descendants: bool) -> Vec<DocId> {
-        let mut found: BTreeSet<DocId> =
-            self.for_key.get(canonical).cloned().unwrap_or_default();
+        let mut found: BTreeSet<DocId> = self.for_key.get(canonical).cloned().unwrap_or_default();
         if descendants {
             for (key, docs) in &self.for_key {
                 if is_sub_tag(key, canonical) {

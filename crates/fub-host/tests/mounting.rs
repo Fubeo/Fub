@@ -28,9 +28,7 @@ use fub_testkit::{Bench, Mounted};
 // --- il banco ---------------------------------------------------------------
 
 fn vault() -> Mounted {
-    Bench::new()
-        .with_format(MarkdownProvider::boxed())
-        .mounts()
+    Bench::new().with_format(MarkdownProvider::boxed()).mounts()
 }
 
 type Journal = Arc<Mutex<Vec<String>>>;
@@ -190,7 +188,8 @@ impl Bundle for BundleSpy {
 
     fn register(&self, ws: &mut Workspace) -> Vec<String> {
         let mut warnings = Vec::new();
-        if let Err(and) = ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id))) {
+        if let Err(and) = ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id)))
+        {
             warnings.push(format!("command: {and}"));
         }
         if let Err(and) = ws.register_event_handler(
@@ -203,7 +202,9 @@ impl Bundle for BundleSpy {
             warnings.push(format!("handler: {and}"));
         }
         if self.loses_a_piece {
-            if let Err(and) = ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id))) {
+            if let Err(and) =
+                ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id)))
+            {
                 warnings.push(format!("command: {and}"));
             }
         }
@@ -469,10 +470,7 @@ fn turn_on_a_bundle_writes_in_the_log_the_pieces_that_not_are_entered() {
         "the bundle is mounted: the fourth pass is not all-or-nothing"
     );
 
-    let warnings: Vec<&String> = lines
-        .iter()
-        .filter(|r| r.contains("test.losing"))
-        .collect();
+    let warnings: Vec<&String> = lines.iter().filter(|r| r.contains("test.losing")).collect();
     assert_eq!(
         warnings.len(),
         1,

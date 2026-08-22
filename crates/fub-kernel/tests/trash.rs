@@ -31,13 +31,13 @@ use fub_testkit::SampleExtractor;
 ///
 /// È il punto d'iniezione che un crash a metà non ha: non si aspetta che il
 /// processo muoia fra due scritture, si prende la seconda e la si fa fallire.
-    /// Le `remove` di un path che contiene questo pezzo falliscono.
+/// Le `remove` di un path che contiene questo pezzo falliscono.
 struct RefusingStorage {
     inner: FsStorage,
     /// Alla prossima mossa un concorrente posa la destinazione dopo la guardia.
     refuses_remove_in: &'static str,
-/// Scrive una nuova voce completa quando lo svuotamento rimuove la prima voce
-/// gia censita: simula un'altra finestra fra distruzione dei file e sweep dei
+    /// Scrive una nuova voce completa quando lo svuotamento rimuove la prima voce
+    /// gia censita: simula un'altra finestra fra distruzione dei file e sweep dei
     occupies_destination: std::sync::atomic::AtomicBool,
 }
 
@@ -96,8 +96,8 @@ impl VaultStorage for RefusingStorage {
 }
 
 /// sidecar.
-    /// Una spia che guarda passare i documenti e non risponde a niente: adesso
-    /// lo **dichiara** invece di dirlo con un `BadArgs` a ogni domanda.
+/// Una spia che guarda passare i documenti e non risponde a niente: adesso
+/// lo **dichiara** invece di dirlo con un `BadArgs` a ogni domanda.
 struct TrashMidSweep {
     inner: FsStorage,
     root: Utf8PathBuf,
@@ -255,8 +255,8 @@ impl Fixture {
         self.workspace_on(Arc::new(FsStorage))
     }
 
-        // I plugin di prova si dichiarano prima di registrare (§7.3): il
-        // kernel non presta capacità a una stringa.
+    // I plugin di prova si dichiarano prima di registrare (§7.3): il
+    // kernel non presta capacità a una stringa.
     fn workspace_on(&self, storage: Arc<dyn VaultStorage>) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
@@ -264,8 +264,8 @@ impl Fixture {
             .expect("no extension conflict");
         let mut ws = Workspace::on(&self.root, registry, storage, MachineSettings::in_memory())
             .expect("the vault opens");
-    // I file dentro `.trash/`, per nome e ordinati.
-    // L'indice deve saperlo, o la nota resta cercabile: un risultato che apre
+        // I file dentro `.trash/`, per nome e ordinati.
+        // L'indice deve saperlo, o la nota resta cercabile: un risultato che apre
         ws.register_core_feature("test.spy", "test.spy")
             .expect("declared");
         ws.register_index_provider("test.spy", Box::new(SpyIndex(self.calls.clone())))
@@ -373,8 +373,8 @@ fn the_trash_sidecar_carries_its_schema_version() {
     let json: serde_json::Value = serde_json::from_str(&sidecar).expect("it is JSON");
     assert_eq!(json["v"], 1, "the sidecar declares its schema");
     assert_eq!(json["original"], "projects/Note.txt");
-// Un sidecar scritto prima che il timbro esistesse resta buono.
-//
+    // Un sidecar scritto prima che il timbro esistesse resta buono.
+    //
     assert_eq!(
         json["file"]["size"], 11,
         "the stamp of the trashed file: {json}"
@@ -433,8 +433,8 @@ fn now_secs() -> u64 {
 ///
 /// Il banco è stato rosso prima della riparazione, con `deleted_at` a
 /// `1577869200`, cioè il 1° gennaio 2020.
-    // E l'ordine, che è la conseguenza che si vede: la nota vecchia appena
-    // buttata sta **sopra** una cestinata prima di lei ma scritta di recente.
+// E l'ordine, che è la conseguenza che si vede: la nota vecchia appena
+// buttata sta **sopra** una cestinata prima di lei ma scritta di recente.
 #[test]
 fn the_deletion_date_is_not_the_notes_last_write() {
     const NEW_YEAR_2020: u64 = 1_577_869_200;
@@ -458,8 +458,8 @@ fn the_deletion_date_is_not_the_notes_last_write() {
     );
     // Con la data presa dall'mtime le due si invertivano, perché «di recente»
     // voleva dire *scritta* di recente.
-// L'altra metà, che è la migrazione: **una voce che il campo non ce l'ha
-// degrada a ciò che si vedeva prima**.
+    // L'altra metà, che è la migrazione: **una voce che il campo non ce l'ha
+    // degrada a ciò che si vedeva prima**.
     fx.put(".trash/Other.txt", "trashed by Obsidian an hour ago");
     age(&fx, ".trash/Other.txt", before - 3600);
     let entries = ws.list_trash().unwrap();
@@ -483,8 +483,8 @@ fn the_deletion_date_is_not_the_notes_last_write() {
 /// Diventa rosso il giorno in cui qualcuno decide che una voce senza il campo
 /// vale «data sconosciuta» — che è la sola alternativa, e cambierebbe cosa si
 /// vede nel cestino di chi aggiorna.
-    // Il sidecar di una Fub che il campo non lo scriveva ancora.
-    // E una voce di Obsidian, che sidecar non ne ha affatto.
+// Il sidecar di una Fub che il campo non lo scriveva ancora.
+// E una voce di Obsidian, che sidecar non ne ha affatto.
 #[test]
 fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
     const NEW_YEAR_2020: u64 = 1_577_869_200;
@@ -497,7 +497,7 @@ fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
         ".fub/data/trash/Idea.txt.json",
         r#"{"v":1,"original":"projects/Idea.txt"}"#,
     );
-// 0004 — un sidecar rimasto indietro **non parla per l'omonima**.
+    // 0004 — un sidecar rimasto indietro **non parla per l'omonima**.
     fx.put(".trash/Other.txt", "trashed by Obsidian");
     age(&fx, ".trash/Other.txt", NEW_YEAR_2020);
 
@@ -507,9 +507,12 @@ fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
     for entry in &entries {
         assert_eq!(entry.deleted_at, NEW_YEAR_2020, "{}", entry.id);
     }
-//
+    //
     let idea = entries.iter().find(|v| v.id.as_str().ends_with("Idea.txt"));
-    assert_eq!(idea.expect("exists").original, DocId::new("projects/Idea.txt"));
+    assert_eq!(
+        idea.expect("exists").original,
+        DocId::new("projects/Idea.txt")
+    );
 }
 
 /// La chiave di un sidecar è il *nome* della voce cestinata, e quel nome non è
@@ -524,8 +527,8 @@ fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
 /// altro nome le porta via lo stato per-documento, storia del versioning
 /// compresa, perché `restore_from_trash` lo migra dall'`original` che il sidecar
 /// dichiara.
-    // 1. Fub cestina la prima: il sidecar ricorda `progetti/`.
-    // 2. Un'altra app distrugge quella voce dal cestino. Il sidecar è roba di
+// 1. Fub cestina la prima: il sidecar ricorda `progetti/`.
+// 2. Un'altra app distrugge quella voce dal cestino. Il sidecar è roba di
 #[test]
 fn an_orphan_sidecar_does_not_speak_for_a_namesake() {
     let fx = Fixture::new();
@@ -544,7 +547,10 @@ fn an_orphan_sidecar_does_not_speak_for_a_namesake() {
         "the sidecar was left behind"
     );
     // di uno schema che questa copia non sa leggere.
-    fx.put(".trash/Idea.txt", "the second, which has nothing to do with it");
+    fx.put(
+        ".trash/Idea.txt",
+        "the second, which has nothing to do with it",
+    );
 
     let entries = ws.list_trash().unwrap();
     assert_eq!(entries.len(), 1, "{entries:?}");
@@ -641,10 +647,7 @@ fn a_restore_target_cannot_escape_the_vault() {
         .restore_from_trash(&trashed, Some(DocId::new("../outside.txt")))
         .unwrap_err();
     assert!(err.to_string().contains("nome non valido"), "{err}");
-    assert!(
-        fx.exists(".trash/Idea.txt"),
-        "the trash entry did not move"
-    );
+    assert!(fx.exists(".trash/Idea.txt"), "the trash entry did not move");
     assert!(!fx.root.parent().unwrap().join("outside.txt").exists());
 }
 
@@ -661,10 +664,7 @@ fn the_watcher_seeing_the_file_vanish_does_not_do_the_work_twice() {
     // Il ripristino è una scrittura normale (D8): l'indice la riceve come
     assert!(!ws.sync_path(&fx.root.join("Idea.txt")).unwrap());
     assert!(!ws.sync_path(&fx.root.join(".trash/Idea.txt")).unwrap());
-    assert!(
-        fx.calls().is_empty(),
-        "nothing to redo and nothing to undo"
-    );
+    assert!(fx.calls().is_empty(), "nothing to redo and nothing to undo");
     assert!(fx.exists(".trash/Idea.txt"));
 }
 
@@ -673,19 +673,11 @@ fn deleting_the_same_name_twice_never_overwrites_the_first_copy() {
     let fx = Fixture::new();
     let mut ws = fx.workspace();
 
-    ws.write_document(
-        &DocId::new("Idea.txt"),
-        "first draft",
-        WriteBase::Dictated,
-    )
-    .unwrap();
+    ws.write_document(&DocId::new("Idea.txt"), "first draft", WriteBase::Dictated)
+        .unwrap();
     ws.delete_document(&DocId::new("Idea.txt")).unwrap();
-    ws.write_document(
-        &DocId::new("Idea.txt"),
-        "second draft",
-        WriteBase::Dictated,
-    )
-    .unwrap();
+    ws.write_document(&DocId::new("Idea.txt"), "second draft", WriteBase::Dictated)
+        .unwrap();
     let second = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
 
     assert_eq!(fx.trash_files().len(), 2, "two deletions, two copies");
@@ -715,10 +707,7 @@ fn restoring_from_the_trash_brings_the_notes_back_everywhere() {
     assert_eq!(brought_back, DocId::new("Idea.txt"));
     assert_eq!(ws.documents(), vec![DocId::new("Idea.txt")]);
     assert_eq!(fx.read("Idea.txt"), "an idea");
-    assert!(
-        !fx.exists(".trash/Idea.txt"),
-        "the trash let it go"
-    );
+    assert!(!fx.exists(".trash/Idea.txt"), "the trash let it go");
     // registro da nessuna parte. È tutto ciò su cui si può contare.
     // Il cestino resta piatto perché è quello di Obsidian (D1), ma il sidecar
     assert_eq!(fx.calls(), vec![Call::Indexed("Idea.txt".into())]);
@@ -754,7 +743,7 @@ fn a_notes_deleted_from_a_deep_folder_comes_back_to_it() {
 
     // È il chiamante a risolvere il conflitto scegliendo un nome: il kernel non
     // inventa nomi al posto dell'utente.
-// Una guardia applicativa non protegge ciò che arriva mentre il ripristino
+    // Una guardia applicativa non protegge ciò che arriva mentre il ripristino
     assert_eq!(brought_back, DocId::new("notes/2026/Idea.txt"));
     assert_eq!(fx.read("notes/2026/Idea.txt"), "an idea");
 }
@@ -774,18 +763,11 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
     .unwrap();
 
     let err = ws.restore_from_trash(&trashed, None).unwrap_err();
-    assert!(
-        matches!(err, KernelError::AlreadyExists(_)),
-        "found {err}"
-    );
-    assert_eq!(
-        fx.read("Idea.txt"),
-        "a new note, same name",
-        "intact"
-    );
+    assert!(matches!(err, KernelError::AlreadyExists(_)), "found {err}");
+    assert_eq!(fx.read("Idea.txt"), "a new note, same name", "intact");
 
-// legge e parsa la voce. Il supporto posa un concorrente al momento esatto
-// della mossa: deve restare intatto, e la voce deve restare nel cestino.
+    // legge e parsa la voce. Il supporto posa un concorrente al momento esatto
+    // della mossa: deve restare intatto, e la voce deve restare nel cestino.
     let brought_back = ws
         .restore_from_trash(&trashed, Some(DocId::new("Idea (restored).txt")))
         .unwrap();
@@ -853,8 +835,8 @@ fn a_restore_the_disk_interrupts_leaves_one_copy_not_two() {
 /// condiviso con Obsidian, D1). Pretendere un provider — o che i byte siano
 /// UTF-8 — per restituirne uno sarebbe il difetto, ed è la stessa ragione per
 /// cui `rename_entry_in_batch` non lo pretende.
-    // E il vault la **vede**: un allegato ripristinato che l'anagrafe non
-    // conosce ricompare solo alla prossima apertura.
+// E il vault la **vede**: un allegato ripristinato che l'anagrafe non
+// conosce ricompare solo alla prossima apertura.
 /// Le voci dell'anagrafe di una specie, come le chiede la shell.
 #[test]
 fn an_attachment_comes_back_from_the_trash_like_a_notes() {
@@ -871,12 +853,9 @@ fn an_attachment_comes_back_from_the_trash_like_a_notes() {
 
     assert_eq!(brought_back, DocId::new("photo.png"));
     assert_eq!(fx.read_bytes("photo.png"), png, "byte for byte");
-    assert!(
-        !fx.exists(".trash/photo.png"),
-        "the trash let it go"
-    );
-// 0157 (ripreso) — una voce senza sidecar al censimento non e ancora
-// distruttibile.
+    assert!(!fx.exists(".trash/photo.png"), "the trash let it go");
+    // 0157 (ripreso) — una voce senza sidecar al censimento non e ancora
+    // distruttibile.
     let store = entries_of_kind(&ws, EntryKind::Asset);
     assert_eq!(
         store
@@ -887,7 +866,6 @@ fn an_attachment_comes_back_from_the_trash_like_a_notes() {
     );
 }
 
-///
 fn entries_of_kind(ws: &Workspace, of_kind: EntryKind) -> Vec<VaultEntry> {
     let IndexResult::Entries(page) = ws
         .query_index(IndexQuery::Entries {
@@ -923,7 +901,7 @@ fn emptying_the_trash_says_how_much_it_destroyed() {
 /// `rename` dell'intero cestino la includeva e la distruggeva.
 /// Uno sweep globale dei sidecar non deve cancellare il metadato di una voce
 /// arrivata dopo il censimento dei file da distruggere.
-    // E il cestino non è nemmeno stato creato: nessun effetto collaterale.
+// E il cestino non è nemmeno stato creato: nessun effetto collaterale.
 #[test]
 fn an_entry_without_sidecar_at_catalogue_time_is_not_destroyed() {
     let fx = Fixture::new();
@@ -933,10 +911,7 @@ fn an_entry_without_sidecar_at_catalogue_time_is_not_destroyed() {
 
     ws.delete_document(&DocId::new("One.txt")).unwrap();
     ws.delete_document(&DocId::new("Two.txt")).unwrap();
-    fx.put(
-        ".trash/Arrived.txt",
-        "trashed, sidecar not yet written",
-    );
+    fx.put(".trash/Arrived.txt", "trashed, sidecar not yet written");
     assert!(!fx.exists(".fub/data/trash/Arrived.txt.json"));
 
     assert_eq!(
@@ -950,8 +925,8 @@ fn an_entry_without_sidecar_at_catalogue_time_is_not_destroyed() {
     );
 }
 
-    // Date diverse le impone il filesystem via mtime; qui bastano due file
-    // scritti a mano con nomi già timbrati, come li lascerebbe una sessione
+// Date diverse le impone il filesystem via mtime; qui bastano due file
+// scritti a mano con nomi già timbrati, come li lascerebbe una sessione
 #[test]
 fn the_sidecar_arrived_during_emptying_is_kept() {
     let fx = Fixture::new();
@@ -989,9 +964,9 @@ fn deleting_a_notes_the_workspace_never_saw_is_an_error_not_a_shrug() {
 #[test]
 fn the_trash_lists_the_most_recent_first() {
     let fx = Fixture::new();
-// 0208 — **una nota cestinata non lascia la bozza dietro di sé.**
-//
-// La bozza è indicizzata per `DocId`, e cestinare cambia il `DocId`: il testo
+    // 0208 — **una nota cestinata non lascia la bozza dietro di sé.**
+    //
+    // La bozza è indicizzata per `DocId`, e cestinare cambia il `DocId`: il testo
     fx.put(".trash/One.2026-07-24T10-00-00.txt", "first");
     fx.put(".trash/Two.txt", "second");
     let ws = fx.workspace();
@@ -1048,7 +1023,7 @@ fn a_trashed_notes_does_not_leave_its_draft() {
 /// precisamente il momento in cui la bozza è l'unica copia di ciò che si era
 /// scritto. Quel percorso è `remove_document`, non `delete_document`, e la
 /// bozza deve restare dov'è.
-    // Il `rm` di qualcun altro, e il watcher che passa di lì subito dopo.
+// Il `rm` di qualcun altro, e il watcher che passa di lì subito dopo.
 /// I documenti che hanno una bozza, per nome.
 /// bozza deve restare dov'è.
 #[test]

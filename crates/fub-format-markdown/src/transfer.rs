@@ -377,10 +377,7 @@ fn frontmatter_end(source: &str, doc_id: &str) -> Option<usize> {
                 .map(|the| the + 1)
                 .unwrap_or(0);
             Some(
-                if source[row..content]
-                    .chars()
-                    .all(|c| c == ' ' || c == '\t')
-                {
+                if source[row..content].chars().all(|c| c == ' ' || c == '\t') {
                     row
                 } else {
                     content

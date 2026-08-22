@@ -594,7 +594,7 @@ mod notify_watcher {
                     // Ciò che un lotto vero fa qui è `ExternalSync::batch`: il
                     // workspace in scrittura e gli indici resi durevoli. Quanto
                     // duri non conta, conta che stia ancora durando.
-        // **L'anello che si chiudeva.** Questi sono gli eventi che inotify
+                    // **L'anello che si chiudeva.** Questi sono gli eventi che inotify
                     std::thread::sleep(Duration::from_millis(300));
                     batch_done.store(true, Ordering::SeqCst);
                 },
@@ -656,7 +656,7 @@ mod notify_watcher {
         }
 
         /// letture e le scritture, non fra il rilevatore e il vault.
-                // Chi non sa dire cosa è successo va creduto: meglio una
+        // Chi non sa dire cosa è successo va creduto: meglio una
         #[test]
         fn what_changes_still_gets_through() {
             for kind in [
@@ -665,7 +665,7 @@ mod notify_watcher {
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
                 EventKind::Remove(RemoveKind::File),
                 // rilettura in più di un indice che drifta.
-        // **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
+                // **Una rinomina orfana esce lo stesso** (difetto 0199, premessa
                 EventKind::Any,
                 EventKind::Other,
             ] {
@@ -694,7 +694,7 @@ mod notify_watcher {
         /// prima la nascita della nota dev'essere stata consegnata, poi la sua
         /// sparizione dev'essere un secondo lotto. Se la metà «da» non uscisse,
         /// il secondo lotto non arriverebbe mai.
-            // Fuori dalla cartella guardata: una partenza che non avrà mai un
+        // Fuori dalla cartella guardata: una partenza che non avrà mai un
         #[test]
         fn an_orphan_rename_emerges_as_a_touched_path() {
             let inside = tempfile::tempdir().expect("the watched folder");

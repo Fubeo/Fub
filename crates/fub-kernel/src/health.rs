@@ -338,7 +338,10 @@ mod tests {
             &graph,
             &entries_of(&["img/foto.png"]),
         );
-        let broken: Vec<&str> = found.iter().filter_map(|the| the.detail.as_deref()).collect();
+        let broken: Vec<&str> = found
+            .iter()
+            .filter_map(|the| the.detail.as_deref())
+            .collect();
         assert_eq!(
             broken,
             vec!["note/b.md", "note/c"],
@@ -362,7 +365,10 @@ mod tests {
             &graph,
             &entries_of(&["img/foto.png"]),
         );
-        let broken: Vec<&str> = found.iter().filter_map(|the| the.detail.as_deref()).collect();
+        let broken: Vec<&str> = found
+            .iter()
+            .filter_map(|the| the.detail.as_deref())
+            .collect();
         assert_eq!(
             broken,
             vec!["img/sparita.png"],

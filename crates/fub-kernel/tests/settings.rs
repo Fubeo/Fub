@@ -44,11 +44,8 @@ fn a_key_exists_because_a_manifest_declares_it() {
         "before the declaration the key does not exist"
     );
 
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .expect("declared");
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .expect("declared");
 
     assert_eq!(
         ws.setting("versioning.enabled").unwrap(),
@@ -82,11 +79,8 @@ fn a_key_outside_the_own_namespace_is_not_declared() {
 #[test]
 fn a_plugin_reads_settings_from_the_host_like_it_reads_the_rest() {
     let mut ws = Bench::new().without_format().without_scan().mounts();
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .expect("declared");
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .expect("declared");
 
     let read = ws.with_host("fub.versioning", |host| host.setting("versioning.enabled"));
     assert_eq!(read.unwrap(), SettingValue::Toggle(true));
@@ -159,20 +153,15 @@ fn without_the_permission_not_even_a_writable_key_is_written() {
 
     // Leggere invece passa: uno schema è pubblico per costruzione, e questo
     // store non contiene segreti (regola scritta in `fub_abi::settings`).
-    let read = ws.with_host("com.acme.tasks", |host| {
-        host.setting("com.acme.tasks:show")
-    });
+    let read = ws.with_host("com.acme.tasks", |host| host.setting("com.acme.tasks:show"));
     assert!(read.is_ok(), "reading has no permission: {read:?}");
 }
 
 #[test]
 fn the_data_channel_responds_with_schema_value_and_origin() {
     let mut ws = Bench::new().without_format().without_scan().mounts();
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .expect("declared");
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .expect("declared");
     ws.register_plugin(
         with_settings(
             "fub.editor",
@@ -250,8 +239,10 @@ fn the_data_channel_responds_with_schema_value_and_origin() {
     assert!(
         all.iter()
             .filter(|and| fub_abi::settings::permission_of_key(&and.spec.key).is_some())
-            .all(|and| and.value == fub_abi::settings::SettingValue::Toggle(true)
-                && !and.spec.program_writable),
+            .all(
+                |and| and.value == fub_abi::settings::SettingValue::Toggle(true)
+                    && !and.spec.program_writable
+            ),
         "granted by default, and not writable by a program"
     );
 
@@ -296,11 +287,8 @@ fn the_data_channel_responds_with_schema_value_and_origin() {
 #[test]
 fn changing_a_setting_is_a_fact_that_announces_itself() {
     let mut ws = Bench::new().without_format().without_scan().mounts();
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .expect("declared");
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .expect("declared");
     let events = ws.bus().subscribe();
 
     ws.set_setting("versioning.enabled", SettingValue::Toggle(false))
@@ -323,11 +311,8 @@ fn changing_a_setting_is_a_fact_that_announces_itself() {
 #[test]
 fn a_plugin_that_shuts_down_takes_its_schema_but_not_its_value() {
     let mut ws = Bench::new().without_format().without_scan().mounts();
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .expect("declared");
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .expect("declared");
     ws.set_setting("versioning.enabled", SettingValue::Toggle(false))
         .unwrap();
 
@@ -339,11 +324,8 @@ fn a_plugin_that_shuts_down_takes_its_schema_but_not_its_value() {
 
     // E riaccenderlo ritrova la configurazione di prima: spegnere una feature
     // non è riconfigurarla.
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .expect("re-declared");
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .expect("re-declared");
     assert_eq!(
         ws.setting("versioning.enabled").unwrap(),
         SettingValue::Toggle(false)
@@ -358,13 +340,9 @@ fn a_written_value_survives_vault_closure() {
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
 
     {
-        let mut ws =
-            Workspace::new(&root, FormatRegistry::new()).expect("the vault opens");
-        ws.register_plugin(
-            with_settings("fub.versioning", vec![toggle()]),
-            Trust::Core,
-        )
-        .unwrap();
+        let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("the vault opens");
+        ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+            .unwrap();
         ws.set_setting("versioning.enabled", SettingValue::Toggle(false))
             .unwrap();
     }
@@ -375,11 +353,8 @@ fn a_written_value_survives_vault_closure() {
     );
 
     let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("the vault opens");
-    ws.register_plugin(
-        with_settings("fub.versioning", vec![toggle()]),
-        Trust::Core,
-    )
-    .unwrap();
+    ws.register_plugin(with_settings("fub.versioning", vec![toggle()]), Trust::Core)
+        .unwrap();
     assert_eq!(
         ws.setting("versioning.enabled").unwrap(),
         SettingValue::Toggle(false)
@@ -396,7 +371,6 @@ struct TwoCommands;
 
 impl fub_abi::traits::CommandProvider for TwoCommands {
     fn commands(&self) -> Vec<fub_abi::command::CommandSpec> {
-
         vec![
             fub_abi::command::CommandSpec::new("note.create", "New note")
                 .describing("Creates an empty note.")

@@ -17,8 +17,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::error::{FormatError, PluginError};
 use fub_abi::edit::Revision;
+use fub_abi::error::{FormatError, PluginError};
 use fub_abi::event::{Event, Notice};
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -29,7 +29,7 @@ use fub_abi::traits::{
     VaultEntry,
 };
 use fub_abi::FormatProvider;
-use fub_kernel::storage::{DirEntry, Merge, MemStorage, Stat, VaultStorage};
+use fub_kernel::storage::{DirEntry, MemStorage, Merge, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
 
 /// Provider `.txt` che **conta quante volte gli è stato chiesto di parsare**.
@@ -438,8 +438,10 @@ fn the_vault_not_and_only_documents() {
     let ws = f.open(false);
 
     let all = entries(&ws, None, None);
-    let seen: Vec<(String, EntryKind)> =
-        all.iter().map(|and| (and.id.to_string(), and.kind)).collect();
+    let seen: Vec<(String, EntryKind)> = all
+        .iter()
+        .map(|and| (and.id.to_string(), and.kind))
+        .collect();
     assert_eq!(
         seen,
         [
@@ -467,7 +469,10 @@ fn the_vault_not_and_only_documents() {
         Some(Revision::of_bytes(b"PNG!")),
         "l'impronta dell'allegato si calcola e si persiste"
     );
-    let notes = all.iter().find(|and| and.id.as_str() == "nota.txt").unwrap();
+    let notes = all
+        .iter()
+        .find(|and| and.id.as_str() == "nota.txt")
+        .unwrap();
     assert!(
         notes.fingerprint.is_some(),
         "l'impronta si calcola dove i byte sono già in mano"

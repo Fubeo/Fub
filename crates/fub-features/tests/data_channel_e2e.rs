@@ -362,8 +362,7 @@ fn the_tag_of_a_result_are_the_its_facets() {
         other => panic!("attesi tag, trovato {other:?}"),
     };
     assert_eq!(
-        all
-            .iter()
+        all.iter()
             .map(|t| (t.name.as_str(), t.count))
             .collect::<Vec<_>>(),
         [("casa", 1), ("lavoro", 2), ("lavoro/vecchio", 1)]

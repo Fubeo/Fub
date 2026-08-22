@@ -28,11 +28,11 @@
 use fub_abi::model::DocId;
 use wasmtime::component::{HasSelf, Linker};
 
+use crate::borrow::State;
 use crate::contract::fub::abi::{
     format as w_format, host_env, host_events, host_vault_read, index as w_index, intl as w_intl,
     model as w_model, session as w_session,
 };
-use crate::borrow::State;
 use crate::translate as tr;
 
 /// Aggiunge al linker le famiglie che questo crate serve.
@@ -107,8 +107,7 @@ impl host_vault_read::Host for State {
         id: w_model::DocId,
     ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
         let h = guest!(self);
-        h
-            .read_document(&DocId::new(id))
+        h.read_document(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))
     }
 
@@ -117,8 +116,7 @@ impl host_vault_read::Host for State {
         id: w_model::DocId,
     ) -> Result<Vec<u8>, crate::contract::fub::abi::errors::PluginError> {
         let h = guest!(self);
-        h
-            .read_document_bytes(&DocId::new(id))
+        h.read_document_bytes(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))
     }
 
@@ -127,8 +125,7 @@ impl host_vault_read::Host for State {
         id: w_model::DocId,
     ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
         let h = guest!(self);
-        h
-            .document_revision(&DocId::new(id))
+        h.document_revision(&DocId::new(id))
             .map(|r| r.0)
             .map_err(|and| tr::to_error(&and))
     }
@@ -138,8 +135,7 @@ impl host_vault_read::Host for State {
         page: Option<w_index::Page>,
     ) -> Result<w_index::DocIdsPage, crate::contract::fub::abi::errors::PluginError> {
         let h = guest!(self);
-        h
-            .list_documents(tr::from_page(page))
+        h.list_documents(tr::from_page(page))
             .map(tr::to_doc_ids_page)
             .map_err(|and| tr::to_error(&and))
     }
@@ -192,8 +188,7 @@ impl host_vault_read::Host for State {
     ) -> Result<Vec<host_vault_read::TrashEntry>, crate::contract::fub::abi::errors::PluginError>
     {
         let h = guest!(self);
-        h
-            .list_trash()
+        h.list_trash()
             .map(|v| v.into_iter().map(tr::to_trash).collect())
             .map_err(|and| tr::to_error(&and))
     }

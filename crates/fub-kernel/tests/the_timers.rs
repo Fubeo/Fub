@@ -167,8 +167,7 @@ fn two_alarms_with_the_same_name_are_refused() {
     ] {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-        let mut ws =
-            Workspace::new(&root, FormatRegistry::new()).expect("the vault opens");
+        let mut ws = Workspace::new(&root, FormatRegistry::new()).expect("the vault opens");
         let result = ws.register_plugin(
             PluginManifest::new(ACME, ACME).waking(timers),
             Trust::Community,

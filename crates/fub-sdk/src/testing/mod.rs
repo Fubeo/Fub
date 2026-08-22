@@ -29,8 +29,8 @@ use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::net::{HttpRequest, HttpResponse};
-use fub_abi::rules::trash;
 use fub_abi::rules::path_policy::{self, fenced_doc_id, Naming};
+use fub_abi::rules::trash;
 use fub_abi::session::{
     AnchoredSelection, AnchoredSelections, PaneMode, SelectionSet, ViewContext,
 };
@@ -298,10 +298,7 @@ impl MemoryHost {
     /// esercita mai. Si accende a metà partita di proposito — la storia si
     /// costruisce con le scritture buone, e poi cede quella che interessa.
     pub fn denies_write(&self, path: &str) {
-        self.writes_negate
-            .lock()
-            .unwrap()
-            .insert(path.to_string());
+        self.writes_negate.lock().unwrap().insert(path.to_string());
     }
 
     /// Quante volte quel path è stato scritto, e quanti byte in tutto.
@@ -1291,10 +1288,9 @@ impl HostQuery for MemoryHost {
             // nessun problema da segnalare, e l'elenco vuoto è la verità — non
             // un finto successo. La paginazione la applica come il kernel su
             // una risposta già in memoria (`Paged::window`).
-            IndexQuery::VaultHealth { page, .. } => Ok(IndexResult::VaultHealth(Paged::window(
-                Vec::new(),
-                page,
-            ))),
+            IndexQuery::VaultHealth { page, .. } => {
+                Ok(IndexResult::VaultHealth(Paged::window(Vec::new(), page)))
+            }
             // Il doppio non ha né indice né grafo né frontmatter: per tutto il
             // resto non c'è nessuno che serva la domanda, ed è quella la
             // risposta — non un `BadArgs`, che direbbe che la domanda è
@@ -1352,17 +1348,13 @@ impl TransferRead for MemoryHost {
 impl HostNetwork for MemoryHost {
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         self.requests.lock().unwrap().push(request);
-        self.answers
-            .lock()
-            .unwrap()
-            .pop_front()
-            .unwrap_or_else(|| {
-                Err(PluginError::Unserved(
-                    "nessuna risposta preparata: questo banco non ha un filo verso \
+        self.answers.lock().unwrap().pop_front().unwrap_or_else(|| {
+            Err(PluginError::Unserved(
+                "nessuna risposta preparata: questo banco non ha un filo verso \
                  fuori finché non glielo si dà (`con_risposta`)"
-                        .into(),
-                ))
-            })
+                    .into(),
+            ))
+        })
     }
 }
 

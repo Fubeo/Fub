@@ -87,7 +87,10 @@ fn an_attachment_footprint_is_stable() {
     bench.reindex().expect("scan succeeds");
 
     let before = footprint(&bench, "manuale.pdf");
-    assert!(before.is_some(), "the entry store did not take the footprint");
+    assert!(
+        before.is_some(),
+        "the entry store did not take the footprint"
+    );
 
     bench.reindex().expect("second scan succeeds");
     assert_eq!(

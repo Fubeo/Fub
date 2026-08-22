@@ -472,7 +472,7 @@ fn document_from_name(name: &str) -> Option<DocId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{DirEntry, Merge, MemStorage, Stat};
+    use crate::storage::{DirEntry, MemStorage, Merge, Stat};
     use std::io;
 
     /// Un supporto che non lascia togliere niente: è il modo di fermare una
@@ -541,7 +541,11 @@ mod tests {
              is theirs: {:?}",
             drafts.drafts.iter().map(|d| &d.doc).collect::<Vec<_>>()
         );
-        assert_eq!(drafts.drafts[0].doc, doc("b.md"), "and it is at the new name");
+        assert_eq!(
+            drafts.drafts[0].doc,
+            doc("b.md"),
+            "and it is at the new name"
+        );
         assert_eq!(drafts.drafts[0].text, "il mio testo");
     }
 
@@ -741,10 +745,7 @@ mod tests {
             text("dopo.md"),
             Some("la destinazione che ha già una bozza")
         );
-        assert_eq!(
-            text("prima~recovery.md"),
-            Some("un recupero che c'era già")
-        );
+        assert_eq!(text("prima~recovery.md"), Some("un recupero che c'era già"));
         assert_eq!(
             text("prima~recovery-2.md"),
             Some("il testo che si sposta"),

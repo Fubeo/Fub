@@ -488,7 +488,10 @@ fn catalog_it() -> StringCatalog {
             "L'oggetto JSON `{{\"chiave\": valore}}`.",
         )
         .with(E_NO_ACTIVE_PANE, "Nessun pannello attivo.")
-        .with(AND_NO_OPEN_NOTES, "Nessuna nota aperta nel pannello attivo.")
+        .with(
+            AND_NO_OPEN_NOTES,
+            "Nessuna nota aperta nel pannello attivo.",
+        )
         .with(AND_NOTHING_SELECTED, "Niente di selezionato.")
         .with(
             E_EMPTY_SELECTION,
@@ -611,7 +614,7 @@ fn catalog_it() -> StringCatalog {
             D_SETTINGS_IMPORT_PARTIAL,
             "Impostazioni applicate: {count} · Saltate: {skipped} ({reasons})",
         )
-// impostazioni e vedeva già il resto in inglese.
+        // impostazioni e vedeva già il resto in inglese.
         // --- l'annullamento (§13.3) ---------------------------------------
         //
         // Le etichette `undo.*` dicono **cosa si disferebbe**, non cosa è
@@ -895,7 +898,10 @@ fn catalog_en() -> StringCatalog {
             "The buffer has unsaved changes: save before ticking, or say the \
              position in `at`.",
         )
-        .with(AND_TASK_NOT_FOUND, "No task item at position {at} of {doc}.")
+        .with(
+            AND_TASK_NOT_FOUND,
+            "No task item at position {at} of {doc}.",
+        )
         .with(
             AND_NOT_A_TOGGLE,
             "`{value}` is not a toggle (`true` or `false`).",
@@ -995,17 +1001,17 @@ fn catalog_en() -> StringCatalog {
         .with(U_TASK, "the task ticked in {doc}")
 }
 
-        // questo cominciano dal verbo di ciò che tornerebbe indietro.
+// questo cominciano dal verbo di ciò che tornerebbe indietro.
 /// I comandi ufficiali. Senza stato: tutto ciò che gli serve lo chiede
 #[derive(Default)]
 pub struct CoreCommands;
 
 impl CoreCommands {
-/// all'host, come farebbe un plugin.
+    /// all'host, come farebbe un plugin.
     /// Le spec, anche fuori dal trait: chi disegna una palette nei test le
     pub fn specs() -> Vec<CommandSpec> {
         vec![
-    // legge senza montare un workspace.
+            // legge senza montare un workspace.
             // Senza accordo, e non per distrazione: `Mod-Shift-f` è della shell,
             // che con quel tasto porta il pannello della ricerca sotto gli occhi
             // — la cosa che fa Obsidian e che le dita hanno già imparato. Questo
@@ -1024,7 +1030,7 @@ impl CoreCommands {
             // gesto giusto. Il perché sta nella 0081.
             command(NOTES_CREATE)
                 .with_param(parameter(NOTES_CREATE, "name", ParamKind::Text))
-            // --- strutturali (decisione 0013) ---------------------------------------
+                // --- strutturali (decisione 0013) ---------------------------------------
                 .with_scope(CommandScope::writing(CommandReach::Document)),
             command(NOTES_RENAME)
                 .with_param(parameter(NOTES_RENAME, "doc", ParamKind::Document).required())
@@ -1048,7 +1054,7 @@ impl CoreCommands {
                 .with_param(parameter(VAULT_ARCHIVE, "docs", ParamKind::Documents).required())
                 .with_param(parameter(VAULT_ARCHIVE, "folder", ParamKind::Text))
                 .with_scope(CommandScope::writing(CommandReach::Documents)),
-                // `trash.restore`, che sta in questo stesso registro.
+            // `trash.restore`, che sta in questo stesso registro.
             // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
             // quella la tiene l'editor, che spunta le todo delle righe
             // selezionate nel **buffer** (`editor-commands.ts`). Sono due
@@ -1219,8 +1225,7 @@ fn selection_wikilink(
 
     let request = EditRequest::new(
         host.document_revision(&doc)?,
-        wrap
-            .iter()
+        wrap.iter()
             .map(|(span, selected)| TextEdit::replace(*span, format!("[[{selected}]]")))
             .collect(),
     );
@@ -1275,11 +1280,9 @@ fn selection_wikilink(
         },
         None => CommandEffect::Done,
     };
-    Ok(
-        CommandOutcome::notify(message(D_WIKILINK, D_WIKILINK_MANY))
-            .undoable(undo)
-            .with_effect(effect),
-    )
+    Ok(CommandOutcome::notify(message(D_WIKILINK, D_WIKILINK_MANY))
+        .undoable(undo)
+        .with_effect(effect))
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,9 +1443,7 @@ fn notes_create(
         Some(name) => DocId::new(with_extension(name)),
         // Il nome libero lo chiede all'host: la convenzione D3 è una sola, e
         // sta nel vault che è l'unico a sapere cosa è occupato.
-        None => host.free_name(&DocId::new(format!(
-            "{UNTITLED}.{DEFAULT_EXTENSION}"
-        ))),
+        None => host.free_name(&DocId::new(format!("{UNTITLED}.{DEFAULT_EXTENSION}"))),
     };
 
     if mode.is_dry_run() {
@@ -1710,7 +1711,7 @@ fn trash_empty(mode: InvokeMode, host: &mut dyn HostApi) -> Result<CommandOutcom
     )))
 }
 
-/// intero.
+// intero.
 // ---------------------------------------------------------------------------
 // vault.archive — il cliente di `run_command`
 
@@ -1748,7 +1749,7 @@ fn vault_archive(
     let mut plans: Vec<CommandPlan> = Vec::new();
     let mut made = 0usize;
     let mut failed: Vec<Failure> = Vec::new();
-//   nella storia di chi guarda gli eventi.
+    //   nella storia di chi guarda gli eventi.
     // I passi dell'annullamento della macro sono quelli dei comandi invocati.
     // È la terza cosa che si compone gratis passando da `run_command` — dopo il
     // piano e il lotto — e la sola che questa funzione deve **girare**: si
@@ -1762,7 +1763,7 @@ fn vault_archive(
         }
         let args = serde_json::json!({ "doc": doc.as_str(), "to": to });
         match host.run_command(NOTES_RENAME, args) {
-    // torna indietro dall'ultima rinomina, non dalla prima.
+            // torna indietro dall'ultima rinomina, non dalla prima.
             // In simulazione il comando invocato risponde col proprio piano —
             // non perché questa funzione glielo abbia chiesto, ma perché
             Ok(CommandOutcome {
@@ -1781,7 +1782,7 @@ fn vault_archive(
     back.reverse();
 
     if mode.is_dry_run() {
-            // l'host in cui gira è già quello di una simulazione.
+        // l'host in cui gira è già quello di una simulazione.
         // L'unione dei piani dei passi. `docs` prima di `edits` perché è
         // l'ordine in cui le cose succederebbero, e `complete()` dell'host
         let mut touched_docs: Vec<DocId> = Vec::new();
@@ -1810,7 +1811,7 @@ fn vault_archive(
     } else {
         archive(D_ARCHIVE_PARTIAL, made, &folder, Some(why(&failed)))
     };
-        // dà comunque il Vec, che è l'ordine in cui i passi succederebbero.
+    // dà comunque il Vec, che è l'ordine in cui i passi succederebbero.
     // `docs.len()` e non `fatte + falliti.len()`: le note già nella cartella
     // sono state guardate e non c'era niente da fare, il che è esattamente il
     // resto che `Partial` lascia senza un campo. Contarle fuori direbbe «undici
@@ -1823,7 +1824,7 @@ fn vault_archive(
         .partially(count))
 }
 
-    // su undici» di un gesto che l'utente ha fatto su dodici note.
+// su undici» di un gesto che l'utente ha fatto su dodici note.
 // ---------------------------------------------------------------------------
 // note.task.toggle
 
@@ -1866,7 +1867,7 @@ fn notes_task_toggle(
         .or_else(|| context.as_ref().and_then(|c| c.doc.clone()))
         .ok_or_else(|| state(Text::key(AND_TASK_NO_NOTES)))?;
 
-// ancora l'undo, mentre una semantica inventata non la disfa nessuno.
+    // ancora l'undo, mentre una semantica inventata non la disfa nessuno.
     // Le posizioni: quelle dette, o tutte quelle del contesto. Le due non si
     // mescolano — un `doc` detto e un `at` no vorrebbe dire spuntare in una
     // nota i task che stanno sotto i cursori di **un'altra**, che è un modo
@@ -1878,11 +1879,8 @@ fn notes_task_toggle(
     // solo la primaria, che è il gesto per cui il multi-cursore esiste
     let ats: Vec<usize> = match args.numbers("at") {
         Some(ns) => {
-            let mut offsets: Vec<usize> = ns
-                .iter()
-                .copied()
-                .map(position)
-                .collect::<Result<_, _>>()?;
+            let mut offsets: Vec<usize> =
+                ns.iter().copied().map(position).collect::<Result<_, _>>()?;
             offsets.sort_unstable();
             offsets.dedup();
             offsets
@@ -1898,7 +1896,7 @@ fn notes_task_toggle(
                 .selections
                 .as_ref()
                 .ok_or_else(|| state(Text::key(AND_TASK_NO_CARET)))?;
-    // (FEATURES 4.2, §23.4).
+            // (FEATURES 4.2, §23.4).
             // La regola dello span della decisione 0007, per la stessa ragione di
             // `selection.wikilink`: a buffer sporco le coordinate valgono per il
             selections
@@ -1913,7 +1911,7 @@ fn notes_task_toggle(
 
     let model = host.read_model(&doc)?;
 
-            // buffer, e il modello che si sta per chiedere è quello del **file**.
+    // buffer, e il modello che si sta per chiedere è quello del **file**.
     // Per ogni offset, il task che lo contiene. Se un offset non ha un task,
     // l'errore nomina **quello** — non l'insieme — perché chi legge sa quale
     let mut markers: Vec<TaskMarker> = Vec::with_capacity(ats.len());
@@ -1985,7 +1983,7 @@ fn notes_task_toggle(
         .with_effect(effect))
 }
 
-    // silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
+// silenzioso. Si deduplica per span, tenendo il primo (ordine stabile).
 /// Un `at` che arriva come numero JSON diventa un offset in byte, o si spiega.
 ///
 /// La specie [`ParamKind::Number`] è un `f64`, e ciò che non è un indice di byte
@@ -2045,7 +2043,7 @@ fn task_at(model: &DocumentModel, at: usize) -> Option<TaskMarker> {
     best.map(|(_, task)| task)
 }
 
-                // blocchi annidati.
+// blocchi annidati.
 /// Le occorrenze di `needle` in `source`, in byte e non sovrapposte.
 ///
 /// `whole_word` non è una raffinatezza: una sostituzione in blocco senza di essa
@@ -2062,14 +2060,14 @@ pub fn occurrences(source: &str, needle: &str, whole_word: bool) -> Vec<Span> {
         if !whole_word || is_whole_word(source, start, end) {
             spans.push(Span::new(start, end));
         }
-// toccato quaranta file.
+        // toccato quaranta file.
         // Si riparte dalla fine del match: le occorrenze sono un insieme di
         from = end;
     }
     spans
 }
 
-        // edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
+// edit, e due edit non possono contendersi lo stesso punto (decisione 0008).
 /// Il match `[start, end)` è una parola intera? Confine = ciò che sta prima e
 fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
     let before = source[..start].chars().next_back();
@@ -2078,7 +2076,7 @@ fn is_whole_word(source: &str, start: usize, end: usize) -> bool {
     !word_part(before) && !word_part(after)
 }
 
-/// dopo non è alfanumerico né `_`.
+// dopo non è alfanumerico né `_`.
 // ---------------------------------------------------------------------------
 // settings.* (§11.1)
 
@@ -2126,7 +2124,7 @@ fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginErro
         SettingKind::Text { .. } | SettingKind::Choice { .. } => {
             Ok(SettingValue::Text(raw.to_string()))
         }
-// la dichiara la chiave che si sta toccando.
+        // la dichiara la chiave che si sta toccando.
         // La virgola e non il JSON: chi scrive `a, b` in un campo di testo sta
         // scrivendo due voci, e chiedergli le virgolette vorrebbe dire fargli
         SettingKind::List { .. } => Ok(SettingValue::List(
@@ -2138,7 +2136,7 @@ fn parse_value(kind: &SettingKind, raw: &str) -> Result<SettingValue, PluginErro
     }
 }
 
-        // scrivere JSON dentro una stringa di un JSON.
+// scrivere JSON dentro una stringa di un JSON.
 fn entry_of(host: &dyn HostApi, key: &str) -> Result<SettingEntry, PluginError> {
     declared(host)?
         .into_iter()
@@ -2176,7 +2174,7 @@ fn settings_set(
     let entry = entry_of(host, key)?;
     deny_if_not_writable(&entry)?;
     let value = parse_value(&entry.spec.kind, raw)?;
-// davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
+    // davvero, che è tutto ciò per cui un piano esiste (decisione 0010).
     // Il piano deve attraversare lo stesso cancello dell'applicazione: il kernel
     if let Some(why) = entry.spec.kind.rejects(&value) {
         return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
@@ -2232,7 +2230,7 @@ fn settings_reset(
     Ok(CommandOutcome::notify(one(D_SETTINGS_RESET, A_KEY, key)))
 }
 
-    // questo raggio, non una dimenticanza.
+// questo raggio, non una dimenticanza.
 /// Esporta ciò che **qualcuno ha deciso**, e non i default.
 ///
 /// I default non sono una configurazione: sono ciò che vale quando non c'è una
@@ -2307,7 +2305,7 @@ fn settings_import(
             skipped.push(skipped_key(key, PluginError::BadArgs(why.into())));
             continue;
         }
-// parziale e un import parziale in silenzio.
+        // parziale e un import parziale in silenzio.
         // Il cancello della chiave si applica **anche in simulazione**, o il
         // piano direbbe una cosa e l'applicazione ne farebbe un'altra: senza
         // questa riga un dry-run su un file che nomina `privacy.telemetry`
@@ -2322,8 +2320,8 @@ fn settings_import(
         }
         match host.set_setting(key, value) {
             Ok(()) => applied += 1,
-        // saltata». Un piano che non è ciò che succederebbe non è un piano
-        // (decisione 0010).
+            // saltata». Un piano che non è ciò che succederebbe non è un piano
+            // (decisione 0010).
             // Il rifiuto più importante è questo, e va **detto**: un file di
             Err(and) => skipped.push(skipped_key(key, and)),
         }
@@ -2337,8 +2335,8 @@ fn settings_import(
             vec![
                 Arg::int(A_COUNT, applied as i64),
                 Arg::int(A_SKIPPED, skipped.len() as i64),
-            // impostazioni che passa di mano non sposta le chiavi che un
-            // programma non può scrivere.
+                // impostazioni che passa di mano non sposta le chiavi che un
+                // programma non può scrivere.
                 // Le ragioni per cui una chiave è saltata attraversano come
                 // **dato**, non come prosa da tradurre, e restano in italiano.
                 // Non è pigrizia: metà di quelle ragioni non sono di questo
@@ -2349,8 +2347,7 @@ fn settings_import(
             ],
         )
     };
-    let outcome =
-        CommandOutcome::notify(message).partially(Partial::of(before, applied, skipped));
+    let outcome = CommandOutcome::notify(message).partially(Partial::of(before, applied, skipped));
     Ok(if mode.is_dry_run() {
         outcome.with_effect(CommandEffect::Plan(CommandPlan {
             summary: count_text(P_SETTINGS_IMPORT, applied),
@@ -2361,9 +2358,9 @@ fn settings_import(
     })
 }
 
-                // tradurre le due righe di qui lascerebbe una frase mezza in
-                // una lingua e mezza nell'altra, che è peggio di una
-                // dichiaratamente in una sola.
+// tradurre le due righe di qui lascerebbe una frase mezza in
+// una lingua e mezza nell'altra, che è peggio di una
+// dichiaratamente in una sola.
 /// Un valore dentro un messaggio, **come dato**.
 ///
 /// Diceva «acceso» e «spento» e «niente», cioè tre parole italiane che
@@ -2400,9 +2397,9 @@ mod tests {
         args: serde_json::Value,
         mode: InvokeMode,
     ) -> Result<CommandOutcome, PluginError> {
-// che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
-// povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
-// che non è parola di nessuno.
+        // che chi lo cambia scrive in `settings.set` e nel file: non è una resa più
+        // povera, è la stessa in tutte le lingue. L'elenco vuoto è un trattino lungo,
+        // che non è parola di nessuno.
         let spec = CoreCommands::specs()
             .into_iter()
             .find(|s| s.id == command)
@@ -2411,9 +2408,9 @@ mod tests {
         CoreCommands.invoke(command, args, mode, host)
     }
 
-        // Come farebbe il kernel: prima la convalida contro la spec, poi la
-        // chiamata. Un test che saltasse la convalida proverebbe un percorso
-        // che non esiste.
+    // Come farebbe il kernel: prima la convalida contro la spec, poi la
+    // chiamata. Un test che saltasse la convalida proverebbe un percorso
+    // che non esiste.
     /// Un `Text` **come lo legge chi guarda**: risolto col catalogo di questo
     /// componente, invece che stampato col suo `Display`.
     ///
@@ -2480,7 +2477,7 @@ mod tests {
     fn the_wikilink_command_needs_a_selection_that_is_true_for_the_file() {
         let mut host = MemoryHost::new().with_document("nota.md", "una nota di prova");
         host.set_active(Some("nota.md"));
-    // un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
+        // un `Text::Message` stampa la chiave e gli argomenti, non la frase. Le
         host.set_context(Some(
             ViewContext::new("main")
                 .with_doc(Some(DocId::new("nota.md")))
@@ -2609,7 +2606,7 @@ mod tests {
         );
         let whole = occurrences("nota, annotazione, nota", "nota", true);
         assert_eq!(whole, vec![Span::new(0, 4), Span::new(19, 23)]);
-    // asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
+        // asserzioni che leggevano prosa devono passare di qui, e ci guadagnano:
         assert!(occurrences("però", "per", true).is_empty());
     }
 
@@ -2626,9 +2623,9 @@ mod tests {
         assert!(matches!(err, PluginError::BadArgs(_)));
     }
 
-    /// adesso provano anche che quella chiave nel catalogo ci sia.
-        // Buffer sporco: c'è il testo, non lo span (decisione 0007).
-        // Accentate: il confine è un carattere, non un byte.
+    // adesso provano anche che quella chiave nel catalogo ci sia.
+    // Buffer sporco: c'è il testo, non lo span (decisione 0007).
+    // Accentate: il confine è un carattere, non un byte.
 
     // -----------------------------------------------------------------------
     // note.task.toggle — il cliente one-shot del modello (decisione 0018)
@@ -2705,8 +2702,8 @@ mod tests {
     #[test]
     fn the_innermost_task_wins_when_they_are_nested() {
         let mut host = with_task(None);
-    // provider invece che contro il contratto), quindi il modello lo si semina
-    // — ed è l'occasione per dire negli span esattamente cosa il comando si
+        // provider invece che contro il contratto), quindi il modello lo si semina
+        // — ed è l'occasione per dire negli span esattamente cosa il comando si
         invoke(
             &mut host,
             NOTES_TASK_TOGGLE,
@@ -2807,8 +2804,8 @@ mod tests {
     }
 
     /// aspetta di ricevere.
-        // Una posizione che sta dentro **entrambe** le voci: la annidata è la
-        // più stretta, ed è quella che l'utente sta guardando.
+    // Una posizione che sta dentro **entrambe** le voci: la annidata è la
+    // più stretta, ed è quella che l'utente sta guardando.
     /// La specie di una chiave la dichiara lo **schema**, e il comando la legge
     #[test]
     fn a_setting_value_is_read_according_to_the_kind_the_key_declares() {
@@ -2833,8 +2830,8 @@ mod tests {
             "un interruttore ha due stati, e «forse» non è uno di quelli"
         );
 
-    // da lì: è ciò che permette a `value` di essere testo — la sola forma che
-    // un chiamante non interattivo (una CLI, un'automazione, un modello) sa
+        // da lì: è ciò che permette a `value` di essere testo — la sola forma che
+        // un chiamante non interattivo (una CLI, un'automazione, un modello) sa
         let list = SettingKind::List {
             default: Vec::new(),
         };
@@ -2845,8 +2842,8 @@ mod tests {
     }
 
     /// compilare.
-        // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
-        // far scrivere virgolette dentro una stringa di un JSON.
+    // Un elenco si scrive con le virgole: chiedere il JSON vorrebbe dire
+    // far scrivere virgolette dentro una stringa di un JSON.
     #[test]
     fn the_command_refuses_a_key_that_is_not_program_writable_and_says_which() {
         let mut host = MemoryHost::new()
@@ -2880,8 +2877,8 @@ mod tests {
             "{error:?}"
         );
 
-    // Il comando visto **dal contratto**: il doppio in memoria applica il
-    // cancello della chiave come lo applica il kernel, quindi ciò che qui
+        // Il comando visto **dal contratto**: il doppio in memoria applica il
+        // cancello della chiave come lo applica il kernel, quindi ciò che qui
         let error = invoke(
             &mut host,
             SETTINGS_SET,

@@ -121,7 +121,8 @@ fn a_restore_not_lands_outside_from_the_root() {
     bench.write(".trash/Idea.txt", "cestinata");
     let vault = bench.vault();
 
-    let outcome = vault.restore_trashed(&DocId::new(".trash/Idea.txt"), &DocId::new("../fuori.txt"));
+    let outcome =
+        vault.restore_trashed(&DocId::new(".trash/Idea.txt"), &DocId::new("../fuori.txt"));
 
     assert!(outcome.is_err(), "una destinazione che risale si rifiuta");
     assert!(

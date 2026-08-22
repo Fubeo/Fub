@@ -100,7 +100,7 @@ impl Missing for KernelError {
     }
 }
 
-    /// è mai avvenuto.
+/// è mai avvenuto.
 /// `Ok(None)` se la cosa non c'è, e **ogni altro errore risale con il suo
 /// tipo**.
 ///
@@ -193,26 +193,26 @@ impl From<KernelError> for PluginError {
         match and {
             KernelError::NotFound(doc) => PluginError::NotFound(doc.into()),
             KernelError::AlreadyExists(doc) => PluginError::AlreadyExists(doc.into()),
-//
-//   [`Text::Message`]: fub_abi::text::Text::Message
+            //
+            //   [`Text::Message`]: fub_abi::text::Text::Message
             // Un conflitto è la sola cosa che chi chiama deve **riprovare**
             // (rileggendo e ricalcolando), un edit malformato la sola che deve
             KernelError::Stale(doc) => PluginError::Conflict(doc.into()),
             KernelError::BadEdit { doc, why } => {
                 PluginError::BadArgs(format!("{doc}: {why}").into())
             }
-            KernelError::BadName { name, why } => PluginError::BadArgs(
-                format!("invalid note name ({name:?}): {why}").into(),
-            ),
+            KernelError::BadName { name, why } => {
+                PluginError::BadArgs(format!("invalid note name ({name:?}): {why}").into())
+            }
             KernelError::OutsideVault(path) => {
                 PluginError::PermissionDenied(format!("path outside vault: {path}").into())
             }
             KernelError::NoProvider(ext) => PluginError::Unserved(
                 format!("no provider registered for extension {ext:?}").into(),
             ),
-            KernelError::NoDefaultFormat => PluginError::Unserved(
-                "no format registered: cannot create a note".into(),
-            ),
+            KernelError::NoDefaultFormat => {
+                PluginError::Unserved("no format registered: cannot create a note".into())
+            }
             KernelError::Format(FormatError::Unsupported { format, got }) => PluginError::Unserved(
                 format!(
                     "the format \"{format}\" cannot read this file: it received \
@@ -252,17 +252,15 @@ impl From<KernelError> for PluginError {
                 std::io::ErrorKind::PermissionDenied => PluginError::PermissionDenied(
                     format!("permission denied writing to {path}").into(),
                 ),
-                _ => PluginError::Io(
-                    format!("invalid vault root ({path}): {source}").into(),
-                ),
+                _ => PluginError::Io(format!("invalid vault root ({path}): {source}").into()),
             },
             and @ KernelError::Format(_) => PluginError::Internal(and.to_string().into()),
         }
     }
 }
 
-            // perché non c'è niente da ritrovare; un permesso negato è invece
-            // la metà del contratto fatta apposta per «c'è, ma non puoi».
+// perché non c'è niente da ritrovare; un permesso negato è invece
+// la metà del contratto fatta apposta per «c'è, ma non puoi».
 /// Come si chiama una [`SourceKind`] in una frase che legge una persona.
 ///
 /// Il `match` è **senza `_`** di proposito: una specie di sorgente in più nel
@@ -279,8 +277,8 @@ fn source_kind_name(k: SourceKind) -> &'static str {
 mod tests {
     use super::*;
 
-/// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
-/// cosa è arrivato, questo obbliga a saperlo **nominare**.
+    /// [`FormatError::Unsupported`] non può prendere da sé: quello obbliga a *dire*
+    /// cosa è arrivato, questo obbliga a saperlo **nominare**.
     /// **Cosa vede chi apre un allegato con un provider testuale**: una frase
     /// che nomina tutti e due i dati del rifiuto.
     ///

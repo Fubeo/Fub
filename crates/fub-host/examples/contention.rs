@@ -146,11 +146,7 @@ fn measure(ws: &Custody<Workspace>, mode: Mode, threads: usize, mix: &[ReadOp]) 
 
 /// La contropartita: quanto aspetta chi **scrive** mentre `threads` lettori
 /// tengono il workspace. Rende (mediana, massimo) in millisecondi.
-fn write_latency(
-    ws: &Custody<Workspace>,
-    mode: Mode,
-    threads: usize,
-) -> (f64, f64, usize) {
+fn write_latency(ws: &Custody<Workspace>, mode: Mode, threads: usize) -> (f64, f64, usize) {
     let stop = Arc::new(AtomicBool::new(false));
     let readers: Vec<_> = (0..threads)
         .map(|t| {
@@ -202,7 +198,11 @@ fn write_latency(
 fn seed(root: &Utf8Path) {
     let tag = ["rust", "cooking", "music", "history", "math"];
     for the in 0..NOTES {
-        let mut b = format!("# Nota {the}\n\n#{} #{}\n\n", tag[the % 5], tag[(the * 7) % 5]);
+        let mut b = format!(
+            "# Nota {the}\n\n#{} #{}\n\n",
+            tag[the % 5],
+            tag[(the * 7) % 5]
+        );
         for s in 0..6 {
             b.push_str(&format!("## Section {s}\n\n"));
             for p in 0..3 {

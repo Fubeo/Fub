@@ -40,9 +40,9 @@ use fub_abi::event::{BatchId, DocChange, DocChanges, Event, EventKind, EventMask
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, TaskMarker};
 use fub_abi::rules::events::{folder_contains, topic_matches};
+use fub_abi::rules::keys;
 use fub_abi::rules::path::resolution_key;
 use fub_abi::rules::path_policy::{check, normalized, Naming};
-use fub_abi::rules::keys;
 use fub_abi::text::{ArgValue, Message, StringCatalog, Strings, Text};
 use fub_abi::Span;
 use serde_json::{json, Value};
@@ -227,11 +227,11 @@ fn name_fault_cases() -> Vec<Value> {
 /// considera identica a un altro.
 fn normalized_name_cases() -> Vec<Value> {
     [
-        "Café.md",            // NFC
-        "Cafe\u{0301}.md",    // NFD, come lo scrive macOS
-        "  note.md  ",        // il trim
-        "folder / note.md",   // per segmento, non solo ai due estremi
-        "note. ",             // lo spazio va, il punto resta
+        "Café.md",          // NFC
+        "Cafe\u{0301}.md",  // NFD, come lo scrive macOS
+        "  note.md  ",      // il trim
+        "folder / note.md", // per segmento, non solo ai due estremi
+        "note. ",           // lo spazio va, il punto resta
         "ÅNGSTRÖM.md",
         "\u{212B}ngen.md", // il segno angstrom, che in NFC diventa Å
         "Projects/City.md",
@@ -421,11 +421,7 @@ fn mask_wants_cases() -> Vec<Value> {
         },
     ];
     let mut out = Vec::new();
-    for (name, mask) in [
-        ("narrow", &narrow),
-        ("wide", &wide),
-        ("on_tags", &on_tags),
-    ] {
+    for (name, mask) in [("narrow", &narrow), ("wide", &wide), ("on_tags", &on_tags)] {
         for event in &events {
             out.push(json!({
                 "mask_name": name,
@@ -636,7 +632,7 @@ fn expansion_cases() -> Vec<Value> {
         // Un'aperta dentro un nome: il nome è ciò che precede la prima chiusa.
         // Un nome che in JavaScript è un membro di ogni oggetto.
         ("{a{b}", vec![("b", "B")]),
-    // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fub-abi --test
+        // Rigenerazione esplicita: `UPDATE_MIRROR=1 cargo test -p fub-abi --test
         ("{constructor}", vec![]),
         ("nothing", vec![]),
     ];
@@ -692,7 +688,7 @@ fn rules_fixture_is_in_sync_with_the_rust_rules() {
     let path = fixture_path();
 
     // rules_mirror`. Fuori da quel caso il test non scrive mai nulla.
-// Il test del test: una fixture di casi che non distinguono niente non
+    // Il test del test: una fixture di casi che non distinguono niente non
     if std::env::var_os("UPDATE_MIRROR").is_some() {
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).expect("creates the fixture folder");
