@@ -90,8 +90,20 @@ jobs:
           try {
             for (const light of LIGHTS) {
               const page = await openPage(stage.browser, light);
+              page.on("console", (msg) => console.log(`[browser:${msg.type()}] ${msg.text()}`));
+              page.on("pageerror", (error) => console.error(`[pageerror] ${error.stack ?? error.message}`));
               try {
-                await prepareScene(page, scene, light, stage.base, sceneUrl);
+                try {
+                  await prepareScene(page, scene, light, stage.base, sceneUrl);
+                } catch (error) {
+                  console.error(`[diagnostic] light=${light}`);
+                  console.error(`[diagnostic] url=${page.url()}`);
+                  console.error(`[diagnostic] vault-path=${await page.locator("#vault-path").textContent().catch(() => "<missing>")}`);
+                  console.error(`[diagnostic] file-list=${await page.locator("#file-list").innerHTML().catch(() => "<missing>")}`);
+                  console.error(`[diagnostic] body=${(await page.locator("body").innerText().catch(() => "<missing>")).slice(0, 4000)}`);
+                  console.error(`[diagnostic] calls=${JSON.stringify(await page.evaluate(() => window.bench?.calls ?? []).catch(() => []))}`);
+                  throw error;
+                }
                 const shot = await stillShot(page);
                 const name = photoFilename(scene, light);
                 await writeFile(join(BASELINE, name), shot);
