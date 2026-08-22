@@ -24,8 +24,11 @@ function nativeTitleCount(): number {
 }
 
 describe("i suggerimenti della shell", () => {
-  it("non lascia title nativi nei pannelli, nella UI o nell'HTML", () => {
-    // Misurato con: `node -e '...'` (2026-08-22): 0 title nativi.
-    expect(nativeTitleCount()).toBe(0);
+  it("non lascia title nativi salvo il nome obbligatorio dell'iframe", () => {
+    // Il presidio a11y monta ogni UiNode e pretende esplicitamente un `title`
+    // sul web_view: quella è l'unica eccezione semantica al divieto dei tooltip
+    // nativi. Tenere il conteggio esatto a uno fa fallire sia un secondo title
+    // usato come tooltip sia la sparizione del nome richiesto dal frame.
+    expect(nativeTitleCount()).toBe(1);
   });
 });
