@@ -306,8 +306,8 @@ async function runCommand(page, title) {
 /// **Si sceglie per `data-path`, non per testo.** `:has-text()` di Playwright
 /// risale agli antenati: in un albero l'antenato di una nota è la sua cartella,
 /// e la cartella contiene il testo di tutti i suoi figli. Il `data-path` è
-/// invece l'identità stabile che l'esploratore mette su ogni riga e che non
-/// dipende dall'implementazione del tooltip.
+/// invece l'identità stabile che l'esploratore mette sulle voci dell'albero e
+/// che non dipende dall'implementazione del tooltip.
 async function openNote(page, path) {
   const folder = path.slice(0, path.lastIndexOf("/"));
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
@@ -321,15 +321,16 @@ async function openNote(page, path) {
   );
 }
 
-/// Apre una cartella dell'albero, se non è già aperta. Stessa ragione di sopra
-/// per il selettore, e l'idempotenza serve perché due scene aprono `Guida` e una
-/// terza apre anche ciò che ci sta dentro.
+/// Apre una cartella dell'albero, se non è già aperta. Il `data-path` della
+/// cartella sta sul `treeitem` che contiene anche il sottoalbero; la riga è il
+/// suo figlio diretto cliccabile.
 async function openFolder(page, path) {
-  const row = `#file-list .tree-row.folder[data-path="${path}"]`;
+  const item = `#file-list li[role="treeitem"][data-path="${path}"]`;
+  const row = `${item} > .tree-row.folder`;
   await page.waitForSelector(row);
   const open = await page.evaluate(
-    (sel) => document.querySelector(sel)?.querySelector(".chevron")?.textContent === "▾",
-    row,
+    (sel) => document.querySelector(sel)?.getAttribute("aria-expanded") === "true",
+    item,
   );
   if (!open) await page.click(row);
 }
