@@ -661,7 +661,7 @@ decide una sola delle due metà:
   identico qui — con l'aggravante che un plugin con `read-vault` ristretto a una
   cartella riceve comunque il testo di qualunque selezione in qualunque nota. Il
   recinto sui path si aggira selezionando. (Ed è indipendente dalla casella
-  della [§7.1](07-il-confine.md#la-casella-rimasta), che è il caso in cui il
+  della [§7.1](07-il-confine.md#la-casella-chiusa), che è il caso in cui il
   filtro per prefisso non viene **letto**: qui non c'è nemmeno un prefisso da
   leggere.)
 - **non è un dato, è un flusso.** La 0007 stabilisce che la shell pubblica il
