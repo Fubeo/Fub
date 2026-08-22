@@ -16,13 +16,24 @@ Benvenuto nella documentazione di Fub. La documentazione è organizzata in carte
 | 💾 [**`05-disco/`**](05-disco/01-note-utente.md) | Formato note Markdown, cartella `.fub/` (autorevole vs derivata) e cestino |
 | 📜 [**`06-contratto/`**](06-contratto/01-i-trait-in-rust.md) | Trait Rust in `fub-abi`, modello dati del documento e contratto WIT per WASM |
 | 🖥️ [**`07-ui/`**](07-ui/01-la-shell-e-il-frontend.md) | Shell frontend TypeScript, protocollo dichiarativo `UiNode`, IPC e temi |
-| 🏛️ [**`decisions/`**](decisions/README.md) | Registro delle decisioni architetturali (*ADR*), inclusi i **dieci** buchi dichiarati [conta: buchi-dichiarati] |
+| 🏛️ [**`decisions/`**](decisions/README.md) | Registro delle decisioni architetturali (*ADR*), inclusi i **dieci** buchi dichiarati <!-- [conta: buchi-dichiarati] --> |
 | 🎯 [**`milestones/`**](milestones/README.md) | Obiettivi di prodotto e traguardi delle release |
 | 🗺️ [**`roadmap/`**](roadmap/README.md) | Sedute di progettazione e traguardi di contratto |
 | 📝 [**`features/`**](features/01-principi-fondanti.md) | Capitolato funzionale e specifiche complete delle funzionalità di prodotto |
 | 🔬 [**`microfeatures/`**](microfeatures/vault-ed-esploratore.md) | Scomposizione granulare dei gesti atomici di interazione utente |
 | 📋 [**`todo.md`**](todo.md) | Registro delle attività aperte, stato di avanzamento e difetti misurati |
 | 🏷️ [**`versionamento.md`**](versionamento.md) | Disciplina SemVer e versioni degli schemi persistenti su disco |
+
+### Stato delle funzionalità
+
+Le guide descrivono lo **stato implementato** salvo indicazione esplicita. Quando una parte è ancora in costruzione, usa queste etichette:
+
+- **Implementato** — presente nel codice e, dove indicato, coperto da test/presìdi.
+- **Parziale** — il percorso esiste, ma non tutte le superfici previste sono disponibili.
+- **Contratto/design** — la forma è definita, ma non implica che l'intera feature sia già attraversabile dall'utente.
+- **Pianificato** — obiettivo futuro; lo stato operativo resta in [`todo.md`](todo.md).
+
+Questa distinzione è particolarmente importante per il runtime WASM di M5: il contratto è più ampio della porzione già attraversata in esecuzione.
 
 ---
 
