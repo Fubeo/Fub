@@ -158,7 +158,7 @@ export const SCENE = [
       // Il toast è l'unica superficie che compare **senza** che l'utente
       // l'abbia chiesta, e l'unica che vive cinque secondi: si fotografa dentro
       // quella finestra, o non si fotografa affatto.
-      await page.evaluate((e) => window.bench.emetti(e), FAILURES.severe);
+      await page.evaluate((e) => window.bench.emit(e), FAILURES.severe);
       await page.waitForSelector("#toast");
     },
   },
@@ -172,8 +172,8 @@ export const SCENE = [
       // manda il banco dalla porta che ha per questo.
       await page.evaluate(
         ([a, b]) => {
-          window.bench.emetti(a);
-          window.bench.emetti(b);
+          window.bench.emit(a);
+          window.bench.emit(b);
         },
         [FAILURES.minor, FAILURES.severe],
       );
@@ -303,17 +303,16 @@ async function runCommand(page, title) {
 /// Apre una nota dall'albero. Sta in una funzione perché due scene la fanno, e
 /// perché il modo di aprirla è una cosa che può cambiare: cambierà qui.
 ///
-/// **Si sceglie per `title`, non per testo.** `:has-text()` di Playwright
+/// **Si sceglie per `data-path`, non per testo.** `:has-text()` di Playwright
 /// risale agli antenati: in un albero l'antenato di una nota è la sua cartella,
-/// e la cartella contiene il testo di tutti i suoi figli. Il primo `li` che
-/// «contiene Sintassi di Fub» è quindi la cartella `Guida` — cliccarlo la
-/// chiude, e la nota che si apre è un'altra. L'esploratore mette il path in
-/// `title` su ogni riga: è una chiave, e una chiave non si somiglia, si eguaglia.
+/// e la cartella contiene il testo di tutti i suoi figli. Il `data-path` è
+/// invece l'identità stabile che l'esploratore mette su ogni riga e che non
+/// dipende dall'implementazione del tooltip.
 async function openNote(page, path) {
   const folder = path.slice(0, path.lastIndexOf("/"));
   const name = path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
   await openFolder(page, folder);
-  await page.click(`#file-list .tree-row.note[title="${path}"]`);
+  await page.click(`#file-list .tree-row.note[data-path="${path}"]`);
   await page.waitForFunction(
     (n) =>
       document.querySelector('.tab[aria-selected="true"] .tab-name')?.textContent?.includes(n) ??
@@ -326,7 +325,7 @@ async function openNote(page, path) {
 /// per il selettore, e l'idempotenza serve perché due scene aprono `Guida` e una
 /// terza apre anche ciò che ci sta dentro.
 async function openFolder(page, path) {
-  const row = `#file-list .tree-row.folder[title="${path}"]`;
+  const row = `#file-list .tree-row.folder[data-path="${path}"]`;
   await page.waitForSelector(row);
   const open = await page.evaluate(
     (sel) => document.querySelector(sel)?.querySelector(".chevron")?.textContent === "▾",
