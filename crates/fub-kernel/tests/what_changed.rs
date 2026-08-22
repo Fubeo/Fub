@@ -135,9 +135,7 @@ fn vault(mask: EventMask) -> (tempfile::TempDir, Workspace, Log) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     let mut registry = FormatRegistry::new();
-    registry
-        .register(Box::new(MetadataFormat))
-        .expect("format");
+    registry.register(Box::new(MetadataFormat)).expect("format");
     let mut ws = Workspace::new(&root, registry).expect("the vault opens");
     ws.register_core_feature(SPY, SPY).expect("declared");
     let log: Log = Arc::default();
@@ -237,11 +235,19 @@ fn a_mask_on_an_aspect_does_not_wake_up_for_the_others() {
     ws.write_document(&id, "@deadline monday\ncorpus", WriteBase::Dictated)
         .unwrap();
     // Solo il corpo: chi guarda le proprietà non ha niente da fare.
-    ws.write_document(&id, "@deadline monday\ncorpus different", WriteBase::Dictated)
-        .unwrap();
+    ws.write_document(
+        &id,
+        "@deadline monday\ncorpus different",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     // E adesso la proprietà.
-    ws.write_document(&id, "@deadline tuesday\ncorpus different", WriteBase::Dictated)
-        .unwrap();
+    ws.write_document(
+        &id,
+        "@deadline tuesday\ncorpus different",
+        WriteBase::Dictated,
+    )
+    .unwrap();
 
     let r = lines(&log);
     assert_eq!(
@@ -257,10 +263,18 @@ fn a_mask_on_an_aspect_does_not_wake_up_for_the_others() {
     let id = DocId::new("a.txt");
     ws.write_document(&id, "@deadline monday\ncorpus", WriteBase::Dictated)
         .unwrap();
-    ws.write_document(&id, "@deadline monday\ncorpus different", WriteBase::Dictated)
-        .unwrap();
-    ws.write_document(&id, "@deadline tuesday\ncorpus different", WriteBase::Dictated)
-        .unwrap();
+    ws.write_document(
+        &id,
+        "@deadline monday\ncorpus different",
+        WriteBase::Dictated,
+    )
+    .unwrap();
+    ws.write_document(
+        &id,
+        "@deadline tuesday\ncorpus different",
+        WriteBase::Dictated,
+    )
+    .unwrap();
     assert_eq!(lines(&wide).len(), 3);
 }
 

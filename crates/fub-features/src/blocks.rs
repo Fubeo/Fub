@@ -405,7 +405,10 @@ mod tests {
         };
         assert!(html.contains("id=\"^f1\""), "{html}");
         assert!(html.contains("class=\"math-block\""));
-        assert!(!html.contains("a < b"), "the source must be escaped: {html}");
+        assert!(
+            !html.contains("a < b"),
+            "the source must be escaped: {html}"
+        );
         // Le virgolette escapate anche nel testo: `fub_abi::html` ha **una**
         // tabella per il contenuto e per l'attributo, e la ragione sta nel suo
         // doc — due tabelle vogliono un chiamante che ne scelga una, ed è la

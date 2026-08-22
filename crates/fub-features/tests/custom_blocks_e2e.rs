@@ -320,16 +320,22 @@ fn a_syntax_of_third_party_traverses_all_and_three_the_sides() {
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
     // dichiarazione, non su ogni cosa che registra (§7.3).
-    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
-        .expect("dichiarato");
+    ws.register_plugin(
+        PluginManifest::new("com.example.third", "Third"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
 
     // Lato 1: la sintassi si innesta sul provider markdown, che non la conosce
     // e non viene toccato.
     ws.register_syntax_rule("com.example.third", Box::new(GanttRule))
         .expect("innesto");
     // Lato 2: il renderer si registra per il kind che la regola produce.
-    ws.register_custom_renderer("com.example.third", Box::new(GanttRenderer { hostile: false }))
-        .expect("renderer");
+    ws.register_custom_renderer(
+        "com.example.third",
+        Box::new(GanttRenderer { hostile: false }),
+    )
+    .expect("renderer");
     ws.reindex().expect("reindex");
 
     // Lato 3: arriva alla shell come albero, senza una riga nel bundle.
@@ -346,12 +352,18 @@ fn from_a_renderer_not_trusted_the_content_active_not_passes() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
-    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
-        .expect("dichiarato");
+    ws.register_plugin(
+        PluginManifest::new("com.example.third", "Third"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
     ws.register_syntax_rule("com.example.third", Box::new(GanttRule))
         .unwrap();
-    ws.register_custom_renderer("com.example.third", Box::new(GanttRenderer { hostile: true }))
-        .unwrap();
+    ws.register_custom_renderer(
+        "com.example.third",
+        Box::new(GanttRenderer { hostile: true }),
+    )
+    .unwrap();
     ws.reindex().unwrap();
 
     let out = preview(&ws, "g.md");
@@ -422,8 +434,11 @@ fn a_kind_of_third_party_degraded_show_the_byte_of_the_key_convenzionale() {
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
     // Un plugin di terzi, dichiarato come tale: il grado di fiducia sta nella
     // dichiarazione, non su ogni cosa che registra (§7.3).
-    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
-        .expect("dichiarato");
+    ws.register_plugin(
+        PluginManifest::new("com.example.third", "Third"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
     ws.register_syntax_rule("com.example.third", Box::new(ConventionRule))
         .expect("innesto");
     ws.reindex().expect("reindex");
@@ -482,8 +497,11 @@ fn two_rules_on_the_same_syntax_not_is_register_in_silence() {
     // Il concorrente è un terzo, e nomina dentro il proprio namespace: la
     // regola del §7.4 è soddisfatta, e ciò che lo shutdown è l'altro conflitto —
     // quello sul **trigger**, che è ciò che questo test vuole vedere.
-    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
-        .expect("dichiarato");
+    ws.register_plugin(
+        PluginManifest::new("com.example.third", "Third"),
+        Trust::Community,
+    )
+    .expect("dichiarato");
     let err = ws
         .register_syntax_rule("com.example.third", Box::new(Concurrent))
         .expect_err("la seconda rivendica `mermaid`");
@@ -537,8 +555,11 @@ fn a_plugin_revoked_not_registers_nothing() {
     // Dichiararsi si può — per dire che qualcuno è revocato bisogna sapere che
     // esiste. Registrare no: una regola e un renderer sono codice che gira a
     // ogni parse e a ogni anteprima, e non passa da nessun guard.
-    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Revoked)
-        .expect("dichiararsi si può");
+    ws.register_plugin(
+        PluginManifest::new("com.example.third", "Third"),
+        Trust::Revoked,
+    )
+    .expect("dichiararsi si può");
 
     let err = ws
         .register_syntax_rule("com.example.third", Box::new(GanttRule))
@@ -546,7 +567,10 @@ fn a_plugin_revoked_not_registers_nothing() {
     assert!(err.to_string().contains("è revocato"), "{err}");
 
     let err = ws
-        .register_custom_renderer("com.example.third", Box::new(GanttRenderer { hostile: false }))
+        .register_custom_renderer(
+            "com.example.third",
+            Box::new(GanttRenderer { hostile: false }),
+        )
         .expect_err("un revocato non disegna niente");
     assert!(err.to_string().contains("è revocato"), "{err}");
 
@@ -594,8 +618,11 @@ fn a_third_not_is_does_pass_for_the_core() {
     let mut registry = FormatRegistry::new();
     registry.register(MarkdownProvider::boxed()).unwrap();
     let mut ws = Workspace::new(&v.root, registry).expect("l'apertura del vault riesce");
-    ws.register_plugin(PluginManifest::new("com.example.third", "Third"), Trust::Community)
-        .unwrap();
+    ws.register_plugin(
+        PluginManifest::new("com.example.third", "Third"),
+        Trust::Community,
+    )
+    .unwrap();
 
     // Dichiarare di produrre un kind del core si shutdown alla registrazione: è la
     // stessa regola dei nomi di ogni altra famiglia (§7.4).
@@ -638,7 +665,10 @@ fn a_third_not_is_does_pass_for_the_core() {
         model.body[0]
     );
     // E il conto non si è sporcato di un kind che nessuno emetterà mai.
-    assert_eq!(ws.undrawn_kinds(), vec!["com.example.third:gantt".to_string()]);
+    assert_eq!(
+        ws.undrawn_kinds(),
+        vec!["com.example.third:gantt".to_string()]
+    );
 }
 
 #[test]

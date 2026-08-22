@@ -473,7 +473,9 @@ mod tests {
             "il tetto vale per i recenti, non per i preferiti"
         );
         // E chi esce è il più vecchio fra i recenti, mai l'ultimo aperto.
-        assert!(list.iter().any(|and| and.root == format!("/v{}", RECENT + 4)));
+        assert!(list
+            .iter()
+            .any(|and| and.root == format!("/v{}", RECENT + 4)));
         assert!(!list.iter().any(|and| and.root == "/v0"));
     }
 

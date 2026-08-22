@@ -26,7 +26,6 @@ use fub_abi::traits::{
 use fub_abi::Notice;
 use fub_features::BACKLINKS_VIEW;
 use fub_host::{Delivery, EventSink, Host, NoWatcher, VaultWatcher, WatcherFactory};
-use fub_kernel::data_root;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -388,9 +387,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // un'apertura è un `JobProgress` come quello di ogni altro lavoro lungo,
     // così il centro attività la disegna senza sapere che è un'apertura.
     assert!(
-        seen
-            .iter()
-            .any(|n| n.event.kind() == EventKind::JobStarted),
+        seen.iter().any(|n| n.event.kind() == EventKind::JobStarted),
         "indexing announces itself like any long job"
     );
     assert!(
@@ -410,10 +407,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     while seen.is_empty() && std::time::Instant::now() < deadline {
         std::thread::yield_now();
     }
-    assert!(
-        !seen.is_empty(),
-        "no event reached the sink after a write"
-    );
+    assert!(!seen.is_empty(), "no event reached the sink after a write");
 }
 
 /// Due vault stanno aperti insieme, e il "corrente" è solo chi risponde a chi
@@ -581,7 +575,10 @@ fn close_a_vault_and_latest_round_in_which_and_again_open() {
 /// Il manifest delle impronte dell'indice di ricerca, com'è sul disco (vuoto se
 /// non c'è ancora).
 fn manifest_of_the_index(root: &Utf8Path) -> String {
-    let path = data_root(root)
+    // Lo spazio dati **autorevole** del provider di ricerca: è lì che una
+    // `data_write` finisce (§31.8 — la cache derivata sta sotto `.fub/data/`).
+    let path = root
+        .join(".fub")
         .join("plugins")
         .join("fub.search")
         .join("manifest.json");
@@ -662,7 +659,7 @@ fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bi
         "chi guarda ha alzato la bandiera del kernel, non una sua"
     );
 
-// proprio valore — legge la bandiera del kernel.
+    // proprio valore — legge la bandiera del kernel.
     // E chi smette lo dice: chiudere il vault lascia andare il rilevatore, e la
     let ws = with.workspace(None).unwrap();
     with.close_vault(&v.root).expect("closes");
@@ -693,7 +690,7 @@ fn a_path_that_is_not_a_directory_is_refused_before_anything_is_mounted() {
     assert!(host.workspace(None).is_err());
 }
 
-    // risposta cambia senza che nessuno la aggiorni a mano.
+// risposta cambia senza che nessuno la aggiorni a mano.
 /// **Chi apre distingue un vault intero da uno aperto in parte** (§15.7,
 /// decisione 0068).
 ///
@@ -710,7 +707,7 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     let host = headless();
     let info = host.open(&v.root).expect("the vault opens anyway");
 
-// e le altre due note erano irraggiungibili per colpa della terza.
+    // e le altre due note erano irraggiungibili per colpa della terza.
     // **Su `info` non c'è niente da asserire**, ed è la conseguenza vera
     // dell'apertura a fasi (§15.7): `open` torna appena il vault è
     // *utilizzabile*, e scoprire uno scarto vuol dire aver già provato a
@@ -722,7 +719,9 @@ fn a_vault_with_a_notes_unreadable_is_opens_and_says_what_not_has_read() {
     // una corsa, e su tre note la si perderebbe quasi sempre.
     // L'esito **si consulta**, che è ciò che la voce chiedeva: finita
     host.wait_indexed(None).expect("waits for indexing");
-    let info = host.open(&v.root).expect("reopens, that is re-reads the state");
+    let info = host
+        .open(&v.root)
+        .expect("reopens, that is re-reads the state");
     let unread: Vec<&str> = info.unread.iter().map(|u| u.doc_id.as_str()).collect();
     assert_eq!(
         unread,

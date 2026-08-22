@@ -83,22 +83,22 @@
 //!
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
 
-pub mod folders;
-pub mod loads;
-pub mod trash;
 pub mod composition;
 pub mod doc_data;
 pub mod events;
+pub mod folders;
 pub mod health;
 pub mod ids;
+pub mod keys;
+pub mod loads;
 pub mod media;
 pub mod path;
 pub mod path_policy;
 pub mod properties;
 pub mod snippet;
 pub mod tag;
-pub mod keys;
 pub mod text_policy;
+pub mod trash;
 
 pub use crate::model::{
     canonical_anchor, canonical_tag, heading_matches, heading_slug, heading_slugs, valid_anchor,

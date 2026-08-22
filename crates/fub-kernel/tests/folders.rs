@@ -238,7 +238,9 @@ fn the_list_is_for_folder_and_the_page_is_of_that_folder() {
         "six notes and one attachment: direct children, not the tree"
     );
     assert!(
-        items.iter().all(|and| and.id.as_str().starts_with("dentro/")),
+        items
+            .iter()
+            .all(|and| and.id.as_str().starts_with("dentro/")),
         "and nothing from the neighboring folder"
     );
 

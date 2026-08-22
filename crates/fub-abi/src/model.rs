@@ -1195,7 +1195,7 @@ pub use custom_kind::Payload;
 // Tag adiacente: alcune varianti portano uno scalare, e col tag interno
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 // `serde_json` fallirebbe a serializzarle (vedi il § in testa al modulo).
-    /// `chiave:` senza valore (YAML `null`). Diverso da chiave assente.
+/// `chiave:` senza valore (YAML `null`). Diverso da chiave assente.
 #[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum PropertyValue {
     /// Data ISO-8601, con o senza orario.
@@ -1209,7 +1209,7 @@ pub enum PropertyValue {
     Link(LinkTarget),
     List(Vec<PropertyScalar>),
     /// hatch delle proprietà, gemello di `Block::Custom`.
-/// Il valore di una **voce di elenco**: [`PropertyValue`] meno la lista.
+    /// Il valore di una **voce di elenco**: [`PropertyValue`] meno la lista.
     Unknown(serde_json::Value),
 }
 
@@ -1257,7 +1257,7 @@ pub struct PropertyDate {
 /// nome in minuscolo, e le due forme devono restare la stessa: che
 /// [`as_key`](DateOrder::as_key) e serde dicano `dmy` tutte e due lo prova
 /// `the_word_of_the_setting_is_the_word_of_the_wire`.
-    /// `05/07/2026`, `5-7-2026`: giorno, mese, anno.
+/// `05/07/2026`, `5-7-2026`: giorno, mese, anno.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DateOrder {
@@ -1297,7 +1297,7 @@ impl DateOrder {
     /// quattro cifre, mese e giorno a una o due. Le due cifre dell'anno non si
     /// accettano — `05/07/26` chiederebbe di indovinare il secolo, e indovinare
     /// è la cosa che la 0003 ha rifiutato.
-/// I formati di data che **questo vault declare**, oltre all'ISO-8601.
+    /// I formati di data che **questo vault declare**, oltre all'ISO-8601.
     fn read(self, s: &str) -> Option<PropertyDate> {
         let sep = s.chars().find(|c| matches!(c, '/' | '-' | '.'))?;
         let mut parts = s.split(sep);
@@ -1339,7 +1339,7 @@ impl DateOrder {
 /// Il default è [`DateFormats::ISO`], cioè nessuna dichiarazione e la regola di
 /// prima parola per parola: un vault che non dice niente si legge oggi come si
 /// leggeva ieri.
-    /// Nessuna dichiarazione: **solo** l'ISO-8601.
+/// Nessuna dichiarazione: **solo** l'ISO-8601.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct DateFormats {
     declared: Option<DateOrder>,
@@ -1373,7 +1373,7 @@ impl DateFormats {
     /// dichiarazioni diverse leggerebbero in due modi è esattamente ciò su cui
     /// vale la pena chiedere all'utente — e siccome la risposta è una domanda e
     /// non un valore, qui la larghezza è legittima dove nel parser non lo era.
-/// L'orario di una [`PropertyDate`], col fuso **come era scritto**.
+    /// L'orario di una [`PropertyDate`], col fuso **come era scritto**.
     pub fn looks_like_a_date(s: &str) -> bool {
         let t = s.trim();
         DateOrder::ALL.iter().any(|or| or.read(t).is_some())
@@ -1384,7 +1384,7 @@ impl DateFormats {
 /// `offset_minutes` è `None` per un orario locale-senza-fuso: convertirlo
 /// richiederebbe sapere il fuso dell'utente, che è una capacità dell'host
 /// (decisione 0013) e non un fatto del documento. Il modello non indovina.
-    /// Minuti rispetto a UTC (`Z` → `0`, `+02:00` → `120`).
+/// Minuti rispetto a UTC (`Z` → `0`, `+02:00` → `120`).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PropertyTime {
     pub hour: u8,
@@ -1411,7 +1411,7 @@ impl PropertyValue {
 
 impl PropertyScalar {
     /// annidata resta JSON.
-                // Un intero più grande di quanto un f64 rappresenti senza
+    // Un intero più grande di quanto un f64 rappresenti senza
     pub fn normalize(v: &serde_json::Value, formats: &DateFormats) -> PropertyScalar {
         match v {
             serde_json::Value::Null => PropertyScalar::Empty,
@@ -1435,7 +1435,7 @@ impl PropertyScalar {
     /// quindi una dichiarazione non può cambiare come si legge una data già
     /// scritta bene. Ciò che una dichiarazione fa è **aggiungere** una lettura
     /// a stringhe che oggi restano [`PropertyScalar::Text`].
-/// `2026-07-25`, `2026-07-25T10:30`, `2026-07-25 10:30:00Z`, `…+02:00`.
+    /// `2026-07-25`, `2026-07-25T10:30`, `2026-07-25 10:30:00Z`, `…+02:00`.
     fn from_text(s: &str, formats: &DateFormats) -> PropertyScalar {
         let t = s.trim();
         if let Some(inner) = t.strip_prefix("[[").and_then(|r| r.strip_suffix("]]")) {
@@ -1466,7 +1466,7 @@ impl From<PropertyScalar> for PropertyValue {
 /// Rigido di proposito: solo l'ISO-8601 nella forma che YAML e Obsidian
 /// producono. Un parser tollerante qui direbbe di sì a `1-2-3` e trasformerebbe
 /// in date delle stringhe che l'utente non intendeva tali.
-        // Il `-` del fuso si distingue dal nulla solo per posizione: prima ci
+// Il `-` del fuso si distingue dal nulla solo per posizione: prima ci
 fn parse_iso_date(s: &str) -> Option<PropertyDate> {
     let (date, rest) = s.split_at_checked(10)?;
     let mut parts = date.split('-');
@@ -1545,7 +1545,7 @@ fn fixed_width(s: &str, width: usize) -> Option<u8> {
 /// Il gemello largo di [`fixed_width`], e la larghezza è il punto: `2026-7-5`
 /// non è una data ISO e resta tale, ma un vault che declare `ymd` sta dicendo
 /// che quella è la sua scrittura del cinque luglio.
-    /// I `const` dichiarati dentro `pub mod custom_kind`, letti dal sorgente.
+/// I `const` dichiarati dentro `pub mod custom_kind`, letti dal sorgente.
 fn digits(s: &str, max: usize) -> Option<u32> {
     if s.is_empty() || s.len() > max || !s.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -1563,7 +1563,7 @@ mod tests {
     /// presidierebbe se stesso. Si prendono le sole righe che **sono** una
     /// dichiarazione — `pub const NOME: &str = "…";` — e solo dentro il
     /// modulo, che comincia alla riga che lo apre.
-            // Un `pub const` di **un altro tipo** non è un kind: `PAYLOADS` è la
+    // Un `pub const` di **un altro tipo** non è un kind: `PAYLOADS` è la
     fn kind_declared() -> Vec<(String, String)> {
         let src = include_str!("model.rs");
         let within = src
@@ -1581,7 +1581,7 @@ mod tests {
             // sfuggire al conto chiamandosi in un modo invece che in un altro;
             // e se un giorno l'estrattore smettesse di riconoscere la forma,
             // il conto `>= 12` qui sotto è il rosso che se ne accorge.
-    // **Ogni `custom_kind` del core declare cosa porta, e viceversa.**
+            // **Ogni `custom_kind` del core declare cosa porta, e viceversa.**
             let Some((name, value)) = rest.split_once(": &str = ") else {
                 continue;
             };
@@ -1648,7 +1648,7 @@ mod tests {
     }
 
     /// la prosa che le nomina no.
-        // `PAYLOADS` è un `pub const` dello stesso modulo, ed è la tabella, non
+    // `PAYLOADS` è un `pub const` dello stesso modulo, ed è la tabella, non
     #[test]
     fn the_extractor_of_the_kind_skips_the_prose() {
         let read = kind_declared();
@@ -1664,7 +1664,7 @@ mod tests {
         );
         // `payload` nomina `SyntaxRuleSpec::produces`: nessuno dei quattro è un
         // kind, e nessuno dei quattro deve comparire.
-    // La regola che distingue "risorsa del vault" da "mondo esterno", con i
+        // La regola che distingue "risorsa del vault" da "mondo esterno", con i
         for name in ["Source", "Body", "Children", "produces"] {
             assert!(
                 !read.iter().any(|(n, v)| n == name || v == name),
@@ -1682,7 +1682,7 @@ mod tests {
 
     /// casi su cui un `contains("://")` sbagliava: `mailto:` non ha `//`, e un
     /// path di Windows ha i due punti al secondo carattere senza essere un URI.
-        // Un heading vuoto non è un heading: `Nota#^blk` ha un `#` che serve al
+    // Un heading vuoto non è un heading: `Nota#^blk` ha un `#` che serve al
     #[test]
     fn classify_tells_a_vault_resource_from_the_outside_world() {
         for external in [
@@ -1735,7 +1735,7 @@ mod tests {
             LinkTarget::wiki("Nota")
         );
         // `^`, e `Nota#` non nomina niente.
-    // **Il giro fra i due versi della stessa regola.**
+        // **Il giro fra i due versi della stessa regola.**
         assert_eq!(
             parse_wikilink_inner("Nota#^blk").target,
             LinkTarget::Wiki {
@@ -1757,7 +1757,7 @@ mod tests {
     /// legge, ed è esattamente com'era — il serializer markdown scriveva
     /// `page^b`, il lettore lo riaccettava perché è indulgente, e Obsidian ci
     /// leggeva una pagina di nome `page^b`.
-            // Il caso che divergeva: blocco **senza** heading.
+    // Il caso che divergeva: blocco **senza** heading.
     #[test]
     fn what_a_wikilink_writes_is_what_a_wikilink_reads() {
         let targets = [
@@ -1778,7 +1778,7 @@ mod tests {
                 heading: Some("Sezione".into()),
                 block: Some("blk".into()),
             },
-        // L'altro verso: ciò che il lettore accetta per indulgenza torna
+            // L'altro verso: ciò che il lettore accetta per indulgenza torna
             LinkTarget::Wiki {
                 page: String::new(),
                 heading: Some("Sezione".into()),
@@ -1831,7 +1831,7 @@ mod tests {
     fn an_anchor_is_a_key_and_a_heading_slug_is_generated() {
         assert_eq!(canonical_anchor("  Blocco-1 "), "blocco-1");
         assert!(valid_anchor("abc123") && valid_anchor("a-b_c"));
-    // Due titoli omonimi non possono portare lo stesso id, e un documento che
+        // Due titoli omonimi non possono portare lo stesso id, e un documento che
         assert!(!valid_anchor("") && !valid_anchor("10 = 1024") && !valid_anchor("a.b"));
 
         assert_eq!(heading_slug("Ciao Mondo!"), "ciao-mondo");
@@ -1842,7 +1842,7 @@ mod tests {
     /// omonimi non ne ha non deve cambiare **nemmeno un** id: un link già
     /// scritto dall'utente punta a uno slug, e riscriverlo sarebbe una
     /// regressione silenziosa su ogni nota del vault.
-        // Il verso che protegge chi non ha duplicati: identità con la regola
+    // Il verso che protegge chi non ha duplicati: identità con la regola
     #[test]
     fn two_headings_with_the_same_text_cannot_share_an_id() {
         assert_eq!(
@@ -1873,13 +1873,13 @@ mod tests {
         );
         // resta una forma che `heading_slug` sa produrre — cioè scrivibile in
         // un link.
-    // La gemella che legge: chi cerca un frammento trova esattamente il
+        // La gemella che legge: chi cerca un frammento trova esattamente il
         assert_eq!(heading_slugs(["...", "???"]), ["", "1"]);
         assert_eq!(heading_slug("1"), "1");
     }
 
     /// titolo che quella lista ha nominato, secondo per secondo.
-        // La seconda sezione omonima è raggiungibile, e prima non lo era da
+    // La seconda sezione omonima è raggiungibile, e prima non lo era da
     #[test]
     fn a_fragment_finds_the_heading_the_allocator_named() {
         let outline: Vec<Heading> = ["Note", "Ciao, Mondo!", "Note"]
@@ -1899,7 +1899,7 @@ mod tests {
         // Il titolo com'è scritto, punteggiatura compresa, resta una strada.
         assert_eq!(find("Note 1"), Some(2));
         assert_eq!(find("note-1"), Some(2));
-    // **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
+        // **Il difetto 0093 era falso sulla conseguenza, e questo lo tiene fermo.**
         assert_eq!(find("Ciao, Mondo!"), Some(1));
         assert_eq!(find("ciao-mondo"), Some(1));
         assert_eq!(find("Sezione che non c'è"), None);
@@ -1920,7 +1920,7 @@ mod tests {
     /// rotta, e la strada che salva la risoluzione anche a slug divergenti non
     /// sarebbe provata da nessuna parte — perciò il titolo su cui si prova qui è
     /// uno che i due rami vedono **diverso**.
-        // Lo slug non diverge più: è la chiusura del 0140, e la coppia completa
+    // Lo slug non diverge più: è la chiusura del 0140, e la coppia completa
     #[test]
     fn nfd_and_nfc_is_meet_on_the_text_and_not_on_the_slug() {
         let nfc = "Café";
@@ -2061,7 +2061,7 @@ mod tests {
             fm.property("annidata", &DateFormats::ISO),
             Some(PropertyValue::Unknown(_))
         ));
-    // Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
+        // Il parser di date dice di **no** più spesso di quanto dica di sì: ogni
         assert_eq!(fm.property("mai-scritta", &DateFormats::ISO), None);
         assert_eq!(fm.properties(&DateFormats::ISO).len(), 10);
     }
@@ -2111,7 +2111,7 @@ mod tests {
 
     /// che era una data ISO resta quella data, ciò che era testo può diventare
     /// una data, e niente si muove al contrario.
-        // L'ISO si legge sempre e per primo, dichiarazione o no.
+    // L'ISO si legge sempre e per primo, dichiarazione o no.
     #[test]
     fn a_declared_format_only_adds_readings() {
         let dmy = DateFormats::declaring(DateOrder::Dmy);
@@ -2135,7 +2135,7 @@ mod tests {
             Some((2026, 7, 5))
         );
         // che nessun parser può dedurre e che solo il vault può dire.
-    // Un formato dichiarato non è un parser tollerante: l'insieme si allarga
+        // Un formato dichiarato non è un parser tollerante: l'insieme si allarga
         assert_eq!(
             read("07/05/2026", &DateFormats::declaring(DateOrder::Mdy)),
             Some((2026, 7, 5))
@@ -2145,7 +2145,7 @@ mod tests {
 
     /// di poco e per una ragione dichiarata, e tutto il resto continua a dire
     /// di no.
-            // L'anno a due cifre chiederebbe di indovinare il secolo.
+    // L'anno a due cifre chiederebbe di indovinare il secolo.
     #[test]
     fn declaring_a_format_is_not_a_tolerant_parser() {
         let each = |s: &str| {
@@ -2174,7 +2174,7 @@ mod tests {
             // sull'anno il vincolo delle quattro cifre.
             // Cifre non ASCII, testo attaccato, e la data con la coda.
             "5/007/2026",
-    // Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
+            // Il rilevatore è lo stesso parser con tutti gli ordini insieme, e dice di
             "٠٥/٠٧/٢٠٢٦",
             "05/07/2026 e poi",
             "2026-07-05T10:30 fine",
@@ -2193,10 +2193,7 @@ mod tests {
             assert!(DateFormats::looks_like_a_date(sembra), "`{sembra}`");
         }
         for not_seems in ["1-2-3", "domani", "05/07/26", "v1.2.3", "capitolo 3"] {
-            assert!(
-                !DateFormats::looks_like_a_date(not_seems),
-                "`{not_seems}`"
-            );
+            assert!(!DateFormats::looks_like_a_date(not_seems), "`{not_seems}`");
         }
     }
 

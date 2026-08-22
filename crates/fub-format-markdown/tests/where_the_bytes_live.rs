@@ -81,11 +81,7 @@ fn declared_bytes_are_visible_in_render() {
 
     for (kind, payload) in custom_kind::PAYLOADS {
         let body = match payload.key() {
-            Some(key) => vec![block(
-                kind,
-                serde_json::json!({ key: MARKER }),
-                Vec::new(),
-            )],
+            Some(key) => vec![block(kind, serde_json::json!({ key: MARKER }), Vec::new())],
             // Chi tiene il contenuto nei figli non ha una chiave da sbagliare:
             // la domanda che gli si fa è la stessa, e la risposta sono i figli.
             None => vec![block(

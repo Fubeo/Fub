@@ -68,12 +68,7 @@ struct Component {
 
 /// Le chiavi che una view dichiara: oggi il titolo, e non serve altro perché è
 /// l'unico `Text` che una `ViewSpec` porta.
-fn of_a_view(
-    id: &str,
-    p: &dyn ViewProvider,
-    keys: &mut Vec<String>,
-    wired: &mut Vec<String>,
-) {
+fn of_a_view(id: &str, p: &dyn ViewProvider, keys: &mut Vec<String>, wired: &mut Vec<String>) {
     for spec in p.views() {
         key(
             &spec.title,

@@ -194,10 +194,12 @@ fn selection_stats(selections: &Option<SelectionSet>) -> Option<(usize, TextStat
         .filter(|t| !t.is_empty())
         .map(count)
         .collect();
-    let sum = pieces.iter().fold(TextStats::default(), |acc, s| TextStats {
-        words: acc.words + s.words,
-        chars: acc.chars + s.chars,
-    });
+    let sum = pieces
+        .iter()
+        .fold(TextStats::default(), |acc, s| TextStats {
+            words: acc.words + s.words,
+            chars: acc.chars + s.chars,
+        });
     (!pieces.is_empty()).then_some((pieces.len(), sum))
 }
 

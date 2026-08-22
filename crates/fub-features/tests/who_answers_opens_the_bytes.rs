@@ -242,7 +242,11 @@ fn the_rebuild_finds_again_the_fingerprints_from_the_content() {
         .into_iter()
         .map(|id| (id.clone(), store.list(&id)))
         .collect();
-    assert_eq!(before.len(), DOCUMENTS, "il vault è stato fotografato tutto");
+    assert_eq!(
+        before.len(),
+        DOCUMENTS,
+        "il vault è stato fotografato tutto"
+    );
 
     // L'indice sparisce: è il solo caso in cui `rebuild_from_store` gira, ed è
     // anche il solo posto in cui le impronte erano già scritte.

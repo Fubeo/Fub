@@ -322,8 +322,9 @@ impl ArtifactSink for DirectorySink {
         }
         let root_real = self.root_real.as_ref().expect("just resolved");
         stays_inside(root_real, &dir)?;
-        std::fs::create_dir_all(&dir)
-            .map_err(|and| PluginError::Io(format!("cannot create `{}`: {and}", dir.display()).into()))?;
+        std::fs::create_dir_all(&dir).map_err(|and| {
+            PluginError::Io(format!("cannot create `{}`: {and}", dir.display()).into())
+        })?;
         // Il nome del file lo dà il provider ed è già passato da
         // `check_path`, quindi è UTF-8 e non ha separatori: la cartella
         // invece è quella che l'utente ha scelto, e può essere qualunque cosa.
@@ -496,8 +497,7 @@ mod tests {
     fn a_link_in_the_folder_choice_not_gate_the_export_outside() {
         let choice = tempfile::tempdir().expect("the folder chosen in the dialog");
         let elsewhere = tempfile::tempdir().expect("a folder nobody chose");
-        std::os::unix::fs::symlink(elsewhere.path(), choice.path().join("fuga"))
-            .expect("the link");
+        std::os::unix::fs::symlink(elsewhere.path(), choice.path().join("fuga")).expect("the link");
 
         let mut sink = DirectorySink::new(choice.path());
         let and = sink

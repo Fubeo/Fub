@@ -209,7 +209,9 @@ fn from_setting_kind(k: w_settings::SettingKind) -> fub_abi::settings::SettingKi
             default: c.default,
             options: c.options.into_iter().map(from_ui_option).collect(),
         },
-        w_settings::SettingKind::List(the) => R::List { default: the.default },
+        w_settings::SettingKind::List(the) => R::List {
+            default: the.default,
+        },
     }
 }
 

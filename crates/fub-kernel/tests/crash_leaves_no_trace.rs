@@ -42,9 +42,7 @@ fn storage() -> Arc<dyn VaultStorage> {
 fn a_day_passes(storage: &Arc<dyn VaultStorage>) {
     for the in 0..20 {
         let path = format!("/vault/.fub/passa-{the}");
-        storage
-            .write(Utf8Path::new(&path), b"x")
-            .expect("write");
+        storage.write(Utf8Path::new(&path), b"x").expect("write");
     }
 }
 

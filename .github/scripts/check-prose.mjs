@@ -153,7 +153,13 @@ function numberTable() {
     const c = IT_HUNDREDS[h - 1];
     table.set(c, h * 100);
     for (let rest = 1; rest <= 99; rest += 1) {
-      table.set(c + itWord(rest), h * 100 + rest);
+      const w = itWord(rest);
+      table.set(c + w, h * 100 + rest);
+      // Il composto col `tre` finale porta l'accento anche sopra il cento
+      // («centosettantatré»): vale la stessa tolleranza di sotto.
+      if (rest > 20 && rest % 10 === 3) {
+        table.set(c + w.replace(/tre$/, "tré"), h * 100 + rest);
+      }
     }
   }
 

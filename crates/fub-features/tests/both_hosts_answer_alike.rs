@@ -195,7 +195,8 @@ fn absent_and_occupied_have_the_same_face_here_and_there() {
         host.create_document(&DocId::new("Seconda.md"), "due")
             .expect("si scrive");
         let trashed = host.trash_document(&c_and).expect("si cestina");
-        host.create_document(&c_and, "di nuovo").expect("si riscrive");
+        host.create_document(&c_and, "di nuovo")
+            .expect("si riscrive");
 
         vec![
             (
@@ -298,7 +299,11 @@ fn a_support_that_says_of_no_and_a_io_of_here_and_of_the() {
         .expect("nessun conflitto di estensioni");
     let storage = Arc::new(WriteRejectingStorage {
         inner: FsStorage,
-        rejects: "/data/".to_string(),
+        // I dati autorevoli di un plugin stanno in `.fub/plugins/<id>/` e la
+        // cache derivata in `.fub/data/plugins/<id>/` (§31.8): è alla radice
+        // autorevole che una `data_write` deve passare, ed è lì che il
+        // supporto dice di no.
+        rejects: "/.fub/plugins/".to_string(),
     });
     let mut ws = Workspace::on(
         &root,
@@ -494,13 +499,17 @@ fn the_writes_leave_the_same_vault_of_here_and_of_the() {
         journal.push(("e il cestino ha una voce".into(), entries.len().to_string()));
         journal.push((
             "che ricorda da dove veniva".into(),
-            entries.first()
+            entries
+                .first()
                 .map(|v| v.original.to_string())
                 .unwrap_or_default(),
         ));
         journal.push((
             "e quanto pesava".into(),
-            entries.first().map(|v| v.size.to_string()).unwrap_or_default(),
+            entries
+                .first()
+                .map(|v| v.size.to_string())
+                .unwrap_or_default(),
         ));
         journal.push((
             "una voce cestinata non si legge come documento".into(),
@@ -616,10 +625,7 @@ fn every_name_and_every_format_is_judge_equal_of_here_and_of_the() {
                 format!("scrivere {name:?}"),
                 face(&host.write_document(&id, "x", WriteBase::Dictated)),
             ));
-            journal.push((
-                format!("leggere {name:?}"),
-                face(&host.read_document(&id)),
-            ));
+            journal.push((format!("leggere {name:?}"), face(&host.read_document(&id))));
             journal.push((
                 format!("rinominare Nota.md in {name:?}"),
                 face(&host.rename_document(&source, &id)),

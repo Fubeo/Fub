@@ -44,7 +44,9 @@ use crate::traits::EntryKind;
 /// lo sa parsare — ed è quella la differenza che conta a valle.
 pub fn kind_of(id: &DocId, doc_extensions: &[String]) -> EntryKind {
     kind_of_ext(id, |ext| {
-        doc_extensions.iter().any(|and| and.eq_ignore_ascii_case(ext))
+        doc_extensions
+            .iter()
+            .any(|and| and.eq_ignore_ascii_case(ext))
     })
 }
 

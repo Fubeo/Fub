@@ -249,9 +249,7 @@ fn every_version_constant_has_its_row_in_the_table() {
                  docs/versioning.md says so. An on-disk format not in the table \
                  is a format nobody will know how to migrate: the row costs less \
                  than the day it will be needed.",
-                file,
-                number,
-                value
+                file, number, value
             );
         }
     }

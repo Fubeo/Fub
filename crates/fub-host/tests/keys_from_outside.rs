@@ -199,7 +199,10 @@ fn setting_one_does_not_adopt_others() {
 
     // Quella scritta vale — l'ha battuta una persona — e l'altra no.
     // Quella scritta vale — l'ha battuta una persona — e l'altra no.
-    assert_eq!(effective_binding(&host, CREATE).0, SettingValue::Text("Mod-j".into()));
+    assert_eq!(
+        effective_binding(&host, CREATE).0,
+        SettingValue::Text("Mod-j".into())
+    );
     assert_eq!(effective_binding(&host, EMPTY).1, SettingSource::Default);
     let pending = host.pending_keybindings(None).expect("open");
     assert_eq!(pending.keys().collect::<Vec<_>>(), vec![EMPTY]);

@@ -144,7 +144,7 @@ fn move_space(
     source: &Utf8Path,
     destination: &Utf8Path,
 ) -> std::io::Result<()> {
-// [`collect`]: crate::docdata::collect
+    // [`collect`]: crate::docdata::collect
     // Sul filesystem insensibile al caso questo `stat` può rispondere con la
     // **sorgente**, che è una cartella e passa: è il caso di sopra, e a
     let to_clear = match storage.stat(destination) {
@@ -174,7 +174,7 @@ fn move_space(
     storage.rename(&aside, destination)
 }
 
-    // distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
+// distinguerlo è l'`exists` dopo lo spostamento di lato, non questo.
 /// Toglie gli spazi per-documento delle note che non esistono più, in ogni
 /// spazio dati di plugin. Restituisce quante ne ha tolte.
 ///
@@ -209,7 +209,7 @@ pub(crate) fn collect(
             let Some(name) = entry.path.file_name() else {
                 continue;
             };
-// e chi ha chiamato decide.
+            // e chi ha chiamato decide.
             // Un nome che il supporto non sa rendere in UTF-8 non l'ha scritto
             // questa convenzione, e non arriva fin qui: `VaultStorage::list` lo
             // rifiuta prima, perché un path non nominabile dal contratto non è
@@ -247,7 +247,7 @@ pub(crate) fn collect(
     Ok(removed_count)
 }
 
-            // silenzio invece di dire che quel file non era da toccare.
+// silenzio invece di dire che quel file non era da toccare.
 fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
     root.join(doc_data::DOC_SPACE)
         .join(doc_data::encode(doc.as_str()))
@@ -256,10 +256,10 @@ fn space_dir(root: &Utf8Path, doc: &DocId) -> Utf8PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::{DirEntry, Merge, MemStorage, Stat};
+    use crate::storage::{DirEntry, MemStorage, Merge, Stat};
     use std::io;
 
-/// La cartella di `doc` dentro lo spazio dati di **un** plugin.
+    /// La cartella di `doc` dentro lo spazio dati di **un** plugin.
     /// Un supporto che **non distingue il caso**, come APFS e NTFS: due nomi che
     /// differiscono solo per una maiuscola sono lo stesso posto.
     ///
@@ -292,7 +292,8 @@ mod tests {
             self.0.rename(&Self::lower(from), &Self::lower(to))
         }
         fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
-            self.0.rename_no_replace(&Self::lower(from), &Self::lower(to))
+            self.0
+                .rename_no_replace(&Self::lower(from), &Self::lower(to))
         }
         fn remove(&self, path: &Utf8Path) -> io::Result<()> {
             self.0.remove(&Self::lower(path))
@@ -460,8 +461,7 @@ mod tests {
             )
             .expect("written");
 
-        let removed = collect(&storage, &roots, &|doc| doc.as_str() == "alive.md")
-            .expect("sweep");
+        let removed = collect(&storage, &roots, &|doc| doc.as_str() == "alive.md").expect("sweep");
 
         assert_eq!(removed, 1);
         assert!(annotation(&storage, &root, "gone.md").is_none());

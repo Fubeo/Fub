@@ -579,8 +579,7 @@ fn machine() -> String {
     let cpu = std::fs::read_to_string("/proc/cpuinfo")
         .ok()
         .and_then(|text| {
-            text
-                .lines()
+            text.lines()
                 .find(|row| row.starts_with("model name"))
                 .and_then(|row| row.split_once(':'))
                 .map(|(_, value)| value.trim().to_string())
@@ -667,7 +666,8 @@ fn main() {
     let mut wasm_measures = measure_backend(
         &WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica"),
         || {
-            let b = WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
+            let b =
+                WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
             black_box(b);
         },
     );
@@ -779,9 +779,7 @@ fn main() {
         "  Il confine costa {} in più per chiamata, su un job che di lavoro vero ne fa",
         fmt_time(surcharge)
     );
-    println!(
-        "  quasi niente: legge una nota di {chars} caratteri e li conta. È il peggior caso"
-    );
+    println!("  quasi niente: legge una nota di {chars} caratteri e li conta. È il peggior caso");
     println!("  possibile per il backend WASM, ed è l'unico modo di leggere quel numero.");
     println!(
         "  Il sovrapprezzo è quasi fisso, quindi si diluisce: un job che duri più di {}",

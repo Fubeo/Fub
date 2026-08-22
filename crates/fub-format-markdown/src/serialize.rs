@@ -608,7 +608,8 @@ fn normalize_table_cell_breaks(cell: &mut String) {
     let mut start = 0;
     while let Some(relative) = cell[start..].find('\n') {
         let end = start + relative;
-        let hard_break = end >= 2 && cell.as_bytes()[end - 2] == b' ' && cell.as_bytes()[end - 1] == b' ';
+        let hard_break =
+            end >= 2 && cell.as_bytes()[end - 2] == b' ' && cell.as_bytes()[end - 1] == b' ';
         let text_end = if hard_break { end - 2 } else { end };
         normalized.push_str(&cell[start..text_end]);
         normalized.push_str(if hard_break { "<br />" } else { " " });
@@ -709,9 +710,7 @@ fn write_inline(inline: &Inline, out: &mut String) -> Result<(), FormatError> {
             attrs,
             span: _,
         } => match custom_kind::payload(custom_kind) {
-            Some(Payload::Source(key)) => {
-                out.push_str(required_attr(attrs, key, custom_kind)?)
-            }
+            Some(Payload::Source(key)) => out.push_str(required_attr(attrs, key, custom_kind)?),
             _ => return Err(unsupported("the inline", custom_kind)),
         },
     }
@@ -775,7 +774,10 @@ fn write_text(s: &str, out: &mut String) {
     let mut digits_only = start_row;
     let mut the = 0;
     while the < s.len() {
-        let c = s[the..].chars().next().expect("i è un confine di carattere");
+        let c = s[the..]
+            .chars()
+            .next()
+            .expect("i è un confine di carattere");
         let after = s[the + c.len_utf8()..].chars().next();
         let before = s[..the].chars().next_back();
         let scappa = match c {
@@ -790,7 +792,9 @@ fn write_text(s: &str, out: &mut String) {
             '<' => after.is_some_and(|d| d.is_alphanumeric() || "/!?".contains(d)),
             '~' | '=' | '%' => after == Some(c),
             '$' => after.is_some_and(|d| !d.is_whitespace()),
-            '^' => before.is_none_or(char::is_whitespace) && after.is_some_and(char::is_alphanumeric),
+            '^' => {
+                before.is_none_or(char::is_whitespace) && after.is_some_and(char::is_alphanumeric)
+            }
             '>' | '-' | '+' | ':' | '|' => start_row,
             '.' | ')' => digits_only && the > 0,
             _ => false,

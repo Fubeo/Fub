@@ -28,7 +28,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::event::EventKind;
 use fub_abi::{Event, Notice};
 use fub_host::{
-    Delivery, Custody, EventSink, ExternalChange, ExternalSync, Host, VaultWatcher, WatcherFactory,
+    Custody, Delivery, EventSink, ExternalChange, ExternalSync, Host, VaultWatcher, WatcherFactory,
 };
 use fub_kernel::Workspace;
 
@@ -106,7 +106,9 @@ fn event_in_window_between_scan_and_detector_exits_exactly_once() {
 
     let (output, entered) = channel();
     let host = Host::new()
-        .with_watcher(Box::new(Window { notes: notes.clone() }))
+        .with_watcher(Box::new(Window {
+            notes: notes.clone(),
+        }))
         .with_sink(Arc::new(Registered(output)));
 
     host.open(&root).expect("vault opens");

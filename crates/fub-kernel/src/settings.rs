@@ -74,8 +74,8 @@ use fub_abi::settings::{SettingEntry, SettingScope, SettingSource, SettingSpec, 
 use fub_abi::PluginError;
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{do_not_overwrite, update_atomic, Durable, VaultStorage};
 use crate::poison::Shelter;
+use crate::storage::{do_not_overwrite, update_atomic, Durable, VaultStorage};
 use fub_abi::schema::SchemaVersion;
 /// La cartella in cui la shell deposita e cerca gli allegati del vault.
 ///
@@ -1003,11 +1003,7 @@ mod tests {
         fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
             self.0.write(path, bytes)
         }
-        fn update(
-            &self,
-            path: &Utf8Path,
-            merge: crate::storage::Merge<'_>,
-        ) -> std::io::Result<()> {
+        fn update(&self, path: &Utf8Path, merge: crate::storage::Merge<'_>) -> std::io::Result<()> {
             // Il primo giro si butta via, come lo butterebbe via chi riprova
             // dopo essersi accorto che il file è cambiato: ciò che conta è che
             // il secondo parta dai byte di adesso e dia lo stesso risultato.

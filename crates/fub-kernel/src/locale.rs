@@ -388,10 +388,7 @@ mod tests {
     fn choosing_another_zone_drops_the_offset_of_this_one() {
         let r = resolve(&system_state(), store(&[(TIMEZONE, "Europe/Rome")]));
         assert_eq!(r.timezone, "Europe/Rome");
-        assert_eq!(
-            r.utc_offset_minutes, 0,
-            "New York's offset is not Rome's"
-        );
+        assert_eq!(r.utc_offset_minutes, 0, "New York's offset is not Rome's");
         // Riscegliere quello del sistema lo riprende.
         let r = resolve(&system_state(), store(&[(TIMEZONE, "America/New_York")]));
         assert_eq!(r.utc_offset_minutes, -300);

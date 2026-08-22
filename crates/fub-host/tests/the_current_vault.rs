@@ -100,9 +100,17 @@ fn closing_the_current_of_it_takes_the_place_the_more_recent_not_the_first_of_th
     // E la seconda chiusura non riparte da capo: la memoria dell'uso è di tutti
     // i vault aperti, non solo del corrente.
     host.close_vault(&path[2]).expect("closes");
-    assert_eq!(host.current().as_ref(), Some(&path[0]), "only this one remains");
+    assert_eq!(
+        host.current().as_ref(),
+        Some(&path[0]),
+        "only this one remains"
+    );
     host.close_vault(&path[0]).expect("closes");
-    assert_eq!(host.current(), None, "and without vaults there is no current");
+    assert_eq!(
+        host.current(),
+        None,
+        "and without vaults there is no current"
+    );
 }
 
 /// Riaprire un vault **già aperto** non lo rimonta — ed è giusto — ma è un uso,
@@ -159,7 +167,10 @@ fn choosing_an_open_vault_counts_as_use() {
     host.set_current(&a.root).expect("is open");
     let after = when(&host, &a.canonical());
 
-    assert!(after > before, "choosing it is using it: {before} → {after}");
+    assert!(
+        after > before,
+        "choosing it is using it: {before} → {after}"
+    );
     assert!(
         after >= when(&host, &b.canonical()),
         "and the recents say so in the same order as the current"
@@ -261,8 +272,5 @@ fn the_startup_falls_on_the_next_if_the_last_and_vanished() {
 fn record_empty_no_last_vault() {
     let (_dir, config) = config();
     let host = installed(&config);
-    assert!(
-        host.last_vault().is_none(),
-        "no known vault, no last"
-    );
+    assert!(host.last_vault().is_none(), "no known vault, no last");
 }

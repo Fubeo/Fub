@@ -59,12 +59,7 @@ fn the_declared_forms_are_the_effective_capabilities() {
     let id = doc("nota.txt");
 
     let caps = bench.format_of(&id).expect("the format is registered");
-    let named: Vec<&str> = caps
-        .capabilities
-        .syntax
-        .active()
-        .map(|(k, _)| k)
-        .collect();
+    let named: Vec<&str> = caps.capabilities.syntax.active().map(|(k, _)| k).collect();
     let forms: Vec<String> = bench
         .syntax_forms(&id)
         .into_iter()

@@ -140,9 +140,7 @@ pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<Str
 /// dei vault e lo stato di vista denunciano di non essersi salvati — finiva nel
 /// vuoto. Il canale con cui ogni altro guasto si racconta era il primo a
 /// tacere, e taceva proprio nel caso in cui c'era di più da dire.
-fn floor(
-    dir: Option<Utf8PathBuf>,
-) -> (std::sync::Arc<dyn fub_kernel::log::Sink>, Option<String>) {
+fn floor(dir: Option<Utf8PathBuf>) -> (std::sync::Arc<dyn fub_kernel::log::Sink>, Option<String>) {
     use std::sync::Arc;
     let Some(dir) = dir else {
         // Nessuna cartella di configurazione — un ambiente senza `HOME` — e
@@ -272,11 +270,17 @@ mod tests {
         assert_eq!(config_dir(), Some(expected));
         unsafe { std::env::remove_var("FUB_CONFIG_DIR") };
         #[cfg(target_os = "windows")]
-        unsafe { std::env::remove_var("APPDATA") };
+        unsafe {
+            std::env::remove_var("APPDATA")
+        };
         #[cfg(target_os = "macos")]
-        unsafe { std::env::remove_var("HOME") };
+        unsafe {
+            std::env::remove_var("HOME")
+        };
         #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-        unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+        unsafe {
+            std::env::remove_var("XDG_CONFIG_HOME")
+        };
     }
 
     /// **Un log che non si apre ripiega su `stderr`, e la ragione esiste.**

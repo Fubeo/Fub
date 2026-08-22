@@ -362,7 +362,11 @@ fn the_health_of_the_vault_is_a_query_like_the_others() {
     ) else {
         panic!("atteso un rapporto");
     };
-    let ids: Vec<String> = orphans.items.iter().map(|the| the.doc.to_string()).collect();
+    let ids: Vec<String> = orphans
+        .items
+        .iter()
+        .map(|the| the.doc.to_string())
+        .collect();
     assert_eq!(
         ids,
         ["Archivio/Gamma.md", "Diario.md"],

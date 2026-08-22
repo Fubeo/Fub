@@ -65,6 +65,7 @@ pub mod maintenance;
 mod occurrences;
 pub mod organization;
 pub mod plugins;
+pub mod poison;
 pub mod properties;
 mod providers;
 pub mod random;
@@ -80,7 +81,6 @@ pub mod time;
 pub mod transfer;
 mod undo;
 pub mod vault;
-pub mod poison;
 pub mod viewstate;
 pub mod workspace;
 
@@ -92,10 +92,11 @@ pub use graph::{BuiltGraph, GraphSources, LinkGraph};
 pub use host::{Capability, CapabilitySet, Granted, Guard, Policy, ReadOnly};
 pub use index::plan::{PlanStep, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
-pub use journal::{journal_path, JournalOp, JournalRecord, JournalRead};
+pub use journal::{journal_path, JournalOp, JournalRead, JournalRecord};
 pub use locale::SystemLocale;
 pub use organization::{organization_path, OrganizationStore};
 pub use plugins::{PluginInfo, PluginRegistry, Registration, RegistrationKind, RegistryError};
+pub use poison::{Condition, SharedShelter, Shelter};
 pub use registry::{FormatRegistry, RegistryConflict};
 pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererRegistry};
 pub use session::Session;
@@ -104,9 +105,8 @@ pub use storage::{update_atomic, write_atomic, Durable};
 pub use storage::{DirEntry, EntryKind, FsStorage, MemStorage, Stat, VaultStorage};
 pub use syntax::{SyntaxConflict, SyntaxRegistry};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
-pub use poison::{Condition, Shelter, SharedShelter};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, Opening, GraphUpdate, Indexing, ParsedBatch, ParsedChange,
-    Rejected, Trust, Workspace, INDEX_JOB, MAIN_PANE,
+    new_doc_id, valid_doc_id, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange, Rejected,
+    Trust, Workspace, INDEX_JOB, MAIN_PANE,
 };

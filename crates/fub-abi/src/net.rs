@@ -219,7 +219,11 @@ mod tests {
             body: Vec::new(),
         };
         assert_eq!(r.headers.len(), 2, "neither is lost");
-        assert_eq!(r.header("set-cookie"), Some("a=1"), "and the first is the first");
+        assert_eq!(
+            r.header("set-cookie"),
+            Some("a=1"),
+            "and the first is the first"
+        );
     }
 
     /// Un redirect si **vede** invece di essere seguito: è la proprietà su cui

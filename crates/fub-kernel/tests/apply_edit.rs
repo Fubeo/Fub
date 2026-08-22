@@ -464,13 +464,8 @@ fn a_provider_patches_a_document_through_the_host_api() {
     let dir = TempDir::new("provider");
     let mut ws = workspace(&dir.0);
     let done = Arc::new(Mutex::new(Vec::new()));
-    ws.register_event_handler(
-        CORRECTOR,
-        Box::new(Corrector {
-            done: done.clone(),
-        }),
-    )
-    .expect("registrato");
+    ws.register_event_handler(CORRECTOR, Box::new(Corrector { done: done.clone() }))
+        .expect("registrato");
 
     let id = DocId::new("nota.lnk");
     ws.write_document(&id, "Alfa\nTOODO: sistemare\nBeta", WriteBase::Dictated)
@@ -482,11 +477,7 @@ fn a_provider_patches_a_document_through_the_host_api() {
         "il provider ha cambiato cinque byte, non ha riscritto la nota"
     );
     let done = done.lock().unwrap();
-    assert_eq!(
-        done.len(),
-        1,
-        "e la correzione non si è richiamata da sola"
-    );
+    assert_eq!(done.len(), 1, "e la correzione non si è richiamata da sola");
     assert!(
         done[0].ends_with(ws.document_revision(&id).unwrap().as_str()),
         "la revisione che il rapporto ha dato al provider è quella del \

@@ -421,10 +421,7 @@ fn a_job_that_panics_costs_the_job_and_not_the_pool() {
     ask(&host, "scrivi", serde_json::json!({ "nota": "Dopo.md" }));
     let (job, result) = outcome(&events);
     assert_eq!(job, "scrivi");
-    assert!(
-        result.is_ok(),
-        "the pool survived a job's panic"
-    );
+    assert!(result.is_ok(), "the pool survived a job's panic");
 
     // E il vault risponde ancora: il panico non ha attraversato nessun prestito.
     host.with_session(None, |s| {

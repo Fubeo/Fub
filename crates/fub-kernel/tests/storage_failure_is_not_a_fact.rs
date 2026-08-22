@@ -22,7 +22,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::error::PluginError;
 use fub_abi::model::DocId;
-use fub_kernel::storage::{DirEntry, FsStorage, FileNames, Stat, VaultStorage};
+use fub_kernel::storage::{DirEntry, FileNames, FsStorage, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, KernelError, MachineSettings, Workspace};
 use fub_testkit::SampleText;
 
@@ -50,7 +50,8 @@ impl RejectingStorage {
 
     fn no(&self, path: &Utf8Path) -> Option<std::io::Error> {
         let rejects = self.rejects.lock().unwrap();
-        rejects.iter()
+        rejects
+            .iter()
             .any(|f| path.as_str().contains(f.as_str()))
             .then(|| {
                 std::io::Error::new(

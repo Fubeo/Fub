@@ -53,7 +53,7 @@
 //!
 //! [`enabled`]: Levels::enabled
 
-use crate::poison::{Shelter, SharedShelter};
+use crate::poison::{SharedShelter, Shelter};
 use camino::{Utf8Path, Utf8PathBuf};
 use std::fmt::Write as _;
 use std::io::Write as _;
@@ -355,7 +355,9 @@ fn identity_of(_: &std::fs::Metadata) -> Option<FileIdentity> {
 /// riapertura lo ricrea, e se è illeggibile per un'altra ragione la riapertura
 /// fallisce e non si perde niente che non fosse già perso.
 fn is_still_it(path: &Utf8Path, open: &Open) -> bool {
-    let Some(identity) = open.who else { return true };
+    let Some(identity) = open.who else {
+        return true;
+    };
     std::fs::metadata(path).ok().and_then(|d| identity_of(&d)) == Some(identity)
 }
 
@@ -716,11 +718,7 @@ mod tests {
         });
         assert_eq!(rows.len(), 2, "due righe su tre, e non altre: {rows:?}");
         assert!(rows[0].contains("WARN "), "{:?}", rows[0]);
-        assert!(
-            rows[0].ends_with("fub.test questa passa"),
-            "{:?}",
-            rows[0]
-        );
+        assert!(rows[0].ends_with("fub.test questa passa"), "{:?}", rows[0]);
         assert!(rows[1].contains("ERROR"), "{:?}", rows[1]);
         assert!(
             rows[1].ends_with("fub.test anche questa passa field=7"),
@@ -836,8 +834,7 @@ mod tests {
         let current = std::fs::read_to_string(&path)
             .expect("dopo la rotazione altrui non c'è più nessun `fub.log`");
         assert!(current.contains("dopo"), "{current:?}");
-        let old =
-            std::fs::read_to_string(format!("{path}.1")).expect("la generazione di prima");
+        let old = std::fs::read_to_string(format!("{path}.1")).expect("la generazione di prima");
         assert!(old.contains("prima"), "{old:?}");
         assert!(
             !old.contains("dopo"),

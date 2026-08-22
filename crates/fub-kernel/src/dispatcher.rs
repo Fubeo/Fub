@@ -692,7 +692,7 @@ mod tests {
             panic!("someone dies holding the bell");
         });
 
-    // più niente.
+        // più niente.
         // Il conto è monotòno e non è tornato indietro: ciò che il veleno può
         let ticket = bell.ticket();
         let waiter = {
@@ -701,9 +701,7 @@ mod tests {
         };
         bell.ring();
         assert_eq!(
-            waiter
-                .join()
-                .expect("the waiter reached the end"),
+            waiter.join().expect("the waiter reached the end"),
             ticket + 1
         );
         assert_eq!(
@@ -713,7 +711,7 @@ mod tests {
         );
     }
 
-        // costare è un risveglio, non un job.
+    // costare è un risveglio, non un job.
     /// L'attesa a scadenza è la seconda porta, e si rompe per conto suo: il
     #[test]
     fn a_poisoned_bell_times_out_anyway() {

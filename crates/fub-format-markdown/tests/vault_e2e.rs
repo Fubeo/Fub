@@ -258,7 +258,10 @@ fn an_embed_carves_out_that_block() {
 fn a_new_notes_takes_the_first_free_untitled_name() {
     let (_scratch, mut ws) = open_scratch();
 
-    assert_eq!(ws.create_notes(None).unwrap(), DocId::new("Senza titolo.md"));
+    assert_eq!(
+        ws.create_notes(None).unwrap(),
+        DocId::new("Senza titolo.md")
+    );
     assert_eq!(
         ws.create_notes(None).unwrap(),
         DocId::new("Senza titolo 1.md")
@@ -336,10 +339,7 @@ fn markdown_links_are_edges_and_survive_a_rename() {
         .map(|r| r.source.to_string())
         .collect();
     assert_eq!(
-        sources
-            .iter()
-            .filter(|s| *s == "Progetti/fonte.md")
-            .count(),
+        sources.iter().filter(|s| *s == "Progetti/fonte.md").count(),
         2,
         "i due link a Nota B (nudo e con ancora) sono due archi: {sources:?}"
     );

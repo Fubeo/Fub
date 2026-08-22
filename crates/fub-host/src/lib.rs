@@ -88,8 +88,6 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
-/// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
-mod wall;
 pub mod records;
 pub mod registry;
 pub mod runner;
@@ -97,6 +95,8 @@ pub mod session;
 pub mod settings;
 pub mod shell;
 pub mod vaults;
+/// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
+mod wall;
 pub mod watcher;
 
 pub use config::{config_dir, install_logging, log_path};
@@ -105,7 +105,7 @@ pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};
 pub use registry::{Bundle, BundleError, BundleInfo, BundleRegistry, OnlyProviders};
-pub use runner::{ShutDown, InProgress, JobRunner, DEFAULT_JOB_THREADS};
+pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use vaults::{VaultEntry, VaultRegistry};

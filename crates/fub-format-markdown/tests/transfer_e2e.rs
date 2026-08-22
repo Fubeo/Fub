@@ -24,7 +24,7 @@ use fub_sdk::testing::conformance;
 
 mod corpus;
 
-use crate::corpus::{corpus, divergent, mutate, how_many_cases, seed, Case64};
+use crate::corpus::{corpus, divergent, how_many_cases, mutate, seed, Case64};
 
 /// Un `Workspace` sulla radice data, coi due provider di trasferimento
 /// registrati.
@@ -1259,11 +1259,7 @@ fn without_metadata_the_round_trip_is_a_fixed_point() {
 
     assert_eq!(
         first.artifacts.iter().map(|a| &a.path).collect::<Vec<_>>(),
-        second
-            .artifacts
-            .iter()
-            .map(|a| &a.path)
-            .collect::<Vec<_>>(),
+        second.artifacts.iter().map(|a| &a.path).collect::<Vec<_>>(),
     );
     for (a, b) in first.artifacts.iter().zip(second.artifacts.iter()) {
         assert_eq!(

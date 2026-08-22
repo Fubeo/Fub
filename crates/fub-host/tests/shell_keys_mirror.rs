@@ -127,10 +127,7 @@ fn no_binding_declared_by_both_registries() {
         }
         if let Some(k) = chord {
             match canonical(k) {
-                Some(key) => for_binding
-                    .entry(key)
-                    .or_default()
-                    .push((*id).to_string()),
+                Some(key) => for_binding.entry(key).or_default().push((*id).to_string()),
                 None => untypeable.push(((*id).to_string(), (*k).to_string())),
             }
         }

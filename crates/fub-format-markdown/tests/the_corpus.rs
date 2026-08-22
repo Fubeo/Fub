@@ -85,7 +85,7 @@ use serde_json::{json, Value};
 
 mod corpus;
 
-use crate::corpus::{corpus, divergent, mutate, how_many_cases, seed, Case64};
+use crate::corpus::{corpus, divergent, how_many_cases, mutate, seed, Case64};
 
 /// Il sorgente del contratto, da cui si estraggono le tre sorgenti di verità del
 /// confronto.
@@ -891,8 +891,8 @@ fn every_corpus_link_carries_the_context_of_its_block() {
             }
             // Il blocco, tolti i byte del link: se resta qualcosa, quel qualcosa
             // è il contesto che al link tocca.
-            let within = &case.source
-                [block.start.min(case.source.len())..block.end.min(case.source.len())];
+            let within =
+                &case.source[block.start.min(case.source.len())..block.end.min(case.source.len())];
             let rest: String = within
                 .char_indices()
                 .filter(|(the, _)| {

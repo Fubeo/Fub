@@ -65,10 +65,7 @@ fn a_failed_parse_writes_nothing_to_disk() {
     let root = ws.root().to_path_buf();
 
     let err = ws.write_document(&DocId::new("nuova.fal"), "BOOM", WriteBase::Dictated);
-    assert!(
-        err.is_err(),
-        "the rejected parse must reach the caller"
-    );
+    assert!(err.is_err(), "the rejected parse must reach the caller");
 
     assert!(
         !root.join("nuova.fal").exists(),

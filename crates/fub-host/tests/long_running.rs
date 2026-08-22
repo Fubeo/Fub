@@ -215,9 +215,7 @@ impl Walk {
 /// Avvia una camminata passo-passo. Il corpo riceve i due capi del rendez-vous e
 /// deve rispettarne il protocollo: `via.recv()` prima di ogni lettura,
 /// `fatto.send(n)` dopo.
-fn step_step(
-    body: impl FnOnce(&Receiver<()>, &SyncSender<usize>) + Send + 'static,
-) -> Walk {
+fn step_step(body: impl FnOnce(&Receiver<()>, &SyncSender<usize>) + Send + 'static) -> Walk {
     // Capacità **zero** in tutti e due i versi: una `send` che tornasse senza che
     // l'altro l'abbia presa rimetterebbe dentro l'incertezza che questo banco
     // esiste per togliere.
@@ -368,9 +366,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     );
 
     for _ in 1..NOTE / 2 {
-        synchronous
-            .step()
-            .expect("the control walk continues");
+        synchronous.step().expect("the control walk continues");
     }
     assert!(
         ws.try_write().is_none(),

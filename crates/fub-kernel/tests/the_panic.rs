@@ -665,8 +665,11 @@ fn a_renderer_that_panics_degrades_instead_of_carry_away_via_the_page() {
         Trust::Community,
     )
     .expect("dichiarato");
-    ws.register_custom_renderer("test.disegno", Box::new(PanickingRenderer(drawings.clone())))
-        .expect("registrato");
+    ws.register_custom_renderer(
+        "test.disegno",
+        Box::new(PanickingRenderer(drawings.clone())),
+    )
+    .expect("registrato");
 
     ws.render_preview(&DocId::new("Nota.txt"))
         .expect("la pagina si disegna lo stesso: il blocco rotto degrada, il resto no");

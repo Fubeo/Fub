@@ -43,10 +43,7 @@ use tracing::{Event, Level, Metadata, Subscriber};
 fn n_from_env() -> usize {
     std::env::var("FUB_APERTURA_N")
         .ok()
-        .map(|v| {
-            v.parse()
-                .expect("FUB_APERTURA_N must be an integer")
-        })
+        .map(|v| v.parse().expect("FUB_APERTURA_N must be an integer"))
         .unwrap_or(30_000)
 }
 

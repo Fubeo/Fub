@@ -19,8 +19,8 @@
 
 use fub_abi::model::DocId;
 use fub_abi::query::{in_folder, parent_folder, within_folder};
-use fub_abi::rules::folders;
 use fub_abi::rules::events::folder_contains;
+use fub_abi::rules::folders;
 use fub_abi::transfer::ImportRequest;
 
 /// I casi: la cartella com'è scritta, il documento, e se ci sta dentro.

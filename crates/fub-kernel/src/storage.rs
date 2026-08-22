@@ -446,7 +446,8 @@ pub struct FsStorage;
 /// [`VaultEntry::mtime`](fub_abi::traits::VaultEntry::mtime) per il perché dei
 /// millisecondi e non dei secondi né dei nanosecondi.
 fn mtime_millis(metadata: &std::fs::Metadata) -> u64 {
-    metadata.modified()
+    metadata
+        .modified()
         .ok()
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_millis().min(u64::MAX as u128) as u64)
@@ -503,9 +504,7 @@ static TMP_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// [`is_write_temporary`] qui accanto.
 fn tmp_path(path: &Utf8Path) -> Utf8PathBuf {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
-    dir.join(temp_name(
-        path.file_name().unwrap_or("senza-nome"),
-    ))
+    dir.join(temp_name(path.file_name().unwrap_or("senza-nome")))
 }
 
 /// Il **nome** del temporaneo di `name`, senza la cartella in cui va.
@@ -762,7 +761,7 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
         use std::os::unix::fs::MetadataExt;
         let metadata = std::fs::metadata(path).ok()?;
         Some(Identity {
-            volume: metadata.dev() as u64,
+            volume: metadata.dev(),
             file: metadata.ino(),
         })
     }
@@ -813,7 +812,11 @@ impl FsStorage {
     /// Il giro `read` → `fondi` di [`VaultStorage::update`], **senza** il
     /// lucchetto: chi chiama decide se tenerlo, perché è la sola cosa che
     /// distingue i due passaggi di [`FsStorage::update`].
-    fn reread_and_merge(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<Option<Vec<u8>>> {
+    fn reread_and_merge(
+        &self,
+        path: &Utf8Path,
+        merge_entries: Merge<'_>,
+    ) -> io::Result<Option<Vec<u8>>> {
         let current = match self.read(path) {
             Ok(bytes) => Some(bytes),
             Err(and) if and.kind() == io::ErrorKind::NotFound => None,
@@ -833,7 +836,12 @@ impl FsStorage {
     /// divisione di [`write_with`](FsStorage::write_with): il corpo sta qui una
     /// volta sola, e chi non paga il prezzo non copia le sessanta righe per
     /// dirlo.
-    fn update_with(&self, path: &Utf8Path, merge_entries: Merge<'_>, derived: bool) -> io::Result<()> {
+    fn update_with(
+        &self,
+        path: &Utf8Path,
+        merge_entries: Merge<'_>,
+        derived: bool,
+    ) -> io::Result<()> {
         let folder_c_and = path.parent().map(Utf8Path::exists).unwrap_or(true);
         if folder_c_and {
             let _lock = exclusive_lock(path);
@@ -1577,7 +1585,7 @@ fn exclusive_lock(path: &Utf8Path) -> Option<std::fs::File> {
 /// a buon fine senza il lock è ciò che si voleva, ma il giorno che quella riga
 /// compare a ogni scrittura vuol dire che su quella macchina c'è un lock morto,
 /// e chi legge il log deve poterlo trovare.
-    // Il lock si rilascia alla chiusura del file, cioè quando il chiamante
+// Il lock si rilascia alla chiusura del file, cioè quando il chiamante
 fn exclusive_lock_entro(path: &Utf8Path, wait_for: std::time::Duration) -> Option<std::fs::File> {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
     let lock_path = lock_path(path);
@@ -1589,7 +1597,7 @@ fn exclusive_lock_entro(path: &Utf8Path, wait_for: std::time::Duration) -> Optio
         .open(&lock_path)
         .ok()?;
     // lascia cadere ciò che questa funzione ha restituito.
-            // Non è un guasto: è qualcun altro che sta salvando, ed è il caso
+    // Non è un guasto: è qualcun altro che sta salvando, ed è il caso
     let expiration = std::time::Instant::now() + wait_for;
     loop {
         match file.try_lock() {
@@ -1598,7 +1606,7 @@ fn exclusive_lock_entro(path: &Utf8Path, wait_for: std::time::Duration) -> Optio
             // Un supporto che il lock non lo sa fare — una share di rete — è il
             Err(std::fs::TryLockError::WouldBlock) => {}
             // caso «best-effort» di sempre: si procede senza, subito.
-// --- la copia in memoria di un file ----------------------------------------
+            // --- la copia in memoria di un file ----------------------------------------
             Err(std::fs::TryLockError::Error(_)) => return None,
         }
         if std::time::Instant::now() >= expiration {
@@ -1614,7 +1622,7 @@ fn exclusive_lock_entro(path: &Utf8Path, wait_for: std::time::Duration) -> Optio
 }
 
 /// **Ciò che si tiene in memoria di un file, e che si cambia solo scrivendo.**
-
+///
 ///
 /// # Il difetto che questo tipo toglie
 ///
@@ -1650,8 +1658,8 @@ fn exclusive_lock_entro(path: &Utf8Path, wait_for: std::time::Duration) -> Optio
 /// la memoria da adottare invece di riceverla. Le due sono la stessa promessa
 /// («la memoria è ciò che il disco ha accettato») per i due modi di comporre un
 /// file, e chi ne apre un settimo sceglie fra queste due e non fra due ordini.
-    /// Ciò che si è appena letto dal file — o il vuoto, per un file che non
-    /// c'era.
+/// Ciò che si è appena letto dal file — o il vuoto, per un file che non
+/// c'era.
 pub struct Durable<T>(T);
 
 impl<T> Durable<T> {
@@ -1667,11 +1675,7 @@ impl<T> Durable<T> {
     /// serializzazione.
     /// **Aggiorna**: adotta ciò che la scrittura ha prodotto, invece di dettarlo.
     ///
-    pub fn write<E>(
-        &mut self,
-        new: T,
-        on_disk: impl FnOnce(&T) -> Result<(), E>,
-    ) -> Result<(), E> {
+    pub fn write<E>(&mut self, new: T, on_disk: impl FnOnce(&T) -> Result<(), E>) -> Result<(), E> {
         on_disk(&new)?;
         self.0 = new;
         Ok(())
@@ -1698,8 +1702,8 @@ impl<T> std::ops::Deref for Durable<T> {
     type Target = T;
 
     /// esattamente la mossa che questo tipo esiste per non far più scrivere.
-// --- la memoria ------------------------------------------------------------
-/// Un vault in memoria: la **seconda implementazione** che tiene onesto il
+    // --- la memoria ------------------------------------------------------------
+    /// Un vault in memoria: la **seconda implementazione** che tiene onesto il
     fn deref(&self) -> &T {
         &self.0
     }
@@ -1712,7 +1716,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Durable<T> {
 }
 
 /// trait.
-
+///
 ///
 /// # Non è il banco di prova dei test e2e
 ///
@@ -1760,8 +1764,8 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Durable<T> {
 /// La [`SCADENZA_DEL_TEMPORANEO_MS`] letta nell'unità di [`MemStorage`], dove il
 /// tempo non è un orologio ma un contatore di operazioni: **sedici operazioni
 /// fa**.
-    /// Le cartelle, ognuna con la sua data: vedi la nota sul tempo di
-    /// [`MemStorage`].
+/// Le cartelle, ognuna con la sua data: vedi la nota sul tempo di
+/// [`MemStorage`].
 const MEMORY_TEMP_FILE_EXPIRY: u64 = 16;
 
 #[derive(Debug, Default)]
@@ -1789,7 +1793,7 @@ impl Mem {
 
     /// invece accettasse si ritroverebbe uno stesso path elencato come file e
     /// come cartella, cioè uno stato che il filesystem non sa rappresentare.
-                // Una cartella nuova cambia quella che la contiene.
+    // Una cartella nuova cambia quella che la contiene.
     /// Data la cartella che contiene `path`, se è una cartella conosciuta.
     fn make_dirs(&mut self, path: &Utf8Path, now: u64) -> io::Result<()> {
         let mut cur = Utf8PathBuf::new();
@@ -1869,8 +1873,8 @@ impl VaultStorage for MemStorage {
     /// memoria. È la ragione per cui i test di durabilità stanno su
     /// [`FsStorage`] e non qui: vedi il modulo di
     /// `crates/fub-kernel/tests/il_supporto.rs`.
-        // Anche una riscrittura data la cartella: di là è una rename dentro di
-        // essa (§15.2), e una rename è una voce di directory che cambia.
+    // Anche una riscrittura data la cartella: di là è una rename dentro di
+    // essa (§15.2), e una rename è una voce di directory che cambia.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat> {
         let mut mem = self.lock();
         if mem.dirs.contains_key(path) {
@@ -1884,8 +1888,8 @@ impl VaultStorage for MemStorage {
             mem.make_dirs(parent, now)?;
         }
         mem.files.insert(path.to_owned(), (bytes.to_vec(), now));
-    // Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
-    // l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
+        // Qui l'aggiornamento è atomico **davvero**, e non per modo di dire come
+        // l'atomicità della `write`: il lucchetto della mappa si tiene per tutto il
         mem.touches_the_parent(path, now);
         Ok(Stat {
             kind: EntryKind::File,
@@ -1897,8 +1901,8 @@ impl VaultStorage for MemStorage {
     /// giro, quindi fra la rilettura e la scrittura non ci si infila nessuno. È
     /// anche la ragione per cui `fondi` non deve rientrare nel supporto — questo
     /// `Mutex` non è rientrante.
-        // Aggiungere in coda a un file che c'è già non tocca la cartella: di là
-        // è una scrittura sull'inode, non una voce di directory in più.
+    // Aggiungere in coda a un file che c'è già non tocca la cartella: di là
+    // è una scrittura sull'inode, non una voce di directory in più.
     fn update(&self, path: &Utf8Path, merge_entries: Merge<'_>) -> io::Result<()> {
         let mut mem = self.lock();
         if mem.dirs.contains_key(path) {
@@ -1939,8 +1943,8 @@ impl VaultStorage for MemStorage {
             .or_insert_with(|| (Vec::new(), now));
         entry.0.extend_from_slice(bytes);
         entry.1 = now;
-            // La data del file non si tocca — una rename non riscrive l'inode,
-            // ed è la proprietà su cui poggia il timbro del cestino — ma le due
+        // La data del file non si tocca — una rename non riscrive l'inode,
+        // ed è la proprietà su cui poggia il timbro del cestino — ma le due
         if born_now {
             mem.touches_the_parent(path, now);
         }
@@ -1955,8 +1959,8 @@ impl VaultStorage for MemStorage {
         }
         if let Some(entry) = mem.files.remove(from) {
             // cartelle sì: una voce se ne va di là e ne arriva una di qua.
-        // Una cartella si sposta con tutto ciò che ha dentro, e i path dentro
-        // sono chiavi: si riscrivono. È l'unica operazione che in memoria costa
+            // Una cartella si sposta con tutto ciò che ha dentro, e i path dentro
+            // sono chiavi: si riscrivono. È l'unica operazione che in memoria costa
             mem.files.insert(to.to_owned(), entry);
             mem.touches_the_parent(from, now);
             mem.touches_the_parent(to, now);
@@ -1967,8 +1971,8 @@ impl VaultStorage for MemStorage {
         }
         // più che sul filesystem, e vale la pena perché il chiamante che sposta
         // uno spazio per-documento (§13.2) sposta esattamente una cartella.
-    // Qui il tempo è un contatore di operazioni e non un orologio (vedi la
-    // nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
+        // Qui il tempo è un contatore di operazioni e non un orologio (vedi la
+        // nota sul tempo di [`MemStorage`]), quindi la soglia si legge in
         let relocate = |old: &Utf8Path| -> Option<Utf8PathBuf> {
             old.strip_prefix(from).ok().map(|rest| {
                 if rest.as_str().is_empty() {
@@ -2033,8 +2037,8 @@ impl VaultStorage for MemStorage {
     }
 
     /// operazioni: [`SCADENZA_DEL_TEMPORANEO_IN_MEMORIA`].
-        // **Vuota vuol dire vuota**: `remove_dir` di là si rifiuta, e un doppio
-        // che invece togliesse la cartella lascerebbe dentro la mappa dei file
+    // **Vuota vuol dire vuota**: `remove_dir` di là si rifiuta, e un doppio
+    // che invece togliesse la cartella lascerebbe dentro la mappa dei file
     fn is_left_behind(&self, stat: &Stat) -> bool {
         self.lock().tick.saturating_sub(stat.mtime) >= MEMORY_TEMP_FILE_EXPIRY
     }
@@ -2111,8 +2115,8 @@ impl VaultStorage for MemStorage {
         }
         // che nessun `list` sa più raggiungere — cioè renderebbe verde qui la
         // camminata che di là si ferma.
-    // La data di una cartella **avanza** quando cambia ciò che le sta dentro.
-    //
+        // La data di una cartella **avanza** quando cambia ciò che le sta dentro.
+        //
         let child = |path: &Utf8Path| path.parent() == Some(dir);
         if mem.files.keys().any(|p| child(p)) || mem.dirs.keys().any(|p| child(p)) {
             return Err(io::Error::new(
@@ -2136,8 +2140,8 @@ mod tests {
     /// scritture nello stesso millisecondo non si distinguono senza una
     /// `sleep`. Il banco appaiato prova ciò che i due sanno promettere insieme
     /// — una data c'è, e non torna indietro — questo prova il modello.
-        // Appendere a un file che c'è già non è una voce di directory in più.
-        // Togliere sì, e la data del file che trasloca non si muove con lui.
+    // Appendere a un file che c'è già non è una voce di directory in più.
+    // Togliere sì, e la data del file che trasloca non si muove con lui.
     #[test]
     fn the_data_of_a_folder_follows_that_that_there_is_inside() {
         let mem = MemStorage::new();
@@ -2150,7 +2154,7 @@ mod tests {
         let with_two = mem.stat(dir).unwrap().mtime;
         assert!(with_two > creation, "un file nuovo data la cartella");
 
-    // Il temporaneo di una scrittura vive dentro il vault per una frazione di
+        // Il temporaneo di una scrittura vive dentro il vault per una frazione di
         mem.append(&dir.join("b.md"), b"bb").unwrap();
         assert_eq!(
             mem.stat(dir).unwrap().mtime,
@@ -2158,7 +2162,7 @@ mod tests {
             "appendere non tocca la cartella"
         );
 
-    // secondo, e in quella frazione **non deve essere un documento**.
+        // secondo, e in quella frazione **non deve essere un documento**.
         let when_of_the_file = mem.stat(&dir.join("a.md")).unwrap().mtime;
         mem.rename(&dir.join("a.md"), Utf8Path::new("/vault/altrove/a.md"))
             .unwrap();
@@ -2290,13 +2294,13 @@ mod tests {
     /// Che la fusione venga chiamata due volte è dentro il patto di
     /// [`Fusione`], ed è per questo che il contatore serve a distinguere i due
     /// giri e non a pretendere che ce ne sia uno solo.
-        // Il file sta sotto una cartella che **non c'è ancora**: è la prima
-        // scrittura in un vault mai aperto, che è il solo caso senza lucchetto.
+    // Il file sta sotto una cartella che **non c'è ancora**: è la prima
+    // scrittura in un vault mai aperto, che è il solo caso senza lucchetto.
     #[test]
     fn the_first_write_in_a_vault_new_not_loses_that_of_the_other() {
         let (_dir, within) = folder();
-    // L'altra metà, che impedisce alla riparazione di diventare «si prende il
-    // lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
+        // L'altra metà, che impedisce alla riparazione di diventare «si prende il
+        // lucchetto comunque»: un aggiornamento che non trova niente da aggiornare
         let protected = within.parent().unwrap().join(".fub/settings.json");
         assert!(!protected.parent().unwrap().exists());
 
@@ -2322,7 +2326,10 @@ mod tests {
              composta a partire da un file che, quando l'abbiamo letto, non \
              c'era ancora: {final_state:?}"
         );
-        assert!(final_state.contains("lingua=it"), "e la nostra c'è: {final_state:?}");
+        assert!(
+            final_state.contains("lingua=it"),
+            "e la nostra c'è: {final_state:?}"
+        );
     }
 
     /// e decide di non scrivere **non fa nascere la cartella del vault**. Una

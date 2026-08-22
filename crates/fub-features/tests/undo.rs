@@ -686,7 +686,11 @@ fn a_panic_inside_a_undo_does_not_carries_via_the_stack() {
     // disfa.
     ws.write_document(&DocId::new("Dopo.md"), "un'altra\n", WriteBase::Dictated)
         .expect("scrive");
-    fai(&mut ws, NOTES_TRASH, serde_json::json!({ "doc": "Dopo.md" }));
+    fai(
+        &mut ws,
+        NOTES_TRASH,
+        serde_json::json!({ "doc": "Dopo.md" }),
+    );
     cancels(&mut ws);
     assert!(
         exists(&ws, "Dopo.md"),

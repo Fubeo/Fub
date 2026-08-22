@@ -511,21 +511,13 @@ mod tests {
     #[test]
     fn the_child_enters_the_arena_before_the_parent() {
         let tree = to_tree(&[quotes(1)]).expect("two levels pass");
-        assert_eq!(
-            tree.roots,
-            vec![1],
-            "the root is the quote, not the text"
-        );
+        assert_eq!(tree.roots, vec![1], "the root is the quote, not the text");
         assert_eq!(tree.blocks.len(), 2);
         assert_eq!(tree.inlines.len(), 1);
         let wm::Block::Quote(q) = &tree.blocks[1] else {
             panic!("the root is the quote");
         };
-        assert_eq!(
-            q.blocks,
-            vec![0],
-            "the child is the first block deposited"
-        );
+        assert_eq!(q.blocks, vec![0], "the child is the first block deposited");
     }
 
     /// Il tetto è quello dichiarato: l'ultimo livello ammesso passa, il primo di

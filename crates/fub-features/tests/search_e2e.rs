@@ -526,7 +526,10 @@ fn omitting_excerpts_keeps_relevance() {
 
     assert_eq!(
         with.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
-        without.iter().map(|h| h.doc.to_string()).collect::<Vec<_>>(),
+        without
+            .iter()
+            .map(|h| h.doc.to_string())
+            .collect::<Vec<_>>(),
         "stessa selezione e stesso ordine: `Omit` non è un'altra domanda"
     );
     assert_eq!(

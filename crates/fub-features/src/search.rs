@@ -2570,7 +2570,11 @@ mod tests {
             ["a.md", "b.md"],
             "and on reopen it answers WITHOUT anyone having opened a file"
         );
-        assert_eq!(search(&idx, "gatto").len(), 1, "and the index is still the same one");
+        assert_eq!(
+            search(&idx, "gatto").len(),
+            1,
+            "and the index is still the same one"
+        );
     }
 
     #[test]
@@ -2685,7 +2689,8 @@ mod tests {
 
         let idx = open(&path, &mut host);
         assert!(
-            idx.up_to_date(&[entry("a.md", Some("il gatto"))]).is_empty(),
+            idx.up_to_date(&[entry("a.md", Some("il gatto"))])
+                .is_empty(),
             "il guardiano è uno solo: se il manifest è di un'altra epoca non se ne \
              crede nessuna parte — dire «ce l'ho» a sproposito farebbe SALTARE un \
              documento, cioè mentire in silenzio"
@@ -2893,8 +2898,10 @@ mod tests {
         let (_g, path) = tmp();
         let (mut idx, _host) = fresh(&path);
         for the in 0..5 {
-            let _ = idx
-                .on_documents_indexed(std::slice::from_ref(&doc(&format!("nota{the}.md"), "gatto")));
+            let _ = idx.on_documents_indexed(std::slice::from_ref(&doc(
+                &format!("nota{the}.md"),
+                "gatto",
+            )));
         }
 
         let first = page_of(&idx, text("gatto"), Some(Page::new(0, 2)));

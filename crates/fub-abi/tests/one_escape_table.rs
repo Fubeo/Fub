@@ -78,8 +78,8 @@ fn production_sources() -> BTreeMap<String, String> {
 }
 
 fn walk(dir: &Path, rel: &str, out: &mut BTreeMap<String, String>) {
-    let entries =
-        std::fs::read_dir(dir).unwrap_or_else(|and| panic!("`{}` is unreadable: {and}", dir.display()));
+    let entries = std::fs::read_dir(dir)
+        .unwrap_or_else(|and| panic!("`{}` is unreadable: {and}", dir.display()));
     for entry in entries {
         let entry = entry.unwrap_or_else(|and| panic!("inside `{}`: {and}", dir.display()));
         let name = entry

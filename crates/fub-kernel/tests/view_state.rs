@@ -120,11 +120,7 @@ fn a_panel_finds_what_it_remembered() {
     let mut ws = vault();
     with_panel(&mut ws);
 
-    assert_eq!(
-        drawn(&ws, VIEW),
-        "nothing",
-        "the first draw has nothing"
-    );
+    assert_eq!(drawn(&ws, VIEW), "nothing", "the first draw has nothing");
     remember(&mut ws, VIEW, "line 40").expect("remember");
     assert_eq!(drawn(&ws, VIEW), "line 40");
 }
@@ -211,7 +207,10 @@ fn not_drawing_a_view_means_no_view_state() {
     .expect("the command runs");
 
     let results = results.lock().unwrap().clone();
-    assert_eq!(results[0], "read: None", "reading into nothing is the normal case");
+    assert_eq!(
+        results[0], "read: None",
+        "reading into nothing is the normal case"
+    );
     assert!(
         results[1].contains("instance"),
         "writing into nothing explains why: {}",

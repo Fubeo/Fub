@@ -58,18 +58,10 @@ fn a_loss_opens_the_gate_a_not_loss_does_not() {
             });
         });
     });
-    assert_eq!(
-        lines.len(),
-        1,
-        "the floor captured the line: {lines:?}"
-    );
+    assert_eq!(lines.len(), 1, "the floor captured the line: {lines:?}");
     assert!(lines[0].contains("loss"), "{:?}", lines[0]);
     let faults = trouble_on(&rx);
-    assert_eq!(
-        faults.len(),
-        1,
-        "the gate opened for the loss: {faults:?}"
-    );
+    assert_eq!(faults.len(), 1, "the gate opened for the loss: {faults:?}");
 
     // Una **non-perdita**: il pavimento scrive comunque una riga — sapere che
     // si è potato è utile dopo — ma la porta resta chiusa, perché nessuno ha

@@ -93,7 +93,9 @@ fn open_and_resave_not_changes_a_byte() {
         let id = DocId::new("nota.md");
         std::fs::write(vault.path_for(&id).unwrap(), &bytes).expect("scrive il file di partenza");
 
-        let read_value = vault.read(&id).unwrap_or_else(|and| panic!("{name}: {and}"));
+        let read_value = vault
+            .read(&id)
+            .unwrap_or_else(|and| panic!("{name}: {and}"));
         vault
             .write(&id, &read_value)
             .unwrap_or_else(|and| panic!("{name}: {and}"));

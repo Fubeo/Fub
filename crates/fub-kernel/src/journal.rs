@@ -599,10 +599,7 @@ fn pruned(raw: &[u8], days: u64) -> Option<Vec<u8>> {
     // nel file riscritto non servirebbe a niente: dopo una riscrittura la coda è
     // integra per costruzione, e il record che verrà si delimita da sé.
     let rows: Vec<&[u8]> = all.iter().copied().filter(|r| !r.is_empty()).collect();
-    let mut cut = rows
-        .len()
-        .saturating_sub(CEILING)
-        .max(expired(&rows, days));
+    let mut cut = rows.len().saturating_sub(CEILING).max(expired(&rows, days));
     if cut == 0 {
         return None;
     }
@@ -646,8 +643,7 @@ fn expired(rows: &[&[u8]], days: u64) -> usize {
         at: u64,
     }
     let threshold = crate::time::now_unix_millis().saturating_sub(days.saturating_mul(86_400_000));
-    rows
-        .iter()
+    rows.iter()
         .position(|row| match serde_json::from_slice::<When>(row) {
             Ok(q) => q.at >= threshold,
             Err(_) => true,
@@ -752,10 +748,6 @@ mod tests {
         let reopened = Journal::open(&root, storage as Arc<dyn VaultStorage>);
         let read = reopened.read().expect("journal readable");
         assert_eq!(read.records.len(), CEILING);
-        assert_eq!(
-            read.records[0].op,
-            rename(5),
-            "the oldest drops out"
-        );
+        assert_eq!(read.records[0].op, rename(5), "the oldest drops out");
     }
 }

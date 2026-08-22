@@ -255,7 +255,10 @@ pub fn mount(
             // delle famiglie del kernel — è una funzione sola, e la
             // chiama anche il banco che la giudica: qui c'era un elenco
             // a mano, e il banco ne teneva una seconda copia.
-            .speaking(crate::settings::CORE_DEFAULT_LOCALE, core_catalog_assembled()),
+            .speaking(
+                crate::settings::CORE_DEFAULT_LOCALE,
+                core_catalog_assembled(),
+            ),
         ),
     ];
     for feature in fub_features::every_official_feature() {
@@ -360,7 +363,7 @@ pub fn mount(
         //
         // Cosa una feature monta davvero lo dice `catalogo_montato`, e lo dice
         // **anche al banco che lo giudica**: è la forma di `core_catalog_montato`.
-    // **Due passi, e in questo ordine.** Prima si dichiara al registry cosa
+        // **Due passi, e in questo ordine.** Prima si dichiara al registry cosa
         let bundle = bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
         bundles.push(Arc::new(bundle));
     }
@@ -384,7 +387,7 @@ pub fn mount(
     // e prima di lui quei nomi non sono nemmeno impostazioni. Da qui in poi ogni
     // riga di `tracing` rispetta ciò che la tendina dice — comprese quelle dei
     // bundle che si montano subito dopo.
-            // Non è un avviso da stderr: è una scelta dell'utente, e la si vede
+    // Non è un avviso da stderr: è una scelta dell'utente, e la si vede
     crate::settings::apply_log_levels(&ws, levels);
     let disabled = disabled_plugins(&ws);
     for bundle in &bundles {
@@ -394,13 +397,13 @@ pub fn mount(
         }
         if disabled.contains(&id) {
             // dall'inventario dei bundle (`BundleRegistry::inventory`).
-        // Gli avvisi dei provider che non sono entrati li scrive `mount`, che
+            // Gli avvisi dei provider che non sono entrati li scrive `mount`, che
             continue;
         }
         // è il punto che anche il core e `Host::set_plugin_enabled`
         // attraversano; qui resta il solo caso che quel punto non raggiunge —
         // il bundle che non si monta affatto.
-    // Cosa è andato storto **leggendo** la configurazione: un file malformato,
+        // Cosa è andato storto **leggendo** la configurazione: un file malformato,
         if let Err(and) = registry.enable(&mut ws, &id) {
             tracing::error!(target: "fub.host", "bundle not mounted: {and}");
         }
@@ -441,7 +444,7 @@ pub fn mount(
 
     // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
     // l'utente legge crudo.
-// L'indice di ricerca. Va registrato **prima** di `reindex`: è lì che riceve il
+    // L'indice di ricerca. Va registrato **prima** di `reindex`: è lì che riceve il
     for kind in ws.undrawn_kinds() {
         tracing::warn!(target: "fub.host", "`{kind}` has no renderer: will degrade to generic rendering");
     }
@@ -463,7 +466,7 @@ pub fn mount(
 /// Vive nel proprio spazio autorevole (`.fub/plugins/fub.search/`), che è il
 /// kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è il
 /// momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
-        // I due esiti sono diversi e vanno detti diversi (decisione 0019): un
+// I due esiti sono diversi e vanno detti diversi (decisione 0019): un
 #[cfg(feature = "search")]
 fn register_search(ws: &mut Workspace) -> Vec<String> {
     match ws
@@ -473,21 +476,21 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
         // conflitto di rotte vuol dire che l'indice **non c'è** e la ricerca non
         // risponderà; un'attivazione fallita che c'è ma reindicizza tutto, che è
         // lento e non sbagliato.
-            // **Il capo dell'`Arc` si prende prima di consegnare l'indice**:
+        // **Il capo dell'`Arc` si prende prima di consegnare l'indice**:
         Ok(index) => {
             // dopo `register_index_provider` il provider è nel workspace e non
             // lo si tocca più. È l'handler che tiene i pesi allineati alle
             // impostazioni (§21.6) — senza di lui i pesi si leggerebbero una
             // volta in `activate` e resterebbero fermi fino alla riapertura del
             // vault.
-                    // L'indice c'è e cerca: quello che manca è che si accorga
+            // L'indice c'è e cerca: quello che manca è che si accorga
             let settings = index.settings_handler();
             match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
                 Ok(()) => match ws.register_event_handler(SEARCH_ID, Box::new(settings)) {
                     Ok(()) => Vec::new(),
                     // di un peso cambiato. Va detto, e non è lo stesso avviso
                     // di una ricerca che non risponde.
-// Il versioning è una feature ufficiale scritta come la scriverebbe un plugin:
+                    // Il versioning è una feature ufficiale scritta come la scriverebbe un plugin:
                     Err(and) => vec![format!(
                         "search index: field weights will not update while vault \
                          is open: {and}"
@@ -518,7 +521,7 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 /// il workspace chiama fra il parse e il disco, un istante prima che
 /// l'originale sparisca. L'handler resta per gli eventi (la versione di ogni
 /// scrittura successiva) e per la riconciliazione dopo un `Overflow`.
-    // La prima fotografia, come gancio **prima della scrittura** (0154): la
+// La prima fotografia, come gancio **prima della scrittura** (0154): la
 #[cfg(feature = "versioning")]
 fn register_versioning(
     ws: &mut Workspace,
@@ -560,7 +563,7 @@ fn register_versioning(
     // assente, non un pannello vuoto e un comando che risponde «disattivato».
     // È la spegnibilità totale (D7) ottenuta togliendo la registrazione, che è
     // l'unico modo in cui è vera anche per chi guarda la palette.
-// Un pannello che passa per il protocollo di view come dovrà fare un plugin:
+    // Un pannello che passa per il protocollo di view come dovrà fare un plugin:
     if let Some(build) = view {
         warnings.extend(register_view(ws, VERSIONING_ID, build()));
     }

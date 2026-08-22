@@ -50,7 +50,7 @@ use fub_abi::PluginError;
 use fub_kernel::{Indexing, JobBell, PendingJob, Workspace};
 use jiff::Timestamp;
 
-use crate::wall::{verdict, Zone, Position};
+use crate::wall::{verdict, Position, Zone};
 
 use crate::custody::Custody;
 use crate::jobs::JobHost;
@@ -283,11 +283,12 @@ struct Alarms {
     quadrants: HashMap<(String, String), Quadrant>,
     /// I recuperi di parete accumulati da [`wall`](Alarms::wall), da
     /// drenare una volta sola in [`expired`](Alarms::expired). Li accumula
-    /// `wall` e non chi la chiama perché [`reconcile`](Alarms::reconcile)
+    /// `wall` e non chi la chiama perché
+    /// [`reconcile_with_cursors`](Alarms::reconcile_with_cursors)
     /// e [`expired`](Alarms::expired) la chiamano entrambe: se il risultato
-    /// tornasse al chiamante, `reconcile` lo butterebbe via e il recupero si
-    /// perderebbe — [`position`](Quadrant::position) è già avanzato, e la
-    /// chiamata dopo non lo rivede.
+    /// tornasse al chiamante, la riconciliazione lo butterebbe via e il
+    /// recupero si perderebbe — [`position`](Quadrant::position) è già
+    /// avanzato, e la chiamata dopo non lo rivede.
     recoveries: Vec<(String, String)>,
 }
 
@@ -313,37 +314,6 @@ struct Quadrant {
 }
 
 impl Alarms {
-    /// Allinea i quadranti a ciò che è dichiarato **adesso**.
-    ///
-    /// È qui che una sveglia nasce e muore, e il fatto che la sorgente sia il
-    /// manifest a ogni giro invece che una copia presa una volta è ciò che fa
-    /// smettere di suonare un componente disattivato — senza che questo codice
-    /// sappia niente della disattivazione.
-    ///
-    /// `machine_zone` è il nome IANA che il locale risolve
-    /// ([`locale.timezone`](fub_kernel::locale::TIMEZONE)): vuoto = quello del
-    /// sistema. Non è una chiave nuova, ed è la misura che ha risparmiato
-    /// un'impostazione — vedi la decisione 0091.
-    fn reconcile(
-        &mut self,
-        declared: &[(String, fub_abi::traits::TimerSpec)],
-        now: Instant,
-        machine_zone: &str,
-    ) {
-        self.reconcile_with_cursors_at(declared, now, machine_zone, &HashMap::new(), Timestamp::now());
-    }
-
-    /// Allinea i quadranti usando l'orologio fornito dal banco.
-    fn reconcile_at(
-        &mut self,
-        declared: &[(String, fub_abi::traits::TimerSpec)],
-        now: Instant,
-        machine_zone: &str,
-        timestamp: Timestamp,
-    ) {
-        self.reconcile_with_cursors_at(declared, now, machine_zone, &HashMap::new(), timestamp);
-    }
-
     fn reconcile_with_cursors_at(
         &mut self,
         declared: &[(String, fub_abi::traits::TimerSpec)],
@@ -380,7 +350,10 @@ impl Alarms {
                 schedule: spec.schedule.clone(),
                 still: now,
                 fired: 0,
-                position: Position { last: cursor, wait_for: None },
+                position: Position {
+                    last: cursor,
+                    wait_for: None,
+                },
                 next: spec
                     .schedule
                     .nth_after(0)
@@ -390,6 +363,17 @@ impl Alarms {
         self.wall_at(now, machine_zone, timestamp);
     }
 
+    /// Allinea i quadranti a ciò che è dichiarato **adesso**.
+    ///
+    /// È qui che una sveglia nasce e muore, e il fatto che la sorgente sia il
+    /// manifest a ogni giro invece che una copia presa una volta è ciò che fa
+    /// smettere di suonare un componente disattivato — senza che questo codice
+    /// sappia niente della disattivazione.
+    ///
+    /// `machine_zone` è il nome IANA che il locale risolve
+    /// ([`locale.timezone`](fub_kernel::locale::TIMEZONE)): vuoto = quello del
+    /// sistema. Non è una chiave nuova, ed è la misura che ha risparmiato
+    /// un'impostazione — vedi la decisione 0091.
     fn reconcile_with_cursors(
         &mut self,
         declared: &[(String, fub_abi::traits::TimerSpec)],
@@ -404,7 +388,9 @@ impl Alarms {
     /// simulare chiusura e riavvio senza dormire davvero.
     fn wall_at(&mut self, instant: Instant, machine_zone: &str, timestamp: Timestamp) {
         for (key, q) in self.quadrants.iter_mut() {
-            let Some(alarm) = q.schedule.wall_clock() else { continue };
+            let Some(alarm) = q.schedule.wall_clock() else {
+                continue;
+            };
             let Some(zone) = Zone::of(alarm, machine_zone) else {
                 q.next = None;
                 continue;
@@ -423,16 +409,13 @@ impl Alarms {
         self.quadrants
             .iter()
             .filter_map(|((owner, timer), q)| {
-                q.schedule
-                    .wall_clock()
-                    .and_then(|_| q.position.last.map(|last| (owner.clone(), timer.clone(), last)))
+                q.schedule.wall_clock().and_then(|_| {
+                    q.position
+                        .last
+                        .map(|last| (owner.clone(), timer.clone(), last))
+                })
             })
             .collect()
-    }
-
-    /// Riallinea usando il tempo reale.
-    fn wall(&mut self, instant: Instant, machine_zone: &str) {
-        self.wall_at(instant, machine_zone, Timestamp::now());
     }
 
     /// Fra quanto suona la prima. `None` = nessuna sveglia viva, e chi aspetta
@@ -693,7 +676,8 @@ impl Shared {
         if in_flight.stopped.contains(plugin) {
             return None;
         }
-        in_flight.within
+        in_flight
+            .within
             .entry(plugin.to_string())
             .or_default()
             .insert(id, Arc::clone(flag));
@@ -1015,7 +999,9 @@ impl Shared {
         let mut failure = self.claim(&jobs).err();
         let mut remaining_jobs = jobs.into_iter();
         while failure.is_none() {
-            let Some(job) = remaining_jobs.next() else { break };
+            let Some(job) = remaining_jobs.next() else {
+                break;
+            };
             // Il controllo è **dentro** il ciclo e non solo in cima: un
             // drenaggio prende tutta la coda, e senza questa riga chiudere
             // vorrebbe dire eseguire fino in fondo tutto ciò che un thread
@@ -1702,7 +1688,7 @@ mod tests {
     fn the_two_families_coexist_in_the_same_quadrant() {
         let mut alarms = Alarms::default();
         let now = Instant::now();
-        alarms.reconcile(
+        alarms.reconcile_with_cursors(
             &[
                 declare("battito", TimerSchedule::Every { seconds: 3600 }),
                 declare(
@@ -1714,6 +1700,7 @@ mod tests {
             ],
             now,
             "",
+            &HashMap::new(),
         );
         assert_eq!(alarms.quadrants.len(), 2);
 
@@ -1727,7 +1714,10 @@ mod tests {
             "e sa quale occorrenza sta aspettando, che è ciò che le fa \
              distinguere una suonata puntuale da un recupero"
         );
-        assert_eq!(wall.position.wait_for.map(|a| (a.hour, a.minute)), Some((0, 1)));
+        assert_eq!(
+            wall.position.wait_for.map(|a| (a.hour, a.minute)),
+            Some((0, 1))
+        );
 
         // Il trascorso non ha imparato niente dal calendario: la sua prossima è
         // ancora un'ora dall'ancora, come è sempre stata.
@@ -1748,13 +1738,14 @@ mod tests {
     fn a_timezone_unresolvable_not_falls_back_and_not_rings() {
         let mut alarms = Alarms::default();
         let now = Instant::now();
-        alarms.reconcile(
+        alarms.reconcile_with_cursors(
             &[declare(
                 "digest",
                 TimerSchedule::AtWallClock(WallClock::daily(9, 0).anchored("Europa/Roma")),
             )],
             now,
             "",
+            &HashMap::new(),
         );
         let q = &alarms.quadrants[&("test.sveglia".into(), "digest".into())];
         assert_eq!(q.next, None, "non suona");
@@ -1777,9 +1768,9 @@ mod tests {
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(9, 0)),
         )];
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         assert_eq!(alarms.quadrants.len(), 1);
-        alarms.reconcile(&[], now, "");
+        alarms.reconcile_with_cursors(&[], now, "", &HashMap::new());
         assert!(alarms.quadrants.is_empty());
     }
 
@@ -1799,7 +1790,7 @@ mod tests {
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
         )];
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
 
         // Simula il passare di un'occorrenza mentre il pool dormiva: l'ultima
         // occorrenza considerata torna indietro di un giorno, come se la
@@ -1812,7 +1803,7 @@ mod tests {
             q.position.last = q.position.last.map(|u| u.prev_day());
         }
 
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         let fired = alarms.expired(now, "");
         assert_eq!(
             fired,
@@ -1835,7 +1826,7 @@ mod tests {
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
         )];
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         {
             let q = alarms
                 .quadrants
@@ -1843,9 +1834,9 @@ mod tests {
                 .expect("la sveglia è dichiarata");
             q.position.last = q.position.last.map(|u| u.prev_day());
         }
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         // Una seconda riconciliazione prima che `expired` dreni.
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         assert_eq!(
             alarms.expired(now, "").len(),
             1,
@@ -1863,7 +1854,7 @@ mod tests {
             "digest",
             TimerSchedule::AtWallClock(WallClock::daily(0, 0).catching_up(86400)),
         )];
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         {
             let q = alarms
                 .quadrants
@@ -1871,10 +1862,10 @@ mod tests {
                 .expect("la sveglia è dichiarata");
             q.position.last = q.position.last.map(|u| u.prev_day());
         }
-        alarms.reconcile(&declared, now, "");
+        alarms.reconcile_with_cursors(&declared, now, "", &HashMap::new());
         // La sveglia sparisce dal manifest: il suo recupero accumulato sparisce
         // con lei.
-        alarms.reconcile(&[], now, "");
+        alarms.reconcile_with_cursors(&[], now, "", &HashMap::new());
         assert!(
             alarms.expired(now, "").is_empty(),
             "una sveglia rimossa suona per un recupero accumulato prima di sparire"
@@ -1897,7 +1888,7 @@ mod tests {
         ];
         let first_time: Timestamp = "2026-01-15T08:00:00Z".parse().expect("timestamp");
         let mut first = Alarms::default();
-        first.reconcile_at(&declared, now, "", first_time);
+        first.reconcile_with_cursors_at(&declared, now, "", &HashMap::new(), first_time);
         let cursors: HashMap<_, _> = first
             .cursors()
             .into_iter()

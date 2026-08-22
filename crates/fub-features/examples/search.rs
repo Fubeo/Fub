@@ -77,7 +77,11 @@ const RUNS: usize = 30;
 fn seed(root: &Utf8Path) {
     let tag = ["rust", "cucina", "musica", "storia", "matematica"];
     for the in 0..NOTES {
-        let mut b = format!("# Nota {the}\n\n#{} #{}\n\n", tag[the % 5], tag[(the * 7) % 5]);
+        let mut b = format!(
+            "# Nota {the}\n\n#{} #{}\n\n",
+            tag[the % 5],
+            tag[(the * 7) % 5]
+        );
         for s in 0..6 {
             b.push_str(&format!("## Sezione {s}\n\n"));
             for p in 0..3 {
@@ -165,9 +169,13 @@ fn main() {
 
     // --- 1. il totale, dalla porta del workspace ---------------------------
     println!("== 1. la query del banco della contesa, dal workspace ==");
-    let (resi, tot) = count_results(&ws, documents(text_query("concorrenza"), Some(Page::first(20))));
-    let ms =
-        median(|| drop(ws.query_index(documents(text_query("concorrenza"), Some(Page::first(20))))));
+    let (resi, tot) = count_results(
+        &ws,
+        documents(text_query("concorrenza"), Some(Page::first(20))),
+    );
+    let ms = median(|| {
+        drop(ws.query_index(documents(text_query("concorrenza"), Some(Page::first(20)))))
+    });
     row("query_index Text(\"concorrenza\") page 20", ms, resi, tot);
 
     // --- 2. cosa muove il costo -------------------------------------------
@@ -250,7 +258,10 @@ fn main() {
     // La differenza fra la porta e l'indice nudo è il giro che il numero di M2
     // non faceva: pianificazione, routing, e la risposta ricomposta.
     println!("\n== 4. il giro del kernel ==");
-    let (_, _) = count_results(&ws, documents(text_query("ittiosauro"), Some(Page::first(1))));
+    let (_, _) = count_results(
+        &ws,
+        documents(text_query("ittiosauro"), Some(Page::first(1))),
+    );
     let carries =
         median(|| drop(ws.query_index(documents(text_query("ittiosauro"), Some(Page::first(1))))));
     println!("query minima dalla porta del workspace      {carries:>9.3} ms");

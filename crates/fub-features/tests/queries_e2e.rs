@@ -166,14 +166,8 @@ fn the_view_lists_and_launches() {
     .expect("run");
     let after = ws.render_view(&ViewInstance::only(QUERIES_VIEW)).unwrap();
     let list = titles(&after);
-    assert!(
-        list.iter().any(|t| t.contains("Inbox/a.md")),
-        "{list:?}"
-    );
-    assert!(
-        list.iter().any(|t| t.contains("Inbox/b.md")),
-        "{list:?}"
-    );
+    assert!(list.iter().any(|t| t.contains("Inbox/a.md")), "{list:?}");
+    assert!(list.iter().any(|t| t.contains("Inbox/b.md")), "{list:?}");
 }
 
 #[test]

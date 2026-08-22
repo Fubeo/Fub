@@ -79,13 +79,13 @@ pub enum FormatError {
     /// non può dimenticarsi di dire *chi* ha rifiutato e *cosa* ha ricevuto,
     /// perché sono i due dati con cui la frase si compone, e la frase la
     /// compone chi sta sulla via d'uscita — non lui.
-        /// L'id del formato che ha detto di no — quello del suo
+    /// L'id del formato che ha detto di no — quello del suo
     #[error("format \"{format}\" cannot read a source of kind {got:?}")]
     Unsupported {
         /// [`FormatDescriptor::id`](crate::format::FormatDescriptor::id).
         /// La forma di sorgente che ha ricevuto, e che non è la sua.
         format: String,
-/// Errore prodotto da un plugin (nativo o WASM), e **la forma con cui ogni
+        /// Errore prodotto da un plugin (nativo o WASM), e **la forma con cui ogni
         got: SourceKind,
     },
 }
@@ -98,7 +98,7 @@ pub enum FormatError {
 /// default di serde (`{"BadArgs": …}`), che nessuno leggeva perché il confine
 /// Tauri buttava via il tipo e mandava una stringa: la forma è stata scelta nel
 /// momento in cui ha guadagnato il primo lettore.
-    /// Il sorgente su cui l'operazione era stata calcolata non è più quello
+/// Il sorgente su cui l'operazione era stata calcolata non è più quello
 #[derive(Clone, Debug, PartialEq, thiserror::Error, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "message", rename_all = "snake_case")]
 pub enum PluginError {

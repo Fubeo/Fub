@@ -68,10 +68,9 @@ use fub_abi::settings::{
 use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CivilTime, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler,
-    HostApi,
-    IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress, JobSpec,
-    LinkDirection, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider, TimerSpec,
-    VaultEntry, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
+    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress,
+    JobSpec, LinkDirection, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
+    TimerSpec, VaultEntry, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{
     ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider,
@@ -102,6 +101,7 @@ use crate::locale::SystemLocale;
 use crate::occurrences;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
+use crate::poison::Shelter;
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
 use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument};
@@ -111,7 +111,6 @@ use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
 use crate::vault::TrashEntry;
-use crate::poison::Shelter;
 use crate::viewstate::ViewStates;
 
 /// Il pannello di una shell che ne ha uno solo.
@@ -251,7 +250,7 @@ impl Indexing {
     }
 
     /// Ciò che di quest'apertura si sa finora: gli scarti raccolti fin qui.
-/// Un documento **già letto e già parsato**, che aspetta di entrare nel
+    /// Un documento **già letto e già parsato**, che aspetta di entrare nel
     pub fn opening(&self) -> &Opening {
         &self.opening
     }
@@ -277,7 +276,7 @@ impl Indexing {
 /// È anche ciò che lo rende un presidio invece di una comodità — chi tiene un
 /// `ParsedChange` in mano ha per forza già rilasciato il prestito condiviso,
 /// perché il tipo non ne porta con sé nessun pezzo.
-    /// `None` quando il file letto porta **l'impronta che l'anagrafe ha già**:
+/// `None` quando il file letto porta **l'impronta che l'anagrafe ha già**:
 pub struct ParsedChange {
     id: DocId,
     /// è la scrittura del kernel che rientra dal rilevatore, e non c'è niente
@@ -289,7 +288,7 @@ pub struct ParsedChange {
     /// L'impronta che l'anagrafe aveva **al momento del piano**. Vedi
     fingerprint: Revision,
     /// [`Workspace::sync_path_prepared`].
-/// **Una fetta dell'apertura già letta e già parsata**, che aspetta di entrare
+    /// **Una fetta dell'apertura già letta e già parsata**, che aspetta di entrare
     seen: Option<Revision>,
 }
 
@@ -306,7 +305,7 @@ pub struct ParsedChange {
 /// I campi sono chiusi per la stessa ragione: chi ne tiene uno in mano ha per
 /// forza già rilasciato il prestito condiviso, perché il tipo non ne porta con
 /// sé nessun pezzo.
-    /// Le voci della fetta, con l'impronta che la lettura ha imparato.
+/// Le voci della fetta, con l'impronta che la lettura ha imparato.
 #[derive(Default)]
 pub struct ParsedBatch {
     /// Ciò che si è ripreso dalla cache invece di riparsarlo.
@@ -320,7 +319,7 @@ pub struct ParsedBatch {
     /// È per documento e non per fetta: fra il piano e l'applicazione l'utente
     /// salva *una* nota, e buttare le altre novecentonovantanove vorrebbe dire
     /// rileggerle dal disco per niente.
-/// Il risultato di un pezzo di fetta lavorato da un thread: gli stessi campi
+    /// Il risultato di un pezzo di fetta lavorato da un thread: gli stessi campi
     seen: BTreeMap<DocId, Option<Revision>>,
 }
 
@@ -364,7 +363,7 @@ pub enum GraphUpdate {
 ///
 /// L'ordine è dal più fidato al meno, e conta: `>=` fra due gradi è una domanda
 /// che si fa davvero (`trust <= Trust::Development` = «lo eseguo?»).
-    /// Core e feature ufficiali: `Html`/`WebView` ammesse.
+/// Core e feature ufficiali: `Html`/`WebView` ammesse.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Trust {
@@ -398,7 +397,7 @@ impl Trust {
         self == Trust::Core
     }
 
-/// Nome di una nota nuova a cui nessuno ne ha dato uno (D3). L'utente la
+    /// Nome di una nota nuova a cui nessuno ne ha dato uno (D3). L'utente la
     pub fn runs(self) -> bool {
         self != Trust::Revoked
     }
@@ -446,7 +445,7 @@ pub const INDEX_JOB: &str = "vault.index";
 /// cui il contenuto che sta per sparire è ancora leggibile, e che qualcuno può
 /// volerlo guardare. `None` è il default e non è un difetto: la maggior parte
 /// dei montaggi non registra niente.
-    /// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
+/// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
 pub type BeforeWriteHook =
     Arc<dyn Fn(&mut dyn HostApi, &DocId) -> std::result::Result<(), PluginError> + Send + Sync>;
 
@@ -699,7 +698,7 @@ impl Workspace {
     }
 
     /// tutti i vault aperti da questo host (§11.1).
-        // **Un** supporto per workspace, non uno per proprietario: il vault, il
+    // **Un** supporto per workspace, non uno per proprietario: il vault, il
     pub fn with_machine_settings(
         root: impl AsRef<Utf8Path>,
         registry: FormatRegistry,
@@ -709,7 +708,7 @@ impl Workspace {
         // scrivono tutti nella stessa cartella, e due supporti per la stessa
         // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
         // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
-    // Come [`with_machine_settings`](Workspace::with_machine_settings), col
+        // Come [`with_machine_settings`](Workspace::with_machine_settings), col
         Workspace::on(root, registry, Arc::new(crate::storage::FsStorage), machine)
     }
 
@@ -722,7 +721,7 @@ impl Workspace {
     /// che parlano di cosa sopravvive a un guasto non hanno un banco. Con questa
     /// riga un supporto che fallisce la mossa che si vuole studiare è tre righe
     /// di test, e non c'è nessuna attesa da costruire.
-        // Il registry è condiviso con l'indice del kernel invece che copiato:
+    // Il registry è condiviso con l'indice del kernel invece che copiato:
     pub fn on(
         root: impl AsRef<Utf8Path>,
         registry: FormatRegistry,
@@ -757,7 +756,7 @@ impl Workspace {
         }
         // scrivendo in questo archivio viaggia con questo archivio. Condivise
         // con l'indice del kernel, che è chi risponde a chi le chiede (0019).
-            // L'anagrafe è **del vault**, come l'organizzazione: si apre col
+        // L'anagrafe è **del vault**, come l'organizzazione: si apre col
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
         Ok(Workspace {
             docs: DocumentStore::new(
@@ -788,7 +787,7 @@ impl Workspace {
             entry_store: EntryStore::open(root, Arc::clone(&storage)),
             // col root: ciò che è successo a queste note viaggia con queste
             // note.
-    // Aggancia lo stato di vista della macchina (§11.2).
+            // Aggancia lo stato di vista della macchina (§11.2).
             journal: Journal::open(root, storage),
             drafts,
             doc_data_warnings: Vec::new(),
@@ -909,7 +908,7 @@ impl Workspace {
     // forma in cui l'host sa di chi siano le capacità che sta prestando, e in
     // cui un nome ha un proprietario invece di essere il primo arrivato.
     /// Dichiara un plugin: id, versione, versione di ABI, permessi, fiducia.
-
+    ///
     ///
     /// Va **prima** di ogni `register_*` che nomini quell'id. Un id non
     /// dichiarato non è un plugin creato al volo: è un errore, e la ragione è
@@ -919,7 +918,7 @@ impl Workspace {
     ///
     /// Il [`Trust`] non sta nel manifest e non ci starà mai: è ciò che l'host
     /// pensa del plugin, non ciò che il plugin dice di sé.
-        // I servizi che offre sono nomi, e valgono la regola del §7.4: o è il
+    // I servizi che offre sono nomi, e valgono la regola del §7.4: o è il
     pub fn register_plugin(
         &mut self,
         manifest: PluginManifest,
@@ -1003,7 +1002,7 @@ impl Workspace {
         // si monta affatto. Se l'ordine fosse rovesciato, a fallire sarebbe la
         // sua dichiarazione: stesso esito, ma il difetto verrebbe raccontato
         // come se fosse dell'host.
-                // E si **ritira il suo schema**, che è stato dichiarato una
+        // E si **ritira il suo schema**, che è stato dichiarato una
         let permissions = self.permission_specs(&id);
         let outcome = {
             let mut settings = self.settings.write().expect("store di configurazione");
@@ -1016,7 +1015,7 @@ impl Workspace {
                 // schema, con «già dichiarata da `<id>`» — cioè raccontando
                 // come un difetto del manifest uno stato che aveva creato
                 // l'host.
-        // E si applica **subito** ciò che l'utente aveva già negato: un vault
+                // E si applica **subito** ciò che l'utente aveva già negato: un vault
                 settings.withdraw(&id);
             })
         };
@@ -1047,7 +1046,7 @@ impl Workspace {
         // al primo job di qualcun altro. È la stessa mossa con cui `stop` sveglia
         // i dormienti: la campana non annuncia un job, annuncia che c'è da
         // ricontare.
-    // Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
+        // Registra chi **offre** i servizi che il suo manifest dichiara (§7.5).
         self.dispatch.bell().ring();
         Ok(())
     }
@@ -1090,7 +1089,7 @@ impl Workspace {
     /// «chi lo offre ha fallito»: è la stessa distinzione del canale dati
     /// (decisione 0019), e serve a chi disegna per scegliere fra «installa il
     /// plugin» e «qualcosa è andato storto».
-        // Il giro. Come per i comandi (decisione 0013), un servizio che rientra
+    // Il giro. Come per i comandi (decisione 0013), un servizio che rientra
     pub fn call_service(
         &mut self,
         service: &str,
@@ -1118,7 +1117,7 @@ impl Workspace {
 
         // su sé stesso non è una profondità da limitare con un numero: è un
         // errore di chi lo ha scritto, e l'unica risposta utile lo nomina.
-            // La rete contro i panici sta **attorno alla chiamata del
+        // La rete contro i panici sta **attorno alla chiamata del
         if self.providers.service_stack.iter().any(|s| s == service) {
             let mut round = self.providers.service_stack.clone();
             round.push(service.to_string());
@@ -1139,7 +1138,7 @@ impl Workspace {
             // la pila dei servizi da svuotare, il dispatch da drenare — è già
             // scritto per girare sul ramo dell'errore, e catturare più in alto
             // lo salterebbe.
-    // Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
+            // Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
             crate::safety::calling(
                 &owner,
                 Gate::Service,
@@ -1206,7 +1205,7 @@ impl Workspace {
     /// prestito** (§7.2), la loro tabella è vuota, e una rimozione calcolata su
     /// una tabella vuota toglie zero e vede tornare tutti. Chi lo riceve
     /// richiede a chiamata tornata.
-                // Il flush **prima** della chiusura, come dice il contratto: chi
+    // Il flush **prima** della chiusura, come dice il contratto: chi
     pub fn deactivate_plugin(
         &mut self,
         plugin: &str,
@@ -1226,14 +1225,14 @@ impl Workspace {
                 let mut host = ws.host_for(&id, InvokeMode::Apply);
                 // arriva a `close` ha già avuto il proprio punto di persistenza,
                 // e ciò che scrive lì dentro è roba della chiusura.
-            // Qui il `Box` cade, ed è il momento in cui un provider nativo
+                // Qui il `Box` cade, ed è il momento in cui un provider nativo
                 let flushed = index.flush(&mut host);
                 let closed = index.close(&mut host);
                 [flushed, closed]
             });
             errors.extend(out.into_iter().filter_map(|outcome| outcome.err()));
             // lascia andare ciò che il `close` non ha saputo lasciare.
-        // Regole sintattiche e renderer non sono in una tabella di provider: i
+            // Regole sintattiche e renderer non sono in una tabella di provider: i
             drop(index);
         }
 
@@ -1295,7 +1294,7 @@ impl Workspace {
 
         // sta mostrando il passato. Non lo ha chiesto un documento né un plugin
         // — è il kernel che dichiara di aver cambiato forma (decisione 0012).
-    // **Chiude il vault**: l'ultimo giro sincrono, un punto di consistenza per
+        // **Chiude il vault**: l'ultimo giro sincrono, un punto di consistenza per
         if removed_indexes {
             self.as_actor(Actor::Kernel, |ws| {
                 ws.emit_event(Event::IndexUpdated);
@@ -1372,7 +1371,7 @@ impl Workspace {
     ///
     /// Gli errori di `stopping` si accodano agli altri e non fermano niente,
     /// come tutto il resto della chiusura.
-                // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da
+    // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da
     pub fn close_with(
         &mut self,
         mut stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
@@ -1403,7 +1402,7 @@ impl Workspace {
                 Ok(errs) => errors.extend(errs),
                 // dentro la chiamata di un provider, cioè che chi chiude è
                 // qualcuno che il vault lo sta usando. Non fa danno e va detto.
-        // **L'anagrafe si scrive qui**, ed è l'ultima riga della chiusura: è
+                // **L'anagrafe si scrive qui**, ed è l'ultima riga della chiusura: è
                 Err(and) => errors.push(PluginError::Internal(and.to_string().into())),
             }
         }
@@ -1444,7 +1443,7 @@ impl Workspace {
         // [`finish_index`](Workspace::finish_index) teneva già è lo stesso letto
         // in una funzione più lunga: **l'anagrafe per ultima**, quando non c'è
         // più nessuno che possa scrivere dopo di lei.
-    // Il vault è già stato chiuso?
+        // Il vault è già stato chiuso?
         self.store_entries();
 
         errors
@@ -1559,10 +1558,10 @@ impl Workspace {
     ///
     /// Le capacità sono **quelle del plugin**, non quelle del chiamante: un id
     /// che nessuno ha dichiarato riceve un host che nega tutto, dicendo perché.
-        // Anche questa è una "chiamata di provider" ai fini della consegna:
+    // Anche questa è una "chiamata di provider" ai fini della consegna:
     pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
         // ciò che `f` emette arriva agli handler quando `f` è tornata.
-    // Presta un [`ReadApi`] intestato a un plugin, per la durata di una
+        // Presta un [`ReadApi`] intestato a un plugin, per la durata di una
         let result = self.with_provider_call(|ws| {
             let mut host = ws.host_for(plugin, InvokeMode::Apply);
             f(&mut host)
@@ -1583,10 +1582,10 @@ impl Workspace {
     ///
     /// Il primo cliente è il `JobHost` di `fub-host` (§9.1): un lavoro lungo
     /// che cammina il vault fa quasi solo letture, e sono migliaia.
-        // Niente `with_provider_call` e niente drenaggio: da qui non si emette
+    // Niente `with_provider_call` e niente drenaggio: da qui non si emette
     pub fn with_read_host<R>(&self, plugin: &str, f: impl FnOnce(&dyn ReadApi) -> R) -> R {
         // e non si scrive, quindi non c'è nessuna coda che possa crescere.
-    // L'host di **lettura** intestato a un plugin, con la stessa politica di
+        // L'host di **lettura** intestato a un plugin, con la stessa politica di
         let host = self.read_host_for(plugin);
         f(&host)
     }
@@ -1639,14 +1638,14 @@ impl Workspace {
     }
 
     /// view: vedi [`read_host_for_view`](Workspace::read_host_for_view).
-        // La politica si prende **prima**: dopo, `self` è prestato all'host.
+    // La politica si prende **prima**: dopo, `self` è prestato all'host.
     pub(crate) fn host_for_view<'a>(
         &'a mut self,
         plugin: &'a str,
         mode: InvokeMode,
         instance: Option<&'a str>,
     ) -> Guard<KernelHost<'a>, Granted> {
-    // Mette il gancio **prima della scrittura** (0154): l'id del plugin a cui
+        // Mette il gancio **prima della scrittura** (0154): l'id del plugin a cui
         let granted = self.providers.plugins.granted(plugin);
         Guard::new(
             KernelHost {
@@ -1687,7 +1686,7 @@ impl Workspace {
     /// dati (`.fub/data/plugins/<id>/`), come per gli event handler.
     ///
     /// [`reindex`]: Workspace::reindex
-        // I `ns` delle query custom sono nomi in uno spazio condiviso, e la
+    // I `ns` delle query custom sono nomi in uno spazio condiviso, e la
     pub fn register_index_provider(
         &mut self,
         plugin: impl Into<String>,
@@ -1698,7 +1697,7 @@ impl Workspace {
         // `acme:tasks` deve essere `acme`. Le rotte del contratto invece non
         // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
         // loro conflitto lo vede la tabella delle rotte.
-    // Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
+        // Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
         let namespaces = plugins::custom_namespaces(&index.routes());
         self.providers
             .plugins
@@ -1719,7 +1718,7 @@ impl Workspace {
     /// adesso si chiede per nome. È anche il modo in cui l'indice del kernel si
     /// scavalca: `Backlinks`, `Tags` e gli altri non sono più un ramo prima del
     /// ciclo, sono rotte come le altre.
-        // Sostituire non scavalca la regola dei nomi: si prende il posto di chi
+    // Sostituire non scavalca la regola dei nomi: si prende il posto di chi
     pub fn replace_index_provider(
         &mut self,
         plugin: impl Into<String>,
@@ -1730,7 +1729,7 @@ impl Workspace {
         // c'era, non il suo namespace. E il permesso si chiede **prima** di
         // togliere la riga di chi c'era, o un rifiuto lascerebbe la rotta ancora
         // servita e l'inventario a dire che non è di nessuno.
-    // La registrazione **è** l'attivazione: l'indice riceve subito un
+        // La registrazione **è** l'attivazione: l'indice riceve subito un
         self.providers
             .plugins
             .admit_replacing(&plugin, RegistrationKind::Index, &namespaces)?;
@@ -1747,7 +1746,7 @@ impl Workspace {
     /// [`HostApi`] intestato al proprio id e ricarica da `data_*` ciò che ha già
     /// visto. Prima di questo momento non può avere ricordi, e dopo il primo
     /// `on_documents_indexed` sarebbe troppo tardi per averli.
-        // `index` è ancora una variabile locale: prestare `&mut self` all'host
+    // `index` è ancora una variabile locale: prestare `&mut self` all'host
     fn activate_index(
         &mut self,
         id: String,
@@ -1755,7 +1754,7 @@ impl Workspace {
     ) -> std::result::Result<(), RegistryError> {
         // qui non alias niente. `activate` è una chiamata a un provider come
         // le altre: il dispatch resta rimandato a chiamata tornata.
-    // Guarda cosa c'è nel vault, ricostruisce il grafo e allinea gli indici
+        // Guarda cosa c'è nel vault, ricostruisce il grafo e allinea gli indici
         let activated = self.with_provider_call(|ws| {
             let mut host = ws.host_for(&id, InvokeMode::Apply);
             index.activate(&mut host)
@@ -1802,7 +1801,7 @@ impl Workspace {
     /// non è lettura-contro-parse, è se il vault sappia ancora dire *quali*
     /// documenti esistono. Il perché sta nella
     /// [decisione 0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md).
-        // La raccolta sta fuori da `finish_index` perché vuole `&self` e non
+    // La raccolta sta fuori da `finish_index` perché vuole `&self` e non
     pub fn reindex(&mut self) -> Result<Opening> {
         let mut indexing = self.scan_vault()?;
         while !indexing.finished() {
@@ -1819,7 +1818,7 @@ impl Workspace {
         // nessuno di aprire una nota. Chi ha chiesto *espressamente* di
         // raccogliere — `vault.repair` — la riceve invece, perché è la sola
         // cosa che aveva chiesto.
-    // Toglie i temporanei di scrittura che la camminata ha trovato rimasti
+        // Toglie i temporanei di scrittura che la camminata ha trovato rimasti
         if let Err(and) = self.collect_doc_data() {
             tracing::warn!(target: "fub.kernel", "spazi per-documento non raccolti: {and}");
         }
@@ -1868,7 +1867,7 @@ impl Workspace {
     /// ([0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)),
     /// quindi la fase che può fallire e la fase che dura sono due fasi diverse.
     /// Chi apre aspetta la prima e non la seconda.
-        // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
+    // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
     pub fn scan_vault(&mut self) -> Result<Indexing> {
         let _phase = tracing::info_span!(target: "fub.apertura", "scan_vault").entered();
         let scanned = self.docs.vault.scan()?;
@@ -1876,14 +1875,14 @@ impl Workspace {
 
         // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
         // che qualcuno rivendica quell'estensione, senza essere cambiato.
-                // Una domanda sola all'anagrafe: la risposta intera serve
+        // Una domanda sola all'anagrafe: la risposta intera serve
         let mut entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
             .files
             .into_iter()
             .map(|file| {
                 // alla riapertura incrementale qui sotto, e rifarla là è un
                 // lock e una copia regalati per niente.
-        // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
+                // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
                 let known = self
                     .entry_store
                     .known(&file.id)
@@ -2033,7 +2032,7 @@ impl Workspace {
     /// nessun prestito. E siccome `work` è un `&mut`, due piani sulla stessa
     /// indicizzazione non compilano — l'ordine delle fette lo dice il tipo, come
     /// nella 0119 lo diceva `ExternalSync::batch`.
-        // Lo span copre tutto il lavoro parallelo della fetta, `thread::scope`
+    // Lo span copre tutto il lavoro parallelo della fetta, `thread::scope`
     pub fn plan_batch(&self, work: &mut Indexing) -> ParsedBatch {
         let slice = work.next_slice();
         if slice.is_empty() {
@@ -2059,7 +2058,7 @@ impl Workspace {
         // `entry_store` e `indexes` sono `Sync` — e li aspetta prima di
         // restituire. Gli handle si raccolgono **tutti** prima di joinare:
         // `map(spawn).map(join)` è pigro, e joinerebbe un thread alla volta.
-    // Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
+        // Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
         let n = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
@@ -2100,7 +2099,7 @@ impl Workspace {
     }
 
     /// parse. Ogni pezzo è indipendente e può girare in un `thread::scope`.
-        // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
+    // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
     fn plan_one_chunk(
         docs: &DocumentStore,
         store: &EntryStore,
@@ -2119,7 +2118,7 @@ impl Workspace {
         // documento rivendicato a byte non passa da una decodifica UTF-8 che
         // fallirebbe, e la sua impronta si prende sui byte — che per una
         // sorgente di testo è lo stesso numero di prima.
-                    // Ciò che non si è potuto leggere o parsare: si raccoglie
+        // Ciò che non si è potuto leggere o parsare: si raccoglie
         let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
         for mut entry in entries {
             if entry.kind == EntryKind::Asset {
@@ -2159,7 +2158,7 @@ impl Workspace {
         //
         // Per fetta di chunk: ogni thread chiede per le proprie voci, e il
         // risultato è lo stesso — la domanda è per documento.
-    // L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
+        // L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
         let documents: Vec<VaultEntry> = out
             .read
             .iter()
@@ -2227,7 +2226,7 @@ impl Workspace {
     /// rifare il lavoro di qualcun altro per arrivare al suo stesso risultato —
     /// ed è la differenza con la 0119, dove il piano buttato era l'unica notizia
     /// che quel file fosse cambiato.
-            // L'impronta appena calcolata torna in anagrafe: la voce c'era già
+    // L'impronta appena calcolata torna in anagrafe: la voce c'era già
     pub fn index_batch_prepared(&mut self, prepared: ParsedBatch) {
         let ParsedBatch {
             read,
@@ -2244,7 +2243,7 @@ impl Workspace {
         for entry in read {
             // dalla prima fase, quello che qui si aggiunge è ciò che si è
             // imparato leggendola.
-        // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
+            // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
             if entry.fingerprint.is_some() && !aged.contains(&entry.id) {
                 self.indexes.core.set_entry(entry);
             }
@@ -2270,7 +2269,7 @@ impl Workspace {
         // porta nessuna notizia a nessuno — a M5 sarebbe una serializzazione
         // per dire niente. Lo ha trovato il banco contando le chiamate: nessun
         // altro presidio le conta.
-    // Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
+        // Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
         if models.is_empty() {
             return;
         }
@@ -2314,13 +2313,13 @@ impl Workspace {
     /// separato, come la terza fase di `ExternalSync::batch`: fra la chiusura
     /// dell'indicizzazione e la durevolezza il lucchetto si rilascia, e i
     /// lettori in coda passano.
-        // Gli errori di flush non fanno fallire l'apertura del vault: un
+    // Gli errori di flush non fanno fallire l'apertura del vault: un
     pub fn finish_index(&mut self, work: Indexing) -> Opening {
         let _phase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         self.indexes.core.rebuild_graph();
         let opening = self.close_indexing(work);
         // indice è stato derivato, il vault è la verità (M4: notifica).
-    // Come [`finish_index`], col grafo già costruito fuori dal prestito
+        // Come [`finish_index`], col grafo già costruito fuori dal prestito
         {
             let _phase = tracing::info_span!(target: "fub.apertura", "flush_indexes").entered();
             let _ = self.flush_indexes();
@@ -2336,7 +2335,7 @@ impl Workspace {
     /// un prestito esclusivo proprio, e chi ha i thread la fa seguire a questa
     /// funzione — fra i due prestiti il lucchetto si rilascia e i lettori in
     /// coda passano, come nella terza fase di `ExternalSync::batch`.
-            // **Gli scarti entrano nell'insieme completo**, e non è un
+    // **Gli scarti entrano nell'insieme completo**, e non è un
     pub fn finish_index_with_graph(&mut self, work: Indexing, graph: BuiltGraph) -> Opening {
         let _phase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         if graph.epoch == self.indexes.core.graph_epoch {
@@ -2373,7 +2372,7 @@ impl Workspace {
             // stessa e peggiore — dire a ogni indice di dimenticare tutto ciò
             // che l'annullamento non ha fatto in tempo a nominare, cioè
             // trasformare «ho smesso di indicizzare» in «cancella».
-        // **Il flush non sta qui** (difetto 0113): è una fase sua, con un
+            // **Il flush non sta qui** (difetto 0113): è una fase sua, con un
             opening.interrupted = true;
         }
         self.indexes.core.watch.indexing = if opening.interrupted {
@@ -2397,7 +2396,7 @@ impl Workspace {
         //
         // Solo se l'apertura è arrivata in fondo: da un'anagrafe parziale
         // «sparito» e «non ancora guardato» sono la stessa cosa.
-            // I guasti erano nello stesso lotto di `VaultOpened`, perché chi si
+        // I guasti erano nello stesso lotto di `VaultOpened`, perché chi si
         if !opening.interrupted {
             self.suspended_from_rejoin = self.rejoin_renamed_while_closed();
         }
@@ -2410,7 +2409,7 @@ impl Workspace {
             // vera: chi disegna un albero lo disegna intero, e ciò che di quei
             // documenti non si è potuto leggere arriva mentre l'indicizzazione
             // procede, sulla stessa superficie di prima (`Event::Trouble`).
-    // Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
+            // Rimette in anagrafe un file che è appena cambiato, chiedendo al disco
             for discard in &opening.discarded {
                 ws.report_trouble(
                     Severity::Failure,
@@ -2456,7 +2455,7 @@ impl Workspace {
     /// Chi invece **non** ha scritto niente — il rilevatore, un ripristino dal
     /// cestino — passa da `touch_entry`, dove togliere la voce di un file che
     /// non c'è è la risposta giusta.
-        // Un file che c'è dice che le cartelle che attraversa ci sono (§14.3):
+    // Un file che c'è dice che le cartelle che attraversa ci sono (§14.3):
     fn set_entry(
         &mut self,
         id: &DocId,
@@ -2467,7 +2466,7 @@ impl Workspace {
         let kind = media::kind_of_ext(id, |ext| self.docs.registry.has_doc_ext(ext));
         // senza questa riga una nota creata in una cartella nuova comparirebbe
         // in un albero che quella cartella non conosce fino alla riapertura.
-    // Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
+        // Scrive l'anagrafe, perché la prossima apertura non debba rifare ciò che
         self.indexes.core.ensure_folders_of(id);
         self.indexes.core.set_entry(VaultEntry {
             id: id.clone(),
@@ -2624,7 +2623,7 @@ impl Workspace {
     /// quando qualcuno la chiede: una scrittura dettata legge dalla memoria come
     /// prima, perché una riga di registro non vale una lettura a ogni
     /// salvataggio (§15.2).
-        // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
+    // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
     pub fn write_document(
         &mut self,
         id: &DocId,
@@ -2661,7 +2660,7 @@ impl Workspace {
         // si sta scrivendo non ci passa mai, ed è ciò che tiene ferma la 0179 —
         // «un salvataggio non torna a chiedere al disco cosa ha appena
         // scritto», che ha un banco che conta gli `stat` e li vuole zero.
-                // Un file che **non c'è** non è un errore da propagare: è una
+        // Un file che **non c'è** non è un errore da propagare: è una
         let (esisteva, from) = match base {
             WriteBase::DescendsFrom(expected) => {
                 // base che non combacia — chi scrive credeva di riscrivere
@@ -2673,7 +2672,7 @@ impl Workspace {
                 // sentiva dire «il documento è cambiato sotto di te», cioè un
                 // fatto del vault che non era avvenuto, e un conflitto vero non
                 // si distingueva da un supporto rotto.
-    // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
+                // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
                 let now =
                     crate::error::optional(self.docs.vault.read(id))?.map(|s| Revision::of(&s));
                 if now.as_ref() != Some(&expected) {
@@ -2711,7 +2710,7 @@ impl Workspace {
     /// senza questa separazione ognuno ne avrebbe scritte **due**: la propria e
     /// quella di `write_document`, cioè una mutazione contata due volte in una
     /// lista che esiste per essere ripercorsa.
-        // Il parse è puro: farlo PRIMA di scrivere tiene la mutazione atomica.
+    // Il parse è puro: farlo PRIMA di scrivere tiene la mutazione atomica.
     fn write_source(&mut self, id: &DocId, source: &str) -> Result<Revision> {
         // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
         // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
@@ -2745,7 +2744,7 @@ impl Workspace {
         }
         // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
         // difetto 0179.
-    // Scrive una riga nel registro delle mutazioni (§15.2).
+        // Scrive una riga nel registro delle mutazioni (§15.2).
         let placed = self.docs.vault.write(id, source)?;
         let revision = Revision::of(source);
         self.ingest_model(id, model, revision.clone(), Some(placed));
@@ -2827,7 +2826,7 @@ impl Workspace {
     // montato — compresi quelli che a M5 non scriviamo noi. Chi ha bisogno di
     // scriverci è la shell, che non è un plugin.
     /// Scrive la bozza di un documento: ciò che c'è nel buffer adesso.
-
+    ///
     ///
     /// `base` è la revisione del file su cui il buffer sta lavorando (`None`
     /// per una nota mai salvata) e non si deduce qui di proposito: dedurla
@@ -2892,7 +2891,7 @@ impl Workspace {
     /// quindi parse prima del disco, indici, grafo ed eventi come qualunque
     /// altra modifica. Una richiesta **senza edit** non è una scrittura: non
     /// tocca il file e non emette eventi.
-        // Nel registro va l'**impronta** e non l'inverso: dove la modifica ha
+    // Nel registro va l'**impronta** e non l'inverso: dove la modifica ha
     pub fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport> {
         let source = self.read_source(id)?;
         let (next, report) = request.apply_to(&source).map_err(|and| match and {
@@ -2911,7 +2910,7 @@ impl Workspace {
         // `report.inverse()` a cui si toglie il testo — quella funzione qui non
         // si chiama affatto, così i byte dell'utente non passano nemmeno per una
         // variabile sulla strada del disco.
-    // Riparsa un documento già presente sul disco (usato dal file watcher).
+        // Riparsa un documento già presente sul disco (usato dal file watcher).
         self.record(JournalOp::Edited {
             doc: id.clone(),
             from,
@@ -2930,13 +2929,13 @@ impl Workspace {
     /// e non emette niente, che è la verità — nessuno ha cambiato niente da
     /// quando lo si è letto l'ultima volta. Vedi
     /// [`already_ingested`](Workspace::already_ingested) per il perché.
-                // Il file sta ancora cambiando, o è sparito fra le due `stat`
+    // Il file sta ancora cambiando, o è sparito fra le due `stat`
     pub fn refresh_from_disk(&mut self, id: &DocId) -> Result<bool> {
         self.as_actor(Actor::Watcher, |ws| {
             let Some(src) = ws.source_if_stable(id)? else {
                 // (difetto 0197). Non è un fallimento: il debounce del
                 // rilevatore riproverà, e ingerire la metà sarebbe il difetto.
-    // La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
+                // La coda di ogni scrittura: indici, conteggi tag, grafo, metadati in
                 return Ok(false);
             };
             if ws.already_ingested(id, &Revision::of(&src)) {
@@ -2962,7 +2961,7 @@ impl Workspace {
     /// all'esito, e non deve tornare a chiederle (difetto 0179, vedi
     /// [`set_entry`](Workspace::set_entry)). `None` per chi porta dentro un
     /// cambiamento che non ha fatto lui.
-        // Una rinomina esterna spezzata dal debounce arriva come «sparito» e
+    // Una rinomina esterna spezzata dal debounce arriva come «sparito» e
     fn ingest_model(
         &mut self,
         id: &DocId,
@@ -2974,7 +2973,7 @@ impl Workspace {
         // sparito, è la stessa nota: lo stato attaccato la segue. Uno a uno e
         // per impronta, come la 0099; se `id` è già in anagrafe non è una
         // rinomina (0135).
-                    // **E poi si dice**, con lo stesso evento della rinomina
+        // **E poi si dice**, con lo stesso evento della rinomina
         if !self.indexes.core.metas.contains_key(id) {
             if let Some((from, fp)) = self.last_removed.take() {
                 if from != *id && fp == fingerprint {
@@ -2989,7 +2988,7 @@ impl Workspace {
                     // un rilevatore: qui l'attore è chi ha visto — il batch del
                     // rilevatore — e l'evento esce dal suo frame, come ogni
                     // altro di questo ingest.
-        // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
+                    // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
                     self.emit_event(Event::DocumentRenamed {
                         from,
                         to: id.clone(),
@@ -3023,20 +3022,20 @@ impl Workspace {
         // testo esistono — la cache tiene i soli metadati.
         // Un lotto di uno: la scrittura singola È il caso normale, e la firma
         // a lotti non la trasforma in un'eccezione da spiegare.
-            // Il rebuild legge la cache: va aggiornata prima.
+        // Il rebuild legge la cache: va aggiornata prima.
         let lost = self
             .indexes
             .on_documents_indexed(std::slice::from_ref(&model));
         self.report_losses(lost);
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-        // Il sorgente sotto la selezione è cambiato: gli offset pubblicati
+            // Il sorgente sotto la selezione è cambiato: gli offset pubblicati
             self.indexes.core.rebuild_graph();
         }
         // dalla shell erano di un altro testo. La shell ne ripubblicherà uno
         // vero al prossimo movimento del cursore (o subito dopo un
         // salvataggio); fino ad allora il contesto dice "non so dove", che è
         // la verità.
-    // Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
+        // Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
         self.session.invalidate(id, ContextChange::Rewritten);
         self.emit_event(Event::DocumentChanged {
             id: id.clone(),
@@ -3092,7 +3091,7 @@ impl Workspace {
     /// esclusivo, che è dove quei rami stavano già — e dove un errore viene
     /// registrato come sempre (§9.7). Un file instabile si rifiuta anche
     /// là: ingerirlo a metà è il difetto, non una lettura da ritentare subito.
-        // L'eco della propria scrittura non si riparsa (§14.1, difetto 0196).
+    // L'eco della propria scrittura non si riparsa (§14.1, difetto 0196).
     pub fn plan_sync(&self, abs: &Utf8Path) -> Option<ParsedChange> {
         if self.docs.vault.is_ignored(abs) {
             return None;
@@ -3105,7 +3104,7 @@ impl Workspace {
         }
         let source = self.source_if_stable(&id).ok().flatten()?;
         let fingerprint = Revision::of(&source);
-    // **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
+        // **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
         let model = if self.already_ingested(&id, &fingerprint) {
             None
         } else {
@@ -3186,7 +3185,7 @@ impl Workspace {
     /// l'anagrafe aveva quando è stato fatto; se adesso è un'altra, il piano si
     /// butta e si rifà la strada intera — che è ciò che il codice faceva sempre,
     /// e qui succede solo nel caso raro.
-        // Il file può anche essere sparito nel frattempo: è un `stat`, non una
+    // Il file può anche essere sparito nel frattempo: è un `stat`, non una
     pub fn sync_path_prepared(
         &mut self,
         abs: &Utf8Path,
@@ -3207,7 +3206,7 @@ impl Workspace {
             ..
         } = plan;
         // riconosciuto l'eco di una scrittura del kernel (difetto 0196).
-    // **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
+        // **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
         let Some(model) = model else {
             return Ok(false);
         };
@@ -3246,7 +3245,7 @@ impl Workspace {
     /// applica lo fa sotto quello esclusivo: è la regola della
     /// [0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
     /// sull'unico sito che le mancava.
-        // La camminata è quella della scansione — stessa politica di
+    // La camminata è quella della scansione — stessa politica di
     pub fn plan_catch_up(&self) -> Vec<(Utf8PathBuf, Option<ParsedChange>)> {
         // esclusione, stesse specie: elenca i file, non li apre.
         // Ciò che l'anagrafe aveva e il disco non ha più: un file sparito
@@ -3269,7 +3268,7 @@ impl Workspace {
         }
         // nella finestra si toglie, e `plan_sync` risponde `None` per lui —
         // chi applica rifà la strada intera, che è dove lo sparito si toglie.
-    // Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
+        // Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
         for id in self.indexes.core.entries.keys() {
             if !on_the_disk.contains(id) {
                 paths.insert(self.root().join(id.as_str()));
@@ -3370,7 +3369,7 @@ impl Workspace {
     /// calcola l'impronta perché costerebbe i byte di un file che nessuno ha
     /// chiesto: l'anagrafe dice che c'è, quanto è grande e di quando è, che è
     /// tutto ciò che si può sapere gratis.
-                    // Stessa dimensione e stessa data: è lo stesso contenuto, e
+    // Stessa dimensione e stessa data: è lo stesso contenuto, e
     fn sync_entry_here(&mut self, id: &DocId, abs: &Utf8Path) -> Result<bool> {
         self.as_actor(Actor::Watcher, |ws| {
             if abs.exists() {
@@ -3391,7 +3390,7 @@ impl Workspace {
                 };
                 if ws.indexes.core.entries.get(id) == before.as_ref() {
                     // lo stesso fatto non è un fatto due volte.
-    // Rimuove un documento (usato dal file watcher su cancellazione).
+                    // Rimuove un documento (usato dal file watcher su cancellazione).
                     return Ok(false);
                 }
                 ws.emit_event(Event::EntryChanged {
@@ -3413,11 +3412,11 @@ impl Workspace {
         })
     }
 
-            // La nota con il focus non esiste più: `active_context` non deve
+    // La nota con il focus non esiste più: `active_context` non deve
     pub fn remove_document(&mut self, id: &DocId) {
         if self.indexes.core.contains(id) {
             // continuare a nominarla alle view (né tenerne una selezione).
-    // Crea una nota vuota e restituisce il suo [`DocId`].
+            // Crea una nota vuota e restituisce il suo [`DocId`].
             self.session.invalidate(id, ContextChange::Gone);
             self.indexes.core.remove_entry(id);
             let lost = self.indexes.on_documents_removed(std::slice::from_ref(id));
@@ -3442,7 +3441,7 @@ impl Workspace {
     /// Il nome libero si calcola qui dentro, dove il workspace è preso in
     /// esclusiva: cercarlo dal chiamante e poi scrivere sarebbe una corsa fra
     /// la domanda e la risposta.
-        // Una nota nuova è una scrittura come le altre: grafo, indici ed eventi
+    // Una nota nuova è una scrittura come le altre: grafo, indici ed eventi
     pub fn create_notes(&mut self, name: Option<&str>) -> Result<DocId> {
         let id = match name {
             Some(name) => {
@@ -3464,7 +3463,7 @@ impl Workspace {
         // la vedono nascere per la via normale. `Dictated` perché il nome
         // appena scelto è libero — `free_name` l'ha appena stabilito — e una
         // base sarebbe la revisione di un file che non esiste.
-    // Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
+        // Il primo nome libero della famiglia `<nome>`, `<nome> 1`, `<nome> 2`, …
         self.write_document(&id, "", WriteBase::Dictated)?;
         Ok(id)
     }
@@ -3505,9 +3504,9 @@ impl Workspace {
     }
 
     /// e, se il nome non porta già un'estensione gestita, quella di default.
-        // Un nome che nasce: la tolleranza stretta del §15.5.
+    // Un nome che nasce: la tolleranza stretta del §15.5.
     fn new_notes_id(&self, name: &str) -> Result<DocId> {
-    // --- cestino -----------------------------------------------------------
+        // --- cestino -----------------------------------------------------------
         let id = new_doc_id(name)?;
         let has_extension = self.docs.has_provider_for(&id);
         if has_extension {
@@ -3522,7 +3521,7 @@ impl Workspace {
     }
 
     /// Cancella un documento **spostandolo nel cestino** del vault, e
-
+    ///
     /// restituisce il [`DocId`] che vi ha assunto.
     ///
     /// È il delete dell'app, ed è un metodo a sé: [`remove_document`] è il
@@ -3536,7 +3535,7 @@ impl Workspace {
     /// sarebbe un secondo modo di divergere.
     ///
     /// [`remove_document`]: Workspace::remove_document
-        // **E la bozza non salvata se ne va con la nota** (§15.2). Sta qui per
+    // **E la bozza non salvata se ne va con la nota** (§15.2). Sta qui per
     pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
@@ -3572,13 +3571,13 @@ impl Workspace {
         // perdita di un dato autorevole (0052 la conta come `Failure`), e
         // `delete_document` è il primo chiamante con il workspace in mano —
         // quindi è qui che il guasto esce sia nel log che nel canale (0062).
-            // Stringa letterale e non chiave di catalogo: è il precedente dei
+        // Stringa letterale e non chiave di catalogo: è il precedente dei
         if let Some(fault) = sidecar_fault {
             tracing::warn!(target: "fub.kernel", "cestino: sidecar di {trashed} non scritto: {fault}");
             // guasti del kernel (`report_losses` passa i messaggi di panico di
             // `safety::reporting`), e il giorno che il centro notifiche vorrà
             // tradurli tutti, li raccoglie insieme.
-    // Il contenuto del cestino, dal più recente al più vecchio.
+            // Il contenuto del cestino, dal più recente al più vecchio.
             self.report_trouble(
                 Severity::Failure,
                 Some(trashed.clone()),
@@ -3616,7 +3615,7 @@ impl Workspace {
     /// percorso.
     ///
     /// [`Vault::restore_trashed`]: crate::Vault::restore_trashed
-        // `entry.original` nasce da un basename o dal sidecar scritto dal
+    // `entry.original` nasce da un basename o dal sidecar scritto dal
     pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
         let entry = self
             .docs
@@ -3669,13 +3668,13 @@ impl Workspace {
         };
 
         // ciò che teneva per lei.
-                // L'impronta di un allegato non c'è, come per ogni voce che
+        // L'impronta di un allegato non c'è, come per ogni voce che
         self.docs.vault.restore_trashed(trash_id, &target)?;
         match model {
             Some((model, revision)) => self.ingest_model(&target, model, revision, None),
             None => {
                 // nessuno parsa: l'anagrafe la ricava dal disco.
-        // Se il ripristino approda su un path diverso dall'origine (il path
+                // Se il ripristino approda su un path diverso dall'origine (il path
                 let kind = self
                     .touch_entry(&target, None)
                     .unwrap_or(EntryKind::Unknown);
@@ -3696,12 +3695,12 @@ impl Workspace {
         // ancora sotto la chiave d'origine: è un rename a tutti gli effetti,
         // anche se il documento non era indicizzato, e chi tiene stato migra
         // la chiave sull'evento.
-            // Lo stato per-documento segue la chiave anche qui, e va fatto nel
+        // Lo stato per-documento segue la chiave anche qui, e va fatto nel
         if target != original {
             // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
             // la coda ha un budget e può troncare (decisione 0034), e chi tiene
             // stato autorevole non può dipendere da una consegna best-effort.
-    // Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
+            // Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
             self.migrate_doc_data(&original, &target);
             self.emit_event(Event::DocumentRenamed {
                 from: original,
@@ -3731,7 +3730,7 @@ impl Workspace {
     /// 200 `index-updated` — cioè 200 ridisegni completi della shell, con 200
     /// `list_documents`, per un'operazione che l'utente ha chiesto una volta.
     /// Adesso è un `batch-ended` solo, con dentro l'elenco.
-        // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
+    // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
     pub fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<()> {
         self.batch(|ws| ws.rename_document_in_batch(from, to))
     }
@@ -3742,7 +3741,7 @@ impl Workspace {
         // *verso* `CON.md` è creare un file che su Windows non si apre, mentre
         // rinominare *via da* `CON.md` è precisamente il modo di sistemarlo — ed
         // è per questo che qui si valida `to` e non `from`.
-            // Non è un documento, ma il vault potrebbe conoscerlo lo stesso
+        // Non è un documento, ma il vault potrebbe conoscerlo lo stesso
         let to = &new_doc_id(to.as_str())?;
         if from == to {
             return Ok(());
@@ -3751,7 +3750,7 @@ impl Workspace {
             // (§14.1): spostare un allegato è la stessa operazione, con una
             // coda diversa — non c'è niente da riparsare, e i riferimenti che
             // lo seguono sono quelli che lo mostrano.
-        // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
+            // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
             if self.indexes.core.entries.contains_key(from) {
                 return self.rename_entry_in_batch(from, to);
             }
@@ -3765,8 +3764,7 @@ impl Workspace {
         // (0182). Chi risponde è il supporto, l'unico che lo sappia.
         // Il piano di riscrittura va calcolato PRIMA di toccare il grafo:
         let same_file = self.docs.vault.same_file(from, to);
-        if self.indexes.core.metas.contains_key(to) || (!same_file && self.docs.vault.exists(to))
-        {
+        if self.indexes.core.metas.contains_key(to) || (!same_file && self.docs.vault.exists(to)) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
         let ext = extension_of(to).unwrap_or_default();
@@ -3818,14 +3816,14 @@ impl Workspace {
 
         // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
         // retry. Gli errori si accumulano per-sorgente e arrivano in coda.
-            // `apply_edit` riparsa, aggiorna il grafo ed emette gli eventi come
+        // `apply_edit` riparsa, aggiorna il grafo ed emette gli eventi come
         let mut failed: Vec<String> = Vec::new();
         for (src, request) in plan {
             // ogni scrittura — con in più la base: se qualcuno ha riscritto una
             // di queste sorgenti da quando il piano è stato calcolato, quella
             // riscrittura non viene cancellata in silenzio, il suo link resta
             // vecchio e il fallimento è nominato qui sotto.
-        // Dentro il lotto questo `index-updated` non esce: diventa il
+            // Dentro il lotto questo `index-updated` non esce: diventa il
             if let Err(and) = self.apply_edit(&src, request) {
                 failed.push(format!("{src}: {and}"));
             }
@@ -3841,7 +3839,7 @@ impl Workspace {
         // contrario (import, migrazioni) vuole il registro delle mutazioni, che
         // adesso c'è (0067) e di questo lotto tiene i confini — non un campo in
         // più qui.
-    // Sposta un file che **non è un documento**, e porta i riferimenti con sé
+        // Sposta un file che **non è un documento**, e porta i riferimenti con sé
         if !failed.is_empty() {
             return Err(KernelError::LinkRewrite(failed.join("; ")));
         }
@@ -3862,7 +3860,7 @@ impl Workspace {
     /// riferimenti vengono riscritti nella stessa operazione. Senza, spostare un
     /// allegato in una cartella «allegati» — cioè la prima cosa che si fa
     /// mettendo ordine — romperebbe ogni nota che lo incorpora.
-        // Il piano PRIMA di spostare: si risolve con il vecchio path ancora in
+    // Il piano PRIMA di spostare: si risolve con il vecchio path ancora in
     fn rename_entry_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
         let same_file = self.docs.vault.same_file(from, to);
         if self.indexes.core.entries.contains_key(to)
@@ -3901,7 +3899,7 @@ impl Workspace {
         self.migrate_doc_data(from, to);
         // registro non conosce la differenza fra un documento e un file di cui
         // nessuno sa il formato, e non deve — l'inverso è lo stesso.
-    // Per ogni documento che **mostra** o nomina `from`, la modifica che
+        // Per ogni documento che **mostra** o nomina `from`, la modifica che
         self.record(JournalOp::Renamed {
             from: from.clone(),
             to: to.clone(),
@@ -3934,7 +3932,7 @@ impl Workspace {
     /// quindi la cache dei metadati, che i link ce li ha tutti. È un giro
     /// sull'intero vault, e si paga quando qualcuno sposta un allegato: cioè
     /// quanto costa già un rename di nota con molti backlink.
-                    // Un wikilink nomina per nome: il nome nuovo, che è il nome
+    // Un wikilink nomina per nome: il nome nuovo, che è il nome
     fn entry_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
         let mut plan = Vec::new();
         for (src, metadata) in &self.indexes.core.metas {
@@ -3950,7 +3948,7 @@ impl Workspace {
                     // del file con la sua estensione. Se il vault ha già un
                     // omonimo del nome d'arrivo si scrive il path intero, che è
                     // sempre univoco — la stessa regola delle note.
-                            // Né il nome d'arrivo né quello di partenza contano
+                    // Né il nome d'arrivo né quello di partenza contano
                     LinkTarget::Wiki { page, .. } => {
                         let name = to.as_str().rsplit('/').next().unwrap_or(to.as_str());
                         let contended = self.indexes.core.entries.keys().any(|id| {
@@ -3979,7 +3977,7 @@ impl Workspace {
                         let new = if path.trim_start().starts_with('/') {
                             // scelta di stile di chi scrive, e il rename non è il
                             // momento di discuterla.
-    // Migra l'identità di un documento il cui file è **già** al path nuovo:
+                            // Migra l'identità di un documento il cui file è **già** al path nuovo:
                             format!("/{}", rules_path::percent_encode_path(to.as_str()))
                         } else {
                             rules_path::relative_ref(src, to)
@@ -4025,7 +4023,7 @@ impl Workspace {
     /// (che prima sposta il file) e di
     /// [`sync_renamed_path`](Workspace::sync_renamed_path) (dove il file lo ha
     /// già spostato qualcun altro).
-        // L'anagrafe migra come tutto il resto: la chiave è il path, e il path
+    // L'anagrafe migra come tutto il resto: la chiave è il path, e il path
     fn migrate_identity(
         &mut self,
         from: &DocId,
@@ -4047,7 +4045,7 @@ impl Workspace {
         // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
         // tiene stato *per-documento* invece migra la chiave sull'evento
         // `DocumentRenamed`.)
-    // Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
+        // Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
         let lost = self
             .indexes
             .on_documents_removed(std::slice::from_ref(from));
@@ -4115,7 +4113,7 @@ impl Workspace {
     /// destinazione dev'essere **libera** — una rinomina che atterra su
     /// un'identità viva non è una rinomina (§25.1, decisione 0135), e qui
     /// varrebbe scrivere il pin di `from` sopra quello di `to`.
-        // In anagrafe e non fra i documenti: chi ha un modello è già passato di
+    // In anagrafe e non fra i documenti: chi ha un modello è già passato di
     fn migrate_attachment_state(&mut self, from: &Utf8Path, to: &Utf8Path) {
         let identity = |ws: &Self, p: &Utf8Path| {
             (!ws.docs.vault.is_ignored(p))
@@ -4186,7 +4184,7 @@ impl Workspace {
         // l'**unica** copia di ciò che l'utente ha scritto. Se `to` ne ha già
         // una sua, quella di `from` prende un nome di recupero e si elenca
         // come orfana: niente si sovrascrive, e niente resta sotto l'id morto.
-    // Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
+        // Sincronizza un **rename accoppiato** riferito dal filesystem (`from` →
         if let Err(and) = self.drafts.migrate(from, to) {
             self.organization.warn(format!(
                 "la bozza non salvata di {from} non ha potuto seguire la \
@@ -4215,11 +4213,11 @@ impl Workspace {
     /// anche se il chiamante non lo legge (§9.7) — e **una volta sola**: i rami
     /// che degradano a `sync_path` passano dal corpo interno, non dalla porta
     /// che registra.
-        // Il soggetto è **dove il file è adesso**: una rinomina che fallisce
+    // Il soggetto è **dove il file è adesso**: una rinomina che fallisce
     pub fn sync_renamed_path(&mut self, from: &Utf8Path, to: &Utf8Path) -> Result<bool> {
         let outcome = self.as_actor(Actor::Watcher, |ws| ws.sync_renamed_path_here(from, to));
         // lascia indietro la destinazione, ed è quella che l'utente ha in mano.
-            // Nessuna **identità di documento** da migrare — ma le due mezze
+        // Nessuna **identità di documento** da migrare — ma le due mezze
         self.notes_sync(to, &outcome);
         outcome
     }
@@ -4262,7 +4260,7 @@ impl Workspace {
             });
         let Some(to_id) = to_id else {
             // gestito: per il workspace è una rimozione.
-        // **Una rinomina che atterra su un'identità viva non è una rinomina**
+            // **Una rinomina che atterra su un'identità viva non è una rinomina**
             self.remove_document(&from_id);
             return Ok(true);
         };
@@ -4324,7 +4322,7 @@ impl Workspace {
         // l'alternativa è un vault che racconta un file che non c'è; e se
         // anche la seconda metà non riesce, l'errore che risale arriva **dopo**
         // che la prima è stata detta, non al posto suo.
-    // Per ogni documento che linkava `from` per nome o per path, la
+        // Per ogni documento che linkava `from` per nome o per path, la
         let new = match self.docs.vault.read(&to_id) {
             Ok(source) => {
                 let revision = Revision::of(&source);
@@ -4365,7 +4363,7 @@ impl Workspace {
     /// ogni `[t](altra.md)` che conteneva. Per questo `from` è sempre fra le
     /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
     /// nuova — e non solo quando linka se stesso.
-        // Nuovo riferimento: il nome pagina se nessun altro documento lo
+    // Nuovo riferimento: il nome pagina se nessun altro documento lo
     fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
         let from_name = resolution_key(from.page_name());
         let from_path = resolution_key(&strip_ext(from.as_str()));
@@ -4440,7 +4438,7 @@ impl Workspace {
         // link markdown serve comunque (vedi la nota sopra: sposta la
         // sorgente), quindi `from` entra sempre e sarà il filtro per-link a
         // dire se c'è davvero qualcosa da riscrivere.
-                // `from_end` è la direzione in cui cercare il riferimento
+        // `from_end` è la direzione in cui cercare il riferimento
         sources.insert(from.clone());
 
         let mut plan = Vec::new();
@@ -4457,12 +4455,12 @@ impl Workspace {
                 // pagina è la **prima** delle due occorrenze, in
                 // `[Nota.md](Nota.md)` la destinazione è la **seconda**. Chi
                 // sbaglia direzione riscrive l'etichetta e lascia il link rotto.
-                        // Riscrivi solo se il link puntava davvero a `from`
+                // Riscrivi solo se il link puntava davvero a `from`
                 let (written, replacement, from_end) = match &link.target {
                     LinkTarget::Wiki { page, .. } => {
                         // (non a un omonimo) e ci arrivava per nome o per path
                         // — mai per alias.
-            // La sorgente rinominata vive ormai al path nuovo: la sua
+                        // La sorgente rinominata vive ormai al path nuovo: la sua
                         let key = resolution_key(page);
                         let by_name = key == from_name;
                         let by_path =
@@ -4513,7 +4511,7 @@ impl Workspace {
             // rename sposta il file senza toccarne il contenuto. È una proprietà
             // della revisione-impronta: un contatore per-documento, qui, avrebbe
             // detto che il documento è cambiato.
-    // La destinazione che il link markdown `written`, scritto dentro `src`,
+            // La destinazione che il link markdown `written`, scritto dentro `src`,
             let dest = if &src == from { to.clone() } else { src };
             plan.push((dest, EditRequest::new(Revision::of(&source_text), edits)));
         }
@@ -4530,7 +4528,7 @@ impl Workspace {
     ///
     /// L'estensione ricompare sempre nel riferimento nuovo, anche se il
     /// vecchio ne era privo: vedi [`fub_abi::rules::path::relative_ref`].
-            // Un link dalla radice resta dalla radice: è una scelta di stile
+    // Un link dalla radice resta dalla radice: è una scelta di stile
     fn rebased_path_link(
         &self,
         from: &DocId,
@@ -4551,7 +4549,7 @@ impl Workspace {
                 return None;
             }
             // di chi scrive, e il rename non è il momento di discuterla.
-    // Innesta una sintassi su un provider (§3.1), o dice **perché no**.
+            // Innesta una sintassi su un provider (§3.1), o dice **perché no**.
             return Some(format!("/{}", rules_path::percent_encode_path(to.as_str())));
         }
         let src_after = if source_moves { to } else { src };
@@ -4563,7 +4561,7 @@ impl Workspace {
     /// Il `Result` non è cerimonia: due regole che rivendicano la stessa
     /// sintassi sono un conflitto, e il modo in cui questo registro sbagliava
     /// prima era proprio non avere dove dirlo.
-        // La regola dei nomi è **una** (§7.4): questa famiglia aveva la
+    // La regola dei nomi è **una** (§7.4): questa famiglia aveva la
     pub fn register_syntax_rule(
         &mut self,
         plugin: impl Into<String>,
@@ -4585,7 +4583,7 @@ impl Workspace {
         // dichiara `callout` e si fa disegnare dal core. Non passano da `admit`
         // perché produrre lo stesso kind in due non è una contesa — è come si
         // scrivono due dialetti della stessa famiglia.
-    // Registra chi disegna un `custom_kind` (§3.2).
+        // Registra chi disegna un `custom_kind` (§3.2).
         self.providers
             .plugins
             .check_names(&plugin, &spec.produces)?;
@@ -4729,7 +4727,7 @@ impl Workspace {
     /// che la contiene. Chiedere «la sezione X, e dentro il blocco b» e
     /// chiedere «il blocco b» sono la stessa domanda, e la seconda si risponde
     /// senza guardare la prima.
-        // Come `render_preview`: il corpo si riparsa dal disco on demand.
+    // Come `render_preview`: il corpo si riparsa dal disco on demand.
     pub fn render_embed(
         &self,
         page: &str,
@@ -4757,7 +4755,7 @@ impl Workspace {
         // trascluso resta un diagramma. Gli slot delle parti sono numerati
         // dentro QUESTA composizione, e il frontend li monta dentro il
         // segnaposto dell'embed che ha appena idratato.
-    // Backlink verso un documento.
+        // Backlink verso un documento.
         Ok((
             id,
             renderer::compose(&model, provider, &self.docs.renderers, &opts)?,
@@ -4787,7 +4785,7 @@ impl Workspace {
     }
 
     /// Pubblica il contesto del pannello con il focus e restituisce **le view
-
+    ///
     /// da ridisegnare**: quelle il cui `follows` interseca ciò che è cambiato,
     /// in ordine di registrazione.
     ///
@@ -4801,7 +4799,7 @@ impl Workspace {
     /// ([`ViewContext::changes`]), e a M5 un host diverso avrà la stessa. La
     /// shell resta padrona del *quando* (è lei a pubblicare) e ignara del
     /// *chi* (non conosce gli id delle view).
-        // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
+    // Il taglio del §8.1 passa qui: la sessione dice *cosa* è cambiato, il
     pub fn set_active_context(&self, context: Option<ViewContext>) -> Vec<String> {
         // workspace traduce la maschera in id di view. È deliberato che il
         // componente non sappia che le view esistono.
@@ -4812,7 +4810,7 @@ impl Workspace {
         }
         // qui non serve una seconda strada per la stessa domanda, e averla
         // vorrebbe dire due posti dove la regola può divergere.
-    // Scorciatoia per chi ha un pannello solo: il documento attivo, senza
+        // Scorciatoia per chi ha un pannello solo: il documento attivo, senza
         self.views()
             .into_iter()
             .filter(|spec| spec.follows.intersects(&changed))
@@ -4853,7 +4851,7 @@ impl Workspace {
     }
 
     /// Interroga il canale dati.
-
+    ///
     ///
     /// **Un percorso di dispatch solo.** Prima erano due e mezzo: sette varianti
     /// su nove le serviva il kernel con un `return` anticipato, e le altre due
@@ -4885,13 +4883,13 @@ impl Workspace {
     ///
     /// Chi ha già riempito `occurrences` non viene toccato: un indice che
     /// sappia dire *dove* — perché tiene i sorgenti, perché è un motore diverso
-        // La resa (§1.6, decisione 0163) è intercettata qui e non passa da
+    // La resa (§1.6, decisione 0163) è intercettata qui e non passa da
     pub fn query_index(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         // `indexes.query`: `CoreIndex` non ha i documenti né i renderer, e la
         // rotta che dichiara (`QueryRoute::Query`) serve solo a dire che il
         // kernel è il risponditore — come Outline. La fast-path di prima era un
         // comando Tauri bespoke; adesso è il canale dati di tutti.
-            // Le etichette, come la resa: `CoreIndex` ha lo store e non i
+        // Le etichette, come la resa: `CoreIndex` ha lo store e non i
         match query {
             IndexQuery::RenderPreview { doc } => Ok(IndexResult::RenderPreview(
                 self.render_preview(&doc)?.into(),
@@ -4913,7 +4911,7 @@ impl Workspace {
             // diventerebbe `{"key": …}` dove la shell si aspetta una stringa
             // `[object Object]` nel pannello. Presidiato da
             // `settings_as_out_resolved_too`.
-    // Apre i sorgenti della pagina e ci trova dentro i testi cercati.
+            // Apre i sorgenti della pagina e ci trova dentro i testi cercati.
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings_entries(plugin.as_deref()),
             )),
@@ -4937,7 +4935,7 @@ impl Workspace {
     /// senza coordinate, che è ciò che `occurrences` vuoto significa da
     /// contratto. Un documento che non si legge o che è sparito da sotto non è
     /// un errore della ricerca — la riga resta, senza il punto.
-            // La revisione è quella del testo appena letto, non una presa
+    // La revisione è quella del testo appena letto, non una presa
     fn locate(&self, mut page: Paged<DocumentMatch>, needles: &[String]) -> Paged<DocumentMatch> {
         for hit in page.items.iter_mut().take(occurrences::max_docs()) {
             if !hit.occurrences.is_empty() {
@@ -4949,7 +4947,7 @@ impl Workspace {
             // altrove: uno span vale sul sorgente su cui è stato misurato, e
             // dire «di quando» con l'impronta di un'altra lettura sarebbe la
             // bugia che il campo esiste per impedire.
-    // Chi risponderebbe a questa domanda, e come: il piano.
+            // Chi risponderebbe a questa domanda, e come: il piano.
             let revision = Revision::of(&source);
             hit.occurrences = occurrences::locate(&source, needles)
                 .into_iter()
@@ -5015,7 +5013,7 @@ impl Workspace {
     /// intestato al proprio id, come gli event handler durante il dispatch.
     /// Gli indici escono dal workspace per la durata delle chiamate, così
     /// l'host può prestare `&mut Workspace` senza aliasing.
-        // Un flush fallito è la perdita di un **derivato**: il vault è intatto,
+    // Un flush fallito è la perdita di un **derivato**: il vault è intatto,
     pub fn flush_indexes(&mut self) -> Vec<PluginError> {
         let errors = self.lend(
             |ws| &mut ws.indexes.providers,
@@ -5038,13 +5036,13 @@ impl Workspace {
             self.report_trouble(Severity::Warning, None, error, None);
         }
         // dentro il frame di un provider.
-    // --- view dichiarative -------------------------------------------------
+        // --- view dichiarative -------------------------------------------------
         self.dispatch_pending();
         errors
     }
 
     /// Registra un [`ViewProvider`] sotto un id, dichiarando **quanto ci si
-
+    ///
     /// fida** di ciò che produce.
     ///
     /// `id` è l'identità del provider, come per gli handler e gli indici:
@@ -5064,7 +5062,7 @@ impl Workspace {
     /// formati (decisione 0017), portata all'ultima famiglia che risolveva un
     /// id per tentativi: sostituire resta possibile, ma **si chiede per nome**
     /// invece di succedere a chi si registra per primo.
-        // Il permesso **prima** di togliere chi c'era: una sostituzione ha due
+    // Il permesso **prima** di togliere chi c'era: una sostituzione ha due
     pub fn replace_view_provider(
         &mut self,
         plugin: impl Into<String>,
@@ -5101,7 +5099,7 @@ impl Workspace {
         // sola registrazione, ed è la ragione per cui un `IndexProvider` di
         // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
         // avesse dato un grado (§7.3).
-    // Rilegge ciò che un provider dichiara: view e comandi.
+        // Rilegge ciò che un provider dichiara: view e comandi.
         let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
         self.providers
             .plugins
@@ -5173,7 +5171,7 @@ impl Workspace {
     /// della chiamata, quindi durante il render vede il mondo intero — indici
     /// e view registrate compresi. La mutilazione del mondo osservabile resta
     /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
-        // Anche il percorso di lettura passa dal punto di applicazione: un
+    // Anche il percorso di lettura passa dal punto di applicazione: un
     pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
         let at = self.view_owner(&instance.view)?;
         let registered = &self.providers.views[at];
@@ -5193,7 +5191,7 @@ impl Workspace {
         // una chiave non può trasformare un nodo innocuo in uno riservato — i
         // `Text` non diventano markup — ma l'ordine giusto è comunque quello che
         // non fa passare niente dal catalogo prima del controllo.
-    // La dichiarazione di interesse di **un esemplare** (§22.3).
+        // La dichiarazione di interesse di **un esemplare** (§22.3).
         self.localize(&registered.id, &mut tree);
         Ok(tree)
     }
@@ -5220,7 +5218,7 @@ impl Workspace {
     /// fidato non può iniettare contenuto attivo *in risposta a un click*
     /// invece che al rendering, né per la via stretta invece che per quella
     /// larga.
-        // Prima del `take`: dopo, il registro è vuoto.
+    // Prima del `take`: dopo, il registro è vuoto.
     pub fn view_action(
         &mut self,
         instance: &ViewInstance,
@@ -5234,7 +5232,7 @@ impl Workspace {
         // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
         // plugin che è sia view sia handler (il caso versioning) sarebbe
         // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
-                // Dentro il prestito, non attorno: il `lend` deve **rimettere a
+        // Dentro il prestito, non attorno: il `lend` deve **rimettere a
         let updated = self.lend(
             |ws| &mut ws.providers.views,
             |ws, views| {
@@ -5243,7 +5241,7 @@ impl Workspace {
                     ws.host_for_view(&registered.id, InvokeMode::Apply, Some(&instance.instance));
                 // posto** la tabella delle view anche quando il provider pania,
                 // e lo fa perché il panico non arriva fin qui.
-        // Il proprietario è quello della view: un aggiornamento porta le
+                // Il proprietario è quello della view: un aggiornamento porta le
                 crate::safety::calling(&registered.id, Gate::ViewAction, &instance.view, || {
                     registered.provider.on_action(instance, action, &mut host)
                 })
@@ -5274,7 +5272,7 @@ impl Workspace {
         }
         self.localize(&owner, &mut update);
         // chiamata del provider è tornata: è il contratto di consegna.
-    // I parametri di questa istanza reggono la spec della sua view?
+        // I parametri di questa istanza reggono la spec della sua view?
         self.dispatch_pending();
         Ok(update)
     }
@@ -5304,11 +5302,11 @@ impl Workspace {
     // kernel non sa cosa faccia un comando; sa scegliere chi lo possiede,
     // convalidare ciò che gli si passa e decidere **quali capacità** prestargli.
     /// Registra un [`CommandProvider`] sotto un id, con la stessa disciplina
-
+    ///
     /// degli altri provider: l'id è lo spazio dati che l'[`HostApi`] gli
     /// concede, e l'ordine di registrazione è l'ordine in cui i comandi
     /// compaiono e in cui si risolve un id conteso.
-        // Le **scorciatoie** come impostazioni (§18.2): una chiave per comando,
+    // Le **scorciatoie** come impostazioni (§18.2): una chiave per comando,
     pub fn register_command_provider(
         &mut self,
         plugin: impl Into<String>,
@@ -5346,7 +5344,7 @@ impl Workspace {
             .record(&plugin, RegistrationKind::Command, &ids);
         // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
         // `run_command` rientra nel registro mentre il registro è in uso).
-    // Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
+        // Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
         self.providers.commands.push(RegisteredCommand {
             id: plugin,
             specs,
@@ -5463,7 +5461,7 @@ impl Workspace {
     /// ogni evento consegnato a ogni handler. Rileggere lì dentro tredici
     /// chiavi di configurazione sarebbe una lettura dello store per evento; qui
     /// è un conto solo, e lo si fa quando una persona muove un interruttore.
-                // Una chiave che non si legge — perché nessuno l'ha dichiarata,
+    // Una chiave che non si legge — perché nessuno l'ha dichiarata,
     fn reapply_permissions(&mut self, plugin: &str) {
         let Some(entry) = self.providers.plugins.get(plugin) else {
             return;
@@ -5481,7 +5479,7 @@ impl Workspace {
                 // un **non ho detto di no**: il default è la concessione, e
                 // trattare l'illeggibile come un rifiuto spegnerebbe un
                 // componente per un file scritto male.
-    // I comandi offerti dai provider registrati, in ordine di registrazione.
+                // I comandi offerti dai provider registrati, in ordine di registrazione.
                 matches!(
                     store.effective(&fub_abi::settings::permission_key(plugin, key)),
                     Ok((SettingValue::Toggle(false), _))
@@ -5579,7 +5577,7 @@ impl Workspace {
     /// Il **modo** invece non è un parametro di questa funzione per caso: lo
     /// passa l'host, che è l'unico a sapere in che modo sta girando chi
     /// invoca. Vedi `KernelHost::mode` e la politica `ReadOnly`.
-        // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
+    // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
     pub(crate) fn invoke_command_nested(
         &mut self,
         command: &str,
@@ -5648,7 +5646,7 @@ impl Workspace {
         // di chi l'ha scritto (0040), il completamento del piano, il drenaggio
         // della coda — vale per **ogni** comando, e un comando che salta quella
         // coda consegna una chiave di catalogo a chi si aspetta una frase.
-            // Il rifiuto è un wrapper (§7.1): la politica dice quali famiglie
+        // Il rifiuto è un wrapper (§7.1): la politica dice quali famiglie
         let outcome = if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
             self.run_maintenance(command, mode)
         } else if spec.scope.writes && mode == InvokeMode::Apply {
@@ -5669,7 +5667,7 @@ impl Workspace {
             // rispondere `permission-denied` a ogni riga.
             // Due politiche insieme: quella del plugin e quella del divieto.
             // È la combinatoria del §7.3 senza un tipo per combinazione.
-        // Il `pop` è **fuori** dalla rete e prima del `?`: un comando che pania
+            // Il `pop` è **fuori** dalla rete e prima del `?`: un comando che pania
             let granted = self.providers.plugins.granted(&owner);
             let mut host = Guard::new(
                 KernelHost {
@@ -5686,14 +5684,14 @@ impl Workspace {
         };
         // non deve restare per sempre "in giro" nella pila, o la prossima
         // invocazione si rifiuterebbe da sé dicendo che sta chiamando sé stesso.
-            // L'insieme impattato è ciò che l'utente approva: lo completa
+        // L'insieme impattato è ciò che l'utente approva: lo completa
         self.providers.command_stack.pop();
 
         let mut outcome = outcome.map_err(|and| self.localized(&owner, and))?;
         if let CommandEffect::Plan(plan) = &mut outcome.effect {
             // l'host, invece di fidarsi che chi ha scritto il piano si sia
             // ricordato di elencare ogni documento che i suoi edit nominano.
-        // I testi dell'esito — la notifica, il riassunto di un piano — col
+            // I testi dell'esito — la notifica, il riassunto di un piano — col
             plan.complete();
         }
         // catalogo di chi ha eseguito. `run_command` annidato passa da qui come
@@ -5719,7 +5717,7 @@ impl Workspace {
         // comandi per la ragione della decisione 0098: una regola che vale per
         // tutti i chiamanti si scrive nel posto che tutti attraversano, e il
         // comando che qualcuno scriverà domani la eredita senza saperlo.
-    // Annulla l'ultima operazione annullabile, e dice quale era (§13.3).
+        // Annulla l'ultima operazione annullabile, e dice quale era (§13.3).
         if mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
             if let Some(undo) = outcome.undo.clone() {
                 self.undo.push(undo, outcome.partial.clone());
@@ -5761,7 +5759,7 @@ impl Workspace {
     /// niente è ancora «fallito», che è la promessa che
     /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
     /// faceva già.
-        // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
+    // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
     pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Undone>, PluginError> {
         let Some(entry) = self.undo.pop() else {
             return Ok(None);
@@ -5807,7 +5805,7 @@ impl Workspace {
         // conflitto può essere transitorio e chi riprova deve ritrovare lo stesso
         // annullamento invece di una pila vuota. `replay` è già caduto, quindi
         // `UndoStack::push` non scarta la voce come riproduzione ricorsiva.
-    // Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
+        // Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
         if done == 0 {
             let error = failure.error;
             self.undo.push(entry.undo, entry.partial);
@@ -5829,7 +5827,7 @@ impl Workspace {
     // Il kernel non sa cosa sia un formato di scambio: sa scegliere chi lo sa e
     // prestargli le capacità. Vedi `fub_abi::transfer`.
     /// Registra un [`ImportProvider`] sotto un id. L'ordine di registrazione è
-
+    ///
     /// l'ordine in cui i provider vengono interpellati da
     /// [`import`](Workspace::import).
     ///
@@ -5946,7 +5944,7 @@ impl Workspace {
     /// oggi) arrivano **dopo** che la chiamata del provider è tornata, come per
     /// ogni altro callback in scrittura. Che siano N e non uno è il debito del
     /// decisione 0011 (il lotto), non una scelta di qui.
-        // La stessa disciplina di tutti gli altri, e non più una quarta copia:
+    // La stessa disciplina di tutti gli altri, e non più una quarta copia:
     pub fn import(
         &mut self,
         source: &ImportSource,
@@ -5967,7 +5965,7 @@ impl Workspace {
                 )
             })?;
         // vedi `Workspace::lend`.
-    // Le destinazioni di export offerte dai provider registrati.
+        // Le destinazioni di export offerte dai provider registrati.
         let report = self.lend(
             |ws| &mut ws.providers.imports,
             |ws, imports| {
@@ -6028,7 +6026,7 @@ impl Workspace {
     }
 
     /// Unico punto di emissione: ponte verso i subscriber esterni + coda per
-
+    ///
     /// gli handler registrati.
     ///
     /// È anche il punto unico in cui l'origine (decisione 0012) viene apposta e in cui il
@@ -6159,12 +6157,12 @@ impl Workspace {
     /// zero», che è una richiesta più forte di «ridisegna questi documenti», e
     /// una garanzia in più per il solo terminale sarebbe una seconda promessa
     /// più debole accanto a una che già copre il caso.
-        // Il ciclo consegna e basta: quando fermarsi, cosa scartare e cosa
+    // Il ciclo consegna e basta: quando fermarsi, cosa scartare e cosa
     fn dispatch_pending(&mut self) {
         // mettere al posto di ciò che si scarta lo decide il [`Dispatcher`]
         // (§8.1). Qui resta ciò che il componente non può fare — chiamare un
         // provider, che vuole `&mut Workspace` da prestare come `HostApi`.
-    // **Presta i provider di una tabella per la durata di una chiamata**: la
+        // **Presta i provider di una tabella per la durata di una chiamata**: la
         if !self
             .dispatch
             .begin_drain(!self.providers.handlers.is_empty())
@@ -6227,7 +6225,7 @@ impl Workspace {
     /// alla prossima consegna riconosce le proprie scritture senza tenerne una
     /// contabilità privata. L'origine dell'evento che sta *ricevendo* è un'altra
     /// cosa e sta nel [`Notice`], dove il plugin la legge.
-                    // La maschera per intero: la specie, il prefisso di topic
+    // La maschera per intero: la specie, il prefisso di topic
     fn deliver_to_handlers(&mut self, notice: &Notice) {
         let troubles = self.lend(
             |ws| &mut ws.providers.handlers,
@@ -6239,7 +6237,7 @@ impl Workspace {
                     // contratto (`fub_abi::rules::events`) e non qui, perché
                     // il secondo lettore è la shell — che decide da sé quando
                     // ridisegnare una view dichiarata.
-                        // L'errore di un handler non deve far fallire
+                    // L'errore di un handler non deve far fallire
                     if !handler.subscribed().wants(&notice.event) {
                         continue;
                     }
@@ -6254,7 +6252,7 @@ impl Workspace {
                         // quando qualcosa va storto — il versioning, che è un
                         // `EventHandler` e nient'altro — smetteva di fare
                         // snapshot in un modo indistinguibile dal funzionare.
-        // **Il guasto della consegna di un guasto non si emette** (decisione
+                        // **Il guasto della consegna di un guasto non si emette** (decisione
                         let mut fault = None;
                         if let Some(panic) = crate::safety::reporting(id, Gate::Event, "", || {
                             fault = handler.handle(notice, &mut host).err();
@@ -6282,7 +6280,7 @@ impl Workspace {
         // arriverebbe a una lista vuota. Il soggetto è il documento che
         // l'evento nominava — chi guarda quella nota è chi ha interesse a
         // sapere che qualcuno non è riuscito a reagirle.
-            // **Chi** ha fallito lo dice l'origine, non un campo nuovo: il
+        // **Chi** ha fallito lo dice l'origine, non un campo nuovo: il
         let subject = notice.event.touched().cloned();
         for (id, error) in troubles {
             // guasto si emette a nome del plugin (decisione 0012), che è la
@@ -6294,7 +6292,7 @@ impl Workspace {
             // successo. Dietro un `EventHandler` c'è il versioning tanto
             // quanto un contatore, e sottostimare la perdita di uno snapshot è
             // peggio che sovrastimare quella di un contatore.
-    // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
+            // --- job (lavoro lungo, fuori dal giro sincrono) -----------------------
             let subject = subject.clone();
             self.as_actor(Actor::Plugin { id }, |ws| {
                 ws.report_trouble(Severity::Failure, subject, error, Some(Gate::Event))
@@ -6303,7 +6301,7 @@ impl Workspace {
     }
 
     /// Accoda un job richiesto via
-
+    ///
     /// [`HostEvents::spawn_job`](fub_abi::traits::HostEvents::spawn_job) e ne
     /// restituisce l'identità.
     ///
@@ -6498,7 +6496,7 @@ impl Workspace {
     /// L'origine è [`Actor::Kernel`] per la ragione di [`Event::JobDone`]: a
     /// far scattare la sveglia non è stato il plugin, è stato il tempo. Chi si
     /// riconosce lo fa da `owner`, che è il campo fatto apposta.
-        // Come `complete_job`, e per la stessa ragione: chi chiama arriva da
+    // Come `complete_job`, e per la stessa ragione: chi chiama arriva da
     pub fn fire_timer(&mut self, owner: &str, timer: &str) -> bool {
         let declared = self
             .providers
@@ -6512,7 +6510,7 @@ impl Workspace {
         // fuori del giro sincrono — è il pool — quindi l'evento non trova
         // nessuno che stia già drenando, e senza questa riga resterebbe in coda
         // fino alla prossima scrittura di qualcun altro.
-    // Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
+        // Riconsegna l'esito di un job: emette [`Event::JobDone`] sul giro
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::TimerFired {
                 owner: owner.to_string(),
@@ -6559,7 +6557,7 @@ impl Workspace {
     // dei plugin (arriva dal manifest, alla dichiarazione) e il valore lo tiene
     // lo store, e le due cose si incontrano solo qui.
     /// Il valore che vale adesso per una chiave dichiarata.
-
+    ///
     /// Come [`setting`](Workspace::setting), ma dice anche **da dove viene**.
     pub fn setting(&self, key: &str) -> std::result::Result<SettingValue, PluginError> {
         self.settings
@@ -6603,7 +6601,7 @@ impl Workspace {
     }
 
     /// [`SettingsWrite::reset_setting`](fub_abi::traits::SettingsWrite::reset_setting)).
-        // Una chiave che è un recinto rifà il recinto, **prima** di dirlo
+    // Una chiave che è un recinto rifà il recinto, **prima** di dirlo
     pub fn reset_setting(&mut self, key: &str) -> std::result::Result<(), PluginError> {
         let scope = self
             .settings
@@ -6627,7 +6625,7 @@ impl Workspace {
         // alla prossima apertura: chi stringe la conservazione a trenta giorni
         // lo fa per far cadere ciò che c'è adesso, non ciò che ci sarà. Stessa
         // riga del recinto qui sopra, stessa ragione (§23.9).
-    // Le scorciatoie che il file di questo vault dichiara (§23.13), come
+        // Le scorciatoie che il file di questo vault dichiara (§23.13), come
         if key == crate::journal::RETENTION_DAYS {
             self.prunes_the_record();
         }
@@ -6729,8 +6727,7 @@ impl Workspace {
             .read()
             .expect("store di configurazione")
             .entries_by_owner(plugin);
-        rows
-            .into_iter()
+        rows.into_iter()
             .map(|(owner, mut entry)| {
                 self.localize(&owner, &mut entry);
                 entry
@@ -6745,7 +6742,7 @@ impl Workspace {
     // provider passa invece dalle capacità, dove il proprietario e l'esemplare
     // li mette l'host e non si possono nominare.
     /// Ciò che questo esemplare aveva salvato sotto questa chiave, su questa
-
+    ///
     /// macchina e per questo vault.
     /// Salva (`Some`) o dimentica (`None`) lo stato di vista di un esemplare.
     pub fn view_state(&self, owner: &str, instance: &str, key: &str) -> Option<serde_json::Value> {
@@ -6784,7 +6781,7 @@ impl Workspace {
     // vale anche quando la cosa da non aggiungere è comoda. Leggere invece passa
     // dal canale dati, che chiunque ha.
     /// L'organizzazione di questo vault: icone, appuntate, ordinamenti, spazi.
-
+    ///
     /// L'emoji accanto a una nota o a una cartella (`None` la toglie).
     pub fn organization(&self) -> fub_abi::organization::Organization {
         self.organization.snapshot()
@@ -6860,7 +6857,7 @@ impl Workspace {
     /// cosa farebbe e non lo fa. Che i tre siano innocui non è una ragione per
     /// saltare quel ramo — chi simula una macro che li contiene si aspetta un
     /// piano, non un vault reindicizzato.
-            // Il piano è **vuoto di documenti** per tutti e quattro, e non è una
+    // Il piano è **vuoto di documenti** per tutti e quattro, e non è una
     fn run_maintenance(
         &mut self,
         command: &str,
@@ -6876,7 +6873,7 @@ impl Workspace {
             // che esiste per dire «cosa succede» in una riga, e i tre che
             // riparano non hanno niente da dire mentre il quarto **perde
             // qualcosa** e chi approva deve vederne il conto.
-                // Il rebuild rifà il derivato; questo raccoglie ciò che il
+            // Il rebuild rifà il derivato; questo raccoglie ciò che il
             let mut plan = fub_abi::command::CommandPlan::default();
             if command == VAULT_CLEAR_JOURNAL {
                 plan.summary = Text::message(
@@ -6938,14 +6935,8 @@ impl Workspace {
                     key,
                     vec![
                         fub_abi::text::Arg::int(crate::maintenance::A_COLLECTED, collected as i64),
-                        fub_abi::text::Arg::int(
-                            crate::maintenance::A_LOST,
-                            journal.pruned as i64,
-                        ),
-                        fub_abi::text::Arg::int(
-                            crate::maintenance::A_UNREAD,
-                            drafts.pruned as i64,
-                        ),
+                        fub_abi::text::Arg::int(crate::maintenance::A_LOST, journal.pruned as i64),
+                        fub_abi::text::Arg::int(crate::maintenance::A_UNREAD, drafts.pruned as i64),
                         fub_abi::text::Arg::int(crate::maintenance::A_ORPHANS, orfane as i64),
                     ],
                 )))
@@ -7012,7 +7003,7 @@ impl Workspace {
                 // di far sparire qualcosa che fallisce in silenzio è la peggiore
                 // delle risposte — chi l'ha chiesta se ne va credendo che sia
                 // sparita.
-    // **Toglie lo spazio per-documento delle note che non ci sono più** (§13.2),
+                // **Toglie lo spazio per-documento delle note che non ci sono più** (§13.2),
                 let count = self
                     .journal
                     .clear()
@@ -7063,7 +7054,7 @@ impl Workspace {
     /// segnalava nessuno. Adesso il guasto risale, e sono i due chiamanti a
     /// decidere cosa farne: l'apertura lo registra e prosegue, `vault.repair` lo
     /// dice a chi l'ha chiesto.
-        // **Una raccolta si fa su un'anagrafe che si dichiara completa, o non si
+    // **Una raccolta si fa su un'anagrafe che si dichiara completa, o non si
     pub fn collect_doc_data(&self) -> Result<usize> {
         // fa** (§23.1). È la stessa riga con cui `finish_index` non riconcilia
         // un'indicizzazione interrotta, applicata al suo vicino di tre righe
@@ -7091,7 +7082,7 @@ impl Workspace {
         // terza regola di [`rejoin_renamed_while_closed`], e vive qui perché la
         // raccolta ha due chiamanti — l'apertura e `vault.repair` — e uno di
         // essi gira quando quel dubbio non è più in vista.
-    // I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
+        // I documenti da cui il cestino è passato: ciò che sta lì dentro **non è
         let suspended = &self.suspended_from_rejoin;
         let storage = Arc::clone(self.docs.vault.storage());
         crate::docdata::collect(storage.as_ref(), &roots, &|doc: &DocId| {
@@ -7175,16 +7166,14 @@ impl Workspace {
     ///   rotto): niente ieri, niente spariti, nessuna rinomina da vedere. Il
     ///   ricongiungimento è una capacità di un **derivato**, e perso il derivato
     ///   si perde anche lei — per un giro, e in silenzio.
-        // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
+    // C'era ieri, oggi non c'è, e portava l'impronta di un contenuto.
     fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
         let trashed = self.trashed_originals();
         // Oggi c'è, ieri non c'era. Si guardano solo le impronte per cui
         let mut disappeared: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
         let snapshot = self.entry_store.snapshot();
         for (id, entry) in &snapshot {
-            if entry.size == 0
-                || self.indexes.core.entries.contains_key(id)
-                || trashed.contains(id)
+            if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.contains(id)
             {
                 continue;
             }
@@ -7199,7 +7188,7 @@ impl Workspace {
         // qualcosa è sparito: un vault appena aperto per la prima volta ha
         // tutto «comparso» e niente «sparito», e non deve costare una mappa
         // grande quanto il vault per scoprirlo.
-                // Nessun candidato: non è una rinomina, è una cancellazione. La
+        // Nessun candidato: non è una rinomina, è una cancellazione. La
         let mut appeared: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
         for entry in self.indexes.core.entries.values() {
             if entry.size == 0 || self.entry_store.known(&entry.id).is_some() {
@@ -7219,7 +7208,7 @@ impl Workspace {
         for (fingerprint, mut from) in disappeared {
             let Some(a) = appeared.get(&fingerprint) else {
                 // raccolta se ne occupa come si è sempre occupata.
-            // Il pavimento e la porta insieme (0062): una riga nel log per chi
+                // Il pavimento e la porta insieme (0062): una riga nel log per chi
                 continue;
             };
             if from.len() == 1 && a.len() == 1 {
@@ -7246,7 +7235,7 @@ impl Workspace {
             // (0034) è la ragione per cui i tre dati autorevoli che il kernel sa
             // spostare li ha spostati **prima**, e non aspettando che qualcuno
             // ascoltasse.
-    // Cosa è andato storto **leggendo** la configurazione: un file malformato,
+            // Cosa è andato storto **leggendo** la configurazione: un file malformato,
             self.as_actor(Actor::Kernel, |ws| {
                 for (from, to) in pairs {
                     ws.emit_event(Event::DocumentRenamed { from, to });
@@ -7281,7 +7270,7 @@ impl Workspace {
     // --- storage persistente dei plugin ------------------------------------
 
     /// La radice dello spazio dati di un plugin, **come cartella del
-
+    ///
     /// filesystem**.
     ///
     /// È **l'unico varco del filesystem fuori da `VaultStorage`**
@@ -7329,7 +7318,7 @@ impl Workspace {
     /// Il recinto è qui e in nessun altro posto: il plugin nomina blob, non
     /// path del filesystem, e non ha modo di sapere dove sia la radice del
     /// vault. `rel` vuoto è la radice stessa (serve a `data_list`).
-        // I separatori sono `/` e basta: un `\` su Windows sarebbe un
+    // I separatori sono `/` e basta: un `\` su Windows sarebbe un
     pub(crate) fn plugin_data_path(
         &self,
         plugin: &str,
@@ -7347,7 +7336,7 @@ impl Workspace {
         }
         // separatore, e qui deve restare un carattere qualunque — cioè un nome
         // di file illegale, non una via d'uscita.
-// Valida un nome/path che **nomina un documento che esiste** (o che potrebbe
+        // Valida un nome/path che **nomina un documento che esiste** (o che potrebbe
         if rel.contains('\\') {
             return Err(denied("i separatori di path sono `/`"));
         }
@@ -7433,12 +7422,19 @@ impl Workspace {
         let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
         let bytes = match self.storage().read(&path) {
             Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(BTreeMap::new())
+            }
             Err(error) => return Err(PluginError::Io(format!("{path}: {error}").into())),
         };
-        let stored: BTreeMap<String, StoredCivilTime> = serde_json::from_slice(&bytes)
-            .map_err(|error| PluginError::Internal(format!("timer cursors at {path}: {error}").into()))?;
-        Ok(stored.into_iter().map(|(id, time)| (id, time.into())).collect())
+        let stored: BTreeMap<String, StoredCivilTime> =
+            serde_json::from_slice(&bytes).map_err(|error| {
+                PluginError::Internal(format!("timer cursors at {path}: {error}").into())
+            })?;
+        Ok(stored
+            .into_iter()
+            .map(|(id, time)| (id, time.into()))
+            .collect())
     }
 
     /// Aggiorna atomicamente il cursore di un timer.
@@ -7452,7 +7448,7 @@ impl Workspace {
         self.storage()
             .update(&path, &mut |existing| {
                 let mut stored: BTreeMap<String, StoredCivilTime> = existing
-                    .map(|bytes| serde_json::from_slice(bytes))
+                    .map(serde_json::from_slice)
                     .transpose()
                     .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
                     .unwrap_or_default();
@@ -7463,7 +7459,6 @@ impl Workspace {
             })
             .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
     }
-
 }
 
 /// esistere): normalizza i separatori `\` → `/`, toglie spazi e slash iniziali, e
@@ -7565,7 +7560,7 @@ fn is_safe_component(name: &str) -> bool {
         && !name.contains(':')
 }
 
-        // Una cartella che non c'è è una lista vuota, non un errore: chi
+// Una cartella che non c'è è una lista vuota, non un errore: chi
 pub(crate) fn collect_data_files(
     storage: &dyn crate::storage::VaultStorage,
     root: &Utf8Path,
@@ -7574,7 +7569,7 @@ pub(crate) fn collect_data_files(
 ) {
     let Ok(entries) = storage.list(dir) else {
         // interroga uno storage vuoto non sta sbagliando niente.
-// Sottomodello con i soli blocchi della sezione di un heading: da esso
+        // Sottomodello con i soli blocchi della sezione di un heading: da esso
         return;
     };
     for entry in entries {
@@ -7633,7 +7628,7 @@ fn section_of(model: &DocumentModel, heading: &str) -> Option<DocumentModel> {
 /// Chi matcha è [`canonical_anchor`], la stessa regola con cui il grafo risolve
 /// un `[[Nota#^blocco]]`: un embed che trovasse un blocco diverso da quello che
 /// il link apre sarebbe la stessa scritta che mostra due cose.
-    // Un'ancora che non ritaglia niente è un'ancora che non c'è: rispondere con
+// Un'ancora che non ritaglia niente è un'ancora che non c'è: rispondere con
 fn block_of(model: &DocumentModel, block: &str) -> Option<DocumentModel> {
     let wanted = canonical_anchor(block);
     let still = model.anchors.iter().find(|a| a.id == wanted)?;
@@ -7649,7 +7644,7 @@ fn block_of(model: &DocumentModel, block: &str) -> Option<DocumentModel> {
         .collect();
     // un documento vuoto vorrebbe dire mostrare il nulla invece di dire che il
     // bersaglio non si è trovato.
-// **Un lotto aperto è un prestito, e si chiude cadendo.**
+    // **Un lotto aperto è un prestito, e si chiude cadendo.**
     (!clipped.body.is_empty()).then_some(clipped)
 }
 
@@ -7669,13 +7664,13 @@ fn block_of(model: &DocumentModel, block: &str) -> Option<DocumentModel> {
 /// d'uscita, e un `Drop` è l'unica cosa che le veda tutte. E si eredita: chi
 /// aggiungesse un secondo modo di aprire un lotto non ha una chiusura da
 /// ricordare, perché non c'è una chiusura da chiamare.
-    /// Se questo prestito è **quello esterno**, cioè se tocca a lui chiudere.
+/// Se questo prestito è **quello esterno**, cioè se tocca a lui chiudere.
 struct Batch<'w> {
     ws: &'w mut Workspace,
     /// Annidato, entra nel lotto che c'è e non lo tocca: contare le aperture
     /// non servirebbe a niente, perché chi trova il campo pieno non lo tocca in
     /// nessun caso.
-            // Srotolando si chiude il lotto e **non** si drena. Le due metà di
+    // Srotolando si chiude il lotto e **non** si drena. Le due metà di
     owns_batch: bool,
 }
 
@@ -7698,7 +7693,7 @@ impl Drop for Batch<'_> {
             // dentro non sarebbe un secondo errore, sarebbe un `abort` del
             // processo. Ciò che resta in coda non è perso: lo drena la prima
             // operazione che riesce, e adesso può, che è tutto il punto.
-// **Un annullamento in corso è un prestito, e si chiude cadendo.**
+            // **Un annullamento in corso è un prestito, e si chiude cadendo.**
             self.ws.dispatch.close_batch();
             tracing::error!(
                 target: "fub.kernel",
@@ -7726,11 +7721,11 @@ impl Drop for Batch<'_> {
 /// `self.undo` per tutta la durata delle scritture, che passano dal workspace
 /// intero. Questo presta il **workspace**, come `Lotto`, e non toglie niente a
 /// nessuno.
-    /// Com'era la bandiera prima: un annullamento annidato non spegne quello di
+/// Com'era la bandiera prima: un annullamento annidato non spegne quello di
 struct Replay<'w> {
     ws: &'w mut Workspace,
     /// fuori uscendo.
-        // Niente ramo per `std::thread::panicking()`, ed è la differenza con
+    // Niente ramo per `std::thread::panicking()`, ed è la differenza con
     before: bool,
 }
 

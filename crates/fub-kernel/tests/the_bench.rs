@@ -351,11 +351,7 @@ fn reopening_an_intact_vault_costs_no_parse() {
     let (_dir, root) = folder();
     let (mut bench, parser, _batches) = seed(&root, count);
     bench.reindex().expect("first opening");
-    assert_eq!(
-        parser.count(),
-        count,
-        "cold, everything is parsed, once"
-    );
+    assert_eq!(parser.count(), count, "cold, everything is parsed, once");
     drop(bench);
 
     let (mut ws, parser, batches) = reopen(&root);

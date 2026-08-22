@@ -21,10 +21,10 @@ use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType};
 use wasmtime::{Engine, Store};
 
+use crate::borrow::{with_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
 use crate::guest::add_to_linker;
-use crate::borrow::{with_guest, State};
 use crate::translate as tr;
 
 /// Le famiglie del contratto che questo crate serve.
@@ -120,8 +120,7 @@ impl Component {
 
     fn load(engine: Engine, component: WasmtimeComponent) -> Result<Self, LoadError> {
         let mut linker: Linker<State> = Linker::new(&engine);
-        add_to_linker(&mut linker)
-            .map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
+        add_to_linker(&mut linker).map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
 
         // Ciò che il componente chiede e questo host non dà. Le due specie
         // ricevono due trattamenti, e la differenza è il §16.1: una famiglia
@@ -185,10 +184,7 @@ impl Component {
         };
         Ok(Instance {
             store,
-            interfaces: Interfaces {
-                plugin,
-                commands,
-            },
+            interfaces: Interfaces { plugin, commands },
         })
     }
 }
@@ -221,7 +217,7 @@ fn cap_the_rest(
         if FAMILIES_SERVED.iter().any(|s| name.starts_with(s)) {
             continue;
         }
-        let ComponentItem::ComponentInstance(iface) = item.ty else {
+        let ComponentItem::ComponentInstance(iface) = item else {
             // Un import che non è un'interfaccia non esiste in un componente
             // scritto contro questo contratto: il WIT non ha funzioni alla
             // radice del mondo. Se un giorno ci fosse, l'istanziazione lo dirà
@@ -231,7 +227,7 @@ fn cap_the_rest(
         let mut functions: Vec<String> = Vec::new();
         let mut resources: Vec<String> = Vec::new();
         for (entry, and) in iface.exports(engine) {
-            match and.ty {
+            match and {
                 ComponentItem::ComponentFunc(_) => functions.push(entry.to_string()),
                 ComponentItem::Resource(_) => resources.push(entry.to_string()),
                 _ => {}
@@ -620,8 +616,7 @@ impl Bundle for WasmBundle {
         let inner = match self.last.lock().map(|mut u| u.take()) {
             Ok(Some(the)) => the,
             Ok(None) => {
-                warnings
-                    .push("no instance to register: `plugin()` was not called".into());
+                warnings.push("no instance to register: `plugin()` was not called".into());
                 return warnings;
             }
             Err(_) => {

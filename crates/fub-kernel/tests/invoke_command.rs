@@ -41,8 +41,7 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     // I plugin di prova si dichiarano prima di registrare (§7.3): il
     // kernel non presta capacità a una stringa.
     for plugin in ["test", "recorder"] {
-        ws.register_core_feature(plugin, plugin)
-            .expect("declared");
+        ws.register_core_feature(plugin, plugin).expect("declared");
     }
     ws.reindex().expect("reindex");
     (dir, ws)
@@ -160,10 +159,11 @@ impl CommandProvider for TriesEverything {
     ) -> Result<CommandOutcome, PluginError> {
         let doc = DocId::new("note.md");
         let annotate = |cap: Capability, which: &'static str, result: Result<(), PluginError>| {
-            self.attempts
-                .lock()
-                .unwrap()
-                .push((cap, which, result.err().map(|and| and.to_string())));
+            self.attempts.lock().unwrap().push((
+                cap,
+                which,
+                result.err().map(|and| and.to_string()),
+            ));
         };
         annotate(
             Capability::VaultWrite,
@@ -257,8 +257,8 @@ impl CommandProvider for TriesEverything {
         // da chi risponde. Che questo montaggio non abbia un client di rete non
         // c'entra — come sopra, il cancello risponde prima, e un `Unserved` qui
         // sarebbe già la prova che il controllo è arrivato dopo.
-// Un comando che restituisce un piano **incompleto**: tocca due note e ne
-// nomina una. È l'errore che rende un consenso strappato.
+        // Un comando che restituisce un piano **incompleto**: tocca due note e ne
+        // nomina una. È l'errore che rende un consenso strappato.
         annotate(
             Capability::Network,
             "fetch",
@@ -312,7 +312,7 @@ impl CommandProvider for HalfHonestPlan {
 }
 
 /// Handler che annota gli eventi ricevuti, per vedere *quando* arrivano.
-    // Lo stesso comando, applicato: adesso scrive davvero.
+// Lo stesso comando, applicato: adesso scrive davvero.
 struct Toucher;
 
 impl CommandProvider for Toucher {
@@ -334,7 +334,7 @@ impl CommandProvider for Toucher {
     }
 }
 
-            // Si dichiara innocuo e non lo è.
+// Si dichiara innocuo e non lo è.
 struct Recorder(Log);
 
 impl EventHandler for Recorder {
@@ -378,7 +378,10 @@ fn the_registry_lists_what_a_caller_needs_to_invoke_without_reading_the_code() {
     assert!(!spec.description.is_empty());
     assert_eq!(spec.params.len(), 2);
     assert!(spec.params[0].required, "`what` is required");
-    assert!(!spec.scope.writes, "whoever does not declare writes does not write");
+    assert!(
+        !spec.scope.writes,
+        "whoever does not declare writes does not write"
+    );
 }
 
 #[test]
@@ -459,18 +462,14 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
         "original",
         "simulating does not write: the guarantee is the host's, not the command's"
     );
-    let message = refused
-        .lock()
-        .unwrap()
-        .clone()
-        .expect("the host refused");
+    let message = refused.lock().unwrap().clone().expect("the host refused");
     assert!(
         message.contains("simulazione"),
         "and the refusal says why, so the command writer reads it in their own \
          tests: {message}"
     );
 
-// Il varco della decisione 0010 copre **ogni** famiglia che una politica di
+    // Il varco della decisione 0010 copre **ogni** famiglia che una politica di
     ws.invoke_command(
         "test.write",
         serde_json::Value::Null,
@@ -478,7 +477,10 @@ fn a_dry_run_cannot_write_even_if_the_command_tries() {
         Actor::User,
     )
     .expect("applies");
-    assert_eq!(ws.read_source(&doc).expect("reads"), "written by the command");
+    assert_eq!(
+        ws.read_source(&doc).expect("reads"),
+        "written by the command"
+    );
 }
 
 #[test]
@@ -492,7 +494,7 @@ fn declaring_yourself_read_only_is_binding() {
     ws.register_command_provider(
         "test",
         Box::new(AlwaysWrites {
-// sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
+            // sola lettura nega — e l'elenco delle famiglie non è scritto qui dentro: si
             declares_writes: false,
             refused: refused.clone(),
         }),
@@ -555,8 +557,8 @@ fn declaring_yourself_read_only_is_binding() {
 /// alla politica passerebbe di qui **verde**, perché `VaultStructure` risulta
 /// coperta dagli altri cinque. È un limite vero e va nominato accanto al
 /// presidio invece che scoperto dopo.
-    // L'insieme atteso, calcolato. La `why` non conta — `ReadOnly` nega per
-    // famiglia e la ragione è solo il testo che finisce nel messaggio — ma è la
+// L'insieme atteso, calcolato. La `why` non conta — `ReadOnly` nega per
+// famiglia e la ragione è solo il testo che finisce nel messaggio — ma è la
 #[test]
 fn every_structural_capability_is_refused_by_the_same_gate() {
     let (_dir, mut ws) = vault();

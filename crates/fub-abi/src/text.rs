@@ -708,8 +708,7 @@ mod tests {
 
     #[test]
     fn substitution_puts_the_arguments_where_the_braces_are() {
-        let catalogs =
-            vec![StringCatalog::new("it").with("conteggio", "{n} note in «{folder}»")];
+        let catalogs = vec![StringCatalog::new("it").with("conteggio", "{n} note in «{folder}»")];
         let locale = italian();
         let s = Strings::new(&catalogs, "it", &locale);
         let t = Text::message(

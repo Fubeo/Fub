@@ -181,7 +181,7 @@ fn every_form_of_divergence_turns_red() {
         ),
         (
             "a renamed case (wrong `snake_case` by hand)",
-                base.replace("\"dry_run\"", "\"dryRun\""),
+            base.replace("\"dry_run\"", "\"dryRun\""),
         ),
         (
             "two reordered cases (no string changes, the discriminant does)",

@@ -380,10 +380,7 @@ fn a_half_failed_registration_leaves_no_settings_behind() {
     let error = ws
         .register_plugin(manifest(), Trust::Community)
         .expect_err("la chiave del recinto non la dichiara chi ci sta dentro");
-    assert!(
-        ws.plugins().is_empty(),
-        "e il plugin non si monta: {error}"
-    );
+    assert!(ws.plugins().is_empty(), "e il plugin non si monta: {error}");
 
     // La prova che non è rimasto niente: lo stesso id ci riprova, con un
     // manifest che quella chiave non la nomina più, e passa. Con lo schema

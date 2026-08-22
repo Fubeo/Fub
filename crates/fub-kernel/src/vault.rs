@@ -953,14 +953,16 @@ impl Vault {
                 }
             }
             count += 1;
-        // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
-            crate::error::optional(self.storage.remove(sidecar)).map_err(|and| KernelError::Io {
-                path: sidecar.clone(),
-                source: and,
+            // Se nel frattempo è arrivato un sidecar, la cartella non è vuota e
+            crate::error::optional(self.storage.remove(sidecar)).map_err(|and| {
+                KernelError::Io {
+                    path: sidecar.clone(),
+                    source: and,
+                }
             })?;
         }
         // resta intatta; non si esegue più uno sweep globale del deposito.
-// Come una voce lascia il cestino: distrutta, o restituita al vault.
+        // Come una voce lascia il cestino: distrutta, o restituita al vault.
         let _ = self.storage.remove_empty_dir(&self.trash_metadata_dir());
         tracing::info!(target: "fub.kernel", "trash emptied: {count} entries destroyed");
         Ok(count)
@@ -975,7 +977,7 @@ enum TrashExit<'a> {
 
 /// `VaultRead::list_trash` la restituisce: qui resta il nome con cui il vault la
 /// costruisce.
-        // La politica d'esclusione non guarda il disco: il vault si apre in
+// La politica d'esclusione non guarda il disco: il vault si apre in
 pub use fub_abi::traits::TrashEntry;
 
 #[cfg(test)]
@@ -995,7 +997,7 @@ mod tests {
         // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
         assert!(v.is_ignored("/vault/note/.bozza.md".into()));
         // `doc_id_for_path`.
-    // **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
+        // **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
         assert!(!v.is_ignored("/altrove/.trash/Idea.md".into()));
     }
 
@@ -1022,7 +1024,11 @@ mod tests {
             .into_iter()
             .map(|f| f.id.0)
             .collect();
-        assert_eq!(seen, vec!["Idea.md"], "\"target/\" was entering the entry store");
+        assert_eq!(
+            seen,
+            vec!["Idea.md"],
+            "\"target/\" was entering the entry store"
+        );
         assert!(v.is_ignored("/vault/target/debug/appunti.md".into()));
     }
 
@@ -1049,7 +1055,7 @@ mod tests {
     /// preferenza, e vale davvero — ma non è un grimaldello sulla struttura.
     /// Con l'interruttore acceso la bozza è un documento, e la cartella di Fub,
     /// il cestino e il temporaneo di una scrittura restano fuori.
-        // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
+    // Il compagno di lock è l'unico dei quattro che non se ne va mai — non
     #[test]
     fn showing_hidden_files_does_not_open_the_structure() {
         use fub_abi::settings::SettingValue;
@@ -1068,7 +1074,7 @@ mod tests {
             "the lock companion of a root-level file was a document, \
              and it never goes away"
         );
-    // La metà che impedisce alla riparazione di diventare «tutto ciò che
+        // La metà che impedisce alla riparazione di diventare «tutto ciò che
         assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
     }
 
@@ -1090,7 +1096,7 @@ mod tests {
     }
 
     /// diverso cambia cosa il vault contiene senza ricompilare niente.
-        // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
+    // La struttura non è nell'elenco e non ci entra: toglierla dalla lista
     #[test]
     fn the_excluded_folders_are_declared_by_the_vault() {
         use fub_abi::settings::SettingValue;
@@ -1101,7 +1107,7 @@ mod tests {
         assert!(v.is_ignored("/vault/build/out.md".into()));
         assert!(!v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
         // non la rivela.
-    // **La prima metà della 0176, dalle due porte.** `build/` è la forma che
+        // **La prima metà della 0176, dalle due porte.** `build/` è la forma che
         assert!(v.is_ignored("/vault/.fub/settings.json".into()));
     }
 
@@ -1129,7 +1135,11 @@ mod tests {
             .into_iter()
             .map(|f| f.id.0)
             .collect();
-        assert_eq!(seen, vec!["note/Idea.md"], "\"build/\" did not exclude anything");
+        assert_eq!(
+            seen,
+            vec!["note/Idea.md"],
+            "\"build/\" did not exclude anything"
+        );
         assert!(v.is_ignored("/vault/build/out.md".into()));
     }
 
@@ -1141,7 +1151,7 @@ mod tests {
     /// l'ha in mano dalla voce di directory, il watcher ha in mano un path e
     /// basta, e se le due rispondessero diverso il file rientrerebbe al primo
     /// salvataggio o sparirebbe al primo evento.
-        // E la cartella che si chiama come lui resta fuori, dai due versi: il
+    // E la cartella che si chiama come lui resta fuori, dai due versi: il
     #[test]
     fn a_file_named_like_an_excluded_folder_stays_in_the_vault() {
         use fub_abi::settings::SettingValue;
@@ -1167,7 +1177,7 @@ mod tests {
         );
         assert!(!v.is_ignored("/vault/archivio".into()));
         // path del file dentro, e il path della cartella stessa.
-    // **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
+        // **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
         assert!(v.is_ignored("/vault/note/archivio/vecchia.md".into()));
         assert!(v.is_ignored("/vault/note/archivio".into()));
     }
@@ -1188,9 +1198,7 @@ mod tests {
             ("node_modules/pacchetto/readme.md", "npm stuff"),
         ] {
             let path = Utf8Path::new("/vault").join(rel);
-            v.storage()
-                .write(&path, content.as_bytes())
-                .expect("write");
+            v.storage().write(&path, content.as_bytes()).expect("write");
         }
         let seen: Vec<String> = v
             .scan()

@@ -298,7 +298,8 @@ impl SyntaxRegistry {
             if let Some(fault) = crate::safety::reporting(&r.spec.id, Gate::SyntaxRule, "", || {
                 match &r.spec.trigger {
                     SyntaxTrigger::Fence { info } => {
-                        let wanted: Vec<String> = info.iter().map(|the| the.to_lowercase()).collect();
+                        let wanted: Vec<String> =
+                            info.iter().map(|the| the.to_lowercase()).collect();
                         apply_to_blocks(&mut model.body, &mut |block| {
                             fence_rule(block, r, &wanted, ctx)
                         });

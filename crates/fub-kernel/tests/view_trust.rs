@@ -17,7 +17,7 @@ use fub_abi::traits::{
     HostApi, PluginManifest, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
-use fub_kernel::{data_root, FormatRegistry, Trust, Workspace};
+use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 /// Un provider che restituisce ciò che gli si dice di restituire, e che scrive
 /// nel proprio storage per far vedere di che id è intestato l'host che riceve.
@@ -310,7 +310,11 @@ fn an_action_reaches_the_provider_with_its_own_data_space() {
     )
     .unwrap();
 
-    let written = data_root(&fx.root)
+    // Lo spazio dati autorevole del provider (§31.8): una `data_write`
+    // finisce in `.fub/plugins/<id>/`, non nella cache derivata.
+    let written = fx
+        .root
+        .join(".fub")
         .join("plugins")
         .join("terzi.diario")
         .join("ultima-azione.txt");

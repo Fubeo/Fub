@@ -220,7 +220,7 @@ pub(crate) struct CoreIndex {
     /// nemmeno il rapporto col disco, e sta qui da prima. Ciò che questa
     /// tabella instrada è **chi risponde a quale domanda**, e a questa risponde
     /// il kernel.
-/// Il **file** che un path nomina dentro un'anagrafe, se c'è — di qualunque
+    /// Il **file** che un path nomina dentro un'anagrafe, se c'è — di qualunque
     drafts: Arc<Drafts>,
 }
 
@@ -228,7 +228,7 @@ pub(crate) struct CoreIndex {
 ///
 /// Funzione libera e non metodo perché il suo cliente non è solo l'indice: la
 /// usa il controllo di salute, che riceve l'anagrafe e non chi la tiene.
-        // Un wikilink nomina un file **per nome**, come nomina una nota per
+// Un wikilink nomina un file **per nome**, come nomina una nota per
 pub(crate) fn resolve_entry_in(
     entries: &BTreeMap<DocId, VaultEntry>,
     names: &EntryNames,
@@ -255,7 +255,7 @@ fn resolve_entry_in_folder(
         LinkTarget::Wiki { page, .. } => {
             if !page.contains('/') {
                 let folder = attachment_folder
-                    .map(|folder| fub_abi::rules::folders::normalized(folder))
+                    .map(fub_abi::rules::folders::normalized)
                     .filter(|folder| !folder.is_empty());
                 if let Some(folder) = folder {
                     let candidate = DocId::new(format!("{folder}/{page}"));
@@ -265,9 +265,9 @@ fn resolve_entry_in_folder(
                     {
                         return Some(candidate);
                     }
-                    if let Some(candidate) = names.by_path_key(
-                        &fub_abi::rules::path::resolution_key(candidate.as_str()),
-                    ) {
+                    if let Some(candidate) =
+                        names.by_path_key(&fub_abi::rules::path::resolution_key(candidate.as_str()))
+                    {
                         if entries
                             .get(&candidate)
                             .is_some_and(|entry| entry.kind == EntryKind::Asset)
@@ -292,7 +292,7 @@ fn resolve_entry_in_folder(
     // la stessa regola con cui il grafo indicizza), e si paga solo quando il
     // confronto esatto ha già detto di no — cioè su un riferimento che sta per
     // essere dichiarato rotto.
-// **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
+    // **I nomi dell'anagrafe**, dalla chiave di risoluzione ai file che la portano.
     names.by_path_key(&fub_abi::rules::path::resolution_key(id.as_str()))
 }
 
@@ -317,7 +317,7 @@ fn resolve_entry_in_folder(
 /// Il prezzo è due chiavi in memoria per voce, ed è il conto che questa forma
 /// paga per non riscandire: un'anagrafe di ventimila file tiene quarantamila
 /// stringhe corte invece di ricalcolarne quarantamila **a ogni link**.
-    /// La chiave del **path intero**, per ogni voce di qualunque specie: è ciò
+/// La chiave del **path intero**, per ogni voce di qualunque specie: è ciò
 #[derive(Debug, Default)]
 pub(crate) struct EntryNames {
     /// che serve al ripiego di [`resolve_entry_in`], che riconcilia NFD e NFC
@@ -399,7 +399,7 @@ impl EntryNames {
     ///
     /// Gli omonimi di una chiave sono pochi — è la ragione per cui questa forma
     /// guadagna: il `min_by_key` è rimasto, ma gira su loro e non sul vault.
-            // Il più vicino alla radice, e a parità il primo in ordine di path:
+    // Il più vicino alla radice, e a parità il primo in ordine di path:
     pub(crate) fn named(&self, name: &str) -> Option<DocId> {
         let wanted = fub_abi::rules::path::resolution_key(name);
         if wanted.is_empty() {
@@ -415,7 +415,7 @@ impl EntryNames {
     }
 
     /// path, che è ciò che rispondeva la scansione.
-/// Il nome di un file dentro il suo path.
+    /// Il nome di un file dentro il suo path.
     pub(crate) fn by_path_key(&self, key: &str) -> Option<DocId> {
         self.by_path.get(key)?.iter().next().cloned()
     }
@@ -425,10 +425,7 @@ fn remember(map: &mut BTreeMap<String, BTreeSet<DocId>>, key: &str, id: &DocId) 
     if key.is_empty() {
         return;
     }
-    map
-        .entry(key.to_string())
-        .or_default()
-        .insert(id.clone());
+    map.entry(key.to_string()).or_default().insert(id.clone());
 }
 
 fn forget_entry(map: &mut BTreeMap<String, BTreeSet<DocId>>, key: &str, id: &DocId) {
@@ -475,7 +472,7 @@ fn count_direct<'a>(paths: impl Iterator<Item = &'a str>, folder: &str) -> u32 {
 }
 
 /// altrui, e cosa è già andato storto nel leggerle.
-    /// **Condiviso** con chi tiene vivo il rilevatore (`fub-host`): il kernel
+/// **Condiviso** con chi tiene vivo il rilevatore (`fub-host`): il kernel
 #[derive(Default)]
 pub(crate) struct WatchState {
     /// non sa cosa sia un watcher, e questo è tutto ciò che gliene serve sapere.
@@ -508,7 +505,7 @@ impl WatchState {
     /// `let _ = ws.sync_path(…)`, quindi il `Result` c'era e non lo leggeva
     /// nessuno. Registrandolo qui, un chiamante distratto non può più nasconderlo
     /// — al più non lo guarda lui, ma il vault se lo ricorda.
-/// **I lavori lunghi vivi** (§10.3, decisione 0035): da quando il kernel
+    /// **I lavori lunghi vivi** (§10.3, decisione 0035): da quando il kernel
     fn notes(&mut self, error: impl std::fmt::Display) {
         self.failures = self.failures.saturating_add(1);
         self.last_error = Some(error.to_string());
@@ -538,7 +535,7 @@ impl WatchState {
 /// fare è chi i numeri li assegna, cioè questo kernel. Ne esce l'elenco
 /// nell'ordine in cui il lavoro è stato chiesto, che è l'unico che chi guarda
 /// riconosce.
-    /// Un job è stato accettato: da qui è vivo, e da qui si vede.
+/// Un job è stato accettato: da qui è vivo, e da qui si vede.
 #[derive(Default)]
 pub(crate) struct JobsState {
     live: BTreeMap<u64, JobStatus>,
@@ -771,7 +768,7 @@ impl CoreIndex {
     /// [`DocChanges::everything`], che è la risposta vera e non una comodità —
     /// chi si è abbonato ai cambi di tag vuole sapere della nota che nasce
     /// con un tag.
-        // Il corpo non sta in cache (è lo split metadata/body): a rispondere è
+    // Il corpo non sta in cache (è lo split metadata/body): a rispondere è
     pub(crate) fn changes_for(&self, model: &DocumentModel, new: &Revision) -> DocChanges {
         let Some(before) = self.metas.get(&model.id) else {
             return DocChanges::everything();
@@ -831,7 +828,7 @@ impl CoreIndex {
         // dell'osservazione: fra questa riga e l'anagrafe scritta su disco ci
         // sta una sessione intera, e una soglia presa là dichiarerebbe pulito
         // tutto ciò che si è visto qui.
-    // Se di questa voce **non ci si può fidare fino alla prossima apertura**:
+        // Se di questa voce **non ci si può fidare fino alla prossima apertura**:
         if entry.mtime < crate::time::now_unix_millis() {
             self.observed_in_the_own_instant.remove(&entry.id);
         } else {
@@ -936,7 +933,7 @@ impl CoreIndex {
     /// riferimento nomina un punto che non c'è più, la risposta resta il
     /// documento con `at: None` — un heading rinominato apre la nota in cima,
     /// che è più di quel che faceva prima e meno di una bugia.
-            // `[[#Sezione]]` e `[[#^blocco]]` nominano il documento che li
+    // `[[#Sezione]]` e `[[#^blocco]]` nominano il documento che li
     fn resolve(&self, target: &LinkTarget, from: Option<&DocId>) -> Option<ResolvedRef> {
         let doc = match target {
             // ospita, e senza un ospite non nominano niente: è la stessa
@@ -957,7 +954,7 @@ impl CoreIndex {
                 .resolve_path(from.unwrap_or(&DocId::new("")), raw)
                 .or_else(|| self.resolve_entry(from.unwrap_or(&DocId::new("")), target))?,
             // `None` invece di un errore.
-    // Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
+            // Il punto che un `[[Nota#Sezione]]` o un `[[Nota#^blocco]]` nomina dentro
             LinkTarget::Url(_) => return None,
         };
         let at = match target {
@@ -977,7 +974,7 @@ impl CoreIndex {
     /// posizione — una coordinata che non sa dire *di quando* è una coordinata
     /// che chi la usa dovrebbe indovinare, e il contratto ha deciso di non
     /// permetterlo (`DocPosition::revision` non è opzionale).
-            // La regola sta nel contratto (`heading_matches`) e non qui: chi
+    // La regola sta nel contratto (`heading_matches`) e non qui: chi
     fn position_in(
         &self,
         doc: &DocId,
@@ -997,7 +994,7 @@ impl CoreIndex {
             // torna è quella del titolo trovato, non quella ricalcolata sulla
             // domanda: `#Ciao, Mondo!` trova `ciao-mondo`, e il chiamante ha
             // diritto all'id vero.
-    // I documenti in relazione di link con `doc`, secondo il verso chiesto.
+            // I documenti in relazione di link con `doc`, secondo il verso chiesto.
             (None, Some(text)) => {
                 let found = metadata.outline.iter().find(|h| heading_matches(text, h))?;
                 (found.span, found.slug.clone())
@@ -1015,7 +1012,7 @@ impl CoreIndex {
     /// volte. Non si vedeva perché a valle c'è il `BTreeMap` di [`Matches`], che
     /// li assorbiva: il difetto era coperto da un dettaglio d'implementazione di
     /// qualcun altro, ed è il modo in cui un difetto sopravvive a un refactor.
-            // Ciò che il pianificatore ha già risolto per conto di qualcun
+    // Ciò che il pianificatore ha già risolto per conto di qualcun
     fn linked(&self, doc: &DocId, direction: LinkDirection) -> BTreeSet<DocId> {
         self.graph.linked(doc, direction)
     }
@@ -1033,7 +1030,9 @@ impl QueryEvaluator for CoreIndex {
                 Ok(Matches::of_docs(
                     self.metas
                         .iter()
-                        .filter(|(_, metadata)| properties::test(&metadata.frontmatter, filter, &formats))
+                        .filter(|(_, metadata)| {
+                            properties::test(&metadata.frontmatter, filter, &formats)
+                        })
                         .map(|(id, _)| id.clone()),
                 ))
             }
@@ -1123,7 +1122,7 @@ impl IndexProvider for CoreIndex {
             QueryRoute::Query(QueryKind::RenderEmbed),
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
-    // Niente da ricaricare: la memoria di questo indice è il vault, e la
+            // Niente da ricaricare: la memoria di questo indice è il vault, e la
             QueryRoute::Predicate(PredicateKind::Property),
             QueryRoute::Predicate(PredicateKind::Tag),
             QueryRoute::Predicate(PredicateKind::Folder),
@@ -1189,7 +1188,7 @@ impl IndexProvider for CoreIndex {
     /// memoria, e se ne va con lui. La riga c'è perché il contratto non ha un
     /// default (decisione 0028), ed è il caso che quel default avrebbe reso
     /// indistinguibile da «non ci ho pensato».
-            // Arriva quando il pianificatore consegna un sottoalbero di foglie
+    // Arriva quando il pianificatore consegna un sottoalbero di foglie
     fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
@@ -1198,7 +1197,7 @@ impl IndexProvider for CoreIndex {
         match query {
             // che questo indice ha dichiarato: la struttura la regge
             // `QueryEvaluator`, che è scritta una volta sola nel contratto.
-                // Nessun estratto da omettere: questo indice non ha il corpo dei
+            // Nessun estratto da omettere: questo indice non ha il corpo dei
             IndexQuery::Documents {
                 matching,
                 sort,
@@ -1206,7 +1205,7 @@ impl IndexProvider for CoreIndex {
                 page,
                 // documenti (è lo split metadata/body di M2), quindi seleziona e
                 // basta — e una risposta senza estratti è già ciò che dà.
-                    // Lo snapshot incrementale: niente O(vault) a ogni
+                // Lo snapshot incrementale: niente O(vault) a ogni
                 excerpts: _,
             } => {
                 let matches = self.expr(&matching)?;
@@ -1231,7 +1230,7 @@ impl IndexProvider for CoreIndex {
                 let counts = if matching.is_everything() {
                     // interrogazione — e il pannello interroga a ogni
                     // salvataggio.
-                // I semi in ordine di id, e i vicini di ognuno di seguito: senza
+                    // I semi in ordine di id, e i vicini di ognuno di seguito: senza
                     self.tags.snapshot()
                 } else {
                     let selected = self.expr(&matching)?;
@@ -1249,7 +1248,7 @@ impl IndexProvider for CoreIndex {
                 let mut all = Vec::new();
                 // un ordine totale la seconda pagina di un grafo grande
                 // ripeterebbe righe della prima.
-                    // Il risolutore è il grafo **più l'anagrafe** (§14.1): il
+                // Il risolutore è il grafo **più l'anagrafe** (§14.1): il
                 for seed in from.ids() {
                     all.extend(self.graph.neighbors(seed, direction, depth));
                 }
@@ -1280,7 +1279,7 @@ impl IndexProvider for CoreIndex {
                     // il PNG che una nota mostra c'è davvero. Con il solo grafo
                     // la seconda domanda non era rispondibile, e l'unica cosa
                     // onesta che si poteva fare era tacere su ogni allegato.
-                // Il guasto risale a chi ha chiesto la pagina invece di
+                    // Il guasto risale a chi ha chiesto la pagina invece di
                     &health::VaultView {
                         graph: &self.graph,
                         entries: &self.entries,
@@ -1309,7 +1308,7 @@ impl IndexProvider for CoreIndex {
                 // costruirlo fuori dalla finestra non alloca. Chi volesse
                 // rendere costante il prezzo di questa pagina deve paginare la
                 // lettura, che è un'altra cosa e sta dall'altra parte.
-                            // L'anagrafe è la fonte di entrambi: `exists` è
+                // L'anagrafe è la fonte di entrambi: `exists` è
                 let items = drafts
                     .drafts
                     .into_iter()
@@ -1323,7 +1322,7 @@ impl IndexProvider for CoreIndex {
                             // qualcuno ha già pagato. Nessuna delle due apre un
                             // file — offrire un recupero non deve costare una
                             // rilettura del vault.
-            // Il filtro sta **prima** della finestra, e non è un dettaglio: una
+                            // Il filtro sta **prima** della finestra, e non è un dettaglio: una
                             exists: entry.is_some(),
                             current: entry.and_then(|and| and.fingerprint.clone()),
                             text: d.text,
@@ -1335,7 +1334,7 @@ impl IndexProvider for CoreIndex {
             // pagina tagliata sull'anagrafe intera e poi filtrata sarebbe una
             // pagina con dentro un numero di righe che dipende da cosa c'è nel
             // resto del vault (§14.4).
-                // La clonazione è **qui dentro** e non un `.cloned()` sulla
+            // La clonazione è **qui dentro** e non un `.cloned()` sulla
             IndexQuery::Entries {
                 of_kind,
                 within,
@@ -1352,7 +1351,7 @@ impl IndexProvider for CoreIndex {
                 // catena: il filtro cammina l'anagrafe intera per dire quanti
                 // sono, ma una `VaultEntry` la si copia solo se sta nella
                 // finestra.
-            // Arriva solo se qualcuno chiama `indexes.query` di qua, non dal
+                // Arriva solo se qualcuno chiama `indexes.query` di qua, non dal
                 VaultEntry::clone,
             ))),
             IndexQuery::Folders { under, page } => Ok(IndexResult::Folders(Paged::window(
@@ -1385,7 +1384,7 @@ impl IndexProvider for CoreIndex {
             // arrivare qui: `CoreIndex` non possiede i documenti né i renderer.
             // Questi bracci non si raggiungono mai, ma il `match` è esaustivo e
             // non accetta un `_` — vedi la 0104.
-// Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
+            // Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
             IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => {
                 Err(PluginError::Internal(
                     "render is `Workspace::query_index`'s, not the kernel index's".into(),
@@ -1448,7 +1447,10 @@ mod tests {
     #[test]
     fn a_bare_attachment_link_prefers_the_declared_folder() {
         let entries = BTreeMap::from([
-            (DocId::new("attachments/photo.png"), asset("attachments/photo.png")),
+            (
+                DocId::new("attachments/photo.png"),
+                asset("attachments/photo.png"),
+            ),
             (DocId::new("other/photo.png"), asset("other/photo.png")),
         ]);
         let names = EntryNames::of(&entries);
@@ -1460,13 +1462,7 @@ mod tests {
             block: None,
         };
         assert_eq!(
-            resolve_entry_in_folder(
-                &entries,
-                &names,
-                &source,
-                &target,
-                Some("attachments"),
-            ),
+            resolve_entry_in_folder(&entries, &names, &source, &target, Some("attachments"),),
             Some(DocId::new("attachments/photo.png"))
         );
     }
@@ -1474,7 +1470,10 @@ mod tests {
     #[test]
     fn changing_the_declared_folder_changes_existing_link_resolution() {
         let entries = BTreeMap::from([
-            (DocId::new("attachments/photo.png"), asset("attachments/photo.png")),
+            (
+                DocId::new("attachments/photo.png"),
+                asset("attachments/photo.png"),
+            ),
             (DocId::new("media/photo.png"), asset("media/photo.png")),
         ]);
         let names = EntryNames::of(&entries);

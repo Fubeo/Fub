@@ -467,7 +467,10 @@ mod tests {
             .with_instance("uno");
         let mut view = TagPanelView;
         type_text(&mut view, &mut host, "rus");
-        assert_eq!(entries(&type_text(&mut view, &mut host, "")), ["#rust", "#note"]);
+        assert_eq!(
+            entries(&type_text(&mut view, &mut host, "")),
+            ["#rust", "#note"]
+        );
         assert_eq!(host.view_state(FILTER_STATE).unwrap(), None);
     }
 
@@ -529,7 +532,11 @@ mod tests {
             ("note", vec!["#NOTE"]),
             ("O", vec!["#progetto/Città", "#NOTE", "#altro"]),
         ] {
-            assert_eq!(entries(&build_tags_view(&tags, filter)), expected, "{filter:?}");
+            assert_eq!(
+                entries(&build_tags_view(&tags, filter)),
+                expected,
+                "{filter:?}"
+            );
         }
     }
 

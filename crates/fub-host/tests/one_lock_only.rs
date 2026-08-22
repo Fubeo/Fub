@@ -158,7 +158,9 @@ const THE_CARRIES: &[&str] = &["custody.rs"];
 /// sono scritti i file di questo crate; se un giorno non lo fosse, il conto
 fn source_code(file_path: &str, skips_the_benches: bool) -> Vec<(usize, &str)> {
     let end = match skips_the_benches {
-        true => file_path.find("\n#[cfg(test)]\n").unwrap_or(file_path.len()),
+        true => file_path
+            .find("\n#[cfg(test)]\n")
+            .unwrap_or(file_path.len()),
         false => file_path.len(),
     };
     file_path[..end]
@@ -354,7 +356,8 @@ fn close_a_vault_poisoned_the_says_instead_of_panic() {
 
     let issues = host.close_vault(&root).expect("the session still exists");
     assert!(
-        issues.iter()
+        issues
+            .iter()
             .any(|g| g.to_string().contains("irrecuperabile")),
         "the closer did not know the vault was dead: {issues:?}"
     );

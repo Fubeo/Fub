@@ -4283,7 +4283,11 @@ impl WallClock {
             second: 0,
             ..now
         };
-        let first = if today <= now { today } else { today.prev_day() };
+        let first = if today <= now {
+            today
+        } else {
+            today.prev_day()
+        };
         let mut c = first;
         for _ in 0..8 {
             if self.falls_on(c.weekday()) {

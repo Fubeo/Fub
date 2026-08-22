@@ -126,7 +126,9 @@ pub fn is_attachment(path: &str, doc_extensions: &[String]) -> bool {
     match name.rsplit_once('.') {
         // Senza estensione è un documento: è la forma dei link fra note.
         None => false,
-        Some((_, ext)) => !doc_extensions.iter().any(|and| and.eq_ignore_ascii_case(ext)),
+        Some((_, ext)) => !doc_extensions
+            .iter()
+            .any(|and| and.eq_ignore_ascii_case(ext)),
     }
 }
 

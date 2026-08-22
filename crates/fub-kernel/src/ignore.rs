@@ -217,9 +217,7 @@ pub const DEFAULT_EXCLUDED: &[&str] = &[".obsidian", ".git", "node_modules", "ta
 pub(crate) fn is_foreign_temporary(key: &str) -> bool {
     // `~$nota.docx`: il file di proprietà che Office scrive accanto a quello
     // aperto, e che resta lì finché la finestra è aperta.
-    let office = key
-        .strip_prefix("~$")
-        .is_some_and(|rest| !rest.is_empty());
+    let office = key.strip_prefix("~$").is_some_and(|rest| !rest.is_empty());
     // `nota.md~`: la copia di prima, che lasciano dietro Emacs, gedit, kate,
     // joe e mezzo Unix.
     let copy = key.strip_suffix('~').is_some_and(|base| !base.is_empty());

@@ -76,18 +76,38 @@ function section(title: string): HTMLElement {
 // Componenti.
 // ---------------------------------------------------------------------------
 
-/** La scena legge la tabella chiusa: ogni specie e ogni stato ha una foto. */
+/** La scena legge la tabella chiusa: una cella per ogni coppia
+ * componente/stato, e dentro ogni hook del componente ha **il suo** elemento.
+ *
+ * Non un solo nodo con tutte le classi addosso: nel DOM vero gli hook stanno
+ * su nodi in rapporto — un `.tab` contiene un `.tab-name`, `.views-modal` è
+ * un fisso a sé — e la pila piatta li fa combattere su uno stesso elemento
+ * con esiti (scrim sotto testo, accent sotto danger) che nessun selettore
+ * della pelle produce davvero. Il banco fotograferebbe quei composti come se
+ * fossero verità, e il presidio del contrasto li condannerebbe a nome della
+ * pelle. Un hook, un elemento: ogni foto è quella di un selettore reale. */
+/** Hook che **sono** una superficie di copertura a sé (scrim a pagina
+ * intera), non un contenuto: si fotografano senza prosa addosso. */
+const SUPERFICI: Set<string> = new Set(["modale", "views-modal"]);
+
 function anatomy(): void {
   const grid = section("Shell anatomy");
   for (const component of COMPONENTS) {
     for (const state of component.states) {
       const cell = el("div", "cella");
       cell.append(el("span", "didascalia", `${component.name} · ${state.label}`));
-      const proof = el("div", component.hooks.join(" "));
-      proof.dataset.component = component.name;
-      proof.dataset.state = state.name;
-      proof.textContent = component.name;
-      cell.append(proof);
+      for (const hook of component.hooks) {
+        const proof = el("div", hook);
+        proof.dataset.component = component.name;
+        proof.dataset.state = state.name;
+        // Le superfici di copertura (`.modale`, `.views-modal`) sono un velo
+        // a pagina intera: il loro testo vero sta dentro il pannello che
+        // ospitano — che qui arriva per conto suo, come hook a sé. Mettere
+        // della prosa **sul velo** fotograferebbe uno stato che la pelle non
+        // produce: il velo si fotografa nudo.
+        if (!SUPERFICI.has(hook)) proof.textContent = `${component.name} · ${hook}`;
+        cell.append(proof);
+      }
       grid.append(cell);
     }
   }

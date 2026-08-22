@@ -170,7 +170,7 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
             };
             spans.push(span);
             found += 1;
-        // intero, moltiplicato per i documenti della pagina.
+            // intero, moltiplicato per i documenti della pagina.
             // Si riparte **dopo la fine**: dentro un termine le occorrenze non
             // si sovrappongono, altrimenti `aa` in `aaaa` sarebbe tre punti a
             // cui saltare invece di due, e il secondo cadrebbe in mezzo al
@@ -179,7 +179,7 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
             from = span.end;
         }
     }
-            // sua scansione, che riparte da zero.
+    // sua scansione, che riparte da zero.
     // I duplicati si tolgono **dopo** l'ordinamento, non impedendoli a ogni
     // inserimento: dentro un termine non ce ne sono (gli inizi crescono), quindi
     // l'unico caso è lo stesso pezzo di testo trovato da due termini diversi, e
@@ -191,7 +191,7 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
     spans
 }
 
-    // milioni di confronti per scartarne una manciata.
+// milioni di confronti per scartarne una manciata.
 fn first_at_or_after(source: &str, needle: &str, from: usize) -> Option<Span> {
     let mut at = from;
     while at <= source.len() {
@@ -296,7 +296,7 @@ mod tests {
         );
     }
 
-/// niente da comporre — cioè su quasi ogni byte di quasi ogni scansione.
+    /// niente da comporre — cioè su quasi ogni byte di quasi ogni scansione.
     /// **Il conto delle scansioni, che è il conto che questo modulo paga.**
     ///
     /// `wanted` non produce una lista: produce **quante volte ogni documento
@@ -311,12 +311,12 @@ mod tests {
         let scans = |q: &str| wanted(&text_query(q, TextMode::Terms, false)).len();
         assert_eq!(scans("Rust rust"), 1, "one pass, not two");
         assert_eq!(scans("rust RUST Rust rUsT"), 1);
-    // macchina condivisa un tempo non è un segnale, un numero di passate sì.
+        // macchina condivisa un tempo non è un segnale, un numero di passate sì.
         // E il caso vero: chi scrive due parole di cui una ripetuta col
         assert_eq!(scans("Rust async rust"), 2);
     }
 
-        // maiuscolo paga due passate, non tre.
+    // maiuscolo paga due passate, non tre.
     /// **Era lavoro sprecato, non verità** — e questa è la misura del verso
     /// opposto, cioè la sola che lo dimostra: la risposta con i doppioni e
     /// quella senza devono essere **identiche**. Se differissero, il difetto
@@ -345,7 +345,7 @@ mod tests {
             let n = wanted(&text_query(&format!("{a} {b}"), TextMode::Terms, false));
             assert_eq!(n.len(), 2, "`{a}` and `{b}` are two texts to search: {n:?}");
         };
-    // chi fonde di troppo tanto quanto a chi fonde di meno.
+        // chi fonde di troppo tanto quanto a chi fonde di meno.
         // Prefisso e termine intero: `arch` sta dentro `architettura`, e chi ha
         two("arch", "architettura");
         // cercato tutti e due vuole tutti e due.
@@ -407,7 +407,7 @@ mod tests {
         assert_eq!(spans[1], Span::new(0, source.len()));
     }
 
-        // uno dentro l'altro, e non farne sparire uno.
+    // uno dentro l'altro, e non farne sparire uno.
     /// **Un termine non si sovrappone a se stesso.** `aa` dentro `aaaa` sono
     /// due punti a cui saltare, non tre: la scansione riparte dopo la fine di
     /// ciò che ha trovato. Il `dedup` qui non serve a niente — gli span
@@ -419,13 +419,13 @@ mod tests {
             spans.windows(2).all(|w| w[0].end <= w[1].start),
             "two occurrences of the same term do not overlap: {spans:?}"
         );
-    // sovrapposti non sono uguali, quindi passerebbero interi.
+        // sovrapposti non sono uguali, quindi passerebbero interi.
         let ruler = "|-----|";
         let dashes = locate(ruler, &["--".to_string()]);
         assert_eq!(dashes, vec![Span::new(1, 3), Span::new(3, 5)]);
     }
 
-        // E il caso vero che si vede in un vault: i separatori di una tabella.
+    // E il caso vero che si vede in un vault: i separatori di una tabella.
     /// L'altro verso della stessa riga: riparando la sovrapposizione **dentro**
     /// un termine non si deve perdere quella **fra** termini diversi, che è
     /// voluta. Sta accanto a
@@ -461,7 +461,10 @@ mod tests {
     fn accent_encoding_does_not_hide_a_word() {
         let composed_text = "Il caffè è pronto";
         let decomposed_text = "Il caffe\u{300} e\u{300} pronto";
-        assert_ne!(composed_text, decomposed_text, "otherwise the two forms prove nothing");
+        assert_ne!(
+            composed_text, decomposed_text,
+            "otherwise the two forms prove nothing"
+        );
 
         for (haystack, needle) in [
             (composed_text, "caffè"),
@@ -471,7 +474,7 @@ mod tests {
         ] {
             let spans = locate(haystack, &[needle.to_string()]);
             assert_eq!(spans.len(), 1, "`{needle}` is not found in `{haystack}`");
-    // sta qui perché `prefix_len_ci` è privata, e privata resta.
+            // sta qui perché `prefix_len_ci` è privata, e privata resta.
             // Lo span è in byte del **sorgente**: la fetta che ritaglia è la
             let slice = &haystack[spans[0].start..spans[0].end];
             assert_eq!(
@@ -481,7 +484,7 @@ mod tests {
             );
         }
 
-            // parola come sta nel file, non una copia normalizzata.
+        // parola come sta nel file, non una copia normalizzata.
         // E il verso che protegge: comporre non fonde un accento con la sua
         assert!(locate("il pero in giardino", &["pero\u{300}".to_string()]).is_empty());
         assert!(locate("però", &["pero".to_string()]).is_empty());
@@ -498,7 +501,7 @@ mod tests {
         assert_eq!(locate(&source, &["a".to_string()]).len(), MAX_PER_DOC);
     }
 
-        // assenza. `pero` e `però` restano due parole, come dice `locate`.
+    // assenza. `pero` e `però` restano due parole, come dice `locate`.
     /// **Il tetto è del documento, non del termine.** Ogni termine smette di
     /// cercare dopo [`MAX_PER_DOC`] occorrenze — è ciò che impedisce a una
     /// parola comune di far percorrere una nota lunga per intero — e la
@@ -517,7 +520,7 @@ mod tests {
             spans.iter().any(|s| s.start == rare),
             "the rare term occurrence is among the first {MAX_PER_DOC} positions"
         );
-    // tetto applicato male lo perderebbe.
+        // tetto applicato male lo perderebbe.
         assert!(spans.windows(2).all(|w| w[0].start < w[1].start));
     }
 }

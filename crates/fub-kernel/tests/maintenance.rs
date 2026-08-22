@@ -338,7 +338,10 @@ fn empty_the_record_and_say_how_many_rows() {
     ws.rename_document(&DocId::new("Due.md"), &DocId::new("Tre.md"))
         .expect("rinomina");
     let before = ws.journal().expect("registro").records.len();
-    assert!(before >= 2, "il registro ha delle righe da perdere: {before}");
+    assert!(
+        before >= 2,
+        "il registro ha delle righe da perdere: {before}"
+    );
 
     let outcome = ws
         .invoke_command(

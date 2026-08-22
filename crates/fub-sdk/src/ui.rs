@@ -48,10 +48,7 @@ pub fn row_with_datum(
     UiNode::list_item(
         title,
         subtitle,
-        Some(ActionRef::with(
-            action,
-            serde_json::json!({ field: value }),
-        )),
+        Some(ActionRef::with(action, serde_json::json!({ field: value }))),
     )
     .with_key(value)
 }

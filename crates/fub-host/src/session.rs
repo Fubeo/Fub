@@ -598,10 +598,8 @@ impl Host {
         // cosa questa macchina ha già visto — e uno store di configurazione che
         // leggesse il registro dei vault per rispondere a una lettura sarebbe il
         // kernel che conosce l'installazione.
-        let suspended = crate::settings::keys_to_watch(
-            &ws.vault_keybindings(),
-            &self.vaults.seen_keys(&root),
-        );
+        let suspended =
+            crate::settings::keys_to_watch(&ws.vault_keybindings(), &self.vaults.seen_keys(&root));
         ws.suspend_settings(suspended);
 
         let workspace = Custody::new("il vault aperto", ws);
@@ -1198,8 +1196,11 @@ impl Host {
         let mut rows = self.machine.entries();
         let all_catalogs = crate::settings::core_catalog_assembled();
         let locale = self.system_locale.get();
-        let strings =
-            fub_abi::text::Strings::new(&all_catalogs, crate::settings::CORE_DEFAULT_LOCALE, &locale);
+        let strings = fub_abi::text::Strings::new(
+            &all_catalogs,
+            crate::settings::CORE_DEFAULT_LOCALE,
+            &locale,
+        );
         for row in &mut rows {
             strings.localize(row);
         }
@@ -1446,10 +1447,7 @@ impl Host {
 
     /// Il vault corrente, se ce n'è uno.
     pub fn current(&self) -> Option<Utf8PathBuf> {
-        self.sessions
-            .read()
-            .ok()
-            .and_then(|s| s.current().cloned())
+        self.sessions.read().ok().and_then(|s| s.current().cloned())
     }
 
     /// Rende corrente un vault già aperto.

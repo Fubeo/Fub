@@ -255,10 +255,14 @@ fn granted(host: &Host, plugin: &str, permission: &str) -> bool {
 /// anche trovandole in un commento.
 #[test]
 fn the_permissions_are_the_same_of_here_and_of_the() {
-    let permissions_ts =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/ui/permissions.ts");
-    let source = std::fs::read_to_string(&permissions_ts)
-        .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", permissions_ts.display()));
+    let permissions_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../frontend/src/ui/permissions.ts");
+    let source = std::fs::read_to_string(&permissions_ts).unwrap_or_else(|and| {
+        panic!(
+            "the shell no longer has {}: {and}",
+            permissions_ts.display()
+        )
+    });
 
     let list = source
         .split_once("export const PERMISSIONS = [")
@@ -663,8 +667,8 @@ fn the_key_of_the_theme_and_the_same_of_here_and_of_the() {
 /// è peggio di un interruttore che non c'è, perché è una promessa.
 #[test]
 fn the_key_of_the_memory_and_the_same_of_here_and_of_the() {
-    let recent_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/src/state/recent.ts");
+    let recent_ts =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/state/recent.ts");
     let source = std::fs::read_to_string(&recent_ts)
         .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", recent_ts.display()));
 
@@ -743,11 +747,7 @@ fn the_window_of_the_record_does_falls_the_rows_old() {
     std::fs::create_dir_all(v.root.join(".fub")).expect("the folder");
     std::fs::write(
         v.root.join(".fub/journal.jsonl"),
-        format!(
-            "{}{}",
-            row(now - old, "vecchia.md"),
-            row(now, "new.md")
-        ),
+        format!("{}{}", row(now - old, "vecchia.md"), row(now, "new.md")),
     )
     .expect("the journal");
 

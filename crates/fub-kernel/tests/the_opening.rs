@@ -309,6 +309,7 @@ fn every_discard_exits_as_fault_after_that_the_vault_is_and_said_open() {
 
 // --- il confine: cosa resta fatale -----------------------------------------
 
+#[cfg(unix)]
 #[test]
 fn a_vault_that_not_is_scans_not_is_opens_a_metadata() {
     use std::os::unix::fs::PermissionsExt;

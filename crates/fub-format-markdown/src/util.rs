@@ -35,7 +35,6 @@ pub fn longest_run(s: &str, c: char) -> usize {
     max
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

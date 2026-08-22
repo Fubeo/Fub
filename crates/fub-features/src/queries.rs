@@ -275,7 +275,11 @@ fn command_then_tree(
     }
 }
 
-fn tree_helper(view: &str, host: &dyn ReadApi, warning: Option<Text>) -> Result<UiNode, PluginError> {
+fn tree_helper(
+    view: &str,
+    host: &dyn ReadApi,
+    warning: Option<Text>,
+) -> Result<UiNode, PluginError> {
     if view == COLLECTIONS_VIEW {
         collections_tree(host, warning)
     } else {
@@ -595,7 +599,7 @@ fn id_from(args: Args<'_>) -> Result<String, PluginError> {
 
 fn expr_from(args: Args<'_>, raw: &serde_json::Value) -> Result<QueryExpr, PluginError> {
     if let Some(v) = raw.get(EXPR) {
-        if !v.is_null() && !(v.is_string() && v.as_str().is_some_and(str::is_empty)) {
+        if !(v.is_null() || v.as_str().is_some_and(str::is_empty)) {
             return parse_expr(v);
         }
     }

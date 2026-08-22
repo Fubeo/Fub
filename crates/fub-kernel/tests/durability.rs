@@ -48,8 +48,8 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_kernel::storage::{
-    folders_to_sync, how_to_write, what_c_and, sync_folder, WriteMode,
-    FsStorage, FileNames, VaultStorage,
+    folders_to_sync, how_to_write, sync_folder, what_c_and, FileNames, FsStorage, VaultStorage,
+    WriteMode,
 };
 
 fn bench() -> (tempfile::TempDir, Utf8PathBuf) {
@@ -198,10 +198,7 @@ fn a_a_file_that_not_c_and_not_is_asks_nothing() {
         .unwrap();
 
     assert_eq!(how, WriteMode::Replacing);
-    assert!(
-        !asked.get(),
-        "nessuno ha contato i nomi di ciò che non c'è"
-    );
+    assert!(!asked.get(), "nessuno ha contato i nomi di ciò che non c'è");
     assert_eq!(std::fs::read(&notes).unwrap(), b"prima");
 }
 

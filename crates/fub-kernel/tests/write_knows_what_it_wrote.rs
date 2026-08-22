@@ -236,7 +236,9 @@ impl Bench {
         else {
             panic!("expected entry store");
         };
-        page.items.into_iter().find(|and| and.id.as_str() == "nota.txt")
+        page.items
+            .into_iter()
+            .find(|and| and.id.as_str() == "nota.txt")
     }
 }
 
@@ -401,7 +403,11 @@ fn the_echo_is_not_reparsed_even_without_a_plan() {
             .expect("synchronization succeeds"),
         "nothing changed, and `sync_path` must say so"
     );
-    assert_eq!(bench.parse_count(), 0, "and it must not discover this by re-parsing");
+    assert_eq!(
+        bench.parse_count(),
+        0,
+        "and it must not discover this by re-parsing"
+    );
     assert!(bench.events().is_empty());
 }
 
