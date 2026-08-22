@@ -61,8 +61,8 @@ try {
     if (aggiungi.status !== 0) {
       console.error("impossibile includere docs/todo.md nel controllo dei link");
       rosso = 1;
-    } else {
-      rosso ||= esegui(radice, envIndice);
+    } else if (esegui(radice, envIndice) !== 0) {
+      rosso = 1;
     }
   }
 } finally {
@@ -82,7 +82,7 @@ try {
 // tempo erano trattate tutte come registri storici. Oggi roadmap e milestone
 // sono invece documentazione viva: eseguirle come radice le porta dentro senza
 // cambiare la semantica del motore e senza trascinare con loro `decisions/`.
-rosso ||= esegui(path.join(docs, "roadmap"));
-rosso ||= esegui(path.join(docs, "milestones"));
+if (esegui(path.join(docs, "roadmap")) !== 0) rosso = 1;
+if (esegui(path.join(docs, "milestones")) !== 0) rosso = 1;
 
 process.exit(rosso ? 1 : 0);
