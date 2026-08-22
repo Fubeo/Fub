@@ -129,3 +129,49 @@ export async function openPage(browser, light) {
   await page.clock.setFixedTime(MOMENT);
   return page;
 }
+
+/// Porta la pagina allo stato di una scena, e la lascia ferma.
+///
+/// L'ordine è quello che è per una ragione ciascuno: il montaggio prima dei
+/// gesti (un click su un bottone che non c'è ancora fallisce), i caratteri
+/// prima dello scatto ma **anche** dopo i gesti (un pannello che si apre può
+/// chiedere un peso che non era servito prima), la quiete per ultima perché è
+/// l'unica cosa che tocca la pagina e deve toccarla il meno possibile.
+export async function prepareScene(page, scene, light, base, url) {
+  await page.goto(url(base, scene, light), { waitUntil: "load" });
+  await page.waitForFunction(() => document.documentElement.dataset.bench === "ready", null, {
+    timeout: 30_000,
+  });
+  await page.evaluate(() => document.fonts.ready);
+  await scene.prepare(page);
+  await page.evaluate(() => document.fonts.ready);
+  await page.addStyleTag({ content: QUIET });
+  // Un fotogramma dopo l'ultimo gesto: il layout è già calcolato, ma ciò che è
+  // stato scritto adesso deve ancora essere dipinto.
+  await page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+}
+
+/// Uno scatto che è **uguale a sé stesso**.
+///
+/// Fotografa, aspetta, rifotografa, e accetta solo quando i due byte a byte
+/// coincidono. Non è prudenza: è la sola misura che distingua «il tema è
+/// cambiato» da «questa scena non sta ferma», e senza di lei la seconda si
+/// presenta come la prima — un rosso che chi lo vede impara a rilanciare finché
+/// non passa, che è il momento in cui il banco ha smesso di servire.
+///
+/// Se dopo `tentativi` giri la scena ancora si muove, si alza: c'è
+/// un'animazione che nessuno ha dichiarato, e va trovata, non tollerata.
+export async function stillShot(page, attempts = 4) {
+  let before = await page.screenshot();
+  for (let i = 0; i < attempts; i += 1) {
+    await page.evaluate(
+      () => new Promise((r) => setTimeout(() => requestAnimationFrame(r), 250)),
+    );
+    const after = await page.screenshot();
+    if (before.equals(after)) return after;
+    before = after;
+  }
+  throw new Error("la scena non sta ferma: due scatti di fila non coincidono mai");
+}
