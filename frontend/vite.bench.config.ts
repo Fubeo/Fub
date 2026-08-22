@@ -59,7 +59,7 @@ function seamForBench(): Plugin {
     // oppure aspettare un elemento a caso, che vuol dire una condizione diversa
     // per ogni scena e nessuna che valga per la prossima.
     //
-    // La risposta c'era già: `main.ts` **esporta** `avvio`, e il commento che lo
+    // La risposta c'era già: `main.ts` **esporta** `startup`, e il commento che lo
     // esporta dice esattamente perché — «senza questa riga l'avvio non è
     // osservabile». Qui la si osserva. Il secondo `import` dello stesso modulo
     // non lo esegue una seconda volta: ESM restituisce l'istanza che c'è già,
@@ -72,8 +72,8 @@ function seamForBench(): Plugin {
       return html.replace(
         "</body>",
         `  <script type="module">
-      import { avvio } from "/src/main.ts";
-      await avvio;
+      import { startup } from "/src/main.ts";
+      await startup;
       document.documentElement.dataset.bench = "ready";
     </script>
   </body>`,
