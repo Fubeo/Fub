@@ -92,4 +92,4 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m "fix(ci): riallinea MSRV, guard, formato e baseline"
-          git push origin HEAD:main
+          git push origin HEAD:${GITHUB_REF_NAME}
