@@ -440,7 +440,7 @@ Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
   — una: i **nomi dei mesi**. `5 luglio 2026` non è un ordine di campi ma una
   tabella per lingua, e le tabelle non ci sono. La casella aspetta un secondo
   cliente per quelle tabelle.
-- [§15.4](roadmap/15-il-disco.md#154-il-confine-wasm-del-data-host) — una: il **resto WASM** del confine dati. Il `HostApi` nativo espone `cache_read`/`cache_write` e lo spazio `.fub/plugins/<id>/`; `fub-wasm-host` non linka `host-data-read`/`host-data-write`. Un componente che le importa viene rifiutato e il rifiuto le nomina. Innesco: prima di M5.
+- [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe) — una: il **resto WASM** del confine dati. Il `HostApi` nativo espone `cache_read`/`cache_write` e lo spazio `.fub/plugins/<id>/`; `fub-wasm-host` non linka `host-data-read`/`host-data-write`. Un componente che le importa viene rifiutato e il rifiuto le nomina. Innesco: prima di M5.
 - [§15.6](roadmap/15-il-disco.md#156-la-politica-di-esclusione-è-una-costante-di-compilazione)
   — due. La prima è leggere il `.gitignore`: la
   [0110](decisions/0110-la-struttura-non-e-una-preferenza.md) ha fatto della
