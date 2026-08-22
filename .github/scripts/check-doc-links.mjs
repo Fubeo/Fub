@@ -6,6 +6,8 @@
 // quando un rimando marcisce. I verbali in `docs/decisions/` restano fuori:
 // sono fotografie datate. `todo.md`, `roadmap/` e `milestones/` invece
 // descrivono lo stato corrente e non possono avere una zona cieca.
+// I tre passaggi sono indipendenti e girano sempre tutti: un rosso in `todo.md`
+// non deve nascondere un secondo link rotto nella roadmap o nelle milestone.
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
