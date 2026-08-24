@@ -67,9 +67,8 @@ const BURST_CEILING: usize = 128;
 /// Accende il ponte: un thread che vive quanto il bus.
 ///
 /// Va acceso **dopo** la scansione iniziale e **prima** che il rilevatore possa
-/// emettere il primo evento: quel momento lo conosce solo chi apre, ed è il
-/// motivo per cui il sink è un trait dell'host e non un abbonamento che il
-/// chiamante si prende da sé.
+/// emettere il primo evento. L'apertura prepara prima un subscriber temporaneo,
+/// così il live subscriber può nascere senza perdere cambiamenti esterni.
 pub(crate) fn spawn(rx: Subscription, sink: Arc<dyn EventSink>) {
     std::thread::spawn(move || {
         // Quanti notice l'uscita non ha preso, e nessuno ha ancora saputo. Il
