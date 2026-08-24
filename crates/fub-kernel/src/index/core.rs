@@ -834,6 +834,22 @@ impl CoreIndex {
         } else {
             self.observed_in_the_own_instant.insert(entry.id.clone());
         }
+        self.install_entry(entry);
+    }
+
+    /// Installa il risultato della scansione dopo che il piano ha letto il
+    /// contenuto, senza rivalutare l'orologio.
+    ///
+    /// È la seconda applicazione della stessa osservazione di
+    /// [`set_entry`](Self::set_entry): il marker racily-clean appartiene alla
+    /// scansione iniziale e deve sopravvivere anche se il parsing ha richiesto
+    /// più tempo della soglia. Questo metodo non va usato per eventi o nuove
+    /// osservazioni dal disco.
+    pub(crate) fn set_entry_from_scan(&mut self, entry: VaultEntry) {
+        self.install_entry(entry);
+    }
+
+    fn install_entry(&mut self, entry: VaultEntry) {
         self.names.insert_entry(&entry.id, entry.kind);
         self.entries.insert(entry.id.clone(), entry);
     }
