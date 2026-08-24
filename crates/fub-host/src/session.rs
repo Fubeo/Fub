@@ -576,7 +576,7 @@ impl Host {
     }
 
     /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):
-    /// monta, prepara il subscriber temporaneo, avvia il rilevatore, scansiona,
+    /// monta, prende il lock di apertura, avvia il rilevatore, scansiona,
     /// registra il subscriber live, accende il ponte e avvia il pool, e
     /// mette la sessione nella mappa. **Non decide chi è corrente**: quello lo
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
@@ -621,37 +621,18 @@ impl Host {
 
         let workspace = Custody::new("il vault aperto", ws);
 
-        // Un subscriber temporaneo si iscrive **prima del rilevatore e della
-        // scansione**. Non ha un sink: serve solo a tenere vivo il conto del bus
-        // finché il subscriber live può nascere sotto lo stesso write-lock della
-        // prima fase.
-        let temporary = if self.sink.is_some() {
-            let ws = workspace.read()?;
-            Some(ws.bus().subscribe())
-        } else {
-            None
-        };
-
-        // Il rilevatore si avvia **prima della scansione**: ogni cambiamento
-        // caduto prima è visto dalla scansione, e ogni cambiamento caduto durante
-        // o dopo entra nella coda del debouncer del rilevatore. La finestra fra
-        // scansione e watcher non esiste più per costruzione, eliminando la
-        // seconda camminata sincrona del disco (`catch_up`).
-        let watching = workspace.read()?.watch_flag();
-        let watcher = self
-            .watcher
-            .start(&root, workspace.clone(), watching)
-            .map_err(|and| PluginError::Io(and.into()))?;
-
-        // **La prima fase, e solo quella** (§15.7): si guarda cosa c'è, e da
-        // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
-        // intero — la scansione — e non i suoi documenti: quelli che non si
-        // leggono diventano scarti, e li raccoglie la seconda fase.
-        let (work, index_job, work_total, live) = {
-            // La scansione, il subscriber live e JobStarted sono una sola
-            // sezione: un batch del watcher che attende qui non può precedere
-            // il live subscriber, e VaultOpened resta solo sul temporaneo.
+        // Il rilevatore parte **sotto il write-lock di apertura**. Una factory
+        // può quindi avviare un thread che tenta subito una lettura: quel
+        // thread resta fermo finché scansione, subscriber live e JobStarted
+        // non sono tutti installati. `WatcherFactory::start` non deve dunque
+        // prendere sincronicamente questo lock, ma solo avviare il rilevatore.
+        let (work, index_job, work_total, live, watcher) = {
             let mut ws = workspace.write()?;
+            let watching = ws.watch_flag();
+            let watcher = self
+                .watcher
+                .start(&root, workspace.clone(), watching)
+                .map_err(|and| PluginError::Io(and.into()))?;
             let work = ws.scan_vault().map_err(PluginError::from)?;
             let work_total = work.total();
             let live = if self.sink.is_some() {
@@ -660,10 +641,9 @@ impl Host {
                 None
             };
             let index_job = ws.begin_index_job();
-            (work, index_job, work_total, live)
+            (work, index_job, work_total, live, watcher)
         };
 
-        drop(temporary);
         if let (Some(sink), Some(live)) = (&self.sink, live) {
             crate::bridge::spawn(live, sink.clone());
         }
