@@ -42,6 +42,12 @@ use fub_abi::DocId;
 use fub_kernel::storage::{FsStorage, MemStorage, VaultStorage};
 use fub_kernel::Vault;
 
+fn mem_root() -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8")
+        .join("vault-storage")
+}
+
 /// Un supporto da provare: come si chiama nei messaggi, cosa è, dove sta la sua
 /// radice, e la `TempDir` che va tenuta viva finché dura il giro — che è la
 /// ragione per cui viaggia insieme al supporto invece di essere una variabile
@@ -61,7 +67,7 @@ fn storages() -> Vec<Bench> {
         .to_owned();
     vec![
         ("fs", Arc::new(FsStorage), root, Some(tmp)),
-        ("mem", Arc::new(MemStorage::new()), "/vault".into(), None),
+        ("mem", Arc::new(MemStorage::new()), mem_root(), None),
     ]
 }
 
@@ -372,8 +378,9 @@ fn a_symlink_is_not_the_thing_it_points_to() {
 #[test]
 fn a_full_vault_on_a_storage_that_is_not_the_disk() {
     let storage = Arc::new(MemStorage::new());
-    let vault = Vault::on("/vault", Arc::clone(&storage) as Arc<dyn VaultStorage>)
-        .expect("the vault opens");
+    let root = mem_root();
+    let vault =
+        Vault::on(&root, Arc::clone(&storage) as Arc<dyn VaultStorage>).expect("the vault opens");
 
     let notes = DocId::new("projects/Idea.md");
     vault.write(&notes, "# Idea\n").unwrap();
@@ -416,7 +423,7 @@ fn a_full_vault_on_a_storage_that_is_not_the_disk() {
     assert_eq!(vault.empty_trash().unwrap(), 1);
     assert!(vault.list_trash().unwrap().is_empty());
     assert!(
-        !storage.exists(Utf8Path::new("/vault/.fub/data/trash")),
+        !storage.exists(&root.join(".fub/data/trash")),
         "the sidecars leave with the trash"
     );
 }
