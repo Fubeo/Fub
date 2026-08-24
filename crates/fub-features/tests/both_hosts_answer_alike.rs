@@ -92,12 +92,29 @@ struct WriteRejectingStorage {
 
 impl WriteRejectingStorage {
     fn no(&self, path: &Utf8Path) -> Option<std::io::Error> {
-        path.as_str().contains(&self.rejects).then(|| {
-            std::io::Error::new(
-                std::io::ErrorKind::PermissionDenied,
-                "il supporto dice di no",
-            )
-        })
+        let rejected_components: Vec<_> = Utf8Path::new(&self.rejects)
+            .components()
+            .filter_map(|component| match component {
+                camino::Utf8Component::Normal(name) => Some(name),
+                _ => None,
+            })
+            .collect();
+        let path_components: Vec<_> = path
+            .components()
+            .filter_map(|component| match component {
+                camino::Utf8Component::Normal(name) => Some(name),
+                _ => None,
+            })
+            .collect();
+        path_components
+            .windows(rejected_components.len())
+            .any(|window| window == rejected_components.as_slice())
+            .then(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "il supporto dice di no",
+                )
+            })
     }
 }
 

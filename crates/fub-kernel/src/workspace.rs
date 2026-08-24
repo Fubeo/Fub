@@ -2661,7 +2661,7 @@ impl Workspace {
         // «un salvataggio non torna a chiedere al disco cosa ha appena
         // scritto», che ha un banco che conta gli `stat` e li vuole zero.
         // Un file che **non c'è** non è un errore da propagare: è una
-        let (esisteva, from) = match base {
+        let (id, esisteva, from) = match base {
             WriteBase::DescendsFrom(expected) => {
                 // base che non combacia — chi scrive credeva di riscrivere
                 // qualcosa che nel frattempo è stato cestinato, e ha diritto
@@ -2678,16 +2678,41 @@ impl Workspace {
                 if now.as_ref() != Some(&expected) {
                     return Err(KernelError::Stale(id.to_string()));
                 }
-                (true, now)
+                (id.clone(), true, now)
             }
             WriteBase::Dictated => {
                 let in_store = self.indexes.core.entries.get(id);
                 let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
-                let esisteva = in_store.is_some() || self.docs.vault.stat(id).is_some();
-                (esisteva, fingerprint)
+                // An indexed, already-portable id is the ordinary save path:
+                // the index is authoritative for that unchanged spelling, so
+                // keep the no-stat fast path. Imported names that would be
+                // changed or rejected by `new_doc_id` must ask the disk: a
+                // stale index cannot prove that such a file still exists.
+                let candidate = new_doc_id(id.as_str());
+                let unchanged_portable =
+                    in_store.is_some() && candidate.as_ref().is_ok_and(|candidate| candidate == id);
+                let esisteva = unchanged_portable || self.docs.vault.stat(id).is_some();
+                // A dictated write is also the path used by importers and
+                // restores. Apply the stricter naming rule only when this
+                // call is actually creating a new document: an imported file
+                // may already have a name that is not portable to every OS,
+                // and writing it back must preserve that existing name.
+                if esisteva {
+                    (id.clone(), true, fingerprint)
+                } else {
+                    let id = candidate?;
+                    // `new_doc_id` may normalize the name (NFC and trimmed
+                    // segments) onto a file that is already on disk.  The
+                    // stale index is not evidence that this normalized target
+                    // exists: only the storage stat can classify this write.
+                    let in_store = self.indexes.core.entries.get(&id);
+                    let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
+                    let esisteva = self.docs.vault.stat(&id).is_some();
+                    (id, esisteva, esisteva.then_some(fingerprint).flatten())
+                }
             }
         };
-        let to = self.write_source(id, source)?;
+        let to = self.write_source(&id, source)?;
         self.record(if esisteva {
             JournalOp::Written {
                 doc: id.clone(),

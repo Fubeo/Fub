@@ -32,7 +32,7 @@ use camino::Utf8PathBuf;
 use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::model::DocId;
-use fub_kernel::{JournalOp, Workspace};
+use fub_kernel::{JournalOp, KernelError, Workspace};
 use fub_testkit::Bench;
 
 fn doc(id: &str) -> DocId {
@@ -120,6 +120,42 @@ fn writing_over_a_file_that_arrived_from_outside_is_not_a_creation() {
         "that file was there, and calling it new gives the journal an undo that \
          trashes someone else's work: {ops:?}"
     );
+}
+
+/// La forma di un nome nuovo può normalizzarsi verso un file che c'è già.
+/// Anche in quel caso la riga deve dire `Written`: `Created` renderebbe
+/// annullabile una scrittura che non ha creato il documento.
+#[test]
+fn a_normalized_name_collision_is_not_a_creation() {
+    let mut bench = Bench::new().mounts();
+    bench.write("nota.md", "already there");
+
+    bench
+        .write_document(&doc("nota.md "), "my save", WriteBase::Dictated)
+        .unwrap();
+
+    let ops = ops(&bench);
+    assert!(
+        matches!(ops[0], JournalOp::Written { ref doc, .. } if doc.as_str() == "nota.md"),
+        "the normalized target already existed: {ops:?}"
+    );
+}
+
+/// Un nome non portabile può essere stato importato e indicizzato, ma se il
+/// file sparisce prima del watcher non può restare una prova di esistenza:
+/// una nuova scrittura deve tornare al giudizio `Naming::New`.
+#[test]
+fn a_removed_indexed_nonportable_name_is_not_written_back() {
+    let mut bench = Bench::new()
+        .with_file(".hidden.md", "arrived from outside")
+        .mounts();
+    std::fs::remove_file(bench.root().join(".hidden.md")).unwrap();
+
+    let error = bench
+        .write_document(&doc(".hidden.md"), "a new save", WriteBase::Dictated)
+        .unwrap_err();
+    assert!(matches!(error, KernelError::BadName { .. }), "{error:?}");
+    assert!(ops(&bench).is_empty(), "the rejected write was journaled");
 }
 
 /// Il rilevatore non scrive nel registro: quella mutazione non è nostra, e

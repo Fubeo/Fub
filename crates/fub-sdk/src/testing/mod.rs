@@ -741,6 +741,15 @@ impl VaultWrite for MemoryHost {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let id = fenced_doc_id(id)?;
+        let mut docs = self.docs.lock().unwrap();
+        let id = if matches!(&base, WriteBase::Dictated) && !docs.contains_key(id.as_str()) {
+            // `Dictated` creates when the document is absent, so it must obey
+            // the same portability rule as `create_document`. Existing
+            // imported names remain addressable verbatim.
+            born_here(&id)?
+        } else {
+            id
+        };
         // **Nessuno serve questo formato.** Nel kernel è il primo modo in cui
         // una scrittura può finire senza che il chiamante abbia sbagliato
         // niente — il parse che precede il disco non trova un provider per
@@ -752,7 +761,6 @@ impl VaultWrite for MemoryHost {
                 format!("nessun provider serve il formato di `{id}`").into(),
             ));
         }
-        let mut docs = self.docs.lock().unwrap();
         if let WriteBase::DescendsFrom(wait_for) = base {
             let now = docs
                 .get(id.as_str())
