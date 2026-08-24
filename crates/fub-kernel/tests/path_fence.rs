@@ -197,6 +197,7 @@ fn a_restore_does_not_land_where_the_scan_does_not_watch() {
 /// nota che si chiamava `CON.txt` — legale su Linux, impossibile su Windows —
 /// deve poter tornare, o si perde un file per un nome che il vault conteneva
 /// già.
+#[cfg(not(windows))]
 #[test]
 fn a_restore_to_its_place_brings_back_a_name_that_would_not_be_created() {
     let bench = Bench::new();

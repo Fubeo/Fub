@@ -2682,7 +2682,6 @@ impl Workspace {
             }
             WriteBase::Dictated => {
                 let in_store = self.indexes.core.entries.get(id);
-                let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
                 // An indexed, already-portable id is the ordinary save path:
                 // the index is authoritative for that unchanged spelling, so
                 // keep the no-stat fast path. Imported names that would be
@@ -2691,14 +2690,41 @@ impl Workspace {
                 let candidate = new_doc_id(id.as_str());
                 let unchanged_portable =
                     in_store.is_some() && candidate.as_ref().is_ok_and(|candidate| candidate == id);
-                let esisteva = unchanged_portable || self.docs.vault.stat(id).is_some();
+                // Su Windows un nome con spazio finale (`nota.md `) risolve
+                // allo stesso file di `nota.md`: se si guarda prima il nome
+                // grezzo, si conserva però l'estensione `md ` e il provider
+                // non viene trovato. Il target normalizzato ha precedenza se è
+                // l'unico esistente o se i due nomi indicano lo stesso file;
+                // due file distinti conservano invece l'import non portabile.
+                let normalized_exists = !unchanged_portable
+                    && candidate.as_ref().is_ok_and(|candidate| {
+                        candidate != id && self.docs.vault.stat(candidate).is_some()
+                    });
+                let raw_exists = !unchanged_portable && self.docs.vault.stat(id).is_some();
+                let normalized_aliases_raw = normalized_exists
+                    && raw_exists
+                    && candidate
+                        .as_ref()
+                        .is_ok_and(|candidate| self.docs.vault.same_file(id, candidate));
+                let use_normalized = normalized_exists && (!raw_exists || normalized_aliases_raw);
+                let esisteva = unchanged_portable || normalized_exists || raw_exists;
                 // A dictated write is also the path used by importers and
                 // restores. Apply the stricter naming rule only when this
                 // call is actually creating a new document: an imported file
                 // may already have a name that is not portable to every OS,
                 // and writing it back must preserve that existing name.
                 if esisteva {
-                    (id.clone(), true, fingerprint)
+                    let id = if use_normalized {
+                        candidate
+                            .as_ref()
+                            .expect("a normalized existing target")
+                            .clone()
+                    } else {
+                        id.clone()
+                    };
+                    let in_store = self.indexes.core.entries.get(&id);
+                    let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
+                    (id, true, fingerprint)
                 } else {
                     let id = candidate?;
                     // `new_doc_id` may normalize the name (NFC and trimmed
