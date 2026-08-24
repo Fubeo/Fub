@@ -265,8 +265,11 @@ fn a_destination_that_not_and_a_folder_not_is_removes() {
     ws.rename_document(&old, &new).expect("rinomina");
 
     let warnings = ws.doc_data_warnings();
+    let obstacle_path = obstacle_path.as_str().replace('\\', "/");
     assert!(
-        warnings.iter().any(|a| a.contains(obstacle_path.as_str())),
+        warnings
+            .iter()
+            .any(|warning| warning.replace('\\', "/").contains(&obstacle_path)),
         "una migrazione che non è potuta avvenire dice **cosa** l'ha fermata, \
          e dove andarlo a guardare: {warnings:?}"
     );
