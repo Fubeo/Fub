@@ -312,7 +312,9 @@ pub trait VaultStorage: Send + Sync {
     /// per un file come per una cartella.
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()>;
 
-    /// Sposta un **file** soltanto se la destinazione non esiste.
+    /// Sposta un **file** soltanto se la destinazione non esiste. L'unica
+    /// eccezione è una correzione del caso sullo stesso nome (`nota` → `Nota`),
+    /// che alcuni filesystem espongono come destinazione già esistente.
     ///
     /// La verifica e la creazione della destinazione sono una sola operazione:
     /// un `exists` seguito da [`rename`](VaultStorage::rename) lascia fra le due
@@ -1027,6 +1029,17 @@ fn writable_folder(root: &Utf8Path) -> io::Result<()> {
     }
 }
 
+fn same_parent_resolution_name(from: &Utf8Path, to: &Utf8Path) -> bool {
+    from != to
+        && from.parent() == to.parent()
+        && matches!(
+            (from.file_name(), to.file_name()),
+            (Some(a), Some(b))
+                if fub_abi::rules::path::resolution_key(a)
+                    == fub_abi::rules::path::resolution_key(b)
+        )
+}
+
 /// Le cartelle la cui **voce** cambia quando qualcosa si sposta o si toglie, e
 /// che quindi vanno sincronizzate perché la mossa sopravviva a un crash
 /// (difetto 0153).
@@ -1246,7 +1259,19 @@ impl VaultStorage for FsStorage {
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::hard_link(from, to)?;
+        if let Err(error) = std::fs::hard_link(from, to) {
+            // Su APFS/NTFS un rename che cambia solo il caso nomina la stessa
+            // voce: `hard_link` la vede già occupata, anche se non c'è un
+            // secondo file da proteggere: il primitive nativo sa aggiornare il
+            // nome della stessa voce senza creare un secondo inode.
+            if error.kind() == io::ErrorKind::AlreadyExists
+                && same_parent_resolution_name(from, to)
+                && self.same_file(from, to)
+            {
+                return self.rename(from, to);
+            }
+            return Err(error);
+        }
         // Se togliere la sorgente fallisce restano due nomi dello stesso inode:
         // è un errore, ma non si prova a cancellare `to`, perché un concorrente
         // potrebbe averlo già sostituito e il ripiego cancellerebbe i suoi byte.
@@ -2197,6 +2222,22 @@ mod tests {
         let root = Utf8Path::from_path(dir.path()).unwrap();
         a_rename_without_overwrite(&FsStorage, root);
         a_rename_without_overwrite(&MemStorage::new(), Utf8Path::new("/vault"));
+    }
+
+    #[test]
+    fn the_same_name_guard_is_local_to_one_folder() {
+        assert!(same_parent_resolution_name(
+            Utf8Path::new("/vault/nota.md"),
+            Utf8Path::new("/vault/Nota.md")
+        ));
+        assert!(!same_parent_resolution_name(
+            Utf8Path::new("/vault/nota.md"),
+            Utf8Path::new("/other/Nota.md")
+        ));
+        assert!(!same_parent_resolution_name(
+            Utf8Path::new("/vault/nota.md"),
+            Utf8Path::new("/vault/nota.txt")
+        ));
     }
 
     ///
