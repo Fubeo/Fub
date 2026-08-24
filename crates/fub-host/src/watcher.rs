@@ -72,7 +72,11 @@ pub trait VaultWatcher: Send + Sync {
 /// un vault: `Host::with_watcher` la prende una volta, e ogni apertura la usa.
 pub trait WatcherFactory: Send + Sync {
     /// Avvia il rilevamento su `root`, sincronizzando `workspace` a ogni
-    /// cambiamento.
+    /// cambiamento. L'apertura chiama questo metodo mentre tiene il write-lock
+    /// del workspace: `start` deve solo avviare il rilevatore e non può prendere
+    /// sincronicamente quel lock. I thread che consegnano cambiamenti possono
+    /// tentare subito la lettura; resteranno bloccati finché il subscriber live
+    /// non è registrato e il lock di apertura non viene rilasciato.
     ///
     /// `watching` è la bandiera del kernel (`Workspace::watch_flag`): chi
     /// guarda davvero la alza avviandosi e la abbassa quando smette. Chi non
