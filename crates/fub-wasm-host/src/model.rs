@@ -64,7 +64,7 @@ use crate::translate::to_span;
 /// Il presidio sta **qui** e non nel provider markdown perché il modello può
 /// arrivare da chiunque implementi `FormatProvider`: chi traduce è l'ultimo a
 /// poter dire di no prima che la ricorsione parta davvero.
-pub(crate) const MAX_DEPTH: u32 = 64;
+pub(crate) const MAX_DEPTH: u32 = rm::MAX_DOCUMENT_DEPTH;
 
 // ---------------------------------------------------------------------------
 // Il documento intero

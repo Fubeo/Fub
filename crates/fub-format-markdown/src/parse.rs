@@ -21,6 +21,8 @@ use fub_sdk::scan;
 
 use crate::offsets::Offsets;
 
+const MAX_DEPTH: u32 = fub_abi::model::MAX_DOCUMENT_DEPTH;
+
 /// Costruisce le opzioni comrak per il dialetto Obsidian.
 pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     let mut or = Options::default();
@@ -60,6 +62,7 @@ struct Acc {
     outline: Vec<Heading>,
     anchors: Vec<Anchor>,
     text: String,
+    depth_error: bool,
     /// Chi assegna gli slug dei titoli, per la durata di **questo** documento:
     /// due `## Note` non possono ricevere lo stesso `id` (vedi `HeadingSlugs`).
     slugs: HeadingSlugs,
@@ -111,7 +114,7 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             }
             continue;
         }
-        let Some(block) = convert_block(child, source, &offsets, ctx, &mut acc) else {
+        let Some(block) = convert_block(child, source, &offsets, ctx, &mut acc, 1) else {
             continue;
         };
         // L'ancora su riga propria (`^abc` da solo, subito dopo un blocco) è la
@@ -128,6 +131,12 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
             }
         }
         body.push(block);
+    }
+
+    if acc.depth_error {
+        return Err(FormatError::Parse(format!(
+            "annidamento del documento oltre {MAX_DEPTH} livelli"
+        )));
     }
 
     // Le definizioni recuperate entrano nell'albero **dopo** la conversione, nel
@@ -321,7 +330,13 @@ fn convert_block<'a>(
     offsets: &Offsets<'_>,
     ctx: &ParseContext,
     acc: &mut Acc,
+    depth: u32,
 ) -> Option<Block> {
+    if depth > MAX_DEPTH {
+        acc.depth_error = true;
+        return None;
+    }
+    let down = depth.saturating_add(1);
     let span = span_of(node, offsets);
     let value = node.data.borrow().value.clone();
     match value {
@@ -330,8 +345,16 @@ fn convert_block<'a>(
             // poi da testo e inline: `^abc` è indirizzo, non contenuto.
             let anchor = trailing_anchor(source, span, acc);
             let mut text = String::new();
-            let inlines =
-                block_inlines(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
+            let inlines = block_inlines(
+                node,
+                source,
+                offsets,
+                ctx,
+                acc,
+                anchor.as_ref(),
+                &mut text,
+                down,
+            );
             acc.text.push_str(&text);
             acc.text.push('\n');
             // Un'ancora scritta dall'utente è un id dichiarato: la generazione
@@ -369,8 +392,16 @@ fn convert_block<'a>(
         NodeValue::Paragraph => {
             let anchor = trailing_anchor(source, span, acc);
             let mut text = String::new();
-            let inlines =
-                block_inlines(node, source, offsets, ctx, acc, anchor.as_ref(), &mut text);
+            let inlines = block_inlines(
+                node,
+                source,
+                offsets,
+                ctx,
+                acc,
+                anchor.as_ref(),
+                &mut text,
+                down,
+            );
             let ptext = text.trim().to_string();
             acc.text.push_str(&ptext);
             acc.text.push('\n');
@@ -393,7 +424,7 @@ fn convert_block<'a>(
                 };
                 let mut blocks = Vec::new();
                 for b in item.children() {
-                    if let Some(block) = convert_block(b, source, offsets, ctx, acc) {
+                    if let Some(block) = convert_block(b, source, offsets, ctx, acc, down) {
                         blocks.push(block);
                     }
                 }
@@ -447,7 +478,7 @@ fn convert_block<'a>(
             })
         }
         NodeValue::BlockQuote => {
-            let blocks = convert_block_children(node, source, offsets, ctx, acc);
+            let blocks = convert_block_children(node, source, offsets, ctx, acc, down);
             Some(Block::Quote {
                 blocks,
                 anchor: None,
@@ -455,7 +486,7 @@ fn convert_block<'a>(
             })
         }
         NodeValue::Alert(alert) => {
-            let blocks = convert_block_children(node, source, offsets, ctx, acc);
+            let blocks = convert_block_children(node, source, offsets, ctx, acc, down);
             let kind = format!("{:?}", alert.alert_type).to_lowercase();
             Some(custom(
                 custom_kind::CALLOUT,
@@ -472,9 +503,10 @@ fn convert_block<'a>(
             ctx,
             acc,
             span,
+            down,
         )),
         NodeValue::FootnoteDefinition(f) => {
-            let blocks = convert_block_children(node, source, offsets, ctx, acc);
+            let blocks = convert_block_children(node, source, offsets, ctx, acc, down);
             Some(custom(
                 custom_kind::FOOTNOTE_DEFINITION,
                 serde_json::json!({ "label": f.name }),
@@ -488,7 +520,9 @@ fn convert_block<'a>(
             // registro dei `custom_kind`.
             let mut blocks = Vec::new();
             for item in node.children() {
-                blocks.extend(convert_block_children(item, source, offsets, ctx, acc));
+                blocks.extend(convert_block_children(
+                    item, source, offsets, ctx, acc, down,
+                ));
             }
             Some(custom(
                 custom_kind::DEFINITION_LIST,
@@ -503,7 +537,7 @@ fn convert_block<'a>(
             } else {
                 custom_kind::DEFINITION_DESCRIPTION
             };
-            let blocks = convert_block_children(node, source, offsets, ctx, acc);
+            let blocks = convert_block_children(node, source, offsets, ctx, acc, down);
             Some(custom(kind, serde_json::Value::Null, blocks, span))
         }
         NodeValue::HtmlBlock(h) => {
@@ -522,7 +556,7 @@ fn convert_block<'a>(
         NodeValue::ThematicBreak => Some(Block::ThematicBreak { anchor: None, span }),
         // Ciò che il provider non sa nominare: escape hatch generico.
         _ => {
-            let blocks = convert_block_children(node, source, offsets, ctx, acc);
+            let blocks = convert_block_children(node, source, offsets, ctx, acc, down);
             if blocks.is_empty() {
                 None
             } else {
@@ -556,6 +590,7 @@ fn convert_table<'a>(
     ctx: &ParseContext,
     acc: &mut Acc,
     span: Span,
+    depth: u32,
 ) -> Block {
     let align = alignments
         .iter()
@@ -581,7 +616,7 @@ fn convert_table<'a>(
         let mut cells = Vec::new();
         for c in r.children() {
             let mut text = String::new();
-            let inlines = block_inlines(c, source, offsets, ctx, acc, None, &mut text);
+            let inlines = block_inlines(c, source, offsets, ctx, acc, None, &mut text, depth);
             acc.text.push_str(text.trim());
             acc.text.push(' ');
             let cell = clipped_after_sibling(span_of(c, offsets), span, end);
@@ -614,9 +649,10 @@ fn convert_block_children<'a>(
     offsets: &Offsets<'_>,
     ctx: &ParseContext,
     acc: &mut Acc,
+    depth: u32,
 ) -> Vec<Block> {
     node.children()
-        .filter_map(|c| convert_block(c, source, offsets, ctx, acc))
+        .filter_map(|c| convert_block(c, source, offsets, ctx, acc, depth))
         .collect()
 }
 
@@ -673,6 +709,7 @@ fn push_link(
 /// I link già scoperti da un blocco **più interno** non si sovrascrivono: il
 /// contesto è quello del blocco più vicino che porti del testo, che è ciò che
 /// faceva già un paragrafo dentro una citazione.
+#[allow(clippy::too_many_arguments)]
 fn block_inlines<'a>(
     node: &'a AstNode<'a>,
     source: &str,
@@ -681,9 +718,10 @@ fn block_inlines<'a>(
     acc: &mut Acc,
     anchor: Option<&FoundAnchor>,
     text: &mut String,
+    depth: u32,
 ) -> Vec<Inline> {
     let link_base = acc.links.len();
-    let mut inlines = convert_inlines(node, source, offsets, ctx, acc, text);
+    let mut inlines = convert_inlines(node, source, offsets, ctx, acc, text, depth);
     if let Some(a) = anchor {
         strip_marker(&mut inlines, text, &a.written);
     }
@@ -768,7 +806,13 @@ fn convert_inlines<'a>(
     ctx: &ParseContext,
     acc: &mut Acc,
     text_out: &mut String,
+    depth: u32,
 ) -> Vec<Inline> {
+    if depth > MAX_DEPTH {
+        acc.depth_error = true;
+        return Vec::new();
+    }
+    let down = depth.saturating_add(1);
     let mut out = Vec::new();
     for child in node.children() {
         let span = span_of(child, offsets);
@@ -817,12 +861,12 @@ fn convert_inlines<'a>(
             }
             NodeValue::Emph => {
                 out.push(Inline::Emph(convert_inlines(
-                    child, source, offsets, ctx, acc, text_out,
+                    child, source, offsets, ctx, acc, text_out, down,
                 )));
             }
             NodeValue::Strong => {
                 out.push(Inline::Strong(convert_inlines(
-                    child, source, offsets, ctx, acc, text_out,
+                    child, source, offsets, ctx, acc, text_out, down,
                 )));
             }
             // L'apice (`^…^`) e il barrato (`~~…~~`) sono costrutti del
@@ -832,12 +876,12 @@ fn convert_inlines<'a>(
             // loro, distinta l'una dall'altra e dall'enfasi.
             NodeValue::Superscript => {
                 out.push(Inline::Superscript(convert_inlines(
-                    child, source, offsets, ctx, acc, text_out,
+                    child, source, offsets, ctx, acc, text_out, down,
                 )));
             }
             NodeValue::Strikethrough => {
                 out.push(Inline::Strikethrough(convert_inlines(
-                    child, source, offsets, ctx, acc, text_out,
+                    child, source, offsets, ctx, acc, text_out, down,
                 )));
             }
             NodeValue::Code(code) => {
@@ -846,7 +890,8 @@ fn convert_inlines<'a>(
             }
             NodeValue::Link(link) => {
                 let mut label_text = String::new();
-                let label = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                let label =
+                    convert_inlines(child, source, offsets, ctx, acc, &mut label_text, down);
                 let start = text_out.len();
                 text_out.push_str(&label_text);
                 push_link(
@@ -913,7 +958,8 @@ fn convert_inlines<'a>(
                     || synthetic.as_deref() != parsed.target.wiki_inner().as_deref();
                 let (label, in_text) = if hand_written {
                     let mut label_text = String::new();
-                    let the = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                    let the =
+                        convert_inlines(child, source, offsets, ctx, acc, &mut label_text, down);
                     let start = text_out.len();
                     text_out.push_str(&label_text);
                     (Some(the), start..text_out.len())
@@ -930,7 +976,8 @@ fn convert_inlines<'a>(
             }
             NodeValue::Image(img) => {
                 let mut label_text = String::new();
-                let label = convert_inlines(child, source, offsets, ctx, acc, &mut label_text);
+                let label =
+                    convert_inlines(child, source, offsets, ctx, acc, &mut label_text, down);
                 // Un'immagine È un riferimento incorporato, e finché non entrava
                 // in `links` nessun riferimento ad allegato veniva aggiornato al
                 // rename, né risultava fra gli orfani (13.1): non perché il path
@@ -993,7 +1040,7 @@ fn convert_inlines<'a>(
             }
             _ => {
                 // Sotto-inline sconosciuti: recupera almeno il testo.
-                let nested = convert_inlines(child, source, offsets, ctx, acc, text_out);
+                let nested = convert_inlines(child, source, offsets, ctx, acc, text_out, down);
                 out.extend(nested);
             }
         }

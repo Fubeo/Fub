@@ -4673,12 +4673,17 @@ impl Workspace {
     /// [`query_index`](Workspace::query_index), che risponde senza toccare il
     /// disco.
     ///
-    /// Un documento che il workspace non conosce è `NotFound`, e la prova è la
-    /// stessa di `render_preview`: la cache dei metadati **è** l'insieme dei
-    /// documenti indicizzati.
+    /// Un documento che il workspace non conosce è `NotFound`. Un file documento
+    /// presente sul disco ma assente dai metadati può invece essere stato
+    /// scartato perché il parse è fallito: in quel caso lo ripariamo comunque,
+    /// così il chiamante riceve il `FormatError` reale (e non un falso
+    /// `NotFound`). Asset, directory e file senza provider restano assenti.
     /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
     pub fn read_model(&self, id: &DocId) -> Result<DocumentModel> {
-        if !self.indexes.core.metas.contains_key(id) {
+        let indexed = self.indexes.core.metas.contains_key(id);
+        let parseable_file =
+            self.docs.vault.stat(id).is_some() && self.docs.provider_for(id).is_ok();
+        if !indexed && !parseable_file {
             return Err(KernelError::NotFound(id.to_string()));
         }
         self.docs.parse_from_disk(id)
