@@ -79,7 +79,9 @@ impl VaultStorage for RefusingStorage {
         self.inner.rename_no_replace(from, to)
     }
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
-        if path.as_str().contains(self.refuses_remove_in) {
+        let normalized_path = path.as_str().replace('\\', "/");
+        let refused = self.refuses_remove_in.replace('\\', "/");
+        if normalized_path.contains(&refused) {
             return Err(std::io::Error::other("the storage said no"));
         }
         self.inner.remove(path)

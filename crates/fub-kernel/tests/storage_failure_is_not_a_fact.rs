@@ -56,9 +56,10 @@ impl RejectingStorage {
 
     fn no(&self, path: &Utf8Path) -> Option<std::io::Error> {
         let rejects = self.rejects.lock().unwrap();
+        let path = path.as_str().replace('\\', "/");
         rejects
             .iter()
-            .any(|f| path.as_str().contains(f.as_str()))
+            .any(|f| path.contains(&f.replace('\\', "/")))
             .then(|| {
                 std::io::Error::new(
                     std::io::ErrorKind::PermissionDenied,
@@ -69,9 +70,10 @@ impl RejectingStorage {
 
     fn invalid_name(&self, path: &Utf8Path) -> Option<std::io::Error> {
         let invalid_names = self.invalid_names.lock().unwrap();
+        let path = path.as_str().replace('\\', "/");
         invalid_names
             .iter()
-            .any(|name| path.as_str().contains(name))
+            .any(|name| path.contains(&name.replace('\\', "/")))
             .then(|| std::io::Error::from_raw_os_error(123))
     }
 }
