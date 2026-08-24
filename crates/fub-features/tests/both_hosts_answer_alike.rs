@@ -591,7 +591,10 @@ fn the_writes_leave_the_same_vault_of_here_and_of_the() {
 fn every_name_and_every_format_is_judge_equal_of_here_and_of_the() {
     on_the_two_host(None, |host| {
         let mut journal: Vec<(String, String)> = Vec::new();
-        let source = DocId::new("Nota.md");
+        // Keep the case-only extension probe distinct from the source path:
+        // macOS and Windows filesystems compare names case-insensitively,
+        // while MemoryHost intentionally models a case-sensitive map.
+        let source = DocId::new("Sorgente.md");
         host.create_document(&source, "uno due tre")
             .expect("si scrive");
 
@@ -627,11 +630,11 @@ fn every_name_and_every_format_is_judge_equal_of_here_and_of_the() {
             ));
             journal.push((format!("leggere {name:?}"), face(&host.read_document(&id))));
             journal.push((
-                format!("rinominare Nota.md in {name:?}"),
+                format!("rinominare Sorgente.md in {name:?}"),
                 face(&host.rename_document(&source, &id)),
             ));
             journal.push((
-                format!("e Nota.md dopo il tentativo su {name:?}"),
+                format!("e Sorgente.md dopo il tentativo su {name:?}"),
                 face(&host.read_document(&source)),
             ));
             journal.push((

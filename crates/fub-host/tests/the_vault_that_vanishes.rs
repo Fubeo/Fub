@@ -150,6 +150,7 @@ fn a_vault_vanished_can_be_favorited_and_renamed_again() {
 /// che ripararne uno non abbia tolto la metà che funzionava. I tre banchi qui
 /// sopra erano rossi.
 #[test]
+#[cfg(any(unix, windows))]
 fn a_name_never_registered_passes_again_from_the_disk() {
     let (_config_dir, config) = folder();
     let host = installed(&config);
@@ -160,7 +161,7 @@ fn a_name_never_registered_passes_again_from_the_disk() {
 
     let (_alias_dir, alias_dir) = folder();
     let alias = alias_dir.join("shortcut");
-    std::os::unix::fs::symlink(root.as_std_path(), alias.as_std_path()).expect("link");
+    directory_symlink(&root, &alias).expect("link");
 
     let view = host
         .root(Some(alias.as_str()))
@@ -171,4 +172,18 @@ fn a_name_never_registered_passes_again_from_the_disk() {
     );
     host.close_vault(&alias).expect("and closes by alias");
     assert!(host.vaults().is_empty());
+}
+
+#[cfg(unix)]
+fn directory_symlink(target: &Utf8Path, link: &Utf8Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target.as_std_path(), link.as_std_path())
+}
+
+#[cfg(windows)]
+fn directory_symlink(target: &Utf8Path, link: &Utf8Path) -> std::io::Result<()> {
+    // GitHub-hosted Windows runners run tests as administrators with UAC
+    // disabled, so this exercises the same directory-link semantics as Unix.
+    // Do not turn a privilege error into a skipped test: that would hide the
+    // regression this test is meant to catch.
+    std::os::windows::fs::symlink_dir(target.as_std_path(), link.as_std_path())
 }

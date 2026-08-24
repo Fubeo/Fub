@@ -29,11 +29,16 @@ perché una versione si scrive in un posto solo — ma la nomina **un crate solo
 `fub-kernel` e `fub-abi` non la nominano: il kernel vede `dyn Trait` e non deve
 sapere che di là dal confine c'è una macchina virtuale.
 
-Il resto del manifest è conseguenza: `wasmtime = { version = "47",
+Il resto del manifest è conseguenza: `wasmtime = { version = "36.0.14",
 default-features = false }` più le tre feature senza cui non c'è niente da fare —
 `cranelift` per compilare, `runtime` per eseguire, `component-model` perché è la
-lingua che il contratto parla. Restano fuori `cache`, `parallel-compilation`,
-`wat`, `gc`, `threads`, `addr2line`, `demangle`, `debug-builtins`: un componente
+lingua che il contratto parla. Il pin alla linea 36 rispetta l'MSRV dichiarato del
+workspace (`rust-version = "1.89"`): Wasmtime 36.0.14 dichiara Rust 1.86 come
+minimo. È inoltre la patch della linea 36 che corregge l'advisory
+[GHSA-vqjp-4c8c-hfgg](https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-vqjp-4c8c-hfgg)
+sull'escape del sandbox filesystem; `cargo deny check advisories` deve restare
+verde. Restano fuori `cache`, `parallel-compilation`, `wat`, `gc`, `threads`,
+`addr2line`, `demangle`, `debug-builtins`: un componente
 di questo contratto non ne tocca nessuna, e ogni feature accesa è albero da
 compilare a ogni giro di prova del repo. La dipendenza verso `fub-host` va in
 questo verso e non nel suo contrario — `fub-host` non nomina questo crate —

@@ -27,6 +27,7 @@ use fub_abi::traits::{
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute, VaultEntry,
 };
 use fub_abi::FormatProvider;
+#[cfg(unix)]
 use fub_kernel::{FormatRegistry, Workspace};
 use fub_testkit::{Bench, Mounted};
 
