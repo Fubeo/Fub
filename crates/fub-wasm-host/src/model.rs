@@ -76,7 +76,11 @@ pub(crate) const MAX_DEPTH: u32 = 64;
 /// il frontmatter sono conversioni totali, l'unica domanda che può ricevere un
 /// «no» è quanto è profondo il corpo.
 /// «no» è quanto è profondo il corpo.
-pub(crate) fn to_document(m: &rm::DocumentModel) -> Result<wm::DocumentModel, PluginError> {
+pub(crate) fn to_document(m: rm::DocumentModel) -> Result<wm::DocumentModel, PluginError> {
+    if exceeds_depth(&m.body) {
+        discard_document_model(m);
+        return Err(too_deep());
+    }
     Ok(wm::DocumentModel {
         id: m.id.0.clone(),
         frontmatter: to_frontmatter(&m.frontmatter),
@@ -88,6 +92,175 @@ pub(crate) fn to_document(m: &rm::DocumentModel) -> Result<wm::DocumentModel, Pl
         text: m.text.clone(),
         frontmatter_present: m.frontmatter_present,
     })
+}
+
+enum Pending<'a> {
+    Blocks(&'a [rm::Block], u32),
+    Inlines(&'a [rm::Inline], u32),
+}
+
+/// Controlla la profondità senza attraversare l'albero con lo stack del thread.
+fn exceeds_depth(body: &[rm::Block]) -> bool {
+    let mut pending = vec![Pending::Blocks(body, 1)];
+    while let Some(work) = pending.pop() {
+        match work {
+            Pending::Blocks(blocks, depth) => {
+                if depth > MAX_DEPTH {
+                    return true;
+                }
+                let down = depth.saturating_add(1);
+                for block in blocks.iter().rev() {
+                    match block {
+                        rm::Block::Heading { inlines, .. }
+                        | rm::Block::Paragraph { inlines, .. } => {
+                            pending.push(Pending::Inlines(inlines, down));
+                        }
+                        rm::Block::List { items, .. } => {
+                            for item in items.iter().rev() {
+                                pending.push(Pending::Blocks(&item.blocks, down));
+                            }
+                        }
+                        rm::Block::Quote { blocks, .. } | rm::Block::Custom { blocks, .. } => {
+                            pending.push(Pending::Blocks(blocks, down));
+                        }
+                        rm::Block::Table { head, rows, .. } => {
+                            for row in rows.iter().rev() {
+                                for cell in row.cells.iter().rev() {
+                                    pending.push(Pending::Inlines(&cell.inlines, down));
+                                }
+                            }
+                            if let Some(row) = head {
+                                for cell in row.cells.iter().rev() {
+                                    pending.push(Pending::Inlines(&cell.inlines, down));
+                                }
+                            }
+                        }
+                        rm::Block::CodeBlock { .. }
+                        | rm::Block::ThematicBreak { .. }
+                        | rm::Block::ReferenceDefinition { .. } => {}
+                    }
+                }
+            }
+            Pending::Inlines(inlines, depth) => {
+                if depth > MAX_DEPTH {
+                    return true;
+                }
+                let down = depth.saturating_add(1);
+                for inline in inlines.iter().rev() {
+                    match inline {
+                        rm::Inline::Emph(children)
+                        | rm::Inline::Strong(children)
+                        | rm::Inline::Superscript(children)
+                        | rm::Inline::Strikethrough(children) => {
+                            pending.push(Pending::Inlines(children, down));
+                        }
+                        rm::Inline::Link {
+                            label: Some(label), ..
+                        } => {
+                            pending.push(Pending::Inlines(label, down));
+                        }
+                        rm::Inline::Text(_)
+                        | rm::Inline::Code(_)
+                        | rm::Inline::Link { label: None, .. }
+                        | rm::Inline::TagRef { .. }
+                        | rm::Inline::Custom { .. }
+                        | rm::Inline::HardBreak
+                        | rm::Inline::SoftBreak => {}
+                    }
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Smonta iterativamente un modello rifiutato, così anche il suo `Drop` non
+/// percorre ricorsivamente un albero costruito da un documento ostile.
+fn discard_document_model(m: rm::DocumentModel) {
+    let rm::DocumentModel {
+        body,
+        id,
+        frontmatter,
+        outline,
+        links,
+        tags,
+        anchors,
+        text,
+        frontmatter_present,
+    } = m;
+    drop((
+        id,
+        frontmatter,
+        outline,
+        links,
+        tags,
+        anchors,
+        text,
+        frontmatter_present,
+    ));
+    discard_blocks(body);
+}
+
+fn discard_blocks(body: Vec<rm::Block>) {
+    let mut pending = vec![body];
+    while let Some(blocks) = pending.pop() {
+        for block in blocks {
+            match block {
+                rm::Block::Heading { inlines, .. } | rm::Block::Paragraph { inlines, .. } => {
+                    discard_inlines(inlines)
+                }
+                rm::Block::List { items, .. } => {
+                    for item in items {
+                        pending.push(item.blocks);
+                    }
+                }
+                rm::Block::Quote { blocks, .. } | rm::Block::Custom { blocks, .. } => {
+                    pending.push(blocks);
+                }
+                rm::Block::Table { head, rows, .. } => {
+                    if let Some(row) = head {
+                        discard_row(row);
+                    }
+                    for row in rows {
+                        discard_row(row);
+                    }
+                }
+                rm::Block::CodeBlock { .. }
+                | rm::Block::ThematicBreak { .. }
+                | rm::Block::ReferenceDefinition { .. } => {}
+            }
+        }
+    }
+}
+
+fn discard_row(row: rm::TableRow) {
+    for cell in row.cells {
+        discard_inlines(cell.inlines);
+    }
+}
+
+fn discard_inlines(inlines: Vec<rm::Inline>) {
+    let mut pending = vec![inlines];
+    while let Some(inlines) = pending.pop() {
+        for inline in inlines {
+            match inline {
+                rm::Inline::Emph(children)
+                | rm::Inline::Strong(children)
+                | rm::Inline::Superscript(children)
+                | rm::Inline::Strikethrough(children) => pending.push(children),
+                rm::Inline::Link {
+                    label: Some(label), ..
+                } => pending.push(label),
+                rm::Inline::Text(_)
+                | rm::Inline::Code(_)
+                | rm::Inline::Link { label: None, .. }
+                | rm::Inline::TagRef { .. }
+                | rm::Inline::Custom { .. }
+                | rm::Inline::HardBreak
+                | rm::Inline::SoftBreak => {}
+            }
+        }
+    }
 }
 
 /// Il frontmatter attraversa come JSON, che al confine è una stringa.
@@ -550,6 +723,14 @@ mod tests {
     #[test]
     fn a_malformed_document_does_not_bring_down_the_thread() {
         let error = to_tree(&[quotes(2_000)]).expect_err("no tree that deep passes");
+        assert!(matches!(error, PluginError::Internal(_)));
+    }
+
+    #[test]
+    fn a_rejected_document_is_discarded_without_recursive_drop() {
+        let mut model = rm::DocumentModel::empty(rm::DocId::new("profondo.md"));
+        model.body.push(quotes(2_000));
+        let error = to_document(model).expect_err("no tree that deep crosses");
         assert!(matches!(error, PluginError::Internal(_)));
     }
 }

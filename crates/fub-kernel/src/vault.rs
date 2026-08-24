@@ -1008,21 +1008,28 @@ pub use fub_abi::traits::TrashEntry;
 mod tests {
     use super::*;
 
+    fn test_root() -> Utf8PathBuf {
+        Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+            .expect("current dir is UTF-8")
+            .join("vault-test")
+    }
+
     #[test]
     fn what_is_ignored_is_ignored_at_any_depth() {
         // memoria, dove una radice che sta per nascere è legittima (0160).
         // Un file nascosto è nascosto anche in fondo a un path pulito.
-        let v = Vault::on("/vault", Arc::new(crate::storage::MemStorage::new()))
+        let root = test_root();
+        let v = Vault::on(&root, Arc::new(crate::storage::MemStorage::new()))
             .expect("an in-memory vault opens");
-        assert!(!v.is_ignored("/vault/note/Idea.md".into()));
-        assert!(v.is_ignored("/vault/.trash/Idea.md".into()));
-        assert!(v.is_ignored("/vault/.obsidian/plugins/x/main.js".into()));
-        assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
+        assert!(!v.is_ignored(&root.join("note/Idea.md")));
+        assert!(v.is_ignored(&root.join(".trash/Idea.md")));
+        assert!(v.is_ignored(&root.join(".obsidian/plugins/x/main.js")));
+        assert!(v.is_ignored(&root.join("node_modules/pacchetto/readme.md")));
         // Fuori dal vault non è "ignorato": è di qualcun altro, e a dirlo è
-        assert!(v.is_ignored("/vault/note/.bozza.md".into()));
+        assert!(v.is_ignored(&root.join("note/.bozza.md")));
         // `doc_id_for_path`.
         // **Un vault che è anche un repo** (difetto 0118): `target/` è ciò che
-        assert!(!v.is_ignored("/altrove/.trash/Idea.md".into()));
+        assert!(!v.is_ignored(Utf8Path::new("/altrove/.trash/Idea.md")));
     }
 
     /// scrive Cargo, e da quando il vault dice *cosa contiene* invece di
@@ -1035,10 +1042,11 @@ mod tests {
     /// Un vault con le impostazioni di un vero montaggio, con la politica di
     #[test]
     fn a_vault_that_is_also_a_repo_does_not_index_what_cargo_writes() {
-        let v = Vault::on("/vault", Arc::new(crate::storage::MemStorage::new()))
+        let root = test_root();
+        let v = Vault::on(&root, Arc::new(crate::storage::MemStorage::new()))
             .expect("an in-memory vault opens");
         for rel in ["target/debug/appunti.md", "Idea.md"] {
-            let path = Utf8Path::new("/vault").join(rel);
+            let path = root.join(rel);
             v.storage().write(&path, b"x").expect("write");
         }
         let seen: Vec<String> = v
@@ -1053,15 +1061,16 @@ mod tests {
             vec!["Idea.md"],
             "\"target/\" was entering the entry store"
         );
-        assert!(v.is_ignored("/vault/target/debug/appunti.md".into()));
+        assert!(v.is_ignored(&root.join("target/debug/appunti.md")));
     }
 
     /// esclusione già dichiarata.
     /// **La casella dei nascosti** (§3.2 del catalogo): mostrarli è una
     fn declaring_vault(values: &[(&str, fub_abi::settings::SettingValue)]) -> Vault {
+        let root = test_root();
         let storage: Arc<dyn VaultStorage> = Arc::new(crate::storage::MemStorage::new());
         let mut store = crate::settings::SettingsStore::open(
-            "/vault".into(),
+            &root,
             Arc::clone(&storage),
             crate::settings::MachineSettings::in_memory(),
         );
@@ -1071,7 +1080,7 @@ mod tests {
         for (key, value) in values {
             store.set(key, value.clone()).expect("declared key");
         }
-        Vault::on("/vault", storage)
+        Vault::on(&root, storage)
             .expect("un vault in memoria si apre")
             .watching(Arc::new(std::sync::RwLock::new(store)))
     }
@@ -1084,22 +1093,23 @@ mod tests {
     fn showing_hidden_files_does_not_open_the_structure() {
         use fub_abi::settings::SettingValue;
         let v = declaring_vault(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
-        assert!(!v.is_ignored("/vault/note/.bozza.md".into()));
-        assert!(v.is_ignored("/vault/.fub/data/anagrafe.json".into()));
-        assert!(v.is_ignored("/vault/.trash/Idea.2026-07-24T15-30-00.md".into()));
-        assert!(v.is_ignored("/vault/note/.Idea.md.tmp1234-5".into()));
+        let root = v.root();
+        assert!(!v.is_ignored(&root.join("note/.bozza.md")));
+        assert!(v.is_ignored(&root.join(".fub/data/anagrafe.json")));
+        assert!(v.is_ignored(&root.join(".trash/Idea.2026-07-24T15-30-00.md")));
+        assert!(v.is_ignored(&root.join("note/.Idea.md.tmp1234-5")));
         // si può togliere senza rompere il lock (difetto 0151) — quindi è
         // l'unico per cui «non si vede» deve essere una regola e non un
         // istante. Sta nella radice apposta: oggi ogni file protetto sta dentro
         // `.fub/`, e un banco che lo mettesse lì proverebbe `.fub`.
         // E l'elenco delle cartelle escluse è l'altra metà, che questa non tocca.
         assert!(
-            v.is_ignored("/vault/.Idea.md.lock".into()),
+            v.is_ignored(&v.root().join(".Idea.md.lock")),
             "the lock companion of a root-level file was a document, \
              and it never goes away"
         );
         // La metà che impedisce alla riparazione di diventare «tutto ciò che
-        assert!(v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
+        assert!(v.is_ignored(&v.root().join("node_modules/pacchetto/readme.md")));
     }
 
     /// finisce per `.lock`»: un `Cargo.lock` o un `flake.lock` non sono note di
@@ -1110,9 +1120,10 @@ mod tests {
     fn a_lock_file_that_is_not_ours_stays_in_the_vault() {
         use fub_abi::settings::SettingValue;
         let v = declaring_vault(&[(crate::ignore::SHOW_HIDDEN, SettingValue::Toggle(true))]);
-        for lock in ["/vault/Cargo.lock", "/vault/note/flake.lock"] {
+        for lock in ["Cargo.lock", "note/flake.lock"] {
+            let lock = v.root().join(lock);
             assert!(
-                !v.is_ignored(lock.into()),
+                !v.is_ignored(&lock),
                 "{lock} disappeared from the vault: the lock companion rule \
                  expanded to anyone ending with \".lock\""
             );
@@ -1128,11 +1139,12 @@ mod tests {
             crate::ignore::EXCLUDED_FOLDERS,
             SettingValue::List(vec!["build".into()]),
         )]);
-        assert!(v.is_ignored("/vault/build/out.md".into()));
-        assert!(!v.is_ignored("/vault/node_modules/pacchetto/readme.md".into()));
+        let root = v.root();
+        assert!(v.is_ignored(&root.join("build/out.md")));
+        assert!(!v.is_ignored(&root.join("node_modules/pacchetto/readme.md")));
         // non la rivela.
         // **La prima metà della 0176, dalle due porte.** `build/` è la forma che
-        assert!(v.is_ignored("/vault/.fub/settings.json".into()));
+        assert!(v.is_ignored(&root.join(".fub/settings.json")));
     }
 
     /// scrive per prima chi arriva da un `.gitignore`, e confrontata per
@@ -1149,7 +1161,7 @@ mod tests {
             SettingValue::List(vec!["build/".into()]),
         )]);
         for rel in ["build/out.md", "note/Idea.md"] {
-            let path = Utf8Path::new("/vault").join(rel);
+            let path = v.root().join(rel);
             v.storage().write(&path, b"x").expect("write");
         }
         let seen: Vec<String> = v
@@ -1164,7 +1176,7 @@ mod tests {
             vec!["note/Idea.md"],
             "\"build/\" did not exclude anything"
         );
-        assert!(v.is_ignored("/vault/build/out.md".into()));
+        assert!(v.is_ignored(&v.root().join("build/out.md")));
     }
 
     /// «cartelle escluse»: un file che si chiama come una di loro è un file di
@@ -1184,7 +1196,7 @@ mod tests {
             SettingValue::List(vec!["archivio".into()]),
         )]);
         for rel in ["archivio", "note/archivio/vecchia.md", "note/Idea.md"] {
-            let path = Utf8Path::new("/vault").join(rel);
+            let path = v.root().join(rel);
             v.storage().write(&path, b"x").expect("write");
         }
         let seen: Vec<String> = v
@@ -1199,11 +1211,11 @@ mod tests {
             vec!["archivio", "note/Idea.md"],
             "the file \"archivio\" disappeared from the vault along with the folder"
         );
-        assert!(!v.is_ignored("/vault/archivio".into()));
+        assert!(!v.is_ignored(&v.root().join("archivio")));
         // path del file dentro, e il path della cartella stessa.
         // **Le due porte d'ingresso guardano lo stesso vault.** Il watcher chiede
-        assert!(v.is_ignored("/vault/note/archivio/vecchia.md".into()));
-        assert!(v.is_ignored("/vault/note/archivio".into()));
+        assert!(v.is_ignored(&v.root().join("note/archivio/vecchia.md")));
+        assert!(v.is_ignored(&v.root().join("note/archivio")));
     }
 
     /// `is_ignored`, la scansione cammina: se le due politiche non fossero la
@@ -1221,7 +1233,7 @@ mod tests {
             (".trash/Vecchia.md", "trashed"),
             ("node_modules/pacchetto/readme.md", "npm stuff"),
         ] {
-            let path = Utf8Path::new("/vault").join(rel);
+            let path = v.root().join(rel);
             v.storage().write(&path, content.as_bytes()).expect("write");
         }
         let seen: Vec<String> = v
@@ -1239,7 +1251,7 @@ mod tests {
             ".trash/Vecchia.md",
             "node_modules/pacchetto/readme.md",
         ] {
-            let path = Utf8Path::new("/vault").join(rel);
+            let path = v.root().join(rel);
             assert_eq!(
                 v.is_ignored(&path),
                 !seen.contains(&rel.to_string()),

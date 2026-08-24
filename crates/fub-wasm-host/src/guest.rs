@@ -172,7 +172,7 @@ impl host_vault_read::Host for State {
         let model = h
             .read_model(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))?;
-        crate::model::to_document(&model).map_err(|and| tr::to_error(&and))
+        crate::model::to_document(model).map_err(|and| tr::to_error(&and))
     }
 
     fn format_of(&mut self, id: w_model::DocId) -> Option<w_format::DocumentFormat> {
