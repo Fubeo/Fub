@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::rules::path_policy::Naming;
 use fub_abi::rules::{path_policy, text_policy};
 use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
@@ -529,6 +530,21 @@ impl Vault {
     /// dimenticare di decodificare.
     pub fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
         let path = self.path_for(id)?;
+        // Windows può restituire `InvalidInput` per un nome illegale che
+        // semplicemente non esiste (`?`, `*`, newline). Prima di tentare la
+        // lettura, chiediamo al supporto se il file c'è davvero: un importato
+        // esistente resta leggibile, mentre un path assente prende la faccia
+        // contrattuale `NotFound` senza trasformare l'assenza in I/O.
+        if path_policy::check(id.as_str(), Naming::New).is_err() {
+            if let Err(and) = self.storage.stat(&path) {
+                if matches!(
+                    and.kind(),
+                    std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+                ) {
+                    return Err(KernelError::NotFound(id.to_string()));
+                }
+            }
+        }
         self.storage
             .read(&path)
             .map_err(|and| KernelError::Io { path, source: and })

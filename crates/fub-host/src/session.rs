@@ -61,10 +61,11 @@ use crate::watcher::{VaultWatcher, WatcherFactory};
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
 ///
 /// Il kernel ha già un bus e chiunque può abbonarsi: questo trait esiste perché
-/// il ponte va **acceso nel momento giusto** — dopo la scansione iniziale e
-/// prima che il watcher possa emettere il primo evento — e quel momento lo
-/// conosce solo chi apre. Lasciarlo al chiamante voleva dire lasciargli una
-/// finestra in cui gli eventi si perdono.
+/// il subscriber live va **registrato dopo la scansione e prima che il
+/// rilevatore possa emettere il primo evento verso di esso**, e quel momento lo
+/// conosce solo chi apre. Il thread del ponte viene acceso subito dopo; un
+/// subscriber temporaneo, registrato prima del rilevatore, copre il tratto
+/// precedente senza esporre al sink gli eventi interni all'apertura.
 ///
 /// Per l'app è il webview (`fub://event`); per un'API locale sarebbero SSE o
 /// websocket; per una CLI stdout; per un e2e headless, niente — e "niente" qui
@@ -522,7 +523,8 @@ impl Host {
         Ok(())
     }
 
-    /// Apre un vault — monta, scansiona, accende il ponte, avvia il rilevatore —
+    /// Apre un vault — monta, prepara il subscriber temporaneo, avvia il
+    /// rilevatore, scansiona, registra il subscriber live e accende il ponte —
     /// e lo rende **corrente**.
     ///
     /// Un vault **già aperto** non si riapre: diventa corrente e basta. Prima
@@ -561,7 +563,8 @@ impl Host {
     }
 
     /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):
-    /// monta, scansiona, accende il ponte, avvia il rilevatore e il pool, e
+    /// monta, prepara il subscriber temporaneo, avvia il rilevatore, scansiona,
+    /// registra il subscriber live, accende il ponte e avvia il pool, e
     /// mette la sessione nella mappa. **Non decide chi è corrente**: quello lo
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
     /// già aperto.
@@ -605,6 +608,17 @@ impl Host {
 
         let workspace = Custody::new("il vault aperto", ws);
 
+        // Un subscriber temporaneo si iscrive **prima del rilevatore e della
+        // scansione**. Non ha un sink: serve solo a tenere vivo il conto del bus
+        // finché il subscriber live può nascere sotto lo stesso write-lock della
+        // prima fase.
+        let temporary = if self.sink.is_some() {
+            let ws = workspace.read()?;
+            Some(ws.bus().subscribe())
+        } else {
+            None
+        };
+
         // Il rilevatore si avvia **prima della scansione**: ogni cambiamento
         // caduto prima è visto dalla scansione, e ogni cambiamento caduto durante
         // o dopo entra nella coda del debouncer del rilevatore. La finestra fra
@@ -620,22 +634,31 @@ impl Host {
         // qui il vault è utilizzabile. Il `?` che resta riguarda il vault
         // intero — la scansione — e non i suoi documenti: quelli che non si
         // leggono diventano scarti, e li raccoglie la seconda fase.
-        let work = workspace.write()?.scan_vault().map_err(PluginError::from)?;
+        let (work, index_job, work_total, live) = {
+            // La scansione, il subscriber live e JobStarted sono una sola
+            // sezione: un batch del watcher che attende qui non può precedere
+            // il live subscriber, e VaultOpened resta solo sul temporaneo.
+            let mut ws = workspace.write()?;
+            let work = ws.scan_vault().map_err(PluginError::from)?;
+            let work_total = work.total();
+            let live = if self.sink.is_some() {
+                Some(ws.bus().subscribe())
+            } else {
+                None
+            };
+            let index_job = ws.begin_index_job();
+            (work, index_job, work_total, live)
+        };
 
-        // Ponte eventi kernel → sink (thread dedicato che vive quanto il bus).
-        if let Some(sink) = &self.sink {
-            let ws = workspace.read()?;
-            crate::bridge::spawn(ws.bus().subscribe(), sink.clone());
+        drop(temporary);
+        if let (Some(sink), Some(live)) = (&self.sink, live) {
+            crate::bridge::spawn(live, sink.clone());
         }
 
-        // **La seconda fase nasce dopo il ponte**, e l'ordine è la sostanza:
-        // `begin_index_job` emette un `JobStarted`, cioè la prima riga del
-        // racconto dell'apertura.
-        let (index_job, work_total) = {
-            let mut ws = workspace.write()?;
-            let job = ws.begin_index_job();
-            (job, work.total())
-        };
+        // **La seconda fase nasce dopo il subscriber live**, e l'ordine è la
+        // sostanza: `begin_index_job` emette un `JobStarted`, cioè la prima riga
+        // del racconto dell'apertura; il thread del ponte parte subito dopo,
+        // drenando ciò che il subscriber ha già accodato.
         let unread: Custody<Vec<UnreadDoc>> = Custody::empty("gli scarti dell'apertura");
         let indexed = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
         let in_progress = crate::runner::InProgress {

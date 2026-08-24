@@ -365,6 +365,12 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     // ricevesse un `DocumentChanged` per nota leggerebbe l'apertura come un
     // temporale di modifiche.
     let seen = seen.lock().unwrap().clone();
+    assert!(
+        !seen
+            .iter()
+            .any(|n| n.event.kind() == EventKind::VaultOpened),
+        "the bridge does not expose the scan's VaultOpened: {seen:?}"
+    );
     let edits: Vec<_> = seen
         .iter()
         .filter(|n| {

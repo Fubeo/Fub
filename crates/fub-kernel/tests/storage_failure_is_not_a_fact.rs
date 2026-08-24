@@ -343,32 +343,53 @@ fn a_trash_emptied_a_metadata_not_and_a_trash_emptied() {
 #[test]
 fn ask_a_document_that_not_c_and_and_a_not_found() {
     let (_bench, mut ws) = Bench::open();
-    let absent = DocId::new("mai-scritta.txt");
 
     ws.with_host("prova.plugin", |host| {
-        for (which, outcome) in [
-            ("read_document", host.read_document(&absent).map(|_| ())),
-            (
-                "read_document_bytes",
-                host.read_document_bytes(&absent).map(|_| ()),
-            ),
-            ("read_model", host.read_model(&absent).map(|_| ())),
-            (
-                "document_revision",
-                host.document_revision(&absent).map(|_| ()),
-            ),
+        for name in [
+            "mai-scritta.txt",
+            "con\nnewline.md",
+            "con*stella.md",
+            "con?punto.md",
         ] {
-            let and = outcome.expect_err("il documento non c'è");
-            assert!(
-                matches!(and, PluginError::NotFound(_)),
-                "`{which}` su un documento assente deve dire «non trovato», e \
-                 non «errore di I/O»: {and:?}"
-            );
-            assert!(
-                and.message().to_string().contains("mai-scritta.txt"),
-                "e deve nominare ciò che non ha trovato: {and}"
-            );
+            let absent = DocId::new(name);
+            for (which, outcome) in [
+                ("read_document", host.read_document(&absent).map(|_| ())),
+                (
+                    "read_document_bytes",
+                    host.read_document_bytes(&absent).map(|_| ()),
+                ),
+                ("read_model", host.read_model(&absent).map(|_| ())),
+                (
+                    "document_revision",
+                    host.document_revision(&absent).map(|_| ()),
+                ),
+            ] {
+                let and = outcome.expect_err("il documento non c'è");
+                assert!(
+                    matches!(and, PluginError::NotFound(_)),
+                    "`{which}` su `{name:?}` deve dire «non trovato», e \
+                     non «errore di I/O»: {and:?}"
+                );
+                assert!(
+                    and.message().to_string().contains(name),
+                    "e deve nominare ciò che non ha trovato: {and}"
+                );
+            }
         }
+    });
+}
+
+/// Un nome non portabile che esiste davvero è un import, non un'assenza:
+/// la pre-verifica del path non deve impedirne la lettura.
+#[cfg(unix)]
+#[test]
+fn an_existing_nonportable_import_is_still_readable() {
+    let (bench, mut ws) = Bench::open();
+    let id = DocId::new("con*stella.txt");
+    std::fs::write(bench.root.join(id.as_str()), "arrivato da fuori").unwrap();
+
+    ws.with_host("prova.plugin", |host| {
+        assert_eq!(host.read_document(&id).unwrap(), "arrivato da fuori");
     });
 }
 
