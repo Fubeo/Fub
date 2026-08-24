@@ -525,10 +525,13 @@ fn the_folders_of_a_move_are_in_a_table() {
 #[test]
 fn synchronize_a_folder_and_best_effort() {
     let (_tmp, root) = bench();
-    assert!(
-        sync_folder(&root),
-        "una cartella che c'è non si è lasciata sincronizzare"
-    );
+    // Windows non espone una directory come file apribile da `std::fs`, quindi
+    // `sync_folder` non può chiedere `sync_all` lì: il best-effort risponde
+    // `false` senza trasformare la mossa che l'ha chiesto in un errore.
+    #[cfg(windows)]
+    assert!(!sync_folder(&root));
+    #[cfg(not(windows))]
+    assert!(sync_folder(&root));
     assert!(
         !sync_folder(&root.join("mai-esistita")),
         "una cartella che non c'è ha detto di essere scesa sul disco"
