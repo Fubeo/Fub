@@ -40,6 +40,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(feature = "versioning")]
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::traits::JobId;

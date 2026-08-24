@@ -90,7 +90,7 @@ tracing = { version = "0.1.44", default-features = false, features = ["std"] }
 # `debug-builtins`, cioè un albero che un componente di questo contratto non
 # tocca mai. Le tre che restano sono quelle senza cui non c'è né un compilatore
 # né un modello di componenti da parlare.
-wasmtime = { version = "40", default-features = false, features = [
+wasmtime = { version = "36.0.14", default-features = false, features = [
     "cranelift",
     "runtime",
     "component-model",

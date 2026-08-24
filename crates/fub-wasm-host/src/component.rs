@@ -245,7 +245,7 @@ fn cap_the_rest(
         }
         for function in functions {
             let label = format!("{name}#{function}");
-            inst.func_new(&function, move |_, _, _, _| {
+            inst.func_new(&function, move |_, _, _| {
                 Err(wasmtime::Error::msg(format!(
                     "this host does not serve `{label}`"
                 )))

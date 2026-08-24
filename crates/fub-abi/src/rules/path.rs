@@ -239,7 +239,7 @@ pub fn relative_ref(src: &DocId, to: &DocId) -> String {
 /// I segmenti della cartella che contiene `id`.
 fn parent_segments(id: &DocId) -> Vec<&str> {
     let s = id.as_str();
-    let cut = s.rfind('/').map_or(0, |the| the);
+    let cut = s.rfind('/').unwrap_or(0);
     s[..cut].split('/').filter(|p| !p.is_empty()).collect()
 }
 

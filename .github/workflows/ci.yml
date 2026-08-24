@@ -28,7 +28,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
       - uses: Swatinem/rust-cache@v2
       - name: Conformità abi ↔ crates/fub-abi/wit/fub/abi.wit
@@ -123,7 +123,7 @@ jobs:
       # E la corrispondenza fra le cargo feature e l'inventario, che è ciò che
       # impedisce ai due elenchi di divergere.
       - name: una cargo feature per bundle, e l'inventario è dove si legge
-        run: cargo test -p fub-features --test le_cargo_feature
+        run: cargo test -p fub-features --test cargo_features
       # E la **condizione** del secondo tempo, valutata da qualcuno invece che
       # ricordata (§16.3, decisione 0073). I tre `build` qui sopra la fanno
       # valere per metà: nella build della sola `outline` un `use crate::search`
@@ -135,7 +135,7 @@ jobs:
       # Se è rosso non c'è un errore da riparare: c'è una voce di roadmap che si
       # è sbloccata, e il messaggio del test lo dice con quelle parole.
       - name: i moduli di feature non si parlano — e se si parlano, la §16.3 si è sbloccata
-        run: cargo test -p fub-features --test i_moduli_non_si_parlano
+        run: cargo test -p fub-features --test independent_modules
 
   # Licenze, advisory e provenienza delle dipendenze, più l'SBOM. È l'unica
   # parte del piano il cui costo cresce con il numero di dipendenze già entrate:
@@ -145,7 +145,7 @@ jobs:
     name: supply chain (licenze, advisory, SBOM)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check
@@ -159,7 +159,7 @@ jobs:
       # sola e sempre troppo tardi.
       - name: Genera l'SBOM
         run: cargo sbom --output-format spdx_json_2_3 > fub-sbom.spdx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: sbom-spdx
           path: fub-sbom.spdx.json
@@ -169,7 +169,7 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.89
         with:
           components: rustfmt, clippy
@@ -201,7 +201,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Toolchain pinnata all'MSRV del workspace (rust-version = "1.89"): la CI
       # verifica anche che la promessa dell'MSRV sia vera.
       - uses: dtolnay/rust-toolchain@1.89
@@ -253,8 +253,8 @@ jobs:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Link interni dei documenti
@@ -305,8 +305,8 @@ jobs:
     name: frontend (type-check + test + build)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
