@@ -147,6 +147,35 @@ fn a_normalized_name_collision_is_not_a_creation() {
     );
 }
 
+/// Su un filesystem che distingue le due grafie, un import non portabile e il
+/// suo nome normalizzato sono due documenti: la normalizzazione non deve
+/// trasformare una scrittura sul primo in una scrittura sul secondo.
+#[cfg(unix)]
+#[test]
+fn distinct_raw_and_normalized_names_remain_distinct() {
+    let mut bench = Bench::new().mounts();
+    bench.write(" nota.md", "raw import");
+    bench.write("nota.md", "normalized document");
+
+    bench
+        .write_document(&doc(" nota.md"), "updated import", WriteBase::Dictated)
+        .unwrap();
+
+    let ops = ops(&bench);
+    assert!(
+        matches!(ops[0], JournalOp::Written { ref doc, .. } if doc.as_str() == " nota.md"),
+        "two distinct files were collapsed by normalization: {ops:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(bench.root().join(" nota.md")).unwrap(),
+        "updated import"
+    );
+    assert_eq!(
+        std::fs::read_to_string(bench.root().join("nota.md")).unwrap(),
+        "normalized document"
+    );
+}
+
 /// Un nome non portabile può essere stato importato e indicizzato, ma se il
 /// file sparisce prima del watcher non può restare una prova di esistenza:
 /// una nuova scrittura deve tornare al giudizio `Naming::New`.
