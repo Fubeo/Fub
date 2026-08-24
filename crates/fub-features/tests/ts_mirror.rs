@@ -27,6 +27,7 @@ use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     Failure, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
 };
+use fub_abi::custom::{SyntaxForm, SyntaxTrigger};
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::error::PluginError;
 use fub_abi::event::{
@@ -816,6 +817,9 @@ fn index_query_samples() -> Vec<Value> {
             heading: Some("Sezione".into()),
             block: None,
         },
+        IndexQuery::SyntaxForms {
+            doc: DocId::new("a.md"),
+        },
     ];
     // Il `match` esaustivo è la guardia: una variante nuova non compila finché
     // non ha un campione qui.
@@ -838,7 +842,8 @@ fn index_query_samples() -> Vec<Value> {
             | IndexQuery::Folders { .. }
             | IndexQuery::Drafts { .. }
             | IndexQuery::RenderPreview { .. }
-            | IndexQuery::RenderEmbed { .. } => {}
+            | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::SyntaxForms { .. } => {}
         }
     }
     all.into_iter().map(to_value).collect()
@@ -1008,6 +1013,13 @@ fn index_result_samples() -> Vec<Value> {
             doc_id: "note/a.md".into(),
             content: RenderedDocument::default(),
         }),
+        IndexResult::SyntaxForms(vec![SyntaxForm {
+            name: "terzi:spoiler".into(),
+            trigger: Some(SyntaxTrigger::Inline {
+                open: "||".into(),
+                close: "||".into(),
+            }),
+        }]),
     ];
     for r in &all {
         match r {
@@ -1028,7 +1040,8 @@ fn index_result_samples() -> Vec<Value> {
             | IndexResult::Folders(_)
             | IndexResult::Drafts(_)
             | IndexResult::RenderPreview(_)
-            | IndexResult::RenderEmbed(_) => {}
+            | IndexResult::RenderEmbed(_)
+            | IndexResult::SyntaxForms(_) => {}
         }
     }
     all.into_iter().map(to_value).collect()

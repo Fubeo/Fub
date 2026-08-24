@@ -86,6 +86,8 @@ const IDENTICAL_NON_COLOR = [
   // I quattro riempimenti/righe in alpha su grigio: scelti perché reggono su
   // entrambi i fondi, e per questo identici nei due fogli.
   "doc-fill", "doc-fill-soft", "doc-rule", "doc-rule-soft",
+  // La carta è il pavimento della scala: non proietta ombra in nessuna luce.
+  "elevation-paper-shadow",
 ] as const;
 
 /// Le uniche var() del foglio che la struttura può consumare: l'anello del

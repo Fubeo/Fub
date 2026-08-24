@@ -9,7 +9,7 @@ solo finché il freeze di M4 non ha mosso il secondo.
 | Numero | Dove sta | A chi promette | Cosa succede se si sbaglia |
 |---|---|---|---|
 | **versione dei crate** | [`Cargo.toml:24`](../Cargo.toml), ereditata dai nove crate [conta: crate-del-workspace]; [`frontend/package.json`](../frontend/package.json) la ripete per la shell | a chi compila Fub, o ci compila contro | la build rossa, subito |
-| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3924`) e `package fub:abi@0.1.1` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
+| **versione del contratto** | [`ABI_VERSION`](../crates/fub-abi/src/traits.rs) (`traits.rs:3937`) e `package fub:abi@0.1.1` in [`crates/fub-abi/wit/fub/abi.wit`](../crates/fub-abi/wit/fub/abi.wit) | a un plugin **già compilato**, che non si ricompila | il confine si rompe a valle, dopo il rilascio, e a rompersi è il codice di qualcun altro |
 | **versione degli schemi su disco** | undici costanti `SchemaVersion` [conta: schemi-su-disco] indipendenti nei crate, una per formato (tabella più sotto) | ai **file dell'utente**, che sopravvivono a ogni versione dell'app | dati letti male, o riscritti male: l'unico dei tre errori che non si annulla |
 
 ## 1. La versione dei crate
@@ -61,7 +61,7 @@ dei crate parla a chi **ricompila**; questa parla a un componente WASM
 accettare o rifiutare da solo, guardando la stringa che il plugin dichiara.
 
 **La regola di caricamento** è
-[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4476`), e sta
+[`abi_compatible`](../crates/fub-abi/src/traits.rs) (`traits.rs:4489`), e sta
 in quattro righe:
 
 | Caso | Esito | Perché |
@@ -133,7 +133,7 @@ era spostata. Un elenco che nessuno riconta è un ricordo.
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../crates/fub-kernel/src/journal.rs) | 1 | ciò che è successo al vault, una riga per mutazione |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../crates/fub-kernel/src/drafts.rs) | 1 | ciò che l'utente ha scritto e non ha salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../crates/fub-kernel/src/maintenance.rs) | 1 | una copia di fatti che stanno altrove, per chi cerca un guasto |
-| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:120`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:149`](../crates/fub-kernel/src/vault.rs) | 1 | da quale cartella veniva una voce cestinata |
 
 **La regola comune è il rifiuto in avanti.** Un file la cui `version` è
 **maggiore** di quella che questa copia di Fub conosce non si legge e non si

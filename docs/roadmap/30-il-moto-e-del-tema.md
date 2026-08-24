@@ -5,9 +5,8 @@ fatto dei tre strati un fascio sostituibile — struttura, foglio, pelle — e h
 collocato il moto al suo posto: il foglio porta «tipografia e moto», la pelle
 porta «bordi, hover, effetti, keyframes — e le animazioni». Questa seduta non
 apre un'altra strada: cerna le decisioni che quel collocamento chiede, e le
-scrive come promesse vincolanti. Sette decisioni, una voce aperta, e nessun file
-di codice cambia — è la seduta di ideazione che la roadmap userà per le tappe
-successive.
+scrive come promesse vincolanti. Sette decisioni e nessuna voce aperta: la
+roadmap le ha portate nel codice senza cambiare il confine deciso qui.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -110,7 +109,7 @@ CSS non transita `display`. Tre strade, una scelta.
 | Via | Meccanismo | Scartata perché |
 | --- | --- | --- |
 | (a) `@starting-style` + `transition-behavior: allow-discrete` | solo CSS | supporto a macchia nei motori (WebKitGTK); una regola che a seconda del motore anima o no è jank silenzioso |
-| (b) View Transitions API per i cambi di vista | potente | stessa a macchia di motori; rimandata ad arricchimento progressivo (voce aperta), non base |
+| (b) View Transitions API per i cambi di vista | potente | stessa a macchia di motori; rimandata ad arricchimento progressivo ([0175](../decisions/0175-la-transizione-nativa-e-un-arricchimento.md)), non base |
 | (c) la shell smonta il `hidden` e appende una classe di coreografia | un modulo `ui/moto.ts` con due gesti — `entra(el)`/`esci(el)` — scrive una classe, aspetta la fine (`transitionend` con bound di sicurezza), poi toglie `hidden` o stacca dal DOM | **scelta**: è logica di shell come `intrappolaFuoco`, il tema non vede codice, vede classi |
 
 Le classi sono il contratto shell→tema: la pelle di serie le consuma con
@@ -127,7 +126,8 @@ subito. Nessun ramo `if (prefersReduced)`. L'alternativa scartata — dodici
 timer scritti a mano, uno per superficie — sono dodici modi di
 desincronizzarsi.
 
-- [ ] **§30.8 Arricchimento progressivo View Transitions**: la via (b) della
+- [x] **§30.8 Arricchimento progressivo View Transitions**: **chiusa** dalla
+      [0175](../decisions/0175-la-transizione-nativa-e-un-arricchimento.md). La via (b) della
       §30.2 non è base, e non è scartata — è dopo. Rientra quando i motori
       convergono, e prima di allora vale il confine della (c): la shell
       dirige.

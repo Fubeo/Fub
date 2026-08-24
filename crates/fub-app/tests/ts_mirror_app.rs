@@ -18,6 +18,7 @@ use fub_abi::options::permission;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
 use fub_app_lib::{BundleInfo, EmbedContent, OpenVaults, UnreadDoc, VaultEntry, VaultInfo};
+use fub_host::registry::BundleKind;
 use fub_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
@@ -133,6 +134,7 @@ fn expected() -> Value {
                 id: "fub.versioning".into(),
                 name: "Versioning".into(),
                 mounted: true,
+                kind: BundleKind::Component,
                 trust: Trust::Core,
                 permissions: PluginPermissions::core().granted,
             }),
@@ -140,6 +142,7 @@ fn expected() -> Value {
                 id: "fub.stats".into(),
                 name: "Statistiche".into(),
                 mounted: false,
+                kind: BundleKind::Component,
                 trust: Trust::Community,
                 permissions: fub_abi::options::OptionMap::new()
                     .on(permission::READ_VAULT)

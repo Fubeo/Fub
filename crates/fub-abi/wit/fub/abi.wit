@@ -1830,6 +1830,7 @@ interface index {
     use organization.{organization};
     use ui.{ui-tree};
     use errors.{plugin-error};
+    use syntax.{syntax-trigger};
 
     /// La finestra chiesta su una risposta: sta nella DOMANDA perché chi la
     /// serve deve poter troncare prima di costruire il risultato. Assente =
@@ -2137,6 +2138,11 @@ interface index {
         heading: option<string>,
         block: option<string>,
     }
+    /// Una sintassi effettiva, col trigger quando è dichiarato da una regola.
+    record syntax-form {
+        name: string,
+        trigger: option<syntax-trigger>,
+    }
     variant index-query {
         documents(index-query-documents),
         backlinks(index-query-backlinks),
@@ -2222,6 +2228,9 @@ interface index {
         /// 0163 la transclusione passava da un comando IPC bespoke
         /// (`render-embed`). In coda come ogni variante nuova.
         render-embed(index-query-render-embed),
+        /// Le forme sintattiche effettive del documento, incluse quelle
+        /// registrate a runtime.
+        syntax-forms(doc-id),
     }
 
     /// La famiglia di una `index-query`: ciò che un indice dichiara di SERVIRE.
@@ -2281,6 +2290,8 @@ interface index {
         /// Chi risponde a «rendi questo ritaglio» (§16.6). Il kernel, per la
         /// ragione di `render-preview`. In coda come nell'`index-query`.
         render-embed,
+        /// Il kernel compone il provider col registro sintattico runtime.
+        syntax-forms,
     }
     /// La specie di una foglia: ciò che un indice dichiara di saper VALUTARE.
     variant predicate-kind {
@@ -2571,6 +2582,8 @@ interface index {
         /// Il ritaglio reso (risposta a `render-embed`): il documento e il suo
         /// id. In coda come la sua domanda.
         render-embed(embed-content),
+        /// Le forme sintattiche effettive del documento.
+        syntax-forms(list<syntax-form>),
     }
 
     /// SU QUESTA IDENTITÀ, L'INDICE ADESSO MENTE (§20.1, decisione 0051).

@@ -4,9 +4,10 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md). La pelle della
 shell — i token, il chrome dei componenti, le animazioni — smette di essere
 della shell e diventa un **fascio sostituibile**, di cui il tema di serie è il
 primo esemplare: un tema di terzi non si sovrappone, **prende il posto**. Sei
-voci, una chiusa: la prima l'ha chiusa la
-[0169](../decisions/0169-i-tre-strati-e-il-caricatore-che-sostituisce.md), e le
-altre cinque restano.
+voci, due chiuse: la §29.1 dalla
+[0169](../decisions/0169-i-tre-strati-e-il-caricatore-che-sostituisce.md) e la
+§29.3 dalla [0174](../decisions/0174-un-tema-entra-solo-se-regge.md). Le altre
+quattro restano.
 
 [← indice](../todo.md) · [le voci a leva più alta](leva.md) ·
 [i verbali delle decisioni chiuse](../decisions/README.md)
@@ -142,19 +143,19 @@ Ciò che un tema porta ha bisogno di due elenchi congelati, e tutti e due
 nascono da un conto, non da un'immaginazione: il primo dal blocco chiaro di
 `tokens.css` (44 ridichiarazioni), il secondo dal banco della §29.1.
 
-- [ ] **L'elenco dei ruoli obbligatori**: manca un ruolo → il tema non si
+- [x] **L'elenco dei ruoli obbligatori**: manca un ruolo → il tema non si
       monta, e il rifiuto **nomina i mancanti** — la regola della
       [0132](../decisions/0132-un-rifiuto-non-e-una-frase.md) applicata a un
       nuovo confine. Il tema parziale non è un tema: è una preferenza (i tre
       stati della [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md)) o
       uno snippet, che stanno sopra e sono un'altra specie.
-- [ ] **Il vocabolario degli hook**: le classi che una pelle può toccare sono
+- [x] **Il vocabolario degli hook**: le classi che una pelle può toccare sono
       API pubblica, versionata a parte (`theme-1`), con la stessa disciplina
       del WIT congelato e una vita sua: l'additività della
       [0002](../decisions/0002-additivita-del-contratto.md) vale anche qui —
       un ruolo nuovo si accoda, toglierne uno costa una major del contratto
       temi.
-- [ ] **Il manifest**: `fub-abi`/`fub-host`, mirror in `host/contract.ts` come
+- [x] **Il manifest**: `fub-abi`/`fub-host`, mirror in `host/contract.ts` come
       la [0053](../decisions/0053-il-contratto-ha-una-sorgente.md) insegna.
       Campi: id, nome, versione, `engine` (`theme-1`), **le luci offerte**
       (scuro, chiaro o coppia — un tema che porta una luce sola dichiara
@@ -166,23 +167,24 @@ nascono da un conto, non da un'immaginazione: il primo dal blocco chiaro di
 
 ### 29.3 I cancelli al montaggio: contrasto, moto, sanificazione
 
-*shell · **P1***
+*shell · **P1** — **chiusa** dalla
+[0174](../decisions/0174-un-tema-entra-solo-se-regge.md)*
 
 La coerenza minima non è un augurio e non è una revisione a occhio: sono
 quattro cancelli che girano al montaggio, prima che l'utente veda qualunque
 cosa. Il primo — la completezza — sta nella §29.2; qui gli altri tre.
 
-- [ ] **Contrasto**: le coppie di `theme/contrast.test.ts` diventano la
+- [x] **Contrasto**: le coppie di `theme/contrast.test.ts` diventano la
       tabella che il caricatore ricalcola sui valori del tema. AA sui ruoli
       testo → rifiuto che nomina la coppia caduta. La tabella esce dal banco e
       diventa una fixture letta dai due lati — una tabella, due lettori, come
       `rules-samples.json` per le gemelle.
-- [ ] **Moto**: `prefers-reduced-motion` lo fa rispettare **la shell**, non la
+- [x] **Moto**: `prefers-reduced-motion` lo fa rispettare **la shell**, non la
       cortesia dell'autore: una regola di struttura che sotto moto ridotto
       spegne il moto del foglio attivo, comunque il tema lo scriva. È il
       pavimento del §25.1. Indicazione di contratto nel manifest del tema:
       animare `transform` e `opacity`, non la geometria.
-- [ ] **Sanificazione CSS in un punto solo**: il gemello di `ui/sanitize.ts`
+- [x] **Sanificazione CSS in un punto solo**: il gemello di `ui/sanitize.ts`
       per i fogli — niente `url()` remoti (una risorsa remota parte da sola e
       dice a chi la serve che quella GUI è aperta: stessa regola di
       `<img src="https://…">` nella 0017), niente `@import`, asset solo dal
@@ -190,7 +192,7 @@ cosa. Il primo — la completezza — sta nella §29.2; qui gli altri tre.
       proprietà strutturali (`position`, `z-index`, `display` e le metriche
       della scocca) vietate. La casa è `ui/`, per la tabella di «dove va una
       regola scritta due volte» in [todo.md](../todo.md).
-- [ ] **Il rifiuto entra nel canale trouble**: un tema che non passa non è un
+- [x] **Il rifiuto entra nel canale trouble**: un tema che non passa non è un
       `console.warn` — è un evento, con il nome del tema e la ragione
       ([0080](../decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md)).
 
@@ -203,15 +205,15 @@ provider vuota. Un tema non legge niente, non scrive niente, non chiede
 permessi — e questo lo rende il bundle più povero che esista, cioè il banco di
 prova più onesto della strada di montaggio.
 
-- [ ] **Gli stessi quattro passi del `BundleRegistry`** (versione,
+- [x] **Gli stessi quattro passi del `BundleRegistry`** (versione,
       dichiarazione, `activate`, provider): il primo cancella legge `engine`
       dal manifest — un tema che dichiara `theme-2` su un host `theme-1` non
       si monta, per la stessa ragione di `abi_compatible`: prima
       dell'inventario, non dopo.
-- [ ] **`Trust::Community` di default, zero permessi**: il grado lo dice chi
+- [x] **`Trust::Community` di default, zero permessi**: il grado lo dice chi
       monta, non il manifest. Un tema con un permesso in manifesto è un
       manifesto sbagliato, e il caricatore lo dice.
-- [ ] **L'inventario**: accanto ai componenti nelle impostazioni, con
+- [x] **L'inventario**: accanto ai componenti nelle impostazioni, con
       `BundleInfo` e un kind suo — «spento» e «non c'è» restano due stati, per
       la stessa ragione per cui `BundleInfo` non è `PluginInfo`.
 - [ ] **La scelta è dell'utente, dalla shell**: una chiave di impostazione coi

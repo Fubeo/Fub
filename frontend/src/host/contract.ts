@@ -37,9 +37,25 @@ import type {
   TextField,
   TextMode,
   TextTolerance,
+  ThemeEngine,
+  ThemeLight,
   ViewSurface,
   Weekday,
 } from "./enums.generated";
+
+// Manifest congelato della pelle: non passa dal WIT, ma resta parte del confine.
+export const THEME_ENGINE = "theme-1" as const;
+
+export type { ThemeEngine, ThemeLight } from "./enums.generated";
+
+export interface ThemeManifest {
+  id: string;
+  name: string;
+  version: string;
+  engine: ThemeEngine;
+  lights: ThemeLight[];
+  asset_namespace: string;
+}
 
 export interface VaultInfo {
   root: string;
@@ -1221,6 +1237,16 @@ export interface Heading {
 // attorno» è una scelta di chi chiede, non un dettaglio della variante.
 export type { Excerpts } from "./enums.generated";
 
+// La forma dichiarata di una sintassi, rispecchiata dal contratto Rust/WIT.
+export type SyntaxTrigger =
+  | { readonly inline: { readonly open: string; readonly close: string } }
+  | { readonly fence: { readonly info: readonly string[] } };
+
+export interface SyntaxForm {
+  readonly name: string;
+  readonly trigger: SyntaxTrigger | null;
+}
+
 // Una interrogazione (rispecchia fub_abi::traits::IndexQuery).
 export type IndexQuery =
   | {
@@ -1311,7 +1337,9 @@ export type IndexQuery =
   // RENDI QUESTO RITAGLIO (0163, §16.6): la transclusione `![[page#heading]]` o
   // `![[page#^blocco]]`. Come `render_preview`, prima era un comando IPC suo
   // (`render_embed`) e ora passa dal canale dati.
-  | { kind: "render_embed"; page: string; heading?: string | null; block?: string | null };
+  | { kind: "render_embed"; page: string; heading?: string | null; block?: string | null }
+  // Le forme sintattiche effettive, incluse quelle registrate a runtime.
+  | { kind: "syntax_forms"; doc: string };
 
 // La risposta (rispecchia fub_abi::traits::IndexResult). Tag ADIACENTE
 // (`kind` + `value`): un payload che è una lista o uno scalare non attraversa
@@ -1342,7 +1370,8 @@ export type IndexResult =
   | { kind: "render_preview"; value: RenderedDocument }
   // Il ritaglio reso (risposta a `render_embed`, 0163): il documento reso e il
   // suo id, perché chi monta un embed deve sapere da quale nota viene.
-  | { kind: "render_embed"; value: EmbedContent };
+  | { kind: "render_embed"; value: EmbedContent }
+  | { kind: "syntax_forms"; value: SyntaxForm[] };
 
 // CHE SPECIE DI FILE È (§14.1). Non è una proprietà del file: è una proprietà
 // del file dato chi è registrato adesso — un `.canvas` è `unknown` finché
@@ -1457,6 +1486,10 @@ export interface BundleInfo {
   id: string;
   name: string;
   mounted: boolean;
+  // La famiglia decide quale gesto la riga offre: un componente si accende, un
+  // tema si applica. Non è deducibile da `mounted`, perché anche uno spento
+  // deve restare classificabile.
+  kind: "component" | "theme";
   // Quanto l'host si fida di chi lo ha prodotto. Non è una decorazione accanto
   // ai permessi: «può leggere le mie note» non vuol dire la stessa cosa detto
   // di una feature di questo repo e di un componente arrivato da fuori.

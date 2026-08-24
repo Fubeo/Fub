@@ -44,19 +44,11 @@
 // esattamente quella che senza una dichiarazione andrebbe scritto due volte.
 import { ALPHANUMERIC, TAG_CHARACTER, scanTags } from "./mirrored";
 import { MARKDOWN_SYNTAX } from "./syntax.generated";
+import type { SyntaxForm, SyntaxTrigger } from "../host/contract";
 
-/// Un trigger dichiarato, nella forma serde che attraverserà l'IPC.
-export type Trigger =
-  | { readonly inline: { readonly open: string; readonly close: string } }
-  | { readonly fence: { readonly info: readonly string[] } }
-  | null;
-
-/// Una sintassi dichiarata: il nome del vocabolario, e la forma quando è un
-/// dato invece che una grammatica.
-export interface SyntaxForm {
-  readonly name: string;
-  readonly trigger: Trigger;
-}
+/// Un trigger dichiarato, nella forma serde che attraversa l'IPC.
+export type Trigger = SyntaxTrigger | null;
+export type { SyntaxForm };
 
 /// I delimitatori inline **dichiarati**, in ordine di dichiarazione.
 ///

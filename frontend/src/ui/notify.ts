@@ -46,6 +46,13 @@ import { onEvent } from "../state/kernel";
 /// tagliare finisce con tutto sullo stesso gradino.
 export type Tone = "info" | "guasto";
 
+/** Rifiuto strutturato del cancello temi, prima della resa in una notifica. */
+export interface ThemeTrouble {
+  readonly type: "theme";
+  readonly theme: string;
+  readonly reasons: readonly string[];
+}
+
 /// Un avviso nello storico: il testo, il tono, quando, e **quante volte**.
 export interface Notice {
   text: string;
@@ -110,6 +117,17 @@ export function notify(message: string, tone: Tone = "info"): void {
   if (!open) unreadCount += 1;
   show(history[0]);
   redraw();
+}
+
+/** Porta i rifiuti locali dei temi nello stesso centro dei guasti del kernel. */
+export function reportThemeTrouble(trouble: ThemeTrouble): void {
+  notify(
+    [
+      `Tema «${trouble.theme}» rifiutato:`,
+      ...trouble.reasons.map((reason) => `- ${reason}`),
+    ].join("\n"),
+    "guasto",
+  );
 }
 
 /// **Il kernel dice che qualcosa è andato storto, e lo si mostra** (§20.2).

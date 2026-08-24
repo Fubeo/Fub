@@ -621,37 +621,49 @@ fn a_host_without_installation_remembers_only_until_lasts() {
 /// stringa di Rust dentro il TypeScript — passerebbe anche trovandola in un
 /// commento.
 #[test]
-fn the_key_of_the_theme_and_the_same_of_here_and_of_the() {
+fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
     let theme_ts =
         std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/theme/theme.ts");
     let source = std::fs::read_to_string(&theme_ts)
         .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", theme_ts.display()));
-
-    let declared = source
-        .lines()
-        .find_map(|row| {
-            row.strip_prefix("export const THEME_KEY = \"")?
-                .strip_suffix("\";")
-        })
-        .expect(
-            "in `theme/theme.ts` there is no longer a line `export const THEME_KEY = \"…\";`: \
-             or the key is called something else, or this guard is reading emptiness",
-        )
-        .to_string();
-
+    let expected = [
+        ("THEME_KEY", fub_host::settings::APPEARANCE_THEME),
+        ("CONTRAST_KEY", fub_host::settings::APPEARANCE_CONTRAST),
+        ("DENSITY_KEY", fub_host::settings::APPEARANCE_DENSITY),
+        ("BODY_KEY", fub_host::settings::APPEARANCE_BODY),
+        (
+            "LINE_HEIGHT_KEY",
+            fub_host::settings::APPEARANCE_LINE_HEIGHT,
+        ),
+        ("MEASURE_KEY", fub_host::settings::APPEARANCE_MEASURE),
+        ("FONT_KEY", fub_host::settings::APPEARANCE_FONT),
+        ("ACCENT_KEY", fub_host::settings::APPEARANCE_ACCENT),
+        ("ZOOM_KEY", fub_host::settings::APPEARANCE_ZOOM),
+    ];
     let core = fub_host::settings::core_settings();
-    let keys: Vec<&str> = core.iter().map(|s| s.key.as_str()).collect();
-    assert!(
-        keys.contains(&declared.as_str()),
-        "the shell reads the setting \"{declared}\", which the core does not declare: \
-         the theme could be changed from the panel without anything changing. \
-         Declared keys are {keys:?}"
-    );
-    assert_eq!(
-        declared,
-        fub_host::settings::APPEARANCE_THEME,
-        "the shell and the core name two different keys"
-    );
+
+    for (name, rust_key) in expected {
+        let prefix = format!("export const {name} = \"");
+        let declared = source
+            .lines()
+            .find_map(|row| row.strip_prefix(&prefix)?.strip_suffix("\";"))
+            .unwrap_or_else(|| panic!("the shell no longer declares {name}"));
+        assert_eq!(declared, rust_key, "the shell and core name different keys");
+        let spec = core
+            .iter()
+            .find(|spec| spec.key == declared)
+            .unwrap_or_else(|| panic!("{declared} is not declared by core"));
+        assert_eq!(spec.scope, fub_abi::settings::SettingScope::Machine);
+        if rust_key == fub_host::settings::APPEARANCE_THEME
+            || rust_key == fub_host::settings::APPEARANCE_CONTRAST
+        {
+            assert_eq!(
+                spec.kind.default_value(),
+                fub_abi::settings::SettingValue::Text(String::new()),
+                "reset must return the system-controlled automatic state",
+            );
+        }
+    }
 }
 
 /// Come il tema, e per una posta più alta: l'interruttore della **memoria**

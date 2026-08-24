@@ -1,7 +1,7 @@
 /* La pagina e il suo fondo. Margini e altezza sono della struttura
    (`theme/struttura.css`); qui è la luce. */
 html, body, .app {
-  background: var(--bg);
+  background: var(--elevation-base-surface);
   color: var(--text);
 }
 
@@ -96,3 +96,20 @@ button.primary:active,
   background: var(--danger-wash);
   color: var(--danger);
 }
+
+/* I cinque piani nel catalogo del banco: stessa anatomia, tre token per riga. */
+.elevation-paper,
+.elevation-base,
+.elevation-chrome,
+.elevation-floating,
+.elevation-dialog {
+  min-height: var(--space-10);
+  padding: var(--space-4);
+  border: 1px solid;
+  border-radius: var(--radius-md);
+}
+.elevation-paper { background: var(--elevation-paper-surface); border-color: var(--elevation-paper-border); box-shadow: var(--elevation-paper-shadow); }
+.elevation-base { background: var(--elevation-base-surface); border-color: var(--elevation-base-border); box-shadow: var(--elevation-base-shadow); }
+.elevation-chrome { background: var(--elevation-chrome-surface); border-color: var(--elevation-chrome-border); box-shadow: var(--elevation-chrome-shadow); }
+.elevation-floating { background: var(--elevation-floating-surface); border-color: var(--elevation-floating-border); box-shadow: var(--elevation-floating-shadow); }
+.elevation-dialog { background: var(--elevation-dialog-surface); border-color: var(--elevation-dialog-border); box-shadow: var(--elevation-dialog-shadow); }

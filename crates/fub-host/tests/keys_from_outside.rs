@@ -244,12 +244,14 @@ fn shortcuts_written_here_still_travel_with_vault() {
     );
 }
 
-/// **Le altre chiavi del vault non si sospendono.** Un tema che arriva da fuori
-/// si applica, ed è la 0076 che regge: si vede subito e si disfa in un gesto.
-/// Sospendere anche quelle sarebbe stato il modo di far pagare a tutti il
-/// prezzo di una famiglia sola.
+/// **Il tema non viaggia più col vault.** Da quando la selezione del tema è
+/// della **macchina** (§29.4), un `appearance.theme` scritto nel file di un
+/// vault che arriva da fuori non si applica: la pelle che questa installazione
+/// conosce resta quella, e la riga inutile è un avviso, non una decisione. La
+/// lingua invece sì, ed è la stessa 0076: si vede subito e si disfa in un
+/// gesto.
 #[test]
-fn theme_arriving_from_outside_is_still_applied() {
+fn theme_arriving_from_outside_is_not_applied() {
     let (_c, config) = config();
     let v = Vault::new().with_settings(&[
         (fub_host::settings::APPEARANCE_THEME, "dark"),
@@ -261,7 +263,9 @@ fn theme_arriving_from_outside_is_still_applied() {
     assert!(host.pending_keybindings(None).unwrap().is_empty());
     assert_eq!(
         effective_binding(&host, fub_host::settings::APPEARANCE_THEME),
-        (SettingValue::Text("dark".into()), SettingSource::Vault)
+        // «Come il sistema», il default dello schema di macchina: il valore
+        // scritto nel vault non vale, e `SettingSource::Default` dice il vero.
+        (SettingValue::Text(String::new()), SettingSource::Default)
     );
     assert_eq!(
         effective_binding(&host, fub_kernel::locale::LANGUAGE).1,

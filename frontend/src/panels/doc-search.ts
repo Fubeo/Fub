@@ -43,6 +43,7 @@ import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
 import { state } from "../state/store";
 import { highlighted } from "../ui/highlight";
+import { enterSurface, exitSurface } from "../ui/motion";
 import { revealByteOffset } from "./document";
 
 const OVERLAY_ID = "doc-search";
@@ -56,9 +57,10 @@ const MAX_OCCURRENCES = 50;
 let release: (() => void) | null = null;
 
 export function closeInDocumentSearch(): void {
-  document.getElementById(OVERLAY_ID)?.remove();
+  const overlay = document.getElementById(OVERLAY_ID);
   release?.();
   release = null;
+  if (overlay) exitSurface(overlay, () => overlay.remove());
 }
 
 /// Il comando, dichiarato da chi ce l'ha (§18.2).
@@ -188,24 +190,28 @@ export function openInDocumentSearch(): void {
 
 function openOverlay(): HTMLElement {
   closeInDocumentSearch();
-  const overlay = document.createElement("div");
-  overlay.id = OVERLAY_ID;
-  overlay.className = "modale";
-  // Una modale dichiarata tale, come la palette: chi entra sente «finestra di
-  // dialogo» e il linguetta non esce di sotto.
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
+  let overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = OVERLAY_ID;
+    overlay.className = "modale";
+    // Una modale dichiarata tale, come la palette: chi entra sente «finestra di
+    // dialogo» e il linguetta non esce di sotto.
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.tabIndex = -1;
+    const box = document.createElement("div");
+    box.className = "palette-box";
+    overlay.appendChild(box);
+    overlay.addEventListener("mousedown", (e) => {
+      if (e.target === overlay) closeInDocumentSearch();
+    });
+    document.body.appendChild(overlay);
+  }
   overlay.setAttribute("aria-label", t("docsearch.title"));
-  overlay.tabIndex = -1;
-  const box = document.createElement("div");
-  box.className = "palette-box";
-  overlay.appendChild(box);
-  overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) closeInDocumentSearch();
-  });
-  document.body.appendChild(overlay);
+  enterSurface(overlay);
   // Dopo l'inserimento: `intrappolaFuoco` mette a fuoco il primo elemento, e
   // un elemento fuori dal documento non lo può prendere.
   release = trapFocus(overlay, closeInDocumentSearch);
-  return box;
+  return overlay.querySelector<HTMLElement>(".palette-box")!;
 }

@@ -37,8 +37,9 @@ import { allCommands, keybindingKey } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import { THEME_KEY } from "../theme/theme";
+import { CONTRAST_KEY, THEME_KEY } from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
+import { enterSurface, exitSurface } from "../ui/motion";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -164,6 +165,7 @@ let release: (() => void) | null = null;
 async function open(): Promise<void> {
   if (release) return;
   panelEl.hidden = false;
+  enterSurface(panelEl);
   // Il fuoco entra e resta: mentre le impostazioni sono aperte, sono quello che
   // si sta facendo (è la ragione per cui stanno sopra tutto anche visivamente,
   // scritto accanto al loro `z-index`). Una modale da cui il linguetta scappa mette
@@ -174,9 +176,11 @@ async function open(): Promise<void> {
 }
 
 function close(): void {
-  panelEl.hidden = true;
   release?.();
   release = null;
+  exitSurface(panelEl, () => {
+    panelEl.hidden = true;
+  });
 }
 
 /// Quale disegno è l'ultimo chiesto.
@@ -286,7 +290,7 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
   // Il tema è la riga più guardata del gruppo Appearance: la si alza di
   // un gradino visivo, così l'occhio la trova prima delle altre impostazioni
   // di aspetto che le stanno attorno.
-  if (entry.spec.key === THEME_KEY) {
+  if (entry.spec.key === THEME_KEY || entry.spec.key === CONTRAST_KEY) {
     el.classList.add("setting-row--theme");
   }
 
@@ -319,6 +323,127 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
     el.append(resetButton);
   }
   return el;
+}
+
+// Una lista resta una dichiarazione generica del contratto. L'editor compare
+// solo per le chiavi per cui la shell possiede un gesto utente esplicito:
+// `program_writable` è deliberatamente un'altra capacità.
+const editableListKeys = new Set(["files.excluded-folders"]);
+const structuralFolderKeys = new Set([".fub", ".trash", ".", ".."]);
+
+function normalizedFolder(raw: string): string {
+  let folder = raw.trim().replaceAll("\\", "/");
+  while (folder.startsWith("/")) folder = folder.slice(1);
+  while (folder.endsWith("/")) folder = folder.slice(0, -1);
+  return folder.trim().normalize("NFC");
+}
+
+function folderKey(folder: string): string {
+  return folder.normalize("NFC").toLowerCase();
+}
+
+function normalizedList(value: SettingValue): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of value) {
+    const folder = normalizedFolder(raw);
+    const key = folderKey(folder);
+    if (!folder || seen.has(key)) continue;
+    seen.add(key);
+    result.push(folder);
+  }
+  return result;
+}
+
+function checkedFolder(
+  raw: string,
+  existing: string[],
+): { value: string } | { message: string } {
+  const value = normalizedFolder(raw);
+  if (!value) return { message: t("settings.list.empty") };
+  if (value.includes("/")) return { message: t("settings.list.path") };
+  const key = folderKey(value);
+  if (structuralFolderKeys.has(key)) {
+    return { message: t("settings.list.structural", { folder: value }) };
+  }
+  if (existing.some((folder) => folderKey(folder) === key)) {
+    return { message: t("settings.list.duplicate", { folder: value }) };
+  }
+  return { value };
+}
+
+function readonlyListField(entry: SettingEntry, id: string): HTMLElement {
+  const el = row("muted", show(entry.value));
+  el.id = id;
+  return el;
+}
+
+function listField(entry: SettingEntry, id: string): HTMLElement {
+  const values = normalizedList(entry.value);
+  const editor = document.createElement("div");
+
+  if (values.length === 0) editor.append(row("muted", t("settings.list.none")));
+  else {
+    const list = document.createElement("ul");
+    for (const [index, folder] of values.entries()) {
+      const item = document.createElement("li");
+      item.append(document.createTextNode(folder));
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link-button";
+      remove.textContent = t("settings.list.remove");
+      remove.setAttribute("aria-label", t("settings.list.remove.hint", { folder }));
+      remove.addEventListener("click", () => {
+        void write(() =>
+          api.setSetting(
+            entry.spec.key,
+            values.filter((_, candidate) => candidate !== index),
+          ),
+        );
+      });
+      item.append(remove);
+      list.append(item);
+    }
+    editor.append(list);
+  }
+
+  const form = document.createElement("form");
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = id;
+  input.autocomplete = "off";
+  input.placeholder = t("settings.list.placeholder");
+  const error = row("muted", "");
+  error.id = `${id}-error`;
+  error.setAttribute("role", "alert");
+  error.setAttribute("aria-live", "polite");
+  error.hidden = true;
+  input.setAttribute("aria-describedby", error.id);
+
+  const add = document.createElement("button");
+  add.type = "submit";
+  add.className = "link-button";
+  add.textContent = t("settings.list.add");
+  form.append(input, add, error);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const checked = checkedFolder(input.value, values);
+    if ("message" in checked) {
+      error.textContent = checked.message;
+      error.hidden = false;
+      input.setAttribute("aria-invalid", "true");
+      return;
+    }
+    error.hidden = true;
+    input.removeAttribute("aria-invalid");
+    void write(async () => {
+      await api.setSetting(entry.spec.key, [...values, checked.value]);
+      input.value = "";
+    });
+  });
+  editor.append(form);
+  return editor;
 }
 
 /// Il campo di una riga, dalla **specie dichiarata**.
@@ -387,8 +512,8 @@ function field(entry: SettingEntry): HTMLElement {
       // niente. È la sola chiave che si prende questa strada: qualunque altra
       // `choice` ha più di tre opzioni, o meno, o le ha ma non è la prima cosa
       // che si guarda, e per quelle la `<select>` resta giusta.
-      if (entry.spec.key === THEME_KEY) {
-        return themeToggle(entry, kind);
+      if (entry.spec.key === THEME_KEY || entry.spec.key === CONTRAST_KEY) {
+        return appearanceToggle(entry, kind);
       }
       const select = document.createElement("select");
       select.id = id;
@@ -417,19 +542,10 @@ function field(entry: SettingEntry): HTMLElement {
       });
       return select;
     }
-    // Un elenco si **mostra e non si edita**: il protocollo di UI non ha un
-    // editor di liste, e inventarne uno qui vorrebbe dire che il pannello sa
-    // disegnare qualcosa che una view dichiarativa non può chiedere. Chi lo
-    // cambia è il comando che lo scrive — per `plugins.disabled` è la scheda
-    // «Componenti», qui accanto.
-    case "list": {
-      const el = row("muted", show(entry.value));
-      // L'`id` c'è anche qui, e non è pignoleria: l'etichetta della riga punta
-      // sempre a `setting-<key>`, e senza questo il `for` di ogni riga di
-      // tipo lista sarebbe pendente.
-      el.id = id;
-      return el;
-    }
+    case "list":
+      return editableListKeys.has(entry.spec.key)
+        ? listField(entry, id)
+        : readonlyListField(entry, id);
   }
 }
 
@@ -443,7 +559,7 @@ function field(entry: SettingEntry): HTMLElement {
 /// ripiego difensivo, non la strada. L'elenco non è più cablato qui: scorre
 /// `kind.options` nell'ordine dello schema, così un'opzione nuova compare
 /// senza una seconda lista da tenere a mano.
-function themeToggle(
+function appearanceToggle(
   entry: SettingEntry,
   kind: Extract<SettingEntry["spec"]["kind"], { kind: "choice" }>,
 ): HTMLElement {

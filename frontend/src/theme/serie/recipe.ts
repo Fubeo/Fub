@@ -54,11 +54,12 @@
 //
 // # Cosa questo file **non** decide
 //
-// L'elevazione (l'ombra, il filetto, quanto una superficie stacca) è la §31.5,
-// e da qui prende solo i gradini. I caratteri sono la §31.3 e restano letterali.
+// L'elevazione (superficie, filetto e ombra) è la tabella qui sotto (§31.5).
+// I caratteri sono la §31.3 e restano letterali.
 // Le preferenze della persona sono la §31.6 e staranno **sopra** il foglio, in
 // un canale proprio.
 import { contrast } from "../contrast";
+import { PAIRS } from "../contrast-fixture";
 import { toHex, type Oklch } from "../oklch";
 
 /// Le due luci. Non sono due temi: sono lo stesso tema visto da due parti, e
@@ -66,6 +67,13 @@ import { toHex, type Oklch } from "../oklch";
 export type Light = "dark" | "light";
 
 export const LIGHTS = ["dark", "light"] as const;
+
+export type ContrastLevel = "normal" | "high";
+export const CONTRASTS = ["normal", "high"] as const;
+
+/** Le soglie numeriche dell'alto contrasto: AAA per il testo, una volta e
+ *  mezza il minimo per segni e controlli. */
+const HIGH_CONTRAST = { text: 7, ui: 4.5 } as const;
 
 /// Ciò che una luce decide, e nient'altro.
 ///
@@ -145,8 +153,26 @@ const ACCENT = 130;
 /// scura al posto di un accento.
 type TargetContrast = number | Readonly<Record<Light, number>>;
 
-function targetContrast(m: TargetContrast, light: Light): number {
-  return typeof m === "number" ? m : m[light];
+function targetContrast(
+  m: TargetContrast,
+  light: Light,
+  level: ContrastLevel,
+  role: string,
+): number {
+  const base = typeof m === "number" ? m : m[light];
+  if (level === "normal") return base;
+
+  // La fixture è l'autorità sulle coppie che la pelle mette davvero insieme.
+  // Una riga AA diventa AAA; una riga UI sale a 4,5:1. Il ruolo può stare da
+  // una parte o dall'altra: il rapporto di contrasto è simmetrico.
+  const required = PAIRS
+    .filter(([ink, background]) => ink === role || background === role)
+    .reduce(
+      (target, [, , threshold]) =>
+        Math.max(target, threshold >= 4.5 ? HIGH_CONTRAST.text : HIGH_CONTRAST.ui),
+      base,
+    );
+  return required;
 }
 
 type Entry = Readonly<
@@ -158,6 +184,9 @@ type Entry = Readonly<
     /// Un gradino della scala delle superfici: quanti passi sopra la carta.
     /// La chiarezza è l'unica cosa che si dichiara, e si dichiara in passi.
     | { type: "gradino"; steps: number; chroma?: number }
+    /// Un gradino che cambia passo fra le due luci: la tabella d'elevazione
+    /// al buio separa con la luce, in chiaro lascia il lavoro all'ombra.
+    | { type: "elevazione"; steps: Readonly<Record<Light, number>>; chroma?: number }
     /// Un inchiostro: che colore è, sopra cosa sta, quanto deve reggere. La
     /// chiarezza la trova la generazione.
     ///
@@ -331,6 +360,44 @@ const SCALE: readonly Group[] = [
     ],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// L'elevazione: cinque livelli, letti nelle due luci.
+// ---------------------------------------------------------------------------
+
+export const ELEVATION_LEVELS = ["paper", "base", "chrome", "floating", "dialog"] as const;
+
+type ElevationLevel = (typeof ELEVATION_LEVELS)[number];
+type ElevationSpec = Readonly<{
+  name: ElevationLevel;
+  surface: Readonly<Record<Light, number>>;
+  border: Readonly<Record<Light, number>>;
+  shadow: Readonly<Record<Light, string>>;
+}>;
+
+/// La tabella livello × luce. Al buio ogni piano guadagna chiarezza e l'ombra
+/// resta spenta; in luce le superfici restano raccolte e la profondità cresce
+/// nell'ombra. Superficie, filetto e ombra escono sempre dalla stessa riga.
+const ELEVATION_TABLE: readonly ElevationSpec[] = [
+  { name: "paper", surface: { dark: 0, light: 0 }, border: { dark: 0, light: 0 }, shadow: { dark: "none", light: "none" } },
+  { name: "base", surface: { dark: 1, light: 1 }, border: { dark: 2, light: 2 }, shadow: { dark: "none", light: "0 1px 2px rgb(20 20 40 / 4%)" } },
+  { name: "chrome", surface: { dark: 2, light: 1 }, border: { dark: 4, light: 3 }, shadow: { dark: "none", light: "0 2px 6px rgb(20 20 40 / 7%)" } },
+  { name: "floating", surface: { dark: 3, light: 1 }, border: { dark: 6, light: 5 }, shadow: { dark: "none", light: "0 6px 18px rgb(20 20 40 / 12%)" } },
+  { name: "dialog", surface: { dark: 4, light: 1 }, border: { dark: 9, light: 7 }, shadow: { dark: "none", light: "0 12px 32px rgb(20 20 40 / 18%)" } },
+];
+
+const ELEVATION: Group = {
+  title: "l'elevazione: dalla carta al dialogo",
+  prose:
+    "Cinque piani. In luce scura la superficie sale e l'ombra non finge di\n" +
+    "staccare dal nero; in luce chiara la superficie resta quieta e cresce\n" +
+    "l'ombra. Il filetto appartiene alla stessa riga, non a un componente.",
+  entries: ELEVATION_TABLE.flatMap((level): Entry[] => [
+    { name: `elevation-${level.name}-surface`, type: "elevazione", steps: level.surface },
+    { name: `elevation-${level.name}-border`, type: "elevazione", steps: level.border },
+    { name: `elevation-${level.name}-shadow`, type: "letterale", value: level.shadow },
+  ]),
+};
 
 // ---------------------------------------------------------------------------
 // Il colore.
@@ -586,41 +653,19 @@ const COLOR: readonly Group[] = [
   {
     title: "i veli e le ombre",
     prose:
-      "Il velo sotto una superficie modale, e le tre ombre. Cambiano con la luce\n" +
-      "perché un'ombra nera al 45% sotto una finestra chiara è una macchia.\n" +
-      "Restano letterali: **quanto** una superficie stacca è la §31.5, e qui non si\n" +
-      "decide — un'ombra nera su fondo nero non solleva niente, e sarà quella voce\n" +
-      "a dirlo con una tabella.",
+      "Il velo sotto una superficie modale, e i tre nomi storici delle ombre.\n" +
+      "Le ombre non hanno più numeri propri: leggono i livelli base, floating e\n" +
+      "dialog della tabella, così un nome pubblico resta additivo senza diventare\n" +
+      "una seconda scala.",
     entries: [
       {
         name: "scrim",
         type: "letterale",
         value: { dark: "rgb(0 0 0 / 45%)", light: "rgb(20 20 30 / 35%)" },
       },
-      {
-        name: "shadow-sm",
-        type: "letterale",
-        value: {
-          dark: "0 6px 20px rgb(0 0 0 / 45%)",
-          light: "0 4px 14px rgb(20 20 40 / 12%)",
-        },
-      },
-      {
-        name: "shadow-md",
-        type: "letterale",
-        value: {
-          dark: "0 8px 28px rgb(0 0 0 / 50%)",
-          light: "0 6px 20px rgb(20 20 40 / 14%)",
-        },
-      },
-      {
-        name: "shadow-lg",
-        type: "letterale",
-        value: {
-          dark: "0 12px 40px rgb(0 0 0 / 55%)",
-          light: "0 10px 30px rgb(20 20 40 / 18%)",
-        },
-      },
+      { name: "shadow-sm", type: "eco", source: "elevation-base-shadow" },
+      { name: "shadow-md", type: "eco", source: "elevation-floating-shadow" },
+      { name: "shadow-lg", type: "eco", source: "elevation-dialog-shadow" },
     ],
   },
   {
@@ -881,7 +926,7 @@ const COLOR: readonly Group[] = [
   },
 ];
 
-const RECIPE: readonly Group[] = [...SCALE, ...COLOR];
+const RECIPE: readonly Group[] = [...SCALE, ELEVATION, ...COLOR];
 
 // ---------------------------------------------------------------------------
 // La derivazione.
@@ -984,15 +1029,16 @@ function search(
 /// chiarezza è **una**, e le dieci si distinguono per tinta — che è come si
 /// distinguono le parole di una lingua, non per quanto sono chiare.
 function familyClarity(
-  members: readonly { h: number; c: number; above: readonly string[]; targetContrast: TargetContrast }[],
+  members: readonly { name: string; h: number; c: number; above: readonly string[]; targetContrast: TargetContrast }[],
   light: Light,
+  level: ContrastLevel,
   resolved: Map<string, string>,
 ): number {
   const clarities = members.map((m) =>
     search(
       { c: m.c, h: m.h },
       m.above.map((f) => backgroundOf(f, resolved)),
-      targetContrast(m.targetContrast, light),
+      targetContrast(m.targetContrast, light, level, m.name),
       light,
     ),
   );
@@ -1010,13 +1056,18 @@ function contrastColor(fill: string): string {
 /// I token di una luce, nell'ordine in cui la ricetta li dichiara. L'ordine
 /// conta due volte: è quello in cui il foglio li scrive, ed è quello in cui si
 /// risolvono — un inchiostro può nominare come fondo solo un ruolo già uscito.
-export function palette(light: Light): Map<string, string> {
+export function palette(
+  light: Light,
+  level: ContrastLevel = "normal",
+  accentHue: number = ACCENT,
+): Map<string, string> {
   const resolved = new Map<string, string>();
   const families = new Map<string, number>();
+  const hue = Number.isFinite(accentHue) ? ((accentHue % 360) + 360) % 360 : ACCENT;
 
   for (const group of RECIPE) {
     for (const entry of group.entries) {
-      resolved.set(entry.name, resolveValue(entry, light, resolved, families));
+      resolved.set(entry.name, resolveValue(entry, light, level, hue, resolved, families));
     }
   }
   return resolved;
@@ -1035,6 +1086,8 @@ function membersOf(family: string) {
 function resolveValue(
   entry: Entry,
   light: Light,
+  level: ContrastLevel,
+  accentHue: number,
   resolved: Map<string, string>,
   families: Map<string, number>,
 ): string {
@@ -1044,23 +1097,35 @@ function resolveValue(
 
     case "gradino": {
       // Il croma dei neutri cresce col gradino: una superficie lontana dalla
-      // carta ha più posto per portare una tinta senza diventare colorata, e una
-      // vicina non ne ha per niente. È il modo in cui «i neutri sono tinti, di
-      // poco» resta vero anche sul gradino più basso, dove «di poco» vuol dire
-      // zero — il nero e il bianco una tinta non ce l'hanno.
+      // carta ha più posto per portare una tinta senza diventare colorata.
       const chroma = entry.chroma ?? Math.min(0.008, 0.0012 * entry.steps);
       return toHex({ l: stepClarity(light, entry.steps), c: chroma, h: NEUTRAL });
     }
 
+    case "elevazione": {
+      const steps = entry.steps[light];
+      const chroma = entry.chroma ?? Math.min(0.008, 0.0012 * steps);
+      return toHex({ l: stepClarity(light, steps), c: chroma, h: NEUTRAL });
+    }
+
     case "inchiostro": {
-      const color = { c: entry.c, h: entry.h };
+      const h = entry.h === ACCENT ? accentHue : entry.h;
+      const color = { c: entry.c, h };
       if (entry.family === undefined) {
         const backgrounds = entry.above.map((f) => backgroundOf(f, resolved));
-        return toHex({ ...color, l: search(color, backgrounds, targetContrast(entry.targetContrast, light), light) });
+        return toHex({
+          ...color,
+          l: search(
+            color,
+            backgrounds,
+            targetContrast(entry.targetContrast, light, level, entry.name),
+            light,
+          ),
+        });
       }
       let l = families.get(entry.family);
       if (l === undefined) {
-        l = familyClarity(membersOf(entry.family), light, resolved);
+        l = familyClarity(membersOf(entry.family), light, level, resolved);
         families.set(entry.family, l);
       }
       return toHex({ ...color, l });
@@ -1090,14 +1155,17 @@ function resolveValue(
 // L'emissione.
 // ---------------------------------------------------------------------------
 
-const HEADER: Record<Light, string> = {
-  dark:
-    "Il foglio del tema di serie, nella luce scura: ruoli, tipografia, moto.\n" +
-    "(§29.1, generato dalla ricetta della §31.2)",
-  light:
-    "Il foglio del tema di serie, nella luce chiara: il gemello di\n" +
-    "`sheet-dark.css` (§29.1, generato dalla ricetta della §31.2)",
-};
+function header(light: Light, level: ContrastLevel): string {
+  const base =
+    light === "dark"
+      ? "Il foglio del tema di serie, nella luce scura: ruoli, tipografia, moto."
+      : "Il foglio del tema di serie, nella luce chiara: il gemello dello scuro.";
+  const contrastLine =
+    level === "high"
+      ? "Soglie alte: testo 7:1, segni e controlli 4,5:1 (§31.7)."
+      : "Soglie normali WCAG AA (§31.2).";
+  return `${base}\n${contrastLine}`;
+}
 
 /// Il righello fra un gruppo e il successivo. La larghezza è dichiarata una
 /// volta sola: due separatori lunghi diversi sono la specie di differenza che
@@ -1121,13 +1189,13 @@ function comment(text: string, inside: boolean): string {
 }
 
 /// Il foglio di una luce, per intero: è ciò che sta su disco, byte per byte.
-export function sheet(light: Light): string {
-  const values = palette(light);
+export function sheet(light: Light, level: ContrastLevel): string {
+  const values = palette(light, level);
   const parts: string[] = [];
 
   parts.push(
     comment(
-      `${HEADER[light]}\n` +
+      `${header(light, level)}\n` +
         "\n" +
         "FILE GENERATO — non modificare a mano.\n" +
         "\n" +
@@ -1188,12 +1256,38 @@ export function sheet(light: Light): string {
   return `${parts.join("\n")}\n`;
 }
 
-/// I due fogli, col nome del file che li ospita. È ciò che la generazione
-/// scrive e ciò che il presidio confronta: un elenco solo, letto da due parti.
-export const SHEETS: Readonly<Record<Light, string>> = {
-  dark: "sheet-dark.css",
-  light: "sheet-light.css",
+/// I quattro fogli luce × contrasto, col nome del derivato che li ospita.
+export const SHEETS: Readonly<Record<Light, Readonly<Record<ContrastLevel, string>>>> = {
+  dark: { normal: "sheet-dark.css", high: "sheet-dark-high.css" },
+  light: { normal: "sheet-light.css", high: "sheet-light-high.css" },
 };
+
+export const VARIANTS = [
+  { light: "dark", contrast: "normal" },
+  { light: "dark", contrast: "high" },
+  { light: "light", contrast: "normal" },
+  { light: "light", contrast: "high" },
+] as const;
+
+/** I soli ruoli colorati dall'accento personale, derivati dalla ricetta intera. */
+export const ACCENT_PREFERENCE_TOKENS = [
+  "accent",
+  "accent-soft",
+  "accent-contrast",
+  "focus-ring",
+  "graph-node-active",
+] as const;
+
+export function accentPalette(
+  light: Light,
+  level: ContrastLevel,
+  hue: number,
+): Record<(typeof ACCENT_PREFERENCE_TOKENS)[number], string> {
+  const values = palette(light, level, hue);
+  return Object.fromEntries(
+    ACCENT_PREFERENCE_TOKENS.map((token) => [token, values.get(token)!]),
+  ) as Record<(typeof ACCENT_PREFERENCE_TOKENS)[number], string>;
+}
 
 /// Il nome dei ruoli che la ricetta dichiara, nell'ordine del foglio. Lo legge
 /// il presidio dell'additività: un ruolo non si rinomina, e il modo di

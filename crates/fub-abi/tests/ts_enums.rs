@@ -39,7 +39,7 @@
 
 mod common;
 
-use common::{fieldless_enums, snake};
+use common::fieldless_enums;
 
 const HEADER: &str = "\
 // FILE GENERATO — non modificare a mano.
@@ -69,9 +69,9 @@ fn render() -> String {
     let mut out = String::from(HEADER);
     for and in &enums {
         let cases: Vec<String> = and
-            .variants
+            .json_variants
             .iter()
-            .map(|v| format!("\"{}\"", snake(v)))
+            .map(|v| format!("\"{v}\""))
             .collect();
         let one_line = format!("export type {} = {};", and.name, cases.join(" | "));
         out.push('\n');
@@ -206,4 +206,9 @@ fn every_form_of_divergence_turns_red() {
 #[test]
 fn the_emission_is_deterministic() {
     assert_eq!(render(), render());
+}
+
+#[test]
+fn a_variant_rename_is_the_json_name() {
+    assert!(render().contains("export type ThemeEngine = \"theme-1\";"));
 }

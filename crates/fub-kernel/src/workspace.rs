@@ -4971,6 +4971,9 @@ impl Workspace {
             IndexQuery::Settings { plugin } => Ok(IndexResult::Settings(
                 self.settings_entries(plugin.as_deref()),
             )),
+            IndexQuery::SyntaxForms { doc } => {
+                Ok(IndexResult::SyntaxForms(self.syntax_forms(&doc)))
+            }
             other => {
                 let needles = occurrences::wanted(&other);
                 let result = self.indexes.query(other)?;

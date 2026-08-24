@@ -227,15 +227,14 @@ export const SCENE = [
   },
   {
     id: "focus",
-    title: "Il fuoco da tastiera, dal principio",
-    query: "",
+    title: "Il riquadro a fuoco e il chrome Darwin",
+    query: "platform=darwin",
     prepare: async (page) => {
-      // Sei tabulazioni dal salto al contenuto: il legame di salto, il primo
-      // bottone della menubar, il trigger di ricerca, le tre modalità. È l'unica
-      // scena che guarda `:focus-visible`, ed è lo stato che si perde per primo
-      // quando si riscrive un componente.
-      await page.evaluate(() => document.body.focus());
-      for (let i = 0; i < 6; i += 1) await page.keyboard.press("Tab");
+      // Il banco tiene insieme due stati della scocca facili da perdere: il
+      // riquadro attivo e i controlli finestra nella posizione di Darwin.
+      await page.click(".pane .cm-content");
+      await page.waitForSelector(".pane.focus");
+      await page.waitForSelector(".titlebar--darwin #titlebar-left .window-controls");
     },
   },
   {

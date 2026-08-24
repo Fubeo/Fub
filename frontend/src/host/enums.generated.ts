@@ -110,6 +110,10 @@ export type TextMode = "terms" | "phrase";
 
 export type TextTolerance = "exact" | "typos";
 
+export type ThemeEngine = "theme-1";
+
+export type ThemeLight = "dark" | "light";
+
 export type ViewSurface =
   | "left_sidebar"
   | "right_sidebar"

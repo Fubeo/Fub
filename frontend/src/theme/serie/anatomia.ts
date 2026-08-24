@@ -49,7 +49,8 @@ const selectable = [...interactive, S("selected")];
 
 /** Classi che una pelle può nominare: estratte dai selettori dei 18 pezzi. */
 export const HOOKS = [
-  "app", "skip-link", "brand", "muted", "primary", "ui-button", "intent-primary", "intent-danger",
+  "app", "elevation-paper", "elevation-base", "elevation-chrome", "elevation-floating", "elevation-dialog",
+  "skip-link", "brand", "muted", "primary", "ui-button", "intent-primary", "intent-danger",
   "views-bottom", "sidebar", "inspector-pane", "panel-title", "link-button", "danger",
   "plain-list", "tree-children", "tree-row", "row-name", "row-icon", "folder", "has-note", "chevron",
   "drop-before", "drop-after", "drop-into",
@@ -93,6 +94,11 @@ export type SkinHook = (typeof HOOKS)[number];
  */
 export const COMPONENTS: readonly ShellComponent[] = [
   { name: "app-surface", parts: ["foundation"], states: rest, hooks: ["app"] },
+  { name: "elevation-paper", parts: ["foundation"], states: rest, hooks: ["elevation-paper"] },
+  { name: "elevation-base", parts: ["foundation"], states: rest, hooks: ["elevation-base"] },
+  { name: "elevation-chrome", parts: ["chrome"], states: rest, hooks: ["elevation-chrome"] },
+  { name: "elevation-floating", parts: ["context-menu"], states: rest, hooks: ["elevation-floating"] },
+  { name: "elevation-dialog", parts: ["modals"], states: rest, hooks: ["elevation-dialog"] },
   { name: "skip-link", parts: ["foundation"], states: [S("rest"), S("focused")], hooks: ["skip-link"] },
   { name: "brand-and-muted-copy", parts: ["foundation"], states: rest, hooks: ["brand", "muted"] },
   { name: "button-intent", parts: ["foundation"], states: interactive, hooks: ["primary", "ui-button", "intent-primary", "intent-danger"] },

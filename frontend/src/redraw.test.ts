@@ -141,9 +141,9 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
     const sixThousand = treeElementCount();
     expect(twoThousand).toBe(sixThousand);
     // E il prezzo è quello della finestra, non un tetto qualunque: tre elementi
-    // per nota disegnata (`li`, la riga, il nome) più la riga che dice cosa è
-    // rimasto fuori.
-    expect(twoThousand).toBe(LEVEL_PAGE.limit * 3 + 1);
+    // per nota disegnata (`li`, la riga, il nome) più il contenitore e il
+    // pulsante che dicono cosa è rimasto fuori.
+    expect(twoThousand).toBe(LEVEL_PAGE.limit * 3 + 2);
   });
 
   it("un vault più piccolo della finestra si disegna intero, e senza dire niente", async () => {
@@ -160,9 +160,40 @@ describe("il prezzo di un ridisegno (§2.9)", () => {
     const row = document.querySelector("#file-list .tree-row.troncata");
     expect(row).not.toBeNull();
     expect(row?.textContent).toContain(String(6000 - LEVEL_PAGE.limit));
-    // E non è una voce dell'albero: chi ci naviga con le frecce non ci si deve
-    // fermare sopra.
-    expect(row?.getAttribute("role")).toBe("none");
+    // È un pulsante nativo, raggiungibile con Tab e attivabile con click, Invio e
+    // Spazio, ma non una voce dell'albero in cui si fermano le frecce.
+    expect(row).toBeInstanceOf(HTMLButtonElement);
+  });
+
+  it("allarga una sola pagina per gesto e alla fine rimuove il residuo", async () => {
+    const total = LEVEL_PAGE.limit * 2 + 1;
+    const host = await start(vaultOf(total));
+    const more = () => document.querySelector<HTMLButtonElement>("#file-list button.tree-row.troncata");
+
+    expect(more()?.textContent).toContain(String(LEVEL_PAGE.limit + 1));
+    more()?.click();
+    await vi.waitFor(() => expect(more()?.textContent).toContain("1"));
+    more()?.click();
+    await vi.waitFor(() => expect(more()).toBeNull());
+
+    const entryPages = queries(host)
+      .filter(
+        (q): q is Extract<IndexQuery, { kind: "entries" }> =>
+          q.kind === "entries" &&
+          q.within?.path === "" &&
+          q.within.descendants === false,
+      )
+      .map((q) => q.page?.limit);
+    expect(entryPages).toEqual([
+      LEVEL_PAGE.limit,
+      LEVEL_PAGE.limit * 2,
+      LEVEL_PAGE.limit * 3,
+    ]);
+    expect(
+      queries(host).some(
+        (q) => (q.kind === "entries" || q.kind === "folders") && q.page === null,
+      ),
+    ).toBe(false);
   });
 
   it("anche le cartelle di troppo si contano, e sono un conto proprio", async () => {

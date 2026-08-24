@@ -270,7 +270,8 @@ impl DocumentStore {
         let Ok(provider) = self.provider_for(id) else {
             return Vec::new();
         };
-        let grafted = self.syntax.forms(&provider.descriptor().id);
+        let snapshot = self.syntax.snapshot();
+        let grafted = snapshot.forms(&provider.descriptor().id).to_vec();
         // La domanda «è già innestato?» si fa una volta per nome che il
         // provider dichiara: su un insieme, non rescandendo l'elenco.
         let nested: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();

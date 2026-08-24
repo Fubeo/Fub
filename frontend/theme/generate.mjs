@@ -35,13 +35,15 @@
 // senza, «rigenerare dà gli stessi byte» sarebbe una cosa che si dice, e la si
 // scoprirebbe falsa il giorno in cui qualcuno ritocca un esadecimale a mano —
 // cioè il giorno in cui la ricetta smette di essere la sorgente.
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createServer } from "vite";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SERIES = join(HERE, "..", "src", "theme", "serie");
+const AUTHOR = join(HERE, "author");
+const SAMPLE = join(AUTHOR, "sample");
 
 const verify = process.argv.includes("--verify");
 
@@ -52,17 +54,21 @@ const vite = await createServer({
   logLevel: "warn",
 });
 
-/** @type {{ LUCI: readonly ("scuro"|"chiaro")[], FOGLI: Record<string,string>, foglio: (l: string) => string }} */
+/** @type {{ VARIANTS: readonly { light: string, contrast: string }[], SHEETS: Record<string,Record<string,string>>, sheet: (l: string, c: string) => string }} */
 const recipe = await vite.ssrLoadModule("/src/theme/serie/recipe.ts");
 /** @type {{ ORDINE: readonly string[], SKIN: string, assembla: (c: Record<string,string>) => string }} */
 const skin = await vite.ssrLoadModule("/src/theme/serie/skin/order.ts");
+/** @type {{ HOOKS: readonly string[], STATE_NAMES: readonly string[], COMPONENTS: readonly { name: string, hooks: readonly string[], states: readonly { name: string }[] }[], unassignedHooks: () => string[] }} */
+const anatomy = await vite.ssrLoadModule("/src/theme/serie/anatomia.ts");
+/** @type {{ REQUIRED_THEME_ROLES: readonly string[], THEME_CONTRAST_PAIRS: readonly unknown[] }} */
+const contrast = await vite.ssrLoadModule("/src/theme/contrast-fixture.ts");
 
 let diffCount = 0;
 
 /// Scrive, o dice che è diverso. Il nome è quello che compare a video; `atteso`
 /// è ciò che la sorgente produce.
-async function derived(name, expected, source) {
-  const file = join(SERIES, name);
+async function derived(name, expected, source, base = SERIES) {
+  const file = join(base, name);
   const onDisk = await readFile(file, "utf8").catch(() => null);
 
   if (onDisk === expected) {
@@ -75,13 +81,18 @@ async function derived(name, expected, source) {
     console.error(`✗ ${name}: ${onDisk === null ? "non c'è" : `non è quello che si genera ${source}`}`);
     return;
   }
+  await mkdir(dirname(file), { recursive: true });
   await writeFile(file, expected);
   console.log(`✎ ${name}: riscritto (${expected.length} byte)`);
 }
 
 try {
-  for (const light of recipe.LIGHTS) {
-    await derived(recipe.SHEETS[light], recipe.sheet(light), "alla ricetta");
+  for (const { light, contrast } of recipe.VARIANTS) {
+    await derived(
+      recipe.SHEETS[light][contrast],
+      recipe.sheet(light, contrast),
+      "alla ricetta",
+    );
   }
 
   // I pezzi si leggono **tutti**, non solo quelli elencati: `assembla` rifiuta
@@ -94,7 +105,60 @@ try {
     if (!f.endsWith(".css")) continue;
     content[f.slice(0, -".css".length)] = await readFile(join(folder, f), "utf8");
   }
-  await derived(skin.SKIN, skin.assemble(content), "ai suoi pezzi");
+  const assembledSkin = skin.assemble(content);
+  await derived(skin.SKIN, assembledSkin, "ai suoi pezzi");
+
+  const roles = [...new Set([...recipe.roles(), ...contrast.REQUIRED_THEME_ROLES])].sort();
+  const assignedStates = anatomy.COMPONENTS.reduce(
+    (count, component) => count + component.states.length,
+    0,
+  );
+  const authorContract = {
+    engine: "theme-1",
+    required_roles: roles,
+    hooks: [...anatomy.HOOKS],
+    states: [...anatomy.STATE_NAMES],
+    components: anatomy.COMPONENTS.map((component) => ({
+      name: component.name,
+      hooks: component.hooks,
+      states: component.states.map((state) => state.name),
+    })),
+    contrast_pairs: contrast.THEME_CONTRAST_PAIRS,
+    counts: {
+      required_roles: roles.length,
+      hooks: anatomy.HOOKS.length,
+      state_names: anatomy.STATE_NAMES.length,
+      assigned_states: assignedStates,
+      components: anatomy.COMPONENTS.length,
+      unassigned_hooks: anatomy.unassignedHooks().length,
+    },
+  };
+  const contractText = `${JSON.stringify(authorContract, null, 2)}\n`;
+  await derived("contract.json", contractText, "a ricetta, anatomia e fixture contrasto", AUTHOR);
+
+  const guide = `# Tema theme-1\n\n` +
+    `Fonte generata: \`npm run theme:generate\`. Verifica: \`npm run theme:verify\`.\n\n` +
+    `Il contratto richiede **${roles.length} ruoli**, espone **${anatomy.HOOKS.length} hook**, ` +
+    `**${anatomy.STATE_NAMES.length} stati** (${assignedStates} assegnazioni su ${anatomy.COMPONENTS.length} componenti). ` +
+    `Hook non assegnati: **${anatomy.unassignedHooks().length}**. Gli elenchi e le coppie di contrasto sono in ` +
+    `\`contract.json\`, generato dalle sorgenti della shell.\n\n` +
+    `Una cartella installabile contiene \`manifest.json\`, un foglio per luce, \`skin.css\` e gli asset locali. ` +
+    `Il campione \`sample/\` è un bundle non-serie completo, generato dagli stessi cancelli.\n`;
+  await derived("README.md", guide, "ai conti del contratto", AUTHOR);
+
+  const manifest = {
+    id: "org.fub.theme-bench",
+    name: "Fub Theme Bench",
+    version: "1.0.0",
+    engine: "theme-1",
+    lights: ["dark", "light"],
+    asset_namespace: "theme://org.fub.theme-bench/",
+    motion: ["opacity", "transform"],
+  };
+  await derived("manifest.json", `${JSON.stringify(manifest, null, 2)}\n`, "al contratto theme-1", SAMPLE);
+  await derived("sheet-dark.css", recipe.sheet("dark", "normal"), "alla ricetta", SAMPLE);
+  await derived("sheet-light.css", recipe.sheet("light", "normal"), "alla ricetta", SAMPLE);
+  await derived("skin.css", assembledSkin, "all'anatomia", SAMPLE);
 } finally {
   await vite.close();
 }

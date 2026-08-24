@@ -131,6 +131,7 @@
 
 use std::collections::BTreeSet;
 
+use camino::Utf8Path;
 use fub_abi::rules::folders;
 use fub_abi::rules::path::resolution_key;
 use fub_abi::settings::{SettingKind, SettingSpec, SettingValue};
@@ -144,6 +145,127 @@ pub const EXCLUDED_FOLDERS: &str = "files.excluded-folders";
 
 /// I file che cominciano per punto sono documenti di questo vault?
 pub const SHOW_HIDDEN: &str = "files.show-hidden";
+
+/// Il file, nella radice del vault, che aggiunge esclusioni per path.
+pub const GITIGNORE_FILE: &str = ".gitignore";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GitignorePattern {
+    segments: Vec<String>,
+    root_anchored: bool,
+    name_only: bool,
+    directory_only: bool,
+}
+
+impl GitignorePattern {
+    fn matches(&self, components: &[String], final_kind: Kind) -> bool {
+        if self.name_only {
+            return components.iter().enumerate().any(|(at, component)| {
+                if component != &self.segments[0] {
+                    return false;
+                }
+                let kind = if at + 1 < components.len() {
+                    Kind::Folder
+                } else {
+                    final_kind
+                };
+                !self.directory_only || kind == Kind::Folder
+            });
+        }
+
+        if self.segments.len() > components.len() {
+            return false;
+        }
+        let last_start = components.len() - self.segments.len();
+        let starts = if self.root_anchored {
+            0..=0
+        } else {
+            0..=last_start
+        };
+        starts.into_iter().any(|start| {
+            if start > last_start || components[start..start + self.segments.len()] != self.segments
+            {
+                return false;
+            }
+            let end = start + self.segments.len();
+            let kind = if end < components.len() {
+                Kind::Folder
+            } else {
+                final_kind
+            };
+            !self.directory_only || kind == Kind::Folder
+        })
+    }
+}
+
+/// Le righe utili di un `.gitignore`, già normalizzate come i nomi del vault.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GitignoreRules {
+    rules: Vec<(GitignorePattern, bool)>,
+}
+
+impl GitignoreRules {
+    /// L'ultima riga che combacia decide; una negazione decide «non escluso».
+    pub fn is_excluded(&self, rel: &Utf8Path, kind: Kind) -> bool {
+        let components: Vec<String> = rel
+            .components()
+            .map(|component| resolution_key(folders::normalized(component.as_str())))
+            .filter(|component| !component.is_empty())
+            .collect();
+        self.rules
+            .iter()
+            .fold(false, |excluded, (pattern, negated)| {
+                if pattern.matches(&components, kind) {
+                    !negated
+                } else {
+                    excluded
+                }
+            })
+    }
+}
+
+/// Legge la sintassi stretta usata dal vault: commenti, nomi, path, cartelle e
+/// negazioni. I glob non vengono inventati: un asterisco è un carattere.
+pub fn parse_gitignore(content: &str) -> GitignoreRules {
+    let mut rules = Vec::new();
+    for raw in content.lines() {
+        let line = raw.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (negated, line) = match line.strip_prefix('!') {
+            Some(rest) => (true, rest),
+            None => (false, line),
+        };
+        let line = line
+            .strip_prefix('\\')
+            .filter(|rest| rest.starts_with('#') || rest.starts_with('!'))
+            .unwrap_or(line);
+        let root_anchored = line.starts_with('/');
+        let directory_only = line.ends_with('/');
+        let body = line.trim_matches('/');
+        let name_only = !root_anchored && !body.contains('/');
+        let segments: Vec<String> = body
+            .split('/')
+            .filter(|segment| !segment.is_empty())
+            .map(|segment| resolution_key(folders::normalized(segment)))
+            .filter(|segment| !segment.is_empty())
+            .collect();
+        if segments.is_empty() {
+            continue;
+        }
+        rules.push((
+            GitignorePattern {
+                segments,
+                root_anchored,
+                name_only,
+                directory_only,
+            },
+            negated,
+        ));
+    }
+    GitignoreRules { rules }
+}
 
 /// Ciò che un vault esclude quando non dichiara niente: la lista che fino alla
 /// §15.6 era la costante `IGNORED_DIRS`, meno le due che sono **struttura** e
@@ -261,6 +383,7 @@ pub enum Kind {
 pub struct IgnorePolicy {
     folders: BTreeSet<String>,
     show_hidden: bool,
+    gitignore: GitignoreRules,
 }
 
 impl Default for IgnorePolicy {
@@ -297,7 +420,14 @@ impl IgnorePolicy {
                 .filter(|key| !key.is_empty())
                 .collect(),
             show_hidden,
+            gitignore: GitignoreRules::default(),
         }
+    }
+
+    /// Aggiunge le regole lette dal `.gitignore` a questa politica.
+    pub fn with_gitignore(mut self, rules: GitignoreRules) -> Self {
+        self.gitignore = rules;
+        self
     }
 
     /// Questo componente di path non partecipa?
@@ -318,17 +448,31 @@ impl IgnorePolicy {
     /// toglierlo sarebbe toglierlo davvero, senza [`DocId`](fub_abi::DocId) e
     /// senza un evento che lo dica (difetto 0176).
     pub fn excludes(&self, name: &str, kind: Kind) -> bool {
-        let name = resolution_key(name);
-        if is_structural(&name) {
-            return true;
+        self.excludes_path(Utf8Path::new(name), kind)
+    }
+
+    /// Valuta un path relativo intero. Le regole superiori si applicano a ogni
+    /// componente; soltanto dopo, e senza poterle negare, entra il `.gitignore`.
+    pub fn excludes_path(&self, rel: &Utf8Path, kind: Kind) -> bool {
+        let components: Vec<&str> = rel.components().map(|c| c.as_str()).collect();
+        for (at, component) in components.iter().enumerate() {
+            let component_kind = if at + 1 < components.len() {
+                Kind::Folder
+            } else {
+                kind
+            };
+            let name = resolution_key(component);
+            if is_structural(&name) {
+                return true;
+            }
+            if !self.show_hidden && (name.starts_with('.') || is_foreign_temporary(&name)) {
+                return true;
+            }
+            if component_kind == Kind::Folder && self.folders.contains(&name) {
+                return true;
+            }
         }
-        // Il punto davanti e la convenzione dell'attrezzo che lo ha scritto
-        // sono la stessa domanda — «questo lo ha messo qui un programma per
-        // sé?» — e stanno sulla stessa riga perché abbiano la stessa uscita.
-        if !self.show_hidden && (name.starts_with('.') || is_foreign_temporary(&name)) {
-            return true;
-        }
-        kind == Kind::Folder && self.folders.contains(&name)
+        self.gitignore.is_excluded(rel, kind)
     }
 }
 
@@ -677,5 +821,63 @@ mod tests {
         };
         let from_the_schema = IgnorePolicy::declaring(default.clone(), false);
         assert_eq!(from_the_schema, IgnorePolicy::default());
+    }
+
+    #[test]
+    fn empty_lines_and_comments_do_not_exclude_anything() {
+        for source in ["", "  \n# commento\n  # ancora un commento\n"] {
+            let rules = parse_gitignore(source);
+            assert!(!rules.is_excluded(Utf8Path::new("note/Idea.md"), Kind::File));
+        }
+        let literal = parse_gitignore(r"\#bozza");
+        assert!(literal.is_excluded(Utf8Path::new("#bozza"), Kind::File));
+    }
+
+    #[test]
+    fn a_bare_name_matches_at_any_depth_without_becoming_a_prefix() {
+        let rules = parse_gitignore("build");
+        assert!(rules.is_excluded(Utf8Path::new("build"), Kind::Folder));
+        assert!(rules.is_excluded(Utf8Path::new("x/build/y.md"), Kind::File));
+        assert!(!rules.is_excluded(Utf8Path::new("building"), Kind::Folder));
+    }
+
+    #[test]
+    fn a_trailing_slash_names_only_a_directory() {
+        let rules = parse_gitignore("build/");
+        assert!(rules.is_excluded(Utf8Path::new("build"), Kind::Folder));
+        assert!(!rules.is_excluded(Utf8Path::new("build"), Kind::File));
+    }
+
+    #[test]
+    fn an_initial_slash_anchors_the_pattern_at_the_root() {
+        let rules = parse_gitignore("/build");
+        assert!(rules.is_excluded(Utf8Path::new("build"), Kind::Folder));
+        assert!(!rules.is_excluded(Utf8Path::new("x/build"), Kind::Folder));
+    }
+
+    #[test]
+    fn a_nested_path_matches_as_a_suffix() {
+        let rules = parse_gitignore("docs/generated/");
+        assert!(rules.is_excluded(Utf8Path::new("docs/generated"), Kind::Folder));
+        assert!(rules.is_excluded(Utf8Path::new("a/docs/generated/x.md"), Kind::File));
+        assert!(!rules.is_excluded(Utf8Path::new("docs/source/generated.md"), Kind::File));
+    }
+
+    #[test]
+    fn the_last_matching_negation_decides() {
+        let visible = parse_gitignore("build/\n!build/keep.md");
+        assert!(!visible.is_excluded(Utf8Path::new("build/keep.md"), Kind::File));
+        assert!(visible.is_excluded(Utf8Path::new("build/drop.md"), Kind::File));
+
+        let excluded = parse_gitignore("!build/keep.md\nbuild/");
+        assert!(excluded.is_excluded(Utf8Path::new("build/keep.md"), Kind::File));
+    }
+
+    #[test]
+    fn a_gitignore_negation_does_not_override_higher_precedence() {
+        let rules = parse_gitignore("!build/keep.md\n!.fub/keep.md");
+        let policy = IgnorePolicy::declaring(["build".into()], true).with_gitignore(rules);
+        assert!(policy.excludes_path(Utf8Path::new("build/keep.md"), Kind::File));
+        assert!(policy.excludes_path(Utf8Path::new(".fub/keep.md"), Kind::File));
     }
 }

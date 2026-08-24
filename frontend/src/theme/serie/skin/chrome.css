@@ -12,9 +12,10 @@
    che ridiceva il fondo — perché l'id nominava l'unico esemplare e la classe
    la specie: la specie basta. */
 .titlebar {
-  background: var(--bg-chrome);
-  border-bottom: 1px solid var(--border);
+  background: var(--elevation-chrome-surface);
+  border-bottom: 1px solid var(--elevation-chrome-border);
   border-radius: 0;
+  box-shadow: var(--elevation-chrome-shadow);
 }
 
 .win-ctrl {
@@ -47,9 +48,9 @@
 .rail {
   gap: var(--space-1);
   padding: var(--space-2) 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--elevation-chrome-border);
   border-bottom: none;
-  background: var(--bg-chrome);
+  background: var(--elevation-chrome-surface);
 }
 
 /* I tab dell'inspector: la tablist compatta in cima a `#right-pane`
@@ -58,8 +59,8 @@
   display: flex;
   align-items: center;
   gap: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--elevation-chrome-border);
+  background: var(--elevation-chrome-surface);
   flex-shrink: 0;
   overflow-x: auto;
 }

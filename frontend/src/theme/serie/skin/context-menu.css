@@ -4,11 +4,10 @@
   z-index: var(--z-menu);
   min-width: 140px;
   padding: var(--space-2);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--elevation-floating-surface);
+  border: 1px solid var(--elevation-floating-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
+  box-shadow: var(--elevation-floating-shadow);
 }
 .context-menu button {
   display: block;

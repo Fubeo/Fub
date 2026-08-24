@@ -17,11 +17,15 @@
 //! gira, e scopre a metà lavoro che una capacità non c'era: lo stesso guasto,
 //! più tardi e senza il nome.
 //!
-//! Le famiglie di oggi sono tre: `host-env` (l'orologio, il locale, il caso, il
-//! fuoco), `host-vault-read` (leggere il vault, modello del documento compreso)
-//! e `host-events` (pubblicare un evento, e sottoscrivere). Le prime due sono
+//! Le famiglie di oggi sono cinque: `host-env` (l'orologio, il locale, il caso,
+//! il fuoco), `host-vault-read` (leggere il vault, modello del documento
+//! compreso), `host-data-read` (rilegge i propri blob persistiti, autorevoli e
+//! di cache) e `host-data-write` (scrive e cancella gli stessi blob — due
+//! interfacce e non una, perché il percorso di render rilegge ciò che il
+//! provider si è salvato e non deve poter scrivere mentre disegna), e
+//! `host-events` (pubblicare un evento, e sottoscrivere). Le prime due sono
 //! quelle che il ping del primo plugin nativo attraversa, cioè quelle su cui
-//! c'è una parità da provare; la terza è l'unica in cui il guest chiama l'host
+//! c'è una parità da provare; l'ultima è l'unica in cui il guest chiama l'host
 //! mentre l'host sta chiamando il guest, e per questo il suo `impl` sta in
 //! [`crate::events`] e non qui.
 
@@ -30,8 +34,8 @@ use wasmtime::component::{HasSelf, Linker};
 
 use crate::borrow::State;
 use crate::contract::fub::abi::{
-    format as w_format, host_env, host_events, host_vault_read, index as w_index, intl as w_intl,
-    model as w_model, session as w_session,
+    format as w_format, host_data_read, host_data_write, host_env, host_events, host_vault_read,
+    index as w_index, intl as w_intl, model as w_model, session as w_session,
 };
 use crate::translate as tr;
 
@@ -39,11 +43,13 @@ use crate::translate as tr;
 pub(crate) fn add_to_linker(linker: &mut Linker<State>) -> wasmtime::Result<()> {
     host_env::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
     host_vault_read::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
-    // La terza è servita da `crate::events`: l'`impl` sta là perché la sua è
+    host_data_read::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    host_data_write::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
+    // L'ultima è servita da `crate::events`: l'`impl` sta là perché la sua è
     // l'unica famiglia in cui la chiamata va dal guest all'host mentre l'host
-    // sta chiamando il guest. La riga però sta qui, con le altre due, perché
-    // linkare è una cosa sola e un secondo posto da cui linkare sarebbe un
-    // secondo posto in cui dimenticarsene.
+    // sta chiamando il guest. La riga però sta qui, con le altre quattro,
+    // perché linkare è una cosa sola e un secondo posto da cui linkare sarebbe
+    // un secondo posto in cui dimenticarsene.
     host_events::add_to_linker::<State, HasSelf<State>>(linker, |s| s)?;
     Ok(())
 }
@@ -190,6 +196,66 @@ impl host_vault_read::Host for State {
         let h = guest!(self);
         h.list_trash()
             .map(|v| v.into_iter().map(tr::to_trash).collect())
+            .map_err(|and| tr::to_error(&and))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// host-data-read / host-data-write: storage privato del componente
+// ---------------------------------------------------------------------------
+
+impl host_data_read::Host for State {
+    fn data_read(
+        &mut self,
+        path: String,
+    ) -> Result<Option<Vec<u8>>, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.data_read(&path).map_err(|and| tr::to_error(&and))
+    }
+
+    fn data_list(
+        &mut self,
+        prefix: String,
+    ) -> Result<Vec<String>, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.data_list(&prefix).map_err(|and| tr::to_error(&and))
+    }
+
+    fn cache_read(
+        &mut self,
+        path: String,
+    ) -> Result<Option<Vec<u8>>, crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.cache_read(&path).map_err(|and| tr::to_error(&and))
+    }
+}
+
+impl host_data_write::Host for State {
+    fn data_write(
+        &mut self,
+        path: String,
+        bytes: Vec<u8>,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.data_write(&path, &bytes)
+            .map_err(|and| tr::to_error(&and))
+    }
+
+    fn data_remove(
+        &mut self,
+        path: String,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.data_remove(&path).map_err(|and| tr::to_error(&and))
+    }
+
+    fn cache_write(
+        &mut self,
+        path: String,
+        bytes: Vec<u8>,
+    ) -> Result<(), crate::contract::fub::abi::errors::PluginError> {
+        let h = guest!(self);
+        h.cache_write(&path, &bytes)
             .map_err(|and| tr::to_error(&and))
     }
 }

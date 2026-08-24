@@ -20,6 +20,7 @@ import type {
   IndexQuery,
   JobStatus,
   SettingEntry,
+  SyntaxForm,
   IndexResult,
   LinkTarget,
   Page,
@@ -209,6 +210,11 @@ export async function unsavedDrafts(): Promise<DraftInfo[]> {
 /// non avrebbe.
 export async function settings(plugin?: string): Promise<SettingEntry[]> {
   return open(await api.queryIndex({ kind: "settings", plugin: plugin ?? null }), "settings");
+}
+
+/// Le forme sintattiche effettive di un documento, lette dal montaggio runtime.
+export async function syntaxForms(doc: string): Promise<SyntaxForm[]> {
+  return open(await api.queryIndex({ kind: "syntax_forms", doc }), "syntax_forms");
 }
 
 /// Com'è organizzato questo vault (§11.3): icone, note appuntate, ordinamenti

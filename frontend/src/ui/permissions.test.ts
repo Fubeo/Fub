@@ -15,7 +15,14 @@ import {
 } from "./permissions";
 
 function bundle(permissions: Record<string, unknown>, mounted = true): BundleInfo {
-  return { id: "com.acme", name: "Acme", mounted, trust: "community", permissions };
+  return {
+    id: "com.acme",
+    name: "Acme",
+    mounted,
+    kind: "component",
+    trust: "community",
+    permissions,
+  };
 }
 
 describe("la chiave con cui si nega un permesso", () => {

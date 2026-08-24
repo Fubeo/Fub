@@ -40,6 +40,7 @@ import { syntaxTree } from "@codemirror/language";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../rules/mirrored";
+import type { SyntaxForm } from "../host/contract";
 import {
   inlineDelimiters,
   parseWikilinkInner,
@@ -119,11 +120,6 @@ export function activeLinesOf(state: EditorState): Set<number> {
   return active;
 }
 
-// I delimitatori inline **dichiarati**, letti una volta sola al caricamento
-// del modulo: `==` non è scritto in questo file, è il trigger di
-// `HighlightRule`. Una sintassi inline registrata in Rust si decora da sé.
-const DECLARED_INLINE = inlineDelimiters();
-
 // Il nome dell'attributo con cui il payload viaggia nel DOM, scritto **una**
 // volta: chi lo posa e chi lo rilegge stanno a trecento righe di distanza, e
 // finché erano due letterali (`attributes:` di qua, `dataset.` di là) un refuso
@@ -148,8 +144,10 @@ export function computeDecorations(
   activeLines: Set<number>,
   from = 0,
   to = state.doc.length,
+  forms?: readonly SyntaxForm[],
 ): LiveDeco[] {
   const out: LiveDeco[] = [];
+  const declaredInline = inlineDelimiters(forms);
   const doc = state.doc;
   const active = (pos: number) => activeLines.has(doc.lineAt(pos).number);
 
@@ -343,7 +341,7 @@ export function computeDecorations(
 
     // I tratti fra delimitatori **dichiarati** (`==evidenziato==` e chi verrà):
     // il mark resta anche sulla riga attiva, spariscono solo i marcatori.
-    for (const t of spans(text, DECLARED_INLINE)) {
+    for (const t of spans(text, declaredInline)) {
       const rangeStart = row.from + t.from;
       const rangeEnd = row.from + t.to;
       if (!isFree(rangeStart, rangeEnd)) continue;
@@ -594,7 +592,10 @@ const theme = EditorView.baseTheme({
 /// L'estensione live preview, pronta da montare in `editor.ts` accanto a
 /// `markdown()`. I callback sono iniettati dalla shell: qui non si sa cosa
 /// significhi "aprire una nota".
-export function livePreview(callbacks: LivePreviewCallbacks): Extension {
+export function livePreview(
+  callbacks: LivePreviewCallbacks,
+  forms?: readonly SyntaxForm[],
+): Extension {
   // Due insiemi dalla stessa passata: tutte le decorazioni per la resa, e i
   // soli replace come atomicRanges (il cursore scavalca i marcatori nascosti
   // invece di incagliarsi dentro).
@@ -604,7 +605,7 @@ export function livePreview(callbacks: LivePreviewCallbacks): Extension {
     const atomicRanges: Range<Decoration>[] = [];
     const rendered = new Set<string>();
     for (const r of view.visibleRanges) {
-      for (const d of computeDecorations(view.state, active, r.from, r.to)) {
+      for (const d of computeDecorations(view.state, active, r.from, r.to, forms)) {
         const key = `${d.from}:${d.to}:${d.kind}:${d.data ?? ""}`;
         if (rendered.has(key)) continue;
         rendered.add(key);

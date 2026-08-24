@@ -411,6 +411,7 @@ function touchIndexQuery(q: IndexQuery): void {
     // chiesti come ogni altra lettura del vault e non da comandi bespoke.
     case "render_preview":
     case "render_embed":
+    case "syntax_forms":
       return;
     default:
       assertNever(q);
@@ -501,6 +502,7 @@ function touchIndexResult(r: IndexResult): void {
     // suo id, perché chi monta un embed deve sapere da quale nota viene.
     case "render_preview":
     case "render_embed":
+    case "syntax_forms":
       return;
     default:
       assertNever(r);
@@ -719,6 +721,7 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     id: true,
     name: true,
     mounted: true,
+    kind: true,
     trust: true,
     permissions: true,
   }),

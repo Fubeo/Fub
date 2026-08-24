@@ -5,7 +5,7 @@ Una **seduta** della [roadmap infrastrutturale](../todo.md). La [seduta
 [30](30-il-moto-e-del-tema.md) le ha dato il ritmo: l'architettura che porta un
 tema è in piedi, e regge. Questa seduta guarda **ciò che ci sta dentro** — il
 tema di serie, primo e unico esemplare — e pone una domanda sola: *da dove
-viene, ciascuna delle cose che si vedono?* Nove voci, cinque chiuse. La prima non
+viene, ciascuna delle cose che si vedono?* Nove voci, otto chiuse. La prima non
 decideva nessuna delle altre otto: ha costruito l'occhio con cui si guardano, e
 la seconda è la prima cosa che quell'occhio ha visto.
 
@@ -141,11 +141,10 @@ non potrà mai farlo — quindi non lo fa nemmeno la serie.
 ### 31.1 Il banco che vede
 
 *presidi · **P1** — **chiusa** dalla
-[0166](../decisions/0166-il-banco-che-vede.md); resta una casella: il confronto a
-pixel in CI aspettava i caratteri in bundle, e la
-[0168](../decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md) (§31.3) l'ha
-portata — ma non basta da sola: le baseline restano scattate su una macchina
-che Playwright non riconosce come Ubuntu, non su `ubuntu-latest`*
+[0166](../decisions/0166-il-banco-che-vede.md). La casella del confronto a pixel
+in CI, sbloccata dai caratteri in bundle della
+[0168](../decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md), è ora chiusa
+dal workflow visuale Linux*
 
 Non si migliora ciò che non si guarda, e i quattro presidi del tema — il
 contrasto, la struttura, il moto, il caricatore — non guardano: i primi tre
@@ -421,7 +420,8 @@ fine M3 si congelano.
 
 ### 31.5 Quanto è lontana una superficie
 
-*pelle · **P1***
+*pelle · **P1** — **chiusa** dalla
+[0176](../decisions/0176-la-distanza-di-una-superficie-e-una-scala.md)*
 
 Al buio l'elevazione è fatta con l'ombra, e un'ombra nera al 55% sopra un fondo
 nero non solleva niente: sposta un po' di grigio. La distanza fra una superficie
@@ -435,28 +435,29 @@ la rail, la statusbar, e le quattro schermate in cui l'app non ha ancora niente
 da mostrare. Uno stato vuoto disegnato è la differenza fra un'app che aspetta e
 un'app che sa cosa vuoi fare; oggi sono testo grigio in un angolo.
 
-- [ ] **La scala di elevazione è una tabella**, non un'abitudine: per ogni
+- [x] **La scala di elevazione è una tabella**, non un'abitudine: per ogni
       livello e per ogni luce, la superficie, il filetto e l'ombra. Cinque
       livelli, dalla carta al dialogo, e la regola che li lega — al buio sale la
       luce, in luce scende l'ombra.
-- [ ] **La scocca è un telaio**: chrome, pannelli e carta sono tre superfici
+- [x] **La scocca è un telaio**: chrome, pannelli e carta sono tre superfici
       distinte e riconoscibili, non tre modi di dire nero. I piani `--z-*`
       restano della struttura e non si toccano: qui si decide *cosa si vede*,
       non *chi sta sopra*.
-- [ ] **Il riquadro a fuoco si vede senza contarne le tab**: la forma attuale —
+- [x] **Il riquadro a fuoco si vede senza contarne le tab**: la forma attuale —
       il filetto sotto le tab che cambia colore — si mette a confronto al banco
       con almeno un'alternativa, perché a due riquadri è ciò che si guarda per
       sapere dove finirà la prossima nota che si apre.
-- [ ] **I quattro stati vuoti sono disegnati**: senza vault (con le recenti, che
+- [x] **I quattro stati vuoti sono disegnati**: senza vault (con le recenti, che
       `state/recenti.ts` già tiene), riquadro senza documento, ricerca senza
       risultati, cestino vuoto.
-- [ ] **I controlli finestra sono per piattaforma**, e la prova sta al banco:
+- [x] **I controlli finestra sono per piattaforma**, e la prova sta al banco:
       la classe `titlebar--darwin` esiste già, e nessuno l'ha mai vista in una
       foto.
 
 ### 31.6 Cosa è del tema e cosa della persona
 
-*shell · kernel · **P1***
+*shell · kernel · **P1** — **chiusa** dalla
+[0177](../decisions/0177-la-persona-sta-sopra-il-tema.md)*
 
 Densità, corpo del testo, interlinea, larghezza della colonna, carattere,
 accento, zoom: sono sette caselle di
@@ -472,30 +473,31 @@ La 29 le ha già nominate come l'altra specie
 qualunque tema e non lo sostituisce»*). Questa voce le realizza per la parte
 che riguarda la GUI, e lascia il CSS per nota e per cartella dov'è.
 
-- [ ] **Uno strato sopra, con una lista chiusa**: le preferenze si montano in un
+- [x] **Uno strato sopra, con una lista chiusa**: le preferenze si montano in un
       canale proprio, dopo la pelle, e possono toccare **solo** i token di un
       elenco dichiarato. Senza la lista, «una preferenza» diventa il modo di
       scrivere CSS arbitrario da un pannello.
-- [ ] **Le chiavi sono di macchina**, coi tre stati della
+- [x] **Le chiavi sono di macchina**, coi tre stati della
       [0036](../decisions/0036-le-impostazioni-e-i-tre-stati.md): lo scope segue
       la vita di chi le dichiara
       ([0116](../decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)),
       e la GUI è della macchina come `keys.shell.*` e come il tema.
-- [ ] **L'accento della persona passa dalla ricetta**: si dichiara una tinta, e
+- [x] **L'accento della persona passa dalla ricetta**: si dichiara una tinta, e
       luminosità e croma le deriva la §31.2 fino a far passare i cancelli. Un
       accento scelto in esadecimale da un selettore di colori è il modo più
       rapido di rendere illeggibile un bottone — ed è il caso in cui la ricetta
       smette di essere un'eleganza e diventa l'unica strada.
-- [ ] **La densità muove la scala, non la scocca**: `--titlebar-h` e `--rail-w`
+- [x] **La densità muove la scala, non la scocca**: `--titlebar-h` e `--rail-w`
       restano della struttura. È il pavimento che la 29 ha messo apposta, e
       questa è la prima voce che lo mette alla prova.
-- [ ] **Lo zoom è dell'host**: la webview lo sa fare su tutte e tre le
+- [x] **Lo zoom è dell'host**: la webview lo sa fare su tutte e tre le
       piattaforme, e farlo in CSS vorrebbe dire riscrivere ogni misura in unità
       relative — cioè spostare la scocca, che non si muove.
 
 ### 31.7 Il contrasto ha più di una soglia
 
-*foglio · struttura · **P1***
+*foglio · struttura · **P1** — **chiusa** dalla
+[0178](../decisions/0178-il-contrasto-sceglie-la-soglia.md)*
 
 L'alto contrasto è una casella di
 [25.1](../features/25-accessibilita-localizzazione.md) e oggi non esiste in
@@ -510,14 +512,14 @@ presidio e la ricetta, e domani il caricatore dei temi di terzi: è
 letteralmente ciò che la [§29.3](29-chi-possiede-la-pelle.md) chiede — *«una
 tabella, due lettori»* — consegnato prima che il caricatore esista.
 
-- [ ] **Il risolutore risolve anche il contrasto**, con la stessa forma con cui
+- [x] **Il risolutore risolve anche il contrasto**, con la stessa forma con cui
       risolve la luce: una scelta a tre stati più ciò che dice il sistema, e un
       foglio solo montato. Luce × contrasto danno quattro fogli, tutti generati.
-- [ ] **I colori forzati sono un pavimento della struttura**, come il moto
+- [x] **I colori forzati sono un pavimento della struttura**, come il moto
       ridotto e l'anello del fuoco: li fa rispettare la shell, non la cortesia
       dell'autore del tema.
-- [ ] **Le coppie diventano una fixture**, e la §29.3 la trova già scritta.
-- [ ] **Le soglie alte si dichiarano come numeri**, non come «più contrasto»: un
+- [x] **Le coppie diventano una fixture**, e la §29.3 la trova già scritta.
+- [x] **Le soglie alte si dichiarano come numeri**, non come «più contrasto»: un
       tema ad alto contrasto che non dice quanto vale non si può presidiare.
 
 ### 31.8 La stessa nota in tre modi
@@ -562,11 +564,11 @@ leggendo il CSS della serie.
 Non chiude la §29.2 e non chiude la §29.5: le rifornisce. Il congelamento del
 vocabolario resta a fine M3, l'inventario dei bundle e il disco restano kernel.
 
-- [ ] **La guida si genera dalle sorgenti** — i ruoli dalla ricetta, gli hook
+- [x] **La guida si genera dalle sorgenti** — i ruoli dalla ricetta, gli hook
       dalla tabella degli stati — perché una guida scritta a mano accanto a un
       codice che cambia è la duplicazione che diverge, e questa cartella ne ha
       già misurate abbastanza.
-- [ ] **Il banco prova anche un tema che non è la serie**: un comando che
+- [x] **Il banco prova anche un tema che non è la serie**: un comando che
       fotografa un fascio qualunque con le stesse scene e gli stessi cancelli.
       La porta dei terzi va provata prima che esista un terzo — è il dogfooding
       della [0031](../decisions/0031-chi-possiede-i-bundle.md) portato al banco.
@@ -574,7 +576,7 @@ vocabolario resta a fine M3, l'inventario dei bundle e il disco restano kernel.
       ([§29.5](29-chi-possiede-la-pelle.md)): l'elenco, la luce e il contrasto
       offerti, l'anteprima in un contenitore, e il ritorno alla serie
       raggiungibile anche a tema rotto.
-- [ ] **Il conto che la §29.2 aspetta**, scritto: quanti ruoli obbligatori,
+- [x] **Il conto che la §29.2 aspetta**, scritto: quanti ruoli obbligatori,
       quanti hook, quanti stati. Non un'immaginazione — un numero col comando
       accanto.
 
@@ -615,9 +617,10 @@ e la §31.7 sono le più separabili: valgono identiche anche fatte dopo M3.
 
 - **Non è l'architettura dei temi** (29): non tocca i tre strati, il caricatore,
   la sostituzione, il risolutore. Li usa, ed è la prima cosa che li usa davvero.
-- **Non è il moto** (30): quella seduta ha già deciso, e qui si realizza. La sua
-  voce aperta — [§30.8](30-il-moto-e-del-tema.md) — resta sua. La §30.9 l'ha
-  chiusa la [0172](../decisions/0172-la-lettura-del-moto-ridotto-nel-grafo.md).
+- **Non è il moto** (30): quella seduta ha già deciso, e qui si realizza. La
+  §30.8 l'ha chiusa la
+  [0175](../decisions/0175-la-transizione-nativa-e-un-arricchimento.md); la
+  §30.9 la [0172](../decisions/0172-la-lettura-del-moto-ridotto-nel-grafo.md).
 - **Non è il montaggio dei temi di terzi**
   ([§29.4](29-chi-possiede-la-pelle.md)) né il disco
   ([§29.6](29-chi-possiede-la-pelle.md)): sono kernel, e questa seduta consegna

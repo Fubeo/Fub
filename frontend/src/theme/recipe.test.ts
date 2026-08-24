@@ -28,6 +28,7 @@ import { contrast } from "./contrast";
 import { fromHex } from "./oklch";
 import {
   SHEETS,
+  VARIANTS,
   PAPER_BACKGROUNDS,
   LIGHTS,
   STEP,
@@ -35,29 +36,30 @@ import {
   sheet,
   roles,
   palette,
+  ELEVATION_LEVELS,
 } from "./serie/recipe";
+import darkHigh from "./serie/sheet-dark-high.css?raw";
 import dark from "./serie/sheet-dark.css?raw";
+import lightHigh from "./serie/sheet-light-high.css?raw";
 import light from "./serie/sheet-light.css?raw";
 
-const ON_DISK = { dark, light } as const;
+const ON_DISK = {
+  dark: { normal: dark, high: darkHigh },
+  light: { normal: light, high: lightHigh },
+} as const;
 
-describe("i due fogli sono quelli che la ricetta produce", () => {
-  it.each(LIGHTS)("%s: byte per byte", (light) => {
+describe("i quattro fogli sono quelli che la ricetta produce", () => {
+  it.each(VARIANTS)("$light × $contrast: byte per byte", ({ light, contrast }) => {
     expect(
-      sheet(light),
-      `${SHEETS[light]} non è quello che la ricetta produce: «npm run theme:genera». ` +
-        "Un esadecimale ritoccato a mano sparisce alla prima rigenerazione, e fino " +
-        "ad allora dice il falso sulla ricetta.",
-    ).toBe(ON_DISK[light]);
+      sheet(light, contrast),
+      `${SHEETS[light][contrast]} non è quello che la ricetta produce: «npm run theme:genera».`,
+    ).toBe(ON_DISK[light][contrast]);
   });
 
   it("e la generazione è deterministica: due corse, gli stessi byte", () => {
-    // La ricerca della chiarezza è una bisezione con un numero **fisso** di
-    // giri, e l'abbassamento del croma pure. Sono fissi apposta: «finché
-    // converge» darebbe risultati diversi al variare dell'ordine delle
-    // operazioni in virgola mobile, e un derivato che cambia da solo non è un
-    // derivato — è un file che qualcuno deve ricommittare ogni tanto.
-    for (const light of LIGHTS) expect(sheet(light)).toBe(sheet(light));
+    for (const { light, contrast } of VARIANTS) {
+      expect(sheet(light, contrast)).toBe(sheet(light, contrast));
+    }
   });
 });
 
@@ -138,6 +140,30 @@ describe("ogni pieno porta un controcolore che regge", () => {
       "un pieno su cui né il nero né il bianco reggono è un pieno che non può " +
         "portare testo: si abbassa la mira del pieno, non si sceglie un terzo colore",
     ).toEqual([]);
+  });
+});
+
+describe("i cinque livelli di elevazione", () => {
+  it.each(LIGHTS)("%s: ogni livello deriva superficie, filetto e ombra", (light) => {
+    const values = palette(light);
+    expect(ELEVATION_LEVELS).toHaveLength(5);
+    for (const level of ELEVATION_LEVELS) {
+      expect(values.get(`elevation-${level}-surface`)).toBeDefined();
+      expect(values.get(`elevation-${level}-border`)).toBeDefined();
+      expect(values.get(`elevation-${level}-shadow`)).toBeDefined();
+    }
+  });
+
+  it("al buio sale la luce; in chiaro cresce l'ombra", () => {
+    const dark = palette("dark");
+    const light = palette("light");
+    const darkSurfaces = ELEVATION_LEVELS.map((level) => dark.get(`elevation-${level}-surface`));
+    const darkShadows = ELEVATION_LEVELS.map((level) => dark.get(`elevation-${level}-shadow`));
+    const lightShadows = ELEVATION_LEVELS.map((level) => light.get(`elevation-${level}-shadow`));
+
+    expect(new Set(darkSurfaces).size).toBe(5);
+    expect(new Set(darkShadows)).toEqual(new Set(["none"]));
+    expect(new Set(lightShadows).size).toBe(5);
   });
 });
 

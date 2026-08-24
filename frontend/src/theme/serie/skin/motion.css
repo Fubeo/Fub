@@ -1,21 +1,68 @@
 /* --- il moto della scocca -------------------------------------------------
-   Si anima ciò che appare — una modale, un menu, un toast — non ciò che
-   sta. Solo l'ingresso: `[hidden]` in struttura spegne il display, e una
-   chiusura animata sarebbe una gara col `!important`. Transform e opacity,
-   mai geometria. `prefers-reduced-motion` lo fa la struttura, non si
-   duplica. Tre keyframe, tre durate, tre curve: tutto speso. */
+   Gli stati li possiede `ui/motion.ts`: lo stesso attributo governa entrata,
+   uscita, riannodamento e puntatore. View Transitions può avvolgere la
+   mutazione, ma questi keyframe restano il fallback completo. Transform e
+   opacity, mai geometria. Il moto ridotto resta un pavimento della struttura. */
 
 @keyframes fub-enter-fade {
   from { opacity: 0; }
   to { opacity: 1; }
 }
+@keyframes fub-exit-fade {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
 @keyframes fub-enter-rise {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(var(--space-4)); }
   to { opacity: 1; transform: translateY(0); }
 }
+@keyframes fub-exit-rise {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(var(--space-4)); }
+}
 @keyframes fub-enter-rise-sm {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(var(--space-2)); }
   to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fub-exit-rise-sm {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(var(--space-2)); }
+}
+
+[data-shell-motion="pre-enter"],
+[data-shell-motion="exit"] {
+  pointer-events: none !important;
+}
+
+[data-shell-motion="pre-enter"] {
+  opacity: 0;
+}
+
+.modale[data-shell-motion="enter"] {
+  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
+}
+.modale[data-shell-motion="exit"] {
+  animation: fub-exit-fade var(--duration-med) var(--ease-in);
+}
+.modale[data-shell-motion="enter"] .palette-box {
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+.modale[data-shell-motion="exit"] .palette-box {
+  animation: fub-exit-rise var(--duration-med) var(--ease-in);
+}
+.settings-panel[data-shell-motion="enter"],
+.icon-picker[data-shell-motion="enter"] {
+  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
+}
+.settings-panel[data-shell-motion="exit"],
+.icon-picker[data-shell-motion="exit"] {
+  animation: fub-exit-rise var(--duration-med) var(--ease-in);
+}
+.context-menu[data-shell-motion="enter"] {
+  animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
+}
+.context-menu[data-shell-motion="exit"] {
+  animation: fub-exit-rise-sm var(--duration-fast) var(--ease-in);
 }
 
 /* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */

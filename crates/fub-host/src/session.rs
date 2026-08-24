@@ -53,7 +53,7 @@ use crate::config::{config_dir, machine_settings_path, vault_registry_path, view
 use crate::custody::Custody;
 use crate::mount::mount;
 use crate::records::{UnreadDoc, VaultInfo};
-use crate::registry::{BundleInfo, BundleRegistry};
+use crate::registry::{Bundle, BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
 use crate::watcher::{VaultWatcher, WatcherFactory};
@@ -329,6 +329,12 @@ pub struct Host {
     /// stesso livello, che prima di questa voce non esisteva affatto — ed è la
     /// ragione per cui la 0029 non poteva chiudere questa metà del §9.6.
     vaults: VaultRegistry,
+    /// La cartella di configurazione della macchina (§11.1), se questo host
+    /// ne ha una. È la radice di cui [`themes_dir`](crate::config::themes_dir)
+    /// è figlia: senza un posto dove scrivere i temi di terzi non esistono
+    /// (si installano qui), e il tema di serie basta a sé stesso — la stessa
+    /// regola di «perdere il tema è meglio di un'app che non parte».
+    config_dir: Option<Utf8PathBuf>,
     /// Quanti thread esegue i job di **ogni** vault aperto (§9.3). Per vault e
     /// non in totale: i pool non si conoscono, come non si conoscono i vault.
     job_threads: usize,
@@ -400,15 +406,10 @@ impl Host {
             watcher,
             sink: None,
             session_notice: Mutex::new(None),
-            // **In memoria di default**, come `Workspace::new`, e per la stessa
-            // ragione: chi non ha un'installazione — un test, un e2e headless —
-            // non deve scrivere nella cartella di configurazione di chi lo
-            // esegue. Un'app vera chiama `installed()` o `with_config_dir`, e se
-            // se ne dimentica il difetto si vede subito (il tema non sopravvive
-            // alla chiusura) invece che mai.
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
+            config_dir: None,
             job_threads: DEFAULT_JOB_THREADS,
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
@@ -461,6 +462,7 @@ impl Host {
         self.machine = with_the_schema(machine);
         self.vaults = vaults;
         self.view_states = view_states;
+        self.config_dir = Some(dir.to_owned());
         self
     }
 
@@ -585,7 +587,7 @@ impl Host {
         let root = root.to_owned();
         let crate::mount::Mounted {
             workspace: mut ws,
-            registry,
+            mut registry,
             #[cfg(feature = "versioning")]
             versions,
         } = mount(
@@ -603,6 +605,37 @@ impl Host {
         // apre dal dialogo la prima delle tre filtra già in `Host::open`, le
         // altre arrivano qui con il perché nel messaggio.
         .map_err(|and| PluginError::Internal(and.into()))?;
+
+        // **I temi installati sulla macchina** (§29.4): l'unica porta è il
+        // `BundleRegistry` appena montato, come per le feature ufficiali —
+        // niente seconda porta. Il tema di serie è già nella tabella di
+        // `mount`; qui si aggiungono quelli che stanno in
+        // `config_dir/themes/<id>/` (vedi [`themes_dir`](crate::config::themes_dir)).
+        // Un tema **spento** (`plugins.disabled`) resta conosciuto e non si
+        // accende: «spento» e «non c'è» sono due stati, ed è la riga di
+        // [`BundleInfo::mounted`](crate::registry::BundleInfo::mounted).
+        //
+        // Un tema rotto non blocca l'apertura del vault: è un tema, non il
+        // vault — la stessa regola del bundle ufficiale che non si monta. Ma si
+        // dice, e nel log: un tema che esiste e non entra non deve sparire
+        // senza una parola.
+        if let Some(config_dir) = &self.config_dir {
+            let disabled = crate::settings::disabled_plugins(&ws);
+            let (themes, errors) = crate::theme::discover_themes(config_dir);
+            for theme in themes {
+                let bundle = std::sync::Arc::new(theme);
+                let id = bundle.manifest().id;
+                registry.remember(bundle);
+                if !disabled.contains(&id) {
+                    if let Err(and) = registry.enable(&mut ws, &id) {
+                        tracing::error!(target: "fub.host", "theme not mounted: {and}");
+                    }
+                }
+            }
+            for problem in errors {
+                tracing::error!(target: "fub.host", "theme skipped: {problem}");
+            }
+        }
         let registry = Custody::new("i componenti montati", registry);
 
         // **I tasti che questo vault propone e che nessuno ha guardato**

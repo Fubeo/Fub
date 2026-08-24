@@ -46,6 +46,22 @@ use fub_abi::traits::{abi_compatible, HostApi, Plugin, PluginManifest};
 use fub_abi::PluginError;
 use fub_kernel::{RegistryError, Trust, Workspace};
 
+/// Di che famiglia è un bundle: come lo presenta l'inventario.
+///
+/// La distinzione serve a chi disegna un elenco — componenti e temi non si
+/// accendono dalla stessa riga, e il tema non offre un interruttore nel senso
+/// dei componenti — e nasce qui e non nel manifest perché è ciò che l'host sa
+/// del bundle, non ciò che il bundle dice di sé (la stessa riga di
+/// [`Trust`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BundleKind {
+    /// Un componente: un plugin con provider da montare.
+    Component,
+    /// Un tema: solo la pelle, dichiarata da un [`ThemeManifest`](fub_abi::theme::ThemeManifest).
+    Theme,
+}
+
 /// Un **bundle**: un [`Plugin`] e i provider che registra, visti da chi li
 /// monta.
 ///
@@ -56,6 +72,15 @@ pub trait Bundle: Send + Sync {
     /// Chi è: id, versione, versione di ABI, permessi, servizi offerti e
     /// richiesti. È ciò che il registry **dichiara** al kernel.
     fn manifest(&self) -> PluginManifest;
+
+    /// Di che famiglia è, per l'inventario. Il default è
+    /// [`BundleKind::Component`]: i componenti erano l'unica famiglia prima
+    /// dei temi, e un'implementazione che non dice niente resta quella di
+    /// prima — ciò che si ottiene dimenticandosi di dichiararlo non può essere
+    /// più di ciò che si otteneva dichiarando.
+    fn kind(&self) -> BundleKind {
+        BundleKind::Component
+    }
 
     /// Quanto l'host si fida di lui.
     ///
@@ -231,12 +256,24 @@ pub struct BundleRegistry {
 /// Non è [`PluginInfo`](fub_kernel::PluginInfo) e non lo sostituisce: quello
 /// racconta chi è **dichiarato nel kernel**, e un bundle spento non lo è
 /// affatto. La differenza è il punto — «spento» e «non c'è» sono due stati
-/// diversi, e senza questo elenco il secondo si mangerebbe il primo.
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct BundleInfo {
+    /// Chi è: l'id con cui il bundle è dichiarato nel kernel.
     pub id: String,
+    /// Come si chiama, per gli elenchi.
     pub name: String,
+    /// Se è acceso. «Spento» e «non c'è» sono due stati diversi, e questo
+    /// campo è l'unica riga che li distingue.
     pub mounted: bool,
+    /// Di che famiglia è: un componente o un tema.
+    ///
+    /// Sta qui e non si deduce da altro perché è l'**unica** riga che lo dice a
+    /// chi guarda l'elenco: «spento» e «non c'è» sono già distinti da
+    /// [`mounted`](BundleInfo::mounted), e la famiglia è la terza domanda che
+    /// chi disegna si pone davanti a una riga — un tema non si spegne con un
+    /// interruttore di componente, e saperlo prima di cliccare è la differenza
+    /// fra un pannello che chiede e uno che insegna.
+    pub kind: BundleKind,
     /// Quanto l'host si fida di chi lo ha prodotto.
     ///
     /// Non è una decorazione accanto ai permessi: è **l'altra metà della
@@ -338,7 +375,6 @@ impl BundleRegistry {
         self.known.push(bundle);
     }
 
-    /// Chi questo host sa montare, e chi è acceso adesso.
     pub fn inventory(&self) -> Vec<BundleInfo> {
         self.known
             .iter()
@@ -350,6 +386,7 @@ impl BundleRegistry {
                     permissions: manifest.permissions.granted,
                     id: manifest.id,
                     name: manifest.name,
+                    kind: b.kind(),
                 }
             })
             .collect()

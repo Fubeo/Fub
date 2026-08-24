@@ -76,7 +76,13 @@ describe("il menu contestuale", () => {
 
 describe("il selettore di icona", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    vi.runAllTimers();
+    vi.useRealTimers();
   });
 
   it("riaprirlo non lascia appesa la finestrella di prima", () => {
@@ -89,6 +95,7 @@ describe("il selettore di icona", () => {
 
     // Si chiude il secondo per la sua via — quella che passa da `chiudi()`.
     document.querySelector<HTMLButtonElement>("#icon-picker .icon-none")!.click();
+    vi.runAllTimers();
     expect(choices).toEqual([null]);
     expect(document.getElementById("icon-picker")).toBeNull();
 
@@ -102,6 +109,7 @@ describe("il selettore di icona", () => {
     const choices: (string | null)[] = [];
     pickIcon(clickEvent(), (i) => choices.push(i));
     document.querySelector<HTMLButtonElement>("#icon-picker .icon-grid button")!.click();
+    vi.runAllTimers();
 
     expect(choices).toHaveLength(1);
     expect(document.getElementById("icon-picker")).toBeNull();

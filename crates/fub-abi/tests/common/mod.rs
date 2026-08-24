@@ -30,6 +30,8 @@ pub struct RustEnum {
     pub name: String,
     /// I nomi dei casi in `CamelCase`, **nell'ordine di dichiarazione**.
     pub variants: Vec<String>,
+    /// I nomi che serde scrive sul JSON, compresi i `rename` della singola variante.
+    pub json_variants: Vec<String>,
     /// Nessun caso porta un payload: è una union di stringhe al confine JSON.
     pub fieldless: bool,
 }
@@ -45,11 +47,35 @@ fn parse(file: &str) -> syn::File {
     syn::parse_file(&src).unwrap_or_else(|and| panic!("{} failed to parse: {and}", path.display()))
 }
 
+fn serde_rename(and: &syn::Variant) -> Option<String> {
+    let mut rename = None;
+    for attr in &and.attrs {
+        if !attr.path().is_ident("serde") {
+            continue;
+        }
+        let _ = attr.parse_nested_meta(|metadata| {
+            if metadata.path.is_ident("rename") {
+                let value: syn::LitStr = metadata.value()?.parse()?;
+                rename = Some(value.value());
+            } else if metadata.input.peek(syn::Token![=]) {
+                let _: syn::Expr = metadata.value()?.parse()?;
+            }
+            Ok(())
+        });
+    }
+    rename
+}
+
 fn convert(file: &str, and: &syn::ItemEnum) -> RustEnum {
     RustEnum {
         file: file.to_string(),
         name: and.ident.to_string(),
         variants: and.variants.iter().map(|v| v.ident.to_string()).collect(),
+        json_variants: and
+            .variants
+            .iter()
+            .map(|v| serde_rename(v).unwrap_or_else(|| snake(&v.ident.to_string())))
+            .collect(),
         fieldless: and
             .variants
             .iter()

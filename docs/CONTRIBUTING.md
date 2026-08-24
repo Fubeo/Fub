@@ -57,6 +57,7 @@ npx tsc --noEmit      # `vite build` traspila senza controllare i tipi
 npm test
 npm run build
 npm run bench:a11y    # il contrasto della pagina vera, nelle due luci (§31.1)
+npm run bench:verify  # confronto a pixel sul runner Linux (§31.1)
 
 # shell (dalla radice, come la CI)
 node .github/scripts/check-listeners.mjs
@@ -110,23 +111,23 @@ girano su Linux, macOS e Windows, e a rompersi sono quasi sempre i path e i lock
 file di `.fub/data/`. Se ciclo locale e CI divergono, `check-locale-loop.mjs`
 diventa rosso.
 
-### Il banco visivo, e la metà che resta fuori da qui
+### Il banco visivo in CI e la provenienza delle baseline
 
 Il banco del [§31.1](roadmap/31-da-dove-viene-cio-che-si-vede.md) fotografa la
-shell vera in tutte e due le luci e confronta con le baseline in repo. Del banco,
-qui sopra c'è solo il contrasto reso: il **confronto a pixel** non sta né nel
-ciclo né in CI, e non è una dimenticanza.
+shell vera in tutte e due le luci e confronta con le baseline in repo. Nel ciclo
+qui sopra e nel job `frontend` di CI girano sia il **confronto a pixel** sia il
+contrasto reso.
 
-Un browser pinnato garantisce lo stesso motore: prima della
+Un browser pinnato garantisce lo stesso motore; la
 [§31.3](roadmap/31-da-dove-viene-cio-che-si-vede.md#313-la-voce-del-tema-i-caratteri)
-non garantiva anche gli stessi caratteri, perché la scala che la shell
-chiedeva si risolveva nel carattere di sistema. La 0168 ha portato i tre
-caratteri in bundle, ma il cancello resta **locale** lo stesso: le baseline in
-repo sono scattate su una macchina che Playwright segnala come non
-supportata, non sul runner `ubuntu-latest` di CI, e nessuno ha ancora
-verificato da lì che il rendering coincida byte per byte.
+ha portato nel bundle anche i tre caratteri, così la resa non dipende dai font
+della macchina. Le baseline canoniche in repo provengono da `ubuntu-latest`, lo
+stesso runner Linux sul quale CI esegue `npm run bench:verify`: quando il
+cambiamento è voluto, anche `npm run bench:update` va eseguito in quell'ambiente
+prima di commettere le nuove immagini. Su un confronto rosso, CI allega foto
+attuali, differenze e foglio di contatto come artifact del job.
 
-Chi tocca il tema lo lancia a mano, e guarda il foglio di contatto:
+Chi tocca il tema lo lancia anche a mano e guarda il foglio di contatto:
 
 ```bash
 # dentro frontend/, la prima volta: npx playwright install chromium

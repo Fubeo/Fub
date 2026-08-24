@@ -65,6 +65,7 @@ pub mod schema;
 pub mod session;
 pub mod settings;
 pub mod text;
+pub mod theme;
 pub mod traits;
 pub mod transfer;
 pub mod ui;
@@ -121,6 +122,7 @@ pub use settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
 pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
+pub use theme::{ThemeEngine, ThemeLight, ThemeManifest, THEME_ENGINE};
 pub use traits::{
     BacklinkRef, CivilTime, CommandProvider, DataRead, DataWrite, DocPosition, DocumentMatch,
     DraftInfo, EntryKind, EventHandler, Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi,

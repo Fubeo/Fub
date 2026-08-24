@@ -1136,6 +1136,7 @@ impl IndexProvider for CoreIndex {
             // Le foglie che sa valutare dai metadati in cache. `Text` non c'è, e
             QueryRoute::Query(QueryKind::RenderPreview),
             QueryRoute::Query(QueryKind::RenderEmbed),
+            QueryRoute::Query(QueryKind::SyntaxForms),
             // non è una lacuna: il kernel non indicizza il corpo, e prometterlo
             // vorrebbe dire scandire il vault a ogni ricerca.
             // Niente da ricaricare: la memoria di questo indice è il vault, e la
@@ -1401,11 +1402,11 @@ impl IndexProvider for CoreIndex {
             // Questi bracci non si raggiungono mai, ma il `match` è esaustivo e
             // non accetta un `_` — vedi la 0104.
             // Le chiavi di frontmatter nate, morte o cambiate di valore, ordinate e senza
-            IndexQuery::RenderPreview { .. } | IndexQuery::RenderEmbed { .. } => {
-                Err(PluginError::Internal(
-                    "render is `Workspace::query_index`'s, not the kernel index's".into(),
-                ))
-            }
+            IndexQuery::RenderPreview { .. }
+            | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::SyntaxForms { .. } => Err(PluginError::Internal(
+                "workspace-owned query reached the kernel index".into(),
+            )),
         }
     }
 }

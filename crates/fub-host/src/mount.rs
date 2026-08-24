@@ -252,7 +252,7 @@ pub fn mount(
             })
             .configuring(core_settings())
             // La somma dei due cataloghi — quello dell'host e quelli
-            // delle famiglie del kernel — è una funzione sola, e la
+            // delle famiglie del kernel — è una sola chiamata, e la
             // chiama anche il banco che la giudica: qui c'era un elenco
             // a mano, e il banco ne teneva una seconda copia.
             .speaking(
@@ -260,6 +260,14 @@ pub fn mount(
                 core_catalog_assembled(),
             ),
         ),
+        // **Il tema di serie** (§29.4), dopo il core e prima delle feature.
+        // Non è nell'inventario di `fub-features` e non può esserci: è
+        // dell'host, come il core — la pelle che la shell disegna per default
+        // non si installa e non si disinstalla (vedi
+        // [`install_theme`](crate::theme::install_theme)). È un bundle senza
+        // provider né permessi, e passa dalla stessa porta dei temi installati
+        // in `config/themes/`: una riga della tabella, come tutte le altre.
+        Arc::new(crate::theme::ThemeBundle::series()),
     ];
     for feature in fub_features::every_official_feature() {
         // **Le tre irregolari, e perché stanno in un `Option` invece che in un

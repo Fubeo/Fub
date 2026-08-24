@@ -914,6 +914,10 @@
       "page": "Nota",
       "heading": "Sezione",
       "block": null
+    },
+    {
+      "kind": "syntax_forms",
+      "doc": "a.md"
     }
   ],
   "IndexResult": [
@@ -1178,6 +1182,20 @@
         "html": "",
         "parts": []
       }
+    },
+    {
+      "kind": "syntax_forms",
+      "value": [
+        {
+          "name": "terzi:spoiler",
+          "trigger": {
+            "inline": {
+              "open": "||",
+              "close": "||"
+            }
+          }
+        }
+      ]
     }
   ],
   "BacklinkRef": [

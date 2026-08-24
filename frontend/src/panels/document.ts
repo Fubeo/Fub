@@ -55,7 +55,7 @@ import {
   type Outcome,
 } from "../state/saving";
 import { CASE_KEY, caseOf, toRecover, rejoinDrafts } from "../state/drafts";
-import { unsavedDrafts } from "../host/query";
+import { syntaxForms, unsavedDrafts } from "../host/query";
 import type { DraftInfo } from "../host/contract";
 import {
   openIn,
@@ -824,8 +824,9 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     clearPreview(r.previewEl);
     return;
   }
-  const text = await readBuffer(tab.doc);
+  const [text, forms] = await Promise.all([readBuffer(tab.doc), syntaxForms(tab.doc)]);
   if (generation !== r.loadGeneration || r.shown !== tab) return;
+  r.editor.setSyntaxForms(forms);
   r.editor.setDoc(text);
   await redrawReading(tab.doc);
 }

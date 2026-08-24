@@ -30,7 +30,6 @@
   align-items: flex-start;
   padding-top: 12vh;
   background: var(--scrim);
-  animation: fub-enter-fade var(--duration-slow) var(--ease-out);
 }
 
 .modale .palette-box {
@@ -40,12 +39,11 @@
   flex-direction: column;
   gap: var(--space-4);
   padding: var(--space-5);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--elevation-dialog-surface);
+  border: 1px solid var(--elevation-dialog-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--elevation-dialog-shadow);
   overflow: auto;
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 .modale input,
