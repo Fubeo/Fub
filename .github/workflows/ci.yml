@@ -206,6 +206,10 @@ jobs:
       # verifica anche che la promessa dell'MSRV sia vera.
       - uses: dtolnay/rust-toolchain@1.89
       - uses: Swatinem/rust-cache@v2
+        with:
+          # Anche un test rosso lascia artefatti di compilazione validi: salvarli
+          # evita di ricompilarli da zero soprattutto sui runner Windows/MSVC.
+          cache-on-failure: true
       - name: Dipendenze di sistema di Tauri
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -239,7 +243,8 @@ jobs:
         run: |
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
-      - run: cargo build --workspace
+      # `cargo test` compila già l'intero workspace (binari inclusi). Una build
+      # separata duplicava quasi tutto il linking e costava ~5 minuti su Windows.
       - run: cargo test --workspace
 
   # I documenti si rimandano l'un l'altro, ma nessuno li compila: un file

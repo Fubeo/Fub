@@ -46,7 +46,8 @@
 //! contract.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Barrier};
+use std::sync::mpsc::channel;
+use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::error::PluginError;
@@ -137,47 +138,65 @@ fn flush_is_its_own_phase() {
     .expect("registered");
 
     let custody = Custody::new("the open vault", ws);
-    let barrier = Arc::new(Barrier::new(2));
+    let (phase_tx, phase_rx) = channel();
+    let (release_tx, release_rx) = channel();
 
-    // L'apritore: le stesse fasi del runner (`advance_opening`), con la stessa
-    // separazione dei prestiti. Le due barriere tengono fermo il punto fra la
-    // chiusura dell'indicizzazione e il flush, che è il punto in cui il
+    // L'apritore riproduce le fasi del runner e annuncia ogni completamento.
     let open = {
         let custody = Custody::clone(&custody);
-        let barrier = Arc::clone(&barrier);
         std::thread::spawn(move || {
             let work = {
                 let mut ws = custody.write().expect("write");
                 ws.scan_vault().expect("scan")
             };
+            phase_tx.send("scan_vault").expect("the test is listening");
             let graph = {
                 let ws = custody.read().expect("read");
                 ws.graph_sources().build()
             };
+            phase_tx
+                .send("graph_sources")
+                .expect("the test is listening");
             {
                 let mut ws = custody.write().expect("write");
                 ws.finish_index_with_graph(work, graph);
             }
+            phase_tx
+                .send("finish_index_with_graph")
+                .expect("the test is listening");
             // Fra i due prestiti esclusivi il lucchetto si rilascia: è qui che
             // il lettore deve passare.
-            barrier.wait();
-            barrier.wait();
+            release_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("the test releases the worker before flush");
             {
                 let mut ws = custody.write().expect("write");
                 let _ = ws.flush_indexes();
             }
+            phase_tx
+                .send("flush_indexes")
+                .expect("the test is listening");
             {
                 let ws = custody.read().expect("read");
                 ws.store_entries();
             }
+            phase_tx
+                .send("store_entries")
+                .expect("the test is listening");
         })
     };
 
-    // Il lettore: nel punto in cui il difetto teneva il lucchetto, il prestito
-    // condiviso si ha subito. La barriera di ritorno tiene l'apritore fermo
-    // finché l'osservazione non è fatta — il banco è deterministico, non
-    // cronometra.
-    barrier.wait();
+    // Ogni attesa ha un limite breve e nomina la fase che il worker non ha
+    // raggiunto.
+    let wait_phase = |expected: &str| {
+        let actual = phase_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .unwrap_or_else(|error| panic!("worker did not reach phase {expected}: {error}"));
+        assert_eq!(actual, expected, "worker phases are out of order");
+    };
+    wait_phase("scan_vault");
+    wait_phase("graph_sources");
+    wait_phase("finish_index_with_graph");
     let reader = custody.try_read();
     assert!(
         reader.is_some(),
@@ -185,7 +204,11 @@ fn flush_is_its_own_phase() {
          concurrent reader waits for the sum of phases (0113)"
     );
     drop(reader);
-    barrier.wait();
+    release_tx
+        .send(())
+        .expect("the worker is waiting before the flush");
+    wait_phase("flush_indexes");
+    wait_phase("store_entries");
     open.join().expect("opening must not panic");
 
     assert_eq!(
