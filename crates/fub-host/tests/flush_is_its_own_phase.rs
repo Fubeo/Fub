@@ -49,7 +49,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::channel;
 use std::sync::Arc;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::PluginError;
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute};
@@ -58,7 +58,6 @@ use fub_kernel::storage::VaultStorage;
 use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, Workspace};
 use fub_testkit::SampleText;
 
-const ROOT: &str = "/vault-flush-fase-sua";
 /// Quante note. Non tre: il numero deve essere abbastanza grande da rendere
 /// credibile che le fasi durino, e abbastanza piccolo da non pesare sul banco.
 const NOTE: usize = 40;
@@ -98,11 +97,11 @@ impl IndexProvider for CountingIndex {
     }
 }
 
-fn seed(storage: &Arc<MemStorage>) {
+fn seed(storage: &Arc<MemStorage>, root: &Utf8Path) {
     for the in 0..NOTE {
         storage
             .write(
-                &Utf8PathBuf::from(format!("{ROOT}/nota{the:04}.txt")),
+                &root.join(format!("nota{the:04}.txt")),
                 format!("nota{the:04}\n").as_bytes(),
             )
             .expect("seed");
@@ -111,8 +110,14 @@ fn seed(storage: &Arc<MemStorage>) {
 
 #[test]
 fn flush_is_its_own_phase() {
+    // Il percorso deve esistere: `Workspace::on` lo canonizza (su Windows
+    // aggiungendo anche l'unità), quindi seed e workspace devono condividere
+    // esattamente la stessa radice canonica.
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("path UTF-8");
+    let root = root.canonicalize_utf8().expect("tempdir exists");
     let storage = Arc::new(MemStorage::new());
-    seed(&storage);
+    seed(&storage, &root);
 
     let mut registry = FormatRegistry::new();
     registry
@@ -121,7 +126,7 @@ fn flush_is_its_own_phase() {
 
     let flush = Arc::new(AtomicUsize::new(0));
     let mut ws = Workspace::on(
-        ROOT,
+        &root,
         registry,
         storage as Arc<dyn VaultStorage>,
         MachineSettings::in_memory(),

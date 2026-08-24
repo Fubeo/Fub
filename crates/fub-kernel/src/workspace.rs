@@ -2245,7 +2245,7 @@ impl Workspace {
             // imparato leggendola.
             // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
             if entry.fingerprint.is_some() && !aged.contains(&entry.id) {
-                self.indexes.core.set_entry(entry);
+                self.indexes.core.set_entry_from_scan(entry);
             }
         }
         for (id, metadata) in reused {
