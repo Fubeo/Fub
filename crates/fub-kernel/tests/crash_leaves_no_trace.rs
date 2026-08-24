@@ -20,19 +20,30 @@
 
 use std::sync::Arc;
 
-use camino::Utf8Path;
+use camino::Utf8PathBuf;
 use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, Vault, VaultStorage, Workspace};
 use fub_testkit::SampleText;
 
-const ROOT: &str = "/vault";
+fn root() -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8")
+        .join("vault-crash-leaves-no-trace")
+}
+
+fn path(relative: &str) -> Utf8PathBuf {
+    root().join(relative)
+}
+
 /// Il temporaneo che il crash ha lasciato: la forma esatta che compone
 /// `tmp_path`, punto davanti, `.tmp`, il pid e il numero di sequenza.
-const RESIDUUM: &str = "/vault/.Nota.md.tmp4242-0";
+fn residuum() -> Utf8PathBuf {
+    path(".Nota.md.tmp4242-0")
+}
 
 fn storage() -> Arc<dyn VaultStorage> {
     let storage: Arc<dyn VaultStorage> = Arc::new(MemStorage::new());
     storage
-        .write(Utf8Path::new("/vault/Idea.md"), b"a real note")
+        .write(&path("Idea.md"), b"a real note")
         .expect("write");
     storage
 }
@@ -41,8 +52,8 @@ fn storage() -> Arc<dyn VaultStorage> {
 /// operazioni: la soglia è di sedici, e venti la superano di sicuro.
 fn a_day_passes(storage: &Arc<dyn VaultStorage>) {
     for the in 0..20 {
-        let path = format!("/vault/.fub/passa-{the}");
-        storage.write(Utf8Path::new(&path), b"x").expect("write");
+        let path = path(&format!(".fub/passa-{the}"));
+        storage.write(&path, b"x").expect("write");
     }
 }
 
@@ -52,7 +63,7 @@ fn workspace(storage: &Arc<dyn VaultStorage>) -> Workspace {
         .register(SampleText::by_extension("md").boxed())
         .expect("no extension conflict");
     Workspace::on(
-        ROOT,
+        root(),
         registry,
         Arc::clone(storage),
         MachineSettings::in_memory(),
@@ -64,12 +75,10 @@ fn workspace(storage: &Arc<dyn VaultStorage>) -> Workspace {
 #[test]
 fn the_walk_sees_the_temporary_that_nobody_else_sees() {
     let storage = storage();
-    storage
-        .write(Utf8Path::new(RESIDUUM), b"half write")
-        .expect("write");
+    storage.write(&residuum(), b"half write").expect("write");
     a_day_passes(&storage);
 
-    let vault = Vault::on(ROOT, Arc::clone(&storage)).expect("vault opens");
+    let vault = Vault::on(root(), Arc::clone(&storage)).expect("vault opens");
     let scan = vault.scan().expect("scan succeeds");
 
     assert!(
@@ -81,7 +90,7 @@ fn the_walk_sees_the_temporary_that_nobody_else_sees() {
             .iter()
             .map(|p| p.as_str())
             .collect::<Vec<_>>(),
-        vec![RESIDUUM],
+        vec![residuum().as_str()],
         "the temporary left by a crash was invisible to everyone"
     );
 }
@@ -90,23 +99,18 @@ fn the_walk_sees_the_temporary_that_nobody_else_sees() {
 #[test]
 fn an_opening_removes_what_the_crash_left() {
     let storage = storage();
-    storage
-        .write(Utf8Path::new(RESIDUUM), b"half write")
-        .expect("write");
+    storage.write(&residuum(), b"half write").expect("write");
     a_day_passes(&storage);
 
     let mut ws = workspace(&storage);
     ws.reindex().expect("root scan");
 
     assert!(
-        !storage.exists(Utf8Path::new(RESIDUUM)),
+        !storage.exists(&residuum()),
         "the temporary of an interrupted write is still there after an opening, \
          and there will be another at the next crash"
     );
-    assert!(
-        storage.exists(Utf8Path::new("/vault/Idea.md")),
-        "the real note survived"
-    );
+    assert!(storage.exists(&path("Idea.md")), "the real note survived");
 }
 
 /// L'altra metà, quella che impedisce alla riparazione di diventare «togli i
@@ -120,15 +124,15 @@ fn a_live_write_is_not_interrupted() {
 
     // Adesso, cioè mentre l'apertura sta per cominciare: questo temporaneo ha
     // un `File` aperto da qualche parte e la sua rename deve ancora arrivare.
-    let live = Utf8Path::new("/vault/.Appena.md.tmp4242-1");
+    let live = path(".Appena.md.tmp4242-1");
     storage
-        .write(live, b"the bytes are landing")
+        .write(&live, b"the bytes are landing")
         .expect("write");
 
     ws.reindex().expect("root scan");
 
     assert!(
-        storage.exists(live),
+        storage.exists(&live),
         "a live write was interrupted by the cleaner: its rename will no longer \
          find the source"
     );

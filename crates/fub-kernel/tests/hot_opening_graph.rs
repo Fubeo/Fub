@@ -90,7 +90,11 @@ impl FormatProvider for LinkListProvider {
     }
 }
 
-const ROOT: &str = "/vault-grafo-a-caldo";
+fn root() -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8")
+        .join("vault-grafo-a-caldo")
+}
 /// Quante note. Il difetto che questo banco tiene fermo non è graduale — o il
 /// grafo c'è o non c'è — ma un vault di tre note lascerebbe credere che si
 /// tratti di un caso limite.
@@ -104,10 +108,11 @@ fn name(the: usize) -> String {
 /// link uscente e un backlink, e «il grafo è vuoto» non si può confondere con
 /// «questa nota non aveva link».
 fn vault(storage: &Arc<MemStorage>) {
+    let root = root();
     for the in 0..NOTE {
         storage
             .write(
-                &Utf8PathBuf::from(format!("{ROOT}/{}", name(the))),
+                &root.join(name(the)),
                 format!("nota{:04}\n", (the + 1) % NOTE).as_bytes(),
             )
             .expect("semina");
@@ -120,7 +125,7 @@ fn open(storage: Arc<MemStorage>) -> Workspace {
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::on(
-        ROOT,
+        root(),
         registry,
         storage as Arc<dyn VaultStorage>,
         MachineSettings::in_memory(),
@@ -226,7 +231,7 @@ fn a_graph_prepared_outside_from_the_exclusive_and_the_same_of_reindex() {
         .register(Box::new(LinkListProvider))
         .expect("nessun conflitto di estensioni");
     let mut ws = Workspace::on(
-        ROOT,
+        root(),
         registry,
         storage as Arc<dyn VaultStorage>,
         MachineSettings::in_memory(),

@@ -25,6 +25,12 @@ use camino::Utf8PathBuf;
 use fub_kernel::storage::{MemStorage, VaultStorage};
 use fub_kernel::{FormatRegistry, KernelError, Vault, Workspace};
 
+fn fixture_root(name: &str) -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8")
+        .join(name)
+}
+
 /// Il `kind` dell'errore che l'apertura ha rifiutato, e la radice che diceva.
 fn kind(and: &KernelError) -> (std::io::ErrorKind, &str) {
     match and {
@@ -141,14 +147,14 @@ fn a_root_real_is_opens_without_leave_the_proof() {
 #[test]
 fn the_in_memory_world_accepts_a_root_that_is_for_birth_and_rejects_a_file() {
     let storage = Arc::new(MemStorage::new());
-    let nascent = Utf8PathBuf::from("/vault-nascente");
+    let nascent = fixture_root("vault-nascente");
 
     let vault = Vault::on(&nascent, Arc::clone(&storage) as Arc<dyn VaultStorage>)
         .expect("un vault in memoria su una radice nascente si apre");
     assert_eq!(vault.root(), nascent.as_str());
 
     // Una radice che è un file è impossibile anche in memoria.
-    let occupied = Utf8PathBuf::from("/occupato-da-un-file");
+    let occupied = fixture_root("occupato-da-un-file");
     VaultStorage::write(&*storage, &occupied, b"sono un file").expect("semina del file");
     let and = Vault::on(&occupied, Arc::clone(&storage) as Arc<dyn VaultStorage>)
         .err()

@@ -792,10 +792,11 @@ impl VaultStorage for CurrentDate {
 fn a_data_that_can_again_change_not_ends_in_registry() {
     let fixture = Fixture::new();
     let storage = Arc::new(CurrentDate::default());
+    let root = fixture.root.clone();
 
     let open = |storage: Arc<dyn VaultStorage>, canvas: bool| {
         let mut ws = Workspace::on(
-            "/vault",
+            &root,
             fixture.registry(canvas),
             storage,
             MachineSettings::in_memory(),
@@ -806,11 +807,11 @@ fn a_data_that_can_again_change_not_ends_in_registry() {
     };
 
     storage
-        .write(Utf8Path::new("/vault/ferma.txt"), b"non cambio")
+        .write(&fixture.root.join("ferma.txt"), b"non cambio")
         .expect("scrive");
     storage
         .write(
-            Utf8Path::new("/vault/appena-scritta.txt"),
+            &fixture.root.join("appena-scritta.txt"),
             b"qualcuno mi sta ancora scrivendo",
         )
         .expect("scrive");

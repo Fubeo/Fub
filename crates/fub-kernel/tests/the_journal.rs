@@ -35,6 +35,12 @@ use fub_abi::model::DocId;
 use fub_kernel::{JournalOp, KernelError, Workspace};
 use fub_testkit::Bench;
 
+fn fixture_root() -> Utf8PathBuf {
+    Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8")
+        .join("vault-journal")
+}
+
 fn doc(id: &str) -> DocId {
     DocId::new(id)
 }
@@ -620,7 +626,7 @@ impl fub_kernel::VaultStorage for CountingStorage {
 fn opening_a_vault_does_not_reread_the_journal_more_than_twice() {
     let reads = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let inner = fub_kernel::MemStorage::new();
-    let root = Utf8PathBuf::from("/vault");
+    let root = fixture_root();
     // Un registro che **c'è già** e finisce per intero: il caso in cui le
     // letture si contano davvero. Su un file che non c'è ognuna torna subito e
     // il banco sarebbe verde per la ragione sbagliata.
