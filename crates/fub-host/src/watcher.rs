@@ -699,6 +699,13 @@ mod notify_watcher {
         fn an_orphan_rename_emerges_as_a_touched_path() {
             let inside = tempfile::tempdir().expect("the watched folder");
             let outside = tempfile::tempdir().expect("a folder nobody watches");
+            // FSEvents reports canonical paths on macOS (for example
+            // `/private/var` instead of `/var`), so keep the watched root and
+            // the expected event path in the same representation.
+            let root = inside
+                .path()
+                .canonicalize()
+                .expect("the canonical watched folder");
             let (sender, receiver) = std::sync::mpsc::channel();
             let mut debouncer = new_debouncer(
                 Duration::from_millis(20),
@@ -714,10 +721,10 @@ mod notify_watcher {
             )
             .expect("a watcher");
             debouncer
-                .watch(inside.path(), RecursiveMode::Recursive)
+                .watch(&root, RecursiveMode::Recursive)
                 .expect("watching the folder");
 
-            let notes = inside.path().join("note.md");
+            let notes = root.join("note.md");
             let touched = ExternalChange::Touched(
                 Utf8PathBuf::from_path_buf(notes.clone()).expect("a utf-8 path"),
             );

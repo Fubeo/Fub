@@ -97,16 +97,18 @@ fn a_name_born_in_the_double_is_portable_like_in_the_real_host() {
         .unwrap_err();
     assert!(matches!(err, PluginError::BadArgs(_)), "{err:?}");
 
-    // Ma leggere e scrivere un nome che il vault contiene già non è una nascita.
-    // Ma leggere e scrivere un nome che il vault contiene già non è una nascita.
-    host.write_document(
-        &DocId::new("CON.md"),
-        "arrived from an import",
-        WriteBase::Dictated,
-    )
-    .expect("the fence passes: `CON.md` is inside the vault");
+    // Un doppio vuoto rappresenta una nascita; per provare un nome non
+    // portabile già arrivato da un import serve quindi un vault seminato.
+    let mut imported = MemoryHost::new().with_document("CON.md", "the console");
+    imported
+        .write_document(
+            &DocId::new("CON.md"),
+            "arrived from an import",
+            WriteBase::Dictated,
+        )
+        .expect("the fence passes: `CON.md` is inside the vault");
     assert_eq!(
-        host.read_document(&DocId::new("CON.md")).unwrap(),
+        imported.read_document(&DocId::new("CON.md")).unwrap(),
         "arrived from an import"
     );
 }

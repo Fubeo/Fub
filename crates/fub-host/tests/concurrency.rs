@@ -23,7 +23,9 @@ use fub_abi::model::DocId;
 use fub_abi::traits::{ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
-use fub_host::{Host, NoWatcher};
+use fub_format_markdown::MarkdownProvider;
+use fub_host::{Custody, Host, NoWatcher};
+use fub_kernel::{FormatRegistry, Workspace};
 
 /// Quanti lettori mettere in campo. Su una macchina a un core la
 /// sovrapposizione vera è impossibile, e il test lo dice invece di fallire.
@@ -101,23 +103,28 @@ fn open(v: &Vault) -> Host {
 ///
 /// [`Custody::try_read`] è la domanda giusta e non ha una macchina dentro:
 /// «lo posso avere **adesso**?». Il prestito condiviso lo tiene questo thread,
-/// un secondo lettore ne chiede un altro senza mettersi in fila. Se il prestito
-/// è condiviso la risposta è `Some` per costruzione, sempre e su qualunque
-/// macchina; se il workspace tornasse a un prestito esclusivo — un `Mutex` con
-/// un altro nome — sarebbe `None`, altrettanto sempre. Niente soglia, niente
-/// cronometro, niente `sleep`.
+/// un secondo lettore ne chiede un altro senza mettersi in fila. Il test usa
+/// direttamente il workspace già reindicizzato, senza il `JobRunner` dell'host:
+/// il suo giro di polling prende periodicamente il prestito esclusivo per
+/// drenare la coda, e su `std::sync::RwLock` un writer accodato fa rispondere
+/// `None` anche a un lettore condiviso. Qui non c'è quindi un writer estraneo
+/// alla proprietà misurata; se il workspace tornasse a un prestito esclusivo —
+/// un `Mutex` con un altro nome — il secondo lettore resterebbe `None`.
 ///
-/// **L'indicizzazione si aspetta prima**, ed è la sola precauzione che resta:
-/// finché il runner gira chiede il prestito esclusivo a ogni fetta, e sotto un
-/// `RwLock` un lettore nuovo si ferma dietro a chi aspetta di scrivere. Un
-/// `None` di lì sarebbe un rosso per la ragione sbagliata — è la stessa nota di
+/// **L'indicizzazione si fa prima**, in modo sincrono, ed è la sola precauzione
+/// che resta: il banco prova il prestito del workspace, non il protocollo del
+/// runner.
 #[test]
 fn two_reads_can_be_in_the_workspace_at_the_same_time() {
     let _turn = bench_turn();
     let v = vault(4);
-    let host = open(&v);
-    host.wait_indexed(None).expect("indexing finishes");
-    let ws = host.workspace(None).unwrap();
+    let mut registry = FormatRegistry::new();
+    registry
+        .register(MarkdownProvider::boxed())
+        .expect("no extension conflict");
+    let mut workspace = Workspace::new(&v.root, registry).expect("the vault opens");
+    workspace.reindex().expect("indexing finishes");
+    let ws = Custody::new("the open vault", workspace);
     let id = DocId::new("Note 0.md");
 
     // Il primo prestito, tenuto da qui fino in fondo.
