@@ -34,17 +34,23 @@ use fub_testkit::SampleText;
 struct RejectingStorage {
     inner: FsStorage,
     rejects: Arc<Mutex<Vec<String>>>,
+    invalid_names: Arc<Mutex<Vec<String>>>,
 }
 
+type FailureNames = Arc<Mutex<Vec<String>>>;
+
 impl RejectingStorage {
-    fn new() -> (Arc<Self>, Arc<Mutex<Vec<String>>>) {
+    fn new() -> (Arc<Self>, FailureNames, FailureNames) {
         let rejects = Arc::new(Mutex::new(Vec::new()));
+        let invalid_names = Arc::new(Mutex::new(Vec::new()));
         (
             Arc::new(RejectingStorage {
                 inner: FsStorage,
                 rejects: Arc::clone(&rejects),
+                invalid_names: Arc::clone(&invalid_names),
             }),
             rejects,
+            invalid_names,
         )
     }
 
@@ -60,11 +66,19 @@ impl RejectingStorage {
                 )
             })
     }
+
+    fn invalid_name(&self, path: &Utf8Path) -> Option<std::io::Error> {
+        let invalid_names = self.invalid_names.lock().unwrap();
+        invalid_names
+            .iter()
+            .any(|name| path.as_str().contains(name))
+            .then(|| std::io::Error::from_raw_os_error(123))
+    }
 }
 
 impl VaultStorage for RejectingStorage {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
-        match self.no(path) {
+        match self.invalid_name(path).or_else(|| self.no(path)) {
             Some(and) => Err(and),
             None => self.inner.read(path),
         }
@@ -101,7 +115,10 @@ impl VaultStorage for RejectingStorage {
         }
     }
     fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
-        self.inner.stat(path)
+        match self.invalid_name(path) {
+            Some(and) => Err(and),
+            None => self.inner.stat(path),
+        }
     }
     fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
         self.inner.remove_empty_dir(dir)
@@ -112,6 +129,7 @@ struct Bench {
     _dir: tempfile::TempDir,
     root: Utf8PathBuf,
     rejects: Arc<Mutex<Vec<String>>>,
+    invalid_names: Arc<Mutex<Vec<String>>>,
 }
 
 impl Bench {
@@ -121,7 +139,7 @@ impl Bench {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
         std::fs::write(root.join("Idea.txt"), "il testo di prima").expect("nota");
-        let (storage, rejects) = RejectingStorage::new();
+        let (storage, rejects, invalid_names) = RejectingStorage::new();
         let mut registry = FormatRegistry::new();
         registry
             .register(SampleText::by_extension("txt").boxed())
@@ -143,6 +161,7 @@ impl Bench {
                 _dir: dir,
                 root,
                 rejects,
+                invalid_names,
             },
             ws,
         )
@@ -151,6 +170,10 @@ impl Bench {
     /// Da adesso in poi, tutto ciò che nomina questo pezzo di path non si legge.
     fn rejects(&self, piece: &str) {
         self.rejects.lock().unwrap().push(piece.to_string());
+    }
+
+    fn windows_invalid_name(&self, piece: &str) {
+        self.invalid_names.lock().unwrap().push(piece.to_string());
     }
 }
 
@@ -377,6 +400,28 @@ fn ask_a_document_that_not_c_and_and_a_not_found() {
             }
         }
     });
+}
+
+/// Windows reports an absent illegal component as `ERROR_INVALID_NAME` (123),
+/// which Rust exposes as `Other`, not `NotFound`. The kernel must still keep
+/// the plugin contract stable for both text and byte reads.
+#[test]
+fn windows_invalid_name_from_stat_and_read_is_not_found() {
+    let (bench, mut ws) = Bench::open();
+    for name in ["con\nnewline.txt", "con*stella.txt", "con?punto.txt"] {
+        bench.windows_invalid_name(name);
+        let id = DocId::new(name);
+        ws.with_host("prova.plugin", |host| {
+            assert!(matches!(
+                host.read_document(&id),
+                Err(PluginError::NotFound(_))
+            ));
+            assert!(matches!(
+                host.read_document_bytes(&id),
+                Err(PluginError::NotFound(_))
+            ));
+        });
+    }
 }
 
 /// Un nome non portabile che esiste davvero è un import, non un'assenza:

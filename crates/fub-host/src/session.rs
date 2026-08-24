@@ -371,6 +371,19 @@ fn with_the_schema(machine: Arc<MachineSettings>) -> Arc<MachineSettings> {
     machine
 }
 
+/// Esegue una lettura del versioning con il prestito condiviso del workspace.
+///
+/// È un seam privato, così il percorso lock-sensitive di [`Host::read_version`]
+/// resta verificabile senza esporre un'API solo ai test.
+#[cfg(feature = "versioning")]
+fn with_read_version_host<R>(
+    workspace: &Custody<Workspace>,
+    f: impl FnOnce(&dyn fub_abi::traits::ReadApi) -> R,
+) -> Result<R, PluginError> {
+    let workspace = workspace.read()?;
+    Ok(workspace.with_read_host(VERSIONING_ID, f))
+}
+
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
     ///
@@ -1608,8 +1621,7 @@ impl Host {
     ) -> Result<String, PluginError> {
         let store = self.versions(vault)?;
         let ws = self.workspace(vault)?;
-        let ws = ws.read()?;
-        ws.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
+        with_read_version_host(&ws, |host| store.read(id, ts, host))?
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
@@ -1771,4 +1783,57 @@ fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
 /// questa riga sarebbe una seconda idea di cosa sia un id accettabile.
 pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
     fub_kernel::valid_doc_id(raw).map_err(PluginError::from)
+}
+
+#[cfg(all(test, feature = "versioning"))]
+mod tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use camino::Utf8PathBuf;
+    use fub_kernel::FormatRegistry;
+
+    use super::*;
+
+    #[test]
+    fn read_version_host_takes_a_shared_workspace_borrow() {
+        let dir = match tempfile::tempdir() {
+            Ok(dir) => dir,
+            Err(error) => panic!("tempdir: {error}"),
+        };
+        let root = match Utf8PathBuf::from_path_buf(dir.path().to_path_buf()) {
+            Ok(root) => root,
+            Err(path) => panic!("path is not utf8: {path:?}"),
+        };
+        let registry = FormatRegistry::new();
+        let workspace = match Workspace::new(&root, registry) {
+            Ok(workspace) => workspace,
+            Err(error) => panic!("workspace opens: {error}"),
+        };
+        let mut workspace = workspace;
+        if let Err(error) = workspace.register_core_feature(VERSIONING_ID, "Versioning") {
+            panic!("versioning registers: {error}");
+        }
+        let workspace = Custody::new("test workspace", workspace);
+        let inside = match workspace.read() {
+            Ok(inside) => inside,
+            Err(error) => panic!("workspace is not poisoned: {error}"),
+        };
+        let (send, receive) = mpsc::channel();
+        let worker_workspace = workspace.clone();
+        let worker = std::thread::spawn(move || {
+            let result = with_read_version_host(&worker_workspace, |_| ());
+            let _ = send.send(result);
+        });
+
+        let result = match receive.recv_timeout(Duration::from_secs(1)) {
+            Ok(result) => result,
+            Err(error) => panic!("a shared reader is blocked by another shared reader: {error}"),
+        };
+        drop(inside);
+        if let Err(error) = worker.join() {
+            panic!("reader thread panicked: {error:?}");
+        }
+        assert!(result.is_ok(), "read host is unavailable: {result:?}");
+    }
 }

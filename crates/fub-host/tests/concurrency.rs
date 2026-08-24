@@ -23,6 +23,7 @@ use fub_abi::model::DocId;
 use fub_abi::traits::{ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
+use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, Host, NoWatcher};
 use fub_kernel::{FormatRegistry, Workspace};
@@ -275,12 +276,12 @@ fn writer_does_not_block_readers_for_more_than_one_tick() {
 /// esattamente il difetto che la 0024 ha misurato e comprato via.
 ///
 /// **Niente cronometro, e niente attesa nel caso buono**: il prestito condiviso
-/// lo tiene questo thread, e il lettore ne chiede un altro. Se sono due letture
-/// entrano insieme e la risposta arriva subito; se `read_version` chiede
-/// l'esclusivo si mette in coda dietro a una guardia che nessuno molla, e il
-/// timeout è la sola forma in cui quel blocco può diventare rosso invece che
-/// appeso. Il prestito si molla **prima** della `join`, in tutti e due i casi,
-/// o un rosso diventerebbe un test che non finisce.
+/// lo tiene questo thread, e il lettore ne chiede un altro. Il test usa il
+/// `VersionStore` già montato ma chiama direttamente la sua lettura con un
+/// secondo `Workspace` read-guard: così il JobRunner dell'host non può mettere
+/// un writer estraneo in coda davanti alla proprietà che si sta provando.
+/// La scrittura viene poi avviata mentre la prima read è ancora detenuta e si
+/// completa appena quella guardia viene rilasciata.
 #[test]
 fn rereading_a_version_does_not_block_writers() {
     // Il turno di banco vale anche per chi non cronometra: questo test apre un
@@ -288,53 +289,88 @@ fn rereading_a_version_does_not_block_writers() {
     // quello che cronometra — che di macchina occupata muore.
     let _turn = bench_turn();
     let v = vault(3);
-    let host = Arc::new(open(&v));
-    // **Prima l'indicizzazione, poi la prova.** Chi apre non la aspetta (§15.7),
-    // e finché gira il runner chiede il prestito esclusivo a ogni fetta: sotto un
-    // `RwLock` un lettore nuovo si ferma dietro a chi aspetta di scrivere — è la
-    // proprietà che la 0024 ha comprato, e qui sarebbe rumore addosso a un'altra.
-    // La storia nasce dalla prima scrittura (0154): l'apertura non fotografa
-    host.wait_indexed(None).expect("indexing finishes");
-    let ws = host.workspace(None).expect("the vault is open");
+    let mut workspace = {
+        let mut registry = FormatRegistry::new();
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("no extension conflict");
+        Workspace::new(&v.root, registry).expect("the vault opens")
+    };
+    // La scansione è sincrona e il montaggio del versioning è esplicito: nel
+    // test non c'è un `JobRunner` che possa mettere un writer estraneo in coda.
+    workspace.reindex().expect("indexing finishes");
+    workspace
+        .register_core_feature(VERSIONING_ID, "Versioning")
+        .expect("versioning registers");
+    let store = workspace.with_host(VERSIONING_ID, VersionStore::open);
+    let store = store.expect("versioning opens");
+    workspace
+        .register_event_handler(
+            VERSIONING_ID,
+            Box::new(VersioningHandler::new(store.clone())),
+        )
+        .expect("versioning handler registers");
     let id = DocId::new("Note 0.md");
-    // più, quindi una scrittura crea la versione da rileggere.
-    // più, quindi una scrittura crea la versione da rileggere.
+    // Si semina una versione senza il percorso Host: la prova resta sul
+    // prestito condiviso di Workspace e sul reader del VersionStore.
+    workspace.with_host(VERSIONING_ID, |host| {
+        store
+            .snapshot(&id, "# Note 0\n\noriginal\n", host)
+            .expect("the seed version is stored");
+    });
+    let ts = store.list(&id).first().expect("the seed version exists").ts;
+    let ws = Custody::new("the open vault", workspace);
+
     {
         let mut ws = ws.write().expect("the vault is not poisoned");
         ws.write_document(&id, "# Note 0\n\nchanged\n", WriteBase::Dictated)
             .expect("the first write succeeds");
     }
-    let ts = host
-        .list_versions(None, &id)
-        .expect("versioning on")
-        .first()
-        .expect("the first write snapshots the original")
-        .ts;
 
     // Il prestito condiviso, tenuto: da qui in poi chi legge è dentro.
     let inside = ws.read().expect("the vault is not poisoned");
 
     let (senders, responses) = std::sync::mpsc::channel();
     let reader = {
-        let (host, id) = (Arc::clone(&host), id.clone());
+        let (ws, id, store) = (ws.clone(), id.clone(), store.clone());
         std::thread::spawn(move || {
-            let _ = senders.send(host.read_version(None, &id, ts));
+            let result = {
+                let shared = ws.read().expect("the vault is not poisoned");
+                shared.with_read_host(VERSIONING_ID, |host| store.read(&id, ts, host))
+            };
+            let _ = senders.send(result);
         })
     };
     let response = responses.recv_timeout(Duration::from_secs(10));
+
+    let writer = {
+        let ws = ws.clone();
+        let id = id.clone();
+        std::thread::spawn(move || {
+            let mut ws = ws.write().expect("the vault is not poisoned");
+            ws.write_document(&id, "# Note 0\n\nwriter\n", WriteBase::Dictated)
+                .expect("the writer succeeds after the read")
+        })
+    };
     drop(inside);
     reader.join().expect("the reader finishes");
+    writer.join().expect("the writer finishes");
 
     let source = response
         .expect(
             "re-reading a version did not enter the workspace while another \
-             read held it: `read_version` asks for the exclusive borrow, and \
-             a read that blocks the writer is the defect that 0024 removed",
+             read held it: a read that blocks another read is the defect that \
+             0024 removed",
         )
         .expect("the version re-reads");
     assert!(
         source.starts_with("# Note 0"),
         "and it is not an empty read: {source:?}"
+    );
+    let ws = ws.read().expect("the vault is not poisoned");
+    assert_eq!(
+        ws.read_source(&id).expect("the write is visible"),
+        "# Note 0\n\nwriter\n"
     );
 }
 

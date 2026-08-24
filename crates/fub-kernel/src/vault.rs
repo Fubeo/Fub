@@ -18,6 +18,13 @@ use crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
 use fub_abi::schema::SchemaVersion;
 
+fn is_absent_path_error(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+    ) || matches!(error.raw_os_error(), Some(2 | 3 | 123))
+}
+
 /// La **radice unica** di ciò che Fub scrive dentro un vault
 /// ([decisione 0048](../../../docs/decisions/0048-una-radice-sola.md)).
 ///
@@ -537,17 +544,18 @@ impl Vault {
         // contrattuale `NotFound` senza trasformare l'assenza in I/O.
         if path_policy::check(id.as_str(), Naming::New).is_err() {
             if let Err(and) = self.storage.stat(&path) {
-                if matches!(
-                    and.kind(),
-                    std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
-                ) {
+                if is_absent_path_error(&and) {
                     return Err(KernelError::NotFound(id.to_string()));
                 }
             }
         }
-        self.storage
-            .read(&path)
-            .map_err(|and| KernelError::Io { path, source: and })
+        self.storage.read(&path).map_err(|and| {
+            if path_policy::check(id.as_str(), Naming::New).is_err() && is_absent_path_error(&and) {
+                KernelError::NotFound(id.to_string())
+            } else {
+                KernelError::Io { path, source: and }
+            }
+        })
     }
 
     /// Scrive il sorgente, e rende **dimensione e data di ciò che ha scritto**.
