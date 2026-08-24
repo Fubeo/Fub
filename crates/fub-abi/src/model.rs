@@ -31,6 +31,9 @@
 
 use serde::{Deserialize, Serialize};
 
+/// Limite comune per le conversioni ricorsive del modello di documento.
+pub const MAX_DOCUMENT_DEPTH: u32 = 64;
+
 use crate::rules::composition::composed;
 
 /// L'identità di un documento nel vault: **il path**, e non un'altra cosa.

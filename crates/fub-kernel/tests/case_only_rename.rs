@@ -95,12 +95,25 @@ fn doc(name: &str) -> DocId {
     DocId::new(name)
 }
 
+fn test_root() -> Utf8PathBuf {
+    // Il doppio WithoutCase abbassa l'intero path: anche la radice deve
+    // avere la stessa forma, altrimenti la scansione vede i file fuori vault.
+    let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
+        .expect("current dir is UTF-8");
+    Utf8PathBuf::from(cwd.as_str().to_lowercase()).join("vault-case-only-rename")
+}
+
+fn vault_path(relative: &str) -> Utf8PathBuf {
+    test_root().join(relative)
+}
+
 fn workspace(storage: Arc<dyn VaultStorage>) -> Workspace {
     let mut registry = FormatRegistry::new();
     registry
         .register(SampleText::by_extension("md").boxed())
         .expect("nessun conflitto di estensioni");
-    let mut ws = Workspace::on("/vault", registry, storage, MachineSettings::in_memory())
+    let root = test_root();
+    let mut ws = Workspace::on(&root, registry, storage, MachineSettings::in_memory())
         .expect("l'apertura del vault riesce");
     ws.reindex().expect("reindex");
     ws
@@ -112,7 +125,7 @@ fn workspace(storage: Arc<dyn VaultStorage>) -> Workspace {
 fn on_a_case_insensitive_fs_the_draft_follows_the_case_correction() {
     let storage = Arc::new(WithoutCase::default());
     storage
-        .write(Utf8Path::new("/vault/nota.md"), b"il testo salvato")
+        .write(&vault_path("nota.md"), b"il testo salvato")
         .expect("scritto");
     let mut ws = workspace(storage.clone());
     ws.save_draft(&doc("nota.md"), "il buffer sporco", None)
@@ -143,12 +156,12 @@ fn on_a_case_insensitive_fs_the_draft_follows_the_case_correction() {
 fn on_a_case_sensitive_fs_a_coincidental_homonym_is_not_buried() {
     let storage = Arc::new(MemStorage::new());
     storage
-        .write(Utf8Path::new("/vault/nota.md"), b"il testo che si sposta")
+        .write(&vault_path("nota.md"), b"il testo che si sposta")
         .expect("scritto");
     let mut ws = workspace(storage.clone());
     storage
         .write(
-            Utf8Path::new("/vault/Nota.md"),
+            &vault_path("Nota.md"),
             b"un'altra nota, che nessuno ha ancora indicizzato",
         )
         .expect("scritto");
@@ -160,12 +173,12 @@ fn on_a_case_sensitive_fs_a_coincidental_homonym_is_not_buried() {
         "la destinazione è un file diverso, e lo si dice: {outcome:?}"
     );
     assert_eq!(
-        storage.read(Utf8Path::new("/vault/Nota.md")).expect("c'è"),
+        storage.read(&vault_path("Nota.md")).expect("c'è"),
         b"un'altra nota, che nessuno ha ancora indicizzato",
         "l'omonimo è ancora il suo contenuto"
     );
     assert_eq!(
-        storage.read(Utf8Path::new("/vault/nota.md")).expect("c'è"),
+        storage.read(&vault_path("nota.md")).expect("c'è"),
         b"il testo che si sposta",
         "e chi non si è potuto spostare è rimasto dov'era"
     );
@@ -179,10 +192,7 @@ fn on_a_case_sensitive_fs_a_coincidental_homonym_is_not_buried() {
 fn whoever_arrives_after_the_guard_is_not_overwritten() {
     let storage = Arc::new(WithoutCase::default());
     storage
-        .write(
-            Utf8Path::new("/vault/vecchia.md"),
-            b"il testo che si sposta",
-        )
+        .write(&vault_path("vecchia.md"), b"il testo che si sposta")
         .expect("scritto");
     let mut ws = workspace(storage.clone());
     storage.1.store(true, Ordering::SeqCst);
@@ -194,12 +204,12 @@ fn whoever_arrives_after_the_guard_is_not_overwritten() {
         "la corsa deve fermare la rinomina come ogni collisione: {outcome:?}"
     );
     assert_eq!(
-        storage.read(Utf8Path::new("/vault/nuova.md")).unwrap(),
+        storage.read(&vault_path("nuova.md")).unwrap(),
         b"concorrente",
         "chi ha occupato la destinazione dopo la guardia resta intatto"
     );
     assert_eq!(
-        storage.read(Utf8Path::new("/vault/vecchia.md")).unwrap(),
+        storage.read(&vault_path("vecchia.md")).unwrap(),
         b"il testo che si sposta",
         "il documento che non si è potuto muovere resta alla sorgente"
     );
