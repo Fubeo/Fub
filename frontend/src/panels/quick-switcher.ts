@@ -58,6 +58,7 @@ import { createNote } from "../state/vault";
 import { activatable, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { setTooltip } from "../ui/tooltip";
+import { enterSurface, exitSurface } from "../ui/motion";
 import { openDocument } from "./document";
 
 const OVERLAY_ID = "quick-switcher";
@@ -80,9 +81,10 @@ type Entry =
 let release: (() => void) | null = null;
 
 export function closeQuickSwitcher(): void {
-  document.getElementById(OVERLAY_ID)?.remove();
+  const overlay = document.getElementById(OVERLAY_ID);
   release?.();
   release = null;
+  if (overlay) exitSurface(overlay, () => overlay.remove());
 }
 
 /// Il comando, dichiarato da chi ce l'ha (§18.2).
@@ -319,22 +321,26 @@ export function openQuickSwitcher(): void {
 
 function openOverlay(): HTMLElement {
   closeQuickSwitcher();
-  const overlay = document.createElement("div");
-  overlay.id = OVERLAY_ID;
-  // La forma è quella delle altre due modali (§21.4): da quando le modali sono
-  // più d'una, l'aspetto di una modale è un fatto della shell.
-  overlay.className = "modale";
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
+  let overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = OVERLAY_ID;
+    // La forma è quella delle altre due modali (§21.4): da quando le modali sono
+    // più d'una, l'aspetto di una modale è un fatto della shell.
+    overlay.className = "modale";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.tabIndex = -1;
+    const box = document.createElement("div");
+    box.className = "palette-box";
+    overlay.appendChild(box);
+    overlay.addEventListener("mousedown", (e) => {
+      if (e.target === overlay) closeQuickSwitcher();
+    });
+    document.body.appendChild(overlay);
+  }
   overlay.setAttribute("aria-label", t("switcher.title"));
-  overlay.tabIndex = -1;
-  const box = document.createElement("div");
-  box.className = "palette-box";
-  overlay.appendChild(box);
-  overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) closeQuickSwitcher();
-  });
-  document.body.appendChild(overlay);
+  enterSurface(overlay);
   release = trapFocus(overlay, closeQuickSwitcher);
-  return box;
+  return overlay.querySelector<HTMLElement>(".palette-box")!;
 }

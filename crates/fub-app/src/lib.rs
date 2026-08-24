@@ -611,21 +611,41 @@ fn set_order(
 #[tauri::command]
 fn set_setting(
     host: State<Host>,
+    window: tauri::WebviewWindow,
     key: String,
     value: SettingValue,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    // Passa da `Host` e non dal `Workspace` perché una chiave scritta qui è una
-    // chiave **guardata**, e per certe famiglie ricordarlo è metà del lavoro
-    // (§23.13): il kernel il registro dei vault non lo conosce.
-    host.set_setting_for_user(vault.as_deref(), &key, value)
+    let zoom = (key == fub_host::settings::APPEARANCE_ZOOM)
+        .then(|| value.as_number())
+        .flatten();
+    // Il side effect nativo segue una scrittura riuscita: un valore rifiutato
+    // non deve lasciare la finestra in uno stato che il livello macchina nega.
+    host.set_setting_for_user(vault.as_deref(), &key, value)?;
+    if let Some(scale) = zoom {
+        window.set_zoom(scale).map_err(|and| {
+            PluginError::Internal(format!("native zoom not applied: {and}").into())
+        })?;
+    }
+    Ok(())
 }
 
 /// Dimentica ciò che era stato deciso per una chiave: torna a valere il livello
 /// sotto.
 #[tauri::command]
-fn reset_setting(host: State<Host>, key: String, vault: Option<String>) -> Result<(), PluginError> {
-    host.reset_setting_for_user(vault.as_deref(), &key)
+fn reset_setting(
+    host: State<Host>,
+    window: tauri::WebviewWindow,
+    key: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.reset_setting_for_user(vault.as_deref(), &key)?;
+    if key == fub_host::settings::APPEARANCE_ZOOM {
+        window
+            .set_zoom(fub_host::settings::DEFAULT_ZOOM)
+            .map_err(|and| PluginError::Internal(format!("native zoom not reset: {and}").into()))?;
+    }
+    Ok(())
 }
 
 // --- lo stato di vista della shell (§11.2) ---------------------------------
@@ -787,6 +807,16 @@ pub fn run() {
         )
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
+            let zoom = app
+                .state::<Host>()
+                .machine_settings()
+                .into_iter()
+                .find(|entry| entry.spec.key == fub_host::settings::APPEARANCE_ZOOM)
+                .and_then(|entry| entry.value.as_number())
+                .unwrap_or(fub_host::settings::DEFAULT_ZOOM);
+            for window in app.webview_windows().values() {
+                window.set_zoom(zoom)?;
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

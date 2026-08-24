@@ -30,6 +30,7 @@ import { trapFocus } from "./a11y";
 import type { Tone } from "./notify";
 import { type Key, t } from "../i18n/strings";
 import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
+import { enterSurface, exitSurface } from "./motion";
 import { state } from "../state/store";
 
 /// Ciò che la palette chiede alla shell: executere gli intenti, dire qualcosa
@@ -265,9 +266,10 @@ const OVERLAY_ID = "command-palette";
 let releasePalette: (() => void) | null = null;
 
 export function closeCommandPalette() {
-  document.getElementById(OVERLAY_ID)?.remove();
+  const overlay = document.getElementById(OVERLAY_ID);
   releasePalette?.();
   releasePalette = null;
+  if (overlay) exitSurface(overlay, () => overlay.remove());
 }
 
 /// Apre la palette. Tre passi al più: scegli, compila, approva.
@@ -304,31 +306,34 @@ export function startCommand(entry: CommandEntry, host: PaletteHost) {
 
 function openOverlay(): HTMLElement {
   closeCommandPalette();
-  const overlay = document.createElement("div");
-  overlay.id = OVERLAY_ID;
-  // La forma sta in `.modale` e non più sull'id: da quando le modali sono due
-  // (§21.4) l'aspetto di una modale è un fatto della shell, non una proprietà
-  // della palette.
-  overlay.className = "modale";
-  // La palette è una modale a tutti gli effetti: copre lo schermo, chiede
-  // qualcosa e se ne va. Dirlo è ciò che fa annunciare «finestra di dialogo» a
-  // chi entra, invece di lasciarlo dentro un `div` sopra la pagina di prima —
-  // che continua a leggere e a essere raggiungibile col linguetta.
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
+  let overlay = document.getElementById(OVERLAY_ID);
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = OVERLAY_ID;
+    // La forma sta in `.modale` e non più sull'id: da quando le modali sono due
+    // (§21.4) l'aspetto di una modale è un fatto della shell, non una proprietà
+    // della palette.
+    overlay.className = "modale";
+    // La palette è una modale a tutti gli effetti: copre lo schermo, chiede
+    // qualcosa e se ne va. Dirlo è ciò che fa annunciare «finestra di dialogo» a
+    // chi entra, invece di lasciarlo dentro un `div` sopra la pagina di prima.
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.tabIndex = -1;
+    const box = document.createElement("div");
+    box.className = "palette-box";
+    overlay.appendChild(box);
+    overlay.addEventListener("mousedown", (e) => {
+      if (e.target === overlay) closeCommandPalette();
+    });
+    document.body.appendChild(overlay);
+  }
   overlay.setAttribute("aria-label", t("palette.title"));
-  overlay.tabIndex = -1;
-  const box = document.createElement("div");
-  box.className = "palette-box";
-  overlay.appendChild(box);
-  overlay.addEventListener("mousedown", (e) => {
-    if (e.target === overlay) closeCommandPalette();
-  });
-  document.body.appendChild(overlay);
+  enterSurface(overlay);
   // Dopo l'inserimento nel documento: `intrappolaFuoco` mette a fuoco il primo
   // elemento, e un elemento fuori dal documento non lo può prendere.
   releasePalette = trapFocus(overlay, closeCommandPalette);
-  return box;
+  return overlay.querySelector<HTMLElement>(".palette-box")!;
 }
 
 /// Passo 1: l'elenco filtrabile.

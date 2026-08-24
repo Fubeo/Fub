@@ -1,0 +1,15 @@
+{
+  "id": "org.fub.theme-bench",
+  "name": "Fub Theme Bench",
+  "version": "1.0.0",
+  "engine": "theme-1",
+  "lights": [
+    "dark",
+    "light"
+  ],
+  "asset_namespace": "theme://org.fub.theme-bench/",
+  "motion": [
+    "opacity",
+    "transform"
+  ]
+}

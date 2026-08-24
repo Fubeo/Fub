@@ -15,8 +15,8 @@ giri di audit. Il file risponde alla domanda sulla ricollocazione di ogni
 segnalazione.
 
 Delle quattro voci originali:
-*   **Due** voci sono **chiuse**.
-*   **Due** voci restano aperte.
+*   **Tre** voci sono **chiuse**.
+*   **Una** voce resta aperta.
 
 Le quattro voci fungono esclusivamente da **rimandi**. Il lavoro effettivo si
 svolge nelle sedute di destinazione. La chiusura delle sedute assorbenti
@@ -25,9 +25,9 @@ determinerà la chiusura definitiva di questa seduta.
 La seduta presenta queste caratteristiche:
 *   Manca dall'[indice](../todo.md) principale.
 *   La colonna *Voci* risulta vuota.
-*   Le due caselle aperte rientrano tra le voci **residue**. La categoria delle
-    voci **residue** dà un posto ai numeri altrimenti omessi dai conteggi. Prima
-    della sua creazione, due caselle aperte restavano invisibili nei totali.
+*   La casella aperta rientra tra le voci **residue**. La categoria delle voci
+    **residue** dà un posto ai numeri altrimenti omessi dai conteggi. Prima
+    della sua creazione, le caselle aperte restavano invisibili nei totali.
 
 **Voci aperte e chiuse**
 
@@ -46,12 +46,12 @@ La seduta presenta queste caratteristiche:
         atteso fino a 6,4 secondi.
     *   **Risultato secondario:** Le view (viste dell'interfaccia) ridisegnate
         simultaneamente incrementano le prestazioni (da 7 a 25 volte).
-*   [ ] **UI di produzione = IPC bespoke** → Assorbito da
+*   [x] ~~**UI di produzione = IPC bespoke**~~ → **Chiuso.** Assorbito da
         [decisione 0009](../decisions/0009-registro-dei-comandi.md),
-        [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e §16.6.
-    *   **Dettaglio:** La UI (interfaccia utente) del versioning impiega
-        attualmente logiche IPC (comunicazione inter-processo) bespoke (su
-        misura).
+        [decisione 0016](../decisions/0016-cosa-e-una-view.md), §1.2 e dalla
+        [0057](../decisions/0057-la-dieta-dell-ipc.md): il versioning passa dal
+        registro e dal canale dati, mentre `lean_ipc.rs` presidia la superficie
+        IPC chiusa (§16.6).
 *   [ ] **Organizzazione sidebar chiusa ai plugin** (scelta O3)
     *   **Dettaglio:** La superficie per i plugin (moduli di estensione)
         introdotta con il milestone M5 richiede una rivalutazione di questa

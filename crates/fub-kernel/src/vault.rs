@@ -12,7 +12,7 @@ use fub_abi::DocId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{KernelError, Result};
-use crate::ignore::{IgnorePolicy, Kind};
+use crate::ignore::{parse_gitignore, GitignoreRules, IgnorePolicy, Kind, GITIGNORE_FILE};
 use crate::settings::SharedSettings;
 use crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
@@ -23,6 +23,35 @@ fn is_absent_path_error(error: &std::io::Error) -> bool {
         error.kind(),
         std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
     ) || matches!(error.raw_os_error(), Some(2 | 3 | 123))
+}
+
+fn read_gitignore(storage: &dyn VaultStorage, root: &Utf8Path) -> Result<GitignoreRules> {
+    let path = root.join(GITIGNORE_FILE);
+    let bytes = match storage.read(&path) {
+        Ok(bytes) => bytes,
+        Err(source)
+            if source.kind() == std::io::ErrorKind::NotFound
+                || matches!(source.raw_os_error(), Some(2 | 3)) =>
+        {
+            return Ok(GitignoreRules::default());
+        }
+        Err(source) => return Err(KernelError::Io { path, source }),
+    };
+    match text_policy::decode(&bytes) {
+        Ok(text) => Ok(parse_gitignore(text)),
+        Err(at) => Err(KernelError::Io {
+            path,
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!(
+                    "il file non è UTF-8: il primo byte non valido è a {at} \
+                     (0x{:02X}), su {} byte in tutto",
+                    bytes.get(at).copied().unwrap_or(0),
+                    bytes.len()
+                ),
+            ),
+        }),
+    }
 }
 
 /// La **radice unica** di ciò che Fub scrive dentro un vault
@@ -236,6 +265,7 @@ pub struct Vault {
     /// kernel montato senza il bundle del core — e vale il default della
     /// politica, cioè il comportamento di prima che fosse dichiarabile.
     settings: Option<SharedSettings>,
+    gitignore: GitignoreRules,
 }
 
 impl Vault {
@@ -268,10 +298,12 @@ impl Vault {
                 path: root.clone(),
                 source,
             })?;
+        let gitignore = read_gitignore(storage.as_ref(), &root)?;
         Ok(Vault {
             root,
             storage,
             settings: None,
+            gitignore,
         })
     }
 
@@ -290,7 +322,7 @@ impl Vault {
 
     /// La politica di esclusione che vale **adesso** per questo vault (§15.6).
     pub(crate) fn ignore_policy(&self) -> IgnorePolicy {
-        crate::ignore::resolve(self.settings.as_ref())
+        crate::ignore::resolve(self.settings.as_ref()).with_gitignore(self.gitignore.clone())
     }
 
     pub fn root(&self) -> &Utf8Path {
@@ -352,29 +384,10 @@ impl Vault {
             return false;
         };
         let policy = self.ignore_policy();
-        let mut components = rel.components().peekable();
-        while let Some(c) = components.next() {
-            let name = c.as_str();
-            if components.peek().is_some() {
-                // Chi sta in mezzo a un path contiene ciò che segue, quindi è
-                // una cartella: non c'è niente da chiedere a nessuno.
-                if policy.excludes(name, Kind::Folder) {
-                    return true;
-                }
-            } else {
-                // L'ultimo è il solo componente che può essere un file, e la
-                // sua specie conta soltanto se quel nome è dichiarato fra le
-                // cartelle escluse: è l'unico ramo in cui le due risposte
-                // differiscono, ed è lì — e solo lì — che si chiede al
-                // supporto di cosa si tratti.
-                let excluded = policy.excludes(name, Kind::File)
-                    || (policy.excludes(name, Kind::Folder) && self.is_folder(abs));
-                if excluded {
-                    return true;
-                }
-            }
+        if policy.excludes_path(rel, Kind::File) {
+            return true;
         }
-        false
+        policy.excludes_path(rel, Kind::Folder) && self.is_folder(abs)
     }
 
     /// L'ultimo componente di un path è una cartella?
@@ -426,7 +439,8 @@ impl Vault {
         // risposta che non cambia in mezzo. Che valga per tutta la camminata è
         // anche più giusto che comodo: una scansione mezza con una politica e
         // mezza con un'altra non è un elenco di niente.
-        let policy = self.ignore_policy();
+        let policy = crate::ignore::resolve(self.settings.as_ref())
+            .with_gitignore(read_gitignore(self.storage.as_ref(), &self.root)?);
         self.walk(&self.root, &policy, &mut out)?;
         out.files.sort_by(|a, b| a.id.cmp(&b.id));
         out.folders.sort();
@@ -447,7 +461,11 @@ impl Vault {
                 EntryKind::Dir => Kind::Folder,
                 _ => Kind::File,
             };
-            if policy.excludes(name, kind) {
+            let rel = entry
+                .path
+                .strip_prefix(&self.root)
+                .expect("a walked entry stays below the vault root");
+            if policy.excludes_path(rel, kind) {
                 // Un temporaneo di scrittura è escluso, ed è la §15.6: quel
                 // file esiste per una frazione di secondo e chi guarda il vault
                 // in quella frazione non lo deve vedere. Ma un crash fra la
@@ -1012,6 +1030,50 @@ mod tests {
         Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
             .expect("current dir is UTF-8")
             .join("vault-test")
+    }
+
+    #[test]
+    fn a_missing_gitignore_is_an_empty_policy() {
+        let root = test_root();
+        let vault = Vault::on(&root, Arc::new(crate::storage::MemStorage::new()))
+            .expect("an absent .gitignore is valid");
+        assert!(!vault.is_ignored(&root.join("note/Idea.md")));
+    }
+
+    #[test]
+    fn the_vault_reads_gitignore_at_construction_and_scan() {
+        let root = test_root();
+        let storage: Arc<dyn VaultStorage> = Arc::new(crate::storage::MemStorage::new());
+        storage
+            .write(&root.join(GITIGNORE_FILE), b"cache/\n!cache/keep.md")
+            .expect("gitignore");
+        let vault = Vault::on(&root, Arc::clone(&storage)).expect("vault");
+        assert!(vault.is_ignored(&root.join("cache/drop.md")));
+        assert!(!vault.is_ignored(&root.join("cache/keep.md")));
+
+        storage
+            .write(&root.join(GITIGNORE_FILE), b"generated/")
+            .expect("updated gitignore");
+        storage
+            .write(&root.join("generated/result.md"), b"result")
+            .expect("generated file");
+        assert!(vault.scan().expect("scan").files.is_empty());
+    }
+
+    #[test]
+    fn an_invalid_gitignore_is_an_observable_io_error() {
+        let root = test_root();
+        let storage: Arc<dyn VaultStorage> = Arc::new(crate::storage::MemStorage::new());
+        storage
+            .write(&root.join(GITIGNORE_FILE), &[0xFF])
+            .expect("invalid gitignore bytes");
+        match Vault::on(&root, storage) {
+            Err(KernelError::Io { path, source }) => {
+                assert_eq!(path, root.join(GITIGNORE_FILE));
+                assert_eq!(source.kind(), std::io::ErrorKind::InvalidData);
+            }
+            _ => panic!("an invalid .gitignore must fail visibly"),
+        }
     }
 
     #[test]

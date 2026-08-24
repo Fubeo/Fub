@@ -35,7 +35,7 @@ wit_bindgen::generate!({
     generate_all,
 });
 
-// Il mondo che chiede i dati persistiti: il linker WASM non serve questa famiglia.
+// Il mondo che prova il round-trip sui dati persistiti e sulla cache privata.
 #[cfg(feature = "con-dati")]
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
@@ -131,12 +131,32 @@ impl Guest for Componente {
         Self::ping(job)
     }
 
-    /// Tiene viva l'import di `host-data-read`: il componente esiste per farsi
-    /// rifiutare al caricamento, non per eseguire questa chiamata.
+    /// Il job `dati` attraversa entrambe le famiglie host-data per
+    /// esercitare scrittura, lettura, lista e separazione della cache.
     #[cfg(feature = "con-dati")]
-    fn run_job(job: String, payload: String) -> Result<String, PluginError> {
-        let _ = fub::abi::host_data_read::data_read(&payload)?;
-        Self::ping(job)
+    fn run_job(job: String, _payload: String) -> Result<String, PluginError> {
+        if job != "dati" {
+            return Self::ping(job);
+        }
+
+        let path = "dati/blob.bin";
+        let authoritative = [1, 2, 3];
+        let cached = [4, 5, 6];
+
+        fub::abi::host_data_write::data_write(path, &authoritative)?;
+        let read_back = fub::abi::host_data_read::data_read(path)?;
+        let listed = fub::abi::host_data_read::data_list("dati")?;
+        fub::abi::host_data_write::cache_write(path, &cached)?;
+        let cache_back = fub::abi::host_data_read::cache_read(path)?;
+        let authoritative_after_cache = fub::abi::host_data_read::data_read(path)?;
+
+        Ok(format!(
+            "{{\"write_read\":{},\"list_ordered\":{},\"cache_round_trip\":{},\"cache_separate\":{}}}",
+            read_back.as_deref() == Some(authoritative.as_slice()),
+            listed == [path],
+            cache_back.as_deref() == Some(cached.as_slice()),
+            authoritative_after_cache.as_deref() == Some(authoritative.as_slice()),
+        ))
     }
 
     #[cfg(all(not(feature = "con-rete"), not(feature = "con-dati")))]

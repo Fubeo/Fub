@@ -271,7 +271,7 @@ o un `FormatProvider`, cioè un provider che il ping non è.
   `Html`/`WebView`.* Accanto c'è però una prova che l'elenco non prevedeva:
   **un componente che importa una famiglia non servita non si monta, e il
   rifiuto la nomina** (`una_famiglia_non_servita_si_fa_nominare`).
-- Presidio specifico: `host-data-read`/`host-data-write` non sono linkate dal linker WASM; il test `a_host_data_family_not_served_is_named` verifica che l'import venga rifiutato e nominato.
+- Presidio specifico: `host-data-read`/`host-data-write` sono linkate dal linker WASM; il test `a_component_with_data_families_round_trips` verifica lettura e scrittura autorevole e cache attraverso il componente.
 - **Parità:** stesso provider nativo (M4) vs WASM → stesso risultato osservabile.
   *Fatto sul `Plugin`:* `il_primo_componente.rs` e `il_primo_plugin.rs` sono lo
   stesso test a meno della riga che costruisce il bundle.

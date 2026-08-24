@@ -99,6 +99,31 @@
   }
 }
 
+/* I colori forzati sono un pavimento della shell, non una variante del tema.
+   I colori di sistema mantengono leggibili fuoco, controlli e stato scelto
+   anche se una pelle affidava la distinzione soltanto a riempimenti e ombre. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    border: 1px solid ButtonText;
+  }
+
+  [aria-current="true"],
+  [aria-selected="true"],
+  [aria-checked="true"],
+  [aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
 /* Il fuoco si vede, ovunque e per costruzione (§12.4).
  *
  * Prima non si vedeva quasi mai, e non per una svista: tre regole

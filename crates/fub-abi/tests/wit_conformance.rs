@@ -63,8 +63,8 @@ use fub_abi::command::{
     Failure, InvokeMode, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep, Undone,
 };
 use fub_abi::custom::{
-    CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
-    SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+    CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxForm, SyntaxMatch,
+    SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
 };
 use fub_abi::edit::{AppliedEdit, EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::error::{FormatError, PluginError};
@@ -351,6 +351,7 @@ wit_kebab! {
 
     // I due innesti del §3.1 e del §3.2.
     SyntaxTrigger,
+    SyntaxForm,
     SyntaxRuleSpec,
     SyntaxMatch,
     SyntaxProduct,
@@ -2128,6 +2129,7 @@ fn index_query_case(q: &IndexQuery) -> Case {
                 ("block", wit(block)),
             ],
         ),
+        IndexQuery::SyntaxForms { doc } => case_ty("syntax-forms", wit(doc)),
     }
 }
 
@@ -2191,6 +2193,7 @@ fn query_kind_case(k: &QueryKind) -> Case {
         QueryKind::Drafts => case("drafts"),
         QueryKind::RenderPreview => case("render-preview"),
         QueryKind::RenderEmbed => case("render-embed"),
+        QueryKind::SyntaxForms => case("syntax-forms"),
     }
 }
 
@@ -2232,6 +2235,7 @@ fn index_result_case(r: &IndexResult) -> Case {
         IndexResult::Drafts(v) => case_ty("drafts", wit(v)),
         IndexResult::RenderPreview(v) => case_ty("render-preview", wit(v)),
         IndexResult::RenderEmbed(v) => case_ty("render-embed", wit(v)),
+        IndexResult::SyntaxForms(v) => case_ty("syntax-forms", wit(v)),
     }
 }
 
@@ -2870,6 +2874,9 @@ fn conform(source: &str) -> Result<(), String> {
                 heading: None,
                 block: None,
             }),
+            index_query_case(&IndexQuery::SyntaxForms {
+                doc: DocId::new("a"),
+            }),
         ],
     );
 
@@ -2898,6 +2905,7 @@ fn conform(source: &str) -> Result<(), String> {
                 doc_id: String::new(),
                 content: RenderedDocument::default(),
             })),
+            index_result_case(&IndexResult::SyntaxForms(vec![])),
         ],
     );
 
@@ -2964,6 +2972,7 @@ fn conform(source: &str) -> Result<(), String> {
             query_kind_case(&QueryKind::Drafts),
             query_kind_case(&QueryKind::RenderPreview),
             query_kind_case(&QueryKind::RenderEmbed),
+            query_kind_case(&QueryKind::SyntaxForms),
         ],
     );
 
@@ -3373,6 +3382,15 @@ fn conform(source: &str) -> Result<(), String> {
             vec![("open", wit(open)), ("close", wit(close))],
         ),
     };
+    let SyntaxForm { name, trigger } = SyntaxForm {
+        name: String::new(),
+        trigger: None,
+    };
+    contract.record(
+        "syntax-form",
+        &[("name", wit(&name)), ("trigger", wit(&trigger))],
+    );
+
     contract.variant_src(
         "syntax-trigger",
         ("custom.rs", "SyntaxTrigger"),

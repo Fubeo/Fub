@@ -14,12 +14,11 @@
   z-index: var(--z-dialog);
   overflow-y: auto;
   padding: var(--space-3) var(--space-7) var(--space-7);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--elevation-dialog-surface);
+  border: 1px solid var(--elevation-dialog-border);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--elevation-dialog-shadow);
   font-size: var(--text-base);
-  animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 
 /* L'unica cosa che le schede hanno di proprio è quanto stanno lontane dal

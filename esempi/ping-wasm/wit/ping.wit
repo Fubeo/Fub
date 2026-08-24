@@ -44,12 +44,13 @@ world ping-con-rete {
     export fub:abi/plugin@0.1.1;
 }
 
-// Lo stesso ping, che in più chiede i dati persistiti. Esiste perché il secondo
-// backend non linka questa famiglia: il rifiuto deve nominare `host-data-read`.
+// Lo stesso ping, che in più attraversa i dati persistiti e la cache privata:
+// scrive, rilegge e lista tramite entrambe le famiglie host-data.
 world ping-con-dati {
     import fub:abi/host-env@0.1.1;
     import fub:abi/host-vault-read@0.1.1;
     import fub:abi/host-data-read@0.1.1;
+    import fub:abi/host-data-write@0.1.1;
 
     export fub:abi/plugin@0.1.1;
 }

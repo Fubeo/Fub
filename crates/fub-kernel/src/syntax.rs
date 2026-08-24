@@ -27,6 +27,7 @@
 //! manifesta come «la mia estensione a volte non funziona».
 
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 use fub_abi::custom::{
     SyntaxForm, SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
@@ -102,6 +103,19 @@ struct Registered {
     rule: Box<dyn SyntaxRule>,
 }
 
+/// Una vista immutabile delle forme dichiarate, pubblicata dopo ogni mutazione.
+/// Clonarla è O(1): i lettori non prendono in prestito il registro che scrive.
+#[derive(Clone, Default)]
+pub struct SyntaxSnapshot {
+    by_format: Arc<HashMap<String, Vec<SyntaxForm>>>,
+}
+
+impl SyntaxSnapshot {
+    pub fn forms(&self, format: &str) -> &[SyntaxForm] {
+        self.by_format.get(format).map(Vec::as_slice).unwrap_or(&[])
+    }
+}
+
 /// Le regole innestate, per formato.
 #[derive(Default)]
 pub struct SyntaxRegistry {
@@ -110,6 +124,8 @@ pub struct SyntaxRegistry {
     rules: Vec<Registered>,
     /// `(formato, chiave di contesa)` → id di chi l'ha presa.
     claims: HashMap<(String, String), String>,
+    /// La proiezione di sola lettura consegnata al canale dati.
+    snapshot: SyntaxSnapshot,
 }
 
 impl SyntaxRegistry {
@@ -162,6 +178,7 @@ impl SyntaxRegistry {
             .position(|r| r.spec.order > spec.order)
             .unwrap_or(self.rules.len());
         self.rules.insert(at, Registered { spec, rule });
+        self.publish_snapshot();
         Ok(())
     }
 
@@ -177,6 +194,7 @@ impl SyntaxRegistry {
         };
         self.rules.remove(at);
         self.claims.retain(|_, owner| owner != id);
+        self.publish_snapshot();
         true
     }
 
@@ -250,16 +268,32 @@ impl SyntaxRegistry {
     /// `grafted_syntax`: non ha un nome da accendere, quindi chi legge questo
     /// elenco non ha niente da dichiarare su di lei.
     pub fn forms(&self, format: &str) -> Vec<SyntaxForm> {
-        self.rules
-            .iter()
-            .filter(|r| r.spec.format == format)
-            .filter_map(|r| {
-                r.spec.option.as_ref().map(|option| SyntaxForm {
+        self.snapshot.forms(format).to_vec()
+    }
+
+    /// Lo snapshot corrente. Chi lo conserva continua a vedere una fotografia
+    /// coerente mentre una registrazione successiva pubblica quella nuova.
+    pub fn snapshot(&self) -> SyntaxSnapshot {
+        self.snapshot.clone()
+    }
+
+    fn publish_snapshot(&mut self) {
+        let mut by_format: HashMap<String, Vec<SyntaxForm>> = HashMap::new();
+        for registered in &self.rules {
+            let Some(option) = &registered.spec.option else {
+                continue;
+            };
+            by_format
+                .entry(registered.spec.format.clone())
+                .or_default()
+                .push(SyntaxForm {
                     name: option.clone(),
-                    trigger: Some(r.spec.trigger.clone()),
-                })
-            })
-            .collect()
+                    trigger: Some(registered.spec.trigger.clone()),
+                });
+        }
+        self.snapshot = SyntaxSnapshot {
+            by_format: Arc::new(by_format),
+        };
     }
 
     /// Applica le regole di questo formato al modello.

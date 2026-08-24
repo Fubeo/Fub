@@ -9,6 +9,7 @@
 import { t } from "../i18n/strings";
 import { trapFocus } from "./a11y";
 import { openLifetime, type Lifetime } from "./lifetime";
+import { enterSurface, exitSurface, finishSurface } from "./motion";
 
 export interface MenuItem {
   label: string;
@@ -27,6 +28,8 @@ let menuLifetime: Lifetime | null = null;
 
 export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   closeContextMenu();
+  const previous = document.getElementById("context-menu");
+  if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   menuLifetime = lifetime;
   const menu = document.createElement("div");
@@ -50,7 +53,8 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
     menu.appendChild(b);
   }
   document.body.appendChild(menu);
-  lifetime.add(() => menu.remove());
+  lifetime.add(() => exitSurface(menu, () => menu.remove()));
+  enterSurface(menu);
   // Il fuoco entra nel menu e non ne esce col tab, ed Escape lo chiude. Senza,
   // un menu contestuale era raggiungibile **solo** col tasto destro del mouse:
   // per chi naviga da tastiera, rinominare o eliminare una nota non esisteva.
@@ -86,6 +90,8 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   // lui la trappola del fuoco, che è la parte che si sentiva, perché Escape
   // continuava a rispondere per un selettore che nessuno vedeva più.
   closePickIcon();
+  const previous = document.getElementById("icon-picker");
+  if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   iconLifetime = lifetime;
   const pop = document.createElement("div");
@@ -144,7 +150,8 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   pop.appendChild(remove);
 
   document.body.appendChild(pop);
-  lifetime.add(() => pop.remove());
+  lifetime.add(() => exitSurface(pop, () => pop.remove()));
+  enterSurface(pop);
   // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
   // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
   // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare

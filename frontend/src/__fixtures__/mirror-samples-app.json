@@ -110,6 +110,7 @@
       "id": "fub.versioning",
       "name": "Versioning",
       "mounted": true,
+      "kind": "component",
       "trust": "core",
       "permissions": {
         "fub:call-service": true,
@@ -125,6 +126,7 @@
       "id": "fub.stats",
       "name": "Statistiche",
       "mounted": false,
+      "kind": "component",
       "trust": "community",
       "permissions": {
         "fub:network": [

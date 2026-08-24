@@ -41,14 +41,16 @@ use fub_abi::ui::UiOption;
 /// # La riga che questa funzione scrive, ed è più larga di lei
 ///
 /// La [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
-/// ha smontato l'argomento di rischio sulle impostazioni del vault, e su tema e
-/// lingua aveva ragione: un vault che porta con sé un tema scuro fa una cosa che
-/// si vede e si disfa in un gesto. La
-/// [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md) ha messo
-/// in quel posto i **tasti**, ed è un'altra specie di cosa. Il criterio che le
-/// separa non è *cosa la chiave descrive* — `locale.hour-cycle` descrive chi
-/// guarda e viaggiare è precisamente ciò che deve fare — ma **cosa può il valore
-/// peggiore**, e le risposte che questo repo ha già dato sono tre:
+/// ha smontato l'argomento di rischio sulle impostazioni del vault; il tema,
+/// che era l'esempio della voce, da allora è **di macchina** (§29.4) e non
+/// viaggia più con le note — un tema che arriva da fuori si vede e si disfa in
+/// un gesto, ma la pelle che questa installazione conosce non la decide un
+/// vault. La [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md)
+/// ha messo in quel posto i **tasti**, ed è un'altra specie di cosa. Il
+/// criterio che le separa non è *cosa la chiave descrive* — `locale.hour-cycle`
+/// descrive chi guarda e viaggiare è precisamente ciò che deve fare — ma **cosa
+/// può il valore peggiore**, e le risposte che questo repo ha già dato sono
+/// tre:
 ///
 /// - **una sottrazione non concede**: `plugins.disabled`, e le chiavi dei
 ///   permessi della [0098](../../../docs/decisions/0098-un-permesso-si-vede-e-si-nega.md).
@@ -117,6 +119,15 @@ pub const PLUGINS_DISABLED: &str = "plugins.disabled";
 /// per la stessa idea si sarebbero pagate al primo componente che ne legge una
 /// aspettandosi l'altra.
 pub const APPEARANCE_THEME: &str = "appearance.theme";
+pub const APPEARANCE_CONTRAST: &str = "appearance.contrast";
+pub const APPEARANCE_DENSITY: &str = "appearance.density";
+pub const APPEARANCE_BODY: &str = "appearance.body";
+pub const APPEARANCE_LINE_HEIGHT: &str = "appearance.line-height";
+pub const APPEARANCE_MEASURE: &str = "appearance.measure";
+pub const APPEARANCE_FONT: &str = "appearance.font";
+pub const APPEARANCE_ACCENT: &str = "appearance.accent";
+pub const APPEARANCE_ZOOM: &str = "appearance.zoom";
+pub const DEFAULT_ZOOM: f64 = 1.0;
 /// La cartella del vault in cui la shell deposita e cerca gli allegati.
 ///
 /// È un dato del vault: viaggia con le note e resta leggibile anche quando il
@@ -143,13 +154,12 @@ pub const DEFAULT_ATTACHMENT_FOLDER: &str = "attachments";
 pub const HISTORY_ENABLED: &str = "history.enabled";
 
 /// Fino a che livello si scrive nel log (§17.3). Di **macchina** e non di
-/// vault, ed è rimasta l'unica famiglia a esserlo dopo che tema e locale sono
-/// scesi nel vault
-/// ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)):
-/// il log non è una preferenza su come leggi le tue note, è lo strumento per
-/// diagnosticare l'applicazione, e deve valere anche **quando un vault non si
-/// apre** — che è precisamente il caso in cui serve. Una chiave che vive dentro
-/// il vault, in quel caso, non si può nemmeno leggere.
+/// vault: il log non è una preferenza su come leggi le tue note, è lo strumento
+/// per diagnosticare l'applicazione, e deve valere anche **quando un vault non
+/// si apre** — che è precisamente il caso in cui serve. Una chiave che vive
+/// dentro il vault, in quel caso, non si può nemmeno leggere. Dalla 0076 è
+/// questa la famiglia di macchina per eccellenza, e dal §29.4 la selezione del
+/// tema — che di macchina è diventata per scelta propria — le sta accanto.
 pub const LOG_LEVEL: &str = "log.level";
 
 /// Gli id dei componenti di cui si vuole vedere tutto, fino al
@@ -192,42 +202,17 @@ pub fn core_settings() -> Vec<SettingSpec> {
     // potesse spegnere gli altri sarebbe un componente con potere di veto su
     // tutto ciò che gli sta accanto — compreso ciò che lo controlla. Chi
     // accende e spegne è la persona davanti allo schermo, e passa dalla shell.
-    // Il tema è **del vault**, come ogni altra preferenza di lettura
-    // ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)):
-    // fino a ieri era di macchina perché «un vault che arriva da fuori non
-    // decide come guardi lo schermo», e riguardato è un argomento debole — un
-    // tema imposto è visibile e si cambia in un gesto, cioè non è il genere di
-    // danno per cui si paga una regola di precedenza.
+    // Tema, contrasto e preferenze di lettura sono della macchina: descrivono
+    // la persona davanti allo schermo e restano vere passando da un vault o da
+    // un tema all'altro. Il livello macchina le rende leggibili anche prima di
+    // aprire un vault.
     //
     // **Non** `program_writable`, e questa resta: un tema è reversibile e si
     // vede subito, quindi il danno di un componente che lo cambia è piccolo. La
     // ragione non è il danno, è che *nessuno lo ha chiesto* — il caso vero,
     // «scuro al tramonto», è un pezzo di 6.2, dove si decide se un componente
     // possa avere in mano l'aspetto e con che permesso.
-    settings.push(
-        SettingSpec::new(
-            APPEARANCE_THEME,
-            Text::key(C_THEME),
-            SettingKind::Choice {
-                default: fub_kernel::locale::AS_SYSTEM.into(),
-                options: vec![
-                    // «Come il sistema» è la stessa frase che dicono quattro
-                    // chiavi `locale.*`, e la dice con la **loro** chiave: due
-                    // traduzioni della stessa scelta, in due tendine vicine,
-                    // sarebbero la prima cosa che qualcuno nota e l'ultima che
-                    // qualcuno ripara.
-                    UiOption::new(
-                        fub_kernel::locale::AS_SYSTEM,
-                        Text::key(fub_kernel::locale::AS_SYSTEM_KEY),
-                    ),
-                    UiOption::new("light", Text::key(C_THEME_LIGHT)),
-                    UiOption::new("dark", Text::key(C_THEME_DARK)),
-                ],
-            },
-        )
-        .describing(Text::key(C_THEME_DESC))
-        .grouped(Text::key(C_GROUP_APPEARANCE)),
-    );
+    settings.extend(appearance_settings());
     settings.push(history_enabled_spec());
     settings.push(log_level_spec());
     settings.push(log_verbose_spec());
@@ -263,6 +248,115 @@ pub fn core_machine_settings() -> Vec<SettingSpec> {
         .into_iter()
         .filter(|spec| spec.scope == fub_abi::settings::SettingScope::Machine)
         .collect()
+}
+
+fn appearance_settings() -> Vec<SettingSpec> {
+    let choice = |key, label, description, default: &str, options: Vec<UiOption>| {
+        SettingSpec::new(
+            key,
+            Text::key(label),
+            SettingKind::Choice {
+                default: default.into(),
+                options,
+            },
+        )
+        .describing(Text::key(description))
+        .grouped(Text::key(C_GROUP_APPEARANCE))
+        .for_machine()
+    };
+    let system = || {
+        UiOption::new(
+            fub_kernel::locale::AS_SYSTEM,
+            Text::key(fub_kernel::locale::AS_SYSTEM_KEY),
+        )
+    };
+    let number = |key, label, description, default, min, max| {
+        SettingSpec::new(
+            key,
+            Text::key(label),
+            SettingKind::Number {
+                default,
+                min: Some(min),
+                max: Some(max),
+            },
+        )
+        .describing(Text::key(description))
+        .grouped(Text::key(C_GROUP_APPEARANCE))
+        .for_machine()
+    };
+
+    vec![
+        choice(
+            APPEARANCE_THEME,
+            C_THEME,
+            C_THEME_DESC,
+            fub_kernel::locale::AS_SYSTEM,
+            vec![
+                system(),
+                UiOption::new("light", Text::key(C_THEME_LIGHT)),
+                UiOption::new("dark", Text::key(C_THEME_DARK)),
+            ],
+        ),
+        choice(
+            APPEARANCE_CONTRAST,
+            C_CONTRAST,
+            C_CONTRAST_DESC,
+            fub_kernel::locale::AS_SYSTEM,
+            vec![
+                system(),
+                UiOption::new("normal", Text::key(C_CONTRAST_NORMAL)),
+                UiOption::new("high", Text::key(C_CONTRAST_HIGH)),
+            ],
+        ),
+        choice(
+            APPEARANCE_DENSITY,
+            C_DENSITY,
+            C_DENSITY_DESC,
+            "comfortable",
+            vec![
+                UiOption::new("compact", Text::key(C_DENSITY_COMPACT)),
+                UiOption::new("comfortable", Text::key(C_DENSITY_COMFORTABLE)),
+                UiOption::new("relaxed", Text::key(C_DENSITY_RELAXED)),
+            ],
+        ),
+        number(APPEARANCE_BODY, C_BODY, C_BODY_DESC, 16.0, 12.0, 28.0),
+        number(
+            APPEARANCE_LINE_HEIGHT,
+            C_LINE_HEIGHT,
+            C_LINE_HEIGHT_DESC,
+            1.7,
+            1.2,
+            2.4,
+        ),
+        number(
+            APPEARANCE_MEASURE,
+            C_MEASURE,
+            C_MEASURE_DESC,
+            70.0,
+            40.0,
+            100.0,
+        ),
+        choice(
+            APPEARANCE_FONT,
+            C_FONT,
+            C_FONT_DESC,
+            "literata",
+            vec![
+                UiOption::new("literata", Text::key(C_FONT_LITERATA)),
+                UiOption::new("inter", Text::key(C_FONT_INTER)),
+                UiOption::new("system", Text::key(C_FONT_SYSTEM)),
+            ],
+        ),
+        number(
+            APPEARANCE_ACCENT,
+            C_ACCENT,
+            C_ACCENT_DESC,
+            130.0,
+            0.0,
+            360.0,
+        ),
+        number(APPEARANCE_ZOOM, C_ZOOM, C_ZOOM_DESC, DEFAULT_ZOOM, 0.5, 2.0),
+    ]
 }
 
 /// La memoria di ciò che si è cercato e aperto come [`SettingSpec`] (§21.7).
@@ -357,6 +451,30 @@ const C_THEME: &str = "core.theme";
 const C_THEME_DESC: &str = "core.theme.desc";
 const C_THEME_LIGHT: &str = "core.theme.light";
 const C_THEME_DARK: &str = "core.theme.dark";
+const C_CONTRAST: &str = "core.contrast";
+const C_CONTRAST_DESC: &str = "core.contrast.desc";
+const C_CONTRAST_NORMAL: &str = "core.contrast.normal";
+const C_CONTRAST_HIGH: &str = "core.contrast.high";
+const C_DENSITY: &str = "core.density";
+const C_DENSITY_DESC: &str = "core.density.desc";
+const C_DENSITY_COMPACT: &str = "core.density.compact";
+const C_DENSITY_COMFORTABLE: &str = "core.density.comfortable";
+const C_DENSITY_RELAXED: &str = "core.density.relaxed";
+const C_BODY: &str = "core.body";
+const C_BODY_DESC: &str = "core.body.desc";
+const C_LINE_HEIGHT: &str = "core.line_height";
+const C_LINE_HEIGHT_DESC: &str = "core.line_height.desc";
+const C_MEASURE: &str = "core.measure";
+const C_MEASURE_DESC: &str = "core.measure.desc";
+const C_FONT: &str = "core.font";
+const C_FONT_DESC: &str = "core.font.desc";
+const C_FONT_LITERATA: &str = "core.font.literata";
+const C_FONT_INTER: &str = "core.font.inter";
+const C_FONT_SYSTEM: &str = "core.font.system";
+const C_ACCENT: &str = "core.accent";
+const C_ACCENT_DESC: &str = "core.accent.desc";
+const C_ZOOM: &str = "core.zoom";
+const C_ZOOM_DESC: &str = "core.zoom.desc";
 const C_LOG_LEVEL: &str = "core.log.level";
 const C_LOG_LEVEL_DESC: &str = "core.log.level.desc";
 const C_LOG_VERBOSE: &str = "core.log.verbose";
@@ -459,6 +577,45 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_THEME_LIGHT, "Chiaro")
         .with(C_THEME_DARK, "Scuro")
+        .with(C_CONTRAST, "Contrasto")
+        .with(
+            C_CONTRAST_DESC,
+            "Segue il sistema oppure usa sempre il contrasto normale o alto.",
+        )
+        .with(C_CONTRAST_NORMAL, "Normale")
+        .with(C_CONTRAST_HIGH, "Alto")
+        .with(C_DENSITY, "Densità")
+        .with(
+            C_DENSITY_DESC,
+            "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.",
+        )
+        .with(C_DENSITY_COMPACT, "Compatta")
+        .with(C_DENSITY_COMFORTABLE, "Comoda")
+        .with(C_DENSITY_RELAXED, "Rilassata")
+        .with(C_BODY, "Corpo del testo (px)")
+        .with(
+            C_BODY_DESC,
+            "Dimensione del testo nelle superfici di lettura.",
+        )
+        .with(C_LINE_HEIGHT, "Interlinea")
+        .with(C_LINE_HEIGHT_DESC, "Passo verticale della prosa lunga.")
+        .with(C_MEASURE, "Misura della riga (caratteri)")
+        .with(
+            C_MEASURE_DESC,
+            "Larghezza massima della colonna di lettura.",
+        )
+        .with(C_FONT, "Carattere di lettura")
+        .with(C_FONT_DESC, "Famiglia usata per la prosa lunga.")
+        .with(C_FONT_LITERATA, "Literata")
+        .with(C_FONT_INTER, "Inter")
+        .with(C_FONT_SYSTEM, "Del sistema")
+        .with(C_ACCENT, "Tinta dell'accento (0–360)")
+        .with(
+            C_ACCENT_DESC,
+            "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+        )
+        .with(C_ZOOM, "Zoom interfaccia")
+        .with(C_ZOOM_DESC, "Scala nativa della finestra, da 0,5 a 2.")
         .with(C_GROUP_DIAGNOSTICS, "Diagnostica")
         .with(C_LOG_LEVEL, "Livello del log")
         .with(
@@ -514,6 +671,39 @@ pub fn core_catalog() -> Vec<StringCatalog> {
         )
         .with(C_THEME_LIGHT, "Light")
         .with(C_THEME_DARK, "Dark")
+        .with(C_CONTRAST, "Contrast")
+        .with(
+            C_CONTRAST_DESC,
+            "Follow the system, or always use normal or high contrast.",
+        )
+        .with(C_CONTRAST_NORMAL, "Normal")
+        .with(C_CONTRAST_HIGH, "High")
+        .with(C_DENSITY, "Density")
+        .with(
+            C_DENSITY_DESC,
+            "Tighten or loosen component spacing without moving the window shell.",
+        )
+        .with(C_DENSITY_COMPACT, "Compact")
+        .with(C_DENSITY_COMFORTABLE, "Comfortable")
+        .with(C_DENSITY_RELAXED, "Relaxed")
+        .with(C_BODY, "Text size (px)")
+        .with(C_BODY_DESC, "Text size on reading surfaces.")
+        .with(C_LINE_HEIGHT, "Line height")
+        .with(C_LINE_HEIGHT_DESC, "Vertical rhythm for long-form prose.")
+        .with(C_MEASURE, "Line measure (characters)")
+        .with(C_MEASURE_DESC, "Maximum width of the reading column.")
+        .with(C_FONT, "Reading font")
+        .with(C_FONT_DESC, "Font family used for long-form prose.")
+        .with(C_FONT_LITERATA, "Literata")
+        .with(C_FONT_INTER, "Inter")
+        .with(C_FONT_SYSTEM, "System")
+        .with(C_ACCENT, "Accent hue (0–360)")
+        .with(
+            C_ACCENT_DESC,
+            "OKLCH hue; lightness and chroma are derived to preserve contrast.",
+        )
+        .with(C_ZOOM, "Interface zoom")
+        .with(C_ZOOM_DESC, "Native window scale, from 0.5 to 2.")
         .with(C_GROUP_DIAGNOSTICS, "Diagnostics")
         .with(C_LOG_LEVEL, "Log level")
         .with(

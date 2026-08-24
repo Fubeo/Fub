@@ -1,0 +1,1300 @@
+{
+  "engine": "theme-1",
+  "required_roles": [
+    "accent",
+    "accent-contrast",
+    "accent-soft",
+    "bg",
+    "bg-active",
+    "bg-chrome",
+    "bg-elev",
+    "bg-hover",
+    "bg-input",
+    "bg-panel",
+    "border",
+    "content-width",
+    "danger",
+    "danger-contrast",
+    "danger-wash",
+    "doc-active-line",
+    "doc-bg",
+    "doc-caret",
+    "doc-danger",
+    "doc-fg",
+    "doc-fill",
+    "doc-fill-soft",
+    "doc-gutter-fg",
+    "doc-heading",
+    "doc-highlight",
+    "doc-link",
+    "doc-rule",
+    "doc-rule-soft",
+    "doc-selection",
+    "doc-tooltip-bg",
+    "duration-fast",
+    "duration-med",
+    "duration-slow",
+    "ease",
+    "ease-in",
+    "ease-out",
+    "elevation-base-border",
+    "elevation-base-shadow",
+    "elevation-base-surface",
+    "elevation-chrome-border",
+    "elevation-chrome-shadow",
+    "elevation-chrome-surface",
+    "elevation-dialog-border",
+    "elevation-dialog-shadow",
+    "elevation-dialog-surface",
+    "elevation-floating-border",
+    "elevation-floating-shadow",
+    "elevation-floating-surface",
+    "elevation-paper-border",
+    "elevation-paper-shadow",
+    "elevation-paper-surface",
+    "focus-ring",
+    "focus-ring-offset",
+    "focus-ring-width",
+    "font-mono",
+    "font-reading",
+    "font-ui",
+    "graph-node",
+    "graph-node-active",
+    "graph-node-hover",
+    "info",
+    "info-contrast",
+    "info-wash",
+    "leading-normal",
+    "leading-relaxed",
+    "leading-tight",
+    "muted",
+    "overlay-hover",
+    "radius-lg",
+    "radius-md",
+    "radius-pill",
+    "radius-sm",
+    "radius-xs",
+    "scrim",
+    "shadow-lg",
+    "shadow-md",
+    "shadow-sm",
+    "space-1",
+    "space-10",
+    "space-2",
+    "space-3",
+    "space-4",
+    "space-5",
+    "space-6",
+    "space-7",
+    "space-8",
+    "space-9",
+    "success",
+    "success-contrast",
+    "success-wash",
+    "syn-comment",
+    "syn-function",
+    "syn-heading",
+    "syn-invalid",
+    "syn-keyword",
+    "syn-literal",
+    "syn-name",
+    "syn-operator",
+    "syn-string",
+    "syn-type",
+    "text",
+    "text-2xl",
+    "text-3xl",
+    "text-base",
+    "text-lg",
+    "text-md",
+    "text-reading",
+    "text-sm",
+    "text-xl",
+    "text-xs",
+    "tracking-caps",
+    "warning",
+    "warning-contrast",
+    "warning-wash",
+    "weight-bold",
+    "weight-medium"
+  ],
+  "hooks": [
+    "app",
+    "elevation-paper",
+    "elevation-base",
+    "elevation-chrome",
+    "elevation-floating",
+    "elevation-dialog",
+    "skip-link",
+    "brand",
+    "muted",
+    "primary",
+    "ui-button",
+    "intent-primary",
+    "intent-danger",
+    "views-bottom",
+    "sidebar",
+    "inspector-pane",
+    "panel-title",
+    "link-button",
+    "danger",
+    "plain-list",
+    "tree-children",
+    "tree-row",
+    "row-name",
+    "row-icon",
+    "folder",
+    "has-note",
+    "chevron",
+    "drop-before",
+    "drop-after",
+    "drop-into",
+    "space-strip",
+    "space-chip",
+    "add",
+    "space-title",
+    "clickable",
+    "icon-picker",
+    "icon-grid",
+    "icon-none",
+    "search-input",
+    "search-results",
+    "hit-title",
+    "hit-occurrence",
+    "hit-create",
+    "hit-snippet",
+    "segmented",
+    "segmented--titlebar",
+    "segmented--wide",
+    "segmented-option",
+    "panes",
+    "pane-split",
+    "row",
+    "col",
+    "pane-tabs",
+    "tab",
+    "tab-name",
+    "dirty",
+    "tab-close",
+    "pane",
+    "focus",
+    "pane-preview",
+    "markdown-preview",
+    "wikilink",
+    "unresolved",
+    "tag",
+    "callout",
+    "callout-title",
+    "task",
+    "cm-content",
+    "block-footnote-definition",
+    "footnote-ref",
+    "block-frontmatter-unparsed",
+    "ui-heading",
+    "ui-list-item",
+    "ui-list-item-title",
+    "ui-list-item-subtitle",
+    "ui-slot",
+    "math-block",
+    "inline-highlight",
+    "embed",
+    "embed-cycle",
+    "embed-too-deep",
+    "empty-note",
+    "ui-section",
+    "ui-table",
+    "ui-row",
+    "ui-tree-item",
+    "ui-children",
+    "ui-tree-label",
+    "ui-tab-bar",
+    "ui-tab-button",
+    "ui-badge",
+    "ui-progress",
+    "ui-progress-label",
+    "ui-empty-state",
+    "ui-empty-title",
+    "ui-empty-detail",
+    "ui-key-value",
+    "ui-field-label",
+    "ui-text-input",
+    "ui-date-picker",
+    "ui-number",
+    "ui-text-area",
+    "ui-select",
+    "ui-checkbox",
+    "ui-radio-option",
+    "ui-slider",
+    "ui-form",
+    "ui-pending",
+    "ui-failed",
+    "ui-failed-message",
+    "titlebar",
+    "win-ctrl",
+    "win-ctrl--close",
+    "rail",
+    "inspector-tabs",
+    "inspector-tab",
+    "setting-row--theme",
+    "titlebar-side",
+    "titlebar-center",
+    "app-menu",
+    "titlebar-btn",
+    "titlebar-btn--wide",
+    "rail-shell",
+    "rail-btn",
+    "rail-btn-view",
+    "titlebar--darwin",
+    "window-controls",
+    "titlebar-side--left",
+    "titlebar-btn--icon",
+    "context-menu",
+    "modale",
+    "palette-box",
+    "palette-input",
+    "palette-list",
+    "palette-row",
+    "palette-title",
+    "palette-scope",
+    "palette-desc",
+    "palette-help",
+    "palette-empty",
+    "docsearch-summary",
+    "palette-heading",
+    "palette-form",
+    "palette-label",
+    "palette-summary",
+    "palette-plan",
+    "palette-actions",
+    "palette-error",
+    "toast",
+    "statusbar",
+    "save-state",
+    "ha-novita",
+    "in-corso",
+    "key-pending",
+    "dock-panel",
+    "dock-panel--notify",
+    "dock-panel--activity",
+    "notify-list",
+    "notify-testo",
+    "notify-ora",
+    "activity-row",
+    "activity-label",
+    "graph-count",
+    "graph-panel",
+    "graph-panel-toggle",
+    "graph-panel-popover",
+    "graph-panel-titolo",
+    "graph-panel-sezione",
+    "graph-panel-sezione-titolo",
+    "graph-panel-preset",
+    "graph-panel-select",
+    "graph-panel-campo",
+    "graph-panel-nome",
+    "graph-panel-valore",
+    "graph-panel-azioni",
+    "tab-view",
+    "settings-panel",
+    "settings-tabs",
+    "setting-row",
+    "setting-text",
+    "setting-source",
+    "setting-sub",
+    "settings-banner",
+    "settings-banner-actions",
+    "views-status",
+    "declared-view-panel",
+    "declared-view",
+    "ui-stack",
+    "views-ribbon",
+    "views-modal",
+    "cm-editor",
+    "pane-editor",
+    "shell-tooltip",
+    "titlebar-shortcut"
+  ],
+  "states": [
+    "rest",
+    "hover",
+    "pressed",
+    "selected",
+    "focused",
+    "disabled",
+    "dragging"
+  ],
+  "components": [
+    {
+      "name": "app-surface",
+      "hooks": [
+        "app"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "elevation-paper",
+      "hooks": [
+        "elevation-paper"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "elevation-base",
+      "hooks": [
+        "elevation-base"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "elevation-chrome",
+      "hooks": [
+        "elevation-chrome"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "elevation-floating",
+      "hooks": [
+        "elevation-floating"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "elevation-dialog",
+      "hooks": [
+        "elevation-dialog"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "skip-link",
+      "hooks": [
+        "skip-link"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "brand-and-muted-copy",
+      "hooks": [
+        "brand",
+        "muted"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "button-intent",
+      "hooks": [
+        "primary",
+        "ui-button",
+        "intent-primary",
+        "intent-danger"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "titlebar",
+      "hooks": [
+        "titlebar",
+        "titlebar-side",
+        "titlebar-side--left",
+        "titlebar-center",
+        "titlebar--darwin",
+        "window-controls"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "window-control",
+      "hooks": [
+        "win-ctrl",
+        "win-ctrl--close"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "app-menu",
+      "hooks": [
+        "app-menu"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "titlebar-button",
+      "hooks": [
+        "titlebar-btn",
+        "titlebar-btn--wide",
+        "titlebar-btn--icon"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "rail",
+      "hooks": [
+        "rail",
+        "rail-shell",
+        "rail-btn",
+        "rail-btn-view"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "inspector-tabs",
+      "hooks": [
+        "inspector-tabs",
+        "inspector-tab"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "panel",
+      "hooks": [
+        "views-bottom",
+        "sidebar",
+        "inspector-pane"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "panel-title",
+      "hooks": [
+        "panel-title",
+        "link-button",
+        "danger"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "focused"
+      ]
+    },
+    {
+      "name": "space-strip",
+      "hooks": [
+        "space-strip",
+        "space-chip",
+        "add",
+        "space-title",
+        "clickable"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "icon-picker",
+      "hooks": [
+        "icon-picker",
+        "icon-grid",
+        "icon-none"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "tree",
+      "hooks": [
+        "plain-list",
+        "tree-children",
+        "tree-row",
+        "row-name",
+        "row-icon",
+        "folder",
+        "has-note",
+        "chevron"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "tree-drop-target",
+      "hooks": [
+        "drop-before",
+        "drop-after",
+        "drop-into"
+      ],
+      "states": [
+        "dragging"
+      ]
+    },
+    {
+      "name": "search",
+      "hooks": [
+        "search-input",
+        "search-results",
+        "hit-title",
+        "hit-occurrence",
+        "hit-create",
+        "hit-snippet"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "segmented-control",
+      "hooks": [
+        "segmented",
+        "segmented--titlebar",
+        "segmented--wide",
+        "segmented-option"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "pane-tree",
+      "hooks": [
+        "panes",
+        "pane-split",
+        "row",
+        "col",
+        "pane",
+        "focus",
+        "pane-preview"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "pane-tabs",
+      "hooks": [
+        "pane-tabs",
+        "tab",
+        "tab-name",
+        "dirty",
+        "tab-close",
+        "tab-view"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "fields",
+      "hooks": [
+        "ui-field-label",
+        "ui-text-input",
+        "ui-date-picker",
+        "ui-number",
+        "ui-text-area",
+        "ui-select",
+        "ui-checkbox",
+        "ui-radio-option",
+        "ui-slider"
+      ],
+      "states": [
+        "rest",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "declarative-node-content",
+      "hooks": [
+        "ui-section",
+        "ui-table",
+        "ui-row",
+        "ui-tree-item",
+        "ui-children",
+        "ui-tree-label",
+        "ui-tab-bar",
+        "ui-tab-button",
+        "ui-heading"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "declarative-node-feedback",
+      "hooks": [
+        "ui-list-item",
+        "ui-list-item-title",
+        "ui-list-item-subtitle",
+        "ui-badge",
+        "ui-progress",
+        "ui-progress-label",
+        "ui-empty-state",
+        "ui-empty-title",
+        "ui-empty-detail",
+        "ui-key-value",
+        "ui-pending",
+        "ui-failed",
+        "ui-failed-message"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "declarative-node-form",
+      "hooks": [
+        "ui-form"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "markdown-preview",
+      "hooks": [
+        "markdown-preview",
+        "wikilink",
+        "unresolved",
+        "tag",
+        "callout",
+        "callout-title",
+        "task",
+        "math-block",
+        "inline-highlight",
+        "embed",
+        "embed-cycle",
+        "embed-too-deep",
+        "empty-note",
+        "block-footnote-definition",
+        "footnote-ref",
+        "block-frontmatter-unparsed"
+      ],
+      "states": [
+        "rest",
+        "selected"
+      ]
+    },
+    {
+      "name": "declarative-slot",
+      "hooks": [
+        "ui-slot"
+      ],
+      "states": [
+        "rest"
+      ]
+    },
+    {
+      "name": "context-menu",
+      "hooks": [
+        "context-menu"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled"
+      ]
+    },
+    {
+      "name": "modal-palette",
+      "hooks": [
+        "modale",
+        "palette-box",
+        "palette-input",
+        "palette-list",
+        "palette-row",
+        "palette-title",
+        "palette-scope",
+        "palette-desc",
+        "palette-help",
+        "palette-empty",
+        "docsearch-summary",
+        "palette-heading",
+        "palette-form",
+        "palette-label",
+        "palette-summary",
+        "palette-plan",
+        "palette-actions",
+        "palette-error"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "settings",
+      "hooks": [
+        "settings-panel",
+        "settings-tabs",
+        "setting-row",
+        "setting-text",
+        "setting-source",
+        "setting-sub",
+        "setting-row--theme",
+        "settings-banner",
+        "settings-banner-actions"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "notices",
+      "hooks": [
+        "toast",
+        "statusbar",
+        "save-state",
+        "ha-novita",
+        "in-corso",
+        "key-pending",
+        "dock-panel",
+        "dock-panel--notify",
+        "dock-panel--activity",
+        "notify-list",
+        "notify-testo",
+        "notify-ora",
+        "activity-row",
+        "activity-label"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "disabled"
+      ]
+    },
+    {
+      "name": "graph-panel",
+      "hooks": [
+        "graph-count",
+        "graph-panel",
+        "graph-panel-toggle",
+        "graph-panel-popover",
+        "graph-panel-titolo",
+        "graph-panel-sezione",
+        "graph-panel-sezione-titolo",
+        "graph-panel-preset",
+        "graph-panel-select",
+        "graph-panel-campo",
+        "graph-panel-nome",
+        "graph-panel-valore",
+        "graph-panel-azioni"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "declared-view",
+      "hooks": [
+        "views-status",
+        "declared-view-panel",
+        "declared-view",
+        "ui-stack",
+        "views-ribbon",
+        "views-modal"
+      ],
+      "states": [
+        "rest",
+        "selected",
+        "focused"
+      ]
+    },
+    {
+      "name": "editor-motion-surface",
+      "hooks": [
+        "cm-editor",
+        "cm-content",
+        "pane-editor"
+      ],
+      "states": [
+        "rest",
+        "focused"
+      ]
+    },
+    {
+      "name": "tooltip",
+      "hooks": [
+        "shell-tooltip",
+        "titlebar-shortcut"
+      ],
+      "states": [
+        "rest",
+        "disabled"
+      ]
+    }
+  ],
+  "contrast_pairs": [
+    [
+      "text",
+      "bg",
+      4.5,
+      "il corpo dell'app"
+    ],
+    [
+      "text",
+      "bg-chrome",
+      4.5,
+      "la titlebar, la barra degli strumenti, le linguette"
+    ],
+    [
+      "text",
+      "bg-elev",
+      4.5,
+      "topbar, pannelli, modali"
+    ],
+    [
+      "text",
+      "bg-input",
+      4.5,
+      "campi, pastiglie"
+    ],
+    [
+      "text",
+      "bg-hover",
+      4.5,
+      "una riga sotto il puntatore, o selezionata"
+    ],
+    [
+      "muted",
+      "bg",
+      4.5,
+      ".muted, i sottotitoli"
+    ],
+    [
+      "muted",
+      "bg-chrome",
+      4.5,
+      "#statusbar e #views-status, che sono tutte muted"
+    ],
+    [
+      "muted",
+      "bg-elev",
+      4.5,
+      "i sottotitoli dentro un pannello"
+    ],
+    [
+      "muted",
+      "bg-input",
+      4.5,
+      "i sottotitoli dentro una pastiglia"
+    ],
+    [
+      "muted",
+      "bg-hover",
+      4.5,
+      "il sottotitolo di una riga selezionata"
+    ],
+    [
+      "accent-contrast",
+      "accent",
+      4.5,
+      "il testo di un bottone pieno"
+    ],
+    [
+      "danger-contrast",
+      "danger",
+      4.5,
+      "il testo di un bottone distruttivo"
+    ],
+    [
+      "bg",
+      "accent-soft",
+      4.5,
+      "button:hover, #mode-switch attivo, .hit-snippet mark"
+    ],
+    [
+      "accent-soft",
+      "bg",
+      4.5,
+      ".brand, i link-button al passaggio"
+    ],
+    [
+      "accent-soft",
+      "bg-elev",
+      4.5,
+      "il titolo di uno spazio, il chevron"
+    ],
+    [
+      "accent-soft",
+      "bg-input",
+      4.5,
+      ".ui-badge.intent-primary"
+    ],
+    [
+      "danger",
+      "bg",
+      4.5,
+      "un messaggio d'errore"
+    ],
+    [
+      "danger",
+      "bg-elev",
+      4.5,
+      "un errore dentro un pannello"
+    ],
+    [
+      "danger",
+      "bg-input",
+      4.5,
+      ".ui-badge.intent-danger"
+    ],
+    [
+      "accent",
+      "bg",
+      3,
+      "il fondo di un bottone, il bordo di un campo a fuoco"
+    ],
+    [
+      "accent",
+      "bg-elev",
+      3,
+      "il bordo attivo di una scheda"
+    ],
+    [
+      "accent",
+      "bg-hover",
+      3,
+      "il contorno di una riga selezionata"
+    ],
+    [
+      "focus-ring",
+      "bg",
+      3,
+      "l'anello del fuoco"
+    ],
+    [
+      "focus-ring",
+      "bg-elev",
+      3,
+      "l'anello del fuoco dentro un pannello"
+    ],
+    [
+      "focus-ring",
+      "bg-input",
+      3,
+      "l'anello del fuoco su un campo"
+    ],
+    [
+      "graph-node",
+      "bg",
+      3,
+      "un nodo del grafo"
+    ],
+    [
+      "graph-node-active",
+      "bg",
+      3,
+      "il nodo della nota aperta"
+    ],
+    [
+      "graph-node-hover",
+      "bg",
+      3,
+      "il nodo sotto il puntatore"
+    ],
+    [
+      "doc-fg",
+      "doc-bg",
+      4.5,
+      "il corpo di una nota"
+    ],
+    [
+      "doc-link",
+      "doc-bg",
+      4.5,
+      "un wikilink"
+    ],
+    [
+      "doc-danger",
+      "doc-bg",
+      4.5,
+      "un wikilink rotto"
+    ],
+    [
+      "doc-gutter-fg",
+      "doc-bg",
+      4.5,
+      "i numeri di riga"
+    ],
+    [
+      "doc-heading",
+      "doc-bg",
+      3,
+      "un titolo reso"
+    ],
+    [
+      "doc-caret",
+      "doc-bg",
+      3,
+      "il cursore di scrittura"
+    ],
+    [
+      "syn-keyword",
+      "doc-bg",
+      4.5,
+      "la sintassi keyword sulla carta"
+    ],
+    [
+      "syn-keyword",
+      "doc-active-line",
+      4.5,
+      "la sintassi keyword sulla carta"
+    ],
+    [
+      "syn-keyword",
+      "doc-selection",
+      4.5,
+      "la sintassi keyword sulla carta"
+    ],
+    [
+      "syn-name",
+      "doc-bg",
+      4.5,
+      "la sintassi name sulla carta"
+    ],
+    [
+      "syn-name",
+      "doc-active-line",
+      4.5,
+      "la sintassi name sulla carta"
+    ],
+    [
+      "syn-name",
+      "doc-selection",
+      4.5,
+      "la sintassi name sulla carta"
+    ],
+    [
+      "syn-function",
+      "doc-bg",
+      4.5,
+      "la sintassi function sulla carta"
+    ],
+    [
+      "syn-function",
+      "doc-active-line",
+      4.5,
+      "la sintassi function sulla carta"
+    ],
+    [
+      "syn-function",
+      "doc-selection",
+      4.5,
+      "la sintassi function sulla carta"
+    ],
+    [
+      "syn-literal",
+      "doc-bg",
+      4.5,
+      "la sintassi literal sulla carta"
+    ],
+    [
+      "syn-literal",
+      "doc-active-line",
+      4.5,
+      "la sintassi literal sulla carta"
+    ],
+    [
+      "syn-literal",
+      "doc-selection",
+      4.5,
+      "la sintassi literal sulla carta"
+    ],
+    [
+      "syn-type",
+      "doc-bg",
+      4.5,
+      "la sintassi type sulla carta"
+    ],
+    [
+      "syn-type",
+      "doc-active-line",
+      4.5,
+      "la sintassi type sulla carta"
+    ],
+    [
+      "syn-type",
+      "doc-selection",
+      4.5,
+      "la sintassi type sulla carta"
+    ],
+    [
+      "syn-operator",
+      "doc-bg",
+      4.5,
+      "la sintassi operator sulla carta"
+    ],
+    [
+      "syn-operator",
+      "doc-active-line",
+      4.5,
+      "la sintassi operator sulla carta"
+    ],
+    [
+      "syn-operator",
+      "doc-selection",
+      4.5,
+      "la sintassi operator sulla carta"
+    ],
+    [
+      "syn-comment",
+      "doc-bg",
+      4.5,
+      "la sintassi comment sulla carta"
+    ],
+    [
+      "syn-comment",
+      "doc-active-line",
+      4.5,
+      "la sintassi comment sulla carta"
+    ],
+    [
+      "syn-comment",
+      "doc-selection",
+      4.5,
+      "la sintassi comment sulla carta"
+    ],
+    [
+      "syn-string",
+      "doc-bg",
+      4.5,
+      "la sintassi string sulla carta"
+    ],
+    [
+      "syn-string",
+      "doc-active-line",
+      4.5,
+      "la sintassi string sulla carta"
+    ],
+    [
+      "syn-string",
+      "doc-selection",
+      4.5,
+      "la sintassi string sulla carta"
+    ],
+    [
+      "syn-heading",
+      "doc-bg",
+      4.5,
+      "la sintassi heading sulla carta"
+    ],
+    [
+      "syn-heading",
+      "doc-active-line",
+      4.5,
+      "la sintassi heading sulla carta"
+    ],
+    [
+      "syn-heading",
+      "doc-selection",
+      4.5,
+      "la sintassi heading sulla carta"
+    ],
+    [
+      "syn-invalid",
+      "doc-bg",
+      4.5,
+      "la sintassi invalid sulla carta"
+    ],
+    [
+      "syn-invalid",
+      "doc-active-line",
+      4.5,
+      "la sintassi invalid sulla carta"
+    ],
+    [
+      "syn-invalid",
+      "doc-selection",
+      4.5,
+      "la sintassi invalid sulla carta"
+    ]
+  ],
+  "counts": {
+    "required_roles": 116,
+    "hooks": 194,
+    "state_names": 7,
+    "assigned_states": 111,
+    "components": 39,
+    "unassigned_hooks": 0
+  }
+}

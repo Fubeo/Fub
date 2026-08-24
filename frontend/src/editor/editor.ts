@@ -25,6 +25,7 @@ import { byteToCharIndex, charToByteIndices } from "../rules/offsets";
 import { editingExtensions } from "./editor-commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview } from "./livepreview";
+import type { SyntaxForm } from "../host/contract";
 
 /// Una selezione dell'editor come la capisce il kernel: **byte UTF-8** del
 /// buffer, più il testo che ci sta dentro (vuoto = cursore).
@@ -51,6 +52,8 @@ export interface EditorSelections {
 }
 
 export interface Editor {
+  /// Aggiorna la dichiarazione sintattica letta dal canale runtime.
+  setSyntaxForms(forms: readonly SyntaxForm[]): void;
   /// Mette nell'editor un testo che **l'utente non ha scritto**: un'altra nota,
   /// il vuoto della chiusura, il file riletto dal disco dopo che qualcun altro
   /// lo ha cambiato.
@@ -153,11 +156,15 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
   // di avere il vecchio sotto mano. Tenerlo qui è anche ciò che rende la
   // ricostruzione una funzione di due valori invece che di uno stato.
   let previewOn = true;
+  let syntaxForms: readonly SyntaxForm[] | undefined;
   const livePreviewExtension = () =>
-    livePreview({
-      openWikilink: opts.onOpenWikilink,
-      searchTag: opts.onSearchTag,
-    });
+    livePreview(
+      {
+        openWikilink: opts.onOpenWikilink,
+        searchTag: opts.onSearchTag,
+      },
+      syntaxForms,
+    );
 
   // Il tema sta in un compartment per la stessa ragione della resa inline: si
   // cambia luce a caldo, senza ricostruire l'editor e quindi senza perdere né
@@ -331,6 +338,10 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     setLivePreview(on: boolean) {
       previewOn = on;
       view.dispatch({ effects: preview.reconfigure(on ? livePreviewExtension() : []) });
+    },
+    setSyntaxForms(forms: readonly SyntaxForm[]) {
+      syntaxForms = forms;
+      if (previewOn) view.dispatch({ effects: preview.reconfigure(livePreviewExtension()) });
     },
     setTheme(next: Theme) {
       currentTheme = next;

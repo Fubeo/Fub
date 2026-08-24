@@ -75,6 +75,10 @@ interface View {
 }
 
 let view: View = { folders: new Map(), existing: new Set() };
+/// La finestra richiesta per ogni livello visibile. Cresce solo per il livello
+/// il cui pulsante «altre» è stato attivato; nessuna domanda perde il proprio
+/// limite mentre gli altri livelli conservano il costo iniziale.
+const levelWindows = new Map<string, number>();
 /// L'impronta dell'ultima vista disegnata: gli eventi del kernel arrivano a
 /// ogni salvataggio con una risposta quasi sempre identica, e ricostruire
 /// l'albero distrugge gli `<li>` sotto il mouse.
@@ -184,7 +188,12 @@ async function loadVisible(): Promise<Map<string, FolderContent>> {
   let level = [state.activeSpace ?? ""];
   while (level.length > 0) {
     const contents = await Promise.all(
-      level.map((path) => folderContent(path, LEVEL_PAGE)),
+      level.map((path) =>
+        folderContent(path, {
+          ...LEVEL_PAGE,
+          limit: levelWindows.get(path) ?? LEVEL_PAGE.limit,
+        }),
+      ),
     );
     const next: string[] = [];
     contents.forEach((content, i) => {
@@ -417,22 +426,29 @@ function renderChildren(path: string, ul: HTMLElement): void {
     if (id === state.currentDoc) li.setAttribute("aria-selected", "true");
     ul.appendChild(li);
   }
-  // Ciò che la finestra ha lasciato fuori **si dice**. Un livello troncato in
-  // silenzio è peggio di un livello lento: chi guarda conclude che la cartella
-  // contiene ciò che vede, e cerca altrove una nota che c'è. La riga non è
-  // attivabile perché non c'è ancora un gesto che la apra — «mostra le altre»
-  // è la casella residua di questa voce — e dirlo senza saperlo fare è più
-  // onesto che non dirlo.
+  // Ciò che la finestra ha lasciato fuori **si dice e si può aprire**. Un
+  // livello troncato in silenzio è peggio di un livello lento: chi guarda
+  // conclude che la cartella contiene ciò che vede, e cerca altrove una nota
+  // che c'è. Ogni gesto allarga soltanto questa finestra di una pagina.
   const other = node.otherFolders + node.otherNote;
-  if (other > 0) ul.appendChild(truncatedRow(other));
+  if (other > 0) ul.appendChild(truncatedRow(path, other));
 }
 
 /// La riga che dice quante voci di questo livello non sono disegnate.
-function truncatedRow(count: number): HTMLElement {
+function truncatedRow(path: string, count: number): HTMLElement {
   const li = document.createElement("li");
-  li.className = "tree-row troncata";
   li.setAttribute("role", "none");
-  li.textContent = t("explorer.altre_voci", { n: count });
+
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "tree-row troncata";
+  button.textContent = t("explorer.altre_voci", { n: count });
+  button.addEventListener("click", () => {
+    const current = levelWindows.get(path) ?? LEVEL_PAGE.limit;
+    levelWindows.set(path, current + LEVEL_PAGE.limit);
+    void refreshFromKernel(true);
+  });
+  li.appendChild(button);
   return li;
 }
 

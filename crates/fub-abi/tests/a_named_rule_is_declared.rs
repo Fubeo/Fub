@@ -542,6 +542,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  dell'SDK) e nessuno di loro ha `fub-kernel` fra le mani.",
             ),
         ),
+        (
+            "crates/fub-kernel/src/ignore.rs::parse_gitignore",
+            (
+                Family::FolderBoundary,
+                "gli slash ai due capi sono **sintassi** della regola gitignore: quello in testa \
+                 ancora il pattern alla radice e quello in coda lo limita alle cartelle. Dopo aver \
+                 registrato quei due bit, li toglie prima di separare e normalizzare i segmenti; \
+                 usare la regola di contenimento di `folders` perderebbe entrambe le informazioni.",
+            ),
+        ),
     ])
 }
 

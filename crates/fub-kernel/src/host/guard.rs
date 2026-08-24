@@ -1188,7 +1188,8 @@ impl<H, P: Policy> Guard<H, P> {
             | QueryKind::Entries
             | QueryKind::Folders
             | QueryKind::RenderPreview
-            | QueryKind::RenderEmbed => (Capability::Query, "querying the index"),
+            | QueryKind::RenderEmbed
+            | QueryKind::SyntaxForms => (Capability::Query, "querying the index"),
         }
     }
 }

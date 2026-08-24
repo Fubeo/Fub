@@ -40,7 +40,7 @@ import sheetScuro from "./serie/sheet-dark.css?raw";
 import sheetChiaro from "./serie/sheet-light.css?raw";
 import skin from "./serie/skin.css?raw";
 import fonts from "./serie/fonts.css?raw";
-import { count, mount, type Layer } from "./loader";
+import { count, mount, mountPreferences, type Layer } from "./loader";
 import { mountTheme } from "./theme";
 function mountedStyle(layer: Layer): HTMLStyleElement | null {
   return document.head.querySelector(`style[data-fub="${layer}"]`);
@@ -129,6 +129,23 @@ describe("il caricatore monta per sostituzione", () => {
     mount(css, "foglio");
 
     expect(mountedStyle("foglio")?.textContent, "il caricatore scrive, non interpreta").toBe(css);
+  });
+  it("le preferenze stanno dopo la pelle e sostituiscono senza accatastare", () => {
+    mount("pelle", "pelle");
+    mountPreferences({ "text-reading": "18px" });
+    mountPreferences({ "text-reading": "20px" });
+
+    expect(count("preferenze")).toBe(1);
+    expect(mountedOrder()).toEqual(["pelle", "preferenze"]);
+    expect(mountedStyle("preferenze")?.textContent).toContain("--text-reading: 20px");
+  });
+
+  it("rifiuta token e valori fuori dal canale chiuso", () => {
+    expect(() => mountPreferences({ "titlebar-h": "80px" })).toThrow(/non è una preferenza/);
+    expect(() => mountPreferences({ "text-reading": "16px; --rail-w: 0" })).toThrow(
+      /non è una dichiarazione CSS sicura/,
+    );
+    expect(count("preferenze")).toBe(0);
   });
 });
 

@@ -363,30 +363,36 @@ jobs:
       # guarderebbe.
       - name: nessun pacchetto npm in due copie
         run: node .github/scripts/check-npm-copies.mjs
-      # Il banco visivo del §31.1 entra in CI **per metà**, e la riga che separa
-      # le due metà è: cosa dipende dalla macchina.
+      # Il banco visivo del §31.1 gira sul runner da cui provengono le baseline:
+      # `ubuntu-latest`. Il browser è quello pinnato dal lock e i tre caratteri
+      # sono nel bundle dell'applicazione (§31.3), quindi il confronto non eredita
+      # né il motore né i font della macchina che ha aperto la pull request.
       #
-      # Il confronto a pixel no. La 0168 (§31.3) ha portato i tre caratteri
-      # dentro l'applicazione — un browser pinnato garantisce lo stesso motore,
-      # e ora anche gli stessi font — ma le baseline in repo sono state
-      # scattate su una macchina che Playwright stesso segnala come non
-      # supportata, non su questo runner: nessun modo di sapere da lì se il
-      # rendering coincide byte per byte. Resta un cancello locale finché
-      # qualcuno non rigenera le baseline da dentro `ubuntu-latest`.
+      # Il comando conserva la sua soglia: qui la CI si limita a eseguirlo. Se una
+      # scena cambia, il passo successivo raccoglie foto attuali, differenze e
+      # foglio di contatto prima che il job termini rosso.
       #
-      # Il contrasto **reso** sì: `axe` legge i colori calcolati, che dai
-      # caratteri non dipendono. È la metà che vede ciò che la tabella delle
-      # coppie non può vedere — un inchiostro sopra un velo, un testo dentro un
-      # fondo che una regola ha cambiato — e le cinque coppie che oggi stanno
-      # sotto la soglia sono scritte nel debito dichiarato di `bench/a11y.mjs`,
-      # con accanto la voce che le paga.
+      # Il contrasto **reso** resta un controllo distinto: `axe` legge i colori
+      # calcolati e vede ciò che la tabella delle coppie non può vedere — un
+      # inchiostro sopra un velo, un testo dentro un fondo che una regola ha
+      # cambiato — mentre il confronto a pixel presidia la resa complessiva.
       #
       # (Che ogni scena abbia la sua baseline in entrambe le luci lo verifica
-      # `bench/scene.test.ts`, che gira dentro `npm test` qui sopra: è una
-      # domanda sui file, e i file sono gli stessi ovunque.)
+      # `bench/scene.test.ts`, che gira dentro `npm test` qui sopra.)
       - name: il browser del banco visivo, alla revisione che il lock pinna
         run: npx playwright install --with-deps chromium
         working-directory: frontend
+      - name: le scene restano uguali alle baseline del runner (§31.1)
+        id: bench_verify
+        run: npm run bench:verify
+        working-directory: frontend
+      - name: differenze e foglio di contatto del banco visivo
+        if: ${{ failure() && steps.bench_verify.outcome == 'failure' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: banco-visivo-${{ github.sha }}
+          path: frontend/bench/.output/
+          include-hidden-files: true
       - name: il contrasto della pagina vera, in tutte e due le luci (§31.1)
         run: npm run bench:a11y
         working-directory: frontend

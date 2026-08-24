@@ -113,6 +113,7 @@ const SOURCES: &[(&str, &str)] = &[
     ("src/registry.rs", include_str!("../src/registry.rs")),
     ("src/bridge.rs", include_str!("../src/bridge.rs")),
     ("src/settings.rs", include_str!("../src/settings.rs")),
+    ("src/theme.rs", include_str!("../src/theme.rs")),
     ("src/records.rs", include_str!("../src/records.rs")),
     ("src/shell.rs", include_str!("../src/shell.rs")),
     ("src/wall.rs", include_str!("../src/wall.rs")),

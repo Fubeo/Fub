@@ -37,6 +37,8 @@ use crate::translate as tr;
 const FAMILIES_SERVED: &[&str] = &[
     "fub:abi/host-env",
     "fub:abi/host-vault-read",
+    "fub:abi/host-data-read",
+    "fub:abi/host-data-write",
     "fub:abi/host-events",
 ];
 

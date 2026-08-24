@@ -90,6 +90,7 @@ fn declared_bundles_are_inventory_plus_core() {
         .iter()
         .map(|f| f.id.to_string())
         .chain([CORE_ID.to_string()])
+        .chain([fub_host::theme::SERIES_ID.to_string()])
         .collect();
 
     let extra: Vec<&String> = declared.difference(&expected).collect();
@@ -111,14 +112,16 @@ fn declared_bundles_are_inventory_plus_core() {
          testing it on a component that does not exist in the app"
     );
 
-    // E il core è **uno**: se domani ne comparisse un secondo che non viene da
-    // `fub-features`, l'asserzione sopra lo direbbe, ma vale la pena che il
-    // conto sia scritto — è il modo in cui questo file dice quanto è larga
-    // l'eccezione che si concede.
+    // E le eccezioni sono **due e non più**: il core e il tema di serie sono
+    // i soli bundle che non vengono da `fub-features` — l'host li porta
+    // perché sono suoi (§29.4). Se domani ne comparisse un terzo, il conto
+    // sotto lo direbbe.
     assert_eq!(
         declared.len(),
-        fub_features::every_official_feature().len() + 1,
-        "the only bundle that is not a `fub-features` feature is `{CORE_ID}`"
+        fub_features::every_official_feature().len() + 2,
+        "the only bundles that are not `fub-features` features are \
+         `{CORE_ID}` and `{}`",
+        fub_host::theme::SERIES_ID
     );
 }
 

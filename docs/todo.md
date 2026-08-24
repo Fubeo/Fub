@@ -12,7 +12,7 @@ Dal 2026-08-10 la domanda ha una nuova chiave di lettura. Otto file di
 domanda non cambia. Cambia la **grana** (la misura di precisione), da cui nasce
 la [seduta 26](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md).
 
-Sono uscite 169 voci:
+Sono uscite 172 voci:
 
 - novantanove voci da sette giri sulla stessa domanda.
 - due voci da una **misura**. La §8.4 nasce dalla
@@ -67,11 +67,11 @@ Sono uscite 169 voci:
   29 aveva deciso senza deciderlo (due). La [seduta
   31](roadmap/31-da-dove-viene-cio-che-si-vede.md) misura il **primo esemplare**
   contro l'architettura che lo porta, e chiede da dove venga ciascuna delle cose
-  che si vedono (nove, cinque chiuse).
+  che si vedono (nove, otto chiuse).
 
-Centosessantadue voci sono chiuse. I loro verbali stanno in
+Centosessantasette voci sono chiuse. I loro verbali stanno in
 [decisions/](decisions/README.md).
-Le voci ancora aperte sono **dieci** [conta: voci-aperte]. Questo file è
+Le voci ancora aperte sono **cinque** [conta: voci-aperte]. Questo file è
 il loro **indice** e consuntivo.
 
 Il file conta una **terza specie**: i [difetti misurati](#i-difetti-misurati).
@@ -177,27 +177,27 @@ Si cercano le voci ponendo domande in questo ordine:
 | **12** | [Le stringhe, gli errori, il locale](roadmap/12-stringhe-errori-locale.md) | chi localizza le stringhe localizza anche gli errori, e a tutti e due serve prima il locale | — | — |
 | **13** | [L'identità di un documento](roadmap/13-identita-del-documento.md) | la stessa domanda a tre distanze: l'identità, ciò che le sta attaccato, la sua storia | — | — |
 | **14** | [Le entry, le cartelle, la lista](roadmap/14-entry-cartelle-lista.md) | lo stesso lavoro visto da quattro lati: entry, metadati, cartelle, lista | — | 1 |
-| **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | — | 2 |
+| **15** | [Il disco: storage, durabilità, politiche](roadmap/15-il-disco.md) | il supporto, e le politiche di cosa ci finisce sopra | — | 3 |
 | **16** | [I crate, l'SDK, i banchi di prova](roadmap/16-crate-sdk-banchi-di-prova.md) | **chiusa** — i banchi e i confini fra crate, **prima** di ciò che li moltiplica; l'ultima voce è andata via lasciando la casella che una condizione tiene fuori | — | 1 |
 | **17** | [I presidi che restano](roadmap/17-presidi-che-restano.md) | **chiusa** — senza precedenze e senza scadenza: il criterio è se il costo cresce con l'attesa | — | 0 |
 | **18** | [L'editor e la tastiera, e ciò che resta della shell](roadmap/18-editor-e-tastiera.md) | **chiusa** — definita per esclusione: ciò che resta della shell e non appartiene a nessuna delle sedute sopra, code delle sedute 1-4 comprese | — | 4 |
-| **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 2 |
+| **19** | [Debito riportato dal quarto audit](roadmap/19-debito-quarto-audit.md) | nessuna voce propria: rimandi ai quattro giri di audit, e il lavoro sta nelle sedute che li hanno assorbiti | — | 1 |
 | **20** | [Quando qualcosa va storto, chi lo dice e a chi](roadmap/20-quando-qualcosa-va-storto.md) | **chiusa** — lo stesso percorso interrotto in più punti: chi non può dirlo, chi lo butta via, chi non ha dove scriverlo | — | — |
 | **21** | [La ricerca predefinita, e cosa le manca per esserlo](roadmap/21-la-ricerca-predefinita.md) | la ricerca è built-in e di classe *omnisearch*: qui sta la distanza fra quella frase e il repo | — | — |
 | **22** | [Cosa sa dire un abbonamento](roadmap/22-cosa-sa-dire-un-abbonamento.md) | le cose che un abbonamento non sa dire — e il cappello che le teneva insieme si è rivelato sbagliato due volte su tre | — | 1 |
 | **23** | [Cosa le decisioni chiuse costano a chi usa Fub](roadmap/23-cosa-costano-le-decisioni-chiuse.md) | **chiusa** — prezzi dichiarati da un verbale, ognuno in una riga, che nessun elenco ha poi sommato | — | 1 |
 | **24** | [Tre firme che il freeze rende definitive](roadmap/24-tre-firme-che-il-freeze-rende-definitive.md) | **chiusa** — tre voci aperte perché toccavano una firma, e su due delle tre quel criterio non reggeva | — | — |
-| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 0 |
+| **25** | [Sette scelte che il codice ha preso senza dirlo](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md) | **chiusa** — sette punti in cui il codice ha già preso una posizione senza che nessuno la scegliesse, e in sei la risposta era già scritta altrove nel repo: [0135](decisions/0135-una-rinomina-che-atterra-su-una-nota-viva.md), [0136](decisions/0136-una-regola-di-identita-di-un-nome-si-dichiara.md), [0137](decisions/0137-una-scrittura-su-disco-dentro-un-comando-ipc-si-accoda-nella-shell.md), [0138](decisions/0138-una-finestra-di-220-caratteri-attorno-al-link.md), [0139](decisions/0139-un-guasto-dell-avvio-si-tira-non-si-spinge.md), [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md), [0141](decisions/0141-la-prima-fotografia-di-un-vault-esce-dalla-fase-1.md) | — | 1 |
 | **26** | [Otto gesti che l'app fa e nessuno può dichiarare](roadmap/26-otto-gesti-che-nessuno-puo-dichiarare.md) | otto gesti che l'app compie e che **nessun dato dichiara**: in tutti e otto la mossa che li renderebbe dichiarabili il repo l'ha già fatta accanto, su un problema confinante | 8 | 0 |
 | **27** | [Tre scommesse che nessuno ha ancora provato](roadmap/27-tre-scommesse-che-nessuno-ha-provato.md) | tre affermazioni che il freeze rende definitive e che **niente nel repo ha mai esercitato**: il confine WASM, il momento in cui un plugin può intervenire, la dimensione dell'oggetto dietro il lucchetto. Il confine l'ha attraversato la [0146](decisions/0146-il-contratto-attraversa-il-confine.md), e non serviva un motore: `abi.wit` genera i binding guest del mondo intero e compilano a `wasm32`; il momento in cui un plugin può intervenire l'ha deciso la [0147](decisions/0147-il-contratto-osserva-dopo-e-non-si-interpone.md), ed è sempre *dopo*; la dimensione dell'oggetto dietro il lucchetto l'ha decisa la [0148](decisions/0148-un-prestito-lungo-non-si-vieta-si-dice.md), che non la cambia e la fa **dire**: un prestito esclusivo lungo non si vieta perché non si interrompe, e la `Custodia` lo misura per tutti | — | — |
 | **28** | [Centoventuno eseguibili per provare una riga](roadmap/28-centoventuno-eseguibili-per-provare-una-riga.md) | **chiusa** — una voce sola, e il soggetto non era il prodotto ma **il ciclo di chi lo scrive**: la [0145](decisions/0145-gli-eseguibili-restano-a-calare-e-quanto-pesa-un-link.md) l'ha chiusa fuori dalle tre forme che proponeva, perché il costo non era il *numero* degli eseguibili ma il *peso* di ognuno | — | — |
-| **29** | [Chi possiede la pelle della shell](roadmap/29-chi-possiede-la-pelle.md) | la stessa domanda di proprietà vista da sei lati: che cosa si sostituisce, con quale contratto, attraverso quali cancelli, su quale strada di montaggio, con quale gesto dell'utente, e dove vive | 5 | 0 |
-| **30** | [Il moto è del tema](roadmap/30-il-moto-e-del-tema.md) | il collocamento della 29, cernito: scala del ritmo, montaggio con classi di coreografia, cambio di luce in dissolvenza, gesti per provenienza, grafo e moto ridotto, dove non si balla, presidi | 1 | 0 |
-| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 4 | 1 |
+| **29** | [Chi possiede la pelle della shell](roadmap/29-chi-possiede-la-pelle.md) | la stessa domanda di proprietà vista da sei lati: che cosa si sostituisce, con quale contratto, attraverso quali cancelli, su quale strada di montaggio, con quale gesto dell'utente, e dove vive | 4 | 0 |
+| **30** | [Il moto è del tema](roadmap/30-il-moto-e-del-tema.md) | **chiusa** — il collocamento della 29, cernito: scala del ritmo, montaggio con classi di coreografia, cambio di luce in dissolvenza, gesti per provenienza, grafo e moto ridotto, dove non si balla, presidi | 0 | 0 |
+| **31** | [Da dove viene ciò che si vede](roadmap/31-da-dove-viene-cio-che-si-vede.md) | la stessa domanda su nove cose che si vedono — un colore, una voce di carattere, un bottone, una distanza, una preferenza, una soglia, la superficie di scrittura, un nome di classe, una consegna — e nove volte la stessa risposta di oggi: *da una scelta fatta una volta e mai più derivabile* | 1 | 0 |
 
 ## Le voci
 
-Le voci aperte sono **dieci** [conta: voci-aperte].
+Le voci aperte sono **cinque** [conta: voci-aperte].
 
 È la [seduta 31](roadmap/31-da-dove-viene-cio-che-si-vede.md) (2026-08-19), e
 la sua domanda cade **dentro** l'architettura che le due precedenti hanno
@@ -217,7 +217,7 @@ conta gli elementi montati in un DOM finto — nessuno guarda, e
 WIT; tutte scadono con M3, perché il vocabolario degli hook si congela lì
 (§29.2). La [0170](decisions/0170-una-componente-un-anatomia.md) lo ha chiuso;
 la [0171](decisions/0171-la-stessa-nota-in-tre-modi.md) ha chiuso la §31.8 e
-il residuo della §31.3. Restano aperte §31.5–§31.7 e §31.9.
+il residuo della §31.3. Le §31.5–§31.7 sono ora chiuse; resta aperta §31.9.
 
 Prima di lei, la [seduta 30](roadmap/30-il-moto-e-del-tema.md) (2026-08-17): il
 moto della GUI, che la 29 aveva collocato — il ritmo nel foglio, le animazioni
@@ -228,7 +228,7 @@ animano con classi di coreografia di shell — non `@starting-style`, non View
 Transitions come base —, il cambio di luce diventa dissolvenza con un solo
 foglio in volo, ogni gesto deve avere una frase di stato, il grafo scopre il
 moto ridotto e l'editor resta fermo — i 60 fps su 10.000 parole sono il
-pavimento, non l'obiettivo. Una voce aperta (§30.8).
+pavimento, non l'obiettivo. La §30.8 è ora chiusa.
 
 Prima di lei, la [seduta 29](roadmap/29-chi-possiede-la-pelle.md)
 (2026-08-17): la pelle
@@ -413,7 +413,7 @@ e lascia una casella che aspetta una **condizione**, valutata dal
 una voce: una voce aperta è lavoro ancora da **decidere**. Le due somme restano
 separate perché contano cose separate.
 
-Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
+Le caselle residue oggi sono **nove**, e stanno in nove posti:
 
 - [§11.2](roadmap/11-impostazioni-e-i-tre-stati.md) — una: i workspace salvati
   con un nome. La casa è decisa, il formato aspetta di vedere assetti veri.
@@ -429,10 +429,11 @@ Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
   — una: aprire in un riquadro una view principale che **non** sia il grafo.
   Oggi lo fa `shell.graph`, che è il comando di quel componente, e il secondo
   cliente vorrà un gesto generico.
-- [seduta 19](roadmap/19-debito-quarto-audit.md) — due rimandi. Il terzo, le
-  «tre copie» custodite da un flag TS, è caduto con la
-  [0089](decisions/0089-da-cosa-e-partita-una-scrittura.md): non fondendo le
-  tre, ma togliendo a una il compito di avere ragione.
+- [seduta 19](roadmap/19-debito-quarto-audit.md) — un rimando:
+  l'organizzazione sidebar chiusa ai plugin. Gli altri due sono caduti: le
+  «tre copie» con la [0089](decisions/0089-da-cosa-e-partita-una-scrittura.md),
+  non fondendo le tre ma togliendo a una il compito di avere ragione; l'IPC
+  bespoke con la [0057](decisions/0057-la-dieta-dell-ipc.md).
 - [§22.3](roadmap/22-cosa-sa-dire-un-abbonamento.md#223-la-maschera-di-ridisegno-è-della-view-non-dellesemplare)
   — una: la query incorporata in una nota. Non è un esemplare di `ViewSpec` e
   non ha un canale di invalidazione affatto.
@@ -440,40 +441,12 @@ Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
   — una: i **nomi dei mesi**. `5 luglio 2026` non è un ordine di campi ma una
   tabella per lingua, e le tabelle non ci sono. La casella aspetta un secondo
   cliente per quelle tabelle.
-- [§15.4](roadmap/15-il-disco.md#154-i-dati-persistiti-non-hanno-né-una-mappa-né-una-classe) — una: il **resto WASM** del confine dati. Il `HostApi` nativo espone `cache_read`/`cache_write` e lo spazio `.fub/plugins/<id>/`; `fub-wasm-host` non linka `host-data-read`/`host-data-write`. Un componente che le importa viene rifiutato e il rifiuto le nomina. Innesco: prima di M5.
-- [§15.6](roadmap/15-il-disco.md#156-la-politica-di-esclusione-è-una-costante-di-compilazione)
-  — due. La prima è leggere il `.gitignore`: la
-  [0110](decisions/0110-la-struttura-non-e-una-preferenza.md) ha fatto della
-  politica di esclusione un dato per-vault, e un **file** come sorgente di quel
-  dato ha una sintassi propria, una precedenza propria e un proprietario che non
-  è Fub. Il posto dove atterrare c'è — un terzo modo di costruire un
-  `IgnorePolicy` — la forma no. La seconda è cambiare le cartelle escluse
-  **dall'app**: chi le cambia sarebbe il comando che le scrive, e per questa
-  chiave quel comando non esiste, perché la chiave non è `program_writable` di
-  proposito.
-- [§2.9](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) — due. La
-  prima è la **finestra scorrevole** vera, e con lei il gesto «mostra le altre»:
-  la [0114](decisions/0114-una-finestra-non-si-omette.md) ha fatto la metà che
-  sta prima del layout, e disegnare ciò che si vede vuole il layout, che in
-  `happy-dom` non esiste — è il buco n. 5 della
-  [0112](decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md). La
-  seconda è il **rendering incrementale dell'anteprima**: la precondizione è
-  quella della [0018](decisions/0018-chi-vede-il-modello-parsato.md), ma la
-  casella resta ferma perché il suo primo cliente non esiste. `updatePreview`
-  gira quando cambia il documento del riquadro e quando si entra in Lettura, mai
-  a ogni battuta, perché `PaneMode` è un enum di modalità esclusive.
-- [§4.4](roadmap/18-editor-e-tastiera.md#44-due-parser-per-la-stessa-sintassi) —
-  una: il **canale a runtime** che porti la sintassi dichiarata alla superficie
-  di scrittura. La [0115](decisions/0115-la-verita-e-la-dichiarazione.md) ha
-  fatto leggere alla shell la dichiarazione invece di riscriverla, ma il file
-  che gliela porta è generato alla compilazione: conosce le regole del core e
-  non quelle di un plugin che si registra a caldo. La rotta è decisa — una
-  variante di `IndexQuery`, perché un elenco è dati e i dati hanno un canale
-  solo ([0013](decisions/0013-elenco-delle-capacita.md)) — e la risposta esiste
-  già, `Workspace::syntax_forms`. Manca che chi serve il canale dati possa
-  arrivarci: il `SyntaxRegistry` vive sotto il prestito esclusivo di chi scrive,
-  quindi condividerlo è una decisione sulla concorrenza del kernel
-  ([0024](decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+- [§2.9](roadmap/18-editor-e-tastiera.md#29-prestazioni-della-ui) — una: il
+  **rendering incrementale dell'anteprima**. La precondizione è quella della
+  [0018](decisions/0018-chi-vede-il-modello-parsato.md), ma la casella resta
+  ferma perché il suo primo cliente non esiste. `updatePreview` gira quando
+  cambia il documento del riquadro e quando si entra in Lettura, mai a ogni
+  battuta, perché `PaneMode` è un enum di modalità esclusive.
 - [§25.7](roadmap/25-sette-scelte-che-il-codice-ha-preso-senza-dirlo.md#257-dove-stanno-i-byte-di-un-kind-di-terzi)
   — una: la **forma (a)**, un campo `carichi` in fondo a `syntax-rule-spec`. La
   [0140](decisions/0140-dove-stanno-i-byte-di-un-kind-di-terzi.md) l'ha lasciata
@@ -482,22 +455,6 @@ Le caselle residue oggi sono **sedici**, e stanno in tredici posti:
   esiste, la (a) costerebbe un tipo additivo per sempre — il prezzo che la
   [0002](decisions/0002-additivita-del-contratto.md) rende caro — per un caso
   che nessuno esercita.
-- [§31.1](roadmap/31-da-dove-viene-cio-che-si-vede.md#311-il-banco-che-vede) —
-  una: il **confronto a pixel in CI**. La
-  [0166](decisions/0166-il-banco-che-vede.md) l'ha lasciato cancello locale
-  perché un browser pinnato garantisce lo stesso motore, non gli stessi
-  caratteri: la scala che la shell chiede si risolve nel carattere di sistema, e
-  quello è diverso su sistemi diversi e anche fra due Linux. La condizione che
-  aspettava — i caratteri in bundle — l'ha portata la
-  [0168](decisions/0168-tre-voci-in-bundle-un-canale-in-piu.md) (§31.3), e non
-  basta da sola: le baseline di questa sessione sono state scattate su una
-  macchina che Playwright stesso non riconosce come Ubuntu (scarica una build
-  di ripiego), e il runner di CI è un `ubuntu-latest` vero — nessun modo di
-  sapere da qui se il rendering dei quattro file coincide byte per byte. La
-  riga resta ferma finché qualcuno non lo prova **da dentro** quell'ambiente:
-  o un run manuale di `banco:verifica` in CI che regeneri le baseline lì, o un
-  primo tentativo che si accetta possa uscire rosso per drift ambientale e non
-  per un difetto vero.
 
 Queste non diventano voci: non reggerebbero il criterio in testa al file. Ma non
 devono nemmeno sparire senza essere state fatte.
@@ -511,16 +468,11 @@ nessuno è tornato a prendere la casella.
 
 | § | Voce | Seduta | Strato | |
 | --- | --- | --- | --- | --- |
-| **§29.2** | Il contratto del tema: ruoli obbligatori e vocabolario degli hook | 29 | contratto · P1 | |
-| **§29.3** | I cancelli al montaggio: contrasto, moto, sanificazione | 29 | shell · P1 | |
-| **§29.4** | Un tema è un bundle senza provider | 29 | kernel · P1 | |
+| **§29.2** | Il contratto del tema: data di congelamento del vocabolario | 29 | contratto · P1 | |
+| **§29.4** | La scelta del tema dalla shell | 29 | kernel · shell · P1 | |
 | **§29.5** | La scheda, l'anteprima, e la via di fuga | 29 | shell · P1 | |
 | **§29.6** | Dove vive un tema, e come entra | 29 | kernel · P2 | |
-| **§30.8** | Arricchimento progressivo View Transitions | 30 | shell · P2 | |
-| **§31.5** | Quanto è lontana una superficie | 31 | pelle · P1 | |
-| **§31.6** | Cosa è del tema e cosa della persona | 31 | shell · kernel · P1 | |
-| **§31.7** | Il contrasto ha più di una soglia | 31 | foglio · struttura · P1 | |
-| **§31.9** | Cosa si consegna a chi scriverà un tema | 31 | presidi · docs · P1 | |
+| **§31.9** | La scheda Temi nella consegna agli autori | 31 | presidi · docs · P1 | |
 
 ## I difetti misurati
 
@@ -696,7 +648,7 @@ richiede l'apertura della seduta 27. Valutazioni richieste:
 - [Dove il contratto si strozza](roadmap/strozzature.md)
 - [Corrispondenza fra la numerazione vecchia e questa](roadmap/numerazione.md)
 - [I verbali delle decisioni chiuse](decisions/README.md) —
-  **centosettantatré** [conta: verbali], uno per file. Diceva
+  **centosettantotto** [conta: verbali], uno per file. Diceva
   «cinquantasette» quando erano cinquantanove, e il comando che lo ricava era
   già scritto qui accanto senza che nessuno lo eseguisse: dalla
   [0072](decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md) lo

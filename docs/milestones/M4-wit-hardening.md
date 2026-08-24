@@ -73,8 +73,8 @@ con il payload in un record a sé). Nessuno dei due si genera dall'altro. Ciò c
 si genera è quello che finora li ripeteva: il lettore del sorgente Rust sta in
 `tests/common/`, `ts_enums.rs` emette le union del mirror, e il conteggio dei
 casi di un `enum` è sceso da quattro scritture a due — Rust e WIT. Generare
-l'`abi.wit` stesso resta **scartato**, e il motivo è misurabile: 2257 righe [conta: wit-commenti]
-su 4213 [conta: wit-righe] sono prosa italiana del confine, che in Rust non c'è e ha un altro lettore.
+l'`abi.wit` stesso resta **scartato**, e il motivo è misurabile: 2262 righe [conta: wit-commenti]
+su 4226 [conta: wit-righe] sono prosa italiana del confine, che in Rust non c'è e ha un altro lettore.
 
 Resta a M4, sulla conformità:
 

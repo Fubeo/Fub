@@ -95,7 +95,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // proprietario alle impostazioni dell'app (§11.1), e «dichiarato con zero
     // registrazioni» è uno stato vero.
     //
-    // **Questi diciassette nomi restano scritti a mano di proposito**, e non è una
+    // **Questi diciotto nomi restano scritti a mano di proposito**, e non è una
     // svista rispetto alla decisione 0056: quella distingue un elenco su cui un
     // test *itera* — che smette di coprire in silenzio — da uno con cui un test
     // *asserisce un'uguaglianza*, che diventa rosso. Questo è il secondo. E la
@@ -121,6 +121,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
             "fub.properties",
             "fub.queries",
             "fub.search",
+            "fub.serie",
             "fub.stats",
             "fub.tags",
             "fub.template",

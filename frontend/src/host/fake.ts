@@ -53,6 +53,7 @@ import type {
   QueryPredicate,
   SettingEntry,
   SettingValue,
+  SyntaxForm,
   UiNode,
   VaultEntry,
   VaultFolder,
@@ -98,6 +99,8 @@ export interface Options {
   commands?: CommandSpec[];
   /// Le impostazioni risolte che il canale dati risponde.
   settings?: SettingEntry[];
+  /// Le forme sintattiche effettive risposte dal montaggio finto.
+  syntaxForms?: SyntaxForm[];
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -274,6 +277,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
     ...e,
     spec: { ...e.spec },
   }));
+  const syntaxForms = (options.syntaxForms ?? []).map((form) => ({ ...form }));
 
   /// Scrive, e **lo dice**: il backend vero emette `setting_changed` da tutte e
   /// due le porte — dal `Workspace` con un vault aperto, dall'host senza
@@ -377,6 +381,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
           kind: "render_embed",
           value: { doc_id: q.page, html: "", parts: [] },
         };
+      case "syntax_forms":
+        return { kind: "syntax_forms", value: syntaxForms.map((form) => ({ ...form })) };
       default:
         throw new Error(`host fake: non so rispondere alla query ${q.kind}`);
     }

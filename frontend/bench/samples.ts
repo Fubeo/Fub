@@ -266,8 +266,16 @@ export const SAMPLES: Sample[] = [
         node: { node: "empty_state", title: "Nessun backlink", detail: "Collega questa nota da un'altra.", action: ACTION },
       },
       {
-        label: "vuoto senza azione",
-        node: { node: "empty_state", title: "Il cestino è vuoto", detail: null, action: null },
+        label: "vuoto con dettaglio, senza azione",
+        node: { node: "empty_state", title: "Il cestino è vuoto", detail: "Gli elementi eliminati compariranno qui.", action: null },
+      },
+      {
+        label: "vuoto con azione, senza dettaglio",
+        node: { node: "empty_state", title: "Nessuna nota aperta", detail: null, action: ACTION },
+      },
+      {
+        label: "vuoto essenziale",
+        node: { node: "empty_state", title: "Nessun risultato", detail: null, action: null },
       },
       {
         label: "guasto con riprova",

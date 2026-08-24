@@ -37,6 +37,7 @@
 // due — la cache qui sotto, prima che `main.ts` giri, e il valore di
 // `appearance.theme` fra le impostazioni che serve.
 import { createFakeHost, type Options } from "../src/host/fake";
+import { MARKDOWN_SYNTAX } from "../src/rules/syntax.generated";
 import type {
   BundleInfo,
   CommandSpec,
@@ -56,6 +57,12 @@ import { CORPUS, OUTPUT } from "./corpus";
 // ---------------------------------------------------------------------------
 
 const params = new URLSearchParams(globalThis.window.location.search);
+
+// Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
+// la query prepara il browser del banco, mai la shell di produzione.
+if (params.get("platform") === "darwin") {
+  Object.defineProperty(globalThis.navigator, "platform", { value: "MacIntel", configurable: true });
+}
 
 /// La luce da fotografare. Il ripiego è lo scuro, che è la luce in cui Fub è
 /// sempre stato — la stessa scelta di `theme.ts`.
@@ -178,6 +185,134 @@ const SETTINGS: SettingEntry[] = [
     },
     value: LIGHT,
     source: "machine",
+  },
+  {
+    spec: {
+      key: "appearance.contrast",
+      label: "Contrasto",
+      description: "Segue il sistema oppure usa sempre il contrasto normale o alto.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "",
+        options: [
+          { value: "", label: "Come il sistema" },
+          { value: "normal", label: "Normale" },
+          { value: "high", label: "Alto" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "normal",
+    source: "machine",
+  },
+  {
+    spec: {
+      key: "appearance.density",
+      label: "Densità",
+      description: "Compatta o allarga la spaziatura dei componenti senza muovere la scocca.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "comfortable",
+        options: [
+          { value: "compact", label: "Compatta" },
+          { value: "comfortable", label: "Comoda" },
+          { value: "relaxed", label: "Rilassata" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "comfortable",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.body",
+      label: "Corpo del testo (px)",
+      description: "Dimensione del testo nelle superfici di lettura.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 16, min: 12, max: 28 },
+      program_writable: false,
+    },
+    value: 16,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.line-height",
+      label: "Interlinea",
+      description: "Passo verticale della prosa lunga.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 1.7, min: 1.2, max: 2.4 },
+      program_writable: false,
+    },
+    value: 1.7,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.measure",
+      label: "Misura della riga (caratteri)",
+      description: "Larghezza massima della colonna di lettura.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 70, min: 40, max: 100 },
+      program_writable: false,
+    },
+    value: 70,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.font",
+      label: "Carattere di lettura",
+      description: "Famiglia usata per la prosa lunga.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: {
+        kind: "choice",
+        default: "literata",
+        options: [
+          { value: "literata", label: "Literata" },
+          { value: "inter", label: "Inter" },
+          { value: "system", label: "Del sistema" },
+        ],
+      },
+      program_writable: false,
+    },
+    value: "literata",
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.accent",
+      label: "Tinta dell'accento (0–360)",
+      description: "Tinta OKLCH; chiarezza e croma vengono derivati per mantenere il contrasto.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 130, min: 0, max: 360 },
+      program_writable: false,
+    },
+    value: 130,
+    source: "default",
+  },
+  {
+    spec: {
+      key: "appearance.zoom",
+      label: "Zoom interfaccia",
+      description: "Scala nativa della finestra, da 0,5 a 2.",
+      group: "Aspetto",
+      scope: "machine",
+      kind: { kind: "number", default: 1, min: 0.5, max: 2 },
+      program_writable: false,
+    },
+    value: 1,
+    source: "default",
   },
   {
     spec: {
@@ -425,6 +560,7 @@ const options: Options = {
   view: VIEWS,
   commands: BENCH_COMMANDS,
   settings: SETTINGS,
+  syntaxForms: [...MARKDOWN_SYNTAX],
 };
 
 const host = createFakeHost(options);

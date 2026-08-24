@@ -92,95 +92,14 @@ import { describe, expect, it } from "vitest";
 // foglio come testo: due misure della stessa promessa, e una formula sola
 // (`theme/contrast.ts`).
 import { contrast } from "./contrast";
+import { AA, PAIRS, PAPER_BACKGROUNDS, SYNTAX_TOKENS } from "./contrast-fixture";
+import darkHigh from "./serie/sheet-dark-high.css?raw";
 import dark from "./serie/sheet-dark.css?raw";
+import lightHigh from "./serie/sheet-light-high.css?raw";
 import light from "./serie/sheet-light.css?raw";
 
-/// La soglia del testo (WCAG 1.4.3).
-const AA = 4.5;
-/// La soglia del testo grande e di ciò che non è testo (WCAG 1.4.11).
-const UI = 3;
 
-/// Una coppia dichiarata: chi sta sopra chi, quanto deve reggere, e per quale
-/// regola vera — la terza colonna è ciò che impedisce a questa tabella di
-/// diventare una lista di buone intenzioni.
-type Pair = readonly [ink: string, background: string, threshold: number, where: string];
-
-const PAIRS: readonly Pair[] = [
-  // Il testo della shell sulle quattro superfici. `--bg-hover` è una superficie
-  // come le altre da quando le righe non si riempiono più d'accento.
-  ["text", "bg", AA, "il corpo dell'app"],
-  ["text", "bg-chrome", AA, "la titlebar, la barra degli strumenti, le linguette"],
-  ["text", "bg-elev", AA, "topbar, pannelli, modali"],
-  ["text", "bg-input", AA, "campi, pastiglie"],
-  ["text", "bg-hover", AA, "una riga sotto il puntatore, o selezionata"],
-  ["muted", "bg", AA, ".muted, i sottotitoli"],
-  ["muted", "bg-chrome", AA, "#statusbar e #views-status, che sono tutte muted"],
-  ["muted", "bg-elev", AA, "i sottotitoli dentro un pannello"],
-  ["muted", "bg-input", AA, "i sottotitoli dentro una pastiglia"],
-  ["muted", "bg-hover", AA, "il sottotitolo di una riga selezionata"],
-
-  // I due token che esistono **per** stare sopra qualcosa: il nome lo dice.
-  ["accent-contrast", "accent", AA, "il testo di un bottone pieno"],
-  ["danger-contrast", "danger", AA, "il testo di un bottone distruttivo"],
-  ["bg", "accent-soft", AA, "button:hover, #mode-switch attivo, .hit-snippet mark"],
-
-  // L'accento come **ink**: è il ruolo di `--accent-soft`, ed è per
-  // questo che i due esistono separati.
-  ["accent-soft", "bg", AA, ".brand, i link-button al passaggio"],
-  ["accent-soft", "bg-elev", AA, "il titolo di uno spazio, il chevron"],
-  ["accent-soft", "bg-input", AA, ".ui-badge.intent-primary"],
-  ["danger", "bg", AA, "un messaggio d'errore"],
-  ["danger", "bg-elev", AA, "un errore dentro un pannello"],
-  ["danger", "bg-input", AA, ".ui-badge.intent-danger"],
-
-  // L'accento come **segno**: fondo di un bottone, contorno di una selezione,
-  // riga sotto una scheda. Non è testo, e la soglia è quella dei segni.
-  ["accent", "bg", UI, "il fondo di un bottone, il bordo di un campo a fuoco"],
-  ["accent", "bg-elev", UI, "il bordo attivo di una scheda"],
-  ["accent", "bg-hover", UI, "il contorno di una riga selezionata"],
-  ["focus-ring", "bg", UI, "l'anello del fuoco"],
-  ["focus-ring", "bg-elev", UI, "l'anello del fuoco dentro un pannello"],
-  ["focus-ring", "bg-input", UI, "l'anello del fuoco su un campo"],
-
-  // Il grafo disegna su canvas: nessuna regola CSS lo raggiunge, e i suoi
-  // colori li legge `panels/graph.ts` da qui. È la superficie che si dimentica
-  // per prima quando si cambia tema, ed è il motivo per cui sta in tabella.
-  ["graph-node", "bg", UI, "un nodo del grafo"],
-  ["graph-node-active", "bg", UI, "il nodo della nota aperta"],
-  ["graph-node-hover", "bg", UI, "il nodo sotto il puntatore"],
-
-  // La superficie del documento: qui il testo è la nota, e la soglia è quella
-  // del testo — tranne i titoli, che sono testo grande per definizione.
-  ["doc-fg", "doc-bg", AA, "il corpo di una nota"],
-  ["doc-link", "doc-bg", AA, "un wikilink"],
-  ["doc-danger", "doc-bg", AA, "un wikilink rotto"],
-  ["doc-gutter-fg", "doc-bg", AA, "i numeri di riga"],
-  ["doc-heading", "doc-bg", UI, "un titolo reso"],
-  ["doc-caret", "doc-bg", UI, "il cursore di scrittura"],
-];
-
-/// Le dieci specie della tavolozza di sintassi, tutte contro il fondo del
-/// documento: è l'unico fondo su cui vivano.
-const SYNTAX_TOKENS = [
-  "keyword",
-  "name",
-  "function",
-  "literal",
-  "type",
-  "operator",
-  "comment",
-  "string",
-  "heading",
-  "invalid",
-] as const;
-
-/// I tre fondi su cui una specie di sintassi può finire: la pagina, la riga
-/// attiva, e la selezione. Sono tre e non uno perché il testo evidenziato è
-/// ancora testo — e il fondo della selezione è il più lontano dei tre dalla
-/// carta, cioè quello su cui un colore tarato solo sulla pagina cede per primo.
-const PAPER_BACKGROUNDS = ["doc-bg", "doc-active-line", "doc-selection"] as const;
-
-type Theme = "dark" | "light";
+type Theme = "dark" | "light" | "dark-high" | "light-high";
 
 // ---------------------------------------------------------------------------
 // I token, letti dal foglio vero.
@@ -205,6 +124,8 @@ function block(css: string, selector: string): string {
 function palettes(
   dark: string,
   light: string,
+  darkHigh: string,
+  lightHigh: string,
 ): Record<Theme, Record<string, string>> {
   const token = (css: string): Record<string, string> => {
     const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, "");
@@ -215,11 +136,16 @@ function palettes(
       ]),
     );
   };
-  return { dark: token(dark), light: token(light) };
+  return {
+    dark: token(dark),
+    light: token(light),
+    "dark-high": token(darkHigh),
+    "light-high": token(lightHigh),
+  };
 }
 
-const PALETTES = palettes(dark, light);
-const THEMES = ["dark", "light"] as const;
+const PALETTES = palettes(dark, light, darkHigh, lightHigh);
+const THEMES = ["dark", "light", "dark-high", "light-high"] as const;
 
 describe("il conto è quello della WCAG", () => {
   // I due estremi e un valore noto: senza, un errore di segno nella formula

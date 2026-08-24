@@ -42,9 +42,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
-use fub_abi::custom::{SyntaxForm, SyntaxTrigger};
+use fub_abi::custom::{
+    SyntaxForm, SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
+};
+use fub_abi::error::FormatError;
+use fub_abi::format::ParseContext;
 use fub_abi::model::DocId;
-use fub_kernel::{MachineSettings, SystemLocale, ViewStates};
+use fub_abi::traits::{IndexQuery, IndexResult, PluginManifest};
+use fub_kernel::{MachineSettings, SyntaxRegistry, SystemLocale, Trust, ViewStates};
 
 /// Il documento su cui si chiede la dichiarazione. Non deve esistere:
 /// `syntax_forms` è una domanda sull'**estensione**, come `format_of`.
@@ -88,7 +93,92 @@ fn forms() -> Vec<SyntaxForm> {
         &fub_kernel::log::Levels::default(),
     )
     .expect("mount succeeds");
-    mounted.workspace.syntax_forms(&DocId::new(PROBE))
+    match mounted
+        .workspace
+        .query_index(IndexQuery::SyntaxForms {
+            doc: DocId::new(PROBE),
+        })
+        .expect("the runtime data channel answers syntax forms")
+    {
+        IndexResult::SyntaxForms(forms) => forms,
+        other => panic!("unexpected syntax response: {}", other.kind_name()),
+    }
+}
+
+struct HotSyntax;
+
+impl SyntaxRule for HotSyntax {
+    fn spec(&self) -> SyntaxRuleSpec {
+        SyntaxRuleSpec {
+            id: "third.party:spoiler".into(),
+            format: "markdown".into(),
+            trigger: SyntaxTrigger::Inline {
+                open: "||".into(),
+                close: "||".into(),
+            },
+            order: 0,
+            option: Some("third.party:spoiler".into()),
+            produces: vec!["third.party:spoiler".into()],
+        }
+    }
+
+    fn apply(
+        &self,
+        _matched: &SyntaxMatch,
+        _ctx: &ParseContext,
+    ) -> Result<Option<SyntaxProduct>, FormatError> {
+        Ok(None)
+    }
+}
+
+#[test]
+fn readers_keep_an_immutable_snapshot_while_a_new_one_is_published() {
+    let mut registry = SyntaxRegistry::new();
+    let before = registry.snapshot();
+    registry
+        .register(Box::new(HotSyntax))
+        .expect("syntax registers");
+    let after = registry.snapshot();
+
+    assert!(before.forms("markdown").is_empty());
+    assert_eq!(after.forms("markdown")[0].name, "third.party:spoiler");
+}
+
+#[test]
+fn a_hot_registered_plugin_appears_on_the_runtime_channel() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let mut mounted = fub_host::mount::mount(
+        &root,
+        MachineSettings::in_memory(),
+        ViewStates::in_memory(),
+        Arc::new(SystemLocale::default()),
+        &fub_kernel::log::Levels::default(),
+    )
+    .expect("mount succeeds");
+    mounted
+        .workspace
+        .register_plugin(
+            PluginManifest::new("third.party", "Third Party"),
+            Trust::Community,
+        )
+        .expect("plugin registers");
+    mounted
+        .workspace
+        .register_syntax_rule("third.party", Box::new(HotSyntax))
+        .expect("syntax registers after the workspace is live");
+
+    let response = mounted
+        .workspace
+        .query_index(IndexQuery::SyntaxForms {
+            doc: DocId::new(PROBE),
+        })
+        .expect("runtime query succeeds");
+    let forms = match response {
+        IndexResult::SyntaxForms(forms) => forms,
+        other => panic!("unexpected response: {}", other.kind_name()),
+    };
+    assert!(forms.iter().any(|form| form.name == "third.party:spoiler"));
 }
 
 fn trigger_ts(t: &SyntaxTrigger) -> String {

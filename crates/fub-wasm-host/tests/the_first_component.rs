@@ -49,7 +49,11 @@ impl Vault {
 
 /// Un host headless col vault aperto e il componente montato.
 fn bench(v: &Vault, permissions: bool) -> (Host, Subscription) {
-    let wasm = common::ping(if permissions { "" } else { "senza-permessi" });
+    bench_component(v, if permissions { "" } else { "senza-permessi" })
+}
+
+fn bench_component(v: &Vault, variant: &str) -> (Host, Subscription) {
+    let wasm = common::ping(variant);
     let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
 
     let host = Host::new()
@@ -217,17 +221,26 @@ fn a_family_not_served_is_does_name() {
     );
 }
 
-/// Il secondo backend non linka `host-data-read`: il rifiuto previsto la nomina.
+/// Le due famiglie host-data fanno round-trip e tengono la cache separata.
 #[test]
-fn a_host_data_family_not_served_is_named() {
-    let wasm = common::ping("con-dati");
-    let error = WasmBundle::from_file(&wasm, Trust::Community)
-        .expect_err("host-data-read non servita non si carica");
-    let said = error.to_string();
-    assert!(
-        said.contains("host-data-read"),
-        "il rifiuto nomina la famiglia host-data-read: {said}"
+fn a_component_with_data_families_round_trips() {
+    let v = Vault::new();
+    let (host, events) = bench_component(&v, "con-dati");
+
+    ask(&host, "dati");
+    let (job, result) = next_result(&events);
+    assert_eq!(job, "dati");
+    assert_eq!(
+        result.expect("il round-trip dei dati riesce"),
+        serde_json::json!({
+            "write_read": true,
+            "list_ordered": true,
+            "cache_round_trip": true,
+            "cache_separate": true,
+        })
     );
+
+    host.close();
 }
 
 /// Il tipo del prestito deve poter attraversare i thread: un job gira sul pool.

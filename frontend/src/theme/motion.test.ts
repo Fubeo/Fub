@@ -23,9 +23,9 @@
 // Un loop infinito è decorazione, non moto: la scocca non respira, il brand
 // non ruota, un pallino non pulsa. Chi scrive non deve vedere la pagina che
 // si muove da sola, e l'editor è sacro — il moto si ferma alla soglia di
-// `.cm-editor` e `.pane-editor`, e lì diventa `none`. L'ingresso di un'overlay
-// si anima; la chiusura no, perché `[hidden]` è immediato nella struttura e
-// non si combatte. Si anima ciò che entra, non ciò che sta.
+// `.cm-editor` e `.pane-editor`, e lì diventa `none`. Entrata e uscita delle
+// superfici sovrane passano dallo stesso attributo; `[hidden]` arriva soltanto
+// dopo l'uscita, e il moto ridotto resta immediato nella struttura.
 //
 // # Lime non è più un fascio
 //
@@ -56,10 +56,12 @@ const MOTION = {
 
 const MOTION_TOKEN = Object.keys(MOTION) as readonly (keyof typeof MOTION)[];
 
-/// I tre keyframe dell'ingresso: il fade del root, il rise della superficie,
-/// e il rise corto dei menu. Sono il vocabolario dell'animazione di entrata,
-/// e un nome che non è qui non è ingresso.
-const KEYFRAMES_FUB = ["fub-enter-fade", "fub-enter-rise", "fub-enter-rise-sm"] as const;
+/// Le tre coppie della coreografia: fade, rise e rise corto, in entrata e uscita.
+const KEYFRAMES_FUB = [
+  "fub-enter-fade", "fub-exit-fade",
+  "fub-enter-rise", "fub-exit-rise",
+  "fub-enter-rise-sm", "fub-exit-rise-sm",
+] as const;
 
 /// Il corpo di un blocco `selettore { … }` di primo livello, coi commenti già
 /// tolti: senza toglierli, un `--token: valore;` citato dentro una spiegazione
@@ -205,16 +207,12 @@ describe("hard-stop dell'editor", () => {
   });
 });
 
-describe("i tre keyframe fub esistono come @keyframes", () => {
-  it("fub-enter-fade, fub-enter-rise, fub-enter-rise-sm sono dichiarati", () => {
-    // Sono il vocabolario dell'ingresso: il fade del root, il rise della
-    // superficie, il rise corto dei menu. Un nome che non è qui non è
-    // ingresso — e un ingresso senza keyframe è un'animazione che non parte.
+describe("le tre coppie di keyframe fub esistono come @keyframes", () => {
+  it("fade, rise e rise corto hanno entrata e uscita", () => {
     const missing = KEYFRAMES_FUB.filter((k) => !SKIN.includes(`@keyframes ${k}`));
     expect(
       missing,
-      "i tre keyframe fub dell'ingresso sono dichiarati nella pelle: un " +
-        "mancante è un'overlay che non entra",
+      "ogni gesto della coreografia ha entrata e uscita nel fallback CSS",
     ).toEqual([]);
   });
 });

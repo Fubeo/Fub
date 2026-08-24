@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::command::{CommandOutcome, CommandSpec, InvokeMode, ParamSpec, Undone};
+use crate::custom::SyntaxForm;
 use crate::edit::{EditReport, EditRequest, Revision, WriteBase};
 use crate::error::PluginError;
 use crate::event::{Event, EventMask, Notice};
@@ -2972,6 +2973,9 @@ pub enum IndexQuery {
         #[serde(default)]
         block: Option<String>,
     },
+    /// Le sintassi effettive di un documento, con la forma dichiarata dal
+    /// provider o dalla regola registrata a runtime (§4.4).
+    SyntaxForms { doc: DocId },
 }
 
 impl IndexQuery {
@@ -2995,7 +2999,8 @@ impl IndexQuery {
             | IndexQuery::Organization
             | IndexQuery::Resolve { .. }
             | IndexQuery::RenderPreview { .. }
-            | IndexQuery::RenderEmbed { .. } => None,
+            | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::SyntaxForms { .. } => None,
         }
     }
 
@@ -3027,7 +3032,8 @@ impl IndexQuery {
             // La resa non seleziona documenti: chiede un documento per nome,
             // non quali documenti combaciano.
             | IndexQuery::RenderPreview { .. }
-            | IndexQuery::RenderEmbed { .. } => None,
+            | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::SyntaxForms { .. } => None,
         }
     }
 
@@ -3093,6 +3099,7 @@ impl IndexQuery {
             IndexQuery::Folders { .. } => QueryKind::Folders,
             IndexQuery::RenderPreview { .. } => QueryKind::RenderPreview,
             IndexQuery::RenderEmbed { .. } => QueryKind::RenderEmbed,
+            IndexQuery::SyntaxForms { .. } => QueryKind::SyntaxForms,
         }
     }
 }
@@ -3175,6 +3182,9 @@ pub enum QueryKind {
     /// un ritaglio si rende con gli stessi provider e renderer. In coda come
     /// nell'[`IndexQuery`].
     RenderEmbed,
+    /// Chi risponde a «quali forme sintattiche capisce questo documento?».
+    /// Il kernel, perché compone il provider col registro aggiornato a runtime.
+    SyntaxForms,
 }
 
 /// La specie di una [`QueryPredicate`]: ciò che un indice dichiara di saper
@@ -3433,6 +3443,8 @@ pub enum IndexResult {
     /// e il suo id, perché chi monta un embed deve sapere da quale nota viene.
     /// In coda come la sua domanda.
     RenderEmbed(EmbedContent),
+    /// Le forme sintattiche effettive (risposta a [`IndexQuery::SyntaxForms`]).
+    SyntaxForms(Vec<SyntaxForm>),
 }
 
 impl IndexResult {
@@ -3476,6 +3488,7 @@ impl IndexResult {
             IndexResult::Drafts(_) => "drafts",
             IndexResult::RenderPreview(_) => "render-preview",
             IndexResult::RenderEmbed(_) => "render-embed",
+            IndexResult::SyntaxForms(_) => "syntax-forms",
         }
     }
 }

@@ -84,6 +84,26 @@ pub fn view_states_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
     config_dir.join("view-state.json")
 }
 
+/// La cartella dei temi installati dentro una cartella di configurazione.
+///
+/// Una sottocartella `themes/`, come `logs/`, perché un tema non è
+/// un'impostazione: non ha uno schema, non lo dichiara il core, e il suo
+/// contenuto è un manifest e dei fogli — non una chiave in un file JSON. Sta
+/// qui e non dentro un vault perché è della **macchina**: la pelle che questa
+/// installazione conosce deve valere anche quando un vault non si apre (è la
+/// stessa ragione di [`log_path`]), e un tema che viaggiasse con le note
+/// sarebbe un tema per vault — il contrario di ciò che la
+/// [decisione 0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
+/// ha deciso per le preferenze.
+///
+/// La struttura è `<config>/themes/<id>/`, con il manifest in
+/// `manifest.json` accanto al foglio e alla pelle: un tema è **una cartella
+/// sola**, e una cartella si installa, si disinstalla e si riconosce senza
+/// inventare un registro.
+pub fn themes_dir(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
+    config_dir.join("themes")
+}
+
 /// Il file di log della macchina (§17.3). Sta accanto alla configurazione e
 /// non nel vault: è uno strumento di chi guarda Fub, non un dato che viaggia
 /// con le note. In una sottocartella `logs/` perché non è un'impostazione e non
