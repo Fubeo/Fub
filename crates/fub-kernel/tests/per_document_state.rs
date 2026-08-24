@@ -259,13 +259,14 @@ fn a_destination_that_not_and_a_folder_not_is_removes() {
     // nessuna nota, ed è di qualcuno.
     let obstacle = doc_data::space(&new);
     let obstacle = obstacle.trim_end_matches('/');
+    let obstacle_path = data_root(&root).join("plugins").join(OFF).join(obstacle);
     write_data_item(&root, OFF, obstacle, b"non e' mio");
 
     ws.rename_document(&old, &new).expect("rinomina");
 
     let warnings = ws.doc_data_warnings();
     assert!(
-        warnings.iter().any(|a| a.contains(obstacle)),
+        warnings.iter().any(|a| a.contains(obstacle_path.as_str())),
         "una migrazione che non è potuta avvenire dice **cosa** l'ha fermata, \
          e dove andarlo a guardare: {warnings:?}"
     );
