@@ -30,6 +30,22 @@ Negare una famiglia di capacità significa non esporre le relative funzioni al c
 - limiti e cancellazione per operazioni costose;
 - versione ABI dichiarata e verificata prima dell'uso.
 
+## Cosa non può essere solo un guest e il metro per deciderlo
+
+Un'estensione non deve reimplementare servizi che appartengono alla shell o all'host. Il criterio non è “si può scrivere in un plugin?”, ma “questo confine resta stabile, serializzabile e controllabile?”.
+
+Resta nella shell o nell'host ciò che richiede:
+
+- accesso diretto a DOM, focus, IME, clipboard o lifecycle della finestra;
+- latenza da interazione continua, come cursore, selezioni e composizione del testo;
+- integrazione privilegiata con sistema operativo o filesystem;
+- stato condiviso fra più viste che deve avere un solo proprietario;
+- oggetti o callback che non possono attraversare IPC e WIT in modo esplicito.
+
+Può stare nel guest ciò che può essere espresso come richiesta e risposta serializzabili, con costo limitabile, cancellazione definita e capacità minime dichiarate.
+
+Per questo i futuri editor di celle, formule o rich text devono riusare motori della shell: il plugin sceglie e configura la superficie, ma non duplica CodeMirror, input Unicode, undo, tema o accessibilità.
+
 ## Stato attuale
 
 Il WIT vivo e le baseline congelate sono presenti e sotto test. `fub-wasm-host` contiene il runtime, ma il flusso pubblico completo di installazione e distribuzione dei plugin non è ancora un'API stabile.
