@@ -1,15 +1,37 @@
-# Compatibilità: architecture/plugin-boundary.md
+# Confine dei plugin
 
-Questo file conserva i rimandi storici alla vecchia documentazione del confine plugin.
+## Un solo contratto, due esecuzioni
 
-La documentazione corrente è distribuita fra:
+Un provider può essere compilato nativamente con l'applicazione oppure eseguito come componente WASM. In entrambi i casi implementa il vocabolario di `fub-abi`; cambia il modo in cui il confine viene attraversato.
 
-- [`../04-plugin/02-il-varco-hostapi.md`](../04-plugin/02-il-varco-hostapi.md) — attraversamento del confine e HostApi;
-- [`../04-plugin/03-i-permessi.md`](../04-plugin/03-i-permessi.md) — capacità e permessi;
-- [`../milestones/M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md) — stato reale del runtime WASM e lavoro residuo.
+## Cosa esporta un provider
 
-## Cosa non può essere solo un guest e il metro per deciderlo
+Il contratto può esporre, secondo il tipo di provider:
 
-Questa intestazione conserva l'ancora usata dai documenti storici. La domanda corrente — quali capacità devono vivere nell'host e quali possono attraversare il confine come provider/guest — è documentata nel dettaglio in [`M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md), insieme alle famiglie host già linkate e a quelle ancora da implementare.
+- parsing e serializzazione di un formato;
+- query di indice;
+- comandi;
+- viste dichiarative e azioni delle viste;
+- impostazioni e metadati di manifest;
+- lavori con progresso e cancellazione.
 
-I verbali storici restano in [`../decisions/`](../decisions/README.md).
+## Cosa importa da Fub
+
+Un guest non riceve accesso generale al processo. L'host importa soltanto le funzioni concesse dalla sua capacità: letture del vault, scritture, query, storage, log o altri servizi espliciti.
+
+Negare una famiglia di capacità significa non esporre le relative funzioni al componente, non affidarsi a un controllo tardivo dentro una funzione già disponibile.
+
+## Regole del confine
+
+- niente accesso diretto al filesystem del vault;
+- niente dipendenza da Tauri o dalla shell;
+- niente tipi non serializzabili nel contratto;
+- errori espliciti invece di panic attraverso il confine;
+- limiti e cancellazione per operazioni costose;
+- versione ABI dichiarata e verificata prima dell'uso.
+
+## Stato attuale
+
+Il WIT vivo e le baseline congelate sono presenti e sotto test. `fub-wasm-host` contiene il runtime, ma il flusso pubblico completo di installazione e distribuzione dei plugin non è ancora un'API stabile.
+
+Per iniziare consulta [`guida/creare-un-plugin.md`](../guida/creare-un-plugin.md), [`06-contratto/03-il-contratto-wit.md`](../06-contratto/03-il-contratto-wit.md) e la milestone [`M5`](../milestones/M5-wasm-runtime.md).
