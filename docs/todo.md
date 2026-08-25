@@ -5,7 +5,7 @@ intervento. Le decisioni chiuse sono archiviate in
 [`decisions/`](decisions/README.md); le sedute che le hanno originate sono in
 [`roadmap/`](roadmap/README.md).
 
-## Regole
+## Il criterio
 
 - Una voce resta qui finché non viene chiusa, scartata o trasformata in un difetto misurato.
 - Una decisione chiusa scompare dalla tabella e produce un ADR quando il suo perché deve restare stabile.
@@ -41,7 +41,7 @@ scelta; l'implementazione parte soltanto quando compare il primo cliente reale.
 | §2.9 | Rendering incrementale dell'anteprima | Il primo documento reale supera il costo accettabile del rendering completo. |
 | §25.7 | Campo additivo `carichi` in `syntax-rule-spec` | Un tipo sintattico di terzi richiede un payload personalizzato. |
 
-## Difetti misurati
+## I difetti misurati
 
 I difetti misurati aperti sono **zero** [conta: difetti-aperti].
 

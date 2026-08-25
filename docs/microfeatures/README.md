@@ -6,13 +6,13 @@ lista di issue e non misura da sola lo stato del prodotto.
 
 ## Aree
 
-- [`agenda-personale.md`](agenda-personale.md)
-- [`benessere-e-routine.md`](benessere-e-routine.md)
-- [`cattura-e-inbox.md`](cattura-e-inbox.md)
-- [`contatti-e-relazioni.md`](contatti-e-relazioni.md)
-- [`diario-e-memoria.md`](diario-e-memoria.md)
-- [`scrittura-e-contenuti.md`](scrittura-e-contenuti.md)
-- [`studio-e-ricerca.md`](studio-e-ricerca.md)
+- [`app-e-piattaforma.md`](app-e-piattaforma.md)
+- [`block-editor-parita.md`](block-editor-parita.md)
+- [`canvas-e-database.md`](canvas-e-database.md)
+- [`editor-di-testo.md`](editor-di-testo.md)
+- [`markdown-e-preview.md`](markdown-e-preview.md)
+- [`media-e-allegati.md`](media-e-allegati.md)
+- [`ricerca-e-task.md`](ricerca-e-task.md)
 - [`vault-ed-esploratore.md`](vault-ed-esploratore.md)
 
 Una casella descrive un gesto da considerare, non una dichiarazione automatica
