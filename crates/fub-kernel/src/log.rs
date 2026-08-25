@@ -2,10 +2,10 @@
 //!
 //! Questo modulo è metà di una coppia. L'altra metà è
 //! [`Event::Trouble`](fub_abi::event::Event::Trouble)
-//! ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+//! ([decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)),
 //! che porta a chi *legge* le note ciò che ha perso; questo porta a chi *scrive*
 //! Fub ciò che è successo. Le due destinazioni non si scelgono a occhio: il
-//! criterio sta nella [decisione 0062](../../../docs/decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md),
+//! criterio sta nella [decisione 0062](../../../docs/decisions/0184-eventi-accodati-e-job.md),
 //! e in una riga sola è *il log è il pavimento, l'evento è la porta* — ogni
 //! guasto lascia una riga qui, e solo quelli che raccontano una **perdita**
 //! aprono anche la porta.
@@ -26,7 +26,7 @@
 //! quattro crate nuovi (`tracing-subscriber`, `sharded-slab`, `thread_local`,
 //! `tracing-log`) più `matchers` e un motore di regex se si vuole `env-filter`
 //! — che è precisamente la cosa che **non** vogliamo: la
-//! [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)
+//! [decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 //! ha tolto la configurazione dalle variabili d'ambiente, e `RUST_LOG` sarebbe
 //! stata la terza rientrata dalla finestra. Ciò che resta di
 //! `tracing-subscriber` una volta tolto il filtro da variabile d'ambiente è un
@@ -160,7 +160,7 @@ pub struct Levels {
     /// il livello globale.
     ///
     /// È una **lista di id**, non una mappa da id a livello, e la forma è presa
-    /// da `plugins.disabled` ([decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)):
+    /// da `plugins.disabled` ([decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
     /// una mappa avrebbe voluto dire `fub.versioning=debug` dentro una stringa,
     /// cioè un formato dentro un formato — la cosa che `vaults.json` esiste per
     /// non fare. La domanda vera che qualcuno si pone è *voglio vedere tutto di

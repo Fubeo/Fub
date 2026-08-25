@@ -26,7 +26,7 @@ export interface ResultRow {
 ///
 /// Omnisearch mostra N punti per nota e lascia saltare all'uno o all'altro, ed è
 /// precisamente ciò che `DocumentMatch.occurrences` esiste per rendere
-/// esprimibile: prima della [0049](../../../docs/decisions/0049-una-posizione-dentro-un-documento.md)
+/// esprimibile: prima della [0049](../../../docs/decisions/0181-modello-documento-e-arene.md)
 /// la seconda occorrenza non era «difficile da mostrare» — non c'era modo di
 /// **dirla**.
 ///

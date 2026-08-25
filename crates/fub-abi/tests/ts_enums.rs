@@ -14,7 +14,7 @@
 //! WIT è `trouble(event-trouble)`, con un record `event-trouble` che nel JSON
 //! **non esiste affatto**. Un generatore TS che leggesse il WIT produrrebbe la
 //! forma di un confine che questo mirror non attraversa mai. Il verbale è la
-//! [decisione 0053](../../../docs/decisions/0053-il-contratto-ha-una-sorgente.md).
+//! [decisione 0053](../../../docs/decisions/0194-sorgenti-e-proiezioni-del-contratto.md).
 //!
 //! # Cosa entra qui, e chi lo decide
 //!

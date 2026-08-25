@@ -1,10 +1,10 @@
 //! **Un abbonamento non sa dire quando** (§22.1,
-//! [decisione 0069](../../../docs/decisions/0069-cosa-sa-dire-un-abbonamento.md)).
+//! [decisione 0069](../../../docs/decisions/README.md)).
 //!
-//! Il no della [0013](../../../docs/decisions/0013-elenco-delle-capacita.md) al
+//! Il no della [0013](../../../docs/decisions/0185-capability-un-solo-guard.md) al
 //! tempo differito resta giusto e la sua ragione no: «il kernel è sincrono e non
 //! possiede thread» era vera fino alla
-//! [0032](../../../docs/decisions/0032-il-runner-dei-job.md). A tenere in piedi
+//! [0032](../../../docs/decisions/0183-composizione-host-kernel.md). A tenere in piedi
 //! la conclusione è l'**altra** regola della 0013 — *ciò che si limita a
 //! informare è un evento* — e una sveglia informa.
 //!
@@ -16,7 +16,7 @@
 //! La prova che conta più di tutte è la terza: una dichiarazione che il kernel
 //! non valuta è **peggio della sua assenza**, perché mente al plugin che ci ha
 //! creduto — ed è esattamente l'errore per cui questa voce era stata ritirata
-//! una volta ([0063](../../../docs/decisions/0063-la-maschera-e-dell-esemplare.md)).
+//! una volta ([0063](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
 
 use std::sync::{Arc, Mutex};
 

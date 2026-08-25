@@ -5,14 +5,14 @@
 //! quello degli altri mirror di questo repo — genera, confronta il committato,
 //! `UPDATE_MIRROR=1` per rigenerare — e la ragione per cui è un derivato e non
 //! due elenchi è quella della
-//! [0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md): quando la
+//! [0056](../../../docs/decisions/0196-test-e-artefatti-generati.md): quando la
 //! produzione può **leggere** l'elenco, l'elenco smette di essere una copia da
 //! confrontare e diventa la sorgente da cui la cosa esiste.
 //!
-//! Prima della [0116](../../../docs/decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+//! Prima della [0116](../../../docs/decisions/0185-capability-un-solo-guard.md)
 //! la tabella stava in TypeScript, e il lato Rust non sapeva che esistesse: è il
 //! quarto dei cinque ostacoli che la
-//! [0090](../../../docs/decisions/0090-una-sequenza-e-una-modalita-che-scade.md)
+//! [0090](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)
 //! aveva misurato — «il presidio non lo vedrebbe» — e si chiude spostando la
 //! sorgente, non aggiungendo un secondo confronto.
 //!

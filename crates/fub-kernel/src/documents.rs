@@ -73,7 +73,7 @@ impl DocumentStore {
     /// Il supporto arriva da fuori e non si costruisce qui: dentro un workspace
     /// è **uno solo**, condiviso col sidecar dell'organizzazione, con la
     /// configurazione del vault e con l'anagrafe (§15.1, e la
-    /// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) per
+    /// [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) per
     /// il giorno in cui gliel'hanno dato). Due supporti sulla stessa cartella
     /// sarebbero due idee di cosa c'è dentro.
     pub(crate) fn new(
@@ -240,7 +240,7 @@ impl DocumentStore {
     /// dicono *cosa so fare*, questa dice *a cosa somiglia*, e la seconda esiste
     /// perché una superficie di scrittura non ha il provider — ha un buffer
     /// sporco che nessuno al di qua del confine conosce
-    /// ([0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
+    /// ([0018](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
     ///
     /// L'ordine è quello della **dichiarazione**: prima ciò che il provider sa
     /// fare per conto suo (in ordine di `OptionMap`, cioè di dichiarazione del

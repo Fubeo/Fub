@@ -527,7 +527,7 @@ fn declaring_yourself_read_only_is_binding() {
 /// "view-state"]`: sette nomi scritti a mano, giusti nel momento in cui furono
 /// scritti e ciechi a tutto ciò che sarebbe venuto dopo. Il presidio notava se
 /// una delle sette **smetteva** di essere rifiutata; non notava l'ottava. La
-/// [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md) gli
+/// [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md) gli
 /// attribuiva invece la proprietà di accorgersi «di quella che un giorno
 /// qualcuno aggiungesse senza pensarci», e quella proprietà non ce l'aveva: le
 /// due che sono entrate — `setting` con la 0036, `view-state` con la 0037 —

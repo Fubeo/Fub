@@ -17,7 +17,7 @@
 //!
 //! Vive quindi nella cartella di configurazione della **macchina**, accanto alle
 //! impostazioni di macchina e al registro dei vault
-//! ([decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)),
+//! ([decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)),
 //! con la stessa disciplina: versione di schema, scrittura atomica, e un file
 //! che non si è potuto leggere **non si riscrive**.
 //!
@@ -211,7 +211,7 @@ impl ViewStates {
     /// adesso**, non alla copia in memoria di chi la chiede.
     ///
     /// È la forma che il §15.2 chiede a chi ricompone un file della macchina
-    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)):
+    /// ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)):
     /// due finestre di Fub aperte insieme depositano scroll di esemplari
     /// diversi, e ricomporre il file dalla propria copia vuol dire cancellare
     /// quelli dell'altra. Ciò che le due si scambiano non è mai la stessa

@@ -303,7 +303,7 @@ impl SyntaxRegistry {
     /// documento meno ricco, non illeggibile.
     ///
     /// Il canale con cui quel fallimento arriva a una persona adesso esiste
-    /// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+    /// ([decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)),
     /// e questo è uno dei punti che **non ci arrivano ancora**: per emettere un
     /// evento ci vuole il workspace, e qui siamo dentro il parse, che è
     /// `&self` e non ne ha uno. Farcelo risalire vuol dire dare un esito a

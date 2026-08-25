@@ -646,7 +646,7 @@ fn what_goes_out_comes_back_in_identical() {
 //
 // La riga del §17.1 che diceva «resta da farlo **sul corpus**, dove la proprietà
 // smette di essere un esempio e diventa una misura». Il corpus è quello della
-// [0060](../../../docs/decisions/0060-il-modello-dice-il-vero-sui-byte.md), e
+// [0060](../../../docs/decisions/0180-compatibilita-wit-additiva.md), e
 // arriva da `tests/corpus/mod.rs`: le stesse sorgenti che là si guardano dal
 // lato del modello, qui diventano **note di un vault**.
 //
@@ -1609,7 +1609,7 @@ fn walks(dir: &std::path::Path, within: &mut Vec<std::path::PathBuf>) {
 ///
 /// `VaultRead::free_name` dichiara di non prenotare — *«fra la domanda e la
 /// scrittura il nome può diventare occupato, e a quel punto è la scrittura a
-/// dirlo»* — e la [0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)
+/// dirlo»* — e la [0027](../../../docs/decisions/0183-composizione-host-kernel.md)
 /// scarica la corsa sulla stessa frase. Nessun banco di questo repo la
 /// costruiva: tutti quelli che nominano `free_name` occupano il path **prima**
 /// della domanda, che è il caso ordinario e non la corsa.

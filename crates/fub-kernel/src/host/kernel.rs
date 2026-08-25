@@ -370,12 +370,12 @@ impl HostEvents for KernelHost<'_> {
     /// Un topic altrui **non si emette**. Che il rifiuto sia un guasto e non un
     /// errore è il limite di questa firma — `emit` non ha esito, ed è l'unica
     /// capacità del contratto che non ne ha (vedi `crate::host`). Il canale giusto
-    /// dove mandarlo c'è ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+    /// dove mandarlo c'è ([decisione 0052](../../../../docs/decisions/0184-eventi-accodati-e-job.md)),
     /// e adesso ci va: un plugin che ruba il topic di un altro è una cosa che
     /// l'utente ha il diritto di sapere — ma **senza** poterla dire a chi ha
     /// emesso, perché la firma non ha esito. Il guasto esce a nome dell'attore
     /// (`self.plugin`, decisione 0012), e il pavimento del log lo raccoglie
-    /// comunque ([decisione 0062](../../../docs/decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)):
+    /// comunque ([decisione 0062](../../../../docs/decisions/0184-eventi-accodati-e-job.md)):
     /// ogni guasto lascia una riga, e questo racconta una perdita — un evento
     /// che qualcuno si aspettava di ricevere non è arrivato — quindi apre anche
     /// la porta.

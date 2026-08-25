@@ -233,7 +233,7 @@ impl Default for Revision {
 /// dichiarazione la si legge in review.
 ///
 /// È il criterio della
-/// [0007](../../../docs/decisions/0007-contesto-di-sessione.md): *«un flag che
+/// [0007](../../../docs/decisions/README.md): *«un flag che
 /// chiunque può dimenticare di leggere protegge meno di un campo che, quando
 /// non è vero, non c'è»*. Qui il campo non manca mai, e allora la stessa regola
 /// dice l'altra metà: **quando c'è una scelta, la si nomina**.

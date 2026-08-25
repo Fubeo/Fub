@@ -8,7 +8,7 @@
 //!
 //! Ciò che scade col freeze non è la **larghezza** di quei tipi — un campo
 //! appeso in fondo a un `record` è additivo, e il presidio della
-//! [decisione 0002](../../../docs/decisions/0002-additivita-del-contratto.md)
+//! [decisione 0002](../../../docs/decisions/0180-compatibilita-wit-additiva.md)
 //! lo fa passare. A scadere è la **forma**: sostituire N booleani con una mappa
 //! è la sola cosa che dopo il freeze non si fa più.
 //!
@@ -440,7 +440,7 @@ pub mod permission {
     /// ha deciso di consegnare al disco; una bozza non ha un nome da chiedere —
     /// la risposta le porta **tutte insieme, col testo dentro** — ed è
     /// precisamente ciò che l'utente *non* ha ancora deciso di consegnare. La
-    /// [0088](../../../docs/decisions/0088-cio-che-non-e-ancora-successo.md)
+    /// [0088](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
     /// lo dice nella riga con cui nega per sempre la scrittura: *«il testo che
     /// l'utente non ha ancora salvato è il dato più privato che un vault
     /// contenga»*. Quella frase vale anche in lettura, perché la minaccia da

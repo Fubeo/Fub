@@ -1,5 +1,5 @@
 //! **Una fetta dell'apertura si prepara in lettura e si applica in scrittura**
-//! ([decisione 0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md),
+//! ([decisione 0119](../../../docs/decisions/README.md),
 //! secondo sito).
 //!
 //! Che il prestito condiviso si prenda ancora *durante* la lettura è una

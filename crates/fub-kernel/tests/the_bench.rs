@@ -1,5 +1,5 @@
 //! **Il banco delle prestazioni** (§17.1,
-//! [decisione 0113](../../../docs/decisions/0113-il-banco-conta-le-operazioni.md)):
+//! [decisione 0113](../../../docs/decisions/0196-test-e-artefatti-generati.md)):
 //! misura **operazioni**, non tempi.
 //!
 //! La voce chiedeva «benchmark su vault sintetici grandi (10k/100k note) in CI,

@@ -1,7 +1,7 @@
 //! **Un provider che pania costa la chiamata, non il vault** (§9.3,
 //! decisione 0032).
 //!
-//! È la metà che la [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+//! È la metà che la [0024](../../../docs/decisions/README.md)
 //! non poteva comprare. Là il `RwLock` aveva tolto il caso più probabile — un
 //! provider che **disegna** gira sotto prestito condiviso, e un prestito
 //! condiviso non si avvelena — e restava quello di chi **agisce**:
@@ -700,7 +700,7 @@ fn a_renderer_that_panics_degrades_instead_of_carry_away_via_the_page() {
 /// ne ha aperta un'altra senza che nessuno tornasse a correggere il conto.
 ///
 /// La forma è quella della
-/// [0104](../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md):
+/// [0104](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md):
 /// un `match` esaustivo senza `_` il cui solo mestiere è **non compilare**.
 /// Aprire una porta nuova senza dire dove si prova, da qui in poi, non è una
 /// dimenticanza possibile.
@@ -799,7 +799,7 @@ fn a_carries_that_receives_a_detail_the_names() {
 /// Chi lo prende è un conto **da fuori**: `porte-verso-un-terzo` in
 /// `.github/scripts/conteggi.mjs` legge le varianti dal sorgente e
 /// `check-prosa` le confronta col numero scritto nei documenti. È la macchina
-/// della [0072](../../../docs/decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md),
+/// della [0072](../../../docs/decisions/0196-test-e-artefatti-generati.md),
 /// e la divisione del lavoro è netta: **il compilatore prende la variante che
 /// non vuol dire niente, il conto prende la variante che nessuno ha elencato.**
 /// Nessuno dei due basta da solo, ed è la ragione per cui ci sono tutti e due.

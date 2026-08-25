@@ -67,7 +67,7 @@ declare const PORT: unique symbol;
 ///
 /// La sola fabbrica è `instrada`. Un `ActionHandler` passato a una di queste
 /// funzioni **non compila**: è la stessa forma con cui la
-/// [0118](../../../docs/decisions/0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md)
+/// [0118](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)
 /// ha tolto a `dispatchAction` la facoltà di ricevere un `ActionRef`, un piano più in su.
 export type Port = ActionHandler & { readonly [PORT]: true };
 
@@ -869,7 +869,7 @@ function div(className: string): HTMLElement {
 // la riconciliazione riscriveva — e due elenchi che nessuno confronta
 // divergono: divergevano su nove voci, e ogni voce era un campo reuseto che
 // mostrava o mandava la forma di ieri funzionando. È la stessa regola della
-// [0118](../../../docs/decisions/0118-una-chiusura-non-cattura-cio-che-il-riconciliatore-aggiorna.md)
+// [0118](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)
 // spostata dagli ascoltatori agli attributi: chi ne aggiunge uno lo scrive qui
 // dentro e ce l'ha in tutte e due le vite senza saperlo.
 
@@ -1140,7 +1140,7 @@ function label(el: HTMLElement, label: string | null): void {
 ///
 /// Il ripiego è il **nome del campo**, ed è brutto apposta: `tags` non è prosa,
 /// è un identificatore, e si nota. È lo stesso gradino ultimo della scala della
-/// [decisione 0040](../../../docs/decisions/0040-chi-localizza.md) — «brutto,
+/// [decisione 0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) — «brutto,
 /// onesto e soprattutto cercabile» —, per la stessa ragione: un ripiego che
 /// inventasse un'etichetta plausibile («Testo») renderebbe un campo senza nome
 /// indistinguibile da uno nominato male.

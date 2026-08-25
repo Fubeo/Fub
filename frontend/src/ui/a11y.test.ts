@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Il presidio di accessibilità dei pannelli (§12.4), e la metà che la
-// [decisione 0014](../../../docs/decisions/0014-i-verbali-fuori-da-todo.md)
+// [decisione 0014](../../../docs/decisions/0197-documentazione-presente-git-storia.md)
 // chiede insieme alla passata: *una promessa senza presidio meccanico decade*.
 //
 // Decadrebbe alla prima view nuova, e in silenzio — un pannello che dimentica

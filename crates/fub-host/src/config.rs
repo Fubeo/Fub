@@ -23,7 +23,7 @@
 //! # Perché non una dipendenza
 //!
 //! `dirs` (o `directories`) farebbe questo, e porterebbe un albero di crate in
-//! un progetto che ne dichiara l'SBOM ([decisione 0001](../../../docs/decisions/0001-supply-chain-e-sbom.md))
+//! un progetto che ne dichiara l'SBOM ([decisione 0001](../../../docs/decisions/0179-supply-chain-verificata.md))
 //! per **venti righe** che sono variabili d'ambiente documentate da vent'anni. Il
 //! giorno che servisse anche «dove stanno le cache» e «dove stanno i dati», la
 //! dipendenza tornerebbe a valere il suo prezzo.
@@ -93,7 +93,7 @@ pub fn view_states_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
 /// installazione conosce deve valere anche quando un vault non si apre (è la
 /// stessa ragione di [`log_path`]), e un tema che viaggiasse con le note
 /// sarebbe un tema per vault — il contrario di ciò che la
-/// [decisione 0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
+/// [decisione 0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 /// ha deciso per le preferenze.
 ///
 /// La struttura è `<config>/themes/<id>/`, con il manifest in

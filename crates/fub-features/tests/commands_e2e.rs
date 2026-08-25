@@ -585,7 +585,7 @@ fn the_whole_life_of_a_notes_goes_through_the_registry() {
 /// attraverso tutta la catena.
 ///
 /// È il presidio del cliente vero del §12.2
-/// ([decisione 0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)):
+/// ([decisione 0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
 /// `frontend/src/panels/trash.ts` rama su `already_exists` per decidere se
 /// chiedere «lo ripristino con un altro nome?», e prima aveva un `catch` nudo
 /// che faceva quella domanda a *qualunque* fallimento — anche a un disco pieno,

@@ -19,7 +19,7 @@
 //!   quasi sempre e non è vero per costruzione; che i dotfile si vedano o no è
 //!   una domanda che ha due risposte legittime (§3.2 del catalogo). Sono
 //!   **dato**, per-vault, e adesso hanno dove stare: una chiave dichiarata
-//!   ([0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)).
+//!   ([0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)).
 //!
 //! Finché le due specie erano una lista sola, «esclusa» voleva dire una cosa
 //! che nessuno poteva cambiare e una cosa che nessuno poteva scegliere, cioè il
@@ -30,7 +30,7 @@
 //! Perché descrive **questi file**: un vault che contiene un repo git lo
 //! contiene su tutti i computer da cui lo si apre, e un vault che nasconde una
 //! cartella su una macchina sola sarebbe due idee di cosa c'è dentro — la
-//! stessa ragione della [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
+//! stessa ragione della [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 //! e la stessa forma di [`properties`](crate::properties).
 //!
 //! # Quando un nome dichiarato è **quel** nome
@@ -62,7 +62,7 @@
 //! che contiene `Build` e `build` non è portabile a prescindere da noi, ed è
 //! ciò che `HealthCheck::CollidingPaths` è lì per dire; e la stessa regola vale
 //! già per i wikilink, dove `[[Nota]]` e `[[nota]]` sono lo stesso riferimento
-//! ([0107](../../../docs/decisions/0107-il-caso-di-una-lettera.md)).
+//! ([0107](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)).
 //! Sarebbe incoerente che due nomi fossero lo stesso documento per il grafo e
 //! due cartelle diverse per la scansione.
 //!
@@ -86,7 +86,7 @@
 //! una facoltà. Il giorno in cui un supporto sa dire «questi due path sono lo
 //! stesso nodo», la chiave si aggiunge qui accanto alle altre due.
 //!
-//! [0058]: ../../../docs/decisions/0058-un-nome-che-nasce.md
+//! [0058]: ../../../docs/decisions/0187-autorita-e-schemi-su-disco.md
 //!
 //! # Una cartella dichiarata è **una cartella**, e si scrive come si scrive
 //!

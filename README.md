@@ -1,144 +1,87 @@
 # Fub
 
-Un'app di note in markdown su file locali, scritta in Rust (Tauri v2), con
-un'architettura pensata fin dall'inizio per i plugin. Apre vault nel formato di
-Obsidian senza conversione — ma il markdown non è il formato dell'app: è il
-primo provider di un contratto che non lo nomina.
+Fub è un workspace di scrittura **local-first**: apre vault di file Markdown
+senza convertirli, conserva i dati dell'utente sul disco e separa il core dai
+formati, dalla shell desktop e dai runtime dei plugin.
 
-## Idea architetturale
+La shell usa Tauri v2 e un frontend Vite/TypeScript. Il core è un workspace
+Rust. Markdown è il primo `FormatProvider`, non il formato incorporato nel
+kernel.
 
-**Core agnostico rispetto al formato** + un contratto di trait definito **una
-volta sola**, di cui il markdown è solo il *primo* provider. Le feature "native"
-sono implementazioni Rust di quei trait; il runtime WASM per i plugin di terzi
-(Milestone 5) implementerà **gli stessi trait** via proxy — il kernel non
-distingue un provider nativo da uno WASM.
+## Architettura in un minuto
 
-```
-┌──────────────┐  contratto unico: modello documento comune + tutti i trait
-│  fub-abi   │  di estensione. NIENTE markdown / tauri / wasm qui dentro.
-└──────┬───────┘
-       │
-   ┌───┴───────────────┬──────────────────────┐
-   ▼                   ▼                        ▼
-┌────────────┐  ┌────────────┐          ┌────────────────────┐
-│fub-kernel│  │ fub-sdk  │          │ fub-format-       │
-│  (core)    │  │ (helper)   │          │   markdown (comrak) │  ← 1° provider
-└─────┬──────┘  └────────────┘          └────────────────────┘
-      │ vault, grafo link, registry, event bus (agnostico)
-      ▼
-┌───────────────┐    ┌──────────────┐        ┌──────────────────────────┐
-│ fub-features│    │  fub-host  │        │ fub-wasm-host (M5)      │
-│ backlink/…    │    │  (chi monta) │        │ plugin di terzi via WASM  │
-└───────────────┘    └──────┬───────┘        └──────────────────────────┘
-                            │
-       fub-testkit ┈┈┈┈┈┈┈┤  il banco di prova del lato host: dipende dal
-       (solo dev)           │  kernel, e per questo non è MAI dipendenza
-                            │  normale di nessuno
-                            │
-                     ┌──────┴───────┐
-                     │  fub-app   │  colla Tauri: comandi, finestre
-                     │  (Tauri v2)  │
-                     └──────┬───────┘
-                            │ IPC (comandi/eventi)
-                            ▼
-                    frontend/ (Vite + TS + CodeMirror 6)
+```mermaid
+flowchart LR
+    UI["frontend/src<br/>Vite · TypeScript · CodeMirror"] --> APP["fub-app<br/>Tauri e IPC"]
+    APP --> HOST["fub-host<br/>sessioni e composizione"]
+    APP --> WASM["fub-wasm-host<br/>Wasmtime"]
+    HOST --> KERNEL["fub-kernel<br/>workspace e policy"]
+    HOST --> PROVIDERS["provider ufficiali"]
+    KERNEL --> ABI["fub-abi<br/>contratti condivisi"]
+    PROVIDERS --> ABI
+    WASM --> ABI
+    KERNEL --> DISK["vault e .fub/"]
 ```
 
-**Invarianti chiave (verificate in CI/test):** `fub-kernel` e `fub-abi` non
-dipendono da `comrak`, `tauri` o `wasmtime`; `fub-host` non dipende da
-`tauri`, perché chi monta deve poter essere preso da una CLI, da un'API locale o
-da un e2e headless senza portarsi dietro una webview.
+Le dipendenze principali puntano verso `fub-abi`. `fub-kernel` non conosce
+Tauri, Wasmtime o Markdown; `fub-host` non conosce Tauri; soltanto
+`fub-wasm-host` dipende da Wasmtime.
+
+## Cosa esiste
+
+- apertura e gestione di vault compatibili con file Markdown e frontmatter;
+- editor CodeMirror, live preview e modalità di lettura;
+- wikilink, tag, backlink, ricerca full-text e Graph View;
+- cestino, bozze, versioning, organizzazione e indici persistenti;
+- comandi, view e query instradati tramite registri generici;
+- feature ufficiali come provider nativi indipendenti;
+- contratto WIT `fub:abi@0.1.1`, congelato e verificato per additività;
+- runtime WASM funzionante per `Plugin` e `CommandProvider`.
+
+M5 non è ancora conclusa: discovery, installazione end-to-end, provider WASM
+aggiuntivi e validazione della UI non fidata restano tracciati nelle issue e in
+[`docs/project/m5-wasm-runtime.md`](docs/project/m5-wasm-runtime.md).
+
+## Avvio
+
+Prerequisiti supportati dal repository:
+
+- Rust **1.89**;
+- Node.js **22** e npm;
+- dipendenze native richieste da Tauri v2 sul sistema operativo.
+
+```bash
+cd frontend
+npm ci
+cd ..
+
+cargo tauri dev --config crates/fub-app/tauri.conf.json
+```
+
+La procedura completa, inclusi build, test e problemi comuni, è in
+[`docs/getting-started/install-and-run.md`](docs/getting-started/install-and-run.md).
 
 ## Documentazione
 
-Tutta in **[`docs/`](docs/)**, e si entra da
-**[docs/README.md](docs/README.md)**:
-- [Guida iniziale](docs/00-inizia-qui/01-cos-e-fub.md) e [Concetti fondamentali](docs/01-concetti/01-il-vault.md).
-- [Mappa dei componenti](docs/02-componenti/01-panoramica.md) e [Diagrammi UML](docs/03-uml/01-trait-fub-abi.md).
-- [Guida ai plugin](docs/04-plugin/01-nativo-vs-wasm.md) e [Formato su disco](docs/05-disco/01-note-utente.md).
-- [Decisioni architetturali (ADR)](docs/decisions/README.md) e [Milestone](docs/milestones/README.md).
+Il punto d'ingresso unico è [`docs/README.md`](docs/README.md).
 
-## Cosa c'è già
+- [Panoramica del prodotto](docs/product/overview.md)
+- [Architettura](docs/architecture/overview.md)
+- [Workflow di sviluppo](docs/development/workflow.md)
+- [Stato e roadmap](docs/project/status.md)
+- [Decisioni architetturali](docs/decisions/README.md)
 
-Milestone 1, 2, 3 e 4 sono completate; Milestone 5 (runtime WASM) è in corso:
+La documentazione descrive il presente. Le attività eseguibili vivono nelle
+GitHub Issues; la cronologia resta in Git.
 
-- Vault compatibile Obsidian (`.md` + frontmatter YAML, `[[wikilink]]`, `#tag`,
-  callout, embed `![[...]]`).
-- Provider markdown nativo (comrak): parse → modello comune, render HTML per
-  l'anteprima, serializzazione best-effort.
-- Kernel: scansione vault, grafo dei link con risoluzione stile Obsidian
-  (nome / alias / path, shortest-path fra omonimi), backlink, event bus,
-  file watcher debounced.
-- Ricerca full-text incrementale su tantivy, CRUD con cestino e versioning,
-  organizzazione del vault, feature ufficiali montate come provider.
-- Frontend: file explorer, editor CodeMirror 6, anteprima live, navigazione
-  `[[wikilink]]`, graph view, e i pannelli resi via il protocollo di **UI
-  dichiarativa**.
-- Contratto WIT congelato (`fub:abi@0.1.1`), conformità dei trait e runtime
-  WASM (`fub-wasm-host`) basato su Wasmtime.
+## Contribuire e sicurezza
 
-Lo stato preciso — cosa è aperto, con che priorità — sta in
-[docs/todo.md](docs/todo.md), che è l'unico posto dove si aggiorna.
-
-## Come si avvia
-
-Prerequisiti: Rust ≥ 1.89, Node ≥ 20, e le dipendenze Tauri v2 per Linux
-(`webkit2gtk-4.1`).
-
-```bash
-# 1. dipendenze frontend
-cd frontend && npm install && cd ..
-
-# 2. sviluppo (avvia Vite + finestra Tauri con hot-reload)
-cargo tauri dev --config crates/fub-app/tauri.conf.json
-
-# 3. build release (binario self-contained, frontend incluso)
-cargo build --release -p fub-app   # → target/release/fub
-
-# comodità: aprire un vault all'avvio senza dialog
-FUB_VAULT="$PWD/tests/fixtures/sample-vault" target/release/fub
-```
-
-Test e lint:
-
-```bash
-cargo test --workspace
-cargo clippy --workspace --all-targets
-```
-
-## Roadmap
-
-- **M1–M4** — completate (vault Obsidian, ricerca omnisearch su tantivy, graph view, live preview in-editor, freeze del contratto WIT `fub:abi@0.1.1`).
-- **M5** — runtime WASM (`fub-wasm-host`, wasmtime, component model): plugin di terzi in `wasm32-wasip2` che implementano gli stessi trait via proxy.
-- **Futuro** — autocompletamento AI come plugin core con backend locale + cloud
-  intercambiabili.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- [`SECURITY.md`](SECURITY.md)
+- [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
+- [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Licenza
 
-Doppia, a scelta di chi usa: **MIT** ([LICENSE-MIT](LICENSE-MIT)) **oppure**
-**Apache-2.0** ([LICENSE-APACHE](LICENSE-APACHE)). È la convenzione
-dell'ecosistema Rust, ed è dichiarata anche in `Cargo.toml`
-(`license = "MIT OR Apache-2.0"`), che è ciò che
-[`deny.toml`](deny.toml) usa come metro per le licenze delle dipendenze.
-
-Un contributo aperto come pull request si intende rilasciato con la stessa
-doppia licenza, senza condizioni aggiuntive.
-
-## Contribuire, segnalare, versioni
-
-- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — le invarianti che non si
-  negoziano, il ciclo locale, la forma dei commit.
-- [docs/SECURITY.md](docs/SECURITY.md) — come si segnala una vulnerabilità (in
-  privato, non con una issue) e cos'è dentro il perimetro.
-- [docs/CODE_OF_CONDUCT.md](docs/CODE_OF_CONDUCT.md) — Contributor Covenant 2.1.
-- [docs/versionamento.md](docs/versionamento.md) — i tre numeri di versione e
-  cosa promette ciascuno.
-- [docs/CHANGELOG.md](docs/CHANGELOG.md) — cosa cambia, versione per versione.
-
-## Marchi
-
-Obsidian è un marchio del suo titolare. **Fub non è affiliato a Obsidian, non
-ne è approvato, e non è un clone né un rimpiazzo**: è un programma diverso, con
-un'architettura diversa, che legge e scrive lo stesso formato su disco. Dove il
-nome compare — nel codice, nei test, nei documenti — è per dire con quale
-programma Fub va d'accordo e quale regola sta rispettando. Nient'altro.
+Fub è distribuito, a scelta, con licenza
+[MIT](LICENSE-MIT) oppure [Apache-2.0](LICENSE-APACHE).

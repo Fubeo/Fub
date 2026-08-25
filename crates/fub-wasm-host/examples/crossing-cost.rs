@@ -1,6 +1,6 @@
 //! **Il costo del passaggio, misurato invece che detto.**
 //!
-//! La [0164](../../../docs/decisions/0164-il-secondo-backend-una-interfaccia-alla-volta.md)
+//! La [0164](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
 //! si chiude su un buco dichiarato: «il numero accanto ai 275 KB» non c'è, e
 //! «dire un numero non misurato sarebbe peggio che non averlo». Questo file è
 //! il modo di riempirlo. Misura lo **stesso** ping nelle sue due incarnazioni —
@@ -116,7 +116,7 @@ const POOL_REPETITIONS: usize = 200;
 /// I giri buttati prima di far partire il cronometro, per ogni misura ripetuta.
 const WARMUP: usize = 50;
 
-/// Il numero della [0146](../../../docs/decisions/0146-il-contratto-attraversa-il-confine.md):
+/// Il numero della [0146](../../../docs/decisions/0186-un-trait-due-backend.md):
 /// il varco — un componente che implementa il contratto **intero** e non fa
 /// niente — pesa tanto, in release. È l'unico numero di questo file che non è
 /// stato misurato qui, ed è citato con la sua fonte proprio per questo.

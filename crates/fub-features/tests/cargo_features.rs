@@ -17,10 +17,10 @@
 //! le feature — questo crate è anche un membro, quindi si compila coi suoi
 //! default e la mancanza sparisce. Si vede solo compilando `fub-host` da solo,
 //! che è ciò che farebbe chi lo usa come libreria. È il §16.3 visto da un piano
-//! più su, ed è una casella della [0079](../../../docs/decisions/0079-il-grafo-esce-dall-overlay.md).
+//! più su, ed è una casella della [0079](../../../docs/decisions/0190-sessioni-documento-e-undo.md).
 //!
 //! È esattamente il difetto che la
-//! [decisione 0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md)
+//! [decisione 0056](../../../docs/decisions/0196-test-e-artefatti-generati.md)
 //! ha chiuso per la registrazione, e la ragione per cui la voce diceva che
 //! l'inventario è «il posto naturale da cui una cargo feature per bundle si
 //! legge»: una riga che sparisce dietro un `#[cfg]` deve sparire da lì, o

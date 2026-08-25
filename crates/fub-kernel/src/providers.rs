@@ -195,7 +195,7 @@ pub(crate) struct RegisteredCommand {
 ///
 /// Uno dei cinque componenti in cui il §8.1 scompone il `Workspace`. Mette
 /// insieme le sei tabelle di provider, il registro dei plugin della
-/// [decisione 0021](../../../docs/decisions/0021-il-confine.md) e le due catene
+/// [decisione 0021](../../../docs/decisions/0185-capability-un-solo-guard.md) e le due catene
 /// di chiamate in corso (servizi e comandi), perché sono la stessa domanda vista
 /// da lati diversi: *chi c'è, cosa ha promesso, e sta già girando?*
 ///
@@ -210,7 +210,7 @@ pub(crate) struct RegisteredCommand {
 /// ci si fida.
 ///
 /// La distinzione non è estetica. È esattamente la linea lungo cui il §8.3 ha
-/// messo il `RwLock` ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)):
+/// messo il `RwLock` ([decisione 0024](../../../docs/decisions/README.md)):
 /// le risposte qui sotto sono letture pure, non toccano né il vault né gli
 /// indici, e girano sotto prestito **condiviso**; le chiamate no, e non
 /// potranno mai esserlo.

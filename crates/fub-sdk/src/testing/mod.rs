@@ -4,7 +4,7 @@
 //! Stava in `fub-features`, privato e `#[cfg(test)]` — cioè raggiungibile
 //! nemmeno dagli integration test del suo stesso crate, solo dai suoi unit test.
 //! Ora è qui ([decisione
-//! 0054](../../../../docs/decisions/0054-il-banco-del-lato-provider.md)).
+//! 0054](../../../../docs/decisions/0196-test-e-artefatti-generati.md)).
 //!
 //! Serve a provare le feature **contro il contratto** e non contro il kernel:
 //! una feature scritta come la scriverebbe un plugin non deve avere altro modo

@@ -3,7 +3,7 @@
 //! Il doc di [`FormatProvider::serialize`](fub_abi::FormatProvider::serialize)
 //! lo dice alla lettera — *«il kernel non riscrive mai un file esistente passando
 //! da qui»* — e fino a questo file era **solo una frase**. È la sesta specie del
-//! [§16.8](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md): la *garanzia
+//! [§16.8](../../../docs/project/roadmap.md): la *garanzia
 //! dichiarata*, quella che batte tutte le altre perché il motivo per cui si
 //! scrive una garanzia è smettere di doverci pensare — un conteggio qualcuno
 //! prima o poi lo ricontrolla, una rete che si crede tesa non la guarda nessuno.
@@ -13,7 +13,7 @@
 //! Il modello è **lossy per costruzione**: non conserva i commenti dello YAML,
 //! l'ordine delle chiavi del frontmatter, lo stile delle virgolette, la
 //! spaziatura dei blocchi, lo stile dell'enfasi. Sono, una per una, le voci del
-//! secondo gruppo della §2.4 di [FEATURES.md](../../../docs/FEATURES.md) — *cosa
+//! secondo gruppo della §2.4 di [FEATURES.md](../../../docs/product/overview.md) — *cosa
 //! si preserva quando invece si scrive*.
 //!
 //! `edit.rs` elenca fra i clienti di `apply_edit` «scrivere una proprietà (8.2)»,
@@ -25,7 +25,7 @@
 //! Chi se ne accorge è chi tiene il vault sotto git.
 //!
 //! La strada giusta è la [decisione
-//! 0008](../../../docs/decisions/0008-modifica-chirurgica.md): una patch
+//! 0008](../../../docs/decisions/README.md): una patch
 //! chirurgica sulla sorgente, guidata dagli `Span`, con la revisione su cui è
 //! stata calcolata — [`EditRequest`](fub_abi::edit::EditRequest).
 //!

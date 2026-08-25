@@ -3,7 +3,7 @@
 // Regola d'oro: ogni tipo che attraversa una firma di trait è un record/variant/
 // enum WIT. I valori JSON liberi (frontmatter, attrs, args, storage) passano come
 // stringa JSON (`type json = string`), scelta deliberata per preservare l'escape
-// hatch. Vedi docs/architecture/traits.md per la tabella di mapping.
+// hatch. Vedi ../../../../docs/reference/abi-and-wit.md per la tabella di mapping.
 //
 // ALBERI RICORSIVI — WIT non ammette tipi ricorsivi, e `Block`, `Inline`,
 // `UiNode` lo sono. Al confine viaggiano come ARENA: una lista piatta di nodi
@@ -11,7 +11,7 @@
 // riferimenti diretti. I tipi Rust nativi restano alberi veri; la conversione
 // albero↔arena è `fub_abi::arena` (con round-trip sotto test), e il proxy
 // WASM di M5 la chiamerà invece di riscriverla. Decisione e motivazioni in
-// docs/architecture/traits.md, "Alberi ricorsivi al confine".
+// ../../../../docs/reference/abi-and-wit.md, "Alberi ricorsivi al confine".
 //
 // KEYWORD WIT — `list`, `result`, `from` e `option` sono parole chiave del
 // linguaggio: dove sono nomi di variante o di campo compaiono con l'escape `%`.
@@ -264,7 +264,7 @@ interface model {
     }
     /// Escape hatch: callout, math, footnote, definition list. I `custom-kind`
     /// condivisi stanno in `fub_abi::model::custom_kind` e nella tabella di
-    /// docs/architecture/data-model.md.
+    /// ../../../../docs/architecture/document-model.md.
     record block-custom {
         custom-kind: string,
         attrs: json,
@@ -1896,7 +1896,7 @@ interface index {
     /// cui nominarlo, e a M5 ogni documento era un attraversamento del
     /// confine. Le due domande hanno una risposta sola — l'esito PER LOTTO — e
     /// per questo il ritaglio è uno solo. Elenco dei tagli deliberati in
-    /// `docs/architecture/wit-congelato.md`.
+    /// `../../../../docs/reference/abi-and-wit.md`.
     on-documents-indexed: func(docs: list<document-model>) -> list<index-loss>;
     on-documents-removed: func(ids: list<doc-id>) -> list<index-loss>;
     /// Verità completa del vault: ciò che l'indice ha in più è morto.

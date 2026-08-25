@@ -6,14 +6,14 @@
 //! Ci sta ciò che il **kernel ha fatto** al vault: una nota creata, riscritta,
 //! modificata chirurgicamente, cestinata, ripristinata, rinominata. Ogni riga
 //! dice *quando*, *chi ha chiesto* ([`Origin`], decisione 0012), *dentro quale
-//! lotto* ([0011](../../../docs/decisions/0011-il-lotto.md)) e *cosa*.
+//! lotto* ([0011](../../../docs/decisions/README.md)) e *cosa*.
 //!
 //! Non ci sta ciò che il vault ha **subìto** da fuori: un file cambiato da
 //! un'altra app arriva dal rilevatore e non è una nostra mutazione — registrarlo
 //! qui vorrebbe dire promettere di poterlo annullare, e l'inverso di una
 //! scrittura che non abbiamo fatto non ce l'ha nessuno. E non ci sta il buffer
 //! sporco dell'editor: quella è l'altra pila della
-//! [0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md), e la riga che
+//! [0045](../../../docs/decisions/0190-sessioni-documento-e-undo.md), e la riga che
 //! separa le due pile — *un comando entra da qui, una battuta di tastiera no* —
 //! è la stessa che separa questo file dal buffer di crash.
 //!
@@ -29,7 +29,7 @@
 //! sommata a questo paragrafo: [`JournalOp::Edited`] portava l'inverso della
 //! modifica ([`EditReport::inverse`](fub_abi::edit::EditReport::inverse)), cioè
 //! **i byte che l'utente aveva appena sostituito**. La
-//! [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md) l'ha
+//! [0103](../../../docs/decisions/0184-eventi-accodati-e-job.md) l'ha
 //! tolta e al suo posto ha messo l'**impronta** ([`EditFootprint`]): dove la
 //! modifica ha toccato e quanti byte c'erano al suo posto, mai quali. Un audit
 //! chiede *quando, chi, dove, quanto* e ha ancora tutto; per *cosa* c'era
@@ -58,7 +58,7 @@
 //! troncare — il suo stesso modulo scrive che perdere uno snapshot intermedio
 //! per un campionatore va bene, e per una base di rollback no —; e vive nello
 //! **spazio dati privato di un plugin**
-//! ([0021](../../../docs/decisions/0021-il-confine.md)), che il kernel non ha
+//! ([0021](../../../docs/decisions/0185-capability-un-solo-guard.md)), che il kernel non ha
 //! titolo di leggere. Un registro delle mutazioni che dipendesse da loro sarebbe
 //! vero finché qualcuno non spegne un interruttore. Il che non vuol dire che
 //! vada duplicato: gli snapshot restano l'unico posto in cui il **contenuto**
@@ -67,7 +67,7 @@
 //! # La classe, e perché non sta sotto `data/`
 //!
 //! Sta **direttamente in `.fub/`**, che per la
-//! [0048](../../../docs/decisions/0048-una-radice-sola.md) vuol dire
+//! [0048](../../../docs/decisions/0188-identita-path-e-rename.md) vuol dire
 //! **autorevole**: la profondità dichiara la classe, e un registro di ciò che è
 //! successo non si rifà da niente — ricostruirlo vorrebbe dire sapere cosa è
 //! successo, che è ciò per cui esiste.
@@ -147,7 +147,7 @@
 //! # Chi lo cancella
 //!
 //! [`Journal::clear`], dietro il comando `vault.clear-journal`. Perché la
-//! [0086](../../../docs/decisions/0086-una-cronologia-e-la-sua-porta.md) ha già
+//! [0086](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) ha già
 //! la regola per un dato di questa specie — chi lo dichiara non è chi lo può
 //! togliere, e l'esecuzione sta dove sta il potere — e sul journal il potere è
 //! solo del kernel. Un dato dell'utente che nessun gesto dell'utente raggiunge è
@@ -285,7 +285,7 @@ pub enum JournalOp {
         to: Revision,
     },
     /// Una modifica chirurgica
-    /// ([0008](../../../docs/decisions/0008-modifica-chirurgica.md)), con la sua
+    /// ([0008](../../../docs/decisions/README.md)), con la sua
     /// **impronta**: dove ha toccato e quanto ha sostituito, mai con cosa.
     ///
     /// Portava l'inverso, cioè i byte dell'utente; la 0103 li ha tolti. Il campo
@@ -304,7 +304,7 @@ pub enum JournalOp {
     /// Ripristinato dal cestino. L'inverso è cestinare di nuovo.
     Restored { trash: DocId, doc: DocId },
     /// Rinominato o spostato — vale per un documento come per un allegato
-    /// ([0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)).
+    /// ([0046](../../../docs/decisions/0188-identita-path-e-rename.md)).
     /// L'inverso è la rinomina all'incontrario.
     Renamed { from: DocId, to: DocId },
 }
@@ -346,7 +346,7 @@ impl JournalOp {
     /// Questa riga porta con sé abbastanza per tornare indietro?
     ///
     /// Non *come* si torna indietro — quello è di chi lo farà, e sta nel
-    /// vocabolario dei comandi ([0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md))
+    /// vocabolario dei comandi ([0045](../../../docs/decisions/0190-sessioni-documento-e-undo.md))
     /// —, ma se l'informazione c'è. Esiste perché la risposta `false` deve
     /// essere leggibile da chi compone un rollback, invece di essere un ramo
     /// dimenticato in fondo a un `match`.

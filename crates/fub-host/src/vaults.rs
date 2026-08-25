@@ -3,7 +3,7 @@
 //!
 //! # Perché sta qui, e perché non poteva stare altrove
 //!
-//! La [decisione 0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)
+//! La [decisione 0029](../../../docs/decisions/0183-composizione-host-kernel.md)
 //! ha chiuso la metà kernel del §9.6 — l'host tiene una **mappa** di sessioni e
 //! sa qual è la corrente — e ha lasciato aperta questa: *un elenco di vault non
 //! sta in nessun vault*. Non è una battuta sul dove metterlo: un file dentro
@@ -366,7 +366,7 @@ impl VaultRegistry {
     /// **preferiti**, che sono una scelta e non una traccia. Quindi la
     /// mutazione si applica all'elenco reopened sotto lock
     /// ([`fub_kernel::update_atomic`],
-    /// [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)),
+    /// [0066](../../../docs/decisions/0195-versioni-indipendenti.md)),
     /// e il tetto si applica dopo la fusione: se l'altra installazione ha
     /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
     fn mutate(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
@@ -577,7 +577,7 @@ mod tests {
     /// con lui se ne andavano i preferiti che l'altra aveva appuntato dopo la
     /// sua apertura. Due registri sullo stesso file **sono** il caso: ognuno ha
     /// letto una volta e da lì tiene la sua copia
-    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+    /// ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)).
     #[test]
     fn two_installations_not_is_delete_the_vault() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -607,7 +607,7 @@ mod tests {
     /// gli altri, e passa dalla stessa porta: chi scrive rilegge il file sotto
     /// il lucchetto e riapplica lì la propria riga, invece di ricomporre
     /// l'elenco dalla copia che ha in mano
-    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+    /// ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)).
     /// La `seconda` apre **prima** che la `prima` scriva, che è la sola forma in
     /// cui la sua copia è vecchia davvero: senza la rilettura il suo
     /// promemoria si porta via quello dell'altra.

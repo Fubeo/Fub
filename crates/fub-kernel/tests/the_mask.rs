@@ -1,5 +1,5 @@
 //! **La grana di un abbonamento** (§10.1,
-//! [decisione 0033](../../../docs/decisions/0033-la-grana-di-un-abbonamento.md))
+//! [decisione 0033](../../../docs/decisions/0184-eventi-accodati-e-job.md))
 //! vista dal punto in cui conta: la consegna.
 //!
 //! La maschera era una lista di specie, e con quella sola grana chi si abbonava

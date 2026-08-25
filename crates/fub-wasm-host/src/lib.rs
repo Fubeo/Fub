@@ -1,4 +1,4 @@
-//! **Il secondo backend** (§16.1, [M5](../../../docs/milestones/M5-wasm-runtime.md)):
+//! **Il secondo backend** (§16.1, [M5](../../../docs/project/m5-wasm-runtime.md)):
 //! un componente WASM che il kernel vede come qualunque altro provider.
 //!
 //! Il contratto è congelato dal 2026-08-14 (`fub:abi@0.1.1`), e questo crate è
@@ -15,14 +15,14 @@
 //! [`CommandProvider`](fub_abi::traits::CommandProvider). Il kernel riceve
 //! `Box<dyn Trait>` e non ha un solo ramo che sappia dire quale dei due backend
 //! ha in mano — è il «un trait, due backend» di
-//! [`traits.md`](../../../docs/architecture/traits.md), e la prova che regge è
+//! [`traits.md`](../../../docs/reference/abi-and-wit.md), e la prova che regge è
 //! il test di parità: **lo stesso** ping del plugin nativo di M4, ricompilato a
 //! componente, che risponde la stessa cosa.
 //!
 //! # Dove NON sta l'enforcement
 //!
 //! Non qui. Le capacità le applica il `Guard<H, P: Policy>` del kernel, che è
-//! il punto unico dalla [0021](../../../docs/decisions/0021-il-confine.md) e
+//! il punto unico dalla [0021](../../../docs/decisions/0185-capability-un-solo-guard.md) e
 //! resta l'unico: le host function di questo crate ricevono un `&mut dyn
 //! HostApi` **già incappucciato** dalla politica del plugin e si limitano a
 //! passargli la chiamata. Un secondo punto in cui si decide chi può cosa

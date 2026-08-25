@@ -43,7 +43,7 @@
 //! vault non ha più prende un tombstone. La frattura da rename perso degrada a
 //! "nuova storia + tombstone della vecchia" — la cronologia si spezza, ma niente
 //! mente sul presente, e il contenuto vecchio resta leggibile. Vedi
-//! `docs/PIANO.md`, riga "Versioning".
+//! `../../../docs/project/status.md`, riga "Versioning".
 //!
 //! # Lo store, e chi comanda fra store e indice
 //!
@@ -59,7 +59,7 @@
 //! Quello spazio sta sotto la radice dei **derivati**, e gli snapshot non lo
 //! sono: buttarli non costa una ricostruzione, costa la memoria di com'erano i
 //! file. È il difetto che la
-//! [0048](../../../docs/decisions/0048-una-radice-sola.md) nomina e non chiude —
+//! [0048](../../../docs/decisions/0188-identita-path-e-rename.md) nomina e non chiude —
 //! la seconda radice per plugin è additiva e arriva dopo M3 —, e questo store è
 //! il primo che ci si sposterà.
 //!
@@ -99,7 +99,7 @@ pub const VERSIONING_ID: &str = "fub.versioning";
 /// su disco: un indice di un'altra epoca si butta e si ricostruisce.
 /// Le chiavi delle stringhe che il versioning scrive a un umano. Sono **tutte**
 /// messaggi d'errore, ed è la conseguenza diretta della
-/// [decisione 0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md):
+/// [decisione 0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md):
 /// un componente senza pannelli non ha prosa da mostrare finché non va storto
 /// qualcosa, e allora ne ha soltanto quella. I punti in cui qualcosa va storto
 /// durante il lavoro del versioning non stanno più su `stderr`: ognuno lascia
@@ -1429,7 +1429,7 @@ impl VersioningHandler {
     /// esiste.
     ///
     /// Che le due liste potessero divergere lo aveva già scritto la
-    /// [0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)
+    /// [0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
     /// — uno scarto è un documento che esiste e non è indicizzato — ma là la
     /// divergenza era rara e piccola; qui è la normalità per tutta la durata
     /// dell'indicizzazione. E per questa passata l'anagrafe è la sorgente

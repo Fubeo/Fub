@@ -3,7 +3,7 @@
 // numeri, ma non importa DOM e non importa il motore: è il file che
 // `render/*`, `interaction.ts`, `config.ts` e `chart.ts` guardano per
 // sapere com'è fatto un grafo. Chi lo cambia cambia tutti: per questo è
-// ghiacciato durante lo sviluppo in parallelo (vedi `graph.md` §9).
+// ghiacciato durante lo sviluppo in parallelo (vedi `../../../../docs/product/search-links-and-graph.md` §9).
 //
 // La scelta strutturale è l'SoA: niente array di oggetti `SimNode`, ma
 // `Float32Array` fratelli. Nel loop caldo — che gira anche duemila volte per
@@ -13,7 +13,7 @@
 // allocare dentro il frame.
 
 /// Ciò che arriva nel `payload` del nodo custom `fub:graph`. La forma la
-/// decide `fub_features::graph` e non cambia (contratto §0 di `graph.md`):
+/// decide `fub_features::graph` e non cambia (contratto §0 di `../../../../docs/product/search-links-and-graph.md`):
 /// tutto il resto — grado, massa, raggio — si ricava di qua.
 export interface GraphData {
   nodes: string[];
@@ -52,7 +52,7 @@ export interface Structure {
   dragged: number;
   /// Identità: l'unico pezzo non numerico, letto fuori dal loop caldo.
   id: string[];
-  /// Archi per indice + curvatura stabile per arco (§5.3 di `graph.md`):
+  /// Archi per indice + curvatura stabile per arco (§5.3 di `../../../../docs/product/search-links-and-graph.md`):
   /// due archi a↔b si separano in due curve speculari invece di giacersi
   /// sopra.
   from: Uint32Array;
@@ -63,7 +63,7 @@ export interface Structure {
 }
 
 /// Livelli di qualità: la taglia del grafo cambia quanto costa un frame, non
-/// quanta fisica fa (§3.4 di `graph.md`).
+/// quanta fisica fa (§3.4 di `../../../../docs/product/search-links-and-graph.md`).
 export type Tier = 1 | 2 | 3;
 
 export interface PhysicsConfig {

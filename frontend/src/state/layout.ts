@@ -18,7 +18,7 @@
 // mezza.
 //
 // «Tab» e non «documento», e la differenza è arrivata con la §3.3
-// ([0079](../../../docs/decisions/0079-il-grafo-esce-dall-overlay.md)): una linguetta
+// ([0079](../../../docs/decisions/0190-sessioni-documento-e-undo.md)): una linguetta
 // può essere una **view dichiarata** — il grafo — e allora quel riquadro non
 // mostra nessuna nota. Vedi `Tab` qui sotto per il perché sia un tipo
 // discriminato e non un path con un prefisso.
@@ -52,7 +52,7 @@ import { emit, readState, writeState } from "./store";
 /// **Discriminata, e non un path con un prefisso.** La tentazione era scrivere
 /// `"view:graph"` dentro l'elenco di prima e lasciare tutto com'era: costa una
 /// riga, e la si paga per sempre. Un path è l'identità di un documento
-/// ([0043](../../../docs/decisions/0043-il-path-e-la-chiave.md)) — è la chiave
+/// ([0043](../../../docs/decisions/0188-identita-path-e-rename.md)) — è la chiave
 /// con cui si legge dal disco, quella che il rename insegue, quella che
 /// attraversa il confine dentro il `ViewContext` — e sovraccaricarla vorrebbe
 /// dire che ogni suo lettore deve sapere che a volte non è un path. Sono una

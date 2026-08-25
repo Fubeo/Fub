@@ -1,6 +1,6 @@
 //! **Ciò che va storto arriva a qualcuno** (seduta 20:
-//! [0051](../../../docs/decisions/0051-l-alimentazione-risponde.md) +
-//! [0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)).
+//! [0051](../../../docs/decisions/README.md) +
+//! [0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
 //!
 //! La proprietà sotto esame è quella che il piano dichiarava di avere e aveva a
 //! metà: *perdite silenziose non esistono per contratto*. Qui si guarda dai due

@@ -17,7 +17,7 @@
 //! ragione per cui è ancora una fixture e non un import diretto è la stessa: i
 //! due lati parlano lingue diverse e si incontrano solo su disco.
 //!
-//! Il verbale è la [0081](../../../docs/decisions/0081-un-accordo-ha-un-proprietario.md).
+//! Il verbale è la [0081](../../../docs/decisions/0185-capability-un-solo-guard.md).
 //!
 //! La forma canonica di un accordo **non è scritta qui**: è una regola del
 //! contratto (`fub_abi::rules::keys`), tenuta uguale alla copia della shell dal

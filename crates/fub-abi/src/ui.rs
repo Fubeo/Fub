@@ -29,7 +29,7 @@
 //! permessi in un solo punto (`HostApi`). Ogni nodo aggiunto qui è **sicuro per
 //! costruzione**: nessun campo di nessuna variante nuova è interpretato come
 //! markup, e chi disegna lo inserisce come testo. Vedi
-//! `docs/architecture/ui-protocol.md`.
+//! `../../../docs/architecture/frontend-and-ipc.md`.
 //!
 //! # Chi mette cosa in un'azione
 //!
@@ -293,7 +293,7 @@ pub enum UiKind {
     },
     /// Escape hatch: web-view isolata. Usata con parsimonia.
     /// **Solo codice fidato** finché non esistono asset story e CSP per i
-    /// plugin (vedi `docs/architecture/ui-protocol.md`).
+    /// plugin (vedi `../../../docs/architecture/frontend-and-ipc.md`).
     WebView {
         url: String,
         height: u32,

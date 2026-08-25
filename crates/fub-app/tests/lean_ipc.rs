@@ -21,7 +21,7 @@
 //! **Questo test giudica `lib.rs`, e la superficie IPC sta tutta lì** — e la
 //! seconda metà di quella frase, che prima era una speranza, adesso è un
 //! presidio. La zona cieca misurata dalla
-//! [0106](../../../docs/decisions/0106-un-formato-si-presenta.md) era questa:
+//! [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md) era questa:
 //! una seconda superficie IPC dichiarata in un altro file dello stesso crate e
 //! montata con un `.plugin()` che porti il proprio `generate_handler!` passava
 //! di qui **verde**, ed era raggiungibile dal webview come
@@ -151,7 +151,7 @@ const CONTRACT: &str = include_str!("../../fub-abi/src/traits.rs");
 /// comando del registro, una view o una query.
 ///
 /// La riga che divide, e che va usata per prima, è della
-/// [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md): *un
+/// [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md): *un
 /// comando fa accadere qualcosa e risponde con un messaggio e un effetto; ciò
 /// che risponde con **dati** non può essere un comando — un `CommandOutcome` non
 /// li porta — e resta sul canale di lettura.*
@@ -194,7 +194,7 @@ enum Why {
     /// **La porta è la credenziale.** Ciò che rende legittimo l'atto è *chi
     /// bussa*, e una porta generica lascerebbe che a dirlo fosse chiunque.
     ///
-    /// È la [decisione 0012](../../../docs/decisions/0012-origine-degli-eventi.md)
+    /// È la [decisione 0012](../../../docs/decisions/0184-eventi-accodati-e-job.md)
     /// applicata alla configurazione e allo stato di vista: da qui passa **la
     /// persona davanti allo schermo** — che ha cliccato su un interruttore — e da
     /// `settings.set` del registro passa un *programma*, che tocca solo le chiavi
@@ -206,7 +206,7 @@ enum Why {
     /// vista di un provider (0035, 0037). E il contesto attivo e il locale di
     /// sistema sono fatti che **solo la shell sa**: quale nota si sta guardando è
     /// una decisione dell'app e non una capacità
-    /// ([0007](../../../docs/decisions/0007-contesto-di-sessione.md)), e `Intl` ce
+    /// ([0007](../../../docs/decisions/README.md)), e `Intl` ce
     /// l'ha il webview.
     GateIsCredential,
     /// **Aspetta un cliente.** Passerebbe la riga che divide come comando — fa
@@ -371,7 +371,7 @@ const ALLOWLIST: &[(&str, Why)] = &[
     // come l'outline e ogni altra lettura. Un fatto sul vault che solo la
     // shell sapeva chiedere è adesso una domanda del canale di tutti — e un
     // `ViewProvider` che volesse mostrare un documento reso ce l'ha. La
-    // [decisione 0163](../../../docs/decisions/0163-render-via-index-query.md)
+    // [decisione 0163](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
     // ha chiuso l'asimmetria.
 ];
 
@@ -886,7 +886,7 @@ fn bridges_stay_six() {
 ///
 /// Questi tre non sono una dimenticanza, e per questo stanno in un elenco invece
 /// che in un `assert!(vuoto)`. La
-/// [0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)
+/// [0029](../../../docs/decisions/0183-composizione-host-kernel.md)
 /// li ha scritti così apposta e lo dice: *«i tre comandi ci sono (`list_vaults`,
 /// `set_current_vault`, `close_vault`) e `main.ts` non ne chiama nessuno: la
 /// finestra resta una, e apre un vault alla volta. È voluto — questa voce è la

@@ -121,9 +121,9 @@ pub struct SyntaxRuleSpec {
 /// [`syntax`](crate::options::syntax), e la **forma** quando la forma è un
 /// dato invece che una grammatica. Chi disegna una superficie di scrittura —
 /// la nostra live preview, o quella di un terzo dalla
-/// [0104](../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md)
+/// [0104](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
 /// — non ha il provider e non può parsare il buffer sporco che ha in mano
-/// ([0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)):
+/// ([0018](../../../docs/decisions/0182-provider-e-porte-generiche.md)):
 /// tutto ciò che può fare è **interpretare** questa dichiarazione, e ciò che
 /// qui non è dichiarato lo riscriverà a mano.
 ///

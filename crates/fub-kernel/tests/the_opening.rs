@@ -1,5 +1,5 @@
 //! **L'apertura di un vault non è tutto-o-niente** (§15.7,
-//! [decisione 0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)).
+//! [decisione 0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)).
 //!
 //! La proprietà sotto esame è una sola, e ha un confine che vale quanto lei:
 //!

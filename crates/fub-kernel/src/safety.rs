@@ -1,6 +1,6 @@
 //! **Il confine contro i panici**: un provider che pania costa la *chiamata*,
 //! non il vault (§9.3,
-//! [decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)).
+//! [decisione 0032](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //!
 //! # Cosa costava prima
 //!
@@ -10,7 +10,7 @@
 //! `RwLockWriteGuard` di chi ha chiamato, e da quel momento il lock è
 //! **avvelenato**: i `.write().unwrap()` di chi monta lo traducono in un panico
 //! su *ogni* comando successivo, cioè in un vault irraggiungibile fino al
-//! riavvio. La [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+//! riavvio. La [decisione 0024](../../../docs/decisions/README.md)
 //! ne aveva tolto una metà — un `RwLock` si avvelena solo se a paniare è chi
 //! tiene il prestito esclusivo, quindi un provider che **disegna** non se lo
 //! portava più via — e questa è l'altra metà, quella di chi **agisce**.
@@ -37,7 +37,7 @@
 //! spegnerlo da soli senza poterlo **riaccendere** (§11.1) farebbe di un
 //! difetto passeggero una perdita permanente. Dirlo invece adesso si può, ed è
 //! ciò che [`reporting`] serve a fare: il canale del §20.2 esiste
-//! ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)).
+//! ([decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
 //!
 //! # Il presupposto della rete, e chi lo verifica
 //!
@@ -150,12 +150,12 @@ pub fn caught<R, E>(
 ///
 /// Qui c'era un `eprintln!` e un commento che diceva «il canale giusto per dirlo
 /// è il §20.2, e non esiste ancora». Adesso esiste
-/// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)),
+/// ([decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)),
 /// e questa funzione ha smesso di decidere da sé dove va a finire un panico:
 /// lo **restituisce**, e chi chiama — che è dentro il kernel e ha l'event bus —
 /// lo emette come `Event::Trouble`.
 ///
-/// La forma è quella della [decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md)
+/// La forma è quella della [decisione 0030](../../../docs/decisions/0183-composizione-host-kernel.md)
 /// letta al contrario: là l'esito si è messo al sicuro **dentro** chi lo
 /// produce, perché dipendeva dall'attenzione di chi lo riceveva; qui chi
 /// produce non ha un canale (è una funzione libera, senza workspace) e allora

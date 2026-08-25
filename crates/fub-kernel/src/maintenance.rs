@@ -5,7 +5,7 @@
 //! # Perché sono comandi del registro, e non comandi dell'app
 //!
 //! Perché è ciò che la voce chiedeva, ed è la scelta giusta per la ragione della
-//! [0009](../../../docs/decisions/0009-registro-dei-comandi.md): un'azione
+//! [0009](../../../docs/decisions/README.md): un'azione
 //! dichiarata una volta la trovano **tutti** — la palette, una scorciatoia che
 //! l'utente si rimappa, una macro, la CLI del §27.1, il centro di comando.
 //! Cablarli come comandi Tauri li avrebbe resi raggiungibili da una sola
@@ -17,7 +17,7 @@
 //! # Perché li esegue il kernel, e non un `CommandProvider` che vive fuori
 //!
 //! Questa è la decisione di cui il modulo aveva bisogno, ed è la
-//! [0086](../../../docs/decisions/0086-una-cronologia-e-la-sua-porta.md)
+//! [0086](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 //! generalizzata. Là si era imparato che un comando scritto in `fub-features`
 //! non può toccare lo stato di vista, perché il proprietario non è un parametro:
 //! **non ci arriva**. Qui succede lo stesso per tre volte, e per un motivo più
@@ -40,7 +40,7 @@
 //!
 //! - `vault.rebuild-index` — butta il **derivato** e lo rifà (anagrafe,
 //!   grafo, indici). È l'operazione sicura per definizione: ciò che tocca è
-//!   ricostruibile per classe ([0048](../../../docs/decisions/0048-una-radice-sola.md)),
+//!   ricostruibile per classe ([0048](../../../docs/decisions/0188-identita-path-e-rename.md)),
 //!   quindi non c'è niente da confermare e niente da annullare.
 //! - `vault.repair` — ciò che il rebuild **non** fa: raccoglie gli spazi
 //!   per-documento rimasti orfani (§13.2) e dice ciò che non può riparare da sé.
@@ -71,7 +71,7 @@
 //! montato per poterglielo servire. Ed è **un gesto dell'utente** e non
 //! manutenzione: la 0086 ha stabilito che per un dato di questa specie chi lo
 //! dichiara non è chi lo può togliere, e fino alla
-//! [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md) il
+//! [0103](../../../docs/decisions/0184-eventi-accodati-e-job.md) il
 //! journal era l'unico dato dell'utente dentro il vault che **nessun gesto
 //! dell'utente raggiungeva**.
 

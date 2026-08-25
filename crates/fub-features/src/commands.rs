@@ -1830,7 +1830,7 @@ fn vault_archive(
 
 // ---------------------------------------------------------------------------
 /// Spunta il task che sta sotto una posizione: il **primo cliente one-shot** del
-/// modello parsato (§4.2, [decisione 0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
+/// modello parsato (§4.2, [decisione 0018](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
 ///
 /// È il gesto quotidiano del capitolo 10, ed è anche la prova che la capacità
 /// nuova serve a qualcosa che prima non si poteva scrivere. Le due strade di

@@ -31,7 +31,7 @@
 //! # Dove altro sta scritta
 //!
 //! La stessa riga è nel doc del WIT accanto a `block-custom` e in
-//! `docs/architecture/plugin-boundary.md`: i tre posti in cui chi scrive un
+//! `../../../../docs/architecture/plugin-runtime.md`: i tre posti in cui chi scrive un
 //! plugin cerca la risposta.
 
 use crate::model::custom_kind;

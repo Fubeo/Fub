@@ -14,12 +14,12 @@
 //
 // - **il linguaggio la sapeva già dire**: è `Docs { docs: [la nota] }` in AND
 //   con un `Text`, cioè una clausola di due letterali della
-//   [0019](../../../docs/decisions/0019-il-canale-dati.md). La porta è
+//   [0019](../../../docs/decisions/0182-provider-e-porte-generiche.md). La porta è
 //   `testoNelDocumento` in `host/contract.ts`, che sta **là** e non qui per la
-//   regola della [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md):
+//   regola della [0082](../../../docs/decisions/0182-provider-e-porte-generiche.md):
 //   tutto ciò che nella shell accetta del testo e propone delle note passa da
 //   `IndexQuery::Documents`, o il ranking nasce quattro volte;
-// - **le coordinate ci sono**: la [0049](../../../docs/decisions/0049-una-posizione-dentro-un-documento.md)
+// - **le coordinate ci sono**: la [0049](../../../docs/decisions/0181-modello-documento-e-arene.md)
 //   ha messo le occorrenze nella risposta, e da lì `rowsToShow` e
 //   `revealByteOffset` sono le stesse identiche del pannello della ricerca. Un
 //   risultato che non fosse cliccabile qui sarebbe una lista di conferme che
@@ -67,7 +67,7 @@ export function closeInDocumentSearch(): void {
 ///
 /// L'accordo è `Mod-f` e sta in `SHELL_KEYS` come tutti gli altri: è quello che
 /// le dita si aspettano — in Obsidian Ctrl+F cerca nella nota e Ctrl+Shift+F nel
-/// vault — ed è la coppia che la [0081](../../../docs/decisions/0081-un-accordo-ha-un-proprietario.md)
+/// vault — ed è la coppia che la [0081](../../../docs/decisions/0185-capability-un-solo-guard.md)
 /// ha appena rimesso in ordine da questa parte.
 export function mountDocSearch(): void {
   registerShellCommand({

@@ -1,5 +1,5 @@
 //! **I tasti che arrivano da fuori** (§23.13,
-//! [decisione 0100](../../../docs/decisions/0100-i-tasti-che-arrivano-da-fuori.md)):
+//! [decisione 0100](../../../docs/decisions/README.md)):
 //! un vault porta con sé le proprie scorciatoie, e finché nessuno le ha
 //! guardate non premono niente.
 //!

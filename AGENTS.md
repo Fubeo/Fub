@@ -1,143 +1,55 @@
-# Repository Guidelines
+# Repository guidelines
 
-## Project Overview
+## Prima di modificare il repository
 
-Fub is a local-first, extensible writing workspace built as a Rust workspace with a Tauri v2 desktop shell and a Vite/TypeScript frontend. The core is format-agnostic: native and WASM plugins implement the same `fub-abi` contracts, while Markdown support and official features live outside the kernel.
+Leggi:
 
-Before changing behavior, read `docs/CONTRIBUTING.md` and the relevant contract or decision. Prefer extending an existing provider, query, command, or view channel over adding a new path.
+1. [`CONTRIBUTING.md`](CONTRIBUTING.md) per il ciclo locale;
+2. [`docs/architecture/overview.md`](docs/architecture/overview.md) per i confini;
+3. la pagina canonica dell'area modificata;
+4. un ADR soltanto quando serve capire il perché di una scelta.
 
-## Architecture & Data Flow
+Il codice e i test hanno precedenza sulla prosa. WIT, schemi persistenti e tipi
+IPC sono contratti pubblici: non cambiarli come dettagli locali.
 
-Primary flow:
+## Confini da preservare
 
-```text
-frontend/src (webview)
-  -> crates/fub-app (thin Tauri IPC glue)
-  -> crates/fub-host (composition root, sessions, bundles, jobs)
-  -> crates/fub-kernel (format-agnostic workspace and policy)
-  -> dyn fub-abi providers (native or WASM)
-  -> storage/indexes
-```
+- `fub-abi` contiene tipi, trait, errori, regole, WIT e rappresentazioni IPC.
+- `fub-kernel` possiede workspace, storage, indici, policy ed eventi. Non deve
+  conoscere Tauri, Wasmtime o Markdown.
+- `fub-host` compone sessioni, bundle, watcher, impostazioni e job. Non deve
+  conoscere Tauri.
+- `fub-app` contiene il binario Tauri e adattatori IPC sottili.
+- `fub-format-markdown` è l'unico crate che conosce Markdown.
+- `fub-wasm-host` è l'unico crate che dipende da Wasmtime.
+- `frontend/src/host/` è il seam della shell. Soltanto `host/ipc.ts` e
+  `host/dialog.ts` possono importare API Tauri.
+- `fub-testkit` è una dipendenza di sviluppo, non una dipendenza normale.
 
-Events return through `Workspace`'s queued event bus, `fub-host::EventSink`, Tauri's `fub://event`, and the frontend state/event router. Provider dispatch is queued and non-reentrant; indexes are updated directly rather than through events.
+Preferisci le porte generiche già presenti:
 
-Key boundaries:
+- `query_index` per i dati;
+- `list_commands` e `invoke_command` per le azioni;
+- `list_views`, `render_view` e `view_action` per le view;
+- porte esplicite soltanto per scritture e bozze.
 
-- `crates/fub-abi`: single source of truth for shared types, traits, errors, WIT, and IPC-safe representations.
-- `crates/fub-kernel`: owns `Workspace`, documents, indexes, registry, sessions, and the single capability `Guard`; it must not know Tauri, WASM, or Markdown.
-- `crates/fub-host`: Tauri-free composition root for vault sessions, bundle lifecycle, watchers, settings, and jobs.
-- `crates/fub-app`: Tauri entry point and IPC adapters only. Logic that does not require a webview belongs in `fub-host` or below.
-- `frontend/src/host`: typed contract, IPC seam, fake host, and generic query helpers. Only `host/ipc.ts` and `host/dialog.ts` may import Tauri APIs.
-- `crates/fub-wasm-host`: the only crate that names Wasmtime; it adapts components to the same `fub-abi` traits used by native providers.
+## Regole operative
 
-Prefer generic routes: `query_index` for data, `list_commands`/`invoke_command` for actions, and `list_views`/`render_view`/`view_action` for UI providers. Dedicated write/draft ports remain explicit. Do not add bespoke IPC for behavior expressible through these registries.
+- I tipi condivisi nascono in `fub-abi` e, se attraversano il confine WASM,
+  hanno una proiezione WIT coerente.
+- Gli interi `u64` attraversano l'IPC come stringhe.
+- Non tenere lock durante una chiamata a un provider.
+- Gli eventi restano accodati e non rientranti.
+- Gli errori attraversano i confini come varianti tipizzate, non come
+  `error.to_string()`.
+- Usa `fub-sdk::testing::MemoryHost` per i test di provider e
+  `fub-testkit::{Bench, Mounted}` per integrazioni host/kernel.
+- I file generati si modificano attraverso la sorgente e il generatore.
+- Una specifica futura diventa una issue; non creare piani permanenti in
+  `docs/`.
 
-## Key Directories
+## Verifica
 
-| Path | Purpose |
-|---|---|
-| `crates/fub-abi/` | Public contract, WIT, IPC types, provider traits, contract tests. |
-| `crates/fub-kernel/` | Format-independent workspace, storage, indexes, policies, events. |
-| `crates/fub-sdk/` | Plugin-author helpers and in-memory `MemoryHost` test double. |
-| `crates/fub-testkit/` | Dev-only host/kernel integration bench (`Bench`, `Mounted`). |
-| `crates/fub-format-markdown/` | First native `FormatProvider`; the only crate that knows Markdown. |
-| `crates/fub-features/` | Official features as plugins behind independent Cargo features. |
-| `crates/fub-host/` | Sessions, bundles, settings, jobs, watchers, host ports. |
-| `crates/fub-app/` | Tauri binary, configuration, and IPC glue. |
-| `crates/fub-wasm-host/` | Wasmtime component linker and native-trait adapters. |
-| `frontend/src/` | Shell, panels, state, host seam, themes, and Vitest tests. |
-| `frontend/bench/` | Playwright visual/a11y bench, scenes, fixtures, baselines. |
-| `.github/scripts/` | Dependency-free Node guards for architecture, docs, and CI invariants. |
-| `docs/` | Operational guide, roadmap, decisions, and mechanically checked prose. |
-| `esempi/*-wasm/`, `tools/varco-wasm/` | WASM examples/tools outside the Cargo workspace. |
-
-## Development Commands
-
-Run Rust and repository guards from the repository root:
-
-```bash
-cargo tauri dev                         # desktop app; requires the Tauri CLI
-cargo build -p fub-app                  # native application build
-cargo test --workspace                  # complete Rust suite
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo deny check                        # requires cargo-deny
-node .github/scripts/check-doc-links.mjs
-node .github/scripts/check-prose.mjs
-node .github/scripts/check-locale-loop.mjs
-```
-
-Run frontend commands from `frontend/`:
-
-```bash
-npm ci
-npm run dev                             # Vite dev server on port 1420
-npm run typecheck                       # tsc --noEmit; Vite/Vitest do not typecheck
-npm test                                # vitest run
-npm run build
-npm run theme:generate                  # regenerate derived theme files
-npm run theme:verify                    # verify generated bytes
-npm run bench:verify                    # Playwright pixel comparison
-npm run bench:a11y                      # rendered color-contrast audit
-```
-
-For focused verification, select the owning package/file, for example:
-
-```bash
-cargo test -p fub-kernel --test session_context
-cargo test -p fub-abi --test wit_conformance
-cd frontend && npx vitest run src/host/mirror.test.ts
-```
-
-`docs/CONTRIBUTING.md` is the authoritative local loop. `.github/scripts/check-locale-loop.mjs` mechanically keeps it aligned with `.github/workflows/ci.yml`.
-
-## Code Conventions & Common Patterns
-
-- **Contract first:** shared public data belongs in `fub-abi` and is re-exported from its root. Types crossing provider signatures must have matching WIT records/variants/enums. Update live WIT, frozen fixtures, TS mirrors, and conformance tests together.
-- **Dependency direction:** kernel code depends on traits, never concrete formats. `fub-sdk` must not depend on `fub-kernel`; `fub-testkit` is dev-only; only `fub-app` names Tauri and only `fub-wasm-host` names Wasmtime.
-- **Dependency injection:** pass `dyn Trait` providers and `HostApi` capabilities. Reuse the existing `Guard`/`Policy`; never create a second capability engine.
-- **Errors:** keep `KernelError` host-local and translate to discriminated `PluginError` once at the ABI boundary. Preserve typed variants and localizable `Text`; do not send `error.to_string()` over IPC.
-- **Identity:** serialize `u64` IDs/fingerprints as strings using `fub_abi::ipc::u64_string`; JavaScript numbers lose values above $2^{53}$.
-- **Locks and async work:** use read locks for reads, write locks for mutation, and do not hold locks across provider calls. Preserve queued, non-reentrant event dispatch. In the frontend, use the existing race/lifetime helpers instead of hopeful timers or untracked global listeners.
-- **Frontend state:** shared shell state belongs in `frontend/src/state/store.ts` signals or kernel-owned machine state, not mutable globals in `main.ts` or panel-local copies. Keep `frontend/src/host/contract.ts` type-only.
-- **UI extension:** render declarative views and registry-provided commands; do not hardcode plugin command IDs or recursively serialize trees across IPC. Use `fub_abi::arena` for recursive structures.
-- **Generated files:** do not hand-edit generated theme sheets/skin or mirror fixtures. Change their recipe/source and run the owning generator; `theme:verify` and mirror tests defend byte/type parity.
-- **Naming and formatting:** use Rust's default `rustfmt`; there is no repository ESLint/Prettier configuration. Frontend tests use `<subject>.test.ts` next to the subject. Follow existing descriptive Rust integration-test filenames and behavior-oriented test names.
-- **Docs:** link instead of repeating prose. Numeric claims use registered `[conta: name]` markers from `.github/scripts/counts.mjs`. Run doc-link/prose/table guards after documentation changes.
-
-## Important Files
-
-- `Cargo.toml`: workspace members, shared dependency versions, MSRV, dev profile.
-- `crates/fub-abi/src/lib.rs`: public contract surface and root re-exports.
-- `crates/fub-abi/wit/fub/abi.wit`: live `fub:abi@0.1.1` WIT contract; frozen copies live under `wit/frozen/`.
-- `crates/fub-kernel/src/workspace.rs`: orchestration, locking, provider frames, direct index updates.
-- `crates/fub-kernel/src/host/guard.rs`: single capability enforcement point.
-- `crates/fub-host/src/session.rs`: `Host`/`VaultSession` ownership and shutdown ordering.
-- `crates/fub-host/src/registry.rs`: bundle ownership, mount/unmount, inventory.
-- `crates/fub-app/src/lib.rs` and `src/main.rs`: Tauri command adapters and binary entry.
-- `frontend/src/main.ts`: shell bootstrap.
-- `frontend/src/host/{contract,ipc,query,fake}.ts`: shared frontend contract and host seam.
-- `frontend/src/state/store.ts`: shell state/signals.
-- `frontend/vite.config.ts` and `vite.bench.config.ts`: app/test and visual-bench seams.
-- `.github/workflows/ci.yml`: actual CI gates and pinned environments.
-- `docs/CONTRIBUTING.md`: authoritative development and contribution workflow.
-
-## Runtime/Tooling Preferences
-
-- Rust edition 2021, MSRV **1.89**; CI pins Rust 1.89.
-- Node **22** with **npm** and the committed lockfile. Use `npm ci` in clean/CI environments; do not substitute Bun, pnpm, or Yarn.
-- WASM targets: `wasm32-unknown-unknown` for `tools/varco-wasm`, `wasm32-wasip2` for component examples.
-- No Makefile, Justfile, ESLint, Prettier, or repository `rust-toolchain`/`rustfmt.toml`. Use Cargo/npm scripts and `.github/scripts/*.mjs` directly.
-- Dependency versions are centralized in `[workspace.dependencies]`; crate manifests use `workspace = true`. `check-cargo-versions.mjs` rejects repeated/shadowed versions.
-- Visual baselines are Linux-specific and generated on `ubuntu-latest`; do not regenerate them on another OS and commit the drift.
-
-## Testing & QA
-
-- Rust unit tests live in `#[cfg(test)] mod tests`; integration tests live in `crates/*/tests/*.rs`.
-- Use `fub-sdk::testing::MemoryHost` for provider-level tests. Use `fub-testkit::{Bench, Mounted}` for real host/kernel/storage integration; never copy a new ad-hoc host double.
-- Frontend tests use Vitest + happy-dom, fixed `it-IT` locale, colocated `*.test.ts`, and `createFakeHost()` from `frontend/src/host/fake.ts`. The fake must throw for unsupported behavior rather than return plausible empty data.
-- Build deterministic races with fake-host `throttle`/`fault` gates; avoid tests based on `setTimeout` timing.
-- Contract or API changes require the corresponding WIT conformance, frozen-copy, TS mirror, fake-host, and native/WASM parity tests.
-- Visual QA uses committed light/dark PNG baselines (`npm run bench:verify`) and axe color-contrast checks (`npm run bench:a11y`). Pixel verification is intentionally Linux-only.
-- Performance tests count stable operations/allocations rather than wall-clock milliseconds.
-- A focused test is useful while editing, but significant cross-layer changes finish with `cargo test --workspace`, frontend typecheck/test/build, and the relevant Node invariant guards from `docs/CONTRIBUTING.md`.
+Esegui il ciclo pertinente descritto in
+[`CONTRIBUTING.md`](CONTRIBUTING.md). Per una modifica trasversale, termina con
+i test Rust, il type-check/test/build del frontend e i guard documentali.

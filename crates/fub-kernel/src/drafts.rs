@@ -19,7 +19,7 @@
 //! # Perché non basta il journal
 //!
 //! Perché sono le **due pile** della
-//! [0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md), e il journal lo
+//! [0045](../../../docs/decisions/0190-sessioni-documento-e-undo.md), e il journal lo
 //! dice già di sé: là dentro ci sta ciò che il kernel *ha fatto* al vault, cioè
 //! mutazioni concluse, con il loro inverso. Una bozza è l'opposto in tutti e tre
 //! i modi: non è successo niente al vault, non c'è nessun inverso da conservare,
@@ -36,13 +36,13 @@
 //!
 //! Una bozza è **lavoro dell'utente che non esiste da nessun'altra parte**: se
 //! la si butta, quel testo non c'è più e non si ricostruisce da niente. Per la
-//! [0048](../../../docs/decisions/0048-una-radice-sola.md) la profondità
+//! [0048](../../../docs/decisions/0188-identita-path-e-rename.md) la profondità
 //! dichiara la classe, e questa è la classe autorevole — la stessa del
 //! registro, un livello sopra i derivati. Metterla sotto `data/` avrebbe voluto
 //! dire dichiarare buttabile ciò che è precisamente l'unica copia.
 //!
 //! Per la stessa ragione **non** sta nello stato di vista
-//! ([0037](../../../docs/decisions/0037-lo-stato-di-vista.md)): quello è il
+//! ([0037](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)): quello è il
 //! *dove eri rimasto* — scroll, tab attiva, sezioni collassate —, sta nella
 //! cartella di configurazione della macchina e si può cancellare senza perdere
 //! niente. Una bozza che vivesse là dentro sarebbe testo dell'utente in un
@@ -57,7 +57,7 @@
 //! Perché ogni scrittura è di **una** bozza, e un file unico avrebbe fatto della
 //! salvataggio automatico di una nota un aggiornamento di un documento
 //! condiviso — cioè l'errore che la
-//! [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)
+//! [0066](../../../docs/decisions/0195-versioni-indipendenti.md)
 //! ha appena finito di togliere, riportato dentro dalla porta di servizio. Con
 //! un file per bozza ogni salvataggio è una **scrittura**, e
 //! [`VaultStorage::write`] la fa atomica per costruzione: chi rilegge dopo un
@@ -86,7 +86,7 @@
 //! più, perché è rimasta l'unica copia. Una nota cancellata mentre una bozza era
 //! aperta lascia una bozza **orfana**, che si mostra e si butta con un gesto,
 //! non con uno sweep silenzioso: il criterio della
-//! [seduta 20](../../../docs/roadmap/20-quando-qualcosa-va-storto.md) è che un
+//! [seduta 20](../../../docs/project/roadmap.md) è che un
 //! dato autorevole non si perde in silenzio, e qui il dato autorevole è il
 //! testo.
 

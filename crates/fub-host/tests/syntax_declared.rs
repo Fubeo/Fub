@@ -1,10 +1,10 @@
 //! **La dichiarazione della sintassi, emessa verso la shell** (§4.4).
 //!
 //! La §4.4 chiede chi dei due parser sia la verità, e la risposta è **nessuno
-//! dei due**: con la [0104](../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md)
+//! dei due**: con la [0104](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
 //! la live preview è *una* superficie di scrittura fra quelle possibili, quindi
 //! le sue regex non possono essere la verità nemmeno per lei; e con la
-//! [0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md) il
+//! [0018](../../../docs/decisions/0182-provider-e-porte-generiche.md) il
 //! modello non può esserlo per un buffer sporco. La verità è la
 //! **dichiarazione** — [`SyntaxForm`], cioè il vocabolario di
 //! [`fub_abi::options::syntax`] più il trigger di chi ne ha uno — e finora
@@ -33,7 +33,7 @@
 //! di lei qui non c'è traccia: la sua sintassi arriva al modello e non arriva
 //! alla superficie di scrittura. È il residuo esatto della §4.4 — un canale che
 //! porti [`Workspace::syntax_forms`] alla shell **a runtime** — e sta scritto
-//! nella [0115](../../../docs/decisions/0115-la-verita-e-la-dichiarazione.md)
+//! nella [0115](../../../docs/decisions/0196-test-e-artefatti-generati.md)
 //! come casella, non come buco: l'accessore che quel canale servirebbe è già
 //! questo, e quello che manca è la rotta.
 

@@ -1,6 +1,6 @@
 //! **Il lotto del watcher non tiene il vault mentre legge il disco.**
 //!
-//! È la regola della [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+//! È la regola della [0024](../../../docs/decisions/README.md)
 //! applicata alla porta da cui il vault cambia da fuori: il lotto prendeva
 //! `write()` e sotto quel lucchetto leggeva e parsava ogni file cambiato, quindi
 //! chi legge — la ricerca, l'autocompletamento, il disegno dei pannelli —

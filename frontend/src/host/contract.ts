@@ -858,7 +858,7 @@ export const MAIN_PANE = "main";
 // e non in due porte per la ragione per cui la revisione è opaca: l'alternativa
 // a riceverla è ricalcolarla di qua, cioè una seconda implementazione di come
 // il kernel deriva le impronte — ed è esattamente ciò che ha costretto la
-// [0088](../../../docs/decisions/0088-cio-che-non-e-ancora-successo.md) a
+// [0088](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) a
 // lasciare `DraftInfo.base` a `null`.
 export interface DocumentSource {
   text: string;
@@ -870,7 +870,7 @@ export interface DocumentSource {
 // e l'altro niente.
 //
 // Due casi e non una revisione opzionale, ed è la
-// [0092](../../../docs/decisions/0092-una-base-si-dichiara.md): finché era
+// [0092](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md): finché era
 // `string | null` col default `null`, scrivere ciechi era ciò che succedeva
 // **omettendo** — cioè il default, che non lo sceglie nessuno. Adesso chi copre
 // una scrittura altrui lo scrive, e chi legge questa riga lo vede.

@@ -1,5 +1,5 @@
 //! Le impostazioni viste dal **kernel** (§11.1,
-//! [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)):
+//! [decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
 //! chi dichiara una chiave, chi la può leggere, chi la può scrivere e cosa
 //! succede a chi ci prova senza titolo.
 //!

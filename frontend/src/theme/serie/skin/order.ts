@@ -15,7 +15,7 @@
 // diciotto smette di esserlo.
 //
 // E un elenco che qualcuno può svuotare in silenzio è indistinguibile da un
-// elenco verde ([0109](../../../../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)):
+// elenco verde ([0109](../../../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
 // un pezzo nuovo non elencato qui non finirebbe nella pelle, e nessuno lo
 // direbbe. Il presidio in `theme/skin.test.ts` confronta i due versi — ogni
 // file un posto nell'ordine, ogni posto un file.
@@ -25,7 +25,7 @@
 // Perché la si chiama da due parti: `theme/generate.mjs`, che legge la cartella
 // con `fs` e riscrive il file, e il presidio, che legge gli stessi pezzi
 // attraverso Vite e confronta. Un posto in cui scriverlo, due da cui leggerlo
-// ([0020](../../../../../docs/decisions/0020-le-regole-in-un-posto-solo.md)).
+// ([0020](../../../../../docs/decisions/README.md)).
 
 /// I pezzi, nell'ordine in cui si montano — che è quello in cui stavano.
 ///
