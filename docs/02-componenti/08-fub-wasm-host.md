@@ -1,65 +1,122 @@
-# `fub-wasm-host` — L'ambiente per plugin WebAssembly
+# `fub-wasm-host` — il secondo backend del contratto
 
-## A cosa serve
+[`crates/fub-wasm-host/`](../../crates/fub-wasm-host) è il solo crate del
+workspace che dipende da Wasmtime. Riceve un componente WebAssembly, lo carica
+nel component model e presenta al resto di Fub oggetti che implementano i trait
+di `fub-abi`.
 
-[`crates/fub-wasm-host`](../../crates/fub-wasm-host) è il motore di runtime (sviluppato per la Milestone 5) incaricato di caricare, isolare ed eseguire in sicurezza plugin di terze parti distribuiti come binari WebAssembly (`.wasm`).
+> **Stato:** runtime parziale della milestone M5. Oggi attraversano il confine
+> il ciclo di vita `Plugin` e `CommandProvider`; gli altri provider e la
+> scoperta automatica dei bundle di terzi non sono ancora completi.
 
-Sfrutta lo standard **Wasmtime Component Model** e le interfacce **WASI 0.2**:
-- **Sandbox deterministica**: il plugin è racchiuso in una sandbox con isolamento di memoria; non ha accesso al filesystem dell'host o alla rete a meno che non siano esplicitamente autorizzati tramite `fub-abi` e `guard.rs`.
-- **Adattatore trasparente (`GuestProxy`)**: implementa i trait nativi di Rust (`Plugin`, `ViewProvider`, `IndexProvider`, `CommandProvider`, `EventHandler`), consentendo al kernel di trattare i plugin WASM esattamente allo stesso modo dei plugin scritti in Rust nativo.
-- **Controllo delle risorse**: previene consumi anomali o attacchi Denial-of-Service tramite limiti di memoria e budget temporali.
+## Responsabilità
 
----
+- compilare e istanziare un componente fornito come file o byte;
+- rifiutare componenti non validi o privi dell'export `fub:abi/plugin`;
+- collegare soltanto le famiglie host che il runtime sa servire;
+- tradurre tipi, risultati ed errori fra WIT e `fub-abi`;
+- montare il componente attraverso lo stesso `BundleRegistry` usato dai bundle nativi;
+- imporre un tetto di memoria e una scadenza alle chiamate del guest;
+- mantenere Wasmtime fuori da kernel, ABI e host generale.
 
-## Architettura e Moduli Interni
+Il crate non scopre da solo i file del vault e non decide quali plugin siano
+fidati. Il chiamante gli consegna il componente e il grado `Trust`; il registro
+dell'host esegue poi il normale ciclo di montaggio.
+
+## Cosa attraversa oggi
+
+### Interfacce esportate dal componente
+
+| Interfaccia | Stato | Adattatore Rust |
+|---|---|---|
+| `fub:abi/plugin` | **Obbligatoria** | `WasmPlugin` implementa `Plugin`. |
+| `fub:abi/command` | **Opzionale e implementata** | `WasmCommandProvider` implementa `CommandProvider`. |
+| Altre famiglie di provider | **Pianificate** | Il contratto le descrive, ma questo crate non espone ancora i relativi proxy. |
+
+### Capacità offerte dall'host
+
+Il linker serve esplicitamente:
+
+- `host-env`;
+- `host-vault-read`;
+- `host-data-read`;
+- `host-data-write`;
+- `host-events`.
+
+Una famiglia `fub:abi/host-*` non presente nell'elenco causa un rifiuto al
+caricamento con il nome della famiglia mancante. Il componente può essere
+compilato per `wasm32-wasip2`, ma Fub non gli collega un ambiente WASI generale:
+filesystem, rete e altre capacità del sistema operativo non diventano
+accessibili per effetto del target.
+
+I permessi non vengono rivalutati in questo crate. Le host function ricevono un
+`HostApi` già protetto dal `Guard` del kernel e si limitano a inoltrare la
+chiamata.
+
+## Flusso
 
 ```mermaid
-flowchart TD
-    Kernel["fub-kernel (Workspace)"] <-->|"Trait Rust (Plugin, ViewProvider...)"| Proxy["GuestProxy (guest.rs)"]
-    Proxy <-->|"Wasmtime Linker / Store"| Component["WASM Component (.wasm)"]
-    Component -->|"Chiamate HostApi"| Guard["Controllo Permessi (guard.rs)"]
-    Guard -->|"Operazioni autorizzate"| Kernel
+flowchart LR
+    File["componente .wasm"] --> Load["Component::from_file / from_bytes"]
+    Load --> Link["link delle sole famiglie servite"]
+    Link --> Bundle["WasmBundle"]
+    Bundle --> Registry["BundleRegistry"]
+    Registry --> Plugin["WasmPlugin"]
+    Registry --> Commands["WasmCommandProvider opzionale"]
+    Plugin --> Kernel["trait di fub-abi"]
+    Commands --> Kernel
 ```
 
-### 1. `component.rs` — Caricamento e Linker
-Configura il motore Wasmtime (`Engine`), il gestore di stato (`Store`), il registro dei tipi esportati e instanzia il componente WASM collegando le importazioni `host-*`.
+`Component` conserva il componente compilato e gli indici delle interfacce
+esportate. Ogni montaggio crea una nuova istanza; `WasmBundle` espone manifest,
+fiducia, plugin e provider al registro comune.
 
-### 2. `guest.rs` — Proxy dei Trait Fub
-Rappresenta l'adattatore che traduce le chiamate ai metodi dei trait (`render_view`, `query`, `handle`, `invoke`) in invocazioni dirette sulle funzioni esportate dal guest WebAssembly.
+## Moduli
 
-### 3. `translate.rs` — Conversione Tipi
-Esegue la traduzione ad alta efficienza e zero-copy ove possibile tra i tipi generati da `wit-bindgen` per il Component Model e le strutture dati native di `fub-abi`.
+| File | Responsabilità |
+|---|---|
+| [`lib.rs`](../../crates/fub-wasm-host/src/lib.rs) | Moduli pubblici e binding host generati dal WIT. |
+| [`component.rs`](../../crates/fub-wasm-host/src/component.rs) | Caricamento, linker, istanze, `WasmBundle`, `WasmPlugin` e `WasmCommandProvider`. |
+| [`guest.rs`](../../crates/fub-wasm-host/src/guest.rs) | Implementazioni delle host function offerte al componente. |
+| [`borrow.rs`](../../crates/fub-wasm-host/src/borrow.rs) | Prestito temporaneo dell'`HostApi` allo store durante una chiamata. |
+| [`translate.rs`](../../crates/fub-wasm-host/src/translate.rs) | Conversioni esaustive fra tipi generati dal WIT e tipi Rust dell'ABI. |
+| [`model.rs`](../../crates/fub-wasm-host/src/model.rs) | Traduzione del modello di documento fra albero Rust e arena WIT. |
+| [`events.rs`](../../crates/fub-wasm-host/src/events.rs) | Capacità `host-events` e gestione del verso rientrante guest → host. |
+| [`limits.rs`](../../crates/fub-wasm-host/src/limits.rs) | Engine condiviso, interruzione a epoche e limite di memoria per istanza. |
 
-### 4. `limits.rs` — Limiti di Risorse
-Monitora e impone limiti stringenti sul consumo di memoria massima del componente, prevenendo saturazioni della RAM di sistema.
+## Dipendenze
 
-### 5. `events.rs` & `model.rs` — Dispatching Eventi e AST
-Gestisce il passaggio degli eventi del bus (`Event`) e la serializzazione/deserializzazione della struttura ad albero del documento (`DocumentModel`).
+Il manifest dichiara `fub-abi`, `fub-kernel`, `fub-host`, `camino`,
+`serde_json`, `thiserror` e `wasmtime`. Non dipende da `wasmtime-wasi`: il
+runtime collega le capacità di Fub una per una invece di consegnare al guest un
+ambiente WASI completo.
 
----
+Il verso verso `fub-host` è intenzionale: questo crate implementa il tipo
+`Bundle`, mentre `fub-host` non deve dipendere da Wasmtime. L'applicazione che
+vuole entrambi compone entrambi.
 
-## Dipendenze e Invarianti
+## Verifica
 
-- **Dipendenze interne**: [`fub-abi`](../../crates/fub-abi), [`fub-kernel`](../../crates/fub-kernel) e [`fub-host`](../../crates/fub-host).
-- **Dipendenze esterne**: `wasmtime` (motore di runtime JIT/AOT WebAssembly), `wasmtime-wasi`, `camino`, `tracing`.
-- **Invariante fondamentale**: la libreria `wasmtime` è utilizzata **esclusivamente all'interno di questo crate**. Nessun altro modulo del workspace vede o dipende direttamente da `wasmtime`.
+Gli esempi WASM restano fuori dal workspace nativo e vengono compilati dai test
+di integrazione:
 
----
+```bash
+cargo test -p fub-wasm-host --test the_first_component
+cargo test -p fub-wasm-host --test commands_cross_the_boundary
+```
 
-## File chiave del modulo
+- [`the_first_component.rs`](../../crates/fub-wasm-host/tests/the_first_component.rs) prova caricamento, ciclo di vita, permessi, capacità e smontaggio.
+- [`commands_cross_the_boundary.rs`](../../crates/fub-wasm-host/tests/commands_cross_the_boundary.rs) prova il provider di comandi attraverso il registro comune.
 
-- [`crates/fub-wasm-host/src/lib.rs`](../../crates/fub-wasm-host/src/lib.rs): entrypoint della libreria e inizializzazione del runtime.
-- [`crates/fub-wasm-host/src/component.rs`](../../crates/fub-wasm-host/src/component.rs): caricamento del file binario `.wasm` e configurazione del `Linker`.
-- [`crates/fub-wasm-host/src/guest.rs`](../../crates/fub-wasm-host/src/guest.rs): implementazione proxy dei trait `fub-abi`.
-- [`crates/fub-wasm-host/src/translate.rs`](../../crates/fub-wasm-host/src/translate.rs): conversione bidirezionale dei tipi WIT.
-- [`crates/fub-wasm-host/src/limits.rs`](../../crates/fub-wasm-host/src/limits.rs): applicazione dei limiti di allocazione memoria e timeout.
-- [`crates/fub-wasm-host/src/events.rs`](../../crates/fub-wasm-host/src/events.rs): recapito degli eventi di Fub al componente WASM.
-- [`crates/fub-wasm-host/src/model.rs`](../../crates/fub-wasm-host/src/model.rs): adattamento del modello del documento per il passaggio attraverso il varco WebAssembly.
+## Limiti correnti
 
----
+Non sono ancora percorsi completi:
 
-## Se vuoi il dettaglio
+- scoperta, installazione e aggiornamento dei bundle esterni;
+- proxy WASM per tutte le famiglie di provider;
+- passaggio di viste dichiarative prodotte da un componente;
+- esperienza utente stabile per abilitazione, errori e disinstallazione.
 
-- Guarda [`docs/04-plugin/01-nativo-vs-wasm.md`](../04-plugin/01-nativo-vs-wasm.md) per capire come funziona l'esecuzione sicura dei plugin.
-- Guarda i plugin di esempio in [`esempi/`](../../esempi) (come [`esempi/ping-wasm/`](../../esempi/ping-wasm)).
-- Guarda [`docs/06-contratto/03-il-contratto-wit.md`](../06-contratto/03-il-contratto-wit.md) per la specifica formale del contratto WIT.
+Lo stato operativo è in [`../PIANO.md`](../PIANO.md) e nella milestone
+[`M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md). L'esempio più piccolo è
+[`../04-plugin/04-esempio-ping.md`](../04-plugin/04-esempio-ping.md).

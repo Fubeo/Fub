@@ -1,51 +1,64 @@
-# Esempi e strumenti di supporto
+# Esempi WASM e strumenti
 
-## Gli esempi pratici (`esempi/`)
+Le cartelle [`esempi/`](../../esempi) e [`tools/`](../../tools) restano fuori
+dal workspace Rust principale. Richiedono target WebAssembly specifici e non
+devono rallentare chi lavora soltanto sul backend nativo.
 
-Nella cartella [`esempi/`](../../esempi) si trovano quattro progetti completi che dimostrano l'implementazione pratica del contratto WebAssembly Component Model (`fub:abi@0.1.1`):
+## Componenti di esempio
 
-| Progetto | Focus Architetturale | Descrizione |
-|---|---|---|
-| [`esempi/ping-wasm`](../../esempi/ping-wasm) | Manifest & HostApi | Plugin minimale che dichiara il manifest, richiede permessi (`fub:read-vault`, `fub:network`) e invoca `now_unix_millis` e `read_document`. |
-| [`esempi/ciclo-wasm`](../../esempi/ciclo-wasm) | Ciclo di Vita | Mostra la sequenza di attivazione (`activate`) e disattivazione (`deactivate`) controllata con inizializzazione e rilascio dello stato locale. |
-| [`esempi/eventi-wasm`](../../esempi/eventi-wasm) | Gestione Eventi | Mostra come sottoscrivere una maschera di eventi (`EventMask`) e gestire le notifiche asincrone dal bus del vault (`EventHandler`). |
-| [`esempi/modello-wasm`](../../esempi/modello-wasm) | AST del Documento | Manipolazione della struttura del modello ad albero (`DocumentModel`, `Block`, `Inline`) attraverso il varco WASM Component Model. |
+| Progetto | Cosa verifica |
+|---|---|
+| [`ping-wasm`](../../esempi/ping-wasm) | Percorso corretto: manifest, ciclo di vita, capacità dell'host, lettura del vault e provider di comandi. |
+| [`ciclo-wasm`](../../esempi/ciclo-wasm) | Componente non collaborativo: risposta normale, ciclo infinito e crescita della memoria, usati per provare scadenza e limite dell'istanza. |
+| [`eventi-wasm`](../../esempi/eventi-wasm) | Chiamate dal guest verso l'host durante un job: progresso, emissione di eventi e richiesta di un nuovo job. |
+| [`modello-wasm`](../../esempi/modello-wasm) | Passaggio del `DocumentModel` attraverso la rappresentazione ad arena del WIT e rifiuto dei documenti troppo profondi. |
 
----
+Questi progetti non sono plugin installabili dalla shell. I test li compilano,
+li caricano esplicitamente con `fub-wasm-host` e verificano il comportamento su
+un host controllato.
 
-## Come compilare gli esempi WASM
+## Compilare un componente
 
-Tutti i plugin nella cartella `esempi/` compilano come componenti WebAssembly WASI 0.2 usando il target `wasm32-wasip2` e `wit-bindgen`:
+I quattro esempi usano il component model e il target `wasm32-wasip2`:
 
 ```bash
-# 1. Assicurarsi di aver aggiunto il target wasm
 rustup target add wasm32-wasip2
-
-# 2. Compilazione release del plugin ping
-cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2 --release
-
-# Il componente risultante si trova in:
-# esempi/ping-wasm/target/wasm32-wasip2/release/ping_wasm.wasm
+cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
 ```
 
----
+Il file prodotto per `ping-wasm` si trova sotto la directory `target`
+dell'esempio, nel profilo scelto da Cargo.
 
-## Gli strumenti di verifica (`tools/`)
+I test principali compilano gli artefatti da soli:
 
-La cartella [`tools/`](../../tools) contiene utility di presidio e validazione statica dei contratti:
+```bash
+cargo test -p fub-wasm-host --test the_first_component
+cargo test -p fub-wasm-host --test commands_cross_the_boundary
+```
 
-### `tools/varco-wasm`
-- **Scopo**: Compila il contratto WIT (`fub/abi.wit`) per il target WebAssembly per verificare che l'interfaccia sia sempre serializzabile e priva di tipi Rust-centric non supportati dal Component Model.
-- **Invariante**: Se un cambiamento in `fub-abi` rompe l'ABI WebAssembly, la compilazione di `tools/varco-wasm` fallisce immediatamente in CI.
-- **Esecuzione**:
-  ```bash
-  cargo check --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-wasip2
-  ```
+Altri test di `fub-wasm-host` usano gli esempi dedicati a eventi, modello e
+limiti.
 
----
+## `tools/varco-wasm`
 
-## Se vuoi il dettaglio
+[`tools/varco-wasm/`](../../tools/varco-wasm) è un presidio statico del
+contratto. Genera binding guest dal WIT e li compila per verificare che il
+confine sia rappresentabile dal lato WebAssembly.
 
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](../04-plugin/04-esempio-ping.md) per l'analisi riga per riga del codice sorgente di `esempi/ping-wasm`.
-- Guarda [`docs/04-plugin/05-creare-un-plugin.md`](../04-plugin/05-creare-un-plugin.md) per la guida alla creazione di un nuovo plugin partendo da zero.
-- Guarda [`docs/06-contratto/03-il-contratto-wit.md`](../06-contratto/03-il-contratto-wit.md) per le specifiche del formato WIT e la regola del freeze.
+Non è un componente eseguito dal runtime e usa un target diverso:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
+```
+
+`wasm32-unknown-unknown` produce il modulo usato dal presidio statico;
+`wasm32-wasip2` produce invece i componenti caricati nei test del runtime. I due
+comandi verificano proprietà diverse e non sono intercambiabili.
+
+## Percorsi successivi
+
+- [`../04-plugin/04-esempio-ping.md`](../04-plugin/04-esempio-ping.md): analisi dell'esempio minimo.
+- [`../04-plugin/05-creare-un-plugin.md`](../04-plugin/05-creare-un-plugin.md): guida sperimentale per un nuovo componente.
+- [`../06-contratto/03-il-contratto-wit.md`](../06-contratto/03-il-contratto-wit.md): struttura e versionamento del WIT.
+- [`08-fub-wasm-host.md`](08-fub-wasm-host.md): runtime e limiti correnti.

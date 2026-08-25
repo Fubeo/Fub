@@ -1,33 +1,62 @@
-# `fub-format-markdown` — Il provider Markdown nativo
+# `fub-format-markdown` — il provider Markdown
 
-## A cosa serve
+[`crates/fub-format-markdown/`](../../crates/fub-format-markdown) è
+l'implementazione nativa di `FormatProvider` per le estensioni `.md` e
+`.markdown`. È il componente che conosce la sintassi Markdown; il kernel vede
+soltanto il contratto comune.
 
-[`crates/fub-format-markdown`](../../crates/fub-format-markdown) è il modulo che implementa il trait `FormatProvider` per i file con estensione `.md`.
+## Responsabilità
 
-Il suo compito è triplice:
-1. **Analisi (Parsing)**: legge il testo grezzo e, usando la libreria `comrak`, costruisce l'albero `DocumentModel` (titoli, paragrafi, elenchi, wikilink `[[nota]]`, tag `#tag`).
-2. **Visualizzazione (Rendering)**: trasforma il modello in HTML sicuro per la visualizzazione nell'anteprima.
-3. **Scrittura (Serializzazione)**: riconverte un modello modificato nel testo Markdown originale senza alterare la formattazione dell'utente.
+- analizzare il testo con Comrak e produrre un `DocumentModel`;
+- conservare gli span necessari a collegare il modello alla sorgente;
+- estrarre frontmatter, titoli, collegamenti, tag e altre strutture supportate;
+- generare l'HTML usato dall'anteprima;
+- serializzare modelli nuovi o frammenti in Markdown;
+- importare ed esportare documenti attraverso le superfici di trasferimento.
 
----
+Il descrittore dichiara queste capacità native:
+
+- wikilink;
+- tag;
+- frontmatter;
+- callout;
+- embed;
+- note a piè di pagina;
+- liste di definizione.
+
+Regole sintattiche aggiunte da altri provider non diventano capacità native del
+formato: appartengono al vault montato.
+
+## Parsing e scrittura non sono simmetrici
+
+Il parser produce un modello semantico, non una copia byte per byte della
+sorgente. Informazioni come lo stile scelto per l'enfasi, alcune spaziature o
+l'indentazione possono non essere rappresentate nel modello.
+
+Di conseguenza, `serialize` **non promette un round-trip identico**. Genera
+Markdown valido per documenti nuovi e frammenti. Le modifiche a un documento
+esistente devono preferire patch mirate sulla sorgente guidate dagli span,
+perché la sorgente sul disco resta autorevole.
+
+Quando il provider incontra una struttura che non sa riscrivere, restituisce un
+errore invece di cancellare silenziosamente delimitatori o contenuto.
+
+## Moduli
+
+| File | Responsabilità |
+|---|---|
+| [`lib.rs`](../../crates/fub-format-markdown/src/lib.rs) | `MarkdownProvider`, descrittore, capacità e implementazione di `FormatProvider`. |
+| [`parse.rs`](../../crates/fub-format-markdown/src/parse.rs) | Conversione dal parser Comrak al modello comune. |
+| [`offsets.rs`](../../crates/fub-format-markdown/src/offsets.rs) | Conversione e verifica degli offset della sorgente. |
+| [`render.rs`](../../crates/fub-format-markdown/src/render.rs) | Resa HTML del modello. |
+| [`serialize.rs`](../../crates/fub-format-markdown/src/serialize.rs) | Generazione del Markdown e rifiuto esplicito dei nodi non scrivibili. |
+| [`transfer.rs`](../../crates/fub-format-markdown/src/transfer.rs) | Importazione ed esportazione di file Markdown. |
+| [`util.rs`](../../crates/fub-format-markdown/src/util.rs) | Utility interne condivise. |
 
 ## Dipendenze
 
-- **Dipendenze interne**: dipende da [`fub-abi`](../../crates/fub-abi) e [`fub-sdk`](../../crates/fub-sdk).
-- **Dipendenze esterne**: `comrak` (il motore di parsing Markdown), `serde_yaml_ng` (per leggere il frontmatter YAML all'inizio dei file).
-- **Invariante**: la libreria `comrak` è utilizzata **esclusivamente qui dentro** e non compare in nessun altro punto del progetto.
+Il crate usa `comrak`, `entities`, `serde_yaml_ng`, `serde`, `serde_json`,
+`fub-abi` e `fub-sdk`. Comrak non deve entrare nel kernel o nell'ABI.
 
----
-
-## File chiave del modulo
-
-- [`crates/fub-format-markdown/src/lib.rs`](../../crates/fub-format-markdown/src/lib.rs): esporta il `MarkdownProvider`.
-- [`crates/fub-format-markdown/src/parse.rs`](../../crates/fub-format-markdown/src/parse.rs): converte i nodi dell'albero di comrak nei nodi del modello Fub (`Block` e `Inline`).
-- [`crates/fub-format-markdown/src/render.rs`](../../crates/fub-format-markdown/src/render.rs): genera l'HTML da visualizzare nell'anteprima live.
-- [`crates/fub-format-markdown/src/serialize.rs`](../../crates/fub-format-markdown/src/serialize.rs): riscrittura del modello in testo Markdown.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`docs/05-disco/01-note-utente.md`](../05-disco/01-note-utente.md) per conoscere le estensioni Markdown supportate.
+Le convenzioni riconosciute nei file utente sono descritte in
+[`../05-disco/01-note-utente.md`](../05-disco/01-note-utente.md).

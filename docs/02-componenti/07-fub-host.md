@@ -1,33 +1,67 @@
-# `fub-host` — L'assemblatore di sistema
+# `fub-host` — composizione e sessioni
 
-## A cosa serve
+[`crates/fub-host/`](../../crates/fub-host) assembla il backend senza dipendere
+da Tauri. Apre i vault, monta formati e funzionalità, gestisce il lavoro in
+background e offre alla shell un'API riutilizzabile anche da altri client.
 
-[`crates/fub-host`](../../crates/fub-host) è il punto di montaggio (*composition root*) del backend. Il suo compito è:
-- Creare e inizializzare il `Workspace` quando si apre una cartella vault.
-- Registrare i provider (il parser Markdown, le feature integrate, ecc.).
-- Gestire la concorrenza tramite il wrapper [`Custody`](../../crates/fub-host/src/custody.rs), che protegge il workspace con un `RwLock`.
-- Avviare il pool di thread per i job in background (`runner.rs`).
-- Monitorare il filesystem tramite `notify` (`watcher.rs`).
+## Responsabilità
 
----
+- mantenere più sessioni di vault e scegliere quella corrente;
+- costruire il `Workspace` con formati, feature ufficiali e impostazioni;
+- possedere i bundle montati e il loro ciclo di vita;
+- proteggere l'accesso concorrente al workspace;
+- eseguire i job fuori dal percorso sincrono della shell;
+- osservare le modifiche esterne del filesystem;
+- inoltrare gli eventi verso un `EventSink` scelto dal client;
+- gestire configurazione macchina, registro dei vault, temi e impostazioni;
+- offrire, quando abilitate, rete HTTP e conversioni del tempo civile.
 
-## Dipendenze
+## Moduli principali
 
-- **Dipendenze interne**: collega insieme [`fub-abi`](../../crates/fub-abi), [`fub-kernel`](../../crates/fub-kernel), [`fub-features`](../../crates/fub-features) e [`fub-format-markdown`](../../crates/fub-format-markdown).
-- **Invariante fondamentale**: **`fub-host` non dipende da Tauri**. Questo permette a Fub di essere avviato anche senza interfaccia grafica (per esempio da una riga di comando o in test automatici).
+| Modulo | Responsabilità |
+|---|---|
+| [`session.rs`](../../crates/fub-host/src/session.rs) | `Host`, `VaultSession`, apertura, chiusura e accesso alle sessioni. |
+| [`mount.rs`](../../crates/fub-host/src/mount.rs) | Composizione del workspace e registrazioni specifiche delle feature ufficiali. |
+| [`registry.rs`](../../crates/fub-host/src/registry.rs) | `Bundle`, `BundleRegistry`, proprietà e ciclo di vita dei provider montati. |
+| [`custody.rs`](../../crates/fub-host/src/custody.rs) | Accesso sincronizzato al workspace e politica sui lock avvelenati. |
+| [`runner.rs`](../../crates/fub-host/src/runner.rs) | Pool dei job, cancellazione e arresto ordinato. |
+| [`jobs.rs`](../../crates/fub-host/src/jobs.rs) | `JobHost`, cioè le capacità prestate a un lavoro in esecuzione. |
+| [`watcher.rs`](../../crates/fub-host/src/watcher.rs) | Astrazione del watcher, sincronizzazione esterna e implementazione basata su `notify`. |
+| [`bridge.rs`](../../crates/fub-host/src/bridge.rs) | Ponte fra eventi del kernel e destinazione scelta dal client. |
+| [`settings.rs`](../../crates/fub-host/src/settings.rs) | Impostazioni dell'app e del vault. |
+| [`config.rs`](../../crates/fub-host/src/config.rs) | Cartella di configurazione, log e diagnosi di avvio. |
+| [`vaults.rs`](../../crates/fub-host/src/vaults.rs) | Registro persistente dei vault conosciuti. |
+| [`theme.rs`](../../crates/fub-host/src/theme.rs) | Sorgenti e metadati dei temi disponibili all'host. |
+| [`net.rs`](../../crates/fub-host/src/net.rs) | Client HTTP opzionale usato attraverso le capacità del contratto. |
+| [`wall.rs`](../../crates/fub-host/src/wall.rs) | Conversione fra istanti e tempo civile con fuso orario. |
+| [`shell.rs`](../../crates/fub-host/src/shell.rs) | Dati e operazioni destinati ai client della shell. |
 
----
+## Confini
 
-## File chiave del modulo
+`fub-host` dipende da `fub-abi`, `fub-kernel`, `fub-features` e
+`fub-format-markdown`. Non dipende da Tauri: `fub-app` aggiunge quel confine.
+Non dipende da Wasmtime: `fub-wasm-host` dipende dall'host per implementare lo
+stesso tipo `Bundle`, non il contrario.
 
-- [`crates/fub-host/src/session.rs`](../../crates/fub-host/src/session.rs): gestisce la durata di vita della sessione di un vault (`VaultSession`).
-- [`crates/fub-host/src/custody.rs`](../../crates/fub-host/src/custody.rs): controlla gli accessi concorrenti in lettura/scrittura sul workspace e gestisce eventuali panici.
-- [`crates/fub-host/src/bridge.rs`](../../crates/fub-host/src/bridge.rs): thread ponte che preleva gli eventi dal kernel e li consegna alla destinazione (es. la webview).
-- [`crates/fub-host/src/watcher.rs`](../../crates/fub-host/src/watcher.rs): rilevatore che avvisa Fub quando altri programmi modificano i file delle note sul disco.
-- [`crates/fub-host/src/runner.rs`](../../crates/fub-host/src/runner.rs): esecutore di compiti in background con supporto per la cancellazione controllata.
+Questo verso permette a un client che non usa plugin WASM di montare Fub senza
+compilare Wasmtime e impedisce al runtime di contaminare il percorso nativo.
 
----
+## Feature di compilazione
 
-## Se vuoi il dettaglio
+La configurazione predefinita abilita:
 
-- Guarda [`docs/03-uml/04-processi-e-thread.md`](../03-uml/04-processi-e-thread.md) per lo schema dell'architettura runtime.
+- `notify-watcher` per il watcher desktop;
+- `http-client` per la capacità di rete;
+- `official-features` per tutti i bundle ufficiali.
+
+Build headless o mirate possono disabilitare queste parti e fornire
+implementazioni alternative dei confini pubblici.
+
+## Rapporto con l'app
+
+`fub-app` traduce IPC e dialoghi in chiamate all'host. Il montaggio, il watcher,
+il runner e le sessioni non vivono nei comandi Tauri e possono quindi essere
+riutilizzati da test o client futuri.
+
+Per il flusso dei thread vedere
+[`../03-uml/04-processi-e-thread.md`](../03-uml/04-processi-e-thread.md).
