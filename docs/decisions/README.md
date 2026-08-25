@@ -11,9 +11,9 @@ flowchart LR
     ADR --> DOCS["Documentazione corrente"]
 ```
 
-I verbali sono **centosettantotto** [conta: verbali]. Il numero e il nome del file non cambiano; il contenuto decisionale resta stabile, mentre la forma può essere migliorata secondo la [decisione 0143](0143-i-verbali-si-possono-riscrivere.md).
+Il numero e il nome di ogni file non cambiano; il contenuto decisionale resta stabile, mentre la forma può essere migliorata secondo la [decisione 0143](0143-i-verbali-si-possono-riscrivere.md).
 
-Tra i verbali sono tracciati **dieci** buchi dichiarati [conta: buchi-dichiarati]: compromessi noti che non devono essere scambiati per garanzie già offerte.
+I conteggi verificati dei verbali e dei buchi dichiarati sono riportati in [`STATO.md`](../STATO.md). Qui resta la regola di consultazione, non una seconda fonte numerica.
 
 ## Come trovare una decisione
 

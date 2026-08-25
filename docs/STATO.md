@@ -9,6 +9,14 @@ Questa pagina è la fotografia sintetica della versione presente nel repository.
 - nessun rilascio pubblico e nessun installer ufficiale;
 - il codice deve essere compilato dalla repository.
 
+## Memoria progettuale
+
+L'archivio contiene **centosettantotto** verbali [conta: verbali].
+
+Sono documentati **dieci** buchi dichiarati [conta: buchi-dichiarati]: compromessi noti che non devono essere scambiati per garanzie già offerte.
+
+Le decisioni chiuse sono in [`decisions/`](decisions/README.md); le sedute che le hanno preparate sono in [`roadmap/`](roadmap/README.md).
+
 ## Base implementata
 
 Sono presenti e collegati:
