@@ -391,18 +391,72 @@ const SETTINGS: SettingEntry[] = [
 ];
 
 /// I componenti montati, per la scheda «Componenti» delle impostazioni.
-const BUNDLE: BundleInfo[] = [
-  { id: "fub.core", name: "Core", mounted: true, trust: "core" },
-  { id: "fub.outline", name: "Struttura", mounted: true, trust: "core" },
-  { id: "fub.graph", name: "Grafo", mounted: true, trust: "core" },
-  { id: "fub.versioning", name: "Versioni", mounted: false, trust: "core" },
-] as BundleInfo[];
+///
+/// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
+/// dell'host reale, quindi un campo nuovo nel contratto deve rompere il
+/// type-check invece di arrivare come errore dentro una fotografia.
+const BUNDLE = [
+  {
+    id: "fub.core",
+    name: "Core",
+    mounted: true,
+    kind: "component",
+    trust: "core",
+    permissions: {},
+  },
+  {
+    id: "fub.outline",
+    name: "Struttura",
+    mounted: true,
+    kind: "component",
+    trust: "core",
+    permissions: { "fub:read-vault": true, "fub:read-session": true },
+  },
+  {
+    id: "fub.graph",
+    name: "Grafo",
+    mounted: true,
+    kind: "component",
+    trust: "core",
+    permissions: { "fub:read-vault": true },
+  },
+  {
+    id: "fub.versioning",
+    name: "Versioni",
+    mounted: false,
+    kind: "component",
+    trust: "core",
+    permissions: {
+      "fub:call-service": true,
+      "fub:read-selection": true,
+      "fub:read-session": true,
+      "fub:read-vault": true,
+      "fub:run-command": true,
+      "fub:write-settings": true,
+      "fub:write-vault": true,
+    },
+  },
+] satisfies BundleInfo[];
 
 /// I vault che questa macchina conosce, per la scheda «Vault».
 const KNOWN_VAULTS = [
-  { path: "/Bench vault", name: "Vault del banco", icon: "📷", favorite: true, last_opened: 0 },
-  { path: "/Appunti", name: "", icon: null, favorite: false, last_opened: 0 },
-] as unknown as KnownVault[];
+  {
+    root: "/Bench vault",
+    name: "Vault del banco",
+    icon: "📷",
+    favorite: true,
+    last_opened: 0,
+    keys_seen: {},
+  },
+  {
+    root: "/Appunti",
+    name: "",
+    icon: null,
+    favorite: false,
+    last_opened: 0,
+    keys_seen: {},
+  },
+] satisfies KnownVault[];
 
 // ---------------------------------------------------------------------------
 // La scenografia: le risposte del canale dati che `finto.ts` non dà.

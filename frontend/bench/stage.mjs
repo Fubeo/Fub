@@ -144,6 +144,11 @@ export async function prepareScene(page, scene, light, base, url) {
   });
   await page.evaluate(() => document.fonts.ready);
   await scene.prepare(page);
+  // I gesti di Playwright lasciano il puntatore sopra l'ultimo controllo.
+  // Un tooltip con ritardo può così comparire fra i due scatti a seconda
+  // del carico del runner. Lo spostiamo in un angolo neutro: il banco
+  // fotografa lo stato preparato, non un hover accidentale.
+  await page.mouse.move(0, 0);
   await page.evaluate(() => document.fonts.ready);
   await page.addStyleTag({ content: QUIET });
   // Un fotogramma dopo l'ultimo gesto: il layout è già calcolato, ma ciò che è
