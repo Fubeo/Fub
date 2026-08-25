@@ -19,7 +19,7 @@ vault/
 └── .trash/
 ```
 
-I nomi concreti e le versioni degli schemi sono definiti nel codice. Questo documento descrive categorie e garanzie, non replica manualmente un censimento che può invecchiare.
+I nomi concreti e le versioni degli schemi sono definiti nel codice. Il censimento verificato è in [schemas-on-disk.md](schemas-on-disk.md); questa pagina descrive categorie e garanzie.
 
 ## Categorie
 
