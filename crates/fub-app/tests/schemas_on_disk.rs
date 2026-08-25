@@ -153,7 +153,8 @@ fn source(file: &str) -> Option<&'static str> {
 }
 
 #[test]
-fn every_table_row_points_to_a_constant_that_exists() {
+fn every_table_row_points_to_a_constant_that_exists(
+) {
     let rows = table_rows();
     assert_eq!(
         rows.len(),
