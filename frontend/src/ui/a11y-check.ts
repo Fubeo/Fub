@@ -2,7 +2,7 @@
 //
 // La voce chiedeva una passata di accessibilità *e il suo presidio, nello
 // stesso giro*, ed è la regola della
-// [decisione 0014](../../../docs/decisions/0014-i-verbali-fuori-da-todo.md):
+// [decisione 0014](../../../docs/decisions/0197-documentazione-presente-git-storia.md):
 // una promessa senza presidio meccanico decade. Qui decadrebbe in fretta e
 // senza rumore — un pannello nuovo che dimentica un `aria-label` non rompe
 // niente, non fa diventare rosso niente, e semplicemente non esiste per chi non

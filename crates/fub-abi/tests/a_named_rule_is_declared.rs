@@ -3,19 +3,19 @@
 //! La domanda «quando due nomi sono lo stesso nome» in questo repo ha
 //! **quarantadue** risposte in produzione, e non è il difetto. Quattro verbali
 //! hanno stabilito che devono essere più d'una: la
-//! [0020](../../../docs/decisions/0020-le-regole-in-un-posto-solo.md) («*due
+//! [0020](../../../docs/decisions/README.md) («*due
 //! requisiti che **devono** divergere, e una fixture che li legasse nascerebbe
 //! rossa*»), la
-//! [0107](../../../docs/decisions/0107-il-caso-di-una-lettera.md) («*la domanda
+//! [0107](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) («*la domanda
 //! non era una: erano tre*»), la
-//! [0058](../../../docs/decisions/0058-un-nome-che-nasce.md) («*un nome che c'è
+//! [0058](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) («*un nome che c'è
 //! e un nome che nasce non si giudicano con la stessa regola*») e la
-//! [0115](../../../docs/decisions/0115-la-verita-e-la-dichiarazione.md).
+//! [0115](../../../docs/decisions/0196-test-e-artefatti-generati.md).
 //!
 //! Il difetto è che la **quarantatreesima** nasce in silenzio. La 0115 lo aveva
 //! già scritto — «*il generato, la fixture e il corpus prendono chi **cambia**
 //! una regola, non chi ne **aggiunge** una accanto*» — e la
-//! [0110](../../../docs/decisions/0110-la-struttura-non-e-una-preferenza.md) è
+//! [0110](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) è
 //! la prova del danno: `IgnorePolicy` confrontava i nomi per uguaglianza di
 //! byte **tre commit dopo** che la 0107 aveva deciso quando due path sono lo
 //! stesso path.

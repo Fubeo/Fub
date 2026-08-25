@@ -19,7 +19,7 @@
 //!    prefisso non vedrebbe un parser markdown con un nome nuovo; un elenco
 //!    chiuso vede tutto ciò che compare, chiamato come vuole.
 //! 4. **Il diagramma dei componenti** — il grafo disegnato in
-//!    `docs/architecture/mappa-visuale.md` deve dire le stesse dipendenze che
+//!    `../../../docs/architecture/overview.md` deve dire le stesse dipendenze che
 //!    dice `cargo metadata`, nei due versi.
 //!
 //! Le maglie sono diverse di proposito: la seconda intercetta il gesto (`cargo
@@ -316,7 +316,7 @@ fn abi_and_kernel_stay_agnostic() {
             trespassers.is_empty(),
             "`{crate_name}` raggiunge {trespassers:?} fra le dipendenze normali.\n\
              È il firewall anti-lock-in: markdown, UI, runtime wasm e motore di\n\
-             ricerca stanno nei crate a valle, non qui. Vedi docs/PIANO.md."
+             ricerca stanno nei crate a valle, non qui. Vedi ../../../docs/project/status.md."
         );
     }
 
@@ -400,7 +400,7 @@ fn official_features_do_not_depend_on_the_kernel() {
 /// ci può stare (§16.1).
 ///
 /// Questa rete è nata da una premessa trovata falsa. La [seduta
-/// 16](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md) dava per scontato
+/// 16](../../../docs/project/roadmap.md) dava per scontato
 /// che mettere `fub-kernel` in `fub-sdk` «violerebbe l'invariante che
 /// `dependency_invariant.rs` presidia» — e questo file, letto riga per riga, non
 /// nominava `fub-sdk` da nessuna parte: l'allowlist copre `fub-abi` e
@@ -425,7 +425,7 @@ fn the_sdk_does_not_see_the_kernel() {
          L'SDK è ciò che un guest WASM importa a M5, ed è dipendenza normale di\n\
          `fub-format-markdown`: il kernel qui finisce nella libreria di un\n\
          provider. Il banco che ha bisogno del kernel è `fub-testkit`.\n\
-         Vedi docs/decisions/0054-il-banco-del-lato-provider.md."
+         Vedi ../../../docs/decisions/0196-test-e-artefatti-generati.md."
     );
     assert!(
         !graph.closure("fub-sdk").contains("fub-kernel"),
@@ -464,7 +464,7 @@ fn the_test_bench_enters_no_library() {
         "{guilty:?} dichiarano `fub-testkit` fra le dipendenze **normali**.\n\
          È il banco di prova del lato host: ha il kernel dentro, e va nei\n\
          [dev-dependencies] di chi lo usa. Vedi\n\
-         docs/decisions/0055-il-banco-del-lato-host.md."
+         ../../../docs/decisions/0196-test-e-artefatti-generati.md."
     );
 }
 
@@ -499,7 +499,7 @@ fn whoever_mounts_does_not_depend_on_whoever_draws() {
         "`fub-host` raggiunge {ui:?} fra le dipendenze normali.\n\
          Chi monta non può dipendere da chi disegna: la CLI, l'API locale, gli e2e\n\
          headless, il mobile e la PWA devono poter prendere il montaggio senza\n\
-         prendersi un webview. Vedi docs/decisions/0023-chi-monta-il-kernel.md."
+         prendersi un webview. Vedi ../../../docs/decisions/0183-composizione-host-kernel.md."
     );
 }
 
@@ -561,7 +561,7 @@ fn the_glue_does_not_bypass_the_mounter() {
 // ---------------------------------------------------------------------------
 
 /// Il documento che contiene il grafo, relativo alla radice del repo.
-const DIAGRAM_DOC: &str = "docs/03-uml/03-componenti-e-dipendenze.md";
+const DIAGRAM_DOC: &str = "../../../docs/architecture/overview.md";
 
 /// Il commento Mermaid che marca *quale* blocco è il grafo delle dipendenze.
 /// Serve perché quel documento ne contiene più d'uno, e il primo è disposto a
@@ -700,8 +700,7 @@ fn the_diagram_declares_the_real_dependencies() {
 
     let doc = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../",
-        "docs/03-uml/03-componenti-e-dipendenze.md"
+        "/../../docs/architecture/overview.md"
     );
     let source = std::fs::read_to_string(doc)
         .unwrap_or_else(|and| panic!("{DIAGRAM_DOC} non si legge: {and}"));

@@ -1,5 +1,5 @@
 //! **Ciò che è della macchina esiste anche senza un vault** (§16.3,
-//! [decisione 0116](../../../docs/decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)).
+//! [decisione 0116](../../../docs/decisions/0185-capability-un-solo-guard.md)).
 //!
 //! `SettingScope::Machine` è nato per il log, e il suo doc-comment dice perché:
 //! il livello del log «deve valere anche **quando un vault non si apre**, che è

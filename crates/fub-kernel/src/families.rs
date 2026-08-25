@@ -21,7 +21,7 @@
 //! # Chi si accorge se torna a rompersi
 //!
 //! Tre attori, come vuole la
-//! [0105](../../../docs/decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md):
+//! [0105](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md):
 //!
 //! 1. **il compilatore** prende la variante che non vuol dire niente: ogni
 //!    `match` su `Family` è esaustivo, quindi una famiglia nuova non compila

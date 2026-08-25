@@ -1,5 +1,5 @@
 //! **Un vault si apre in due tempi** (§15.7,
-//! [decisione 0070](../../../docs/decisions/0070-un-vault-si-apre-in-due-tempi.md)).
+//! [decisione 0070](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //!
 //! La prima metà del §15.7 — che l'apertura possa **fallire in parte** — ha i
 //! suoi presidi nel kernel (`l_apertura.rs`), dove il fallimento si provoca con
@@ -13,7 +13,7 @@
 //! - **l'indicizzazione si racconta e si ferma** come qualunque lavoro lungo,
 //!   perché *è* un lavoro lungo (§10.3);
 //! - **chi chiude a metà riceve comunque un esito**, che è la regola della
-//!   [0028](../../../docs/decisions/0028-come-un-componente-smette.md) applicata
+//!   [0028](../../../docs/decisions/0183-composizione-host-kernel.md) applicata
 //!   al job che nessuno ha chiesto.
 
 use std::sync::{Arc, Mutex};
@@ -175,7 +175,7 @@ fn the_opening_and_a_job_as_the_other() {
 ///
 /// Un worker che vede `stopping` in cima al proprio ciclo esce senza passare
 /// dall'apertura: senza una riga che la chiuda comunque, l'esito che la
-/// [0028](../../../docs/decisions/0028-come-un-componente-smette.md) promette a
+/// [0028](../../../docs/decisions/0183-composizione-host-kernel.md) promette a
 /// ogni job non arriverebbe proprio a quello che nessuno ha chiesto.
 #[test]
 fn close_a_metadata_indexing_not_leaves_a_work_hanging() {

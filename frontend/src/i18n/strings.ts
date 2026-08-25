@@ -1,6 +1,6 @@
 // Le stringhe **della shell**, e come si scelgono (§12.4).
 //
-// La [decisione 0040](../../../docs/decisions/0040-chi-localizza.md) ha deciso
+// La [decisione 0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) ha deciso
 // chi localizza cosa: le stringhe di un componente le porta il componente, in un
 // catalogo di manifest, e le risolve il kernel sulla via d'uscita dal contratto.
 // Quella regola ha ristretto questa voce invece di allargarla — i pannelli dei

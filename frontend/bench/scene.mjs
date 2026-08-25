@@ -12,7 +12,7 @@
 // cancellata lascia in repo la foto di qualcosa che non esiste più.
 //
 // Che l'elenco si possa svuotare in silenzio è la lezione della
-// [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md):
+// [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md):
 // un elenco che si svuota è indistinguibile da un elenco verde. Qui il presidio
 // pretende anche un minimo, così una `SCENE = []` è rossa e non serena.
 //

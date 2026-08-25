@@ -29,9 +29,9 @@
 //! [`VaultStorage::write`] dice «questi byte, a questo path», **o niente**: chi
 //! rilegge dopo un crash trova il contenuto di prima o quello nuovo, mai un file
 //! a metà. Non era così quando questo modulo è nato — era una `std::fs::write` —
-//! ed è l'ordine che la [seduta 15](../../../docs/roadmap/15-il-disco.md) aveva
+//! ed è l'ordine che la [seduta 15](../../../docs/project/roadmap.md) aveva
 //! dichiarato: il §15.1 fa il posto, il §15.2 ci mette dentro la proprietà
-//! ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)),
+//! ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)),
 //! invece di scriverla due volte — una accanto all'astrazione e una dentro.
 //!
 //! La promessa è di **una scrittura**, non di un aggiornamento: due processi che
@@ -39,11 +39,11 @@
 //! un file integro, e il secondo cancella le chiavi del primo. Quella è la *lost
 //! update*, e chiede un'altra funzione — [`update_atomic`], che rilegge sotto
 //! lock prima di comporre
-//! ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+//! ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)).
 //!
 //! L'altro asse — la **classe** di un dato, «si può buttare o no» — non è di
 //! qui affatto: sta nel path, e l'ha deciso la
-//! [0048](../../../docs/decisions/0048-una-radice-sola.md). Un supporto non sa
+//! [0048](../../../docs/decisions/0188-identita-path-e-rename.md). Un supporto non sa
 //! cosa sta scrivendo, e non deve saperlo.
 //!
 //! # Il recinto non è qui
@@ -85,7 +85,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 ///
 /// Decidere se seguirli è una **politica** e non un fatto sul supporto: è il
 /// §15.6, che li ha avuti in consegna dalla
-/// [0058](../../../docs/decisions/0058-un-nome-che-nasce.md). Questa variante
+/// [0058](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md). Questa variante
 /// è il posto dove quella decisione atterrerà.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
@@ -104,7 +104,7 @@ pub struct Stat {
     /// «1970», è «non lo so», e la conseguenza è quella giusta: una data che non
     /// si conosce non combacia mai con quella di prima, quindi quel file si
     /// rilegge invece di essere dato per immutato
-    /// ([0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)).
+    /// ([0046](../../../docs/decisions/0188-identita-path-e-rename.md)).
     pub mtime: u64,
 }
 
@@ -138,7 +138,7 @@ pub struct DirEntry {
 /// questo trait è nato era «sette, e chi ne aggiunge un'ottava sta chiedendo al
 /// supporto di sapere qualcosa sul contenuto»; l'ottava è arrivata
 /// ([`VaultStorage::append`], con la
-/// [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md))
+/// [0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md))
 /// e quella frase è il metro con cui è stata giudicata invece che il veto che
 /// sembrava: `append` non chiede di sapere **cosa** c'è nel file, chiede di
 /// sapere **dove finisce**, che è l'unica cosa che un supporto sa già di ogni
@@ -151,7 +151,7 @@ pub struct DirEntry {
 /// non può sapere. Fuori di qui quella fermata non si può ottenere: chi legge,
 /// compone e riscrive dall'esterno perde ciò che un altro ha scritto nel mezzo,
 /// e lo perde in silenzio
-/// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+/// ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)).
 ///
 /// La decima ([`VaultStorage::rename_no_replace`]) ha la stessa ragione:
 /// `exists` più `rename` lascia fra le due un concorrente, mentre il supporto
@@ -224,7 +224,7 @@ pub trait VaultStorage: Send + Sync {
     /// senza la promessa che i byte sopravvivano a un crash.
     ///
     /// Non è la seconda scrittura che la
-    /// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+    /// [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
     /// ha scartato. Quella era una seconda via per gli **stessi** file — un
     /// modo di scrivere i documenti senza pagarne il prezzo — e offrirla a ogni
     /// chiamante era il modo in cui un giorno qualcuno la sceglieva storta sul
@@ -256,7 +256,7 @@ pub trait VaultStorage: Send + Sync {
     /// integro e senza ciò che la prima aveva scritto nel frattempo — una *lost
     /// update*, che nessuna quantità di `fsync` risolve perché non è un file a
     /// metà: è un file intero e vecchio
-    /// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+    /// ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)).
     ///
     /// `fondi` riceve i byte **che stanno sul supporto adesso** (`None` se il
     /// file non c'è) e torna quelli da scrivere, oppure `None` per non scrivere
@@ -649,7 +649,7 @@ pub enum WriteMode {
 ///
 /// [`NomiDelFile::Ignoto`] sceglie **sul posto**, ed è la riga che vale la voce.
 /// L'argomento è quello della
-/// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md), preso
+/// [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md), preso
 /// sul serio fino in fondo: i due danni non sono uguali — il file troncato vuole
 /// un crash *durante* la scrittura ed è visibile, il nome staccato avviene a
 /// ogni salvataggio e non lo vede nessuno. Davanti a un dubbio si paga quello
@@ -1044,7 +1044,7 @@ fn same_parent_resolution_name(from: &Utf8Path, to: &Utf8Path) -> bool {
 /// che quindi vanno sincronizzate perché la mossa sopravviva a un crash
 /// (difetto 0153).
 ///
-/// La [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+/// La [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 /// aveva già trovato la riga che conta — *è la cartella a portare il nome*, e
 /// senza il suo `fsync` un rename può sparire dopo un `Ok` — e l'aveva scritta
 /// dentro la sola scrittura. Ma le operazioni che muovono o tolgono l'**unica
@@ -1052,7 +1052,7 @@ fn same_parent_resolution_name(from: &Utf8Path, to: &Utf8Path) -> bool {
 /// buttare una bozza. Lì un `Ok` che non è sceso lascia una voce di cestino che
 /// punta al nulla, o una nota che risorge dov'era, con il registro che dice il
 /// contrario — e il registro, per la
-/// [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md),
+/// [0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md),
 /// si scrive *dopo* la mossa proprio per non raccontare mai ciò che non è
 /// successo: una mossa che torna indietro da sola gli toglie quella garanzia.
 ///
@@ -1186,7 +1186,7 @@ impl VaultStorage for FsStorage {
     /// la `write` che crea l'albero ci sta l'intero giro dell'altra, e chi
     /// arriva secondo posa il file che ha composto dal nulla sopra quello che il
     /// primo aveva appena scritto — la *lost update* che la
-    /// [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)
+    /// [0066](../../../docs/decisions/0195-versioni-indipendenti.md)
     /// ha tolto a ogni altra scrittura, lasciata dove il file è più povero e
     /// quindi meno sospetta: si perde una configurazione di due righe, non un
     /// vault di note.
@@ -1217,14 +1217,14 @@ impl VaultStorage for FsStorage {
     }
 
     /// `O_APPEND` e **nessun `fsync`**: la scelta è a verbale
-    /// ([0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)),
+    /// ([0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)),
     /// e sta tutta nell'ordine in cui le due scritture avvengono. Chi appende lo
     /// fa **dopo** che la mutazione è riuscita, quindi un crash può far perdere
     /// la coda del registro — le ultime operazioni non si potranno annullare — e
     /// mai il contrario, una riga che racconta qualcosa che non è successo. Un
     /// `fsync` per riga metterebbe un secondo giro sul disco dentro il percorso
     /// del salvataggio, che la
-    /// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) ha
+    /// [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) ha
     /// appena fatto pagare una volta, per proteggere un dato il cui smarrimento
     /// costa un annullamento e non una nota.
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<()> {
@@ -1461,7 +1461,7 @@ impl VaultStorage for FsStorage {
 /// [`FsStorage::write`] con l'errore vestito da stringa per i chiamanti che
 /// portano avvisi e non `io::Error`.
 ///
-/// Fino alla [0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md) era
+/// Fino alla [0064](../../../docs/decisions/0185-capability-un-solo-guard.md) era
 /// il contrario: questa funzione era l'unica scrittura atomica del kernel, e i
 /// file *del vault* venivano qui a prendersela scavalcando il supporto. Adesso
 /// l'implementazione è **una**, e sta sotto il trait dove ogni supporto la
@@ -1502,7 +1502,7 @@ pub fn write_atomic(path: &Utf8Path, bytes: &[u8]) -> Result<(), String> {
 /// sceglie per i file che si aggiornano: chi prende il lock e poi ricompone
 /// dalla copia vecchia non ha risolto niente, e la forma giusta si ripeterebbe
 /// tre volte. È la ragione della
-/// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md) sul
+/// [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) sul
 /// perché la scrittura del supporto è una sola.
 ///
 /// `fondi` serializza ciò che ha appena mutato, invece di lasciarlo fare a chi
@@ -1522,7 +1522,7 @@ pub fn update_atomic<T>(
 /// Il rifiuto di sovrascrivere un file che **adesso** non si rilegge.
 ///
 /// È la seconda metà della regola della
-/// [0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md),
+/// [0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md),
 /// e senza di essa la prima non vale niente: leggere un file malformato e
 /// tenersi un livello vuoto salva ciò che l'utente aveva scritto per il tempo di
 /// **una** scrittura, perché la prima che arriva ricompone il file dalla mappa
@@ -1767,7 +1767,7 @@ impl<T: std::fmt::Debug> std::fmt::Debug for Durable<T> {
 ///
 /// L'mtime è un contatore che avanza di uno a ogni scrittura, non un orologio.
 /// Chi ci sta sopra guarda se la data è **cambiata**, non che ora fosse
-/// ([0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)), e un
+/// ([0046](../../../docs/decisions/0188-identita-path-e-rename.md)), e un
 /// contatore risponde a quella domanda in modo deterministico — cioè senza la
 /// risoluzione dell'orologio di mezzo, che sui filesystem veri è il motivo per
 /// cui mtime+size bastano a saltare un file e non a crederci.
@@ -1872,7 +1872,7 @@ impl MemStorage {
     ///
     /// La politica non è scritta qui: è quella del [`Shelter`], che è la porta
     /// del kernel per un dato che un panico a metà non rende incredibile
-    /// ([0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)).
+    /// ([0126](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
     /// Ed è il caso: `fondi` non riceve niente della mappa, e l'unica mutazione
     /// dell'`update` avviene **dopo** che è tornato, quindi ciò che il panico
     /// lascia dietro di sé è lo stato di prima — esattamente ciò che lascia il

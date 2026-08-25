@@ -437,7 +437,7 @@ fn render_link(
                 // e NON può leggere altri documenti (niente HostApi qui). Si
                 // emette un placeholder; il frontend chiama `render_embed` del
                 // kernel e innesta il contenuto (profondità e cicli a suo
-                // carico). Vedi docs/architecture/ui-protocol.md.
+                // carico). Vedi ../../../docs/architecture/frontend-and-ipc.md.
                 write!(
                     out,
                     "<div class=\"embed\"{}>",

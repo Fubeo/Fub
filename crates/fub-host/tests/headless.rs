@@ -74,7 +74,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // canale dati, che sa dire quale cartella e quante righe.
     // E si chiede **a indicizzazione finita**: `open` torna appena si sa cosa
     // c'è, non cosa dicono i documenti (§15.7,
-    // [0070](../../../docs/decisions/0070-un-vault-si-apre-in-due-tempi.md)).
+    // [0070](../../../docs/decisions/0183-composizione-host-kernel.md)).
     // Quale sia l'anagrafe appena aperto il vault lo presidia
     // `l_apertura_a_fasi.rs`; qui la domanda è un'altra, e chiederla presto
     // farebbe fallire questo test per il disco invece che per il montaggio.

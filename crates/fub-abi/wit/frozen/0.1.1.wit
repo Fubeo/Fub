@@ -3,7 +3,7 @@
 // Regola d'oro: ogni tipo che attraversa una firma di trait è un record/variant/
 // enum WIT. I valori JSON liberi (frontmatter, attrs, args, storage) passano come
 // stringa JSON (`type json = string`), scelta deliberata per preservare l'escape
-// hatch. Vedi docs/architecture/traits.md per la tabella di mapping.
+// hatch. Vedi ../../../../docs/reference/abi-and-wit.md per la tabella di mapping.
 //
 // ALBERI RICORSIVI — WIT non ammette tipi ricorsivi, e `Block`, `Inline`,
 // `UiNode` lo sono. Al confine viaggiano come ARENA: una lista piatta di nodi
@@ -11,7 +11,7 @@
 // riferimenti diretti. I tipi Rust nativi restano alberi veri; la conversione
 // albero↔arena è `fub_abi::arena` (con round-trip sotto test), e il proxy
 // WASM di M5 la chiamerà invece di riscriverla. Decisione e motivazioni in
-// docs/architecture/traits.md, "Alberi ricorsivi al confine".
+// ../../../../docs/reference/abi-and-wit.md, "Alberi ricorsivi al confine".
 //
 // KEYWORD WIT — `list`, `result`, `from` e `option` sono parole chiave del
 // linguaggio: dove sono nomi di variante o di campo compaiono con l'escape `%`.
@@ -315,7 +315,7 @@ interface model {
     }
     /// Escape hatch: callout, math, footnote, definition list. I `custom-kind`
     /// condivisi stanno in `fub_abi::model::custom_kind` e nella tabella di
-    /// docs/architecture/data-model.md; un kind di terzi porta i propri byte
+    /// ../../../../docs/architecture/document-model.md; un kind di terzi porta i propri byte
     /// negli `attrs` sotto la chiave `source` (convenzione §25.7,
     /// `fub_abi::rules::carichi`).
     record block-custom {
@@ -2550,7 +2550,7 @@ interface index {
         ///
         /// Il payload è un `resolved-ref` e non un `doc-id` nudo: è un RITAGLIO
         /// della linea di base (decisione 0049, tabella in
-        /// `docs/architecture/wit-congelato.md`). `[[Nota#^blocco]]` porta un
+        /// `../../../../docs/reference/abi-and-wit.md`). `[[Nota#^blocco]]` porta un
         /// punto dalla 0003, e una risposta che sapeva dire solo QUALE
         /// documento costringeva chi risolve a scartarlo.
         resolved(option<resolved-ref>),
@@ -2607,7 +2607,7 @@ interface index {
     /// 0051). RITAGLIO della linea di base: i tre metodi dell'alimentazione
     /// erano per documento e restituivano `()`, mentre `activate` e `flush`
     /// restituivano un `result` — il ciclo di vita poteva fallire e dirlo,
-    /// l'alimentazione no. Tabella in `docs/architecture/wit-congelato.md`.
+    /// l'alimentazione no. Tabella in `../../../../docs/reference/abi-and-wit.md`.
     ///
     /// Le due domande — che forma ha l'esito, e qual è la grana — hanno una
     /// risposta sola: un esito per lotto dice QUALE documento (cosa che un

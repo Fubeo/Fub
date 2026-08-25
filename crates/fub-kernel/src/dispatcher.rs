@@ -4,9 +4,9 @@
 //!
 //! È uno dei cinque componenti in cui il §8.1 scompone il `Workspace`, e mette
 //! insieme tre cose che il piano nominava separate perché sono la stessa: il
-//! lotto ([decisione 0011](../../../docs/decisions/0011-il-lotto.md)) decide
+//! lotto ([decisione 0011](../../../docs/decisions/README.md)) decide
 //! *cosa esce*, l'origine
-//! ([decisione 0012](../../../docs/decisions/0012-origine-degli-eventi.md))
+//! ([decisione 0012](../../../docs/decisions/0184-eventi-accodati-e-job.md))
 //! decide *a nome di chi*, il budget decide *per quanto*. Tutte e tre si
 //! applicano nello stesso punto — `Dispatcher::emit` — e tenerle in tre posti
 //! significherebbe avere tre posti da cui un evento può uscire senza lotto,
@@ -583,7 +583,7 @@ pub struct PendingJob {
 /// Il kernel è sincrono e non possiede thread — ma sa che *qualcuno* potrebbe
 /// starne aspettando uno, e questo è tutto ciò che gli serve sapere. È la stessa
 /// mossa della bandiera del rilevamento
-/// ([decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md)):
+/// ([decisione 0030](../../../docs/decisions/0183-composizione-host-kernel.md)):
 /// il kernel possiede un pezzetto di stato condiviso e lo **presta** a chi fa il
 /// mestiere che lui non fa. L'alternativa era un runner che interroga la coda a
 /// intervalli, cioè una politica (ogni quanto? a che costo di batteria?) al
@@ -601,7 +601,7 @@ pub struct PendingJob {
 /// # E se il campanello si avvelena
 ///
 /// Il conto sta in una [`Condizione`], non in un `Mutex` nudo, e la ragione è la
-/// riga che la [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)
+/// riga che la [0126](../../../docs/decisions/0184-eventi-accodati-e-job.md)
 /// aveva lasciato scoperta: qui c'erano **sei** `.expect("campanello
 /// avvelenato")`, e una frase ripetuta sei volte sembra una decisione presa
 /// senza esserlo. La decisione c'era, ed è quella della 0126 — *cosa il

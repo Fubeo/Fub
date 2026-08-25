@@ -4,7 +4,7 @@
 //! `il_primo_componente.rs` prova che il contratto si attraversa e che il
 //! cancello del §7.3 si chiude: tutt'e due con un plugin che si comporta bene.
 //! Questo file prova la cosa che quello non può provare, ed è il buco che la
-//! [0164](../../../docs/decisions/0164-il-secondo-backend-una-interfaccia-alla-volta.md)
+//! [0164](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
 //! aveva dichiarato per nome — «*l'interruzione a epoche e i limiti di memoria*
 //! […] *un componente lento o ostile non viene ancora interrotto*».
 //!

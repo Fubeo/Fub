@@ -45,9 +45,9 @@ const ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 ///
 /// Rendeva `None`, e il `None` era la parte debole di un'ottima decisione: la
 /// ragione la sapeva l'host e si perdeva qui, un livello prima di chi avrebbe
-/// dovuto mostrarla. Con la [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md)
+/// dovuto mostrarla. Con la [0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)
 /// la ragione arriva intera fino a chi disegna — che per un errore, dalla
-/// [0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)
+/// [0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 /// in poi, è tutto il punto.
 pub fn uuid_v4(host: &dyn HostEnv) -> Result<String, PluginError> {
     let mut b: [u8; 16] = exact(host, 16)?;
@@ -147,7 +147,7 @@ mod tests {
     use std::collections::HashSet;
 
     // Il doppio è `MemoryHost`, che sta in questo crate dalla
-    // [decisione 0054](../../../docs/decisions/0054-il-banco-del-lato-provider.md).
+    // [decisione 0054](../../../docs/decisions/0196-test-e-artefatti-generati.md).
     // Qui ce n'era una copia scritta a mano, e il commento che la accompagnava
     // dava la ragione: «non è `MemoryHost` perché quello sta in
     // `fub-features`, che dipende da questo crate». La ragione è evaporata col

@@ -11,7 +11,7 @@
 //! Nessun provider di questo repo la scrive, il che è precisamente il motivo per
 //! cui la divergenza poteva restare lì per sempre: la si vede solo costruendo il
 //! caso, ed è quello che fa questo file. Il verbale è la
-//! [0131](../../../docs/decisions/0131-tre-stati-e-la-firma-che-ne-diceva-due.md).
+//! [0131](../../../docs/decisions/0192-impostazioni-locale-e-temi.md).
 //!
 //! # Perché la prova sta qui e non sul mirror
 //!

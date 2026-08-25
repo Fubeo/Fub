@@ -15,7 +15,7 @@
 //! dentro il workspace è una sola per tutti — la versione del contratto, la
 //! dichiarazione, `Plugin::activate`, i provider — perché la scrive il
 //! [`BundleRegistry`] e non questo file
-//! ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)).
+//! ([decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //!
 //! Ne segue che una regola che era **un ordine da rispettare** è diventata la
 //! forma del montaggio: «le feature si dichiarano prima di registrare
@@ -182,7 +182,7 @@ impl Bundle for CoreBundle {
 /// questo repo**, non una condizione che l'utente possa produrre — si dice su
 /// stderr e si tira dritto, che è ciò che faceva prima. Il canale giusto per
 /// dirlo adesso esiste
-/// ([decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)):
+/// ([decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)):
 /// questi punti sono fra i ventisette da convertire, ed è la casella che il
 /// §20.2 lascia dietro di sé.
 pub fn mount(

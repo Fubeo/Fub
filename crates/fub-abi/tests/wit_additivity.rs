@@ -47,7 +47,7 @@
 //! linea di base — cioè con un commit che tocca `wit/frozen/0.1.0.wit`, che in
 //! review si vede. Dopo M4 quel file non si tocca più: si aggiunge
 //! `wit/frozen/<nuova-versione>.wit` e si lascia il precedente a fare da
-//! presidio. La regola in prosa sta in `docs/architecture/wit-congelato.md`.
+//! presidio. La regola in prosa sta in `../../../docs/reference/abi-and-wit.md`.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -389,7 +389,7 @@ fn new_obligations(base: &Contract, now: &Contract) -> Vec<String> {
              function in more is not an addition — it is an obligation. A component compiled \
              against {} does not export it, and a world that requires it is a world it does \
              not satisfy. If deliberate: a line in `KNOWN_OBLIGATIONS` with the reason, and a \
-             line in the cuts table of `docs/architecture/wit-frozen.md`",
+             line in the cuts table of `../../../docs/reference/abi-and-wit.md`",
             base.version
         ));
     }

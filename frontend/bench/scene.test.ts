@@ -13,7 +13,7 @@
 // rimossa.
 //
 // Che l'elenco si possa svuotare in silenzio è la lezione della
-// [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md):
+// [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md):
 // un elenco vuoto e un elenco che passa danno lo stesso verde. Qui c'è un
 // pavimento, e sta scritto.
 //

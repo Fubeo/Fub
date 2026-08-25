@@ -2,7 +2,7 @@
 //!
 //! I due numeri che c'erano stavano a due ordini di grandezza di distanza —
 //! 108 µs misurati a M2, ~23 ms misurati dal banco della
-//! [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md) sullo
+//! [0024](../../../docs/decisions/README.md) sullo
 //! stesso ordine di vault — e nessuno dei due era sbagliato. Questo banco esiste
 //! per dire **quale lavoro** c'è nel secondo e non nel primo, e per dirlo per
 //! fase invece che per totale: un totale non si sa dove tagliare.
@@ -27,7 +27,7 @@
 //!    altre quattro misurano una query che parte quando qualcuno *apre* una
 //!    superficie; questa misura la query che parte a **ogni tasto**, che è il
 //!    budget dell'autocompletamento dei wikilink e del quick switcher. La
-//!    [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md) ha scelto
+//!    [0082](../../../docs/decisions/0182-provider-e-porte-generiche.md) ha scelto
 //!    il prefisso contro la lista spinta *senza* misurarlo, dichiarando che
 //!    andava misurato: qui si misura — una battuta alla volta, sul prefisso più
 //!    corto (il caso peggiore: `n` apre un intervallo di dizionario enorme) fino

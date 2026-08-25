@@ -540,7 +540,7 @@ pub enum Event {
     ///
     /// I tre eventi dell'anagrafe sono i gemelli dei tre dei documenti, e sono
     /// tre e non uno per la stessa ragione: l'abbonamento ha la grana del
-    /// [`EventKind`] ([decisione 0033](../../../docs/decisions/0033-la-grana-di-un-abbonamento.md)),
+    /// [`EventKind`] ([decisione 0033](../../../docs/decisions/0184-eventi-accodati-e-job.md)),
     /// e chi vuole sapere solo delle sparizioni — una cache di miniature, un
     /// pannello degli allegati — deve poterlo dire senza ricevere tutto e
     /// filtrare il payload.
@@ -575,7 +575,7 @@ pub enum Event {
         kind: EntryKind,
     },
     /// **Qualcosa è andato storto** (§20.2, decisione 0052): la variante che
-    /// la [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)
+    /// la [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md)
     /// aveva previsto — *ciò che si limita a informare è un evento* — e
     /// rimandato perché non aveva un cliente.
     ///
@@ -586,7 +586,7 @@ pub enum Event {
     /// non ha un lettore.
     ///
     /// Che cosa, di quei ventisette, passi di qui è deciso dalla
-    /// [0062](../../../docs/decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md),
+    /// [0062](../../../docs/decisions/0184-eventi-accodati-e-job.md),
     /// ed è la sola parte di questa prosa che non è più storia: il criterio è
     /// *il log è il pavimento, l'evento è la porta*, e apre la porta solo ciò
     /// che racconta una **perdita**. Le diagnosi per chi sviluppa restano nel
@@ -654,7 +654,7 @@ pub enum Event {
 /// e a quel punto non distingue più niente.
 ///
 /// Il criterio del taglio è quello della
-/// [decisione 0048](../../../docs/decisions/0048-una-radice-sola.md), ed è
+/// [decisione 0048](../../../docs/decisions/0188-identita-path-e-rename.md), ed è
 /// l'unica ragione per cui questo campo lo si può compilare senza indovinare:
 /// **la classe del dato perso dice la severità**. Ciò che è *derivato* si
 /// ricostruisce riaprendo il vault, e la sua perdita è un

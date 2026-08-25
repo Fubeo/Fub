@@ -5,12 +5,12 @@
 //! clienti sono due, e chiedono al corpus due cose che non si somigliano:
 //!
 //! - `il_corpus.rs` chiede **cosa il modello dice** di queste sorgenti — è la
-//!   [0060](../../../../docs/decisions/0060-il-modello-dice-il-vero-sui-byte.md);
+//!   [0060](../../../../docs/decisions/0180-compatibilita-wit-additiva.md);
 //! - `transfer_e2e.rs` chiede **cosa il trasferimento ne fa**: gli stessi byte
 //!   escono da un vault e rientrano in un altro.
 //!
 //! Il corpus sta qui e non in [`fub_sdk::testing`] per il criterio della
-//! [0059](../../../../docs/decisions/0059-la-generazione-non-e-un-round-trip.md):
+//! [0059](../../../../docs/decisions/0180-compatibilita-wit-additiva.md):
 //! le *proprietà* sono di un `FormatProvider` qualunque e stanno nell'SDK, ma
 //! queste sorgenti sono markdown, e il markdown è di questo crate.
 //!
@@ -34,7 +34,7 @@
 /// Una voce del corpus: un nome per leggere il fallimento, e i byte esatti.
 ///
 /// I byte stanno scritti qui come stringhe Rust e non come file committati, per
-/// la ragione della [0058](../../../../docs/decisions/0058-un-nome-che-nasce.md):
+/// la ragione della [0058](../../../../docs/decisions/0187-autorita-e-schemi-su-disco.md):
 /// un file con un BOM o con CRLF dentro un repo è alla mercé di
 /// `.gitattributes`, degli editor e dei checkout su Windows.
 pub struct Case {

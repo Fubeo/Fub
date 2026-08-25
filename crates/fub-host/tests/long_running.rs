@@ -106,7 +106,7 @@ fn open(v: &Vault) -> Host {
     host.open(&v.root).expect("il vault si apre");
     // **Si aspetta l'indicizzazione**, e non è un dettaglio di comodo: da
     // quando l'apertura è a fasi (§15.7,
-    // [0070](../../../docs/decisions/0070-un-vault-si-apre-in-due-tempi.md))
+    // [0070](../../../docs/decisions/0183-composizione-host-kernel.md))
     // `open` torna a indici ancora vuoti, e la seconda fase prende il prestito
     // in esclusiva **una fetta alla volta** su questi stessi thread. Un test di
     // questo file che partisse lì troverebbe il vault occupato da qualcosa che

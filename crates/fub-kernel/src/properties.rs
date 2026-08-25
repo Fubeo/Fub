@@ -1,7 +1,7 @@
 //! Come **questo vault** scrive le date nel frontmatter (§8.2).
 //!
 //! Una riga sola di impostazione, e il perché è tutto nella riga: la
-//! [0003](../../../docs/decisions/0003-modello-del-documento.md) ha deciso che
+//! [0003](../../../docs/decisions/0181-modello-documento-e-arene.md) ha deciso che
 //! *solo l'ISO-8601 a larghezza fissa è una data*, con l'argomento giusto — un
 //! parser tollerante trasformerebbe in date le stringhe dell'utente. Quella
 //! regola resta. Ciò che cambia è **chi dichiara il formato**: un vault che
@@ -17,7 +17,7 @@
 //! italiana è il cinque luglio e su una americana è il sette maggio: un vault
 //! sincronizzato fra due macchine porterebbe **due date diverse per lo stesso
 //! byte**, che è precisamente il difetto che la
-//! [0004](../../../docs/decisions/0004-il-grafo-e-i-link-non-wiki.md) ha
+//! [0004](../../../docs/decisions/README.md) ha
 //! rifiutato per i link — *il vault sincronizzato fra macOS e Linux è lo stesso
 //! vault*. Il formato è un fatto **dei file**, non di chi guarda, e per questo
 //! il suo default non è «come il sistema»: è «solo ISO», cioè nessuna lettura in

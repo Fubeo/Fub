@@ -48,7 +48,7 @@ use jiff::Timestamp;
 /// Si costruisce una volta per sveglia e per giro. Costruirlo non è gratis — un
 /// nome IANA si risolve leggendo il database — ma il giro in cui succede è
 /// quello in cui il pool stava per addormentarsi, cioè lo stesso in cui la
-/// [0069](../../../docs/decisions/0069-cosa-sa-dire-un-abbonamento.md) ha già
+/// [0069](../../../docs/decisions/README.md) ha già
 /// deciso di poter leggere un orologio.
 pub(crate) struct Zone(TimeZone);
 
@@ -64,7 +64,7 @@ impl Zone {
     /// sveglia. È deliberato e non è un ripiego mancato: cadere su UTC vorrebbe
     /// dire onorare la dichiarazione con un'altra sveglia, all'ora sbagliata,
     /// senza che nessuno se ne accorga — la specie di bugia che la
-    /// [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md)
+    /// [0077](../../../docs/decisions/README.md)
     /// rifiuta nel registro dei comandi.
     pub(crate) fn of(timer: &WallClock, machine: &str) -> Option<Self> {
         match timer.zone.as_deref().unwrap_or(machine) {

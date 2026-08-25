@@ -33,9 +33,9 @@
 // `state/kernel.ts`, che un DOM non ce l'hanno, la promessa di funzionare senza
 // disegno ha smesso di essere solo scritto.
 //
-// [decisione 0013]: ../../../docs/decisions/0013-elenco-delle-capacita.md
-// [decisione 0052]: ../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md
-// [decisione 0080]: ../../../docs/decisions/0080-un-guasto-si-dice-a-chi-sta-lavorando.md
+// [decisione 0013]: ../../../docs/decisions/0185-capability-un-solo-guard.md
+// [decisione 0052]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
+// [decisione 0080]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 
 import { onLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";

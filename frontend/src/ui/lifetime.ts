@@ -15,7 +15,7 @@
 // che sa anche smettere. Chi apre una `Lifetime` la chiude; ciò che c'è dentro non
 // si conta e non si ricorda.
 //
-// È la forma della [0125](../../../docs/decisions/0125-un-albero-riusato-riceve-una-porta-non-un-handler.md)
+// È la forma della [0125](../../../docs/decisions/README.md)
 // applicata al terzo lato: là ciò che circolava nel riconciliatore non era un
 // handler ma una porta, qui ciò che si passa a chi ascolta non è un
 // `EventTarget` ma una vita. In tutti e due i casi il tipo toglie di mezzo il

@@ -40,7 +40,7 @@
 //! quando gli pare, anche dai thread di merge, e non ha un host da chiamare in
 //! quei momenti. Il path arriva dall'host (`Workspace::plugin_data_dir`) ed è
 //! **dentro lo stesso recinto** del resto: quel varco è dichiarato
-//! ([0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md)), non
+//! ([0064](../../../docs/decisions/0185-capability-un-solo-guard.md)), non
 //! implicito, ed è ciò che a M5 diventerà un preopen WASI sulla stessa cartella
 //! per un componente che avvolga un motore analogo.
 
@@ -93,7 +93,7 @@ pub const SEARCH_ID: &str = "fub.search";
 const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 
 /// **La forma che quel numero versiona** (§15.3,
-/// [0106](../../../docs/decisions/0106-un-formato-si-presenta.md)).
+/// [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)).
 ///
 /// Un numero di schema serve a chi rilegge, e serve a una condizione sola: che
 /// **salga quando la forma cambia**. I due banchi di questo file provano che il
@@ -414,7 +414,7 @@ fn build_schema() -> (Schema, Fields) {
 /// scatena più spesso non guadagnava niente dal prestito condiviso del
 /// workspace: il `RwLock` del kernel non attraversa il lock di un provider, e
 /// otto thread facevano le stesse ricerche al secondo di uno
-/// ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+/// ([decisione 0024](../../../docs/decisions/README.md)).
 ///
 /// La garanzia non è stata tolta: è stato tolto il **prezzo di chi non la usa**.
 /// Committare serve solo quando c'è qualcosa da committare, e chi scrive passa
@@ -491,7 +491,7 @@ impl SearchIndex {
     /// ricalcolasse per conto proprio ne terrebbe una seconda copia.
     ///
     /// Quel path è **l'unico varco del filesystem fuori da `VaultStorage`**
-    /// ([0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md)): la
+    /// ([0064](../../../docs/decisions/0185-capability-un-solo-guard.md)): la
     /// cifratura si ferma qui, ed è riservato ai provider nativi che mmappano —
     /// oggi solo questo. Un plugin WASM (M5) non lo avrà: avrà un preopen WASI
     /// sulla stessa cartella.
@@ -958,14 +958,14 @@ impl SearchIndex {
     /// La differenza è tutta la §8.4 — una `read()` condivisa non mette nessuno
     /// in fila, un `Mutex` sì — e una parola mancante la cancellava. L'ha
     /// trovata il banco del §17.1
-    /// ([decisione 0113](../../../docs/decisions/0113-il-banco-conta-le-operazioni.md)),
+    /// ([decisione 0113](../../../docs/decisions/0196-test-e-artefatti-generati.md)),
     /// che è quello che il commento accanto ai pesi chiedeva quando diceva «*il
     /// banco della seduta è lì per smentirmi se sbaglio*».
     ///
     /// Il doppio controllo di `dirty` non è prudenza: due query concorrenti
     /// possono trovarlo alzato insieme, e la seconda non deve committare a
     /// vuoto. Non è nemmeno un residuo: è ciò che la
-    /// [decisione 0026](../../../docs/decisions/0026-due-query-insieme.md) ha
+    /// [decisione 0026](../../../docs/decisions/0182-provider-e-porte-generiche.md) ha
     /// **installato** quando ha tolto il `Mutex<Inner>` che metteva in fila le
     /// ricerche — 43 op/s prima, 320 dopo a otto thread — e leggerlo come un
     /// lock che ferma i lettori per la durata del commit è leggere al contrario
@@ -1142,7 +1142,7 @@ impl SearchIndex {
             // vault grande: è **come il pianificatore interroga sempre**
             // (`fub-kernel/src/index/plan.rs`), perché ordine e finestra di una
             // risposta a `Documents` sono del contratto e non di tantivy
-            // ([decisione 0020](../../../docs/decisions/0020-le-regole-in-un-posto-solo.md)).
+            // ([decisione 0020](../../../docs/decisions/README.md)).
             // Quanto costi l'argomento di `with_limit` è misurato in
             // `tests/una_ricerca_senza_finestra.rs`, e la risposta è: niente. Il
             // costo sta in `searcher.doc`, cioè nelle righe restituite.

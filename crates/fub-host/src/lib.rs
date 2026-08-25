@@ -35,7 +35,7 @@
 //! ## Le capacità di un lavoro lungo
 //!
 //! [`JobHost`] è l'`HostApi` che un job riceve (§9.1,
-//! [decisione 0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)),
+//! [decisione 0027](../../../docs/decisions/0183-composizione-host-kernel.md)),
 //! e sta qui per la stessa ragione del `RwLock`: il kernel non sa che esiste un
 //! lock, e un host che ne prende uno **per chiamata** può nascere solo dove il
 //! lock è di casa.
@@ -44,9 +44,9 @@
 //!
 //! [`BundleRegistry`] è chi monta un plugin coi suoi provider e lo **possiede**
 //! finché è vivo (§9.3,
-//! [decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)). Sta
+//! [decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)). Sta
 //! qui e non nel kernel per una ragione sola: l'`HostApi` non ha capacità di
-//! registrazione ([decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)),
+//! registrazione ([decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md)),
 //! quindi un plugin non può registrarsi da sé — qualcuno che ha un
 //! `&mut Workspace` deve leggergli il manifest, dichiararlo, attivarlo e
 //! registrare ciò che offre. [`mount()`] è la tabella delle otto righe ufficiali,
@@ -56,7 +56,7 @@
 //!
 //! [`JobRunner`] è il pool che drena la coda dei job e li esegue fuori dal giro
 //! sincrono (§9.3,
-//! [decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)). Prima
+//! [decisione 0032](../../../docs/decisions/0183-composizione-host-kernel.md)). Prima
 //! quella coda non la drenava nessuno in produzione: `spawn_job` accodava e
 //! basta. Il pool passa al job un [`JobHost`] — che il prestito se lo prende una
 //! chiamata alla volta — e il **corpo** glielo dà [`BundleRegistry::body`].

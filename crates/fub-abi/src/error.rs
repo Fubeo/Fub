@@ -4,7 +4,7 @@
 //! # Un errore è testo che qualcuno legge (§12.2)
 //!
 //! Il payload di ogni variante è un [`Text`], non una `String`, ed è il gemello
-//! dichiarato della [decisione 0040](../../../docs/decisions/0040-chi-localizza.md):
+//! dichiarato della [decisione 0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md):
 //! *chi localizza le stringhe localizza anche gli errori, e un messaggio già
 //! composto non si traduce.* Un errore era, fino a questa seduta, l'unica cosa
 //! che attraversava il confine verso uno schermo senza poter essere tradotta.

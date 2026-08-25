@@ -3,7 +3,7 @@
 //! La shell ha un registro di comandi suo — «passa a Lettura», «apri il
 //! pannello dei file», «apri un vault» — e sono comandi veri: hanno un id, un
 //! titolo, una descrizione e un accordo, e la palette e la tastiera li leggono
-//! insieme a quelli del kernel ([0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md)).
+//! insieme a quelli del kernel ([0077](../../../docs/decisions/README.md)).
 //! Ciò che li distingue è **chi li esegue**: `run()` nella webview, non
 //! `invoke_command` di qua. Per questo non sono un [`CommandProvider`] e non
 //! entrano nel registro del kernel — un comando che il kernel elenca e non sa
@@ -15,7 +15,7 @@
 //!
 //! Qui stanno **gli id e gli accordi dichiarati**, e nient'altro. Il titolo e la
 //! descrizione restano nel catalogo della shell, perché la frase la localizza
-//! chi l'ha scritta ([0040](../../../docs/decisions/0040-chi-localizza.md)) e chi
+//! chi l'ha scritta ([0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)) e chi
 //! ha scritto «Apri il pannello dei file» è la shell: portarne una copia qui
 //! vorrebbe dire trentaquattro stringhe tradotte due volte, e la seconda
 //! copia falsa al primo ritocco.
@@ -33,7 +33,7 @@
 //! l'app in esecuzione — `Mod-Shift-f` è stato dichiarato due volte, dal kernel
 //! per `search.open` e dalla shell per il pannello della ricerca, e la shell ha
 //! eseguito per mesi quello sbagliato senza che niente diventasse rosso
-//! ([0081](../../../docs/decisions/0081-un-accordo-ha-un-proprietario.md)). La
+//! ([0081](../../../docs/decisions/0185-capability-un-solo-guard.md)). La
 //! 0081 aveva messo la tabella degli accordi di shell in un modulo TypeScript e
 //! li aveva fatti incontrare in un banco di là; da questa voce la tabella è
 //! **una sola**, sta qui, e di là arriva emessa

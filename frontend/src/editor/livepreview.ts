@@ -2,7 +2,7 @@
 // altre mostrano la resa (marcatori nascosti, testo stilato, widget al posto
 // di righelli e checkbox).
 //
-// Due vincoli architetturali, decisi in docs/todo.md §6:
+// Due vincoli architetturali, decisi in ../../../docs/project/status.md §6:
 //
 // - Le decorazioni leggono **l'albero Lezer** di `lang-markdown`, non gli
 //   `Span` del modello Rust: il tree è già in code unit UTF-16 (la valuta di

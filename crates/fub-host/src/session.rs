@@ -9,7 +9,7 @@
 //! ottiene lo stesso vault.
 //!
 //! **Le sessioni sono una mappa** (§9.6,
-//! [decisione 0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)).
+//! [decisione 0029](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //! Erano una `Option<VaultSession>` e aprire un vault chiudeva quello aperto:
 //! il vault "corrente" non era una comodità della shell, era un'assunzione del
 //! backend, e ogni cosa che avrà due vault davanti — una finestra per vault
@@ -28,7 +28,7 @@
 //! `Mutex` e lo si tiene per il tempo di un `get` o di un `clone`; il
 //! workspace è un [`RwLock`] e lo si tiene per il tempo di una lettura o di una
 //! scrittura vera. Il secondo è il §8.3
-//! ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)),
+//! ([decisione 0024](../../../docs/decisions/README.md)),
 //! e chi prende quale prestito **non è una convenzione**: da un
 //! `RwLockReadGuard` non si chiama `write_document`, perché il `Workspace`
 //! prende `&mut self` per scrivere e `&self` per leggere. Il compilatore fa la
@@ -94,7 +94,7 @@ pub trait EventSink: Send + Sync + 'static {
 /// kernel, che non ha nessuno a cui rispondere ([decisione 0126]) — e ciò che
 /// serve sapere è una cosa sola, se chi sta dall'altra parte l'ha visto.
 ///
-/// [decisione 0126]: ../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md
+/// [decisione 0126]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Delivery {
     /// È uscito.
@@ -945,7 +945,7 @@ impl Host {
     ///
     /// Due cose, e nessuna delle due basta da sola: il montaggio (o lo
     /// smontaggio) *adesso* — che è `BundleRegistry`, ed è host-side per
-    /// costruzione ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md):
+    /// costruzione ([decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md):
     /// l'`HostApi` non ha capacità di registrazione, quindi un plugin non può
     /// montarsi da sé — e la riga scritta in `plugins.disabled`, che è ciò che
     /// mancava al §11.1: «dove stare scritto fra un avvio e l'altro».
@@ -961,7 +961,7 @@ impl Host {
     /// che li descrivono: spegnere non si annulla perché un `deactivate` è
     /// andato storto, e chi riceve l'elenco deve poterci ramificare sopra. Una
     /// `String` qui avrebbe fatto la stessa figura sullo schermo e tolto il
-    /// `kind` ([decisione 0041](../../../docs/decisions/0041-un-errore-che-attraversa-il-confine.md))
+    /// `kind` ([decisione 0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md))
     /// a un passo dal confine che quel tipo lo sa attraversare da sé — che è
     /// come lo restituisce già [`Host::close_vault`], ed è la stessa lista.
     pub fn set_plugin_enabled(
@@ -983,7 +983,7 @@ impl Host {
             // solo: spegnere un componente con un suo job in volo saltava il
             // commiato e lo diceva in un errore. Aspettarlo qui è la stessa
             // regola con cui si chiude un vault — chi spegne aspetta chi
-            // lavora ([0032](../../../docs/decisions/0032-il-runner-dei-job.md))
+            // lavora ([0032](../../../docs/decisions/0183-composizione-host-kernel.md))
             // — applicata a un componente invece che a tutti.
             //
             // E **prima** dei due prestiti, non dopo: un job dentro `run_job`
@@ -1235,7 +1235,7 @@ impl Host {
     /// aggiungesse un secondo dichiarante troverebbe qui una riga da cambiare
     /// invece di un difetto da scoprire. La lingua è quella del **sistema** e
     /// basta: le `locale.*` sono del vault
-    /// ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)),
+    /// ([0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)),
     /// quindi senza vault la scala di `Workspace::locale` collassa sull'unico
     /// gradino che le resta.
     ///
@@ -1623,8 +1623,8 @@ impl Host {
     /// `rileggere_una_versione_non_ferma_chi_scrive` (`tests/concorrenza.rs`),
     /// accanto ai tre presidi che la 0024 aveva già lasciato.
     ///
-    /// [0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
-    /// [0021]: ../../../docs/decisions/0021-il-confine.md
+    /// [0024]: ../../../docs/decisions/README.md
+    /// [0021]: ../../../docs/decisions/0185-capability-un-solo-guard.md
     #[cfg(feature = "versioning")]
     pub fn read_version(
         &self,

@@ -446,7 +446,7 @@ fn a_derived_entry_is_written_and_reread() {
 /// esiste, e la 0065 non deve essersi spenta per farla esistere.
 ///
 /// È il presidio che la
-/// [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+/// [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 /// chiedeva: la promessa «o c'è o non c'è» vale per i documenti, e chi li
 /// scrive non deve poter scegliere di non pagarla. Il `sync_all` in sé non si
 /// osserva da un test — è una riga letta in review — ma che la via derivata
@@ -589,7 +589,7 @@ fn a_move_responds_again_that_that_responded() {
 // Ciò che segue non presidia più la scrittura di **un file** ma la fusione di un
 // **aggiornamento**: due installazioni di Fub sulla stessa cartella di
 // configurazione, e nessuna delle due che cancella le chiavi dell'altra
-// ([0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)).
+// ([0066](../../../docs/decisions/0195-versioni-indipendenti.md)).
 //
 // Due istanze aperte sullo stesso path **sono** il caso, e non una sua imitazione
 // approssimata: ognuna ha letto il file una volta e da lì tiene la propria copia

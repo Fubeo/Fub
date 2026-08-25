@@ -34,7 +34,7 @@
 //! # Cosa questo file NON chiede, e perché la distinzione regge
 //!
 //! Non chiede il round-trip di *qualunque* markdown: `serialize` resta
-//! **lossy per costruzione** ([0059](../../../docs/decisions/0059-la-generazione-non-e-un-round-trip.md))
+//! **lossy per costruzione** ([0059](../../../docs/decisions/0180-compatibilita-wit-additiva.md))
 //! — `_corsivo_` torna `*corsivo*`, l'indentazione scelta non torna. Chiede il
 //! round-trip di documenti **già scritti nella forma che il serializer
 //! genera**: su quelli non c'è niente da normalizzare, quindi ogni differenza

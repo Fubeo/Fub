@@ -32,8 +32,8 @@
 //! componenti c'è ciò a cui si risponde *senza svegliare nessuno*. È anche la
 //! linea lungo cui il §8.3 ha messo il `RwLock`: chi legge prende il prestito
 //! condiviso, chi chiama un provider quello esclusivo. Vedi la
-//! [decisione 0022](../../../docs/decisions/0022-il-kernel-a-pezzi.md) e la
-//! [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md).
+//! [decisione 0022](../../../docs/decisions/README.md) e la
+//! [0024](../../../docs/decisions/README.md).
 //!
 //! **Invariante:** questo crate non dipende da comrak/pulldown, wasmtime o
 //! tauri. Se `comrak` comparisse nel suo albero delle dipendenze, il design

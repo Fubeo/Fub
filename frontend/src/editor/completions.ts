@@ -36,7 +36,7 @@ import { tagInProgress } from "../rules/syntax";
 /// Prendeva un argomento in meno, e la differenza è tutta la §21.5: era
 /// `listNotes()`, cioè l'elenco intero del vault, e il filtro lo faceva
 /// CodeMirror. Adesso la domanda porta con sé il prefisso e la risposta è una
-/// finestra — la [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md),
+/// finestra — la [0082](../../../docs/decisions/0182-provider-e-porte-generiche.md),
 /// che su questa superficie ha dovuto decidere due volte: la porta unica come
 /// per tutte, e il fatto che qui il budget non è per invocazione ma **per
 /// battuta**.

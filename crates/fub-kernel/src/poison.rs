@@ -1,8 +1,8 @@
 //! **Un lucchetto del kernel sta dietro una porta, e questa porta si riprende.**
 //!
-//! È la [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)
+//! È la [0126](../../../docs/decisions/0184-eventi-accodati-e-job.md)
 //! applicata fuori da `bus.rs`, con la regola che la
-//! [0120](../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md)
+//! [0120](../../../docs/decisions/README.md)
 //! ha scritto per renderla decidibile: *la politica del veleno segue **cosa il
 //! lucchetto protegge**, non che specie di lucchetto è.*
 //!

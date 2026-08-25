@@ -10,7 +10,7 @@
 //! [`custom_kind`].
 //!
 //! Il criterio per cui qualcosa si guadagna una variante invece di restare
-//! `Custom` è dichiarato in `docs/architecture/data-model.md`: deve esistere un
+//! `Custom` è dichiarato in `../../../docs/architecture/document-model.md`: deve esistere un
 //! consumatore **trasversale al formato** che ne interroghi la struttura, e la
 //! forma di `Custom` non deve reggerne il contenuto. La tabella ha entrambi (una
 //! cella porta inline, e `Custom` porta solo blocchi); footnote e definition
@@ -883,7 +883,7 @@ pub fn canonical_tag(name: &str) -> String {
 /// un `[[Nota#^Blocco]]` trova il suo blocco, e chi scrive l'ancora e chi la
 /// cerca sono due pezzi di codice che non si vedono fra loro. Un'ancora è
 /// case-insensitive come il resto della risoluzione (§ "Case dei path" in
-/// `docs/architecture/data-model.md`).
+/// `../../../docs/architecture/document-model.md`).
 pub fn canonical_anchor(id: &str) -> String {
     composed(id.trim()).to_lowercase()
 }
@@ -1038,7 +1038,7 @@ pub fn heading_slugs<'a>(texts: impl IntoIterator<Item = &'a str>) -> Vec<String
 /// l'agnosticità del modello diventa una convinzione. Qui stanno i kind che
 /// **più di un pezzo del sistema** interpreta (parser, renderer, export), con
 /// la forma dei loro `attrs`; l'elenco esteso, con la tabella degli `attrs`, è
-/// in `docs/architecture/data-model.md`.
+/// in `../../../docs/architecture/document-model.md`.
 ///
 /// Un kind sconosciuto non è un errore: degrada a resa generica. Questo elenco
 /// non chiude l'insieme — dichiara quali significati sono **condivisi**.
@@ -1332,7 +1332,7 @@ impl DateOrder {
 }
 
 ///
-/// La [decisione 0003](../../../docs/decisions/0003-modello-del-documento.md)
+/// La [decisione 0003](../../../docs/decisions/0181-modello-documento-e-arene.md)
 /// ha rifiutato il parser tollerante con l'argomento giusto — *un parser
 /// tollerante trasformerebbe in date le stringhe dell'utente* — e quell'argomento
 /// resta intero. Ciò che cambia non è la **tolleranza**: è **chi declare il

@@ -1,5 +1,5 @@
 //! **Il ponte degli eventi** end-to-end (§10.2,
-//! [decisione 0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)):
+//! [decisione 0034](../../../docs/decisions/0184-eventi-accodati-e-job.md)):
 //! il bus da un capo, un sink dall'altro, e in mezzo il freno.
 //!
 //! La politica — cosa si raggruppa, cosa si degrada, in che ordine — ha le sue

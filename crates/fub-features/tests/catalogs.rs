@@ -5,7 +5,7 @@
 //! lavoro che si fa una volta; questa è ciò che impedisce che si disfi, e senza
 //! si disferebbe **in silenzio**, che è la forma di rottura peggiore che le
 //! stringhe abbiano: la scala della
-//! [decisione 0040](../../../docs/decisions/0040-chi-localizza.md) non fallisce
+//! [decisione 0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) non fallisce
 //! mai, degrada. Una chiave senza voce non è un errore, è la chiave nuda
 //! stampata a schermo; una lingua tradotta a metà non è un errore, è metà
 //! pannello nell'altra lingua; una stringa dimenticata dentro una `ViewSpec`
@@ -35,7 +35,7 @@
 //! # Su quali componenti, e come lo sa
 //!
 //! Gli otto erano elencati a mano qui sotto, ed era il difetto del
-//! [§16.7](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! [§16.7](../../../docs/project/roadmap.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
 //! nella sua forma più larga: non solo la quinta view sarebbe entrata muta, ma
 //! la **nona feature** — una che non registra nessuna view — sarebbe entrata
 //! senza che nessuno guardasse il suo catalogo. Adesso l'elenco viene da
@@ -225,7 +225,7 @@ fn the_settings_of_the_core_speak_also_their() {
     // due gruppi «Privacy» scritti da due componenti sarebbero due sezioni
     // identiche nel pannello, e la ragione sta scritta accanto alla riga in
     // `journal.rs`. La frase la localizza chi l'ha scritta
-    // ([0040](../../../docs/decisions/0040-chi-localizza.md)), quindi in nessun
+    // ([0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)), quindi in nessun
     // catalogo del kernel quella voce c'è né deve esserci: a giudicarla è il
     // banco di `fub-host`, che somma i due cataloghi.
     //

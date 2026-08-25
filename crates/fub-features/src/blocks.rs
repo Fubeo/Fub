@@ -137,7 +137,7 @@ impl SyntaxRule for DiagramRule {
 /// sorgente del diagramma in una sezione ripiegabile, cioè il degrado onesto:
 /// Fub non ha un motore di diagrammi nel bundle e non finge di averlo.
 ///
-/// [decisione 0016]: ../../../docs/decisions/0016-cosa-e-una-view.md
+/// [decisione 0016]: ../../../docs/decisions/0182-provider-e-porte-generiche.md
 pub struct DiagramRenderer;
 
 impl CustomRenderer for DiagramRenderer {

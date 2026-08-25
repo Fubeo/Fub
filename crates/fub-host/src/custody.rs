@@ -93,9 +93,9 @@
 //! per-documento in fondo a un'apertura — è lungo *perché* è condiviso, cioè è
 //! la riparazione e non il difetto.
 //!
-//! [0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
-//! [0032]: ../../../docs/decisions/0032-il-runner-dei-job.md
-//! [0032]: ../../../docs/decisions/0032-il-runner-dei-job.md
+//! [0024]: ../../../docs/decisions/README.md
+//! [0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
+//! [0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
 
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicU32, Ordering};

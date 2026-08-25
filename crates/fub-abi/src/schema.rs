@@ -4,9 +4,9 @@
 //! Ogni file che Fub scrive dentro il vault sopravvive alla versione di Fub che
 //! l'ha scritto, e ognuno porta il proprio numero di schema: quale formato sono
 //! quei byte. Undici formati, undici numeri, e la
-//! [0106](../../../docs/decisions/0106-un-formato-si-presenta.md) ha dato loro
+//! [0106](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md) ha dato loro
 //! tre presidi — un conto che li trova nei sorgenti, un conto che conta le
-//! righe della tabella di `docs/versionamento.md`, e un banco che confronta le
+//! righe della tabella di `../../../docs/development/versioning-and-releases.md`, e un banco che confronta le
 //! due liste nei due versi.
 //!
 //! Restava un buco, e la 0106 l'ha dichiarato scrivendolo: il conto trovava i

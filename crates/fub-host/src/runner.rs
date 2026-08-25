@@ -1,5 +1,5 @@
 //! **Il runner dei job**: chi possiede i thread su cui gira il lavoro lungo
-//! (§9.3, [decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)).
+//! (§9.3, [decisione 0032](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //!
 //! Il giro c'era per intero e non aveva un chiamante: `spawn_job` accodava
 //! ([`Workspace::take_pending_jobs`]), `complete_job` riconsegnava, il test
@@ -13,9 +13,9 @@
 //! chiama [`Plugin::run_job`](fub_abi::traits::Plugin::run_job). Nessuno
 //! tiene niente in mano mentre il job gira: il prestito del workspace se lo
 //! prende il `JobHost`, una chiamata alla volta
-//! ([decisione 0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)).
+//! ([decisione 0027](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //! Il corpo del job lo dà chi possiede i bundle
-//! ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)): la
+//! ([decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)): la
 //! coda dice **quale plugin**, il registry dice **quale codice**.
 //!
 //! # Le tre cose che un pool deve saper fare, e che non si aggiungono dopo
@@ -32,7 +32,7 @@
 //! # Chi chiude aspetta chi lavora
 //!
 //! È la domanda che il §9.3 poneva («chi chiude aspetta chi?») e la risposta è
-//! la stessa forma della [0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md):
+//! la stessa forma della [0029](../../../docs/decisions/0183-composizione-host-kernel.md):
 //! **prima si smette di guardare, poi si smette di lavorare, poi si chiude.**
 //! Chiudere annulla ogni job in volo e **aspetta** che i thread tornino. Non
 //! aspettarli vorrebbe dire lasciare un job che scrive mentre gli indici si
@@ -63,7 +63,7 @@ use crate::registry::BundleRegistry;
 /// job che aspetta la rete non deve tenere fermo un job che calcola — è la
 /// ragione per cui un pool esiste invece di un worker. Non «quanti core»,
 /// perché il parallelismo utile non lo limitano i core: lo limita il `RwLock`
-/// del workspace ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)),
+/// del workspace ([decisione 0024](../../../docs/decisions/README.md)),
 /// e due job che scrivono si mettono in fila comunque. Un pool grande
 /// comprerebbe contesa, non velocità.
 ///
@@ -495,7 +495,7 @@ pub struct InProgress {
     ///
     /// Una condizione e non un'attesa a intervalli, per la stessa ragione per
     /// cui il campanello dei job non è un polling
-    /// ([0032](../../../docs/decisions/0032-il-runner-dei-job.md)): un
+    /// ([0032](../../../docs/decisions/0183-composizione-host-kernel.md)): un
     /// intervallo è una politica da scegliere — ogni quanto? a che costo? —
     /// dove basta un fatto.
     pub(crate) end: Arc<(Mutex<bool>, Condvar)>,
@@ -508,7 +508,7 @@ impl Shared {
     /// Una fetta alla volta, e non il giro intero, perché fra una fetta e
     /// l'altra succedono le tre cose per cui questa voce esiste: il workspace
     /// si libera — `reindex` lo teneva in esclusiva ~780 ms su 2000 note
-    /// ([0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)) —,
+    /// ([0024](../../../docs/decisions/README.md)) —,
     /// il progresso si timbra, e la bandiera si guarda.
     ///
     /// **L'apertura ha la precedenza sui job**, e non è un caso: un job chiesto
@@ -697,7 +697,7 @@ impl Shared {
     /// Chiedere a chi è dentro di smettere è **alzare la sua bandiera**, e non
     /// è più di così: un job che non chiama mai l'host arriva in fondo
     /// comunque, ed è il limite che la
-    /// [0032](../../../docs/decisions/0032-il-runner-dei-job.md) dichiara —
+    /// [0032](../../../docs/decisions/0183-composizione-host-kernel.md) dichiara —
     /// chi spegne aspetta chi lavora, come chi chiude.
     ///
     /// **Chi la chiama non deve tenere in mano né il workspace né il registry**:
@@ -723,7 +723,7 @@ impl Shared {
 
     /// Esegue un job e ne riconsegna l'esito. **Sempre** un esito: un job che
     /// sparisce senza dire niente è un chiamante che aspetta per sempre, ed è la
-    /// regola che la [0028](../../../docs/decisions/0028-come-un-componente-smette.md)
+    /// regola che la [0028](../../../docs/decisions/0183-composizione-host-kernel.md)
     /// ha già scritto per i job di chi si disattiva.
     fn run(&self, job: PendingJob) -> Result<(), PluginError> {
         let outcome = self.outcome(&job);

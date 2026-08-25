@@ -20,7 +20,7 @@
 //
 // # Dove si scrive, e perché lì
 //
-// Nello **stato di vista della shell** ([0037](../../../docs/decisions/0037-lo-stato-di-vista.md)),
+// Nello **stato di vista della shell** ([0037](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)),
 // sotto la chiave [`CHIAVE_STATO`], accanto a `layout`. È la stessa cassetta in
 // cui la finestra ricorda com'era, e per un dato di privacy ha tre proprietà che
 // nessun altro posto ha insieme: sta nella cartella di configurazione della
@@ -35,7 +35,7 @@
 // filtro corrente, linguetta attiva* — «dove eri rimasto». Una cronologia è un'altra
 // specie di dato: ha un peso di privacy, vuole un interruttore e vuole un gesto
 // per cancellarla. Il verbale
-// [0086](../../../docs/decisions/0086-una-cronologia-e-la-sua-porta.md) allarga
+// [0086](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) allarga
 // quella descrizione apposta invece di far finta che ci rientri, e il prezzo che
 // paga è scritto lì: il recinto per proprietario **vieta** che un comando del
 // registro cancelli questa roba, e quindi il gesto è un comando di shell.

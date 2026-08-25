@@ -14,7 +14,7 @@
 //! Sono **autorevoli e non derivati**, che è la riga da cui discende tutto il
 //! resto: persi, non si ricostruiscono da niente. Un `.fub/data/` si può
 //! cancellare e si rifà con una scansione; questo no. Per questo il file ha la
-//! stessa disciplina della configurazione ([decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)):
+//! stessa disciplina della configurazione ([decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
 //! versione di schema, scrittura atomica, e un file che non si è potuto leggere
 //! **non si riscrive**.
 //!
@@ -31,7 +31,7 @@
 //! rilevatore le riconosce e chiama `sync_renamed_path`). La migrazione sta
 //! dentro l'operazione che sposta l'identità e non sull'evento `DocumentRenamed`,
 //! perché la coda degli eventi ha un budget e può troncare
-//! ([decisione 0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)):
+//! ([decisione 0034](../../../docs/decisions/0184-eventi-accodati-e-job.md)):
 //! un dato autorevole non può dipendere da una consegna che è dichiaratamente
 //! best-effort.
 //!

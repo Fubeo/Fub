@@ -283,7 +283,7 @@ async function renderForm(): Promise<HTMLElement[]> {
 /// file» è questa shell. Passarlo di qua costa un parametro; portarne una copia
 /// di là costerebbe trentaquattro stringhe tradotte due volte.
 ///
-/// [0040]: ../../../docs/decisions/0040-chi-localizza.md
+/// [0040]: ../../../docs/decisions/0192-impostazioni-locale-e-temi.md
 function renderRow(entry: SettingEntry, name?: string, description?: string): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row";

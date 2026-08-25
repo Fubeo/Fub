@@ -9,14 +9,14 @@
 //!    invece di ricestinare;
 //! 2. **il registro sopravvive alla chiusura del vault.** È la sola cosa che lo
 //!    distingue dalla pila della
-//!    [0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md), che vive
+//!    [0045](../../../docs/decisions/0190-sessioni-documento-e-undo.md), che vive
 //!    quanto il vault aperto ed è per questo che quella decisione dichiarava il
 //!    §15.2;
 //! 3. **il testo dell'utente non ci entra, da nessuna variante.** Non «da
 //!    quelle che abbiamo guardato»: il presidio che lo diceva esercitava solo la
 //!    riscrittura integrale, cioè l'unica che per costruzione non poteva
 //!    portarlo, e restava verde mentre la modifica chirurgica ce lo metteva
-//!    (§23.9, [0103](../../../docs/decisions/0103-un-registro-dice-cosa-e-successo.md));
+//!    (§23.9, [0103](../../../docs/decisions/0184-eventi-accodati-e-job.md));
 //! 4. **una coda troncata non fa rifiutare il resto** (§15.7), **e costa la
 //!    sola riga interrotta**: il record si delimita da sé, quindi chi appende
 //!    dopo un'interruzione non si attacca in fondo a ciò che il crash ha
@@ -239,7 +239,7 @@ fn the_journal_survives_vault_closure() {
 }
 
 /// Il lotto tiene insieme le proprie righe, ed è la materia prima del
-/// tutto-o-niente che la [0011](../../../docs/decisions/0011-il-lotto.md) non
+/// tutto-o-niente che la [0011](../../../docs/decisions/README.md) non
 /// poteva promettere: senza questa chiave, un rollback di un'operazione dovrebbe
 /// indovinare dove comincia e dove finisce.
 #[test]
@@ -455,7 +455,7 @@ fn a_truncated_queue_does_not_steal_the_line_after_in_an_open_vault() {
 }
 
 /// Il registro sta **direttamente** in `.fub/`, non sotto `.fub/data/`: la
-/// profondità dichiara la classe ([0048](../../../docs/decisions/0048-una-radice-sola.md)),
+/// profondità dichiara la classe ([0048](../../../docs/decisions/0188-identita-path-e-rename.md)),
 /// e un registro di ciò che è successo non si rifà da niente.
 ///
 /// Il presidio è sul path e non su una frase, perché la riga di `todo.md` che
@@ -782,7 +782,7 @@ fn opening_the_journal_does_not_write_into_it() {
 /// `write` fatti fuori chiude la finestra in cui una riga appesa sparisce. Non
 /// la chiude: il lucchetto di `FsStorage::update` tiene fuori chi *aggiorna*, e
 /// `FsStorage::append` è `O_APPEND` senza lucchetto — glielo rifiuta la
-/// [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md),
+/// [0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md),
 /// perché un lock per riga si pagherebbe a ogni salvataggio. La finestra è
 /// stretta e dichiarata, non chiusa, e chi legge quel commento deve saperlo.
 ///

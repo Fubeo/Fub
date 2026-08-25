@@ -11,11 +11,11 @@
 //! Le proprietà stanno in [`fub_sdk::testing::conformance`] e non qui, perché
 //! sono di un `FormatProvider` **qualunque**: un secondo provider (org-mode,
 //! AsciiDoc, il canvas) le eredita senza riscriverle, e il criterio è quello
-//! della [0059](../../../docs/decisions/0059-la-generazione-non-e-un-round-trip.md)
+//! della [0059](../../../docs/decisions/0180-compatibilita-wit-additiva.md)
 //! — il soggetto della garanzia decide dove sta il presidio. Qui sta l'**ingresso**,
 //! che è markdown e quindi di questo crate. Fino a oggi la sezione
 //! `FormatProvider` del banco aveva due proprietà e **nessun cliente**, cioè era
-//! esattamente ciò che la [0054](../../../docs/decisions/0054-il-banco-del-lato-provider.md)
+//! esattamente ciò che la [0054](../../../docs/decisions/0196-test-e-artefatti-generati.md)
 //! dichiara vietato: *«una suite di conformità che nessuna implementazione vera
 //! passa non è una suite, è un'opinione»*.
 //!
@@ -24,7 +24,7 @@
 //! Il §17.1 lo dice così: «ogni sintassi nuova è un caso in più da scrivere a
 //! posteriori». Il costo non cresce perché scrivere il caso sia caro — cresce
 //! perché **nessuno si accorge che il corpus non è cresciuto**. Quindi il corpus
-//! non è un elenco su cui si itera ([0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md)):
+//! non è un elenco su cui si itera ([0056](../../../docs/decisions/0196-test-e-artefatti-generati.md)):
 //! si **compare**, in tre direzioni, con altrettante sorgenti che non sono lui.
 //!
 //! 1. le varianti di `Block` e `Inline`, estratte dal sorgente del contratto;
@@ -50,7 +50,7 @@
 //! Un corpus serve anche — soprattutto — a dire **dove il modello e il file non
 //! sono d'accordo**. Ogni caso sta in [`divergenze_dichiarate`], una per riga,
 //! con la sua ragione: la stessa forma dell'allowlist della
-//! [0059](../../../docs/decisions/0059-la-generazione-non-e-un-round-trip.md).
+//! [0059](../../../docs/decisions/0180-compatibilita-wit-additiva.md).
 //! Non dicono «va bene così»: dicono «succede questo, ed è scritto». Il giorno in
 //! cui qualcuno mappa `~~barrato~~` nel modello, la riga diventa rossa e va
 //! **tolta** — che è il modo in cui una divergenza smette di essere silenziosa.
@@ -93,7 +93,7 @@ use crate::corpus::{corpus, divergent, how_many_cases, mutate, seed, Case64};
 /// Arriva per `include_str!` e non per path a runtime: se `model.rs` si sposta,
 /// questo file **non compila** — invece di passare avendo compareto il corpus
 /// con un elenco vuoto. È il gesto della
-/// [0059](../../../docs/decisions/0059-la-generazione-non-e-un-round-trip.md).
+/// [0059](../../../docs/decisions/0180-compatibilita-wit-additiva.md).
 const CONTRATTO: &str = include_str!("../../fub-abi/src/model.rs");
 
 fn provider() -> MarkdownProvider {
@@ -307,7 +307,7 @@ fn the_corpus_produces_every_model_variant() {
 /// I `custom_kind` che il **provider markdown** non emette, e la ragione.
 ///
 /// Non è una lacuna del corpus: è dove passa il confine del §3.1
-/// ([0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)).
+/// ([0017](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
 /// Tre di questi kind li innesta una `SyntaxRule` registrata — `MathRule`,
 /// `DiagramRule`, `HighlightRule` in `fub-features/src/blocks.rs` — e un
 /// provider che li producesse da sé rimetterebbe in piedi le due categorie di
@@ -356,7 +356,7 @@ fn the_corpus_exercises_every_syntax_the_provider_declares() {
 }
 
 /// Il confronto nei due versi, che è la forma canonica di questo repo
-/// ([0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md)).
+/// ([0056](../../../docs/decisions/0196-test-e-artefatti-generati.md)).
 ///
 /// `attesi` viene da una sorgente che non è il corpus; `osservati` viene dal
 /// corpus parsato; `scusati` è l'elenco chiuso di ciò che il corpus non può
@@ -491,7 +491,7 @@ fn module_constants(source: &str, name: &str) -> BTreeSet<String> {
 
 /// Un estrattore che torna a vuoto fa passare ogni confronto, quindi si prova
 /// che veda: sono i «test del test» della
-/// [0059](../../../docs/decisions/0059-la-generazione-non-e-un-round-trip.md).
+/// [0059](../../../docs/decisions/0180-compatibilita-wit-additiva.md).
 #[test]
 fn the_extractor_sees_the_contract() {
     let blocks = enum_variants(CONTRATTO, "Block");

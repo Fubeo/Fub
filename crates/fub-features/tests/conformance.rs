@@ -11,7 +11,7 @@
 //! Le feature ufficiali passano la **suite di conformità** dell'SDK.
 //!
 //! È il primo cliente vero di `fub_sdk::testing::conformance` ([decisione
-//! 0054](../../../docs/decisions/0054-il-banco-del-lato-provider.md)), e serve a
+//! 0054](../../../docs/decisions/0196-test-e-artefatti-generati.md)), e serve a
 //! due cose che non sono la stessa.
 //!
 //! La prima è ovvia: le view ufficiali rispettano il contratto che dichiarano.
@@ -30,7 +30,7 @@
 //! `view_refresh_masks.rs`: una suite di conformità che copre le implementazioni
 //! che qualcuno si è ricordato di scriverci dentro è esattamente il difetto che
 //! il
-//! [§16.7](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! [§16.7](../../../docs/project/roadmap.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
 //! accusa — e qui morde due volte, perché una view non provata non è solo una
 //! view non presidiata: è **un dogfooding in meno**, cioè una prova in meno che
 //! le asserzioni della suite siano giuste.
@@ -52,7 +52,7 @@
 //!
 //! `il_dogfooding_dichiara_fin_dove_arriva` lo scrive: per ogni superficie, o
 //! una feature ufficiale ci sta, o c'è la ragione per cui non ci sta. È la forma
-//! della [§23.2](../../../docs/roadmap/23-cosa-costano-le-decisioni-chiuse.md):
+//! della [§23.2](../../../docs/project/roadmap.md):
 //! l'invariante resta vero dove è provato, e dove non lo è si legge invece di
 //! scoprirsi.
 

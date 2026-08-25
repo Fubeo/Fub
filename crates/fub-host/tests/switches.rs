@@ -1,5 +1,5 @@
 //! Gli **interruttori** del §11.1
-//! ([decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)):
+//! ([decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
 //! quello della feature e quello dell'host, che sono due cose diverse e vanno
 //! provate diverse.
 //!
@@ -713,7 +713,7 @@ fn the_key_of_the_memory_and_the_same_of_here_and_of_the() {
 }
 
 /// E non è scrivibile da un programma, che qui è la riga della
-/// [0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md): *le
+/// [0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md): *le
 /// impostazioni di privacy e dell'AI non stanno fra quelle*.
 ///
 /// La differenza con `versioning.enabled`, che invece lo è, non è la

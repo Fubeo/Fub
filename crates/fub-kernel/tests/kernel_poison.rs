@@ -10,7 +10,7 @@
 //! vecchia solo per chi ci passa: niente impedirebbe di scrivere accanto un
 //! secondo `Mutex` con la sua politica improvvisata, e il compilatore direbbe di
 //! sì perché non c'è niente di illegale da dire. È la zona cieca misurata
-//! addosso alla [0120](../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md),
+//! addosso alla [0120](../../../docs/decisions/README.md),
 //! dove quattordici siti erano rimasti col codice vecchio a crate verde.
 //!
 //! Quindi due conti, che guardano due cose diverse.
@@ -20,7 +20,7 @@
 //! 2. **La politica del veleno, in tutto il kernel, sta in due file soli.** Le
 //!    parole con cui si risponde a un `PoisonError` — `clear_poison`,
 //!    `into_inner`, `PoisonError` — compaiono in `bus.rs` (la porta della
-//!    [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md))
+//!    [0126](../../../docs/decisions/0184-eventi-accodati-e-job.md))
 //!    e in `poison.rs`, e in nessun altro posto. Una terza risposta scritta a
 //!    mano in un terzo file è rossa **per nome**, ed è il verso giusto in cui
 //!    sbagliare: costringe a dichiararla invece di lasciarla passare.

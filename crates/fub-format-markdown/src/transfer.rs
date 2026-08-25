@@ -350,7 +350,7 @@ impl ExportProvider for MarkdownExport {
 /// all'inizio della riga, **ma solo attraverso spazi e tabulazioni**: fermarsi al
 /// primo carattere che non è indentazione è ciò che tiene il gesto una patch e
 /// non una seconda lettura del file. Trovato dal round-trip sul corpus della
-/// [0061](../../../docs/decisions/0061-un-giro-che-non-passa-dal-modello.md).
+/// [0061](../../../docs/decisions/README.md).
 fn frontmatter_end(source: &str, doc_id: &str) -> Option<usize> {
     let Ok(model) = crate::parse::parse_markdown(source, &ParseContext::obsidian(doc_id)) else {
         return None;

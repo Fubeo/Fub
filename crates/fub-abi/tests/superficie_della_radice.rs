@@ -7,7 +7,7 @@
 //! chi lo usa scrive `fub_abi::traits::JobId` mentre il suo vicino di riga
 //! scrive `fub_abi::Paged`. Il path lungo passa da `traits`, che è un modulo di
 //! **implementazione**: il giorno in cui si spezza — ed è la direzione in cui il
-//! crate si muove dalla [0053](../../../docs/decisions/0053-il-contratto-ha-una-sorgente.md) —
+//! crate si muove dalla [0053](../../../docs/decisions/0194-sorgenti-e-proiezioni-del-contratto.md) —
 //! quei path si rompono, e si rompono per chi sta fuori.
 //!
 //! Questo test toglie a chi scrive la facoltà di dimenticarsene. Non è un test

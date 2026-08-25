@@ -1,13 +1,13 @@
 //! [`JobHost`]: le capacità di un lavoro lungo, prese **per chiamata**.
 //!
 //! Il §9.1 chiedeva che il lavoro lungo vedesse il vault, e la
-//! [decisione 0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md)
+//! [decisione 0027](../../../docs/decisions/0183-composizione-host-kernel.md)
 //! ha messo l'`HostApi` nella firma di
 //! [`Plugin::run_job`](fub_abi::traits::Plugin::run_job). Quella è la metà che
 //! scadeva col freeze; questo è il pezzo che la rende utilizzabile — e non
 //! poteva stare nel kernel, perché il kernel non sa che esiste un lock: il
 //! `Workspace` è un oggetto normale, ed è chi lo monta a metterlo dietro un
-//! `RwLock` ([decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+//! `RwLock` ([decisione 0024](../../../docs/decisions/README.md)).
 //!
 //! # La regola, in una riga
 //!
@@ -27,7 +27,7 @@
 //!
 //! Un prestito per chiamata vuol dire anche **una decisione per chiamata**, e
 //! da lì viene l'annullamento (§9.3,
-//! [decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)): un job
+//! [decisione 0032](../../../docs/decisions/0183-composizione-host-kernel.md)): un job
 //! annullato non riceve un segnale da controllare, riceve
 //! [`PluginError::Cancelled`] alla capacità successiva. Non c'è niente da
 //! ricordarsi di chiamare, e un job scritto prima che la cancellazione esistesse
@@ -48,7 +48,7 @@
 //! progresso esce dal job perché il suo host **lo firma**. Sono la stessa mossa
 //! nei due versi: le due cose che un job non sa di sé — quando smettere e come
 //! si chiama — le sa chi lo esegue (§10.3,
-//! [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
+//! [decisione 0035](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -89,12 +89,12 @@ use fub_kernel::Workspace;
 /// non si aspettano fra loro e che chi salva scavalca ([decisione 0024]), contro
 /// un'unica presa lunga che non le farebbe aspettare — le farebbe non accadere.
 ///
-/// [decisione 0024]: ../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md
+/// [decisione 0024]: ../../../docs/decisions/README.md
 pub struct JobHost {
     workspace: Custody<Workspace>,
     plugin: String,
     /// **L'identità che il job non ha** (§10.3,
-    /// [decisione 0035](../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md)).
+    /// [decisione 0035](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
     ///
     /// `Plugin::run_job` riceve il nome dell'entry point, gli argomenti e
     /// l'host — non l'id — quindi un job non può nominare sé stesso in un
@@ -369,7 +369,7 @@ impl HostEnv for JobHost {
     /// La sola delle quattro capacità di `HostEnv` che passa da `read_result`, e
     /// non per scelta di questo modulo: è l'unica che ha un esito, e da quando
     /// ce l'ha (decisione 0094) la regola della
-    /// [0032](../../../docs/decisions/0032-il-runner-dei-job.md) — *la
+    /// [0032](../../../docs/decisions/0183-composizione-host-kernel.md) — *la
     /// cancellazione non aggiunge una capacità, toglie le altre* — la può
     /// raggiungere. Prima non poteva: un job annullato che chiedeva byte li
     /// riceveva, perché la firma non aveva un posto in cui dire di no.
@@ -470,7 +470,7 @@ impl HostNetwork for JobHost {
     /// una lettura di documento è microscopico. Una richiesta di rete dura
     /// quanto la rete: tenere il prestito condiviso per quel tempo affamerebbe
     /// chi scrive, che è precisamente il difetto contro cui la
-    /// [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+    /// [0024](../../../docs/decisions/README.md)
     /// ha scelto l'`RwLock` — e lo farebbe su una chiamata che **il vault non
     /// lo tocca affatto**.
     ///
@@ -482,7 +482,7 @@ impl HostNetwork for JobHost {
     ///
     /// La cancellazione si guarda **due volte**, prima e dopo aver preso il
     /// filo, ed è la lezione della
-    /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md) presa
+    /// [0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md) presa
     /// sul serio: questa è la cosa più lunga che un job possa fare, quindi è
     /// quella in cui *la cancellazione toglie le altre capacità* conta di più.
     /// Fermare la richiesta **già partita** è parte della stessa domanda: il
