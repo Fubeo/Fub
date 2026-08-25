@@ -1,52 +1,59 @@
-# I file dell'utente: Note, Formato e Convenzioni
+# Le note Markdown
 
-## Struttura di una nota tipica
+Il provider ufficiale riconosce file `.md` e `.markdown` come testo UTF-8. Usa
+Comrak per il Markdown e aggiunge le convenzioni dichiarate dal descrittore
+“Markdown (Obsidian)”.
 
-Un file di note in Fub è un file di testo normale con estensione `.md` codificato in **UTF-8**. Segue lo standard GitHub Flavored Markdown (GFM) arricchito con le convenzioni più diffuse (come quelle di Obsidian).
+## Sintassi supportate dal provider
+
+- frontmatter YAML;
+- wikilink;
+- tag;
+- callout;
+- embed;
+- note a piè di pagina;
+- liste di definizione.
+
+Altre forme possono essere innestate da regole sintattiche registrate nel
+vault. La matematica non è una capacità nativa attiva del provider corrente: la
+sorgente matematica resta visibile finché il rendering dedicato non viene
+riaperto come lavoro.
+
+## Esempio
 
 ```markdown
 ---
-titolo: Algoritmi di Ordinamento
-tag:
+titolo: Algoritmi di ordinamento
+tags:
   - informatica
   - algoritmi
-data_creazione: 2026-08-21
 ---
 
-# Algoritmi di Ordinamento
+# Algoritmi di ordinamento
 
-Gli algoritmi principali sono:
-- [[QuickSort]] — efficiente in media \(O(n \log n)\).
-- [[MergeSort]] — stabile e ottimo per liste collegate.
+Vedi [[QuickSort]] e [[MergeSort|l'algoritmo MergeSort]].
 
-Vedi anche la nota su #complessità.
+> [!NOTE]
+> Il costo dipende dai dati e dall'implementazione.
 ```
 
----
+## Portabilità e fedeltà
 
-## Elementi speciali supportati
+Le note restano normali file di testo e possono essere versionate, sincronizzate
+o aperte con altri editor. Questo non equivale a una garanzia di identità byte
+per byte dopo ogni operazione.
 
-1. **Frontmatter YAML**:
-   - È il blocco all'inizio del file compreso tra due righe con tre trattini `---`.
-   - Contiene metadati strutturati (chiave: valore), come tag, data, autore, o proprietà personalizzate.
-2. **Wikilink (`[[NomeNota]]` o `[[NomeNota|Testo Personalizzato]]`)**:
-   - Creano collegamenti ipertestuali rapidi tra note all'interno dello stesso vault senza dover specificare percorsi assoluti.
-3. **Tag (`#tag` o `#categoria/sottocategoria`)**:
-   - Etichette che categorizzano la nota e consentono ricerche tematiche istantanee.
-4. **Embed e Allegati (`![[diagramma.png]]` o `![[AltraNota]]`)**:
-   - Includono immagini, file multimediali o il testo di un'altra nota direttamente nella pagina visualizzata.
+Il parser conserva modello semantico e span della sorgente. Le modifiche a un
+file esistente devono preferire patch mirate per non riscrivere parti estranee.
+La serializzazione completa, usata per documenti o frammenti nuovi, genera
+Markdown canonico e può cambiare dettagli non rappresentati nel modello, come
+alcune spaziature, indentazioni o scelte equivalenti di delimitatore.
 
----
+Un nodo che il serializer non sa rappresentare produce un errore invece di
+essere eliminato in silenzio.
 
-## Garanzia di portabilità
+Dettagli tecnici:
 
-Fub rispetta scrupolosamente i file dell'utente:
-- Quando Fub modifica o risalva una nota, **non riscrive né cancella formattazioni personalizzate o commenti non riconosciuti**.
-- Se decidi di spostare le tue note su un altro programma o sincronizzarle con Git, i file rimangono identici e puliti.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`crates/fub-format-markdown/src/parse.rs`](../../crates/fub-format-markdown/src/parse.rs) per vedere come il parser analizza i wikilink e il frontmatter.
-- Guarda [`docs/05-disco/02-cartella-fub.md`](./02-cartella-fub.md) per scoprire come Fub gestisce i propri file ausiliari.
+- [`../../crates/fub-format-markdown/src/parse.rs`](../../crates/fub-format-markdown/src/parse.rs)
+- [`../../crates/fub-format-markdown/src/serialize.rs`](../../crates/fub-format-markdown/src/serialize.rs)
+- [`../02-componenti/05-fub-format-markdown.md`](../02-componenti/05-fub-format-markdown.md)

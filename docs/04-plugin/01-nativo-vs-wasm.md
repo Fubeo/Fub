@@ -1,65 +1,51 @@
-# Plugin nativi vs Plugin WebAssembly
+# Plugin nativi e componenti WebAssembly
 
-## Stato attuale
+## Stato
 
-**Plugin nativi: implementati. Runtime WASM: parziale (M5 in corso).**
+- **Bundle nativi:** implementati e usati dalle funzionalità ufficiali.
+- **Backend WASM:** parziale, milestone M5 in corso.
 
-Il confine WebAssembly viene già attraversato in esecuzione: `Plugin` e `CommandProvider` hanno un proxy WASM reale, condividono la stessa istanza del componente e passano dalla stessa porta di montaggio usata dai provider nativi. Sono inoltre presenti isolamento del component model, limiti di memoria/tempo e alcune famiglie di host function.
+Il runtime carica già componenti reali, attraversa `Plugin` e
+`CommandProvider`, applica limiti di memoria e durata e collega alcune capacità
+dell'host. Non esiste ancora un flusso utente stabile per scoprire e installare
+un file dal vault.
 
-Non è ancora corretto leggere questa pagina come «qualunque trait di `fub-abi` è già utilizzabile da un plugin `.wasm` installato dall'utente». Gli altri provider, la discovery/installazione dei componenti dal vault e il passaggio della UI dichiarativa sono ancora parti di M5. Lo stato puntuale, con ciò che è fatto e ciò che manca, è in [`M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md).
+## Confronto
 
----
+| Aspetto | Nativo | WebAssembly |
+|---|---|---|
+| Forma | Crate Rust compilato nel processo | Componente compatibile con il WIT di Fub |
+| Chiamata | Trait Rust diretto | Adattatore di `fub-wasm-host` sopra Wasmtime |
+| Fiducia | Codice fidato, con accesso al processo | Memoria isolata e nessun ambiente WASI generale collegato |
+| Capacità | Tutte quelle montate dal bundle | Soltanto le famiglie host collegate dal runtime |
+| Provider disponibili | Quelli implementati dal crate | Oggi `Plugin` e `CommandProvider`; gli altri richiedono nuovi proxy |
+| Distribuzione | Inclusa nella build di Fub | Gli esempi sono compilati e caricati dai test; installazione utente ancora assente |
 
-## Le due modalità di estensione
-
-In Fub esistono due backend per il modello di estensione:
+## Stesso contratto, copertura diversa
 
 ```mermaid
-flowchart TB
-    subgraph Nativo ["1. Plugin Nativo (Rust)"]
-        A["Compilato insieme a Fub<br>(es. fub-features)"]
-        B["Chiamate di funzione dirette in memoria<br>(massima velocità)"]
-        C["Fiducia totale (Trust::Core)"]
-        A --- B --- C
-    end
-
-    subgraph WASM ["2. Plugin WebAssembly (Component Model)"]
-        D["Componente wasm32-wasip2"]
-        E["Eseguito in sandbox Wasmtime"]
-        F["Capacità esposte dall'host in modo esplicito"]
-        D --- E --- F
-    end
+flowchart LR
+    Native["provider nativo"] --> Traits["trait di fub-abi"]
+    Guest["componente WASM"] --> Runtime["fub-wasm-host"]
+    Runtime --> Traits
+    Traits --> Registry["registri comuni"]
 ```
 
----
+Il kernel non deve contenere una variante “WASM” delle proprie regole. La
+traduzione vive nel backend e termina sugli stessi trait. Questa proprietà è già
+provata per il ciclo di vita e i comandi, ma non significa che ogni trait abbia
+già un proxy WebAssembly.
 
-## Confronto punto per punto
+## Sicurezza
 
-| Aspetto | Plugin Nativo | Plugin WebAssembly |
-|---|---|---|
-| **Stato** | Implementato | **Parziale — M5 in corso** |
-| **Linguaggio** | Rust | Qualunque toolchain capace di produrre un componente compatibile con il WIT |
-| **Distribuzione** | Compilato nel binario di Fub | **Target:** componente `.wasm` scoperto a runtime. Oggi gli esempi vengono costruiti ed esercitati dai test; la discovery utente non è ancora completa. |
-| **Prestazioni** | Chiamata Rust diretta | Confine misurato in M5; il costo è piccolo ma non nullo |
-| **Sicurezza e isolamento** | Codice fidato nel processo | Memoria isolata; WASI non viene linkato; sono raggiungibili solo le famiglie host che Fub collega esplicitamente |
-| **Contratto** | Implementa i trait di `fub-abi` | Implementa le interfacce del contratto WIT |
-| **Provider già attraversati in WASM** | Tutti quelli montati nativamente | Al momento `Plugin` e `CommandProvider`; gli altri arrivano con M5 |
+`HostApi` applica policy e permessi a entrambi i backend quando usano il
+contratto. La sandbox del sistema operativo, però, riguarda il componente WASM:
+un provider nativo è codice Rust fidato e potrebbe chiamare direttamente API
+esterne al contratto.
 
----
+## Approfondimenti
 
-## La regola architetturale: stessa porta, backend diverso
-
-L'obiettivo del progetto è che il kernel riceva provider attraverso lo stesso contratto senza contenere rami del tipo «se è WASM fai X, se è nativo fai Y». Questa proprietà è già dimostrata per il ciclo di vita del plugin e per `CommandProvider`; **non implica ancora che tutti i trait abbiano oggi il relativo proxy WASM**.
-
-Per questo conviene distinguere due frasi:
-
-- **Il contratto è comune**: vero già oggi.
-- **Ogni superficie del contratto attraversa già il confine WASM**: non ancora; è il lavoro residuo di M5.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`docs/04-plugin/02-il-varco-hostapi.md`](./02-il-varco-hostapi.md) per capire come i plugin comunicano con il sistema.
-- Guarda [`docs/04-plugin/03-i-permessi.md`](./03-i-permessi.md) per il sistema di permessi e sicurezza.
-- Guarda [`docs/milestones/M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md) per lo stato implementativo preciso del runtime WASM.
+- [`02-il-varco-hostapi.md`](02-il-varco-hostapi.md): capacità offerte dall'host.
+- [`03-i-permessi.md`](03-i-permessi.md): permessi e limiti del modello.
+- [`04-esempio-ping.md`](04-esempio-ping.md): componente minimo verificato dai test.
+- [`../milestones/M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md): stato dettagliato di M5.

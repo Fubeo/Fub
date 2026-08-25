@@ -1,53 +1,54 @@
-# Snapshot, Versionamento e Protezione Dati
+# Versionamento e snapshot
 
-La sicurezza dei dati è un principio fondamentale di Fub: ogni modifica alle note viene tracciata attraverso un sistema di snapshot automatici che protegge da perdite accidentali o errori di digitazione.
+Il bundle `fub.versioning` conserva copie storiche per documento. È composto da
+un `EventHandler`, una vista della cronologia e un provider di comandi per il
+ripristino.
 
----
-
-## 1. Come funziona il Versionamento
-
-Il modulo di versionamento (situato in [`crates/fub-features/src/versioning.rs`](../../crates/fub-features/src/versioning.rs)) è implementato come un `EventHandler` ufficiale che ascolta gli eventi del kernel:
+## Flusso
 
 ```mermaid
 flowchart LR
-    Salva["📝 Salvataggio nota"] --> Evento["📢 Evento: DocumentChanged"]
-    Evento --> Versioning["🧩 Plugin Versioning (fub.versioning)"]
-    Versioning --> Snapshot["💾 Scrittura snapshot (.fub/data/plugins/fub.versioning/)"]
+    Change["DocumentChanged"] --> Sampler["handler del versioning"]
+    Sampler --> Store["spazio dati fub.versioning"]
+    Store --> View["vista Cronologia"]
+    View --> Restore["comando di ripristino"]
 ```
 
----
+Lo snapshot viene campionato secondo l'intervallo configurato. La perdita di un
+evento di modifica può quindi perdere una versione intermedia, ma non cambia il
+file autorevole sul disco. Rename e rimozioni hanno un peso diverso: il bundle
+migra la storia o scrive un tombstone e, dopo `Overflow`, riconcilia il proprio
+stato con l'elenco reale dei documenti.
 
-## 2. Struttura dei dati su disco
+## Layout
 
-Tutti gli snapshot storici vengono conservati nella cartella privata del modulo di versionamento (`.fub/data/plugins/fub.versioning/`):
+Lo storage persistente assegnato al bundle vive nel layout autorevole:
 
 ```text
-.fub/data/plugins/fub.versioning/
-├── versions.json            # Indice centrale: mappa ogni doc_id alla lista delle versioni
-└── <dir_nota>/
-    ├── meta.json            # Metadati della nota e data di eventuale eliminazione (tombstone)
-    └── 1724270400000.md     # Contenuto integrale del file al timestamp Unix indicato
+.fub/plugins/fub.versioning/
+├── versions.json
+└── <impronta-del-documento>/
+    ├── meta.json
+    └── <timestamp>.md
 ```
 
----
+- `versions.json` è un indice ricostruibile leggendo le cartelle;
+- `meta.json` conserva identità e tombstone;
+- i file con timestamp contengono il testo delle versioni e **non sono cache**.
 
-## 3. Gestione del ciclo di vita
+Il kernel continua a leggere anche il precedente spazio sotto
+`.fub/data/plugins/` durante la transizione del layout. Non eliminare quelle
+cartelle senza avere verificato che la cronologia sia stata migrata.
 
-1. **Campionamento (*Copy-on-Write*)**: quando salvi una nota, se è trascorso un intervallo di tempo minimo dall'ultimo snapshot, Fub genera una copia timestamped del testo.
-2. **Tracciamento dei cambi di nome (`DocumentRenamed`)**: se rinomini una nota, la cronologia degli snapshot viene preservata e agganciata al nuovo nome del documento.
-3. **Cancellazione con lapide (*Tombstone*)**: se una nota viene eliminata, lo store di versionamento registra una voce di tomba (*tombstone*). Questo permette di consultare lo storico e il contenuto della nota anche dopo la sua cancellazione.
+## Ripristino
 
----
+La vista mostra le versioni del documento attivo e può aprirne l'anteprima. Il
+comando di ripristino riscrive la nota con il contenuto scelto. Il ripristino è
+a sua volta una modifica versionabile, quindi non distrugge necessariamente il
+punto da cui si è partiti.
 
-## 4. Ripristino di una versione precedente
+La documentazione non promette un motore di diff dedicato: la superficie
+corrente è cronologia, anteprima e ripristino.
 
-Attraverso il pannello della cronologia o tramite il trait `HostApi`:
-- L'utente può visualizzare le differenze (*diff*) tra la versione attuale e qualsiasi snapshot passato.
-- Premendo **"Ripristina questa versione"**, il kernel sovrascrive il file `.md` con il contenuto storico selezionato, emettendo a sua volta un nuovo evento di salvataggio.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`crates/fub-features/src/versioning.rs`](../../crates/fub-features/src/versioning.rs) per il codice Rust del modulo.
-- Guarda [`docs/05-disco/02-cartella-fub.md`](02-cartella-fub.md) per l'organizzazione generale di `.fub/`.
+L'implementazione è in
+[`../../crates/fub-features/src/versioning.rs`](../../crates/fub-features/src/versioning.rs).

@@ -1,51 +1,53 @@
 # Il varco `HostApi`
 
-## La porta unica verso il mondo
+`HostApi` è l'insieme delle capacità che il kernel presta a un provider durante
+una chiamata. Il provider non riceve il `Workspace` intero: vede interfacce
+strette e gli errori del contratto.
 
-Un plugin non può accedere liberamente alle risorse del computer (non può aprire file a caso o aprire connessioni socket dirette). Tutto ciò che desidera fare deve passare attraverso l'interfaccia **`HostApi`**, fornita da Fub ad ogni chiamata.
+Il trait aggrega **quarantadue** metodi [conta: hostapi-metodi]. Le famiglie
+principali sono:
+
+| Famiglia | Esempi di operazioni |
+|---|---|
+| Lettura del vault | sorgente, modello, elenco dei documenti e struttura. |
+| Scrittura del vault | creazione, modifica, rinomina, cestino e ripristino. |
+| Query | ricerca e interrogazioni degli indici registrati. |
+| Eventi e job | emissione di eventi, progresso e avvio di lavoro in background. |
+| Dati del plugin | lettura, scrittura, rimozione ed elenco nello spazio assegnato al plugin. |
+| Impostazioni | lettura e, per chi è autorizzato, scrittura delle chiavi dichiarate. |
+| Ambiente | ora, entropia, locale e contesto attivo. |
+| Comandi e servizi | invocazione di superfici registrate da altri provider. |
+| Rete | richieste attraverso il client controllato dall'host. |
+
+## Il controllo
 
 ```mermaid
 flowchart LR
-    Plugin["Plugin (Nativo o WASM)"] -->|"Chiamata HostApi"| Guard["Guardia di Sicurezza (guard.rs)"]
-    Guard -->|"Se autorizzato"| Kernel["Kernel di Fub"]
-    Guard -->|"Se non autorizzato"| Deny["Errore di permesso"]
+    Provider["provider"] --> Api["HostApi"]
+    Api --> Guard["Guard"]
+    Guard -->|"permesso e policy validi"| Kernel["operazione"]
+    Guard -->|"negato"| Error["PluginError"]
 ```
 
----
+Il `Guard` conosce identità, fiducia e permessi del chiamante. Le operazioni
+sullo storage del plugin vengono inoltre confinate al namespace assegnato; un
+path relativo non può uscire da quella radice.
 
-## Le capacità disponibili in `HostApi`
+I dati persistenti del plugin vivono oggi sotto `.fub/plugins/<id>/`; le cache
+separate vivono sotto `.fub/data/plugins/<id>/`. Il provider usa i metodi del
+contratto e non compone direttamente questi percorsi.
 
-L'interfaccia `HostApi` raggruppa **quarantadue** metodi [conta: hostapi-metodi] suddivisi in diverse famiglie:
+## Confine architetturale e confine di sicurezza
 
-1. **Documenti del Vault (`VaultRead`, `VaultWrite`, `VaultStructure`)**:
-   - `read_document(doc_id)`: legge la sorgente di testo UTF-8 di una nota.
-   - `read_model(doc_id)`: legge il modello strutturato ad albero (`DocumentModel`).
-   - `write_document(doc_id, text, base)`: aggiorna il contenuto di una nota (richiede il permesso `fub:write-vault`).
-   - `create_document`, `rename_document`, `trash_document`, `restore_document`, `empty_trash`.
-2. **Canale Dati e Indici (`HostQuery`)**:
-   - `query_index(query)`: esegue una ricerca strutturata (es. per tag, proprietà o full-text) e riceve i risultati.
-3. **Eventi e Job (`HostEvents`)**:
-   - `emit(event)`: pubblica un evento personalizzato che altri componenti possono ascoltare.
-   - `spawn_job(spec)`: avvia un'operazione asincrona in background.
-4. **Stato e Dati del Plugin (`DataRead`, `DataWrite`)**:
-   - `data_read(path)` / `data_write(path, data)`: storage isolato e persistente sotto `.fub/data/plugins/<id>/`.
-5. **Impostazioni e Ambiente (`SettingsRead`, `SettingsWrite`, `HostEnv`)**:
-   - `setting(key)` / `set_setting(key, value)`: lettura e scrittura configurazioni.
-   - `now_unix_millis()`: timestamp Unix corrente in millisecondi.
-   - `user_locale()`, `random_bytes(n)`, `active_context()`.
-6. **Comandi, Servizi e Rete (`HostCommands`, `HostServices`, `HostNetwork`)**:
-   - `run_command(cmd, args)`, `call_service(srv, method, args)`, `fetch(request)`.
+Per un componente WASM, `HostApi` è anche il solo accesso alle risorse che
+`fub-wasm-host` collega: non viene fornito un ambiente WASI generale.
 
----
+Per un provider nativo, `HostApi` resta il confine corretto dell'architettura e
+delle policy, ma non può impedire a codice Rust malevolo compilato nel processo
+di usare direttamente il sistema operativo. Per questo i bundle nativi sono
+fidati.
 
-## Perché un'interfaccia unica?
-
-1. **Controllo centralizzato dei permessi**: prima di eseguire l'operazione richiesta dal plugin, `guard.rs` verifica se il manifest del plugin dichiara il permesso necessario.
-2. **Isolamento**: un plugin malfunzionante o malevolo non può compromettere file al di fuori del vault o accedere a cartelle di sistema non autorizzate.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs) per la definizione completa del trait `HostApi`.
-- Guarda [`docs/04-plugin/03-i-permessi.md`](./03-i-permessi.md) per scoprire come funzionano i permessi.
+La definizione completa è in
+[`crates/fub-abi/src/traits.rs`](../../crates/fub-abi/src/traits.rs); i controlli
+sono in
+[`crates/fub-kernel/src/host/guard.rs`](../../crates/fub-kernel/src/host/guard.rs).

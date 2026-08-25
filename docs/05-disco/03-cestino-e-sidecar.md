@@ -1,41 +1,46 @@
-# Il Cestino `.trash/` e i file sidecar
+# Il cestino e i sidecar
 
-## Come funziona il cestino
-
-Quando elimini una nota in Fub:
-1. Il file non viene cancellato definitivamente dal disco.
-2. Viene invece **spostato nella cartella `.trash/`** situata nella radice del vault.
-3. Fub memorizza i metadati d'origine del file cestinato in un file **sidecar** sotto `.fub/data/trash/<nome_file>.json` per non inquinare `.trash/` e mantenere la piena compatibilità con Obsidian.
+Quando Fub cestina una voce, la sposta nella cartella `.trash/` alla radice del
+vault. Il file non viene cancellato definitivamente finché il cestino non viene
+svuotato.
 
 ```mermaid
 flowchart LR
-    Origine["📁 Appunti/Scuola/Storia.md<br>(L'utente elimina la nota)"] --> Sposta["📦 Spostamento in .trash/"]
-    Sposta --> Cestino["📁 .trash/Storia.md"]
-    Sposta --> Sidecar["📄 .fub/data/trash/Storia.md.json<br>(Memorizza: path originale = 'Appunti/Scuola/Storia.md')"]
+    Source["Scuola/Storia.md"] --> Trash[".trash/<nome timbrato>.md"]
+    Source --> Sidecar[".fub/data/trash/<nome timbrato>.json"]
 ```
 
----
+Il nome nel cestino può ricevere un timbro per evitare collisioni con un file
+già presente.
 
-## A cosa serve il file sidecar?
+## Contenuto del sidecar
 
-Un file **sidecar** è un piccolo file di metadati associato a un elemento.
+Per le voci cestinate da Fub, il sidecar conserva:
 
-Nel caso del cestino, memorizza:
-- Il percorso originale dove si trovava il file prima dell'eliminazione.
-- La data e l'ora esatta in cui è stato cestinato.
+- versione dello schema;
+- percorso originale;
+- quando disponibile, dimensione e data del file usate per riconoscere l'elemento corretto;
+- quando disponibile, istante della cancellazione.
 
-Grazie a queste informazioni, quando l'utente preme **"Ripristina nota"**, Fub è in grado di ricollocare il file esattamente nella cartella di provenienza (ricreando eventuali sottocartelle se necessario).
+Il path originale permette di ripristinare la voce nella cartella di partenza.
+Il timbro impedisce che un vecchio sidecar venga applicato a un file omonimo
+cestinato successivamente.
 
----
+## Compatibilità con altri programmi
 
-## Compatibilità con Obsidian
+`.trash/` è la stessa convenzione usata dal cestino locale di Obsidian. Un
+programma esterno può però spostare o rimuovere file senza aggiornare i sidecar
+di Fub.
 
-Fub usa la stessa cartella `.trash/` standard adottata da Obsidian. Ciò significa che:
-- Le note eliminate con Fub sono visibili nel cestino di Obsidian.
-- Le note eliminate da Obsidian possono essere viste e ripristinate anche da Fub.
+Quando una voce non ha un sidecar valido, Fub degrada in modo esplicito: usa il
+nome disponibile e ripristina in radice invece di inventare un percorso. Questa
+compatibilità è meno ricca del ripristino di una voce cestinata da Fub.
 
----
+## Non è cache eliminabile
 
-## Se vuoi il dettaglio
+Il sidecar contiene informazioni che il file in `.trash/` non possiede. Al
+momento vive sotto `.fub/data/trash/`, ma non è ricostruibile dalla sola nota:
+cancellarlo può perdere percorso originale e data reale di eliminazione.
 
-- Guarda [`crates/fub-kernel/src/vault.rs`](../../crates/fub-kernel/src/vault.rs) per la logica di spostamento dei file nel cestino e gestione dei metadati sidecar.
+L'implementazione è in
+[`../../crates/fub-kernel/src/vault.rs`](../../crates/fub-kernel/src/vault.rs).
