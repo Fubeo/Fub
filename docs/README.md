@@ -1,45 +1,59 @@
 # Documentazione di Fub
 
-Benvenuto nella documentazione di Fub. La documentazione è organizzata in cartelle tematiche per guidarti dal primo avvio fino ai dettagli architetturali più approfonditi.
+Questa è la sola porta d'ingresso alla documentazione corrente. Le pagine canoniche descrivono comportamento implementato; le proposte vivono nelle RFC; il lavoro aperto vive nelle issue; la storia delle scelte vive negli ADR.
 
----
+```mermaid
+flowchart TD
+    Start["Cosa devo fare?"] --> New["Conoscere Fub"]
+    Start --> Build["Compilare o contribuire"]
+    Start --> Extend["Estendere il sistema"]
+    Start --> Design["Capire una scelta"]
+    Start --> Status["Vedere cosa manca"]
+    New --> Getting["getting-started/"]
+    Build --> Contrib["CONTRIBUTING.md"]
+    Extend --> Guides["guides/ e reference/"]
+    Design --> Decisions["decisions/"]
+    Status --> Project["project/"]
+```
 
-## Mappa della documentazione
+## Percorsi di lettura
 
-| Cartella | Descrizione |
+| Lettore | Inizia da |
 |---|---|
-| 🚀 [**`00-inizia-qui/`**](00-inizia-qui/01-cos-e-fub.md) | Cos'è Fub, come si compila/avvia e struttura del repository |
-| 💡 [**`01-concetti/`**](01-concetti/01-il-vault.md) | Concetti chiave (Vault, Kernel, Plugin, Eventi) spiegati con analogie e schemi |
-| 🧩 [**`02-componenti/`**](02-componenti/01-panoramica.md) | Scheda di dettaglio per ogni crate Rust, frontend ed esempi con path reali |
-| 📊 [**`03-uml/`**](03-uml/01-trait-fub-abi.md) | Diagrammi architetturali (gerarchia trait, sequenza tasto-pixel, dipendenze, thread) |
-| 🔌 [**`04-plugin/`**](04-plugin/01-nativo-vs-wasm.md) | Modello di estensione, HostApi, permessi e walkthrough passo-passo di `ping-wasm` |
-| 💾 [**`05-disco/`**](05-disco/01-note-utente.md) | Formato note Markdown, cartella `.fub/` (autorevole vs derivata) e cestino |
-| 📜 [**`06-contratto/`**](06-contratto/01-i-trait-in-rust.md) | Trait Rust in `fub-abi`, modello dati del documento e contratto WIT per WASM |
-| 🖥️ [**`07-ui/`**](07-ui/01-la-shell-e-il-frontend.md) | Shell frontend TypeScript, protocollo dichiarativo `UiNode`, IPC e temi |
-| 🏛️ [**`decisions/`**](decisions/README.md) | Registro delle decisioni architetturali (*ADR*), inclusi i **dieci** buchi dichiarati <!-- [conta: buchi-dichiarati] --> |
-| 🎯 [**`milestones/`**](milestones/README.md) | Obiettivi di prodotto e traguardi delle release |
-| 🗺️ [**`roadmap/`**](roadmap/README.md) | Sedute di progettazione e traguardi di contratto |
-| 📝 [**`features/`**](features/01-principi-fondanti.md) | Capitolato funzionale e specifiche complete delle funzionalità di prodotto |
-| 🔬 [**`microfeatures/`**](microfeatures/vault-ed-esploratore.md) | Scomposizione granulare dei gesti atomici di interazione utente |
-| 📋 [**`todo.md`**](todo.md) | Registro delle attività aperte, stato di avanzamento e difetti misurati |
-| 🏷️ [**`versionamento.md`**](versionamento.md) | Disciplina SemVer e versioni degli schemi persistenti su disco |
+| Nuovo utente | [getting-started/overview.md](getting-started/overview.md) |
+| Contributore | [CONTRIBUTING.md](../CONTRIBUTING.md) |
+| Sviluppatore di provider | [guides/create-native-provider.md](guides/create-native-provider.md) |
+| Autore di plugin WASM | [architecture/wasm-runtime.md](architecture/wasm-runtime.md) |
+| Revisore architetturale | [architecture/overview.md](architecture/overview.md) |
+| Chi cerca lo stato | [project/status.md](project/status.md) |
+| Chi cerca il perché | [decisions/README.md](decisions/README.md) |
 
-### Stato delle funzionalità
+## Sezioni
 
-Le guide descrivono lo **stato implementato** salvo indicazione esplicita. Quando una parte è ancora in costruzione, usa queste etichette:
+- [`getting-started/`](getting-started/overview.md): prodotto, avvio e struttura della repository.
+- [`concepts/`](concepts/vault.md): vocabolario stabile.
+- [`architecture/`](architecture/overview.md): comportamento implementato e confini.
+- [`guides/`](guides/create-native-provider.md): procedure eseguibili.
+- [`reference/`](reference/crates.md): contratti, formati e configurazione.
+- [`project/`](project/status.md): stato e priorità correnti.
+- [`rfcs/`](rfcs/README.md): proposte aperte.
+- [`decisions/`](decisions/README.md): decisioni accettate.
 
-- **Implementato** — presente nel codice e, dove indicato, coperto da test/presìdi.
-- **Parziale** — il percorso esiste, ma non tutte le superfici previste sono disponibili.
-- **Contratto/design** — la forma è definita, ma non implica che l'intera feature sia già attraversabile dall'utente.
-- **Pianificato** — obiettivo futuro; lo stato operativo resta in [`todo.md`](todo.md).
+## Regole
 
-Questa distinzione è particolarmente importante per il runtime WASM di M5: il contratto è più ampio della porzione già attraversata in esecuzione.
+- una pagina risponde a una domanda principale;
+- niente documenti di solo redirect;
+- niente seconda roadmap o checklist permanenti;
+- una proposta non compare nelle guide come se fosse disponibile;
+- i numeri derivabili dal codice devono essere verificati automaticamente;
+- ogni Mermaid deve essere semplice, tematico e leggibile senza colori rigidi;
+- i limiti noti sono dichiarati nella stessa pagina della funzionalità.
 
----
+## Stati ammessi
 
-## Documenti del repository
-
-- [**`CONTRIBUTING.md`**](CONTRIBUTING.md): ciclo locale di sviluppo, controlli di qualità e linee guida per i contributi.
-- [**`SECURITY.md`**](SECURITY.md): perimetro di sicurezza e segnalazione di vulnerabilità.
-- [**`CODE_OF_CONDUCT.md`**](CODE_OF_CONDUCT.md): codice di condotta della community.
-- [**`CHANGELOG.md`**](CHANGELOG.md): cronologia delle modifiche e delle versioni rilasciate.
+| Stato | Significato |
+|---|---|
+| `implementato` | Comportamento dimostrato da codice e test |
+| `parziale` | Percorso esistente con limiti espliciti |
+| `proposto` | Solo nelle RFC |
+| `pianificato` | Solo nella roadmap |
