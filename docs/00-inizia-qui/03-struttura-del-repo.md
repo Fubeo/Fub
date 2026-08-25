@@ -1,46 +1,57 @@
 # Struttura del repository
 
-## Albero delle cartelle
+## Flusso principale
 
-```
-Fub/
-├── crates/             # Moduli backend in Rust
-│   ├── fub-abi/        # Il contratto comune (tipi, trait e definizioni WIT)
-│   ├── fub-kernel/     # Il motore centrale (file, eventi, indici)
-│   ├── fub-host/       # L'assemblatore (sessione, lock, watcher, thread)
-│   ├── fub-features/   # Le funzionalità ufficiali (ricerca, tag, grafo)
-│   ├── fub-format-markdown/ # Il parser per i file Markdown (.md)
-│   ├── fub-wasm-host/  # Il runtime WebAssembly per plugin WASM
-│   ├── fub-app/        # L'app desktop Tauri v2 (IPC, finestre)
-│   ├── fub-sdk/        # Strumenti di sviluppo per scrivere plugin
-│   └── fub-testkit/    # Strumenti di test per simulare l'host
-├── frontend/           # Interfaccia grafica (TypeScript, Vite, CodeMirror 6)
-│   ├── src/editor/     # Editor di testo, evidenziazione sintassi, anteprima
-│   ├── src/panels/     # Pannelli (esplora risorse, ricerca, grafo, ecc.)
-│   ├── src/ui/         # Interprete dei componenti dichiarativi UiNode
-│   └── src/host/       # Chiamate IPC verso il backend Rust
-├── esempi/             # Plugin di esempio (es. ping-wasm, ciclo-wasm)
-├── tools/              # Strumenti di verifica del contratto (es. varco-wasm)
-├── tests/              # Test di integrazione e fixture di prova (es. sample-vault)
-├── docs/               # Tutta la documentazione del progetto
-└── .github/            # Script di automazione e workflow per la CI
+```text
+frontend/src
+  -> crates/fub-app
+  -> crates/fub-host
+  -> crates/fub-kernel
+  -> provider definiti da fub-abi
+  -> storage e indici
 ```
 
----
+Gli eventi tornano verso la shell attraverso il bus del workspace, l'host e il
+canale Tauri. Gli indici vengono aggiornati dal proprietario corretto, non da un
+secondo giro di eventi.
 
-## Dove cercare cosa
+## Cartelle principali
 
-- **Vuoi cambiare l'aspetto visivo o l'editor?** → [`frontend/`](../../frontend)
-- **Vuoi capire come vengono salvati i file?** → [`crates/fub-kernel/`](../../crates/fub-kernel)
-- **Vuoi creare una nuova interfaccia o un nuovo tipo di documento?** → [`crates/fub-abi/`](../../crates/fub-abi)
-- **Vuoi vedere o sviluppare un plugin WASM?** → [`docs/04-plugin/`](../04-plugin/01-nativo-vs-wasm.md) e [`esempi/ping-wasm/`](../../esempi/ping-wasm)
-- **Vuoi conoscere la struttura dei file e di `.fub/` su disco?** → [`docs/05-disco/`](../05-disco/01-note-utente.md)
-- **Vuoi consultare le decisioni architetturali (ADR) o la roadmap?** → [`docs/decisions/`](../decisions/README.md)
-- **Vuoi contribuire al codice e conoscere le regole di qualità?** → [`docs/CONTRIBUTING.md`](../CONTRIBUTING.md)
+| Percorso | Responsabilità |
+|---|---|
+| `crates/fub-abi/` | Contratto pubblico: tipi, trait, errori, WIT e forme IPC. |
+| `crates/fub-kernel/` | Workspace indipendente da Tauri, Wasmtime e Markdown. |
+| `crates/fub-sdk/` | Helper per provider e host in memoria per test di contratto. |
+| `crates/fub-testkit/` | Banco di integrazione lato host, solo come dipendenza di sviluppo. |
+| `crates/fub-format-markdown/` | Implementazione Markdown del contratto di formato. |
+| `crates/fub-features/` | Funzionalità ufficiali montate come provider nativi. |
+| `crates/fub-host/` | Sessioni, bundle, watcher, impostazioni e job. |
+| `crates/fub-wasm-host/` | Wasmtime e adattatori dei componenti WASM. |
+| `crates/fub-app/` | Binario desktop e adattatori IPC Tauri. |
+| `frontend/src/` | Shell, stato, pannelli, temi e confine tipizzato con l'host. |
+| `frontend/bench/` | Scene e controlli visuali/accessibilità. |
+| `esempi/` | Esempi di provider, inclusi componenti WASM. |
+| `tools/` | Strumenti fuori dal workspace principale. |
+| `.github/scripts/` | Controlli meccanici di architettura, documentazione e CI. |
+| `docs/` | Guida, stato corrente, inventari e memoria storica. |
 
----
+## Confini da non attraversare
 
-## Se vuoi il dettaglio
+- `fub-abi` non conosce Markdown, Tauri o Wasmtime.
+- `fub-kernel` dipende dai trait, non dalle implementazioni concrete.
+- `fub-host` non dipende da Tauri.
+- `fub-app` contiene adattatori IPC, non logica di dominio riutilizzabile.
+- soltanto `fub-wasm-host` nomina Wasmtime.
+- nel frontend, le API Tauri restano nei moduli di confine dedicati.
 
-- Guarda le schede dettagliate dei singoli moduli in [`docs/02-componenti/`](../02-componenti/01-panoramica.md).
-- Approfondisci i concetti di base in [`docs/01-concetti/`](../01-concetti/01-il-vault.md).
+## Come è organizzata `docs/`
+
+| Categoria | Percorsi | Uso |
+|---|---|---|
+| Guida corrente | `00-inizia-qui/` … `07-ui/` | Spiega il sistema presente. |
+| Stato corrente | `FEATURES.md`, `PIANO.md`, `todo.md`, `milestones/` | Distingue completato, parziale e aperto. |
+| Inventari | `features/`, `microfeatures/` | Descrive requisiti e gesti da coprire. |
+| Storico | `decisions/`, `roadmap/` | Conserva il perché delle scelte. |
+| Compatibilità | `architecture/`, `appendix/` | Mantiene validi collegamenti storici verso la guida canonica. |
+
+L'indice completo è [`../README.md`](../README.md).
