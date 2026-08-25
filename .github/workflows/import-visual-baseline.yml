@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   import:
-    if: github.event.head_commit.message == 'chore(ci): prepara import baseline visiva'
+    if: "${{ github.event.head_commit.message == 'chore ci importa baseline visiva' }}"
     runs-on: ubuntu-latest
     steps:
       - name: Scarica il repository
