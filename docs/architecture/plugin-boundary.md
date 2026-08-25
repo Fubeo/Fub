@@ -65,7 +65,7 @@ sequenceDiagram
 - limiti e cancellazione per operazioni costose;
 - versione ABI dichiarata e verificata prima dell'uso.
 
-## Cosa non deve diventare un guest
+## Cosa non può essere solo un guest e il metro per deciderlo
 
 Il criterio non è “si può scrivere in un plugin?”, ma “questo confine resta stabile, serializzabile e controllabile?”.
 
