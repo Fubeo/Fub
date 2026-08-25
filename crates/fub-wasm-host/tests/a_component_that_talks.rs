@@ -207,20 +207,29 @@ fn a_component_asks_a_work_and_the_work_speaks() {
         .as_u64()
         .unwrap_or_else(|| panic!("il componente ha restituito l'id del figlio: {value}"));
 
-    // Le due finestre d'ascolto si sommano, e la ragione è una proprietà del
-    // kernel che vale la pena aver visto: il `job-started` del figlio arriva
-    // **prima** del `job-done` del padre. «Accettato» non vuol dire «partito»
-    // — lo emette chi mette in coda, cioè lo `spawn-job` di dentro il padre —
-    // ed è la stessa cosa che rende innocua la rientranza: se quell'evento
-    // arrivasse dopo, vorrebbe dire che qualcuno ha eseguito il figlio prima di
-    // rendere il controllo al padre, cioè dentro l'istanza che il padre teneva.
+    // `spawn-job` pubblica `JobStarted` mentre il padre è ancora nel guest, ma
+    // i due `JobDone` non hanno un ordine contrattuale. `Shared::run` lascia
+    // l'istanza del plugin quando `outcome` torna e pubblica il completamento
+    // del padre subito dopo; in quella finestra il secondo worker può eseguire
+    // e completare il figlio. Su una macchina veloce, quindi, il primo
+    // `until_end` può aver già raccolto anche il suo `JobDone`.
     //
-    // Da qui in poi il figlio è già in coda: si ascolta finché non torna. Con
-    // due thread nel pool è il caso della rientranza — il secondo thread lo ha
-    // preso mentre il padre teneva ancora l'istanza — e arrivare in fondo è
-    // esattamente ciò che si voleva sapere.
-    let (queue, outcome) = until_end(&events, "figlio");
-    seen.extend(queue);
+    // Si accettano entrambi gli intrecci reali: se l'esito è già fra gli eventi
+    // osservati lo si usa; altrimenti si continua ad ascoltare. Le asserzioni
+    // sotto restano quelle sostanziali — identità, avvio ed evento emesso
+    // dall'interno del figlio — senza trasformare il test in un retry.
+    let outcome = seen.iter().find_map(|and| match and {
+        Event::JobDone { job, result, .. } if job == "figlio" => Some(result.clone()),
+        _ => None,
+    });
+    let outcome = match outcome {
+        Some(outcome) => outcome,
+        None => {
+            let (queue, outcome) = until_end(&events, "figlio");
+            seen.extend(queue);
+            outcome
+        }
+    };
     let value = outcome.expect("il figlio è riuscito");
     assert_eq!(value["chi"], "figlio");
 
