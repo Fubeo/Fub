@@ -1,7 +1,9 @@
 # Componenti e dipendenze
 
 > **Stato:** implementato  
-> **Fonte di verità:** `Cargo.toml` e manifest dei crate
+> **Fonte di verità:** `Cargo.toml`, manifest dei crate e `dependency_invariant.rs`
+
+Questa pagina descrive i componenti del workspace e contiene il grafo verificato automaticamente contro `cargo metadata`.
 
 ## Componenti
 
@@ -12,30 +14,59 @@
 | `fub-sdk` | helper per autori e host in memoria | kernel concreto |
 | `fub-testkit` | integrazione reale per test | dipendenza normale dei crate |
 | `fub-format-markdown` | parsing e resa Markdown | Tauri |
-| `fub-features` | funzionalità ufficiali come provider | accoppiamenti fra bundle |
-| `fub-host` | sessioni, montaggio, watcher, job | Tauri |
+| `fub-features` | funzionalità ufficiali come provider | accoppiamenti normali con kernel e altri bundle |
+| `fub-host` | sessioni, montaggio, watcher e job | Tauri |
 | `fub-wasm-host` | linker Wasmtime e proxy | Tauri |
 | `fub-app` | binario e adattatori Tauri | logica di dominio |
 | `frontend` | shell, editor, pannelli e tema | accesso diretto al disco |
 
-## Grafo logico
+## Grafo verificato del workspace
+
+Le frecce continue rappresentano dipendenze normali. Le frecce tratteggiate rappresentano dipendenze presenti soltanto durante i test.
 
 ```mermaid
-flowchart LR
-    App["fub-app"] --> Host["fub-host"]
-    App --> Wasm["fub-wasm-host"]
-    Host --> Kernel["fub-kernel"]
-    Host --> Features["fub-features"]
-    Host --> Markdown["fub-format-markdown"]
-    Kernel --> ABI["fub-abi"]
-    Features --> ABI
-    Markdown --> ABI
-    Wasm --> ABI
-    SDK["fub-sdk"] --> ABI
-    Testkit["fub-testkit"] -. test .-> Kernel
+flowchart TD
+    %% @grafo-dipendenze
+    %% Verificato da crates/fub-abi/tests/dependency_invariant.rs.
+    app["fub-app"]
+    host["fub-host"]
+    features["fub-features"]
+    markdown["fub-format-markdown"]
+    wasmhost["fub-wasm-host"]
+    sdk["fub-sdk"]
+    testkit["fub-testkit"]
+    kernel["fub-kernel"]
+    abi["fub-abi"]
+
+    app --> abi
+    app --> host
+    app --> kernel
+    host --> abi
+    host --> features
+    host --> markdown
+    host --> kernel
+    features --> abi
+    markdown --> abi
+    markdown --> sdk
+    wasmhost --> abi
+    wasmhost --> host
+    wasmhost --> kernel
+    kernel --> abi
+    sdk --> abi
+    testkit --> abi
+    testkit --> kernel
+
+    features -.-> kernel
+    features -.-> markdown
+    features -.-> sdk
+    features -.-> testkit
+    markdown -.-> kernel
+    kernel -.-> testkit
+    host -.-> testkit
+    wasmhost -.-> testkit
 ```
 
-Il test di dipendenza deve confrontare questo grafo con i manifest reali. Una nuova freccia richiede una decisione, non soltanto una modifica al diagramma.
+Il test confronta nodi e archi nei due versi. Un crate o una dipendenza nuovi devono comparire sia nei manifest sia in questo diagramma.
 
 ## Composizione
 
