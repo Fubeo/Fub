@@ -103,7 +103,7 @@ cd frontend && npx vitest run src/host/mirror.test.ts
 - **UI extension:** render declarative views and registry-provided commands; do not hardcode plugin command IDs or recursively serialize trees across IPC. Use `fub_abi::arena` for recursive structures.
 - **Generated files:** do not hand-edit generated theme sheets/skin or mirror fixtures. Change their recipe/source and run the owning generator; `theme:verify` and mirror tests defend byte/type parity.
 - **Naming and formatting:** use Rust's default `rustfmt`; there is no repository ESLint/Prettier configuration. Frontend tests use `<subject>.test.ts` next to the subject. Follow existing descriptive Rust integration-test filenames and behavior-oriented test names.
-- **Docs:** link instead of repeating prose. Numeric claims use registered `[conta: name]` markers from `.github/scripts/counts.mjs`. Run doc-link/prose/table guards after documentation changes.
+- **Docs:** link instead of repeating prose. Numeric claims use markers registered in `.github/scripts/counts.mjs`. Run doc-link/prose/table guards after documentation changes.
 
 ## Important Files
 

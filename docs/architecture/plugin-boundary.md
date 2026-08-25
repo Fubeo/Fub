@@ -19,6 +19,8 @@ Il contratto può esporre, secondo il tipo di provider:
 
 Un guest non riceve accesso generale al processo. L'host importa soltanto le funzioni concesse dalla sua capacità: letture del vault, scritture, query, storage, log o altri servizi espliciti.
 
+Il trait `HostApi` raccoglie **quarantadue** metodi [conta: hostapi-metodi]. Sono organizzati per famiglie di capacità; il numero è verificato sui sorgenti, mentre la responsabilità architetturale resta una sola: ogni accesso al mondo dell'host attraversa questo varco.
+
 Negare una famiglia di capacità significa non esporre le relative funzioni al componente, non affidarsi a un controllo tardivo dentro una funzione già disponibile.
 
 ## Regole del confine
