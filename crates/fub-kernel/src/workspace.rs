@@ -133,7 +133,7 @@ pub const MAIN_PANE: &str = "main";
 /// là un **derivato** non ha preso un documento che il kernel aveva in mano —
 /// il vault sa ancora tutto e ricostruire è gratis — qui il kernel non ce l'ha
 /// affatto. È la stessa distinzione con cui la
-/// [decisione 0052](../../../docs/decisions/0052-cio-che-va-storto-e-un-evento.md)
+/// [decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)
 /// sceglie la severità, ed è la ragione per cui uno esce come
 /// [`Severity::Warning`] e l'altro come [`Severity::Failure`].
 #[derive(Clone, Debug)]
@@ -147,7 +147,7 @@ pub struct Rejected {
 /// L'esito di un'apertura: cosa **non** ha letto (§15.7).
 ///
 /// È la forma della [`JournalRead`](crate::journal::JournalRead) del registro
-/// ([decisione 0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md))
+/// ([decisione 0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md))
 /// applicata un piano più in su, e per lo stesso principio: un esito che porta
 /// ciò che ha scartato invece di un `Result` che si rifiuta. Là il conto
 /// bastava perché una riga di journal rotta non ha un nome; qui ciò che si
@@ -266,7 +266,7 @@ impl Indexing {
 /// workspace.
 ///
 /// È il valore che permette a una sincronizzazione da fuori di stare nella
-/// forma della [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md):
+/// forma della [decisione 0024](../../../docs/decisions/README.md):
 /// leggere e parsare sotto prestito condiviso
 /// ([`Workspace::plan_sync`]), mutare sotto quello esclusivo
 /// ([`Workspace::sync_path_prepared`]).
@@ -296,7 +296,7 @@ pub struct ParsedChange {
 ///
 /// È il [`ParsedChange`] di un lotto invece che di un file, e il nome dice la
 /// parentela apposta: la forma è la stessa della
-/// [decisione 0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
+/// [decisione 0119](../../../docs/decisions/README.md)
 /// — leggere e parsare sotto prestito condiviso
 /// ([`Workspace::plan_batch`]), mutare sotto quello esclusivo
 /// ([`Workspace::index_batch_prepared`]) — su un percorso dove i file non sono
@@ -337,7 +337,7 @@ struct PlanChunk {
 ///
 /// L'incrementale è il percorso normale; il rebuild completo resta disponibile
 /// come rete di sicurezza (e come oracolo nei test) finché non ci fidiamo
-/// ciecamente dell'invalidazione — vedi `docs/milestones/M2-search-graph.md`.
+/// ciecamente dell'invalidazione — vedi `../../../docs/project/status.md`.
 /// Quanto l'host si fida di chi ha prodotto un albero di UI — o un blocco
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum GraphUpdate {
@@ -352,7 +352,7 @@ pub enum GraphUpdate {
 /// stesso `UiNode::Html` è legittimo da una feature ufficiale e inaccettabile da
 /// un plugin sandboxato, perché nella webview principale il contenuto attivo ha
 /// l'IPC con pieni privilegi — passare da lì aggirerebbe l'intera sandbox. Vedi
-/// `docs/architecture/ui-protocol.md`.
+/// `../../../docs/architecture/frontend-and-ipc.md`.
 ///
 /// **Erano due varianti** (§3.5), e 20.2 e 20.3 ne chiedono quattro: verificato,
 /// community, locale in sviluppo, revocato. È l'unico dei quattro tipi di quella
@@ -523,13 +523,13 @@ pub struct Workspace {
     /// avvelena questo lucchetto, e da lì ogni `open_source`, `close_source`,
     /// `read_open_source` e `source_len` sarebbe stato un panico: sotto il
     /// prestito esclusivo del workspace, cioè un vault irraggiungibile fino al
-    /// riavvio. Sarebbe la [0032](../../../docs/decisions/0032-il-runner-dei-job.md)
+    /// riavvio. Sarebbe la [0032](../../../docs/decisions/0183-composizione-host-kernel.md)
     /// disfatta da sotto — *un provider che pania costa la chiamata, non il
     /// vault* — e la rete che la 0032 mette attorno alla chiamata non lo vede,
     /// perché il veleno **resta** dopo che il panico è stato preso.
     ///
     /// Ci si riprende, per la regola della
-    /// [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md):
+    /// [0126](../../../docs/decisions/0184-eventi-accodati-e-job.md):
     /// ciò che il lucchetto protegge è una tabella di prestiti **indipendenti**
     /// e un contatore monotòno. `read` non muta niente (cerca e chiama), e le
     /// altre tre sono un `insert`, un `remove` e una lettura: nessuna lascia
@@ -1188,7 +1188,7 @@ impl Workspace {
     ///    chiusura perché non tengono niente: il punto in cui un bundle libera
     ///    ciò che possiede è `Plugin::deactivate`, e lo chiama chi possiede il
     ///    bundle — il `BundleRegistry` di `fub-host`
-    ///    ([decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)),
+    ///    ([decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)),
     ///    non il kernel. Lo chiama **prima** di questa funzione, che è l'unico
     ///    momento in cui il bundle è ancora intero: dopo, l'host intestato a
     ///    quell'id nega tutto, perché la dichiarazione non c'è più.
@@ -1328,7 +1328,7 @@ impl Workspace {
     ///    quando il primo indice si chiude.
     /// 3. **Ogni plugin, in ordine inverso di dichiarazione** — `flush` e
     ///    `close` sui suoi indici, via tutto il resto
-    ///    ([decisione 0028](../../../docs/decisions/0028-come-un-componente-smette.md)).
+    ///    ([decisione 0028](../../../docs/decisions/0183-composizione-host-kernel.md)).
     ///    All'inverso perché è l'ordine in cui si smontano le cose che si sono
     ///    montate in ordine: chi è arrivato per ultimo può dipendere da chi
     ///    c'era già (§7.5), mai il contrario.
@@ -1800,7 +1800,7 @@ impl Workspace {
     /// **solo** ciò che riguarda il vault intero, cioè la scansione: il confine
     /// non è lettura-contro-parse, è se il vault sappia ancora dire *quali*
     /// documenti esistono. Il perché sta nella
-    /// [decisione 0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md).
+    /// [decisione 0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md).
     // La raccolta sta fuori da `finish_index` perché vuole `&self` e non
     pub fn reindex(&mut self) -> Result<Opening> {
         let mut indexing = self.scan_vault()?;
@@ -1864,7 +1864,7 @@ impl Workspace {
     /// **Il `Result` è qui e non altrove**, ed è tutta la ragione per cui il
     /// taglio cade in questo punto: ciò che può far fallire un'apertura è
     /// rimasto solo la scansione
-    /// ([0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)),
+    /// ([0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)),
     /// quindi la fase che può fallire e la fase che dura sono due fasi diverse.
     /// Chi apre aspetta la prima e non la seconda.
     // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
@@ -1919,7 +1919,7 @@ impl Workspace {
 
         // non a giro di lettura finito. Finché il parse era fatale, svuotare
         // tardi teneva il tutto-o-niente; quando la
-        // [0068](../../../docs/decisions/0068-un-vault-si-apre-per-quel-che-si-legge.md)
+        // [0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
         // gliel'ha tolto, teneva ancora una cosa vera — gli indici non restano
         // vuoti per il tempo in cui si cammina il disco. Quella cosa **si
         // perde qui**, ed è il prezzo dichiarato dell'apertura a fasi: fra
@@ -2020,7 +2020,7 @@ impl Workspace {
     /// legge dal disco e parsa fino a [`FEED_BATCH`] documenti, sotto `&self`.
     ///
     /// È la regola della
-    /// [decisione 0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
+    /// [decisione 0119](../../../docs/decisions/README.md)
     /// sul suo secondo sito, che quella voce aveva già nominato: la stessa forma
     /// del lotto del watcher, sul percorso dove i file da leggere non sono
     /// quattro ma quattromila. Chi guarda il vault appena aperto — la ricerca,
@@ -2279,7 +2279,7 @@ impl Workspace {
 
     /// (id, alias, link), e tiene il prestito condiviso solo per quella copia:
     /// [`GraphSources::build`] gira dopo, senza lucchetto
-    /// ([0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)).
+    /// ([0024](../../../docs/decisions/README.md)).
     ///
     /// Chi ha i thread la chiama sotto prestito condiviso, poi costruisce, poi
     /// consegna il risultato a [`finish_index_with_graph`].
@@ -2604,13 +2604,13 @@ impl Workspace {
     /// scrive si aspetta di trovare sul disco: se non combacia si risponde
     /// [`KernelError::Stale`] e non si tocca niente. È la guardia che
     /// `apply_edit` ha dalla
-    /// [0008](../../../docs/decisions/0008-modifica-chirurgica.md) e che questa
+    /// [0008](../../../docs/decisions/README.md) e che questa
     /// metà non aveva, cioè il buco per cui il salvataggio dell'editor
     /// **copriva** una scrittura altrui che il watcher non aveva visto.
     ///
     /// Con [`WriteBase::Dictated`] la guardia non c'è perché non ci sarebbe
     /// niente da guardare, ed è una **dichiarazione**: fino alla
-    /// [0092](../../../docs/decisions/0092-una-base-si-dichiara.md) esisteva
+    /// [0092](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md) esisteva
     /// anche una `write_document` a due argomenti, che voleva dire `Dictated`
     /// senza dirlo. Era la stessa trappola del contratto, in casa: due firme per
     /// la stessa domanda, di cui una cieca e più corta da scrivere.
@@ -2805,7 +2805,7 @@ impl Workspace {
 
     ///
     /// Si chiama **dopo** che la mutazione è riuscita, e l'ordine è la decisione
-    /// ([0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)):
+    /// ([0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)):
     /// un crash può far perdere la coda del registro — le ultime operazioni non
     /// si potranno annullare — e mai il contrario, una riga che racconta
     /// qualcosa che non è successo.
@@ -3127,7 +3127,7 @@ impl Workspace {
     /// legge il file dal disco e lo parsa, sotto `&self`.
     ///
     /// È la regola della
-    /// [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+    /// [decisione 0024](../../../docs/decisions/README.md)
     /// applicata alla porta da cui il vault cambia da fuori: leggere e parsare
     /// N file è l'I/O più lungo di un lotto del watcher, e chi legge — la
     /// ricerca, il disegno dei pannelli — non ha niente a che farci. Il
@@ -3294,7 +3294,7 @@ impl Workspace {
     ///
     /// I piani si fanno sotto prestito condiviso, come [`plan_sync`], e chi li
     /// applica lo fa sotto quello esclusivo: è la regola della
-    /// [0119](../../../docs/decisions/0119-il-piano-si-fa-in-lettura-e-si-applica-in-scrittura.md)
+    /// [0119](../../../docs/decisions/README.md)
     /// sull'unico sito che le mancava.
     // La camminata è quella della scansione — stessa politica di
     pub fn plan_catch_up(&self) -> Vec<(Utf8PathBuf, Option<ParsedChange>)> {
@@ -4145,7 +4145,7 @@ impl Workspace {
     /// perché un'icona non l'ha seguita sarebbe il verso sbagliato. La rinomina
     /// vale, ciò che resta indietro si dice.
     ///
-    /// [decisione 0044]: ../../../docs/decisions/0044-lo-stato-per-documento.md
+    /// [decisione 0044]: ../../../docs/decisions/0190-sessioni-documento-e-undo.md
     /// Ciò che l'utente ha attaccato addosso a un **allegato** rinominato da
     /// un'altra applicazione (difetto 0184).
     ///
@@ -4424,7 +4424,7 @@ impl Workspace {
         //
         // **La terza forma esiste perché la seconda non è «sempre univoca»**,
         // come questo commento ha dichiarato fino alla
-        // [0107](../../../docs/decisions/0107-il-caso-di-una-lettera.md): la
+        // [0107](../../../docs/decisions/0192-impostazioni-locale-e-temi.md): la
         // chiave di `path_index` è `resolution_key(strip_ext(…))`, quindi
         // `sub/Nota.md` e `sub/nota.txt` la condividono. E qui non si sta
         // scegliendo cosa mostrare a schermo: si sta **scrivendo su disco nei
@@ -4738,7 +4738,7 @@ impl Workspace {
     /// per una superficie di scrittura, che il modello non ce l'ha e non può
     /// averlo — il buffer che ha in mano è sporco, e un modello spedito di là
     /// sarebbe vero solo quando serve meno
-    /// ([0018](../../../docs/decisions/0018-chi-vede-il-modello-parsato.md)).
+    /// ([0018](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
     /// Rende l'anteprima di un documento: l'HTML del provider, e le parti
     pub fn syntax_forms(&self, id: &DocId) -> Vec<SyntaxForm> {
         self.docs.syntax_forms(id)
@@ -4773,7 +4773,7 @@ impl Workspace {
     /// gli embed); la composizione è del frontend, che chiama questo metodo e
     /// innesta l'HTML nel placeholder. Ricorsione, profondità massima e cicli
     /// sono gestiti dal chiamante, che conosce la catena di embed corrente
-    /// (vedi `docs/architecture/ui-protocol.md`).
+    /// (vedi `../../../docs/architecture/frontend-and-ipc.md`).
     ///
     /// # Chi vince fra i due, e perché non è una scelta di comodo
     ///
@@ -5054,7 +5054,7 @@ impl Workspace {
     ///
     /// **Li racconta da sé** (§20.3, decisione 0052), e continua a
     /// restituirli. È la forma della
-    /// [decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md):
+    /// [decisione 0030](../../../docs/decisions/0183-composizione-host-kernel.md):
     /// un `Result` che dipende dall'attenzione di chi lo riceve è un `Result`
     /// che si perde, e il posto dove metterlo al sicuro è dentro chi lo
     /// produce. Qui il doc diceva «restituisce gli errori perché chi ha un
@@ -5509,7 +5509,7 @@ impl Workspace {
     /// Si chiama alla dichiarazione e a ogni scrittura di una di quelle chiavi,
     /// e la seconda è quella che conta: una revoca deve valere alla prossima
     /// chiamata, non alla riapertura del vault. È il precedente che la
-    /// [0097](../../../docs/decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+    /// [0097](../../../docs/decisions/0185-capability-un-solo-guard.md)
     /// ha scritto per la rete — `JobHost::fetch` rilegge il permesso a ogni
     /// chiamata invece di catturarlo all'avvio del job — onorato dalla parte
     /// opposta: là si rilegge perché la politica può essere cambiata, qui si
@@ -6485,7 +6485,7 @@ impl Workspace {
     ///
     /// Il kernel è sincrono e non possiede thread: chi li possiede — il
     /// `JobRunner` di `fub-host`
-    /// ([decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)), a
+    /// ([decisione 0032](../../../docs/decisions/0183-composizione-host-kernel.md)), a
     /// M5 l'host WASM — drena questa coda, esegue ogni job **fuori** dal lock
     /// del workspace (`Plugin::run_job`, a M5 su un'istanza separata del
     /// componente) e riconsegna l'esito con [`Workspace::complete_job`].
@@ -7165,7 +7165,7 @@ impl Workspace {
     /// # Il problema
     ///
     /// Il path è la chiave, e lo è per sempre
-    /// ([0043](../../../docs/decisions/0043-il-path-e-la-chiave.md)). Chi
+    /// ([0043](../../../docs/decisions/0188-identita-path-e-rename.md)). Chi
     /// rinomina una nota mentre Fub è aperto — dalla shell, dal Finder, da un
     /// client di sync — la fa seguire da tutto ciò che le sta attaccato, perché
     /// il rilevatore accoppia i due path e si finisce in
@@ -7185,7 +7185,7 @@ impl Workspace {
     /// riassociazione non deve passare da un id: passa dal **contenuto**. Il
     /// materiale è già tutto su disco e non costa una lettura in più:
     /// l'anagrafe è durevole fra un avvio e l'altro
-    /// ([0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)) e porta
+    /// ([0046](../../../docs/decisions/0188-identita-path-e-rename.md)) e porta
     /// l'impronta di ogni documento che qualcuno ha letto, e l'impronta di ciò
     /// che è comparso oggi l'ha appena calcolata
     /// [`plan_batch`](Workspace::plan_batch) leggendolo.
@@ -7198,7 +7198,7 @@ impl Workspace {
     ///    bozza dell'uno sull'altro. E quando ne spariscono N e ne compaiono N
     ///    con la stessa impronta, l'accoppiamento non è unico.
     /// 2. **Nel dubbio non si accoppia**, ed è il verso *opposto* a quello della
-    ///    [0085](../../../docs/decisions/0085-leggere-non-e-cambiare.md): là nel
+    ///    [0085](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md): là nel
     ///    dubbio si conta come cambiamento, perché una rilettura di troppo costa
     ///    un file aperto. Qui un accoppiamento sbagliato consegna il testo non
     ///    salvato di una nota a un'altra, e non c'è nessun «di troppo» che
@@ -7333,7 +7333,7 @@ impl Workspace {
     /// filesystem**.
     ///
     /// È **l'unico varco del filesystem fuori da `VaultStorage`**
-    /// ([0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md)): ogni
+    /// ([0064](../../../docs/decisions/0185-capability-un-solo-guard.md)): ogni
     /// altro byte di un vault passa dal supporto, e lì la cifratura si ferma
     /// qui. Per questo è un metodo del workspace e non una capacità
     /// dell'[`HostApi`]: `data_*` nomina blob, non file, ed è tutto ciò che un

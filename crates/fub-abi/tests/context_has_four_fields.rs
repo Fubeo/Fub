@@ -2,7 +2,7 @@
 //! decisione 0152).
 //!
 //! `view-context` porta quattro campi — pannello, documento, selezioni,
-//! modalità — e la [0007](../../../docs/decisions/0007-contesto-di-sessione.md)
+//! modalità — e la [0007](../../../docs/decisions/README.md)
 //! li ha messi *tutti* lì con la sua ragione scritta: «un campo in più a un
 //! record è una migrazione di ogni provider che lo riceve. I quattro campi sono
 //! perciò tutti qui, e non un sottoinsieme da completare dopo».

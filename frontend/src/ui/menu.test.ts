@@ -22,7 +22,7 @@
 // del fuoco la spia è `defaultPrevented` su un Tab: la trappola **mangia** il
 // tasto, quindi un Tab che passa è un Tab che nessuno ha intercettato. È la
 // forma scrivibile in `happy-dom`, dove il layout non esiste (buco n. 5 della
-// [0112](../../../docs/decisions/0112-un-e2e-contro-un-host-finto-prova-il-cablaggio.md)) e quindi non si può
+// [0112](../../../docs/decisions/0196-test-e-artefatti-generati.md)) e quindi non si può
 // guardare *dove* è finito il fuoco.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { closeContextMenu, pickIcon, showContextMenu } from "./menu";

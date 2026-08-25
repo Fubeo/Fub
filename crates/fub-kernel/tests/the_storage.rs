@@ -23,12 +23,12 @@
 //! Presidiarla qui vorrebbe dire renderla verde su un supporto che non ce l'ha.
 //! Stanno in `la_durabilita.rs`, su `FsStorage` soltanto — e il fatto che questa
 //! riga sia rimasta identica il giorno in cui la durabilità è arrivata
-//! ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)) è il
+//! ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)) è il
 //! punto: la ragione per cui non stanno qui non è cambiata insieme a loro.
 //!
 //! Il terzo — `the_filesystem_gap_has_only_declared_callers` —
 //! presidia l'eccezione dichiarata della
-//! [0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md):
+//! [0064](../../../docs/decisions/0185-capability-un-solo-guard.md):
 //! `plugin_data_dir` consegna a un provider nativo una cartella vera del
 //! filesystem, e la cifratura si ferma lì. Il banco elenca chi la riceve, e un
 //! chiamante nuovo è un varco nuovo che si dichiara prima di esistere.
@@ -434,7 +434,7 @@ fn a_full_vault_on_a_storage_that_is_not_the_disk() {
 
 /// **`plugin_data_dir` ha solo i chiamanti dichiarati qui.**
 ///
-/// La [0064](../../../docs/decisions/0064-il-supporto-sta-sotto.md) ha
+/// La [0064](../../../docs/decisions/0185-capability-un-solo-guard.md) ha
 /// dichiarato il buco: `plugin_data_dir` consegna a un provider nativo una
 /// vera cartella del filesystem, fuori da `VaultStorage` — lì la cifratura si
 /// ferma. È il varco che tantivy esige (mmappa i segmenti e li rilegge quando

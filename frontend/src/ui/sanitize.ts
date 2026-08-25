@@ -33,7 +33,7 @@
 // Qui c'era scritto che il **cammino sul DOM** non è testato «perché questa
 // shell non ha un ambiente DOM nei test, che è il §17.2». Era vero quando è
 // stato scritto e ha smesso di esserlo: `happy-dom` c'è, ed è una delle tre
-// righe che la [0112](../../../docs/decisions/0112-un-e2e-contro-un-host-finto.md)
+// righe che la [0112](../../../docs/decisions/0196-test-e-artefatti-generati.md)
 // ha misurato false in tre posti. Il cammino ora si prova dove ha un cliente
 // vero — l'anteprima, in `ridisegno.test.ts` — invece che a vuoto.
 //

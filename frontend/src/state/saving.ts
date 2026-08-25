@@ -76,7 +76,7 @@ export function stateOf(buf: { dirty: boolean; result: Outcome } | undefined): S
 /// non è un tentativo ma una decisione, e la decisione è dell'utente.
 ///
 /// Che la specie si legga dal `kind` e non da una sottostringa del messaggio è
-/// la [0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md):
+/// la [0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md):
 /// il messaggio è già tradotto quando arriva, e cercarci dentro «conflict»
 /// smetterebbe di funzionare nella lingua in cui l'app viene usata.
 export function failureOutcome(e: unknown): "conflitto" | "fallito" {

@@ -3,7 +3,7 @@
 //!
 //! Fino a questa voce la guardia era privilegio di `apply_edit` — la revisione
 //! nella firma e `Conflict` invece della sovrascrittura silenziosa
-//! ([decisione 0008](../../../docs/decisions/0008-modifica-chirurgica.md)) — cioè
+//! ([decisione 0008](../../../docs/decisions/README.md)) — cioè
 //! valeva per i *provider* e non per l'editor. `write_document` non portava
 //! niente, quindi il salvataggio dell'editor **copriva** una scrittura altrui che
 //! il watcher non aveva visto, e nessuna delle due metà del sistema se ne
@@ -178,7 +178,7 @@ fn a_base_invented_not_passes() {
 /// il rilevatore non copre, e le due risposte che adesso sono due frasi diverse.
 ///
 /// Messo accanto alla
-/// [0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md): con
+/// [0030](../../../docs/decisions/0183-composizione-host-kernel.md): con
 /// `watching: false` — share di rete, cloud drive, vault sincronizzato — il
 /// watcher non vede la modifica esterna. Finché la base era un `Option` col
 /// default `None`, la guardia era **opt-in proprio dove il rilevamento non

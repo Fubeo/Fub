@@ -1,5 +1,5 @@
 // Comandi e scorciatoie in stile Obsidian: il Cantiere A del piano "Editor
-// stile Obsidian" (docs/todo.md §6). Il modulo è autonomo — esporta una sola
+// stile Obsidian" (../../../docs/project/status.md §6). Il modulo è autonomo — esporta una sola
 // `Extension` che la shell monta in editor.ts, e non importa api.ts né lo
 // stato dell'app. Tutta la logica è in `StateCommand` puri (stato →
 // transazione): la view compare solo nell'auto-pair, e anche lì la *decisione*
@@ -474,7 +474,7 @@ const autoPair = EditorView.inputHandler.of((view, from, to, text) => {
 /// che CodeMirror porta con sé.
 ///
 /// È esportato per una ragione sola, ed è la stessa della
-/// [0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md): un
+/// [0056](../../../docs/decisions/0196-test-e-artefatti-generati.md): un
 /// elenco che nessuno può leggere non si può confrontare con gli altri, e
 /// questi accordi vivono accanto a due registri dichiarati senza che niente
 /// guardi i tre insiemi insieme. Il banco che lo fa è

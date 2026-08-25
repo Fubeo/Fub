@@ -1,92 +1,146 @@
 #!/usr/bin/env node
-// Orchestratore del controllo dei link della documentazione.
-//
-// Il motore storico resta in `check-doc-links-core.mjs`: qui si decide **quali
-// parti del corpus sono documentazione viva** e quindi devono diventare rosse
-// quando un rimando marcisce. I verbali in `docs/decisions/` restano fuori:
-// sono fotografie datate. `todo.md`, `roadmap/` e `milestones/` invece
-// descrivono lo stato corrente e non possono avere una zona cieca.
-// I tre passaggi sono indipendenti e girano sempre tutti: un rosso in `todo.md`
-// non deve nascondere un secondo link rotto nella roadmap o nelle milestone.
-// Il motore resta separato apposta: ampliare la copertura non cambia le regole
-// con cui un singolo documento viene giudicato.
 
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
-const qui = path.dirname(fileURLToPath(import.meta.url));
-const radice = path.resolve(qui, "../..");
-const core = path.join(qui, "check-doc-links-core.mjs");
-const docs = path.join(radice, "docs");
+const root = process.cwd();
+const entryFiles = [
+  "README.md",
+  "AGENTS.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  "CODE_OF_CONDUCT.md",
+  "CHANGELOG.md",
+];
 
-function esegui(radiceDaControllare, env = process.env) {
-  const esito = spawnSync(process.execPath, [core, radiceDaControllare], {
-    cwd: radice,
-    env,
-    stdio: "inherit",
+function walk(dir) {
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    return entry.isDirectory() ? walk(full) : [full];
   });
-  if (esito.error) {
-    console.error(esito.error.message);
-    return 1;
-  }
-  return esito.status ?? 1;
 }
 
-let rosso = 0;
+const files = [
+  ...entryFiles.map((file) => path.join(root, file)).filter(fs.existsSync),
+  ...walk(path.join(root, "docs")).filter((file) => file.endsWith(".md")),
+];
 
-// `todo.md` è escluso per nome nel motore storico. Lo rendiamo visibile senza
-// toccare l'indice git reale: una copia temporanea entra in un indice usa-e-getta
-// tramite intent-to-add, così `git ls-files` del core la considera tracciata e i
-// suoi link mantengono esattamente la stessa base relativa (`docs/`).
-const aliasTodo = path.join(docs, "todo.__link-check__.md");
-const indice = path.join(os.tmpdir(), `fub-doc-links-${process.pid}.index`);
-const envIndice = { ...process.env, GIT_INDEX_FILE: indice };
+function stripCode(text) {
+  const lines = text.split(/\r?\n/);
+  let fenced = false;
+  let marker = "";
+  return lines.map((line) => {
+    const match = line.match(/^\s*(```+|~~~+)/);
+    if (match) {
+      if (!fenced) {
+        fenced = true;
+        marker = match[1][0];
+      } else if (match[1][0] === marker) {
+        fenced = false;
+      }
+      return "";
+    }
+    return fenced ? "" : line;
+  }).join("\n");
+}
 
-try {
-  fs.copyFileSync(path.join(docs, "todo.md"), aliasTodo);
+function slug(text) {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/<[^>]+>/g, "")
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+}
 
-  const prepara = spawnSync("git", ["read-tree", "HEAD"], {
-    cwd: radice,
-    env: envIndice,
-    stdio: "inherit",
-  });
-  if (prepara.status !== 0) {
-    console.error("impossibile preparare l'indice temporaneo per controllare docs/todo.md");
-    rosso = 1;
-  } else {
-    const aggiungi = spawnSync("git", ["add", "-N", "--", "docs/todo.__link-check__.md"], {
-      cwd: radice,
-      env: envIndice,
-      stdio: "inherit",
-    });
-    if (aggiungi.status !== 0) {
-      console.error("impossibile includere docs/todo.md nel controllo dei link");
-      rosso = 1;
-    } else if (esegui(radice, envIndice) !== 0) {
-      rosso = 1;
+function anchorsFor(file) {
+  if (!fs.existsSync(file) || !file.endsWith(".md")) return new Set();
+  const counts = new Map();
+  const anchors = new Set();
+  for (const line of stripCode(fs.readFileSync(file, "utf8")).split(/\r?\n/)) {
+    const match = line.match(/^#{1,6}\s+(.+?)\s*#*\s*$/);
+    if (!match) continue;
+    const base = slug(match[1]);
+    const index = counts.get(base) ?? 0;
+    counts.set(base, index + 1);
+    anchors.add(index === 0 ? base : `${base}-${index}`);
+  }
+  return anchors;
+}
+
+function decodeTarget(raw) {
+  let target = raw.trim();
+  if (target.startsWith("<") && target.endsWith(">")) {
+    target = target.slice(1, -1);
+  }
+  const title = target.match(/^(\S+)\s+["'(].*["')]\s*$/);
+  if (title) target = title[1];
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
+}
+
+function linksIn(text) {
+  const clean = stripCode(text);
+  const links = [];
+  const inline = /!?\[[^\]]*]\(([^)]+)\)/g;
+  for (const match of clean.matchAll(inline)) links.push(match[1]);
+  const definitions = /^\s*\[[^\]]+]:\s*(\S+)/gm;
+  for (const match of clean.matchAll(definitions)) links.push(match[1]);
+  return links;
+}
+
+const errors = [];
+const anchorCache = new Map();
+
+for (const file of files) {
+  const relative = path.relative(root, file);
+  const text = fs.readFileSync(file, "utf8");
+  for (const raw of linksIn(text)) {
+    const target = decodeTarget(raw);
+    if (
+      !target ||
+      /^(https?:|mailto:|tel:|data:)/i.test(target)
+    ) {
+      continue;
+    }
+
+    const [pathname, fragment] = target.split("#", 2);
+    const resolved = pathname
+      ? path.resolve(path.dirname(file), pathname)
+      : file;
+
+    if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+      errors.push(`${relative}: il link esce dalla repository: ${target}`);
+      continue;
+    }
+
+    if (!fs.existsSync(resolved)) {
+      errors.push(`${relative}: target inesistente: ${target}`);
+      continue;
+    }
+
+    if (fragment && fs.statSync(resolved).isFile() && resolved.endsWith(".md")) {
+      let anchors = anchorCache.get(resolved);
+      if (!anchors) {
+        anchors = anchorsFor(resolved);
+        anchorCache.set(resolved, anchors);
+      }
+      if (!anchors.has(fragment.toLowerCase())) {
+        errors.push(`${relative}: anchor inesistente in ${target}`);
+      }
     }
   }
-} finally {
-  try {
-    fs.unlinkSync(aliasTodo);
-  } catch {
-    // Se la copia non è nata, non c'è niente da ripulire.
-  }
-  try {
-    fs.unlinkSync(indice);
-  } catch {
-    // L'indice temporaneo può non essere stato creato.
-  }
 }
 
-// Queste cartelle sono escluse quando il core parte dalla radice, perché un
-// tempo erano trattate tutte come registri storici. Oggi roadmap e milestone
-// sono invece documentazione viva: eseguirle come radice le porta dentro senza
-// cambiare la semantica del motore e senza trascinare con loro `decisions/`.
-if (esegui(path.join(docs, "roadmap")) !== 0) rosso = 1;
-if (esegui(path.join(docs, "milestones")) !== 0) rosso = 1;
+if (errors.length) {
+  console.error("Link documentali non validi:\n");
+  for (const error of errors) console.error(`- ${error}`);
+  process.exit(1);
+}
 
-process.exit(rosso ? 1 : 0);
+console.log(`Link validi in ${files.length} file Markdown.`);

@@ -7,7 +7,7 @@
 // pannelli che hanno una regola dentro. Nessuno prova il **cablaggio** — chi si
 // monta prima di chi, quale porta attraversa un gesto, quale argomento ci
 // arriva — e il cablaggio è precisamente ciò che la
-// [decisione 0015](../../../docs/decisions/0015-la-forma-della-shell.md)
+// [decisione 0015](../../../docs/decisions/0190-sessioni-documento-e-undo.md)
 // dichiara di non poter verificare: *«è anche il giro che ha spostato ogni
 // ascoltatore di eventi, e questa è la classe di difetti che i test di questa
 // shell non vedono»*. Quel verbale rimanda al §17.2, e questo file è la metà

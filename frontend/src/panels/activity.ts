@@ -23,8 +23,8 @@
 // canale più fitto che il contratto abbia. Un centro attività che non sapesse
 // riconciliare trasformerebbe quel freno in una riga che resta lì per sempre.
 //
-// [decisione 0032]: ../../../docs/decisions/0032-il-runner-dei-job.md
-// [decisione 0035]: ../../../docs/decisions/0035-il-lavoro-lungo-si-racconta.md
+// [decisione 0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
+// [decisione 0035]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
 import { api } from "../host/ipc";
 import { activeJobs } from "../host/query";
 import type { JobProgress, JobStatus, KernelNotice } from "../host/contract";

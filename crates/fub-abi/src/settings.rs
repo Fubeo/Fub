@@ -18,7 +18,7 @@
 //! l'insieme delle chiavi di un plugin è il suo manifest, e ciò che il file di
 //! configurazione contiene e nessuno dichiara resta lì senza essere letto,
 //! invece di diventare uno spazio chiave→valore libero. Uno store senza schema
-//! è ciò che la [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)
+//! è ciò che la [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md)
 //! ha tolto (`storage_*`), e non rientra dalla finestra della configurazione.
 //!
 //! # La chiave è un nome, e ha un proprietario
@@ -35,7 +35,7 @@
 //!
 //! Un'impostazione vive nel **vault**, in `.fub/settings.json`: un file
 //! visibile, copiabile, che viaggia col vault a cui si riferisce. È la
-//! [0076](../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md), e
+//! [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md), e
 //! costa una riga di regole invece di due — «prima guardo qui, poi lì» era la
 //! parte del §11.1 che nessuno avrebbe indovinato guardando il file.
 //!
@@ -275,7 +275,7 @@ pub struct SettingSpec {
     pub kind: SettingKind,
     /// **Un programma la può scrivere?**
     ///
-    /// È il residuo che la [decisione 0010](../../../docs/decisions/0010-comando-descritto-a-una-macchina.md)
+    /// È il residuo che la [decisione 0010](../../../docs/decisions/README.md)
     /// aveva lasciato aperto: `CommandReach::Settings` diceva che un comando può
     /// toccare la configurazione, e non c'era nessuno schema che dicesse *quali
     /// chiavi*. Questa è la risposta, ed è **per chiave** invece che per
@@ -340,7 +340,7 @@ impl SettingSpec {
 /// Una chiave **per comando**, di specie [`SettingKind::Text`], col suggerimento
 /// dichiarato dalla `CommandSpec` come default. Le due alternative sono state
 /// scartate e la ragione sta nella
-/// [0077](../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md): una lista
+/// [0077](../../../docs/decisions/README.md): una lista
 /// di stringhe `"note.create=Mod-Alt-k"` è un formato dentro un formato — la
 /// stessa cosa che `LOG_VERBOSE` aveva già rifiutato — e un `SettingKind::Map`
 /// è **firma** a ridosso del freeze di M4, che pagherebbero host, shell, WIT e
@@ -408,7 +408,7 @@ pub fn command_of_keybinding_key(key: &str) -> Option<String> {
 ///
 /// Uguale per il motivo che conta: la fabbrica la **chiave**, non il plugin. Le
 /// due alternative sono le stesse che la
-/// [0077](../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md) ha
+/// [0077](../../../docs/decisions/README.md) ha
 /// scartato — una lista di stringhe `"com.acme fub:network"` è un formato dentro
 /// un formato, un `SettingKind::Map` è firma a ridosso del freeze — e qui c'è
 /// una terza ragione che là non c'era: con una chiave per coppia, **negare un

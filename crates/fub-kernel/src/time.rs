@@ -1,7 +1,7 @@
 //! Il minimo di aritmetica del tempo che serve al kernel.
 //!
 //! I file del cestino portano la data nel nome (`Nota.2026-07-24T15-30-00.md`,
-//! vedi `docs/PIANO.md`, "Decisioni (con il perché)") e devono restare
+//! vedi `../../../docs/project/status.md`, "Decisioni (con il perché)") e devono restare
 //! leggibili da chi apre il vault con un file manager — anche da Obsidian, che
 //! di Fub non sa nulla.
 //!

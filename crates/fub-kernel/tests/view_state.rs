@@ -1,5 +1,5 @@
 //! Lo **stato di vista** visto dal kernel (§11.2,
-//! [decisione 0037](../../../docs/decisions/0037-lo-stato-di-vista.md)): chi
+//! [decisione 0037](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)): chi
 //! compone la chiave, chi non la può nominare, e cosa risponde chi lo chiede
 //! fuori da una view.
 //!

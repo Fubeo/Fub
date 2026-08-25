@@ -40,14 +40,14 @@ use crate::workspace::Trust;
 ///
 /// Per tredici trait su sedici la corrispondenza è uno a uno, ed era vera
 /// per tutti e quattordici fino alla
-/// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
+/// [0095](../../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md).
 /// [`HostEnv`] ne porta **tre** perché è il solo trait che presta, dallo stesso
 /// metodo, una cosa della macchina e due dell'utente: l'orologio e il caso
 /// sono [`Capability::Env`], quale nota è aperta è [`Capability::Session`], il
 /// testo selezionato è [`Capability::SessionSelection`].
 ///
 /// La scomposizione in sotto-trait — la strada della
-/// [0021](../../../docs/decisions/0021-il-confine.md), che è ciò che di norma
+/// [0021](../../../../docs/decisions/0185-capability-un-solo-guard.md), che è ciò che di norma
 /// rende una famiglia esattamente un trait — qui **non era disponibile**: le
 /// tre cose escono da una firma sola, e un trait in più non spacca un record in
 /// due. Spaccare il record era un'opzione, ed è quella che si è scartata; vedi
@@ -55,7 +55,7 @@ use crate::workspace::Trust;
 /// «una famiglia, un trait», ma «nessun trait senza almeno una famiglia».
 ///
 /// [`HostQuery`] ne porta **due** dalla
-/// [0096](../../../docs/decisions/0096-una-bozza-non-e-una-nota.md), e per una
+/// [0096](../../../../docs/decisions/0195-versioni-indipendenti.md), e per una
 /// ragione diversa da quella di [`HostEnv`]: là le tre cose escono insieme da
 /// un record, qui escono da **richieste diverse** — una [`IndexQuery`] nomina
 /// già la propria famiglia ([`fub_abi::traits::QueryKind`]), e le bozze sono
@@ -93,7 +93,7 @@ pub enum Capability {
     /// Sapere che ore sono, e tirare a sorte.
     ///
     /// **Non** «cosa guarda l'utente»: quella era qui, e se n'è andata con la
-    /// [0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md).
+    /// [0095](../../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md).
     /// Ciò che resta è della macchina, non di chi la usa, e per questo non ha
     /// un permesso.
     Env,
@@ -737,16 +737,16 @@ impl Policy for Granted {
 ///
 /// L'elenco diceva **cinque** e ne nominava cinque, ma quelle senza esito erano
 /// sette: `user_locale` e `random_bytes` c'erano e non erano contate. Il conto
-/// stava fermo dalla [0021](../../../docs/decisions/0021-il-confine.md), che
+/// stava fermo dalla [0021](../../../../docs/decisions/0185-capability-un-solo-guard.md), che
 /// l'aveva fatto quando le due capacità della
-/// [0039](../../../docs/decisions/0039-il-locale-e-il-caso.md) non esistevano
+/// [0039](../../../../docs/decisions/0192-impostazioni-locale-e-temi.md) non esistevano
 /// ancora, e nessuna delle due si è aggiunta arrivando. Un elenco scritto a mano
 /// che nessun presidio conta invecchia in silenzio: è lo stesso difetto che
 /// `every_structural_capability_is_refused_by_the_same_gate` aveva già tolto
 /// alle famiglie negate, e che qui non era stato tolto.
 ///
 /// `random_bytes` ne è uscita con la
-/// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md), che le ha
+/// [0094](../../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md), che le ha
 /// dato un esito. `user_locale` resta, e ci resta per una ragione buona: il
 /// locale di default **è** la risposta del contratto per «nessuno me l'ha
 /// detto», quindi negarla dà ciò che darebbe un host senza shell — non una
@@ -755,7 +755,7 @@ impl Policy for Granted {
 ///
 /// `active_context` è il terzo caso, ed è quello che alla regola della 0094 ha
 /// dovuto aggiungere una clausola. Da quando i cancelli sono due
-/// ([0095](../../../docs/decisions/0095-cosa-guardo-e-cosa-sto-scrivendo.md))
+/// ([0095](../../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md))
 /// il rifiuto è anche **per campo**: `selections: None` a `Session` concessa e
 /// `SessionSelection` negata. Quel `None` significa già «nessun cursore», cioè
 /// **non** è la risposta vera — sarebbe la bugia che la 0094 condanna, se non
@@ -1162,7 +1162,7 @@ impl<H, P: Policy> Guard<H, P> {
     ///
     /// È anche il primo punto in cui il `Guard` legge un **argomento** e non
     /// solo il metodo. Non spacca il canale dati della
-    /// [0019](../../../docs/decisions/0019-il-canale-dati.md) — resta una
+    /// [0019](../../../../docs/decisions/0182-provider-e-porte-generiche.md) — resta una
     /// domanda sola con un instradamento solo — e non allarga la [`Policy`],
     /// che continua a rispondere a nomi e a non sapere niente di query: è la
     /// stessa mossa di `undo_last`, che da un metodo ricava più famiglie perché
@@ -1661,7 +1661,7 @@ mod tests {
     ///
     /// Il `match` è esaustivo apposta e non ha altro mestiere: una famiglia
     /// nuova non compila finché non le si dà un posto qui. Lo ha trovato la
-    /// [§23.2](../../../../docs/decisions/0104-la-superficie-di-scrittura-si-presta.md)
+    /// [§23.2](../../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
     /// provando rosso il presidio gemello delle superfici, che da questo aveva
     /// copiato la forma **e il buco**.
     /// `ALL` è l'unico elenco scritto a mano rimasto in questo modulo, e tutto
@@ -1721,7 +1721,7 @@ mod tests {
         );
 
         // l'ha misurato la verifica del rosso della
-        // [0105](../../../../docs/decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md),
+        // [0105](../../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md),
         // scambiando `SettingsRead` e `SettingsWrite` e trovando il workspace
         // interamente verde. Il presidio gemello delle superfici questo ciclo
         // ce l'aveva; questo, da cui quello aveva copiato la forma, no — ed è

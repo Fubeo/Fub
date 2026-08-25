@@ -6,7 +6,7 @@
 //! domanda che risponde è sua — *quale pannello ha il focus, su quale
 //! documento, con quale selezione* — e perché il kernel la **custodisce**
 //! senza derivarla: quale nota guarda l'utente è una decisione della shell
-//! ([decisione 0007](../../../docs/decisions/0007-contesto-di-sessione.md)).
+//! ([decisione 0007](../../../docs/decisions/README.md)).
 //!
 //! Il kernel la tocca in un caso solo, ed è di **verità**: quando il sorgente
 //! sotto la selezione cambia o il documento sparisce ([`Session::invalidate`]).

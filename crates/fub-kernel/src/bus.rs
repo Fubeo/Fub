@@ -51,7 +51,7 @@
 //! [`Event::Overflow`] e riconcilia. Chi l'aveva ricevuto riconcilia per
 //! niente: è il verso giusto in cui sbagliare.
 //!
-//! [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
+//! [decisione 0120]: ../../../docs/decisions/README.md
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError, TryRecvError};
 use std::time::Duration;
@@ -314,7 +314,7 @@ impl Subscription {
     /// quegli eventi, e il log è l'unico canale che resta quando il bus non c'è
     /// (stessa ragione della [0126] per la riga dell'avvelenamento).
     ///
-    /// [0126]: ../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md
+    /// [0126]: ../../../docs/decisions/0184-eventi-accodati-e-job.md
     fn close_account(&self) {
         let dropped = self.intake.settle();
         if dropped > 0 {
@@ -650,7 +650,7 @@ mod tests {
     /// nudi, o un secondo `Mutex` con la sua politica improvvisata, e il
     /// compilatore direbbe di sì perché non c'è niente di illegale da dire. È la
     /// zona cieca già misurata sulla
-    /// [0120](../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md),
+    /// [0120](../../../docs/decisions/README.md),
     /// dove quattordici siti erano rimasti col codice vecchio a crate verde.
     ///
     /// **Ciò che questo conto non vede, dichiarato**: i banchi, che sono

@@ -18,14 +18,14 @@
 // sulla scocca vera (`index.html`), contro l'host finto (`host/fake.ts`). Ciò
 // che resta finto è **il di là del confine**, e il §1.3 lo ha reso un file
 // solo: è esattamente il modo in cui la
-// [decisione 0015](../../docs/decisions/0015-la-forma-della-shell.md) diceva
+// [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
 // # Ventuno gesti, contati da fuori
 //
 // I gesti sono **ventuno** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
-// [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md)
+// [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
 // suite verde*, e un file come questo si svuota nel modo più facile che ci sia
 // — un `.skip` messo per sbloccare un giro e mai tolto. La prima forma del

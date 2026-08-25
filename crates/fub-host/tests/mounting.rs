@@ -372,7 +372,7 @@ fn closing_stops_bundles_in_reverse_while_they_are_still_intact() {
 /// sidecar dell'organizzazione — icone, appuntate, spazi, ordinamenti — non si è
 /// potuto leggere all'apertura, o quando una migrazione non ha potuto seguire
 /// una rinomina. Il suo doc lo scrive («chi monta le mostra, e svuotandole se ne
-/// fa carico») e la [0038](../../../docs/decisions/0038-il-kernel-possiede-il-sidecar.md)
+/// fa carico») e la [0038](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 /// pure («la rinomina vale, l'icona resta indietro, e qualcuno lo dice»), ma
 /// nessuno fuori dai banchi le chiedeva: erano l'unica delle quattro famiglie di
 /// avvisi del workspace a non passare dal blocco di `mount` che legge le altre

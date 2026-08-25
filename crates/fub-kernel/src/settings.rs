@@ -4,7 +4,7 @@
 //! # Un posto solo, e un'eccezione che si dichiara
 //!
 //! Un valore sta nel file del **vault** (`<root>/.fub/settings.json`), e basta:
-//! è la [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md),
+//! è la [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md),
 //! ed è la forma che ha Obsidian con `.obsidian/`. Un file solo, visibile e
 //! copiabile, e nessuna regola di precedenza da tenere a mente per capire perché
 //! ciò che si è scritto non si vede.
@@ -47,7 +47,7 @@
 //! store che leggesse il registro dei vault per rispondere a una `effective()`
 //! sarebbe il kernel che conosce l'installazione. La regola sta in
 //! `fub_host::settings`, la sospensione arriva qui già decisa, ed è la
-//! [0100](../../../docs/decisions/0100-i-tasti-che-arrivano-da-fuori.md).
+//! [0100](../../../docs/decisions/README.md).
 //!
 //! Una sola cosa la decide questo modulo, perché è l'unico a saperla: **scrivere
 //! una chiave sospesa la risveglia**. Chi scrive è una persona davanti al
@@ -55,14 +55,14 @@
 //! valore nel file che nessuno leggerà mai — che è precisamente ciò che la 0076
 //! esiste per non avere.
 //!
-//! [0077]: ../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md
+//! [0077]: ../../../docs/decisions/README.md
 //!
 //! # Perché non è uno spazio chiave→valore
 //!
 //! Perché le chiavi le dichiara qualcuno: una chiave fuori schema non si legge e
 //! non si scrive, e ciò che il file contiene senza che nessuno lo dichiari resta
 //! lì senza essere letto. È la differenza con lo `storage_*` che la
-//! [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md) ha
+//! [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md) ha
 //! tolto, ed è ciò che rende questo store una **configurazione** invece di un
 //! database di comodo.
 
@@ -194,7 +194,7 @@ fn load(path: &Utf8Path) -> Result<BTreeMap<String, SettingValue>, String> {
 /// Che poi si scrivano **atomicamente** non è più una scelta di questa funzione:
 /// lo sono entrambe le scritture che la usano, quella del supporto (§15.1) e
 /// quella della macchina, perché l'atomicità è scesa sotto tutte e due
-/// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)). E
+/// ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)). E
 /// qui conta: questo file si riscrive a ogni interruttore toccato, e un JSON
 /// troncato da un crash è una configurazione che al riavvio è *malformata* —
 /// cioè, per la regola di [`load_from`], un errore che blocca la lettura di
@@ -214,7 +214,7 @@ fn encode(values: &BTreeMap<String, SettingValue>) -> Result<Vec<u8>, String> {
 /// vecchia dall'apertura, e ricomporre il file da lì cancella le chiavi che
 /// un'altra installazione ha scritto nel frattempo. Ciò che si scrive è la
 /// **chiave toccata**, applicata al file riletto sotto lock
-/// ([`update_atomic`], [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)),
+/// ([`update_atomic`], [0066](../../../docs/decisions/0195-versioni-indipendenti.md)),
 /// e la mappa che torna è quella fusa — che il chiamante adotta al posto della
 /// propria.
 fn store(
@@ -340,7 +340,7 @@ fn undeclared(key: &str) -> PluginError {
 /// Il livello **macchina**, condiviso da tutti i vault aperti.
 ///
 /// Condiviso e non copiato: i vault aperti insieme sono N
-/// ([decisione 0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md))
+/// ([decisione 0029](../../../docs/decisions/0183-composizione-host-kernel.md))
 /// e la configurazione della macchina è **una**. N copie sarebbero N idee del
 /// tema, e la seconda finestra che scrive vincerebbe sulla prima senza che
 /// nessuna delle due lo sappia.
@@ -354,7 +354,7 @@ fn undeclared(key: &str) -> PluginError {
 /// # Perché tiene anche uno **schema**
 ///
 /// Perché una chiave di macchina esiste quando un vault non c'è, e fino alla
-/// [0116](../../../docs/decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
+/// [0116](../../../docs/decisions/0185-capability-un-solo-guard.md)
 /// esisteva solo il suo *valore*: lo schema stava nello [`SettingsStore`] di un
 /// vault, cioè nell'unico posto che sparisce proprio nel caso per cui lo scope
 /// `Machine` era nato. `log.level` si poteva leggere e scrivere **solo con un
@@ -555,7 +555,7 @@ impl MachineSettings {
     /// cui il disco le ha accettate**. Senza il turno, la fusione più vecchia
     /// può tornare per seconda e posarsi sopra la più recente, lasciando in
     /// memoria una mappa che sul disco non c'è più — cioè la *lost update* che
-    /// la [0066](../../../docs/decisions/0066-un-aggiornamento-non-e-una-scrittura.md)
+    /// la [0066](../../../docs/decisions/0195-versioni-indipendenti.md)
     /// aveva tolto al file, rientrata dalla porta della memoria. Il lock del
     /// file serializza le installazioni; questo serializza i thread, che quel
     /// lock non li vede nemmeno.
@@ -601,7 +601,7 @@ pub struct SettingsStore {
     /// **dentro il vault**: passa da qui e non da `std::fs`, o il giorno in cui
     /// un vault vive su un supporto che cifra la sua configurazione resterebbe
     /// in chiaro accanto ai documenti cifrati
-    /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
+    /// ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)).
     storage: Arc<dyn VaultStorage>,
     /// Il livello del vault, che è **anche** ciò che sta nel file: un
     /// [`Durable`] perché «su disco prima, in memoria dopo» smettesse di
@@ -684,7 +684,7 @@ impl SettingsStore {
     ///
     /// Non tocca il file. Una sospensione che cancellasse sarebbe irreversibile
     /// dove il caso è **il dubbio**, ed è la riga della
-    /// [0099](../../../docs/decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md):
+    /// [0099](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md):
     /// delle due mosse si sospende quella che non si disfa.
     ///
     /// [`resolve`]: SettingsStore::resolve

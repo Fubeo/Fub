@@ -2,7 +2,7 @@
 //
 // # Cosa è cambiato, e perché era un difetto
 //
-// Fino alla [0166](../../../../docs/decisions/0166-il-banco-che-vede.md) i due
+// Fino alla [0166](../../../../docs/decisions/0196-test-e-artefatti-generati.md) i due
 // fogli erano novanta valori esadecimali scelti a mano: prima si sceglieva, poi
 // `contrast.test.ts` diceva sì o no, e quando diceva no si spostava il valore
 // finché diceva sì. Un presidio ferma il rosso, non produce il bello — e il
@@ -10,7 +10,7 @@
 // l'accento della persona (§31.6) sono due tavolozze in più.
 //
 // Qui il numero si scrive **accanto a come si ricava**, che è la
-// [0072](../../../../docs/decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)
+// [0072](../../../../docs/decisions/0196-test-e-artefatti-generati.md)
 // presa alla lettera. Un inchiostro non dichiara un esadecimale: dichiara *che
 // colore è* (tinta e croma), *sopra cosa deve stare* e *quanto deve reggere*. La
 // chiarezza — l'unica grandezza che il contrasto muove — la trova la
@@ -25,7 +25,7 @@
 // **letto come testo** da tre presidi che non hanno un motore di rendering, e
 // `oklch()` vivo nel CSS lo renderebbe un valore che solo un browser sa dire.
 // Quindi: si scrive in un posto, si legge da due — è lo schema della
-// [0020](../../../../docs/decisions/0020-le-regole-in-un-posto-solo.md) e dei
+// [0020](../../../../docs/decisions/README.md) e dei
 // `*.generated.ts`, e il presidio è lo stesso: rigenerare deve dare **gli
 // stessi byte**.
 //

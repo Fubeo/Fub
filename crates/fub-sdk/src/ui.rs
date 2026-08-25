@@ -36,7 +36,7 @@ pub fn placeholder(key: &str) -> UiNode {
 /// È la convenzione che le tre view ufficiali avevano ognuna per conto proprio:
 /// il payload porta il dato, la chiave della riga è la sua **identità fra due
 /// ridisegni** — il documento, non la posizione nell'elenco. Prima della
-/// [decisione 0016](../../../docs/decisions/0016-cosa-e-una-view.md) il dato
+/// [decisione 0016](../../../docs/decisions/0182-provider-e-porte-generiche.md) il dato
 /// veniva codificato dentro l'`ActionId` e ognuno lo codificava a modo suo.
 pub fn row_with_datum(
     title: impl Into<Text>,

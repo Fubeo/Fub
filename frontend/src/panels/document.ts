@@ -7,7 +7,7 @@
 // §1.2. La prima è **il layout** — quali riquadri ci sono e cosa tiene aperto
 // ognuno — e non sta qui: sta in `state/layout.ts`, perché è ciò che si ricorda
 // fra un avvio e l'altro. La seconda è **il buffer**, che è la verità del
-// documento aperto finché è sporco (docs/architecture/data-model.md, "Fonte di
+// documento aperto finché è sporco (../../../docs/architecture/document-model.md, "Fonte di
 // verità"), e sta qui.
 //
 // E il buffer è **per documento, non per riquadro**. È la domanda che il §1.2
@@ -194,7 +194,7 @@ interface Buffer {
   /// testo che ci consegna.
   ///
   /// È un `WriteBase` e non più una revisione opzionale
-  /// ([0092](../../../docs/decisions/0092-una-base-si-dichiara.md)): `null`
+  /// ([0092](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)): `null`
   /// teneva insieme due cose diverse — «non so da cosa discendo» e «ho scelto
   /// di sovrascrivere» — e le due si leggono uguali proprio nel punto in cui
   /// contano. Adesso chi non lo sa lo **dichiara** dove lo scopre (il recupero
@@ -1002,7 +1002,7 @@ export function isOpen(id: string): boolean {
 /// che l'utente abbia scritto la prima riga — è il grafo a ricucirlo.
 ///
 /// `heading` e `block` sono il **punto** che il link nomina, quando lo nomina.
-/// Fino alla [0049](../../../docs/decisions/0049-una-posizione-dentro-un-documento.md)
+/// Fino alla [0049](../../../docs/decisions/0181-modello-documento-e-arene.md)
 /// arrivavano fin qui e si fermavano: la risposta di `resolve` sapeva dire
 /// *quale documento* e non *dove dentro*, quindi `[[Nota#^blocco]]` apriva la
 /// nota in cima e niente lo diceva. Adesso la posizione torna dal kernel e la

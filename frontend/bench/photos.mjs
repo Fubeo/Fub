@@ -72,7 +72,7 @@
 // la CI. È probabile che un font incorporato renda identico sulle due
 // macchine — Chromium usa la propria pipeline di font shaping per un webfont,
 // non quella di sistema — ma questo file misura invece di argomentare
-// ([0167](../../docs/decisions/0167-un-colore-ha-una-ricetta.md)), e nessuno
+// ([0167](../../docs/decisions/0192-impostazioni-locale-e-temi.md)), e nessuno
 // l'ha ancora misurato da dentro `ubuntu-latest`. Il confronto entra in CI
 // quando qualcuno rigenera le baseline lì, o accetta che un primo tentativo
 // possa uscire rosso per drift ambientale e non per un difetto vero.

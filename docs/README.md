@@ -1,45 +1,83 @@
 # Documentazione di Fub
 
-Benvenuto nella documentazione di Fub. La documentazione è organizzata in cartelle tematiche per guidarti dal primo avvio fino ai dettagli architetturali più approfonditi.
+Questa è la mappa canonica del progetto.
 
----
+La documentazione descrive **ciò che esiste**. Le attività eseguibili vivono
+nelle GitHub Issues. Le decisioni architetturali spiegano il perché delle scelte
+ancora rilevanti. La cronologia completa resta in Git.
 
-## Mappa della documentazione
+```mermaid
+flowchart LR
+    START["Che cosa devi fare?"]
+    START --> USE["Usare o capire Fub"]
+    START --> CODE["Modificare il codice"]
+    START --> DESIGN["Capire l'architettura"]
+    START --> STATUS["Vedere stato e direzione"]
+    USE --> PRODUCT["product/"]
+    CODE --> DEV["development/"]
+    DESIGN --> ARCH["architecture/ e reference/"]
+    STATUS --> PROJECT["project/"]
+```
 
-| Cartella | Descrizione |
-|---|---|
-| 🚀 [**`00-inizia-qui/`**](00-inizia-qui/01-cos-e-fub.md) | Cos'è Fub, come si compila/avvia e struttura del repository |
-| 💡 [**`01-concetti/`**](01-concetti/01-il-vault.md) | Concetti chiave (Vault, Kernel, Plugin, Eventi) spiegati con analogie e schemi |
-| 🧩 [**`02-componenti/`**](02-componenti/01-panoramica.md) | Scheda di dettaglio per ogni crate Rust, frontend ed esempi con path reali |
-| 📊 [**`03-uml/`**](03-uml/01-trait-fub-abi.md) | Diagrammi architetturali (gerarchia trait, sequenza tasto-pixel, dipendenze, thread) |
-| 🔌 [**`04-plugin/`**](04-plugin/01-nativo-vs-wasm.md) | Modello di estensione, HostApi, permessi e walkthrough passo-passo di `ping-wasm` |
-| 💾 [**`05-disco/`**](05-disco/01-note-utente.md) | Formato note Markdown, cartella `.fub/` (autorevole vs derivata) e cestino |
-| 📜 [**`06-contratto/`**](06-contratto/01-i-trait-in-rust.md) | Trait Rust in `fub-abi`, modello dati del documento e contratto WIT per WASM |
-| 🖥️ [**`07-ui/`**](07-ui/01-la-shell-e-il-frontend.md) | Shell frontend TypeScript, protocollo dichiarativo `UiNode`, IPC e temi |
-| 🏛️ [**`decisions/`**](decisions/README.md) | Registro delle decisioni architetturali (*ADR*), inclusi i **dieci** buchi dichiarati <!-- [conta: buchi-dichiarati] --> |
-| 🎯 [**`milestones/`**](milestones/README.md) | Obiettivi di prodotto e traguardi delle release |
-| 🗺️ [**`roadmap/`**](roadmap/README.md) | Sedute di progettazione e traguardi di contratto |
-| 📝 [**`features/`**](features/01-principi-fondanti.md) | Capitolato funzionale e specifiche complete delle funzionalità di prodotto |
-| 🔬 [**`microfeatures/`**](microfeatures/vault-ed-esploratore.md) | Scomposizione granulare dei gesti atomici di interazione utente |
-| 📋 [**`todo.md`**](todo.md) | Registro delle attività aperte, stato di avanzamento e difetti misurati |
-| 🏷️ [**`versionamento.md`**](versionamento.md) | Disciplina SemVer e versioni degli schemi persistenti su disco |
+## Iniziare
 
-### Stato delle funzionalità
+- [Installare, avviare e verificare](getting-started/install-and-run.md)
+- [Orientarsi nella repository](getting-started/repository-tour.md)
 
-Le guide descrivono lo **stato implementato** salvo indicazione esplicita. Quando una parte è ancora in costruzione, usa queste etichette:
+## Capire il prodotto
 
-- **Implementato** — presente nel codice e, dove indicato, coperto da test/presìdi.
-- **Parziale** — il percorso esiste, ma non tutte le superfici previste sono disponibili.
-- **Contratto/design** — la forma è definita, ma non implica che l'intera feature sia già attraversabile dall'utente.
-- **Pianificato** — obiettivo futuro; lo stato operativo resta in [`todo.md`](todo.md).
+- [Panoramica](product/overview.md)
+- [Vault e file](product/vault-and-files.md)
+- [Editor e anteprima](product/editor-and-preview.md)
+- [Ricerca, link e grafo](product/search-links-and-graph.md)
+- [Plugin ed estensioni](product/plugins-and-extensions.md)
 
-Questa distinzione è particolarmente importante per il runtime WASM di M5: il contratto è più ampio della porzione già attraversata in esecuzione.
+## Capire l'architettura
 
----
+- [Vista d'insieme](architecture/overview.md)
+- [Componenti e confini](architecture/components-and-boundaries.md)
+- [Modello del documento](architecture/document-model.md)
+- [Storage e identità](architecture/storage-and-identity.md)
+- [Runtime, eventi e job](architecture/runtime-events-and-jobs.md)
+- [Frontend e IPC](architecture/frontend-and-ipc.md)
+- [Runtime dei plugin](architecture/plugin-runtime.md)
 
-## Documenti del repository
+## Sviluppare
 
-- [**`CONTRIBUTING.md`**](CONTRIBUTING.md): ciclo locale di sviluppo, controlli di qualità e linee guida per i contributi.
-- [**`SECURITY.md`**](SECURITY.md): perimetro di sicurezza e segnalazione di vulnerabilità.
-- [**`CODE_OF_CONDUCT.md`**](CODE_OF_CONDUCT.md): codice di condotta della community.
-- [**`CHANGELOG.md`**](CHANGELOG.md): cronologia delle modifiche e delle versioni rilasciate.
+- [Workflow](development/workflow.md)
+- [Test e qualità](development/testing-and-quality.md)
+- [Creare un plugin](development/plugin-authoring.md)
+- [Stile della documentazione](development/documentation-style.md)
+- [Versionamento e release](development/versioning-and-releases.md)
+
+## Consultare i contratti
+
+- [ABI e WIT](reference/abi-and-wit.md)
+- [Layout su disco](reference/on-disk-layout.md)
+- [Contratto IPC](reference/ipc-contract.md)
+- [Permessi e sicurezza](reference/permissions-and-security.md)
+
+## Vedere stato e direzione
+
+- [Stato corrente](project/status.md)
+- [Roadmap](project/roadmap.md)
+- [M5: runtime WASM](project/m5-wasm-runtime.md)
+
+## Capire le decisioni
+
+- [Indice ADR](decisions/README.md)
+- [Template ADR](decisions/template.md)
+
+## Gerarchia delle fonti
+
+Quando due fonti divergono, usa questo ordine:
+
+1. codice e test;
+2. WIT, schemi e formati persistenti;
+3. pagine architetturali e riferimenti canonici;
+4. ADR, limitatamente alla motivazione;
+5. stato e roadmap;
+6. cronologia Git.
+
+Una pagina non sostituisce il codice. Deve spiegare i confini, i flussi e le
+proprietà che una persona deve conoscere per modificarlo senza romperli.

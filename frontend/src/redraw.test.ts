@@ -7,7 +7,7 @@
 //
 // La voce chiedeva «il numero che dice se è ora», e rimandava al §17.1 per
 // delle soglie su vault sintetici da 10k/100k note. Quel rimando è scaduto: la
-// [0113](../../docs/decisions/0113-il-banco-conta-le-operazioni.md) ha chiuso il
+// [0113](../../docs/decisions/0196-test-e-artefatti-generati.md) ha chiuso il
 // §17.1 decidendo l'opposto — **un banco conta operazioni, non millisecondi**,
 // perché su una macchina condivisa il tempo non è un segnale, e un conto esatto
 // è esatto a qualunque taglia. Qui vale identico, con un'aggravante di questo

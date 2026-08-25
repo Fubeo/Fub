@@ -1,19 +1,9 @@
-# CI multi-OS, come previsto da docs/appendix/platforms-ci.md.
-#
-# Il motivo per averla adesso e non "quando servirà": ogni invariante che i
-# documenti dichiarano "verificata dai test" vale solo sulla macchina di chi si
-# ricorda di lanciarli. Linux è la piattaforma primaria di sviluppo; Windows e
-# macOS sono supportati, e una regressione cross-OS deve emergere subito —
-# soprattutto sui path (`camino`/`Utf8Path`) e sui lock file di `.fub/data/`.
-
 name: CI
 
 on:
   push:
     branches: ["**"]
   pull_request:
-  # Un advisory nuovo non aspetta il prossimo push: il job `supply-chain` gira
-  # da solo una volta a settimana (gli altri no — vedi le loro condizioni).
   schedule:
     - cron: "0 6 * * 1"
 
@@ -21,8 +11,6 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  # Le invarianti architetturali sono veloci e non dipendono dall'OS: girano da
-  # sole, così il segnale arriva in un minuto invece che in venti.
   invariants:
     name: invarianti (abi↔WIT, additività, dipendenze)
     if: github.event_name != 'schedule'
@@ -33,114 +21,34 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Conformità abi ↔ crates/fub-abi/wit/fub/abi.wit
         run: cargo test -p fub-abi --test wit_conformance
-      # La conformità confronta abi e WIT fra di loro, OGGI. Questa confronta il
-      # contratto con crates/fub-abi/wit/frozen/, cioè con com'era quando è stato pubblicato:
-      # è la promessa del freeze di M4 ("si cresce solo per aggiunta") resa
-      # meccanica. Vedi crates/fub-abi/wit/frozen/README.md.
       - name: Additività del contratto (crates/fub-abi/wit/frozen/)
         run: cargo test -p fub-abi --test wit_additivity
       - name: invarianti di dipendenza (abi/kernel agnostici, features senza kernel)
         run: cargo test -p fub-abi --test dependency_invariant
-      # Le tre righe qui sopra guardano il contratto come TESTO: che Rust e WIT
-      # dicano la stessa cosa, che il WIT non abbia perso niente, che nessuno dei
-      # due dipenda da wasmtime. Nessuna delle tre lo attraversa. Questa lo
-      # attraversa: `abi.wit` diventa i binding guest di `plugin-world` — export
-      # implementati compresi — e viene compilato a wasm32. È la §27.1, e il
-      # perché sta nella 0146 e in tools/varco-wasm/Cargo.toml. Se un giorno il
-      # contratto smette di essere costruibile da un plugin, si scopre qui e non
-      # dopo il freeze.
       - name: aggiungi il bersaglio del confine
         run: rustup target add wasm32-unknown-unknown
-      - name: il contratto attraversa il confine (§27.1)
+      - name: il contratto attraversa il confine
         run: cargo build --manifest-path tools/varco-wasm/Cargo.toml --target wasm32-unknown-unknown
-      # Le altre invarianti di dipendenza dicono *chi* può dipendere da cosa;
-      # questa dice *dove si scrive la versione*. Il difetto era misurato:
-      # `tempfile = "3.27.0"` copiato identico in cinque Cargo.toml, cioè cinque
-      # righe da cambiare per un `cargo update` — e la prima dimenticata non
-      # diventa un errore, diventa una seconda versione nell'albero.
       - name: le versioni delle dipendenze si scrivono in un posto solo
         run: node .github/scripts/check-cargo-versions.mjs
-      # E la domanda che nessun altro passo si fa: **questa feature, qualcuno la
-      # compila?** Una feature spenta non è codice che fallisce, è codice che non
-      # esiste — e con lui spariscono i suoi `#[test]`, che non diventano rossi e
-      # nemmeno `ignored`: escono dal conto. Misurato: togliendo `http-client`
-      # dal `default` di `fub-host`, `cargo test --workspace` passa da 1331 a
-      # 1328 test — spariscono le tre prove di `net.rs`, cioè quelle che tengono
-      # in piedi le due decisioni della 0097 (non seguire i redirect, fidarsi del
-      # verificatore della piattaforma) — e nient'altro se ne accorge: le righe
-      # `test result: ok` restano 119, `clippy` resta a zero, gli altri presidi
-      # restano verdi. È la classe che questo repo ha già incontrato più di dodici
-      # volte, e qui bastava togliere una parola da un elenco.
-      - name: ogni cargo feature è compilata da qualcuno (decisione 0129)
+      - name: ogni cargo feature è compilata da qualcuno
         run: node .github/scripts/check-cargo-feature-default.mjs
-      # E la gemella sull'altra riga di manifest che nessuno guardava: **questa
-      # forma di libreria, qualcuno la apre?** Un `crate-type` in più è un
-      # codegen e un link dell'intero albero a ogni compilazione. Misurato:
-      # `fub-app` portava `["staticlib", "cdylib", "rlib"]` dal template mobile
-      # di Tauri senza nessun target mobile, e la ricostruzione del workspace
-      # dopo un `touch` su `fub-abi` costava 10,7 / 11,7 / 10,9 s contro
-      # 5,9 / 6,5 / 6,7 / 7,2 s con `rlib` da solo — per un `.a` e un `.so` che
-      # non apriva nessuno. Nient'altro se ne accorgeva: con o senza le due
-      # parole, tutto compila.
-      - name: ogni forma di libreria è consumata da qualcuno (0229)
+      - name: ogni forma di libreria è consumata da qualcuno
         run: node .github/scripts/check-crate-type.mjs
-      # E la terza riga di manifest della stessa famiglia, sull'altra metà dello
-      # stesso conto: non *quante volte* si linka, ma **quanto pesa un link**.
-      # Misurato: `[profile.dev]` non diceva niente su `split-debuginfo`, cioè
-      # prendeva il default che copia l'informazione di debug dentro ognuno dei
-      # centotrentasette eseguibili che escono da `tests/` — mediana 62,4 MB,
-      # 13,8 GB in tutto. Con `unpacked` restano nei `.o` accanto ai binari:
-      # 25,6 MB di mediana, 4,9 GB in tutto, backtrace con file e riga intatti.
-      # È la decisione 0145, ed è la riga che ha risposto alla §28.1 senza
-      # toccare né un test né un'asserzione né un `--test` di questo file.
-      - name: il profilo dev è quello deciso, chiave per chiave (0145)
+      - name: il profilo dev è quello deciso, chiave per chiave
         run: node .github/scripts/check-dev-profile.mjs
-      # Il terzo confine, e l'unico che si GENERA: le union di stringhe del
-      # mirror TS sono emesse dagli enum senza payload del contratto
-      # (decisione 0053). Sta qui e non solo nel `cargo test --workspace`
-      # perché è un'invariante del contratto come le altre tre: se è rosso,
-      # `frontend/src/host/enums.generated.ts` è stantio e la shell sta
-      # nominando dei casi che in Rust non ci sono più.
       - name: le union del mirror TS sono derivate dai tipi Rust
         run: cargo test -p fub-abi --test ts_enums
-      # **Le feature ufficiali si spengono davvero** (§16.3). Il `cargo test
-      # --workspace` compila sempre la build piena, quindi da solo non
-      # accorgerebbe mai che uno scorporo è tornato a essere finto: basta un
-      # `use` senza `#[cfg]` e tutto continua a passare — in verde, con tantivy
-      # dentro il pannello struttura. Questi tre comandi sono la misura al
-      # contrario, ed è per questo che sono `build` e non `test`: la domanda è
-      # se compila, non se funziona.
-      #
-      # Il primo è il caso limite (nessuna feature ufficiale: resta il solo
-      # bundle di core), il secondo è quello che porta il guadagno — il
-      # pannello struttura senza un motore di ricerca —, il terzo prova che
-      # anche chi monta un vault si spegne a pezzi.
-      - name: le feature ufficiali si spengono (§16.3)
+      - name: le feature ufficiali si spengono
         run: |
           cargo build -p fub-features --no-default-features
           cargo build -p fub-features --no-default-features --features outline
           cargo build -p fub-host --no-default-features --features outline,notify-watcher
-      # E la corrispondenza fra le cargo feature e l'inventario, che è ciò che
-      # impedisce ai due elenchi di divergere.
       - name: una cargo feature per bundle, e l'inventario è dove si legge
         run: cargo test -p fub-features --test cargo_features
-      # E la **condizione** del secondo tempo, valutata da qualcuno invece che
-      # ricordata (§16.3, decisione 0073). I tre `build` qui sopra la fanno
-      # valere per metà: nella build della sola `outline` un `use crate::search`
-      # non compila. Ma la riparazione che quell'errore suggerisce è mettergli
-      # davanti un `#[cfg(feature = "search")]`, e da lì in poi l'accoppiamento
-      # c'è e tutto è verde. Questo banco pone la domanda ai sorgenti, cioè
-      # prima del `cfg`.
-      #
-      # Se è rosso non c'è un errore da riparare: c'è una voce di roadmap che si
-      # è sbloccata, e il messaggio del test lo dice con quelle parole.
-      - name: i moduli di feature non si parlano — e se si parlano, la §16.3 si è sbloccata
+      - name: i moduli di feature non si parlano
         run: cargo test -p fub-features --test independent_modules
 
-  # Licenze, advisory e provenienza delle dipendenze, più l'SBOM. È l'unica
-  # parte del piano il cui costo cresce con il numero di dipendenze già entrate:
-  # una licenza incompatibile scoperta a valle si toglie riscrivendo ciò che ci
-  # stava sopra. Politica e motivazioni in `deny.toml`.
   supply-chain:
     name: supply chain (licenze, advisory, SBOM)
     runs-on: ubuntu-latest
@@ -153,10 +61,6 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-sbom
-      # SPDX 2.3: il formato che il 23.3 di FEATURES chiede per nome
-      # ("identificatori SPDX, license compliance"). L'artefatto è la risposta
-      # alla domanda "cosa c'è dentro questa build", che a valle si fa una volta
-      # sola e sempre troppo tardi.
       - name: Genera l'SBOM
         run: cargo sbom --output-format spdx_json_2_3 > fub-sbom.spdx.json
       - uses: actions/upload-artifact@v6
@@ -173,8 +77,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.89
         with:
           components: rustfmt, clippy
-          # Il ramo Windows del kernel sotto il compilatore, da Linux: vedi il
-          # passo in fondo a questo job.
           targets: x86_64-pc-windows-msvc
       - uses: Swatinem/rust-cache@v2
       - name: Dipendenze di sistema di Tauri
@@ -184,12 +86,6 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
-      # Il codice `#[cfg(windows)]` di `fub-kernel` — il conteggio dei nomi di un
-      # file, §23.16 — non lo guarda nessuno degli altri passi: `clippy` gira su
-      # Linux, e il job `windows-latest` compila ma non ha `clippy` né `fmt`.
-      # Sono sei secondi, e prendono la classe di errore che costa di più: una
-      # FFI che non compila è una FFI che non è stata scritta, e ce ne si accorge
-      # solo dalla piattaforma su cui nessuno sviluppa.
       - name: Il ramo Windows del kernel, compilato da qui
         run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
 
@@ -202,13 +98,9 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v5
-      # Toolchain pinnata all'MSRV del workspace (rust-version = "1.89"): la CI
-      # verifica anche che la promessa dell'MSRV sia vera.
       - uses: dtolnay/rust-toolchain@1.89
       - uses: Swatinem/rust-cache@v2
         with:
-          # Anche un test rosso lascia artefatti di compilazione validi: salvarli
-          # evita di ricompilarli da zero soprattutto sui runner Windows/MSVC.
           cache-on-failure: true
       - name: Dipendenze di sistema di Tauri
         if: matrix.os == 'ubuntu-latest'
@@ -216,45 +108,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
             librsvg2-dev patchelf libgtk-3-dev
-      # Il bersaglio dei **componenti**, e sta qui e non fra le invarianti per
-      # una ragione sola: chi lo pretende è `cargo test --workspace`, due righe
-      # più sotto. Il test di `fub-wasm-host` non carica un `.wasm` messo nel
-      # repo — lo **costruisce**, invocando da sé `cargo build --target
-      # wasm32-wasip2` su `esempi/ping-wasm`, perché un binario committato è una
-      # promessa che nessuno ricompila e che smette di corrispondere al suo
-      # sorgente senza dirlo. Il prezzo è che il bersaglio dev'essere già
-      # installato quando i test partono: se manca, non fallisce l'host — fallisce
-      # l'esempio, con un errore di rustup dentro l'output di un test, che è il
-      # posto peggiore in cui leggerlo.
-      #
-      # `wasm32-wasip2` e non `wasm32-unknown-unknown` (quello del varco, nel job
-      # `invariants`): un componente ha bisogno del mondo di WASI 0.2, e dallo
-      # stesso `abi.wit` i due bersagli producono due cose diverse — un modulo
-      # core di là, un componente di qua. Sono due passi e non uno perché sono in
-      # due job diversi, non per simmetria.
-      #
-      # La build esplicita dell'esempio non è ridondante col test: separa «il
-      # componente non compila» da «l'host non lo sa caricare», che senza questa
-      # riga arriverebbero come lo stesso rosso. Ed è l'unico posto che compila
-      # `esempi/ping-wasm`, che sta fuori dal workspace apposta (vedi l'`exclude`
-      # della radice) proprio perché `--workspace` non deve pretendere quel
-      # bersaglio da chi non ce l'ha.
       - name: il bersaglio dei componenti, prima dei test che lo pretendono
         run: |
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
-      # `cargo test` compila già l'intero workspace (binari inclusi). Una build
-      # separata duplicava quasi tutto il linking e costava ~5 minuti su Windows.
       - run: cargo test --workspace
 
-  # I documenti si rimandano l'un l'altro, ma nessuno li compila: un file
-  # rinominato o cancellato non rompe niente finché qualcuno non ci clicca — e a
-  # quel punto la riga che lo linkava è vecchia di venti commit. È già successo
-  # (`ORGANIZZAZIONE_VAULT.md`, cancellato col commit `0a4ee40` e linkato per un
-  # pezzo dopo). Dieci secondi qui valgono quanto la promessa che la mappa dei
-  # documenti sia vera.
   docs:
-    name: docs (link interni)
+    name: documentazione canonica
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
@@ -264,43 +125,22 @@ jobs:
           node-version: 22
       - name: Link interni dei documenti
         run: node .github/scripts/check-doc-links.mjs
-      # E ciò che i documenti **affermano** sui sorgenti (§16.8). Il link rotto
-      # è la promessa che si vede; il numero sbagliato è quella che si legge, si
-      # crede e non si ricontrolla mai — un giro dedicato ne ha trovati falsi
-      # una dozzina, nessuno dei quali aveva mai rotto un test. Prima
-      # l'autoprova, perché qui la parte fragile è il lettore dei numeri scritti
-      # in lettere: se si spegnesse lui, il controllo direbbe verde senza aver
-      # guardato.
+      - name: Ogni pagina canonica è raggiungibile
+        run: node .github/scripts/check-doc-orphans.mjs
+      - name: Le pagine rispettano le soglie dimensionali
+        run: node .github/scripts/check-doc-size.mjs
+      - name: Il Markdown rispetta lo stile canonico
+        run: node .github/scripts/check-markdown-style.mjs
+      - name: Ogni diagramma Mermaid è valido e renderizzabile
+        run: node .github/scripts/check-mermaid.mjs --render
       - name: Il lettore dei numeri sa leggere l'italiano
         run: node .github/scripts/check-prose.mjs --self-test
       - name: I numeri e le garanzie che la prosa afferma sui sorgenti
         run: node .github/scripts/check-prose.mjs
-      # E la terza specie, che non è né un link né un numero: una tabella che al
-      # sorgente si legge intatta e alla pagina non dice più quello che dice il
-      # sorgente. Due modi. Una riga vuota in mezzo la chiude, e le righe sotto
-      # diventano un paragrafo con i `|` stampati come testo — era successo in
-      # due file, cinquantotto righe nel registro dei verbali e otto in
-      # `wit-congelato.md`, senza rompere un link né un numero. Oppure la
-      # tabella regge e una riga di corpo non ha le celle dell'intestazione: lì
-      # GFM pareggia in silenzio, inserendo il vuoto se ne mancano e buttando
-      # via l'eccesso se ne avanzano, e in pagina o compare una colonna vuota o
-      # sparisce del testo. Prima l'autoprova, perché le parti fragili qui sono
-      # due distinzioni: la riga vuota che spezza una tabella contro quella che
-      # ne separa due, e la cella mancante contro la cella vuota ma presente. Se
-      # si spegnessero loro, il conto direbbe verde su tutto.
       - name: La riga vuota che spezza una tabella non è quella che ne separa due
         run: node .github/scripts/check-tables.mjs --autoprova
       - name: Ogni tabella dei documenti è ancora una tabella, e con tutte le sue colonne
         run: node .github/scripts/check-tables.mjs
-      # E la promessa che il CONTRIBUTING fa alla CI, resa meccanica: ogni
-      # comando che un job lancia dev'essere nel ciclo locale di
-      # docs/CONTRIBUTING.md o fra le sue eccezioni dichiarate, e viceversa —
-      # è la riga «La CI non fa niente di più di questo elenco», che senza un
-      # presidio decade come è già successo (sette script e tre build erano
-      # arrivati in CI senza una riga nel documento). Prima l'autoprova, perché
-      # qui la parte fragile è il lettore dei due formati — il `run:` a blocco
-      # del workflow, il recinto e l'elenco delle eccezioni del documento: se
-      # si spegnesse lui, il controllo direbbe verde senza aver guardato.
       - name: Il ciclo locale di CONTRIBUTING.md sa leggere i comandi della CI
         run: node .github/scripts/check-locale-loop.mjs --self-test
       - name: Ogni comando della CI sta nel ciclo locale di CONTRIBUTING.md, o fra le sue eccezioni
@@ -318,71 +158,22 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
         working-directory: frontend
-      # `vite build` traspila senza controllare i tipi, e `vitest` nemmeno: il
-      # type-check è questo, ed è il **terzo** comando della shell. Era scritto
-      # qui come `npx tsc --noEmit` e in nessuno `script` di `package.json`,
-      # quindi chi verificava il proprio lavoro con la coppia che tutti citano
-      # — `npm run test && npm run build` — mandava in CI del codice che non
-      # compila e lo scopriva da un'altra parte. Adesso ha un nome che si può
-      # eseguire a mano (§2.9).
       - run: npm run typecheck
         working-directory: frontend
-      # I test di unità del frontend (oggi: il ponte byte↔UTF-16, `offsets.ts`).
       - run: npm test
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
-      # E la domanda che né `tsc` né i test si fanno: **fino a quando** vive un
-      # ascoltatore messo su `document` o su `window`? La porta è
-      # `frontend/src/ui/vita.ts` — `ascolta` è un metodo di `Vita`, quindi non
-      # lo si chiama senza avere in mano ciò che sa anche smettere — e il
-      # compilatore quella metà la tiene da sé. Non può tenere l'altra: che
-      # nessuno chiami `document.addEventListener` per conto suo, perché quella
-      # funzione è del DOM e non c'è niente di sbagliato nel suo tipo. Il difetto
-      # era misurato ed era sei volte la stessa riga (decisione 0133).
-      - name: ogni ascoltatore globale della shell ha una Vita (decisione 0133)
+      - name: ogni ascoltatore globale della shell ha una Vita
         run: node .github/scripts/check-listeners.mjs
-      # La stessa mossa sul tempo invece che sulla vita: dentro il corpo di un
-      # giro (`corsa.ultimo(async (atteso) => …)`) non si aspetta di nascosto.
-      # `atteso` è l'unico modo di ottenere il risultato di un'attesa, e quella
-      # metà la tiene il compilatore — per averlo bisogna già essere dentro un
-      # giro. Le due che non può tenere sono un `await` nudo e un `catch` scritto
-      # per gli errori veri, che ingoia anche il segnale di scadenza: è come
-      # erano scritte tutte e quattro le implementazioni a mano che la decisione
-      # 0134 ha sostituito.
-      - name: dentro un giro non si aspetta di nascosto (decisione 0134)
+      - name: dentro un giro non si aspetta di nascosto
         run: node .github/scripts/check-races.mjs
-      # E la stessa domanda delle versioni Rust, dall'altro lato: un pacchetto
-      # npm in due copie. Non è un caso ipotetico scelto a caso — l'albero della
-      # shell porta `@codemirror/state` sia diretto sia dentro `codemirror`, e
-      # due copie di quel modulo sono due insiemi di identità per i `Facet`: le
-      # estensioni costruite con l'una la configurazione dell'altra non le vede.
-      # Nessun errore di tipo, nessuna eccezione, solo una live preview che non
-      # fa niente. Oggi la copia è una e questo passo non costa niente; serve il
-      # giorno in cui un `npm install` le separa, che è l'unico in cui nessuno
-      # guarderebbe.
       - name: nessun pacchetto npm in due copie
         run: node .github/scripts/check-npm-copies.mjs
-      # Il banco visivo del §31.1 gira sul runner da cui provengono le baseline:
-      # `ubuntu-latest`. Il browser è quello pinnato dal lock e i tre caratteri
-      # sono nel bundle dell'applicazione (§31.3), quindi il confronto non eredita
-      # né il motore né i font della macchina che ha aperto la pull request.
-      #
-      # Il comando conserva la sua soglia: qui la CI si limita a eseguirlo. Se una
-      # scena cambia, il passo successivo raccoglie foto attuali, differenze e
-      # foglio di contatto prima che il job termini rosso.
-      #
-      # Il contrasto **reso** resta un controllo distinto: `axe` legge i colori
-      # calcolati e vede ciò che la tabella delle coppie non può vedere — un
-      # inchiostro sopra un velo, un testo dentro un fondo che una regola ha
-      # cambiato — mentre il confronto a pixel presidia la resa complessiva.
-      #
-      # (Che ogni scena abbia la sua baseline in entrambe le luci lo verifica
-      # `bench/scene.test.ts`, che gira dentro `npm test` qui sopra.)
       - name: il browser del banco visivo, alla revisione che il lock pinna
         run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - name: le scene restano uguali alle baseline del runner (§31.1)
+      - name: le scene restano uguali alle baseline del runner
         id: bench_verify
         run: npm run bench:verify
         working-directory: frontend
@@ -393,6 +184,6 @@ jobs:
           name: banco-visivo-${{ github.sha }}
           path: frontend/bench/.output/
           include-hidden-files: true
-      - name: il contrasto della pagina vera, in tutte e due le luci (§31.1)
+      - name: il contrasto della pagina vera, in tutte e due le luci
         run: npm run bench:a11y
         working-directory: frontend

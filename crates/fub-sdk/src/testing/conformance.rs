@@ -7,7 +7,7 @@
 //! erano già quattordici: d'ora in poi conta la guardia del §16.8, non chi
 //! scrive la frase.
 //!
-//! [decision 0054]: https://github.com/Fubeo/Fub/blob/main/docs/decisions/0054-the-provider-side-bench.md
+//! [decision 0054]: https://github.com/Fubeo/Fub/blob/main/../../../../docs/decisions/0196-test-e-artefatti-generati.md
 //!
 //! Ogni funzione qui corrisponde a una frase del doc-comment di un trait in
 //! `fub-abi/src/traits.rs`, ed è scritta per essere chiamata da un test
@@ -25,7 +25,7 @@
 //! Il §16.1 elencava «un `IndexProvider` che non perde documenti fra
 //! `on_document_*` e `flush`». Quei metodi si chiamano
 //! `on_documents_indexed`/`on_documents_removed` dalla [decision
-//! 0051](../../../../docs/decisions/0051-indexing-responds.md), prendono un
+//! 0051](../../../../docs/decisions/README.md), prendono un
 //! **lotto** e — ed è il punto — restituiscono `Vec<IndexLoss>`.
 //!
 //! La proprietà è cambiata in **natura**, non nel nome. Quando la perdita era
@@ -230,7 +230,7 @@ pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &d
 /// dentro un lotto il primo non arriva, ed è il secondo a farle fare **un**
 /// ridisegno dove prima ne faceva N.»*
 ///
-/// È la [decision 0011](../../../../docs/decisions/0011-the-batch.md) letta
+/// È la [decision 0011](../../../../docs/decisions/README.md) letta
 /// dal lato dell'autore della view, ed è il peggior difetto che questa suite
 /// possa vedere: una view che sbaglia questo **non si rompe**, smette solo di
 /// aggiornarsi dentro un lotto — cioè proprio quando l'utente ha appena fatto
@@ -239,7 +239,7 @@ pub fn a_view_respects_the_contract<V: ViewProvider + ?Sized>(view: &V, host: &d
 pub fn redrawing_on_index_updated_declares_batch_ended<V: ViewProvider + ?Sized>(view: &V) {
     for spec in view.views() {
         // La regola vive in **un posto solo** ([decision
-        // 0020](../../../../docs/decisions/0020-rules-in-one-place.md)):
+        // 0020](../../../../docs/decisions/README.md)):
         // `misses_batches` viene dal contratto, e questa funzione la applica
         // invece di riscriverla. Una seconda idea della stessa regola, scritta
         // in un banco di test, è il modo in cui due guardie finiscono per
@@ -510,7 +510,7 @@ pub fn the_model_matches_the_given_id(model: &DocumentModel, ctx: &ParseContext)
         ctx.doc_id,
         "the model says it is `{}`, but the context asked for `{}`.\n\
          L'id è la chiave con cui il kernel indicizza, risolve e versiona questo\n\
-         documento ([decisione 0043](../../../../docs/decisions/0043-il-path-e-la-chiave.md)):\n\
+         documento ([decisione 0043](../../../../docs/decisions/0188-identita-path-e-rename.md)):\n\
          un provider che ne mette un altro non sbaglia il parse, fa atterrare\n\
          backlink e versioni sotto una chiave che nessuno interroga.",
         model.id.as_str(),
@@ -528,7 +528,7 @@ pub fn the_model_matches_the_given_id(model: &DocumentModel, ctx: &ParseContext)
 /// pannello sbagliato: le tabelle piatte e gli span sono **le coordinate con
 /// cui un file viene riscritto**. Una modifica programmatica è una patch
 /// chirurgica guidata da uno span ([decision
-/// 0008](../../../../docs/decisions/0008-surgical-edit.md)): uno span che
+/// 0008](../../../../docs/decisions/README.md)): uno span che
 /// mente di un byte non disegna male, **corrompe un documento** — spunta la
 /// task sbagliata, rinomina dentro la parola accanto, taglia un carattere a
 /// metà. E lo fa senza diventare rosso, perché il file resta UTF-8 valido.
@@ -1220,9 +1220,9 @@ fn bom_in_inlines(the: &Inline, check: &impl Fn(&str, &str)) {
 /// nutre il grafo del kernel.
 ///
 /// È arrivata con la
-/// [0061](../../../../docs/decisions/0061-a-pass-not-through-the-model.md),
+/// [0061](../../../../docs/decisions/README.md),
 /// alla condizione che la
-/// [0060](../../../../docs/decisions/0060-the-model-tells-the-truth-about-bytes.md)
+/// [0060](../../../../docs/decisions/0180-compatibilita-wit-additiva.md)
 /// l'avesse scritta qui invece di lasciarla scoprire — *il primo corpus che
 /// verifica ciò che un documento nomina le dà una ragione di esistere, o va
 /// tolta*. È il round-trip senza metadati di

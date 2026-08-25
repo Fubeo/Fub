@@ -1,5 +1,5 @@
 # Il secondo backend del contratto: un componente WASM visto dal kernel come
-# qualunque altro provider (M5, `docs/milestones/M5-wasm-runtime.md`).
+# qualunque altro provider (M5, `../../docs/project/m5-wasm-runtime.md`).
 #
 # **L'invariante di questo manifest è una riga sola, ed è la ragione per cui il
 # crate esiste separato**: wasmtime sta qui e in nessun altro posto del

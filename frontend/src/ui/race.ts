@@ -19,7 +19,7 @@
 // corpo già scritto eredita il controllo senza saperlo, che è la sola forma per
 // cui il secondo chiamante non paga niente.
 //
-// È la forma della [0133](../../../docs/decisions/0133-chi-ascolta-nomina-fino-a-quando.md)
+// È la forma della [0133](../../../docs/decisions/0193-ownership-lifecycle-e-teardown.md)
 // applicata al tempo invece che alla vita: là non ci si registra senza nominare
 // un padrone, qui non si aspetta senza nominare un giro. E come là, **niente
 // marchio**: `awaited` arriva come parametro del corpo, cioè per averlo bisogna
@@ -186,7 +186,7 @@ interface EntryByKey {
 /// Il padrone dei lavori per **chiave** in cui, per ogni chiave, conta solo
 /// l'ultimo valore — e nessun valore si perde.
 ///
-/// È ciò che la [0133](../../../docs/decisions/0133-chi-ascolta-nomina-fino-a-quando.md)
+/// È ciò che la [0133](../../../docs/decisions/0193-ownership-lifecycle-e-teardown.md)
 /// lasciava da decidere: una scrittura su disco si **accoda**, non si **scarta**.
 /// Per ogni chiave la coda tiene **al più un lavoro in volo e al più uno che
 /// aspetta**: quello che aspetta porta sempre il valore più recente, perché

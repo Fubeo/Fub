@@ -171,15 +171,15 @@ fn every_key_that_the_kernel_declares_and_mounted_from_the_core() {
 /// scorciatoie dei comandi della shell.
 ///
 /// Non è un indebolimento del presidio, è la mossa che la
-/// [0071](../../../docs/decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)
+/// [0071](../../../docs/decisions/0185-capability-un-solo-guard.md)
 /// ha chiamato per nome — un presidio che diventa rosso per un caso nuovo e
 /// legittimo si **circoscrive**. La ragione: la chiave `keys.shell.*` la
 /// dichiara il bundle di core, ma il nome del comando che nomina («Apri il
 /// pannello dei file») l'ha scritto la shell, e una frase la localizza chi l'ha
-/// scritta ([0040](../../../docs/decisions/0040-chi-localizza.md)). Portarne una
+/// scritta ([0040](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)). Portarne una
 /// copia nel catalogo del core vorrebbe dire trentadue stringhe tradotte due
 /// volte, che è la famiglia di difetto della
-/// [0072](../../../docs/decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md).
+/// [0072](../../../docs/decisions/0196-test-e-artefatti-generati.md).
 /// L'etichetta è quindi l'**id**, che è un dato: chi disegna la riga ci mette il
 /// titolo (`disegnaRiga(entry, comando.title, …)`), e chi elenca le impostazioni
 /// senza la shell davanti legge comunque di quale comando si tratti.

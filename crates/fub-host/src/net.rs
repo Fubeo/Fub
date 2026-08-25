@@ -22,7 +22,7 @@
 //!
 //! **Non decide quanto aspettare** più di una volta: il tetto è qui, è
 //! dell'host, e non attraversa il confine — la regola della
-//! [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md), *un
+//! [0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md), *un
 //! limite dell'host dev'essere visibile quando morde, non interrogabile*. Chi
 //! lo supera riceve un `Io` che lo dice, e il numero resta alzabile senza
 //! rompere nessuno.
@@ -49,7 +49,7 @@ const CANCEL_POLL: Duration = Duration::from_millis(50);
 /// Quanti byte di risposta si accettano.
 ///
 /// C'è per la disciplina del freno degli eventi
-/// ([0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)): una
+/// ([0034](../../../docs/decisions/0184-eventi-accodati-e-job.md)): una
 /// capacità senza tetto è un modo di far allocare all'host quanto pare a chi
 /// risponde — e qui *chi risponde* non è nemmeno un plugin di cui ci si fida,
 /// è una macchina di qualcun altro. Sedici mebibyte stanno larghi su ogni

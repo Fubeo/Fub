@@ -35,7 +35,7 @@
 //! decisione non li ha attraversati: il difetto misurato era il confine
 //! host↔app, e allargare un conto oltre ciò che si è deciso vorrebbe dire
 //! un'allowlist lunga come l'elenco che dovrebbe restringere. La
-//! [0126](../../../docs/decisions/0126-un-bus-che-tace-non-lo-scopre-nessuno.md)
+//! [0126](../../../docs/decisions/0184-eventi-accodati-e-job.md)
 //! ha riguardato la domanda e ha risposto di nuovo di no, con la ragione più
 //! forte: una politica del veleno si **riderivano** da cosa il lucchetto
 //! protegge, quindi trapiantare qui la `Custody` importerebbe la risposta

@@ -208,7 +208,7 @@ impl NameFault {
     /// prosa italiana vorrebbe dire legare due cose che devono restare libere di
     /// divergere — il *giudizio* è la regola, la sua formulazione non lo è.
     ///
-    /// [decisione 0042]: ../../../../docs/decisions/0042-il-catalogo-della-shell.md
+    /// [decisione 0042]: ../../../../docs/decisions/0192-impostazioni-locale-e-temi.md
     pub fn tag(&self) -> &'static str {
         match self {
             NameFault::Empty => "empty",

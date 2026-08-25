@@ -9,7 +9,7 @@
 //! vieta di dichiarare il banco fra le dipendenze **normali**, e
 //! `fub_host::mount` è codice di libreria. Un inventario nel banco sarebbe
 //! leggibile dai test e invisibile alla produzione — cioè la forma che il
-//! [§16.7](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! [§16.7](../../../docs/project/roadmap.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
 //! accusa: un elenco che *descrive* la registrazione senza esserne la causa.
 //!
 //! Sta qui perché questo è il crate che **possiede** quei tipi: chi aggiunge
@@ -52,7 +52,7 @@
 //! Ogni riga di questo elenco sta dietro un `#[cfg(feature = "…")]`, e il nome
 //! della cargo feature è il nome del modulo qui accanto (il suffisso dell'id:
 //! `fub.search` ↔ `search`). È il primo tempo del
-//! [§16.3](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#163-un-crate-per-bundle-di-feature),
+//! [§16.3](../../../docs/project/roadmap.md#163-un-crate-per-bundle-di-feature),
 //! ed è il motivo per cui **si legge qui**: se la scelta di compilare o saltare
 //! un bundle vivesse solo nel `Cargo.toml`, l'inventario tornerebbe a
 //! *descrivere* ciò che esiste invece di costituirlo — verde anche in una build
@@ -298,7 +298,7 @@ pub fn every_official_feature() -> &'static [OfficialFeature] {
 /// secondo elenco.
 ///
 /// È il nome che la
-/// [decisione 0055](../../../docs/decisions/0055-il-banco-del-lato-host.md)
+/// [decisione 0055](../../../docs/decisions/0196-test-e-artefatti-generati.md)
 /// aveva promesso, e la forma in cui lo mantiene è la parte che conta: se questa
 /// funzione filtrasse una tabella propria, aggiungere una view vorrebbe dire
 /// ricordarsi di due posti, che è il difetto da cui siamo partiti scritto con

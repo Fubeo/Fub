@@ -1,5 +1,5 @@
 //! **Il pavimento e la porta** (seduta 17: §17.3,
-//! [0062](../../../docs/decisions/0062-il-log-e-il-pavimento-l-evento-e-la-porta.md)).
+//! [0062](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
 //!
 //! Ciò che va storto ha due destinazioni, e la decisione 0062 le distingue con
 //! un criterio: *il log è il pavimento, l'evento è la porta*. Ogni guasto

@@ -1,7 +1,7 @@
 //! **I formati su disco sono quelli dichiarati** (§15.3).
 //!
 //! Ogni file che Fub scrive porta il suo numero di versione, e
-//! [`docs/versionamento.md`](../../../docs/versionamento.md) ne tiene la
+//! [`../../../docs/development/versioning-and-releases.md`](../../../docs/development/versioning-and-releases.md) ne tiene la
 //! tabella: quale schema, in quale sorgente, a che numero è oggi. È l'elenco
 //! che qualcuno legge il giorno in cui deve capire perché un file dell'utente
 //! non si apre più — e fino a questo test era un elenco **tenuto a mano**.
@@ -27,7 +27,7 @@
 //! nessun `include_str!` può vedere — un file che il test non include è un file
 //! di cui il test non sa niente. Ma due conti uguali non dicono che siano gli
 //! stessi undici: quello lo dice questo test, riga per riga. È la lezione della
-//! [0105](../../../docs/decisions/0105-una-porta-si-nomina-e-un-presupposto-si-compila.md)
+//! [0105](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
 //! applicata a un terzo caso — *il conto prende ciò che nessuno ha elencato, il
 //! test prende ciò che è elencato male* — e nessuno dei due basta da solo.
 //!
@@ -35,8 +35,8 @@
 //! `lean_ipc.rs`: se un file si sposta, questo test **non compila**.
 
 /// La tabella che questo test giudica: `## 3. Le versioni degli schemi su
-/// disco`, in `docs/versionamento.md`.
-const DOC: &str = include_str!("../../../docs/versionamento.md");
+/// disco`, in `../../../docs/development/versioning-and-releases.md`.
+const DOC: &str = include_str!("../../../docs/development/versioning-and-releases.md");
 
 /// I sorgenti che la tabella cita. Un formato nuovo aggiunge una riga là e una
 /// riga qui, e finché non fa tutt'e due il test lo dice per nome.
@@ -104,7 +104,7 @@ fn table_rows() -> Vec<TableRow> {
     let mut out = Vec::new();
     for line in DOC.lines() {
         let line = line.trim();
-        if !line.starts_with('|') || !line.contains("](../crates/") {
+        if !line.starts_with('|') || !line.contains("](../../crates/") {
             continue;
         }
         let cols: Vec<&str> = line.split('|').map(str::trim).collect();
@@ -201,7 +201,7 @@ fn every_table_row_points_to_a_constant_that_exists() {
     assert!(
         rows.len() >= 11,
         "the schema table has shrunk: {} rows read from \
-         docs/versioning.md. If a format was removed it must be removed from \
+         docs/development/versioning-and-releases.md. If a format was removed it must be removed from \
          SOURCES too; if the table shape changed, this parser is the one that \
          is old.",
         rows.len()
@@ -246,7 +246,7 @@ fn every_version_constant_has_its_row_in_the_table() {
             assert!(
                 cited,
                 "{}:{} declares version {} and no row of \
-                 docs/versioning.md says so. An on-disk format not in the table \
+                 docs/development/versioning-and-releases.md says so. An on-disk format not in the table \
                  is a format nobody will know how to migrate: the row costs less \
                  than the day it will be needed.",
                 file, number, value

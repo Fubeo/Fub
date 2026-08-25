@@ -8,7 +8,7 @@
 // ritoccherebbe un esadecimale a mano — con ragione, magari — e da quel momento
 // la ricetta racconterebbe un tema che non esiste, senza che niente lo dica. È
 // lo stesso schema dei `*.generated.ts` e la stessa ragione della
-// [0020](../../../docs/decisions/0020-le-regole-in-un-posto-solo.md): un posto
+// [0020](../../../docs/decisions/README.md): un posto
 // in cui scriverlo, due da cui leggerlo.
 //
 // Il confronto si fa qui e non solo in `tema/genera.mjs --verifica` perché
@@ -173,7 +173,7 @@ describe("il vocabolario cresce solo in modo additivo", () => {
   /// ruolo nuovo si aggiunge in fondo e il presidio non se ne lamenta; un ruolo
   /// che sparisce o cambia nome diventa rosso, perché è la sola operazione che
   /// rompe ogni tema di terzi già scritto — e l'additività che la
-  /// [0002](../../../docs/decisions/0002-additivita-del-contratto.md) impone al
+  /// [0002](../../../docs/decisions/0180-compatibilita-wit-additiva.md) impone al
   /// contratto varrebbe meno di quella che ci si impone da soli.
   const ROLES_31_2 = [
     "space-1", "space-2", "space-3", "space-4", "space-5",
