@@ -16,6 +16,10 @@ function walk(dir) {
 function limitFor(relative) {
   if (relative === "docs/README.md" || relative === "docs/decisions/README.md") return 150;
   if (/^docs\/decisions\/\d{4}-/.test(relative)) return 180;
+  if (relative === "docs/project/todo-modularita-superfici-di-editing.md") {
+    // Piano operativo temporaneo: conserva fasi, API candidate, test e DoD.
+    return 650;
+  }
   if (relative.startsWith("docs/reference/")) return 550;
   return 450;
 }

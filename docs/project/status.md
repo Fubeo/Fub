@@ -1,7 +1,6 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** `main` al commit
-> `5d8af02050700c738e73461a7a0a98059d91dfc2`, 25 agosto 2026.
+> **Stato aggiornato per:** `main`, 25 agosto 2026.
 
 ## Release corrente
 
@@ -69,6 +68,7 @@ Issue:
 ### Architettura della shell
 
 - [#11 — superfici di editing condivise con un secondo cliente](https://github.com/Fubeo/Fub/issues/11)
+  ([piano operativo](todo-modularita-superfici-di-editing.md))
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
@@ -83,7 +83,9 @@ prova.
 1. chiudere il percorso M5 dimostrato dalle issue #8 e #10;
 2. completare le prove di resilienza #5–#7;
 3. separare la Graph View soltanto con benchmark e test #6/#12;
-4. estrarre il motore di editing soltanto con il secondo cliente #11;
+4. eseguire il
+   [TODO sulle superfici di editing](todo-modularita-superfici-di-editing.md)
+   con il secondo cliente reale tracciato in #11;
 5. chiudere le decisioni sui temi #13;
 6. preparare la prima release dopo il ciclo completo di compatibilità,
    supply chain e installazione.
@@ -92,5 +94,6 @@ prova.
 
 - [Roadmap](roadmap.md)
 - [M5](m5-wasm-runtime.md)
+- [TODO sulle superfici di editing](todo-modularita-superfici-di-editing.md)
 - [Changelog](../../CHANGELOG.md)
 - [Issue aperte](https://github.com/Fubeo/Fub/issues)
