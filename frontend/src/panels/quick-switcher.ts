@@ -6,7 +6,7 @@
 // mezz'ora la scrive su `list_documents` con un `includes()` — e quel giorno
 // l'app avrebbe **due** ricerche, con la peggiore sulla strada più battuta.
 // Quindi non nasce da sé: nasce sulla porta della
-// [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md), che è
+// [0082](../../../docs/decisions/0182-provider-e-porte-generiche.md), che è
 // `IndexQuery::Documents` con i campi ristretti al nome.
 //
 // # Cosa questo file NON contiene
@@ -30,7 +30,7 @@
 //
 // Fino a ieri quella memoria viveva quanto la finestra, in attesa che la §21.7
 // decidesse dove una cronologia si scrive. Adesso lo ha deciso
-// ([0086](../../../docs/decisions/0086-una-cronologia-e-la-sua-porta.md)): resta
+// ([0086](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)): resta
 // fra un avvio e l'altro, nello stato di vista della shell, e ha un
 // interruttore — quindi le due liste qui sotto possono tornare **vuote** anche
 // dopo un mese di uso, e non è un difetto, è qualcuno che ha spento la memoria.
@@ -92,7 +92,7 @@ export function closeQuickSwitcher(): void {
 /// L'accordo è `Mod-o` e sta in `SHELL_KEYS` come tutti gli altri: è quello di
 /// Obsidian, ed è libero in tutti e tre i registri che questa shell tiene — i
 /// comandi di shell, le spec del kernel (la fixture della
-/// [0081](../../../docs/decisions/0081-un-accordo-ha-un-proprietario.md)) e la
+/// [0081](../../../docs/decisions/0185-capability-un-solo-guard.md)) e la
 /// keymap dell'editor, che è il terzo e che nessun presidio guarda ancora.
 ///
 /// Qui parte anche la memoria corta: la mette in ascolto chi ha interesse, che è

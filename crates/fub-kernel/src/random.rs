@@ -48,11 +48,11 @@ static COUNTER: AtomicU64 = AtomicU64::new(0);
 /// `n` byte di caso, o il rifiuto se `n` supera [`MAX_RANDOM_BYTES`].
 ///
 /// Il tetto c'era già; ciò che è cambiato con la
-/// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md) è che si
+/// [0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md) è che si
 /// **sente**. Prima chi ne chiedeva quattromila ne riceveva mille e l'unico modo
 /// di accorgersene era misurare la lunghezza di ciò che era tornato: una perdita
 /// che non si dichiara, cioè l'unico posto del progetto in cui l'invariante
-/// della [0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)
+/// della [0034](../../../docs/decisions/0184-eventi-accodati-e-job.md)
 /// era falsa. Il criterio della 0039 — *una richiesta assurda non deve far
 /// fallire la generazione di un id* — resta onorato: le identità chiedono
 /// sedici, dieci, `len` byte, e nessuna di quelle richieste ha smesso di

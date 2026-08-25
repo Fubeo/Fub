@@ -1,12 +1,12 @@
 //! **Il ponte degli eventi** (§10.2,
-//! [decisione 0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)):
+//! [decisione 0034](../../../docs/decisions/0184-eventi-accodati-e-job.md)):
 //! da un capo il bus del kernel, dall'altro chi guarda — il webview, una CLI,
 //! SSE.
 //!
 //! Prima era un thread scritto dentro [`Host::open`](crate::Host::open) che
 //! faceva `recv()` e `emit` in un ciclo senza freno: **un messaggio per
 //! evento**, e nessuna politica sua. Il costo non si vedeva perché la
-//! [decisione 0011](../../../docs/decisions/0011-il-lotto.md) aveva già tolto i
+//! [decisione 0011](../../../docs/decisions/README.md) aveva già tolto i
 //! *ridisegni* — dentro un lotto arriva un `batch-ended` solo — ma non i
 //! **messaggi**: una rinomina con 200 backlink li faceva attraversare tutti e
 //! 200, uno per uno.
@@ -315,7 +315,7 @@ mod tests {
     /// banchi. Ciò che serve provare sono due numeri e una posizione, e quelli
     /// si contano senza chiedere niente a nessuno.
     ///
-    /// [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
+    /// [decisione 0120]: ../../../docs/decisions/README.md
     struct Exit {
         open: std::sync::atomic::AtomicBool,
         /// Quanti notice sono usciti davvero.

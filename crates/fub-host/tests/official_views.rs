@@ -7,7 +7,7 @@
 //! registra qualcosa senza passare di lì — nessun test diventa rosso, perché
 //! ogni test che itera l'inventario continua a vedere ciò che l'inventario dice.
 //! È il difetto del
-//! [§16.7](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
+//! [§16.7](../../../docs/project/roadmap.md#167-due-presidi-sono-esaustivi-a-memoria-non-per-costruzione)
 //! spostato di un file, non chiuso.
 //!
 //! Il secondo è un elenco da cui la registrazione **discende**, ed è quello che

@@ -186,7 +186,7 @@ pub(crate) struct CoreIndex {
     registry: Arc<FormatRegistry>,
     ///
     /// Sta qui e non sul `Workspace` per la ragione della
-    /// [0019](../../../../docs/decisions/0019-il-canale-dati.md): *le risposte
+    /// [0019](../../../../docs/decisions/0182-provider-e-porte-generiche.md): *le risposte
     /// del kernel sono un provider*, e questa è una risposta del kernel. Metterla
     /// sul workspace avrebbe voluto dire intercettare una variante **prima** del
     /// router — cioè rimettere il ramo privilegiato che quella decisione ha
@@ -491,9 +491,9 @@ pub(crate) struct WatchState {
     /// l'[`Indicizzazione`](crate::Indicizzazione), che chi ha i thread si passa
     /// di fetta in fetta — e qui sta solo ciò che se ne **osserva**. È la stessa
     /// divisione della bandiera del rilevamento
-    /// ([0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md))
+    /// ([0030](../../../../docs/decisions/0183-composizione-host-kernel.md))
     /// e del campanello dei job
-    /// ([0032](../../../docs/decisions/0032-il-runner-dei-job.md)): il kernel
+    /// ([0032](../../../../docs/decisions/0183-composizione-host-kernel.md)): il kernel
     /// non fa il mestiere, ma è l'unico posto da cui la domanda si può fare.
     /// Registra l'esito di una sincronizzazione per-path.
     pub(crate) indexing: IndexingState,
@@ -940,7 +940,7 @@ impl CoreIndex {
     /// punto in cui si vedeva: `heading` e `block` di un `LinkTarget::Wiki`
     /// venivano scartati con un `..` — non per dimenticanza, ma perché non
     /// c'era dove metterli. Il modello li parsa dalla
-    /// [0003](../../../../docs/decisions/0003-modello-del-documento.md), il
+    /// [0003](../../../../docs/decisions/0181-modello-documento-e-arene.md), il
     /// confine li trasporta, la shell li rispecchia, e si perdevano nell'ultimo
     /// centimetro.
     ///

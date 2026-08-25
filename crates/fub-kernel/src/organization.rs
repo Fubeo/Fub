@@ -10,7 +10,7 @@
 //! ricostruiscono — tenuti peggio di quelli derivati.
 //!
 //! Adesso è il kernel a possederlo, gemello di [`crate::settings`] e con la
-//! stessa disciplina della [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md):
+//! stessa disciplina della [decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md):
 //! versione di schema, [`write_atomic`], e un file che non si è potuto leggere
 //! **non si riscrive**. Il file resta dov'era, `<root>/.fub/workspace.json`,
 //! perché quello è il posto giusto: l'organizzazione **viaggia col vault**, ed è
@@ -105,7 +105,7 @@ pub struct OrganizationStore {
     /// Il supporto del vault (§15.1), assente per lo store in memoria. Il
     /// sidecar sta in `.fub/`, cioè **dentro il vault**, e da qui in poi ci
     /// passa sopra come tutto il resto
-    /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
+    /// ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)).
     storage: Option<Arc<dyn VaultStorage>>,
     /// L'organizzazione, che è **anche** ciò che sta nel sidecar: un
     /// [`Durable`] perché «su disco prima, in memoria dopo» non dipendesse dal

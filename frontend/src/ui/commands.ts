@@ -31,8 +31,8 @@
 //
 // # E la scorciatoia di un comando di shell si riconfigura
 //
-// Fino alla [0116](../../../docs/decisions/0116-lo-scope-di-una-chiave-segue-la-vita-di-chi-la-dichiara.md)
-// no, e la ragione stava nella [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md):
+// Fino alla [0116](../../../docs/decisions/0185-capability-un-solo-guard.md)
+// no, e la ragione stava nella [0077](../../../docs/decisions/README.md):
 // la chiave che la tiene la fabbrica il kernel registrando un `CommandProvider`,
 // e un comando che vive nella webview un provider non ce l'ha. La via d'uscita
 // non è stata dargliene uno finto — sarebbe un comando che il registro elenca e

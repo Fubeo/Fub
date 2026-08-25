@@ -26,7 +26,7 @@
 //! una dipendenza che il kernel non porta — e risponderebbe *peggio*.
 //!
 //! Quindi il locale segue la strada del contesto di sessione
-//! ([decisione 0007](../../../docs/decisions/0007-contesto-di-sessione.md)): lo
+//! ([decisione 0007](../../../docs/decisions/README.md)): lo
 //! **pubblica la shell**, il kernel lo custodisce senza derivarlo, e chi sta
 //! dentro il confine lo **chiede** con
 //! [`HostEnv::user_locale`](crate::traits::HostEnv::user_locale).
@@ -38,7 +38,7 @@
 //! Sopra ciò che la shell riporta stanno le **impostazioni** (§11.1): `locale.*`
 //! è un pugno di chiavi di livello macchina, e una chiave vuota vuol dire
 //! *«come il sistema»*. È la precedenza della
-//! [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)
+//! [decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 //! applicata a un fatto invece che a una preferenza: vault → macchina → ciò che
 //! la shell riporta → [`Locale::default`]. Un utente italiano su un sistema
 //! inglese non deve cambiare il sistema per cambiare Fub.

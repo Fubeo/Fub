@@ -17,7 +17,7 @@
 //! - [`testing`]: il **banco del lato provider** — un host in memoria e una
 //!   suite di conformità con cui provare un provider contro il **contratto**
 //!   invece che contro il kernel ([decisione
-//!   0054](../../../docs/decisions/0054-il-banco-del-lato-provider.md)).
+//!   0054](../../../docs/decisions/0196-test-e-artefatti-generati.md)).
 //!
 //! # Cosa questo crate non può avere
 //!
@@ -27,7 +27,7 @@
 //! provider, cioè esattamente dove il progetto ha deciso che non stia. Il banco
 //! del lato *host* — costruire un vault vero, registrare, far girare un giro di
 //! eventi — sta in `fub-testkit`, che è un altro crate per questa ragione
-//! ([decisione 0055](../../../docs/decisions/0055-il-banco-del-lato-host.md)).
+//! ([decisione 0055](../../../docs/decisions/0196-test-e-artefatti-generati.md)).
 //! È presidiato da `fub-abi/tests/dependency_invariant.rs`.
 
 pub use fub_abi as abi;

@@ -1,5 +1,5 @@
 //! **Il banco del filtro dei tag**: conta le allocazioni, non i millisecondi
-//! (§17.1, [decisione 0113](../../../docs/decisions/0113-il-banco-conta-le-operazioni.md)).
+//! (§17.1, [decisione 0113](../../../docs/decisions/0196-test-e-artefatti-generati.md)).
 //!
 //! Il pannello tag ridisegna a **ogni battuta** nel campo filtro, e ridisegnarlo
 //! vuol dire ripassare tutti i tag del vault. La riga che c'era —

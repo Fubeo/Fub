@@ -1,11 +1,11 @@
 //! Il **registry dei bundle**: chi monta un plugin coi suoi provider, e chi lo
 //! possiede finché è vivo (§9.3,
-//! [decisione 0031](../../../docs/decisions/0031-chi-possiede-i-bundle.md)).
+//! [decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //!
 //! # Perché sta qui e non nel kernel
 //!
 //! Perché l'`HostApi` **non ha capacità di registrazione**, e non ne avrà: la
-//! [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md) ha
+//! [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md) ha
 //! chiuso l'elenco, e nessun `register_*` ci compare. Ne segue una cosa sola,
 //! ed è la forma di questo modulo: **un plugin non può registrarsi da sé**.
 //! Qualcuno deve leggere il suo manifest, dichiararlo, chiamare il suo
@@ -213,7 +213,7 @@ impl BundleError {
 /// Un bundle montato: l'id con cui è dichiarato, e il suo plugin.
 ///
 /// Il plugin è un `Arc` e non un `Box` dalla
-/// [0032](../../../docs/decisions/0032-il-runner-dei-job.md): il runner esegue
+/// [0032](../../../docs/decisions/0183-composizione-host-kernel.md): il runner esegue
 /// `run_job` su un thread suo e per tutta la durata del job, quindi ha bisogno
 /// di **tenere** il corpo senza tenere il lock di questo registry — o chiudere
 /// il vault aspetterebbe la fine di un export. `Arc<dyn Plugin>` è la forma di
@@ -228,7 +228,7 @@ struct MountedBundle {
 /// Possedere il plugin è tutto il mestiere di questo tipo, e da lì
 /// vengono le due cose che prima non avevano un posto dove stare:
 /// [`Plugin::deactivate`], che non aveva un chiamante
-/// ([decisione 0028](../../../docs/decisions/0028-come-un-componente-smette.md)),
+/// ([decisione 0028](../../../docs/decisions/0183-composizione-host-kernel.md)),
 /// e [`Plugin::run_job`], che è il corpo di un job e che il runner del §9.3
 /// dovrà pur chiedere a qualcuno.
 ///
@@ -425,7 +425,7 @@ impl BundleRegistry {
 
     /// **Il corpo di un job.** Chi drena `take_pending_jobs` sa a quale plugin
     /// chiederlo (è il campo che la
-    /// [0028](../../../docs/decisions/0028-come-un-componente-smette.md) ha
+    /// [0028](../../../docs/decisions/0183-composizione-host-kernel.md) ha
     /// messo in `PendingJob`) e lo trova qui.
     ///
     /// Rende un `Arc` clonato e non un prestito, ed è il punto: chi esegue un
@@ -500,7 +500,7 @@ impl BundleRegistry {
     }
 
     /// **Chiude il vault**: l'ordine della
-    /// [0029](../../../docs/decisions/0029-chiudere-un-vault-e-chiuderli-tutti.md)
+    /// [0029](../../../docs/decisions/0183-composizione-host-kernel.md)
     /// — l'evento mentre tutti sono ancora vivi, il flush di tutti gli indici,
     /// e poi ognuno che smette a rovescio — con `Plugin::deactivate` di ogni
     /// bundle infilato al proprio posto.

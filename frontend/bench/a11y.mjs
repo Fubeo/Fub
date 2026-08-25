@@ -34,7 +34,7 @@
 //
 // Una regola che non si applica a nessun elemento e una regola che passa su
 // tutti danno lo stesso verde — è la lezione della
-// [0109](../../docs/decisions/0109-un-conteggio-che-non-si-sa-non-e-un-nome-solo.md).
+// [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md).
 // Qui si conta quanti elementi `axe` ha davvero esaminato, e una scena che ne
 // esamina **zero** è rossa: vuol dire che non c'è testo, cioè che la pagina non
 // è quella che si credeva.

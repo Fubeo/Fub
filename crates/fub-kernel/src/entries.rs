@@ -32,7 +32,7 @@
 //!   formato del [`crate::journal`], §15.7), e cambiare una voce su N appende
 //!   il solo record di quel cambiamento invece di riscrivere la tabella intera.
 //!   L'atomicità della
-//!   [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+//!   [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 //!   qui non c'è, e non serve: un file mezzo scritto ha una riga rotta in coda,
 //!   e una riga rotta si scarta — un derivato che si ricostruisce non ha
 //!   bisogno che la sua scrittura sia «o c'è o non c'è», ha bisogno che chi
@@ -43,7 +43,7 @@
 //!   che fonde sotto lucchetto e poi scrive **senza `fsync`**: un crash può
 //!   lasciare la coda troncata o assente, e troncata o assente si ricostruisce,
 //!   che è la riga sopra. È la stessa distinzione della
-//!   [0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)
+//!   [0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 //!   portata alla classe che lei non conosceva: per i **documenti** la promessa
 //!   «o c'è o non c'è» vale e si paga, per un derivato il `fsync` comprerebbe
 //!   una riapertura lenta in meno a ogni chiusura del vault — e il suo prezzo
@@ -258,7 +258,7 @@ pub(crate) struct EntryStore {
     /// Il supporto del vault (§15.1): la tabella sta sotto `.fub/data/`, cioè
     /// dentro il vault, e ci passa sopra come i documenti
     storage: Arc<dyn VaultStorage>,
-    /// ([0065](../../../docs/decisions/0065-una-scrittura-o-c-e-o-non-c-e.md)).
+    /// ([0065](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)).
     /// Ciò che si sa, e che è **anche** ciò che c'è nel file: un [`Durable`]
     /// perché fossero la stessa cosa per costruzione e non per disciplina —
     /// questo campo si assegnava prima della scrittura, e una scrittura fallita

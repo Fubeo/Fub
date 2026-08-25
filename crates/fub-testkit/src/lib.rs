@@ -6,7 +6,7 @@
 //! un provider **contro il contratto**, qui si prova qualcosa **contro il
 //! kernel vero**. Due banchi, due crate, e la ragione per cui non possono
 //! essere lo stesso sta nella [decisione
-//! 0055](../../../docs/decisions/0055-il-banco-del-lato-host.md).
+//! 0055](../../../docs/decisions/0196-test-e-artefatti-generati.md).
 //!
 //! # Perché è un builder e non una funzione `vault()`
 //!
@@ -409,7 +409,7 @@ impl EventHandler for Spy {
 /// invece di elencarli a mano — un `ogni_view_ufficiale()`. Il posto naturale è
 /// questo modulo, e non c'è: costruirlo qui vorrebbe dire mettere
 /// `fub-features` fra le dipendenze di questo crate, che è una decisione della
-/// [seduta 16](../../../docs/roadmap/16-crate-sdk-banchi-di-prova.md) e non di
+/// [seduta 16](../../../docs/project/roadmap.md) e non di
 /// questa. La nota resta perché il posto sia già nominato quando quella voce si
 /// aprirà.
 #[doc(hidden)]

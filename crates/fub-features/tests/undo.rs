@@ -461,7 +461,7 @@ fn nothing_missing_means_no_partial_at_all() {
 /// mette la voce in pila, che è l'unico momento in cui i due pezzi sono ancora
 /// insieme.
 ///
-/// [decisione 0045]: ../../../docs/decisions/0045-l-undo-ha-due-pile.md
+/// [decisione 0045]: ../../../docs/decisions/0190-sessioni-documento-e-undo.md
 #[test]
 fn undoing_a_half_done_operation_says_it_was_half_done() {
     let vault = Vault::new();

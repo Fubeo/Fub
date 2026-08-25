@@ -52,7 +52,7 @@ const CULL_MARGIN = 50;
 export const TRAIL_THRESHOLD = 0.02;
 const ALPHA_TRAIL = 0.25;
 /// Alpha del «resto del grafo» quando c'è un focus: il quartiere a 1 salto
-/// resta pieno, tutto il resto scende qui (§5.4 di graph.md).
+/// resta pieno, tutto il resto scende qui (§5.4 di ../../../../docs/product/search-links-and-graph.md).
 const BACKGROUND_ALPHA = 0.12;
 /// Il pulse dei nodi aperti vive solo mentre la simulazione è calda: a grafo
 /// fermo un alone che oscilla senza motivo è rumore visivo.

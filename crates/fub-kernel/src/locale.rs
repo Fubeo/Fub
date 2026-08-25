@@ -18,9 +18,9 @@
 //!   cui un default può dire «non decidere tu».
 //!
 //! La precedenza è quella della
-//! [decisione 0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)
+//! [decisione 0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 //! come la
-//! [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md) l'ha
+//! [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) l'ha
 //! ridotta, con un gradino in più in fondo: **vault → ciò che la shell riporta
 //! → [`Locale::default`]**. Il gradino nuovo sta *sotto* la configurazione e
 //! *sopra* il default dello schema, ed è l'unico posto in cui poteva stare: un
@@ -68,7 +68,7 @@ pub const AS_SYSTEM: &str = "";
 /// mentre l'app è viva**: l'utente sposta il fuso del sistema, o passa la
 /// mezzanotte dell'ultima domenica di ottobre e l'offset cambia da solo. Chi
 /// legge non aspetta chi legge, ed è la regola della
-/// [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md).
+/// [decisione 0024](../../../docs/decisions/README.md).
 #[derive(Debug, Default)]
 pub struct SystemLocale {
     inner: RwLock<Locale>,
@@ -106,7 +106,7 @@ impl SystemLocale {
 /// Le impostazioni che il core dichiara per il locale.
 ///
 /// Sono di livello **vault**, come tutto il resto
-/// ([0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)).
+/// ([0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)).
 /// Erano di macchina, con l'argomento della 0036 — un vault arriva da fuori e
 /// non decide in che lingua leggi — e l'argomento non regge il suo prezzo: una
 /// lingua imposta è visibile e si cambia in un gesto, mentre la precedenza fra

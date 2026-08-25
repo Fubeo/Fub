@@ -56,7 +56,7 @@ fn vault() -> (tempfile::TempDir, Workspace) {
     // ragione che non è di questa voce: il `#Oggi` dentro le parentesi finisce
     // anche nello scanner dei tag, e la nota si ritrova un tag `Oggi` che
     // nessuno ha scritto. È la divergenza già dichiarata dalla
-    // [0060](../../../docs/decisions/0060-il-modello-dice-il-vero-sui-byte.md)
+    // [0060](../../../docs/decisions/0180-compatibilita-wit-additiva.md)
     // e ripetuta dalla 0115 — *«il modello inventa un tag dentro
     // `[[#Sezione]]`»* — e non si chiude di straforo dentro un presidio che
     // guarda un'altra cosa.

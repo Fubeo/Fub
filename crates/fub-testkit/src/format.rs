@@ -135,7 +135,7 @@ impl FormatProvider for SampleText {
 /// forma di un estrattore (PDF, OCR, trascrizione) senza esserne uno.
 ///
 /// Esiste perché `SourceKind::Bytes` c'era dalla
-/// [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+/// [decisione 0017](../../../docs/decisions/0182-provider-e-porte-generiche.md)
 /// e nessun cliente lo percorreva: un ramo dichiarato senza nessuno che ci
 /// passi è indistinguibile da un ramo rotto, e infatti era rotto — chi
 /// indicizzava non consultava il descrittore e leggeva testo comunque (§21.8).

@@ -1,7 +1,7 @@
 //! Cosa dicono di sé i byte di un file — e cosa non si fa loro.
 //!
 //! Questo modulo **rileva e dichiara**. Non converte niente, e la differenza non
-//! è di stile: il catalogo (§2.4 di `docs/FEATURES.md`) promette che «un file che
+//! è di stile: il catalogo (§2.4 di `../../../../docs/product/overview.md`) promette che «un file che
 //! Fub non ha modificato resta identico byte per byte; uno che ha modificato
 //! differisce solo dove la modifica è avvenuta», e ne fa una condizione di
 //! prodotto — *«un `git diff` che mostra righe che l'utente non ha scritto è un

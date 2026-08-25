@@ -30,7 +30,7 @@
 //!   faccetta deve fare, ed è la stessa regola dei tag.
 //!
 //! [`IndexQuery::Documents`]: crate::traits::IndexQuery::Documents
-//! [decisione 0155]: ../../../docs/decisions/0155-fra-specie-diverse-decide-un-rango-fisso.md
+//! [decisione 0155]: ../../../../docs/decisions/0187-autorita-e-schemi-su-disco.md
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -153,8 +153,8 @@ fn compare(a: &PropertyValue, b: &PropertyValue) -> Option<Ordering> {
 /// fra specie diverse perché `Equal` non era un ordine e `Greater` non era
 /// antisimmetrico.
 ///
-/// [decisione 0005]: ../../../docs/decisions/0005-canale-dati-verso-le-view.md
-/// [decisione 0155]: ../../../docs/decisions/0155-fra-specie-diverse-decide-un-rango-fisso.md
+/// [decisione 0005]: ../../../../docs/decisions/0182-provider-e-porte-generiche.md
+/// [decisione 0155]: ../../../../docs/decisions/0187-autorita-e-schemi-su-disco.md
 fn species_rank(v: &PropertyValue) -> u8 {
     match v {
         PropertyValue::Number(_) => 0,
@@ -173,7 +173,7 @@ fn species_rank(v: &PropertyValue) -> u8 {
 /// il [rango fisso](`species_rank`), che non si ribalta col decrescente
 /// ([decisione 0155]).
 ///
-/// [decisione 0155]: ../../../docs/decisions/0155-fra-specie-diverse-decide-un-rango-fisso.md
+/// [decisione 0155]: ../../../../docs/decisions/0187-autorita-e-schemi-su-disco.md
 pub fn order_of(
     a: Option<&PropertyValue>,
     b: Option<&PropertyValue>,

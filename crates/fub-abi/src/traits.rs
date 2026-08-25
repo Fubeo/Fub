@@ -31,7 +31,7 @@ use crate::ui::{UiAction, UiNode, ViewUpdate};
 // Job: il varco per il lavoro lungo. Le chiamate dei trait sono sincrone e
 // devono restare brevi (a M5 una deadline le tronca); tutto ciò che è lento —
 // rete, calcolo pesante, camminare il vault intero — passa da qui e gira FUORI
-// dal giro sincrono del kernel. Vedi docs/architecture/plugin-boundary.md,
+// dal giro sincrono del kernel. Vedi ../../../docs/architecture/plugin-runtime.md,
 // "Lavoro lungo: i job".
 // ---------------------------------------------------------------------------
 
@@ -198,7 +198,7 @@ pub enum EntryKind {
 /// ieri» non avevano una **fonte**, non una implementazione.
 ///
 /// La chiave è il path, come per ogni altra cosa del vault
-/// ([decisione 0043](../../../docs/decisions/0043-il-path-e-la-chiave.md)):
+/// ([decisione 0043](../../../docs/decisions/0188-identita-path-e-rename.md)):
 /// [`DocId`] nomina *un file del vault*, e non un secondo tipo identico che
 /// significhi la stessa cosa per gli allegati.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -232,7 +232,7 @@ pub struct VaultEntry {
     /// byte di ogni PNG all'apertura è esattamente il costo che l'anagrafe
     /// esiste per togliere. Chi la vorrà — dedup (13.1), duplicati (3.2),
     /// integrità (24.2) — la farà calcolare da un job, che è il posto del
-    /// lavoro lungo ([decisione 0032](../../../docs/decisions/0032-il-runner-dei-job.md)).
+    /// lavoro lungo ([decisione 0032](../../../docs/decisions/0183-composizione-host-kernel.md)).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fingerprint: Option<Revision>,
 }
@@ -256,7 +256,7 @@ pub struct VaultEntry {
 /// nome, non si rinomina e non si cancella.
 ///
 /// Nome e cartella genitore **non sono campi**, per la ragione per cui il MIME
-/// di un allegato non lo è ([decisione 0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)):
+/// di un allegato non lo è ([decisione 0046](../../../docs/decisions/0188-identita-path-e-rename.md)):
 /// sono funzioni pure del path — l'ultimo segmento, e
 /// [`folder_of`](crate::query::folder_of) — e copiarle qui vorrebbe dire
 /// scriverne una copia per cartella di ogni vault.
@@ -370,7 +370,7 @@ pub trait VaultRead: Send + Sync {
     /// che è il modo in cui omnisearch fa entrare gli allegati nella ricerca —
     /// non ha modo di chiedere ciò che gli serve. Il kernel sapeva già leggere a
     /// byte per conto proprio (`SourceKind::Bytes`, dalla
-    /// [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md));
+    /// [decisione 0017](../../../docs/decisions/0182-provider-e-porte-generiche.md));
     /// quel sapere si fermava sul confine, e questa è la firma che lo fa passare
     /// (§21.8).
     ///
@@ -686,7 +686,7 @@ pub trait VaultStructure: VaultRead {
 // assoluti e non può uscire dal proprio recinto.
 // È l'alternativa a un'API filesystem scoped, ed è stata scelta perché il
 // recinto qui è una proprietà della firma, non una convenzione da
-// rispettare — vedi docs/architecture/plugin-boundary.md.
+// rispettare — vedi ../../../docs/architecture/plugin-runtime.md.
 //
 // Sono **due** famiglie e non una, per la stessa ragione per cui lo sono la
 // lettura e la scrittura del vault: il percorso di render può rileggere ciò che
@@ -747,7 +747,7 @@ pub trait SettingsRead: Send + Sync {
 
 /// Scrivere un'impostazione **che si è dichiarata scrivibile da un programma**.
 ///
-/// È la metà che la [decisione 0010](../../../docs/decisions/0010-comando-descritto-a-una-macchina.md)
+/// È la metà che la [decisione 0010](../../../docs/decisions/README.md)
 /// aveva lasciato aperta. Due condizioni, e nessuna delle due basta da sola: il
 /// permesso `fub:write-settings` nel manifest (chi scrive), e
 /// [`SettingSpec::program_writable`](crate::settings::SettingSpec::program_writable)
@@ -841,13 +841,13 @@ pub trait ViewStateWrite: ViewStateRead {
 /// grandezza sopra ogni identità che si possa voler generare. Il tetto c'è
 /// perché una capacità senza tetto è un modo di far allocare all'host quanto
 /// pare a chi chiama — la stessa disciplina del freno degli eventi
-/// ([decisione 0034](../../../docs/decisions/0034-il-freno-e-il-raggruppamento.md)),
+/// ([decisione 0034](../../../docs/decisions/0184-eventi-accodati-e-job.md)),
 /// dove il tetto sta con chi ritira.
 ///
 /// **Non è un termine del contratto.** Il numero non attraversa il confine, e
 /// chi lo supera non lo scopre chiedendolo ma sentendoselo dire: sopra il tetto
 /// `random_bytes` rende [`BadArgs`](PluginError::BadArgs) invece di mille byte
-/// zitti ([decisione 0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md)).
+/// zitti ([decisione 0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md)).
 /// Così resta alzabile senza rompere nessuno — una promessa pubblica di mille
 /// byte, dopo il congelamento di M4, sarebbe stata mille byte per sempre.
 pub const MAX_RANDOM_BYTES: u32 = 1024;
@@ -905,7 +905,7 @@ pub trait HostEnv: Send + Sync {
     /// Sotto WASI il caso non c'è di default: è letteralmente lo stesso buco
     /// dell'orologio, un metodo più in là. Ogni identità che Fub genera lo
     /// chiede — UUID per nota (2.2), Zettelkasten id (8.3), id di blocco (5.2, e
-    /// la [decisione 0003](../../../docs/decisions/0003-modello-del-documento.md)),
+    /// la [decisione 0003](../../../docs/decisions/0181-modello-documento-e-arene.md)),
     /// id di annotazione (13.3) — e senza, ognuna di quelle feature si
     /// arrangerebbe con l'orologio, che a due chiamate nello stesso millisecondo
     /// dà lo stesso valore.
@@ -1132,19 +1132,19 @@ pub trait HostServices: Send + Sync {
 
 /// **Parlare con qualcosa che non sta sul disco** (§23.3).
 ///
-/// La [0013](../../../docs/decisions/0013-elenco-delle-capacita.md) l'aveva
+/// La [0013](../../../docs/decisions/0185-capability-un-solo-guard.md) l'aveva
 /// tenuta fuori con **due bloccanti nominati** — *«servono prima §9.1 (un
 /// lavoro lungo che vede il vault) perché sia utile e §7.3 (`network` letto da
 /// qualcuno) perché sia sicura»* — ed è la forma migliore in cui un no si possa
 /// scrivere. Sono caduti tutti e due: il primo con la
-/// [0027](../../../docs/decisions/0027-il-lavoro-lungo-vede-il-vault.md), il
-/// secondo con la [0021](../../../docs/decisions/0021-il-confine.md), che aveva
+/// [0027](../../../docs/decisions/0183-composizione-host-kernel.md), il
+/// secondo con la [0021](../../../docs/decisions/0185-capability-un-solo-guard.md), che aveva
 /// scritto perfino la riga d'innesto.
 ///
 /// # Il permesso non dice solo *se*: dice **dove**
 ///
 /// `fub:network` porta come parametro una **allowlist di host**, e lo prometteva
-/// dalla [0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+/// dalla [0017](../../../docs/decisions/0182-provider-e-porte-generiche.md)
 /// senza che nessuno la leggesse. È l'unico permesso il cui parametro **si
 /// onora**, e la ragione per cui si è cominciato da qui invece che dai prefissi
 /// di path è che qui il divario fra ciò che il manifest dichiara e ciò che
@@ -1188,7 +1188,7 @@ pub trait HostNetwork: Send + Sync {
     /// nessun filo, e chi lo riceve deve poterlo dire diversamente.
     ///
     /// **Il tetto di tempo non attraversa il confine**, per la regola della
-    /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md): un
+    /// [0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md): un
     /// limite dell'host dev'essere visibile quando morde, non interrogabile.
     /// Chi lo supera riceve un `Io` che lo dice, e il numero resta alzabile
     /// senza rompere nessuno.
@@ -1263,7 +1263,7 @@ pub trait TransferRead: Send + Sync {
     /// una singola lettura, e obbliga chi legge a scrivere il ciclo che
     /// dovrebbe scrivere comunque. Un vuoto significa: non c'è altro a partire
     /// da lì. Il tetto non è interrogabile, per la regola della
-    /// [0094](../../../docs/decisions/0094-un-tetto-che-si-fa-sentire.md).
+    /// [0094](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md).
     ///
     /// I rifiuti sono due: [`PermissionDenied`](crate::PluginError::PermissionDenied)
     /// se la famiglia è negata, [`BadArgs`](crate::PluginError::BadArgs) per un
@@ -1909,7 +1909,7 @@ pub struct ViewInterests {
 /// quello di **lettura** (`render_view`) no. Non è un compromesso: è la stessa
 /// divisione che regge `index.query` e il §8.3 — N view che si ridisegnano non
 /// si aspettano a vicenda, e dalla
-/// [decisione 0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md)
+/// [decisione 0024](../../../docs/decisions/README.md)
 /// il render gira davvero in parallelo: era la firma a permetterlo. Il kernel estrae il provider dal workspace per la
 /// durata di `on_action`, come faceva prima per prestargli l'host in scrittura;
 /// il costo di `&mut self` è quindi zero, ed è per questo che la terza strada —
@@ -2006,7 +2006,7 @@ pub trait ViewProvider: Send + Sync {
 /// Quella frase dice cosa la firma **permette**, non cosa succede: la `Page` in
 /// ingresso è una facoltà di chi serve, e per anni nessuno ha guardato se
 /// qualcuno la esercitasse. Il banco del §17.1
-/// ([decisione 0113](../../../docs/decisions/0113-il-banco-conta-le-operazioni.md))
+/// ([decisione 0113](../../../docs/decisions/0196-test-e-artefatti-generati.md))
 /// l'ha guardato contando le allocazioni, e la risposta era **no** per ogni
 /// famiglia dell'indice del kernel: si costruiva l'insieme intero e poi lo si
 /// tagliava, quindi mostrare venti righe di un vault costava quanto il vault.
@@ -2864,13 +2864,13 @@ pub enum IndexQuery {
     /// risposta include un PNG, uno ZIP e un file che nessuno sa cosa sia.
     ///
     /// La ragione per cui esiste è la stessa per cui la
-    /// [decisione 0013](../../../docs/decisions/0013-elenco-delle-capacita.md)
+    /// [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md)
     /// ha tenuto `create_folder` **fuori** dalle capacità: un'anagrafe che
     /// contenesse gli allegati senza che nessuna domanda li sappia chiedere
     /// sarebbe uno stato che il kernel tiene e nessuno può vedere. Passa di qui
     /// e non da una capacità nuova perché è **una risposta con dei dati**, e
     /// quelle passano dal canale dati
-    /// ([decisione 0019](../../../docs/decisions/0019-il-canale-dati.md)).
+    /// ([decisione 0019](../../../docs/decisions/0182-provider-e-porte-generiche.md)).
     ///
     /// L'ordine è quello dei [`DocId`], come per i documenti e per la stessa
     /// ragione: è ciò che rende stabile una risposta paginata.
@@ -2927,7 +2927,7 @@ pub enum IndexQuery {
     /// Passa da qui e non da un comando IPC suo per la ragione di `Watching`
     /// più sopra — i clienti sono già qui — e per una che è di questa variante
     /// soltanto: **leggere non è cambiare**
-    /// ([0085](../../../docs/decisions/0085-leggere-non-e-cambiare.md)), e
+    /// ([0085](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)), e
     /// ritrovare ciò che si stava scrivendo è la lettura più innocua che ci
     /// sia. È chi decide *cosa farne* a mutare qualcosa, e quello è un comando.
     Drafts {
@@ -3416,7 +3416,7 @@ pub enum IndexResult {
     /// base, non un'aggiunta: la variante c'era già, e affiancargliene una
     /// seconda avrebbe lasciato per sempre due casi che rispondono alla stessa
     /// domanda, con chi legge a doversi ricordare quale guardare
-    /// (`docs/architecture/wit-congelato.md`, tabella dei ritagli).
+    /// (`../../../docs/reference/abi-and-wit.md`, tabella dei ritagli).
     Resolved(Option<ResolvedRef>),
     /// Cosa c'è nel vault (risposta a [`IndexQuery::Entries`]), in ordine di
     /// [`DocId`].
@@ -3550,7 +3550,7 @@ impl IndexLoss {
 ///
 /// I tre metodi che portano il dato restituivano `()` mentre `activate` e
 /// `flush` restituivano un `Result`: il ciclo di vita poteva fallire e dirlo,
-/// l'alimentazione no. E il canale che il [`PIANO`](../../../docs/PIANO.md)
+/// l'alimentazione no. E il canale che il [`PIANO`](../../../docs/project/status.md)
 /// dichiarava incapace di perdere pezzi — *«un indice che perde un aggiornamento
 /// non tace: risponde sbagliato, in silenzio»* — manteneva la promessa a metà:
 /// il **canale** non tronca, ma il **destinatario** può rifiutare, e la firma
@@ -3635,13 +3635,13 @@ pub trait IndexProvider: Send + Sync {
     /// I tre metodi dell'alimentazione — questo, `on_documents_removed` e
     /// `reconcile` — sono a **lotto** e restituiscono un esito; erano per
     /// documento e restituivano `()`, ed è il ritaglio della
-    /// [decisione 0051](../../../docs/decisions/0051-l-alimentazione-risponde.md).
+    /// [decisione 0051](../../../docs/decisions/README.md).
     /// Vedi [`IndexLoss`] per cosa vuol dire nominare una perdita, e il doc del
     /// trait per perché la grana e l'esito sono la stessa domanda.
     ///
     /// # Un lotto non è una transazione
     ///
-    /// È la stessa frase della [decisione 0011](../../../docs/decisions/0011-il-lotto.md),
+    /// È la stessa frase della [decisione 0011](../../../docs/decisions/README.md),
     /// e vale nello stesso senso: un lotto **accettato a metà è la norma**, non
     /// un errore. Ciò che si elenca è perduto, ciò che non si elenca è preso, e
     /// non c'è niente da annullare — il chiamante non ritenta il lotto e non
@@ -3759,7 +3759,7 @@ pub trait IndexProvider: Send + Sync {
     /// che nessuno se ne accorga: il `RwLock` del workspace non attraversa il
     /// lock di un provider. Il contratto non chiede di dichiararlo, e non è una
     /// dimenticanza — è la [decisione
-    /// 0026](../../../docs/decisions/0026-due-query-insieme.md): una
+    /// 0026](../../../docs/decisions/0182-provider-e-porte-generiche.md): una
     /// dichiarazione non potrebbe cambiare ciò che è *lecito* (lo dice già
     /// `Send + Sync`), quindi sarebbe un fatto che nessun chiamante può
     /// verificare e su cui nessuno può agire, e sbagliarla non produrrebbe un
@@ -4059,7 +4059,7 @@ pub struct TimerSpec {
 ///
 /// Il caso nuovo è **in coda**, e non «dove starebbe meglio»: l'ordine dei casi
 /// è il discriminante dell'ABI
-/// ([0088](../../../docs/decisions/0088-cio-che-non-e-ancora-successo.md)),
+/// ([0088](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)),
 /// quindi additivo vuol dire in fondo.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -4160,7 +4160,7 @@ pub struct WallClock {
     /// sarebbe onorata da un'altra sveglia, all'ora sbagliata, senza che nessuno
     /// se ne accorga.
     ///
-    /// [0077]: ../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md
+    /// [0077]: ../../../docs/decisions/README.md
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub zone: Option<String>,
     /// Quanto tardi è ancora utile suonare, in secondi. **`0` = mai.**

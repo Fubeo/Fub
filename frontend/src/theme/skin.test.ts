@@ -9,7 +9,7 @@
 // che il browser lo ha portato — e da quel momento i pezzi racconterebbero una
 // pelle che non esiste, finché la prima rigenerazione non se la riprende. È lo
 // stesso schema della ricetta (`recipe.test.ts`) e la stessa ragione della
-// [0020](../../../docs/decisions/0020-le-regole-in-un-posto-solo.md).
+// [0020](../../../docs/decisions/README.md).
 //
 // Il confronto si fa anche qui, e non solo in `theme/generate.mjs --verifica`,
 // perché questo gira dentro `npm test`.

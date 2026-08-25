@@ -12,7 +12,7 @@
 //! chiede un `MemStorage` accanto a `FsStorage`.
 //!
 //! **E il rilevatore può morire** (§9.7,
-//! [decisione 0030](../../../docs/decisions/0030-il-rilevamento-si-puo-chiedere.md)).
+//! [decisione 0030](../../../docs/decisions/0183-composizione-host-kernel.md)).
 //! Prima [`VaultWatcher::is_watching`] rispondeva *per costruzione* — `false`
 //! per [`NoWatcher`], `true` per un debouncer **avviato** — e nessuno gliela
 //! chiedeva: un debouncer che moriva continuava a rispondere `true` per sempre.
@@ -53,7 +53,7 @@ use crate::custody::Custody;
 /// effetto. Chi implementa questo trait aspetta i propri thread dentro il
 /// proprio `Drop`; chi non ne ha — [`NoWatcher`] — non ha niente da aspettare.
 ///
-/// [decisione 0120]: ../../../docs/decisions/0120-un-lucchetto-avvelenato-si-dice-una-volta.md
+/// [decisione 0120]: ../../../docs/decisions/README.md
 pub trait VaultWatcher: Send + Sync {
     /// `true` se questo vault ha il rilevamento delle modifiche esterne
     /// **adesso**.
@@ -149,7 +149,7 @@ pub enum ExternalChange {
 /// dei due. Oggi non si accavallano — il debouncer di `notify` chiama il
 /// proprio handler da un thread solo, e l'handler è un `FnMut` — ma «oggi non
 /// succede» è la forma di garanzia che la
-/// [0024](../../../docs/decisions/0024-chi-legge-non-aspetta-chi-legge.md) ha
+/// [0024](../../../docs/decisions/README.md) ha
 /// già dovuto scrivere in prosa una volta. Qui la dice il prestito: da un
 /// `&mut ExternalSync` non se ne ricava un secondo, quindi due lotti sullo
 /// stesso sincronizzatore non compilano.

@@ -1,6 +1,6 @@
 // La configurazione del grafo: carica, salva e applica.
 //
-// La distinzione delle responsabilità è quella del §9 di `graph.md`: la
+// La distinzione delle responsabilità è quella del §9 di `../../../docs/product/search-links-and-graph.md`: la
 // **forma** dei valori sta in `sim/types.ts` (ghiacciata durante lo sviluppo
 // in parallelo), qui c'è la vita di una conf — da dove viene, dove va a
 // finire, e come nasce un preset. `chart.ts` la consuma, `panels/graph.ts`

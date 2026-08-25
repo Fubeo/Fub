@@ -51,7 +51,7 @@ use crate::settings::SharedSettings;
 /// che dice a chi va cosa.
 ///
 /// È uno dei cinque componenti in cui il §8.1 scompone il `Workspace`
-/// ([decisione 0022](../../../docs/decisions/0022-il-kernel-a-pezzi.md)) — il
+/// ([decisione 0022](../../../../docs/decisions/README.md)) — il
 /// primo ad avere avuto un confine, con la 0019 — ed è tenuto insieme qui
 /// perché le tre parti non hanno senso separate: una tabella di routing senza un core index che si dichiara come
 /// gli altri instraderebbe due varianti su nove.

@@ -12,7 +12,7 @@
 //! **Un provider è sostituibile, e ora anche estendibile.** Chi vuole aggiungere
 //! *una sintassi* a un formato che c'è già non deve più forkarne il provider: la
 //! innesta con una [`SyntaxRule`](crate::custom::SyntaxRule), e il §3.1 è chiuso
-//! con la [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md).
+//! con la [decisione 0017](../../../docs/decisions/0182-provider-e-porte-generiche.md).
 
 use serde::{Deserialize, Serialize};
 
@@ -176,7 +176,7 @@ impl FormatCapabilities {
 /// (§3.1). Rispondere le sole capacità del provider sarebbe rispondere una
 /// verità di laboratorio — `==evidenziato==` non è del provider markdown e
 /// funziona lo stesso — e rimetterebbe in piedi le due categorie di estensioni
-/// che la [decisione 0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md)
+/// che la [decisione 0017](../../../docs/decisions/0182-provider-e-porte-generiche.md)
 /// ha rifiutato: chi accende una sintassi non deve sapere da dove viene, e chi
 /// chiede cosa è acceso nemmeno.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

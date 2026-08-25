@@ -55,7 +55,7 @@ fn read_gitignore(storage: &dyn VaultStorage, root: &Utf8Path) -> Result<Gitigno
 }
 
 /// La **radice unica** di ciò che Fub scrive dentro un vault
-/// ([decisione 0048](../../../docs/decisions/0048-una-radice-sola.md)).
+/// ([decisione 0048](../../../docs/decisions/0188-identita-path-e-rename.md)).
 ///
 /// Ciò che sta direttamente qui dentro è **autorevole** — perso, non si
 /// ricostruisce da niente: il sidecar dell'organizzazione, le impostazioni del
@@ -125,8 +125,8 @@ pub use fub_abi::rules::trash::TRASH_DIR;
 ///
 /// È la stessa che usa Obsidian per "Move to Obsidian trash": un vault
 /// condiviso fra le due app ha **un solo** cestino (vedi
-/// `docs/PIANO.md`, "Decisioni (con il perché)", e
-/// `docs/architecture/data-model.md`, "Il cestino").
+/// `../../../docs/project/status.md`, "Decisioni (con il perché)", e
+/// `../../../docs/architecture/document-model.md`, "Il cestino").
 use fub_abi::rules::trash::{self, file_name_of, strip_stamp};
 
 /// Cartella (dentro [`data_root`]) dei sidecar del cestino: per ogni voce

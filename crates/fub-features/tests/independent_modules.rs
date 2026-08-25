@@ -3,7 +3,7 @@
 //! Il §16.3 lascia lo split in crate fuori con una condizione che non è una
 //! data: *il primo import fra due moduli di feature che non sia un link di
 //! documentazione*. Una condizione scritta così è esattamente ciò che la
-//! [decisione 0072](../../../docs/decisions/0072-un-numero-si-scrive-accanto-a-come-si-ricava.md)
+//! [decisione 0072](../../../docs/decisions/0196-test-e-artefatti-generati.md)
 //! ha censito un piano più in su — un'affermazione in italiano dentro un
 //! documento, che nessun compilatore legge e che invecchia in silenzio. Il
 //! motivo per cui si scrive una condizione è **smettere di doverci pensare**, e
@@ -15,7 +15,7 @@
 //!
 //! # Perché non basta il compilatore, che pure sa farlo valere
 //!
-//! La [0071](../../../docs/decisions/0071-una-feature-si-spegne-dove-si-dichiara.md)
+//! La [0071](../../../docs/decisions/0185-capability-un-solo-guard.md)
 //! lascia il criterio: prima di scrivere un test che legge i sorgenti, si cerca
 //! il confine che il compilatore già sa far valere. Qui c'è, ed è pure già in
 //! CI. Ogni modulo di feature sta dietro il suo `#[cfg]` in `lib.rs`, quindi
@@ -62,7 +62,7 @@ use std::collections::BTreeSet;
 ///   mestiere.
 /// - `inventory.rs` è la **tavola di montaggio**, non una feature che parla a
 ///   un'altra: è l'elenco di cosa esiste
-///   ([0056](../../../docs/decisions/0056-un-elenco-che-e-la-sorgente.md)), e un
+///   ([0056](../../../docs/decisions/0196-test-e-artefatti-generati.md)), e un
 ///   elenco che non nomina ciò che elenca non è un elenco. Importa tutti gli
 ///   altri moduli **per definizione** — è l'unico file che può, ed è anche il
 ///   solo posto da cui uno split lo farebbe comunque: diventerebbe il crate
@@ -78,7 +78,7 @@ const ROOT: &[&str] = &["lib.rs", "inventory.rs"];
 /// **solo** quelli: sei moduli su otto linkano `backlinks::catalog` per spiegare
 /// dove sta un catalogo. Un presidio che contasse la prosa sarebbe rosso da
 /// prima di nascere, che è il difetto in cui la
-/// [0057](../../../docs/decisions/0057-la-dieta-dell-ipc.md) era già inciampata
+/// [0057](../../../docs/decisions/0189-ipc-sottile-e-tipizzato.md) era già inciampata
 /// contando `#[tauri::command]` dentro i commenti.
 ///
 /// Le stringhe perché un `"crate::"` dentro un messaggio d'errore non è un
@@ -218,7 +218,7 @@ fn no_feature_module_names_at_root() {
          \n\
          Cosa fare, in quest'ordine:\n\
          \n\
-           1. leggi la §16.3 in `docs/roadmap/16-crate-sdk-banchi-di-prova.md`\n\
+           1. leggi la §16.3 in `../../../docs/project/roadmap.md`\n\
               e la decisione 0071, che le hanno lasciate scritte la condizione e\n\
               la ragione;\n\
            2. se ciò che hai scritto è davvero un accoppiamento fra due feature,\n\

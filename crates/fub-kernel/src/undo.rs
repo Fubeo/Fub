@@ -28,7 +28,7 @@
 //! disco: è accorgersi di ciò che è cambiato mentre l'app era spenta, o
 //! riproporre l'annullamento di un'operazione il cui documento nel frattempo
 //! qualcun altro ha riscritto tre volte. Quello è il journal del §15.2 — che
-//! dalla [0067](../../../docs/decisions/0067-il-registro-di-cio-che-e-successo.md)
+//! dalla [0067](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 //! esiste, e registra alla mutazione dove questa pila si riempie
 //! all'invocazione —, ed è
 //! un'altra cosa — questa pila è il pezzo che si può avere prima, e senza il
@@ -56,7 +56,7 @@ const CEILING: usize = 100;
 /// dopo — l'esito torna a chi ha invocato, la voce resta qui — quindi se non si
 /// appaiano *adesso* non si appaiano più: mesi dopo, davanti al menu che disfa,
 /// nessuno sa più che quell'archiviazione era di undici note su dodici. È il
-/// danno dichiarato dalla [decisione 0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md)
+/// danno dichiarato dalla [decisione 0045](../../../docs/decisions/0190-sessioni-documento-e-undo.md)
 /// e raccolto dalla §23.14.
 ///
 /// Che a portarlo sia l'**host** e non chi ha scritto il comando è deliberato,
@@ -247,7 +247,7 @@ mod tests {
 
     /// **Il conto dell'operazione resta appaiato alla voce che la disfa.**
     ///
-    /// È la metà che la [decisione 0045](../../../docs/decisions/0045-l-undo-ha-due-pile.md)
+    /// È la metà che la [decisione 0045](../../../docs/decisions/0190-sessioni-documento-e-undo.md)
     /// aveva dichiarato mancante: i due pezzi arrivano dallo stesso esito e si
     /// separano subito dopo, quindi o si appaiano qui o non si appaiano mai più.
     #[test]

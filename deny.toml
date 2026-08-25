@@ -12,7 +12,7 @@
 
 [graph]
 # Le dipendenze che non entrano in nessun binario che spediamo non contano.
-# Restano tutti i target su cui il progetto gira davvero (docs/appendix/platforms-ci.md).
+# Restano tutti i target su cui il progetto gira davvero (docs/getting-started/install-and-run.md).
 targets = [
     "x86_64-unknown-linux-gnu",
     "x86_64-pc-windows-msvc",

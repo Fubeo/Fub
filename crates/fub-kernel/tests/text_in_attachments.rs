@@ -1,11 +1,11 @@
 //! Il tragitto di un documento che **non è testo**, dalla scansione all'indice.
 //!
-//! La [§21.8](../../../docs/roadmap/21-la-ricerca-predefinita.md) chiedeva «il
+//! La [§21.8](../../../docs/project/roadmap.md) chiedeva «il
 //! testo che sta dentro gli allegati», e nominava due blocchi che nel frattempo
 //! erano caduti: `Vault::list_documents` (via con la
-//! [0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)) e
+//! [0046](../../../docs/decisions/0188-identita-path-e-rename.md)) e
 //! `parse(source: &str)` (via con la
-//! [0017](../../../docs/decisions/0017-chi-disegna-cio-che-il-core-non-conosce.md),
+//! [0017](../../../docs/decisions/0182-provider-e-porte-generiche.md),
 //! che ha messo `DocumentSource::Bytes` nel contratto). Ciò che restava non era
 //! né l'anagrafe né il parser: era il **tragitto**, e a essere scollegata era
 //! l'indicizzazione — che leggeva testo comunque, senza guardare cosa il
@@ -79,7 +79,7 @@ fn the_extracted_text_arrives_in_the_index() {
 /// decodifica, e resta la stessa famiglia di impronte di prima: un documento di
 /// testo non cambia impronta il giorno che qualcuno lo rivendica a byte, e un
 /// allegato che non cambia non rifà il giro (la regola di `up_to_date`, dalla
-/// [0046](../../../docs/decisions/0046-l-anagrafe-del-vault.md)).
+/// [0046](../../../docs/decisions/0188-identita-path-e-rename.md)).
 #[test]
 fn an_attachment_footprint_is_stable() {
     let mut bench = bench_with_extractor();

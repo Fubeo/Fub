@@ -1,15 +1,15 @@
 //! Una richiesta e una risposta, e niente di più (§23.3).
 //!
 //! Sono i tipi di [`HostNetwork::fetch`](crate::traits::HostNetwork::fetch), la
-//! capacità che la [0013](../../../docs/decisions/0013-elenco-delle-capacita.md)
+//! capacità che la [0013](../../../docs/decisions/0185-capability-un-solo-guard.md)
 //! aveva tenuto fuori con due bloccanti nominati e la
-//! [0097](../../../docs/decisions/0097-un-recinto-che-vale-anche-quando-nessuno-guarda.md)
+//! [0097](../../../docs/decisions/0185-capability-un-solo-guard.md)
 //! ha fatto entrare quando erano caduti tutti e due.
 //!
 //! # Perché una richiesta e non un metodo per verbo
 //!
 //! Perché un `record` cresce per aggiunta e un elenco di funzioni no. La
-//! [0007](../../../docs/decisions/0007-contesto-di-sessione.md) scrive il
+//! [0007](../../../docs/decisions/README.md) scrive il
 //! criterio — *«un campo in più a un record è una migrazione di ogni provider
 //! che lo riceve»*, quindi i campi si mettono **tutti adesso** — e qui il
 //! criterio si applica per intero: `method`, `headers` e `body` nascono con la
@@ -20,7 +20,7 @@
 //!
 //! # Byte e non testo, che è la 0087 letta al contrario
 //!
-//! La [0087](../../../docs/decisions/0087-il-testo-che-sta-dentro-gli-allegati.md)
+//! La [0087](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
 //! ha deciso per i documenti che il testo è il default e i byte gli stanno
 //! accanto, con l'argomento che *«chi legge del testo non deve poter dimenticare
 //! di decodificare»*. Per una risposta HTTP la stessa regola dà il risultato
@@ -150,7 +150,7 @@ impl HttpRequest {
 /// poter distinguere *«ho chiesto e mi hanno detto di no»* da *«non ho potuto
 /// chiedere»*, perché le due si correggono in modi opposti — la prima guardando
 /// la risposta, la seconda riprovando o dicendolo a chi guarda. È la stessa
-/// distinzione che la [0041](../../../docs/decisions/0041-un-errore-e-testo-che-qualcuno-legge.md)
+/// distinzione che la [0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 /// fa fra un errore e un esito, applicata al filo.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct HttpResponse {

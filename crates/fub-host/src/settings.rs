@@ -2,7 +2,7 @@
 //! che livello vivono (§11.1).
 //!
 //! Il livello, da
-//! [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md), è
+//! [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md), è
 //! il **vault** per tutto ciò che è una preferenza su come leggi le tue note —
 //! tema e `locale.*` compresi — e la macchina solo per il log, che serve
 //! proprio quando un vault non si apre.
@@ -40,12 +40,12 @@ use fub_abi::ui::UiOption;
 ///
 /// # La riga che questa funzione scrive, ed è più larga di lei
 ///
-/// La [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md)
+/// La [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 /// ha smontato l'argomento di rischio sulle impostazioni del vault; il tema,
 /// che era l'esempio della voce, da allora è **di macchina** (§29.4) e non
 /// viaggia più con le note — un tema che arriva da fuori si vede e si disfa in
 /// un gesto, ma la pelle che questa installazione conosce non la decide un
-/// vault. La [0077](../../../docs/decisions/0077-una-scorciatoia-e-una-chiave.md)
+/// vault. La [0077](../../../docs/decisions/README.md)
 /// ha messo in quel posto i **tasti**, ed è un'altra specie di cosa. Il
 /// criterio che le separa non è *cosa la chiave descrive* — `locale.hour-cycle`
 /// descrive chi guarda e viaggiare è precisamente ciò che deve fare — ma **cosa
@@ -53,7 +53,7 @@ use fub_abi::ui::UiOption;
 /// tre:
 ///
 /// - **una sottrazione non concede**: `plugins.disabled`, e le chiavi dei
-///   permessi della [0098](../../../docs/decisions/0098-un-permesso-si-vede-e-si-nega.md).
+///   permessi della [0098](../../../docs/decisions/0185-capability-un-solo-guard.md).
 ///   Il caso peggiore è il default che l'utente ha già accettato;
 /// - **si vede e si disfa**: tema, `locale.*`, i pesi della ricerca, gli
 ///   interruttori delle feature. Il caso peggiore è un fastidio con davanti
@@ -76,7 +76,7 @@ use fub_abi::ui::UiOption;
 /// quindi la seconda troverebbe un vault "conosciuto" a cui nessuno ha mai
 /// risposto. Confrontare i valori risponde a tutti e due i casi con lo stesso
 /// paragone — ed è la forma della
-/// [0099](../../../docs/decisions/0099-una-rinomina-che-non-ha-visto-nessuno.md):
+/// [0099](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md):
 /// ciò che è cambiato mentre nessuno guardava si riconosce mettendo accanto
 /// quello che si sapeva ieri e quello che si legge oggi.
 ///
@@ -147,7 +147,7 @@ pub const DEFAULT_ATTACHMENT_FOLDER: &str = "attachments";
 /// **aperte** di recente, che con la ricerca non c'entrano.
 ///
 /// È l'inverso del precedente dei pesi
-/// ([0084](../../../docs/decisions/0084-un-peso-e-una-preferenza.md)), e la
+/// ([0084](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)), e la
 /// differenza è chi legge: un peso lo legge il provider di ricerca, e sta nel
 /// suo manifest; questo lo legge la shell, e la shell ha un solo posto dove
 /// dichiarare — qui.
@@ -362,7 +362,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
 /// La memoria di ciò che si è cercato e aperto come [`SettingSpec`] (§21.7).
 ///
 /// **Non** `program_writable`, e qui la ragione non è la reversibilità: è la
-/// riga della [0036](../../../docs/decisions/0036-le-impostazioni-e-i-tre-stati.md)
+/// riga della [0036](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 /// che il §11 ha messo per iscritto — *le impostazioni di privacy e dell'AI non
 /// stanno fra quelle*. Un componente che potesse riaccendere da sé la memoria di
 /// cosa cerchi è un componente che si allarga i permessi, e la differenza col
@@ -378,7 +378,7 @@ fn appearance_settings() -> Vec<SettingSpec> {
 /// scrivere.
 ///
 /// Del **vault** e non di macchina, come ogni altra preferenza dopo la
-/// [0076](../../../docs/decisions/0076-le-impostazioni-vivono-nel-vault.md): chi
+/// [0076](../../../docs/decisions/0192-impostazioni-locale-e-temi.md): chi
 /// dice «di questo vault non tenere traccia» lo dice del vault — è la proprietà
 /// dell'archivio, non del computer da cui lo si apre — e una scelta di privacy
 /// che vale su un portatile e non sull'altro è una scelta che non protegge.

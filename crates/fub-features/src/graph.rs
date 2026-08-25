@@ -36,7 +36,7 @@
 //! Ciò che **resta** privilegiato è solo il disegno, e la misura di quanto lo sia
 //! è precisa: lo `ns` che questa shell conosce. Un plugin di terzi può mandare il
 //! suo `Custom`, e riceve il `fallback` finché nessuno gli scrive un renderer.
-//! È l'asterisco di onestà di `docs/architecture/ui-protocol.md`, che questo file
+//! È l'asterisco di onestà di `../../../docs/architecture/frontend-and-ipc.md`, che questo file
 //! non indebolisce — lo **circoscrive**: prima riguardava anche i dati, adesso
 //! solo i pixel.
 //!
@@ -224,7 +224,7 @@ fn documents(host: &dyn ReadApi) -> Result<Vec<String>, PluginError> {
 
 /// Gli archi: i vicini a un passo di **tutto il vault**, in uscita.
 ///
-/// È la domanda sola che la [0004](../../../docs/decisions/0004-il-grafo-e-i-link-non-wiki.md)
+/// È la domanda sola che la [0004](../../../docs/decisions/README.md)
 /// ha messo nel contratto apposta — semi vuoti = tutto il vault — e la ragione
 /// per cui esiste è esattamente questa: chiederli una nota alla volta sarebbe
 /// stato mille viaggi, cioè un comando bespoke con un altro nome.

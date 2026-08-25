@@ -25,7 +25,7 @@
 // # Il limite, che resta quello dichiarato
 //
 // Un renderer sta **in questo bundle**: registrarlo è codice della shell, non di
-// un plugin. È l'asterisco di onestà di `docs/architecture/ui-protocol.md`, e
+// un plugin. È l'asterisco di onestà di `../../../docs/architecture/frontend-and-ipc.md`, e
 // questo registro lo circoscrive invece di toglierlo — un `ns` di terzi riceve
 // il `fallback` finché la `WebView` non avrà asset story e CSP (M5). Ciò che è
 // cambiato con la §3.3 è che il privilegio riguarda ormai solo i **pixel**: i

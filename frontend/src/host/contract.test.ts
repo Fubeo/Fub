@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { nameQuery, textQuery } from "./contract";
 
 // **Le query si compongono qui**, ed è la regola della
-// [0082](../../../docs/decisions/0082-una-porta-per-chi-cerca.md): una
+// [0082](../../../docs/decisions/0182-provider-e-porte-generiche.md): una
 // superficie che se la componesse in casa sarebbe già una seconda
 // implementazione. Se le query hanno un posto solo, hanno anche un banco solo —
 // e questo è il posto in cui le due proprietà su cui poggia la §21.5 restano

@@ -2,7 +2,7 @@
 //!
 //! WIT non ammette tipi ricorsivi, e [`Block`](crate::model::Block),
 //! [`Inline`](crate::model::Inline) e [`UiNode`](crate::ui::UiNode) lo sono. La
-//! decisione (vedi `docs/architecture/traits.md`, "Alberi ricorsivi al confine")
+//! decisione (vedi `../../../docs/reference/abi-and-wit.md`, "Alberi ricorsivi al confine")
 //! è che al confine viaggino come **arena**: una lista piatta di nodi più indici
 //! `u32` al posto dei riferimenti diretti. I tipi nativi restano alberi veri —
 //! il kernel e i provider nativi non pagano niente.

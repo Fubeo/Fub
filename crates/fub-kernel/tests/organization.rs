@@ -1,5 +1,5 @@
 //! L'**organizzazione** del vault vista dal kernel (§11.3,
-//! [decisione 0038](../../../docs/decisions/0038-il-kernel-possiede-il-sidecar.md)):
+//! [decisione 0038](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)):
 //! chi la possiede, chi la migra, e da dove si chiede.
 //!
 //! Le regole dello *store* — i mutatori per chiave, la potatura di un ordine

@@ -1,5 +1,5 @@
 //! **Un evento dice quale documento, e adesso anche cosa è cambiato** (§22.2,
-//! [decisione 0069](../../../docs/decisions/0069-cosa-sa-dire-un-abbonamento.md)).
+//! [decisione 0069](../../../docs/decisions/README.md)).
 //!
 //! `DocumentChanged { id }` diceva che *quella* nota era cambiata e non cosa: chi
 //! voleva sapere se era cambiato un tag doveva rileggere il modello e
@@ -9,7 +9,7 @@
 //! del contratto.
 //!
 //! Le prove sono scritte **in coppia** come quelle della
-//! [0033](../../../docs/decisions/0033-la-grana-di-un-abbonamento.md), e per la
+//! [0033](../../../docs/decisions/0184-eventi-accodati-e-job.md), e per la
 //! stessa ragione: una che mostra il solo silenzio non distingue un filtro che
 //! funziona da un handler mai chiamato.
 //!

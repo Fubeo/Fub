@@ -1,5 +1,5 @@
 //! **Il rilevatore parte prima della scansione e non perde il primo lotto**
-//! (§15.7, [decisione 0070](../../../docs/decisions/0070-un-vault-si-apre-in-due-tempi.md)):
+//! (§15.7, [decisione 0070](../../../docs/decisions/0183-composizione-host-kernel.md)):
 //! l'apertura tiene il write-lock mentre avvia il watcher, fotografa il vault,
 //! registra il subscriber live e crea il job iniziale.
 //!

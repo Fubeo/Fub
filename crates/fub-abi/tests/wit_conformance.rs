@@ -970,7 +970,7 @@ fn diff(
 /// dall'enum stesso, così riordinare l'enum Rust senza toccare WIT e test è
 /// rosso quanto riordinare il WIT.
 ///
-/// Dalla [decisione 0053](../../../docs/decisions/0053-il-contratto-ha-una-sorgente.md)
+/// Dalla [decisione 0053](../../../docs/decisions/0194-sorgenti-e-proiezioni-del-contratto.md)
 /// il lettore del sorgente sta in `tests/common/`, perché non serve più a
 /// questo test soltanto: la stessa dichiarazione Rust proietta di qua il WIT
 /// (`kebab`) e di là le union del mirror TypeScript (`snake`, `ts_enums.rs`).
