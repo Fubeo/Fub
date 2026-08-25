@@ -34,23 +34,25 @@ jobs:
 
           path = Path("frontend/bench/stage.mjs")
           source = path.read_text(encoding="utf-8")
-          old = '''  await scene.prepare(page);
-          await page.evaluate(() => document.fonts.ready);
-          await page.addStyleTag({ content: QUIET });
-          '''
-          new = '''  await scene.prepare(page);
-          // I gesti di Playwright lasciano il puntatore sopra l'ultimo controllo.
-          // Un tooltip con ritardo può così comparire fra i due scatti a seconda
-          // del carico del runner. Lo spostiamo in un angolo neutro: il banco
-          // fotografa lo stato preparato, non un hover accidentale.
-          await page.mouse.move(0, 0);
-          await page.evaluate(() => document.fonts.ready);
-          await page.addStyleTag({ content: QUIET });
-          '''
+          lines = source.splitlines()
+          matches = [i for i, line in enumerate(lines) if line.strip() == "await scene.prepare(page);"]
 
-          if old not in source:
-              raise SystemExit("Il punto atteso di prepareScene non è presente: nessuna modifica applicata")
-          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+          if len(matches) != 1:
+              raise SystemExit(f"Attesa una sola chiamata a scene.prepare, trovate: {len(matches)}")
+
+          index = matches[0]
+          indent = lines[index][: len(lines[index]) - len(lines[index].lstrip())]
+          pointer_line = f"{indent}await page.mouse.move(0, 0);"
+          if pointer_line not in lines:
+              lines[index + 1:index + 1] = [
+                  f"{indent}// I gesti di Playwright lasciano il puntatore sopra l'ultimo controllo.",
+                  f"{indent}// Un tooltip con ritardo può così comparire fra i due scatti a seconda",
+                  f"{indent}// del carico del runner. Lo spostiamo in un angolo neutro: il banco",
+                  f"{indent}// fotografa lo stato preparato, non un hover accidentale.",
+                  pointer_line,
+              ]
+
+          path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
       - run: npm ci
         working-directory: frontend
