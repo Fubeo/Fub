@@ -2,8 +2,10 @@
 
 > **Stato aggiornato per:** 25 agosto 2026.
 
-La roadmap descrive ordine e direzione. Le attività eseguibili e i criteri di
-accettazione vivono nelle GitHub Issues.
+La roadmap descrive ordine e direzione. Le GitHub Issues restano il tracker
+delle attività eseguibili. Un prossimo passo approvato può avere un TODO
+operativo in `project/` quando l'issue non è sufficiente a conservare una
+sequenza tecnica estesa.
 
 ```mermaid
 flowchart LR
@@ -48,7 +50,9 @@ Un caso reale diverso da Markdown deve dimostrare quali parti dell'editor sono
 motore comune e quali appartengono al profilo. Soltanto allora si consolida
 l'API interna.
 
-Issue: [#11](https://github.com/Fubeo/Fub/issues/11).
+- Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
+- Piano operativo:
+  [TODO — modularità delle superfici di editing](todo-modularita-superfici-di-editing.md).
 
 ### Contratto dei temi
 

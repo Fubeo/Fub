@@ -3,7 +3,10 @@
 Questa è la mappa canonica del progetto.
 
 La documentazione descrive **ciò che esiste**. Le attività eseguibili vivono
-nelle GitHub Issues. Le decisioni architetturali spiegano il perché delle scelte
+nelle GitHub Issues. Un prossimo passo approvato può avere un TODO operativo in
+`project/` quando richiede una sequenza tecnica estesa: il TODO deve essere
+collegato a un'issue, dichiarare stato e regola di uscita e sparire quando il
+lavoro è concluso. Le decisioni architetturali spiegano il perché delle scelte
 ancora rilevanti. La cronologia completa resta in Git.
 
 ```mermaid
@@ -62,6 +65,7 @@ flowchart LR
 - [Stato corrente](project/status.md)
 - [Roadmap](project/roadmap.md)
 - [M5: runtime WASM](project/m5-wasm-runtime.md)
+- [TODO: modularità delle superfici di editing](project/todo-modularita-superfici-di-editing.md)
 
 ## Capire le decisioni
 
@@ -76,7 +80,7 @@ Quando due fonti divergono, usa questo ordine:
 2. WIT, schemi e formati persistenti;
 3. pagine architetturali e riferimenti canonici;
 4. ADR, limitatamente alla motivazione;
-5. stato e roadmap;
+5. stato, roadmap e TODO attivi;
 6. cronologia Git.
 
 Una pagina non sostituisce il codice. Deve spiegare i confini, i flussi e le

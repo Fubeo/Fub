@@ -15,6 +15,7 @@ Una pagina descrive:
 - una procedura;
 - un contratto;
 - stato o direzione;
+- un piano operativo attivo;
 - il perché di una decisione.
 
 Non svolge più ruoli insieme.
@@ -28,10 +29,28 @@ Non svolge più ruoli insieme.
 | architettura | responsabilità, flussi e invarianti | `architecture/` |
 | sviluppo | modo di lavorare | `development/` |
 | riferimento | forma precisa di un contratto | `reference/` |
-| progetto | stato e direzione correnti | `project/` |
+| progetto | stato, direzione e TODO attivi | `project/` |
 | ADR | motivazione di una scelta costosa | `decisions/` |
 
-Un'attività eseguibile vive in una GitHub Issue.
+Una GitHub Issue resta il tracker di attività, owner, priorità e PR. Un piano
+approvato può avere un TODO dettagliato in `project/` quando la sequenza tecnica
+non può essere conservata professionalmente nel corpo dell'issue.
+
+## TODO attivi
+
+Un file `project/todo-*.md` è ammesso soltanto quando:
+
+- descrive uno dei prossimi passi approvati;
+- è collegato a una GitHub Issue aperta;
+- dichiara stato, data, origine e regola di uscita;
+- contiene fasi, invarianti, criteri di uscita e Definition of Done;
+- distingue API candidate da contratti approvati;
+- viene aggiornato soltanto per lavoro realmente entrato in `main`;
+- viene eliminato a completamento, trasferendo il presente nelle pagine
+  canoniche e le decisioni stabili negli ADR.
+
+Il TODO non è un archivio, una raccolta di idee o una seconda roadmap. Le
+checklist sono ammesse perché il documento è temporaneo e operativo.
 
 ## Struttura
 
@@ -76,7 +95,7 @@ Ordine di autorità:
 2. contratti persistenti;
 3. pagina canonica;
 4. ADR;
-5. stato e roadmap;
+5. stato, roadmap e TODO attivi;
 6. Git.
 
 Non copiare intere enum o strutture quando un link al sorgente è più preciso.
@@ -89,7 +108,8 @@ Spiega significato e invarianti.
 - non creare alias Markdown;
 - dopo una rinomina, aggiorna tutti i chiamanti;
 - ogni pagina deve essere raggiungibile da `docs/README.md`;
-- ogni ADR deve essere indicizzato.
+- ogni ADR deve essere indicizzato;
+- ogni TODO deve essere collegato dalla roadmap, dallo stato e dalla sua issue.
 
 ## Mermaid
 
@@ -125,6 +145,7 @@ numero di celle e non deve contenere una lista narrativa.
 | guida | 100–250 righe | 300 |
 | architettura | 150–350 righe | 450 |
 | riferimento | 150–450 righe | 550 |
+| TODO attivo | 250–600 righe | 650 |
 | ADR | 50–140 righe | 180 |
 | indice | 30–100 righe | 150 |
 
