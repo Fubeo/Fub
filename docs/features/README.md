@@ -1,23 +1,34 @@
 # Specifiche delle funzionalità
 
-I documenti di questa cartella descrivono **requisiti di prodotto**: cosa una funzionalità dovrebbe offrire, quali casi deve coprire e quali criteri ne definiscono la qualità.
+Questa cartella descrive **requisiti di prodotto**: cosa una funzionalità dovrebbe offrire, quali casi deve coprire e quali criteri ne definiscono la qualità.
 
-Non sono una lista affidabile delle funzioni già disponibili. Una casella non selezionata non è automaticamente un'attività approvata; una descrizione completa non prova che il codice esista.
+Non è una roadmap, un backlog o un report automatico sul codice.
 
-Per lo stato reale usa:
+## Come leggere i file
 
-- [`STATO.md`](../STATO.md) per la fotografia verificata del repository;
-- [`todo.md`](../todo.md) per le voci tecniche aperte;
-- [`milestones/`](../milestones/README.md) per i traguardi;
-- [`roadmap/`](../roadmap/README.md) per i piani discussi.
+- ogni documento raccoglie una famiglia coerente di capacità;
+- le caselle `[ ]` rappresentano requisiti, comportamenti o criteri da coprire;
+- una casella non selezionata non dimostra, da sola, che il comportamento manchi nel codice;
+- una casella selezionata non sostituisce test, documentazione tecnica o stato di milestone.
+
+Per conoscere la situazione reale usa:
+
+- [`../STATO.md`](../STATO.md) per la fotografia verificata del repository;
+- [`../PIANO.md`](../PIANO.md) per milestone e priorità;
+- [`../todo.md`](../todo.md) per il lavoro ancora aperto.
+
+## Ordine di lettura
+
+Parti da [`01-principi-fondanti.md`](01-principi-fondanti.md), poi apri il documento della famiglia interessata. Non è necessario leggere il catalogo in sequenza per contribuire a un singolo componente.
 
 ## Regola di manutenzione
 
 Quando una specifica diventa implementazione:
 
-1. il codice e i test restano la fonte di verità;
-2. `STATO.md` viene aggiornato con il comportamento verificato;
-3. questa pagina conserva i requisiti, senza trasformarsi in changelog;
-4. le decisioni non ovvie vengono registrate in [`decisions/`](../decisions/README.md).
+1. codice e test restano la fonte di verità;
+2. [`STATO.md`](../STATO.md) viene aggiornato con il comportamento verificato;
+3. questa cartella conserva i requisiti, senza trasformarsi in changelog;
+4. il lavoro concreto entra in [`todo.md`](../todo.md), non in una seconda roadmap;
+5. le decisioni non ovvie vengono registrate in [`decisions/`](../decisions/README.md).
 
-Le specifiche sono utili soltanto se distinguono chiaramente “richiesto”, “deciso” e “disponibile”.
+Le sedute in [`roadmap/`](../roadmap/README.md) sono memoria storica del ragionamento, non priorità operative.

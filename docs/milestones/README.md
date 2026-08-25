@@ -1,29 +1,21 @@
-# milestones/
+# Milestone
 
-Cosa entra in una milestone e cosa la dichiara finita. Una milestone è un
-traguardo di **prodotto** — l'app sa fare una cosa nuova — e si distingue da una
-seduta di [roadmap/](../roadmap/), che è un traguardo di **contratto**: perché
-una feature possa essere scritta come provider invece che come codice dell'app.
+Le milestone descrivono obiettivi tecnici di ampia portata. Lo stato sintetico e l'ordine corrente restano in [`../PIANO.md`](../PIANO.md); le singole attività aperte restano in [`../todo.md`](../todo.md).
 
-- [M2-search-graph.md](M2-search-graph.md) — ricerca (tantivy), grafo e indice
-  incrementali, graph view, pannelli outline e tag, «crea nota».
-- [M3-editor-fidelity.md](M3-editor-fidelity.md) — live preview dentro
-  l'editor, command palette, impostazioni dichiarative, rendering di callout,
-  embed e formule. **Chiusa** il 14/08/2026, salvo la resa TeX rimandata
-  ([0158](../decisions/0158-la-matematica-e-sorgente-a-vista-per-ora.md)).
-- [M4-wit-hardening.md](M4-wit-hardening.md) — il **freeze del contratto**: WIT,
-  conformità abi↔WIT, primo plugin nativo. **Chiusa** il 14/08/2026:
-  `fub:abi@0.1.1`, linea di base in `wit/frozen/`. Da lì il contratto cresce
-  solo per aggiunta.
-- [M5-wasm-runtime.md](M5-wasm-runtime.md) — `fub-wasm-host`, il proxy WASM,
-  l'applicazione delle capacità, i plugin di esempio.
+```mermaid
+flowchart LR
+    M1["M1<br>Fondamenta"] --> M2["M2<br>Ricerca e grafo"]
+    M2 --> M3["M3<br>Editor"]
+    M3 --> M4["M4<br>Contratto WIT"]
+    M4 --> M5["M5<br>Runtime WASM"]
+```
 
-**M1 non ha un file qui**, e non è una dimenticanza: è chiusa dal 24/07/2026 —
-vault compatibile Obsidian, provider markdown, kernel, frontend usabile — e ciò
-che ne resta da consultare è la sezione «Verifica» di [PIANO.md](../PIANO.md).
-Un documento di pianificazione per qualcosa di già fatto è un documento che
-nessuno riapre.
+| Milestone | Stato | Documento |
+|---|---|---|
+| M1 — fondamenta local-first | **Completata** | Non esiste un documento separato: il risultato è descritto nella guida e in [`../STATO.md`](../STATO.md). |
+| M2 — ricerca e grafo | **Completata** | [`M2-search-graph.md`](M2-search-graph.md) |
+| M3 — fedeltà dell'editor | **Completata** | [`M3-editor-fidelity.md`](M3-editor-fidelity.md) |
+| M4 — irrobustimento WIT | **Completata** | [`M4-wit-hardening.md`](M4-wit-hardening.md) |
+| M5 — runtime WASM | **In corso** | [`M5-wasm-runtime.md`](M5-wasm-runtime.md) |
 
-Lo stato di avanzamento non sta qui ma in [../todo.md](../todo.md), per la
-stessa ragione per cui non sta in nessun altro indice: si aggiorna in un posto
-solo.
+I documenti di milestone possono contenere criteri, prove e storia implementativa più dettagliati. Non usarli per ricostruire a mano il backlog: le voci ancora attive devono comparire in `todo.md`.

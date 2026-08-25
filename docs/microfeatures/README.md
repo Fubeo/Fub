@@ -1,12 +1,21 @@
 # Microfunzionalità
 
-Questa cartella raccoglie comportamenti piccoli ma osservabili: stati vuoti, feedback, scorciatoie, focus, errori, conferme e dettagli di interazione.
+Questa cartella scompone l'esperienza utente in gesti piccoli e osservabili. È utile per progettazione, test di usabilità e copertura delle superfici; non è una lista di issue e non misura da sola lo stato del prodotto.
 
-Sono criteri di qualità e accettazione, non una seconda roadmap e non una fotografia automatica del frontend. Prima di considerarne una voce completata, deve esistere un comportamento verificabile nel codice o nei test.
+## Aree
 
-Per evitare ridondanze:
+- [`app-e-piattaforma.md`](app-e-piattaforma.md)
+- [`block-editor-parita.md`](block-editor-parita.md)
+- [`canvas-e-database.md`](canvas-e-database.md)
+- [`editor-di-testo.md`](editor-di-testo.md)
+- [`markdown-e-preview.md`](markdown-e-preview.md)
+- [`media-e-allegati.md`](media-e-allegati.md)
+- [`ricerca-e-task.md`](ricerca-e-task.md)
+- [`vault-ed-esploratore.md`](vault-ed-esploratore.md)
 
-- una microfunzionalità spiega **che cosa deve percepire l'utente**;
-- [`features/`](../features/README.md) spiega la capacità più ampia;
-- [`frontend/`](../frontend/README.md) documenta l'implementazione della shell;
-- [`todo.md`](../todo.md) contiene soltanto lavoro aperto realmente deciso.
+Una casella descrive un gesto da considerare, non una dichiarazione automatica sul codice.
+
+- stato verificato: [`../STATO.md`](../STATO.md);
+- piano e priorità: [`../PIANO.md`](../PIANO.md);
+- lavoro aperto: [`../todo.md`](../todo.md);
+- specifiche di livello superiore: [`../features/`](../features/README.md).

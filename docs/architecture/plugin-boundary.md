@@ -2,11 +2,23 @@
 
 ## Un solo contratto, due esecuzioni
 
-Un provider può essere compilato nativamente con l'applicazione oppure eseguito come componente WASM. In entrambi i casi implementa il vocabolario di `fub-abi`; cambia il modo in cui il confine viene attraversato.
+Un provider può essere compilato nativamente con l'applicazione oppure eseguito come componente WASM. In entrambi i casi implementa il vocabolario di `fub-abi`; cambia soltanto il modo in cui il confine viene attraversato.
+
+```mermaid
+flowchart LR
+    CONTRACT["fub-abi<br>contratto comune"]
+    NATIVE["Provider nativo<br>trait Rust"] --> CONTRACT
+    WASM["Guest WASM<br>world WIT"] --> CONTRACT
+    CONTRACT --> HOST["fub-host"]
+    HOST --> KERNEL["fub-kernel"]
+    HOST --> SHELL["shell e servizi locali"]
+    WASM -. "capacità concesse" .-> API["HostApi"]
+    API --> HOST
+```
 
 ## Cosa esporta un provider
 
-Il contratto può esporre, secondo il tipo di provider:
+Secondo il tipo di provider, il contratto può esporre:
 
 - parsing e serializzazione di un formato;
 - query di indice;
@@ -17,11 +29,32 @@ Il contratto può esporre, secondo il tipo di provider:
 
 ## Cosa importa da Fub
 
-Un guest non riceve accesso generale al processo. L'host importa soltanto le funzioni concesse dalla sua capacità: letture del vault, scritture, query, storage, log o altri servizi espliciti.
+Un guest non riceve accesso generale al processo. L'host importa soltanto le funzioni concesse dalle sue capacità: letture del vault, scritture, query, storage, log o altri servizi espliciti.
 
 Il trait `HostApi` raccoglie **quarantadue** metodi [conta: hostapi-metodi]. Sono organizzati per famiglie di capacità; il numero è verificato sui sorgenti, mentre la responsabilità architetturale resta una sola: ogni accesso al mondo dell'host attraversa questo varco.
 
 Negare una famiglia di capacità significa non esporre le relative funzioni al componente, non affidarsi a un controllo tardivo dentro una funzione già disponibile.
+
+```mermaid
+sequenceDiagram
+    participant Guest as Guest WASM
+    participant Runtime as fub-wasm-host
+    participant Api as HostApi
+    participant Host as fub-host
+    participant Kernel as fub-kernel
+
+    Guest->>Runtime: richiesta prevista dal WIT
+    Runtime->>Api: verifica capacità e converte i tipi
+    alt capacità concessa
+        Api->>Host: operazione serializzabile
+        Host->>Kernel: applica le regole del vault
+        Kernel-->>Host: risultato o errore di dominio
+        Host-->>Runtime: risposta limitata
+        Runtime-->>Guest: valore WIT
+    else capacità negata
+        Runtime-->>Guest: errore esplicito
+    end
+```
 
 ## Regole del confine
 
@@ -32,13 +65,13 @@ Negare una famiglia di capacità significa non esporre le relative funzioni al c
 - limiti e cancellazione per operazioni costose;
 - versione ABI dichiarata e verificata prima dell'uso.
 
-## Cosa non può essere solo un guest e il metro per deciderlo
+## Cosa non deve diventare un guest
 
-Un'estensione non deve reimplementare servizi che appartengono alla shell o all'host. Il criterio non è “si può scrivere in un plugin?”, ma “questo confine resta stabile, serializzabile e controllabile?”.
+Il criterio non è “si può scrivere in un plugin?”, ma “questo confine resta stabile, serializzabile e controllabile?”.
 
 Resta nella shell o nell'host ciò che richiede:
 
-- accesso diretto a DOM, focus, IME, clipboard o lifecycle della finestra;
+- accesso diretto a DOM, focus, IME, clipboard o ciclo di vita della finestra;
 - latenza da interazione continua, come cursore, selezioni e composizione del testo;
 - integrazione privilegiata con sistema operativo o filesystem;
 - stato condiviso fra più viste che deve avere un solo proprietario;

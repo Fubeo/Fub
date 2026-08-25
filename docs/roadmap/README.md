@@ -1,48 +1,40 @@
-# roadmap/
+# Sedute di progettazione — archivio storico
 
-Una **seduta** (gruppo di voci correlate da decidere insieme) per file. I file
-sono numerati da `01` a `31`. Una seduta raggruppa voci (argomenti) sulla stessa
-domanda vista da lati diversi. Conviene decidere le voci in una volta sola.
-Decisioni separate diventano decisioni sbagliate. Ogni file spiega in testa la
-ragione del raggruppamento.
+La cartella si chiama `roadmap` per ragioni storiche, ma **non è la roadmap operativa corrente**. Contiene le sedute numerate che hanno esplorato problemi, alternative, misure e possibili decisioni.
 
-## Indice
+```mermaid
+flowchart LR
+    SESSION["Seduta di progettazione"] --> QUESTION["Problema e alternative"]
+    QUESTION --> OPEN{"Scelta chiusa?"}
+    OPEN -->|"sì"| ADR["ADR in decisions/"]
+    OPEN -->|"no"| TODO["Voce in todo.md"]
+    ADR --> CURRENT["Documentazione corrente<br>se cambia il comportamento"]
+    TODO --> PLAN["PIANO.md<br>se diventa priorità"]
+```
 
-**L'indice principale è [../todo.md](../todo.md)**. Contiene:
-- Le sedute.
-- Le voci aperte (con strato, ovvero il livello dell'architettura, e priorità).
-- Lo stato.
+Per lo stato attuale usa:
 
-Evitiamo duplicazioni. Uno stato scritto in due posti diventa uno stato
-sbagliato in uno dei due.
+- [`../STATO.md`](../STATO.md) per ciò che è verificato nel repository;
+- [`../PIANO.md`](../PIANO.md) per milestone e priorità;
+- [`../todo.md`](../todo.md) per il lavoro ancora aperto;
+- [`../decisions/README.md`](../decisions/README.md) per le scelte chiuse.
 
-## Chiusura
+## Come leggere una seduta
 
-Quando una voce si chiude avvengono questi passaggi:
-1. Il ragionamento diventa un verbale (documento di decisione) in
-   [../decisions/](../decisions/README.md).
-2. La voce **sparisce** da `todo.md` (dalla tabella, dal conteggio della sua
-   seduta e dall'elenco).
-3. L'assenza è il segnale del completamento.
-4. Rimuovere una riga conferma lo spostamento del verbale.
-5. Mantenere una casella spuntata rappresenta solo una promessa scritta.
-6. Le spunte si trovano **qui**, nel file della seduta, per tracciare lo stato
-   della singola voce.
-7. Il file della seduta resta. È il posto dove la domanda è stata posta bene la
-   prima volta.
+Una seduta può contenere ipotesi poi smentite, numeri validi soltanto al momento dell'analisi e alternative incompatibili. Non va letta come specifica vigente.
 
-## I tre allegati
+La fonte stabile è:
 
-I tre allegati sono tre modi diversi di attraversare lo stesso elenco.
+- l'ADR prodotto dalla decisione, quando la scelta è chiusa;
+- `todo.md`, quando la scelta è ancora aperta;
+- la documentazione corrente, quando il comportamento è già implementato.
 
-- [leva.md](leva.md) — *Quali voci contano di più*. Mostra l'importanza delle
-  voci. Una voce può essere P2 (priorità secondaria) e restare la più importante
-  da capire, anche se altre scadono prima.
-- [strozzature.md](strozzature.md) — L'**indice inverso**. Si entra da un
-  capitolo di [FEATURES.md](../FEATURES.md). Spiega cosa impedisce oggi a quelle
-  funzionalità (feature) di essere un provider (fornitore di servizi). Serve a
-  chi parte dalla funzionalità.
-- [numerazione.md](numerazione.md) — *Corrispondenza*. Mostra la corrispondenza
-  fra la numerazione di prima della riorganizzazione e questa. È l'unico posto
-  del repo (archivio del codice) dove i numeri vecchi restano validi. Serve a
-  leggere i messaggi di commit e i commenti nel codice.
+Le sedute sono numerate in ordine di lavoro. I collegamenti dagli ADR alle sezioni originarie vengono conservati per rendere verificabile il percorso che ha portato alla scelta.
+
+## Documenti trasversali
+
+- [`leva.md`](leva.md): criteri usati per trovare il punto con maggiore effetto architetturale;
+- [`numerazione.md`](numerazione.md): convenzione per sedute, sezioni e riferimenti;
+- [`strozzature.md`](strozzature.md): strozzature e dipendenze osservate durante la progettazione.
+
+Questi file sono memoria del processo. Non devono duplicare lo stato operativo né ricevere nuove attività al posto del backlog.
