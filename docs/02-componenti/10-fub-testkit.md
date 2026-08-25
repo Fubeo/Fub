@@ -1,81 +1,79 @@
-# `fub-testkit` — Banco di prova del lato host
+# `fub-testkit` — banco del lato host
 
-## A cosa serve
+[`crates/fub-testkit/`](../../crates/fub-testkit) costruisce un vault reale su
+una directory temporanea e vi monta il kernel. Serve ai test di integrazione che
+devono osservare filesystem, registri, indicizzazione ed eventi insieme.
 
-[`crates/fub-testkit`](../../crates/fub-testkit) è il banco di prova per i test di integrazione (*end-to-end*) e di sistema di Fub.
+Non è una dipendenza di produzione. I crate che lo usano lo dichiarano soltanto
+fra le dipendenze di sviluppo.
 
-Consente di:
-- Istituire un vault reale su directory temporanea isolata con ciclo di vita garantito.
-- Montare un'istanza effettiva di `Workspace` (kernel reale) con formati e plugin configurabili.
-- Registrare e asserire con precisione su ogni singolo evento generato dal bus eventi (`with_spy`).
-- Simulare modifiche al filesystem effettuate "alle spalle del kernel" da processi esterni o da altri editor.
+## I due banchi
 
----
+| Banco | Uso |
+|---|---|
+| `fub-sdk::testing` | Prova un provider isolato contro un `MemoryHost`. |
+| `fub-testkit` | Prova componenti e flussi contro un `Workspace` reale. |
 
-## Architettura dei Banchi di Prova: `fub-testkit` vs `fub-sdk::testing`
+## Costruire un banco
 
-Fub adotta due banchi di test distinti e complementari:
-1. **`fub-sdk::testing` (Lato Provider)**: usa `MemoryHost` per testare l'implementazione di un provider in isolamento puro su RAM, senza toccare il disco né dipendere dal kernel.
-2. **`fub-testkit` (Lato Host)**: monta il `fub-kernel` reale su una cartella temporanea gestita da `tempfile::TempDir`, validando l'interazione tra componenti, filesystem, indicizzazione ed eventi.
+`Bench` permette di scegliere in modo indipendente:
 
----
+- radice temporanea o directory fornita dal test;
+- formati registrati;
+- feature di base o plugin di terzi dichiarati;
+- file presenti prima della prima scansione;
+- spia degli eventi;
+- scansione iniziale automatica o manuale.
 
-## Come si usa: il builder `Bench` e `Mounted`
-
-Il banco è strutturato come un builder (`Bench`) che varia su 5 assi indipendenti (radice, formati registrati, plugin, file precaricati, scansione iniziale):
+Esempio:
 
 ```rust
 use fub_testkit::Bench;
-use fub_abi::event::EventKind;
 
-#[test]
-fn test_flusso_modifica_nota() {
-    // 1. Configurazione del banco con spia degli eventi abilitata
-    let mut banco = Bench::new()
-        .with_spy()
-        .with_file("Nota.md", "# Titolo Iniziale\nTesto con [[Altro]]")
-        .mounts();
+let mut banco = Bench::new()
+    .with_file("Nota.md", "# Titolo")
+    .with_spy()
+    .mounts();
 
-    // 2. Operazioni sul vault
-    assert!(banco.exists("Nota.md"));
-    let contenuto = banco.read("Nota.md");
-    assert!(contenuto.contains("Titolo Iniziale"));
+assert!(banco.exists("Nota.md"));
 
-    // 3. Modifica fisica del file (simulazione agente esterno)
-    banco.write("Nota.md", "# Titolo Aggiornato");
+// Scrive direttamente sul disco, come farebbe un programma esterno.
+banco.write("Nota.md", "# Titolo aggiornato");
 
-    // 4. Verifica degli eventi emessi
-    let tipi_eventi = banco.event_kinds();
-    assert!(tipi_eventi.contains(&EventKind::DocumentChanged));
-}
+// Il kernel vede la modifica quando il test lo fa risincronizzare.
+banco.reindex().expect("nuova scansione");
+assert!(!banco.events().is_empty());
 ```
 
----
+`write` e `write_byte` lavorano deliberatamente alle spalle del kernel. Non
+emettono da soli un evento di modifica: il test deve eseguire `reindex` oppure
+montare e pilotare il watcher appropriato.
 
-## Capacità principali della struttura `Mounted`
+## API principali
 
-- **Accesso disco**: `.root()` (percorso `Utf8Path`), `.write(path, text)`, `.write_byte(path, bytes)`, `.read(path)`, `.exists(path)`.
-- **Ispezione eventi**: `.events()` (vettore clonabile di `Event`), `.event_kinds()` (sequenza tipizzata di `EventKind`).
-- **Controllo scansione**: `.reindex()` per forzare la rilettura e reindicizzazione di tutte le note del vault.
+### `Bench`
 
----
+- `new` e `on` scelgono la radice;
+- `with_format`, `without_format` e `with_extension` configurano i formati;
+- `with_plugin`, `with_plugins` e `with_third_party_plugin` dichiarano identità e fiducia;
+- `with_file` semina la directory;
+- `with_spy` registra un `EventHandler` che conserva le notifiche;
+- `without_scan` lascia al test il controllo della prima scansione;
+- `mounts` restituisce il banco pronto.
 
-## Dipendenze e Invarianti
+### `Mounted`
 
-- **Dipendenze interne**: [`fub-abi`](../../crates/fub-abi) e [`fub-kernel`](../../crates/fub-kernel).
-- **Invariante fondamentale**: `fub-testkit` **non entra mai nelle dipendenze di produzione** di alcun crate. È dichiarato esclusivamente sotto `[dev-dependencies]` ed è presidiato dal test `the_test_bench_enters_no_library`.
-- **Dipendenze esterne**: `camino`, `tempfile`.
+- espone `root`, `write`, `write_byte`, `read` ed `exists` per il disco;
+- espone `events`, `event_kinds` e `forgets_events` per la spia;
+- `adapt` applica builder che consumano il `Workspace`;
+- implementa `Deref` e `DerefMut` verso il kernel montato.
 
----
+Quando la scansione iniziale è automatica, gli eventi prodotti durante la
+preparazione vengono cancellati prima che `mounts` restituisca il banco. Chi
+deve osservarli usa `without_scan`, monta, poi avvia esplicitamente la scansione.
 
-## File chiave del modulo
+## Dipendenze e invariante
 
-- [`crates/fub-testkit/src/lib.rs`](../../crates/fub-testkit/src/lib.rs): definizione del builder `Bench` e del wrapper `Mounted`.
-- [`crates/fub-testkit/src/format.rs`](../../crates/fub-testkit/src/format.rs): estrattori di testo campione (`SampleExtractor`, `SampleText`) per simulare formati personalizzati nei test.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`crates/fub-host/tests/concurrency.rs`](../../crates/fub-host/tests/concurrency.rs) per test pratici di concorrenza su `Custody`.
-- Guarda [`crates/fub-features/tests/`](../../crates/fub-features/tests/) per esempi di test end-to-end che montano feature ufficiali con `Bench`.
+Il crate dipende da `fub-abi`, `fub-kernel`, `camino`, `serde_json` e
+`tempfile`. Un test di dipendenza verifica che nessuna libreria di produzione lo
+importi normalmente.
