@@ -34,7 +34,7 @@ Queste sezioni non dimostrano da sole che una funzione sia disponibile. La fotog
 - [Versionamento](versionamento.md)
 - [Changelog](CHANGELOG.md)
 - [Registro tecnico e voci aperte](todo.md)
-- [Decisioni](decisions/README.md)
+- [Decisioni](decisions/README.md), inclusi i **dieci** buchi dichiarati <!-- [conta: buchi-dichiarati] -->
 - [Codice di condotta](CODE_OF_CONDUCT.md)
 
 ## Regole della documentazione
