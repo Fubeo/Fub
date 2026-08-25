@@ -1,35 +1,44 @@
-# Il Kernel: il bibliotecario del programma
+# Il kernel
 
-## L'analogia: il bibliotecario
+`fub-kernel` è il nucleo che mantiene coerente un vault aperto. Conosce
+identità, documenti, policy, registri, indici ed eventi; non conosce Tauri,
+Wasmtime o la sintassi Markdown.
 
-Pensa a una grande biblioteca.
-- Il bibliotecario sa esattamente dove si trova ogni libro, chi lo ha preso in prestito e quanti libri parlano di scienze.
-- Tuttavia, il bibliotecario **non legge tutti i libri riga per riga** e **non dipinge le pareti della biblioteca**.
-
-In Fub, [`fub-kernel`](../../crates/fub-kernel) è esattamente il bibliotecario:
-1. Sa quali file ci sono nella cartella (`DocumentStore`).
-2. Mantiene una mappa di tutti i collegamenti tra le note (`LinkGraph`), così quando apri una pagina sa subito quali altre pagine la citano.
-3. Se chiedi "dammi tutte le note con il tag `#esame`", chiede agli indici specializzati e ti restituisce l'elenco.
-4. Non sa cosa sia una finestra o un pulsante sullo schermo (quello lo fa il frontend).
-5. Non sa come è fatto il linguaggio Markdown (quello lo fa il modulo `fub-format-markdown`).
+## Il percorso reale
 
 ```mermaid
 flowchart LR
-    Frontend["🖥️ Finestra UI<br>(Chiede una nota)"] --> Kernel["🚀 fub-kernel<br>(Il Bibliotecario)"]
-    Kernel --> Parser["🧩 Provider Markdown<br>(Traduce il testo)"]
-    Kernel --> Disco["💾 Disco<br>(Legge il file .md)"]
+    UI["frontend"] --> App["fub-app"]
+    App --> Host["fub-host"]
+    Host --> Kernel["fub-kernel"]
+    Kernel --> Provider["provider definiti da fub-abi"]
+    Kernel --> Storage["VaultStorage"]
 ```
 
----
+La shell non chiama direttamente il kernel. `fub-app` adatta l'IPC Tauri,
+`fub-host` sceglie la sessione e compone i provider, poi il kernel esegue
+l'operazione applicando le regole comuni.
 
-## Perché separare il Kernel dal resto?
+## Cosa fa
 
-Questa separazione è uno dei principi più importanti dell'ingegneria del software: la **modularità**.
+- tiene il catalogo dei documenti conosciuti;
+- legge e scrive il vault attraverso l'astrazione `VaultStorage`;
+- sceglie il provider in base al formato dichiarato;
+- mantiene grafo, metadati e indici sotto il proprietario corretto;
+- applica i permessi alle capacità di `HostApi`;
+- registra viste, comandi, servizi, sintassi e altri provider;
+- emette eventi con origine, filtri e protezione dai cicli senza fine.
 
-Se un giorno volessimo supportare file scritti in un altro formato (per esempio AsciiDoc o LaTeX), basterà aggiungere un nuovo traduttore (provider), senza dover riscrivere una singola riga del kernel!
+## Cosa non fa
 
----
+- non disegna finestre o pannelli;
+- non contiene un parser Markdown;
+- non esegue componenti WebAssembly;
+- non decide come installare o distribuire un plugin;
+- non importa implementazioni concrete quando basta un trait di `fub-abi`.
 
-## Se vuoi il dettaglio
+Aggiungere un formato nuovo dovrebbe richiedere un nuovo `FormatProvider` e gli
+eventuali adattamenti del contratto, non un ramo dedicato nel kernel.
 
-- Guarda [`docs/02-componenti/03-fub-kernel.md`](../02-componenti/03-fub-kernel.md) per scoprire i moduli interni di `fub-kernel`.
+La struttura interna è in
+[`../02-componenti/03-fub-kernel.md`](../02-componenti/03-fub-kernel.md).

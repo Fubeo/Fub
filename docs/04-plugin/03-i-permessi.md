@@ -1,55 +1,58 @@
-# Permessi e sicurezza dei plugin
+# Permessi dei plugin
 
-## Il principio del minimo privilegio
-
-Ogni plugin deve dichiarare nel proprio **manifest** (la sua carta d'identità) esattamente quali permessi richiede per funzionare. Se tenta di compiere un'azione non dichiarata, l'operazione viene bloccata immediatamente.
+Il manifest dichiara le capacità richieste dal bundle. Quando un provider usa
+`HostApi`, il `Guard` verifica sia il permesso generale sia le restrizioni
+associate, come prefissi di path o host di rete.
 
 ```mermaid
 flowchart TD
-    Req["Plugin tenta di scrivere su una nota"] --> Check{"Il manifest ha il permesso<br>fub:write-vault?"}
-    Check -- "Sì" --> Exec["L'operazione viene eseguita"]
-    Check -- "No" --> Block["Errore: Permission Denied (bloccato)"]
+    Req["richiesta di scrittura"] --> Check{"fub:write-vault è concesso?"}
+    Check -->|"sì, e il path è ammesso"| Run["operazione"]
+    Check -->|"no"| Deny["PermissionDenied"]
 ```
 
----
+## Vocabolario corrente
 
-## I permessi dichiarabili
+| Permesso | Significato |
+|---|---|
+| `fub:read-vault` | Leggere il vault; può portare una lista di prefissi ammessi. |
+| `fub:write-vault` | Scrivere il vault; usa la stessa forma di restrizione per path. |
+| `fub:network` | Usare la rete attraverso l'host; può portare una allowlist di host. |
+| `fub:read-clipboard` | Leggere gli appunti del sistema. |
+| `fub:write-clipboard` | Scrivere negli appunti del sistema. |
+| `fub:camera` | Nome riservato per l'accesso alla fotocamera. |
+| `fub:microphone` | Nome riservato per l'accesso al microfono. |
+| `fub:external-fs` | Nome riservato per il filesystem esterno al vault. |
+| `fub:run-command` | Invocare comandi registrati. |
+| `fub:call-service` | Chiamare servizi esposti da altri provider. |
+| `fub:write-settings` | Modificare impostazioni dichiarate scrivibili da un programma. |
+| `fub:read-session` | Conoscere documento e superficie attivi. |
+| `fub:read-selection` | Leggere il testo selezionato dall'utente. |
+| `fub:read-drafts` | Leggere bozze non ancora salvate. |
 
-I permessi disponibili sono definiti in [`crates/fub-abi/src/options.rs`](../../crates/fub-abi/src/options.rs) e includono:
+Il vocabolario contiene **quattordici** nomi [conta: permessi-dichiarabili].
+Camera, microfono, filesystem esterno e appunti sono già nominati per stabilire
+la granularità del consenso, ma il contratto corrente non offre ancora una
+famiglia host per tutte queste operazioni. Dichiarare un nome non crea da solo
+una capacità.
 
-- `fub:read-vault`: permette di leggere i file e la struttura delle note.
-- `fub:write-vault`: permette di creare o modificare documenti nel vault.
-- `fub:network`: permette di effettuare chiamate di rete (HTTP verso internet, con eventuale allowlist host).
-- `fub:external-fs`: permette di accedere al filesystem al di fuori del vault.
-- `fub:read-clipboard` / `fub:write-clipboard`: permettono di leggere o scrivere negli appunti di sistema.
-- `fub:run-command`: permette di invocare comandi registrati da altri provider.
-- `fub:call-service`: permette di invocare metodi esposti da servizi di altri plugin.
-- `fub:write-settings`: permette la modifica programmatica delle impostazioni consentite.
-- `fub:read-session`: permette di conoscere il contesto attivo (es. quale documento/pannello ha il focus).
-- `fub:read-selection`: permette di leggere il testo correntemente selezionato dall'utente.
-- `fub:read-drafts`: permette di consultare il buffer delle bozze non ancora salvate.
-- `fub:camera` / `fub:microphone`: accesso a fotocamera e microfono per acquisizioni multimediali.
+## Operazioni senza permesso dedicato
 
-*(Nota: lo storage isolato del plugin sotto `.fub/data/plugins/<id>/` tramite `data_read`/`data_write` è sempre consentito di default).*
+Lo spazio dati isolato del plugin non richiede un permesso del manifest: il
+namespace del chiamante è già il recinto. Leggere gli schemi e i valori delle
+impostazioni non richiede un permesso perché, per contratto, quello store non
+contiene segreti; scriverli richiede invece `fub:write-settings` e una chiave
+marcata `program_writable`.
 
----
+## Limiti della garanzia
 
-## Come il kernel applica i permessi
+Il permesso dice cosa il provider può chiedere attraverso `HostApi`; non
+significa che ogni richiesta produca un dialogo per l'utente. Inoltre non è una
+sandbox per il codice nativo fidato, che gira nello stesso processo. La barriera
+di sistema più forte riguarda i componenti WASM, ai quali non vengono collegati
+filesystem o rete generici.
 
-Nel modulo [`crates/fub-kernel/src/host/guard.rs`](../../crates/fub-kernel/src/host/guard.rs), ogni metodo esposto tramite `HostApi` viene controllato dalla funzione di guardia prima di toccare il disco o lo stato:
-
-```rust
-// Esempio concettuale del controllo di guardia
-if !self.has_permission(Capability::VaultWrite) {
-    return Err(PluginError::PermissionDenied("manca il permesso fub:write-vault".into()));
-}
-```
-
-Questo meccanismo protegge l'utente da plugin di terze parti dannosi o con bug, assicurando che nessuna nota venga modificata all'insaputa dell'utente.
-
----
-
-## Se vuoi il dettaglio
-
-- Guarda [`crates/fub-kernel/src/host/guard.rs`](../../crates/fub-kernel/src/host/guard.rs) per l'implementazione del controllo di sicurezza.
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](./04-esempio-ping.md) per vedere come un plugin dichiara i propri permessi nel codice.
+I nomi autorevoli sono in
+[`crates/fub-abi/src/options.rs`](../../crates/fub-abi/src/options.rs); il punto
+di applicazione è
+[`crates/fub-kernel/src/host/guard.rs`](../../crates/fub-kernel/src/host/guard.rs).

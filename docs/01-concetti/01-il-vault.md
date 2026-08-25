@@ -1,38 +1,50 @@
-# Il Vault: una cartella di note sul tuo disco
+# Il vault
 
-## L'analogia: la cartellina con i fogli
+Un vault è una cartella normale del computer scelta dall'utente. Fub non la
+trasforma in un database proprietario: documenti, immagini e altri allegati
+restano file visibili e utilizzabili anche da altri programmi.
 
-Immagina di avere una cartellina trasparente con tanti fogli a quadretti. Su ogni foglio scrivi una lezione diversa, e su un foglio puoi scrivere una freccia che rimanda a un altro foglio (come `[[Geografia - I Fiumi]]`).
+Il primo formato documentale supportato è Markdown. Il kernel, però, non presume
+che ogni file sia una nota Markdown: sono i provider registrati a dichiarare
+quali estensioni rappresentano documenti.
 
-In Fub, questa cartellina si chiama **Vault**:
-- Non è un file magico o un database cifrato.
-- È una **semplice cartella sul tuo computer** piena di normali file di testo con estensione `.md` (Markdown).
-- Puoi aprirla con Fub, ma puoi anche aprirla con Obsidian, con Blocco Note, con VS Code o visualizzarla da terminale.
+## Cosa può contenere
 
-```mermaid
-flowchart TB
-    subgraph Vault ["📁 La cartella del Vault (es. AppuntiScuola/)"]
-        F1["📄 Storia.md"]
-        F2["📄 Informatica.md"]
-        F3["📄 Matematica.md"]
-        subgraph FubDir [".fub/ (Cartella di servizio invisibile)"]
-            S1["settings.json (Le tue preferenze)"]
-            S2["data/ (Indici di ricerca veloci)"]
-        end
-    end
+```text
+Appunti/
+├── Storia.md
+├── Scienze.md
+├── immagini/
+│   └── cellula.png
+├── .trash/
+└── .fub/
 ```
 
----
+| Percorso | Ruolo |
+|---|---|
+| File dell'utente | Documenti e allegati che costituiscono il contenuto del vault. |
+| `.trash/` | Cestino condivisibile con applicazioni che adottano la stessa convenzione. |
+| `.fub/` | Impostazioni, organizzazione, dati dei plugin e cache usate da Fub. |
 
-## Cosa c'è dentro un Vault
+## Cosa significa local-first
 
-1. **I tuoi file di testo (`.md`)**: sono il contenuto che scrivi. Rimangono sempre tuoi e non vengono alterati.
-2. **Le immagini e gli allegati**: se trascini un'immagine o un PDF in una nota, viene salvato dentro la cartella del vault.
-3. **La cartella nascosta `.fub/`**: Fub crea una cartellina speciale all'interno del vault dove tiene le preferenze della vista e gli indici di ricerca per trovare le parole all'istante. Se cancelli `.fub/`, non perdi nessuna nota: Fub la ricreerà automaticamente alla riapertura.
+- La copia autorevole dei documenti è sul disco dell'utente.
+- Fub può funzionare sul vault senza trasferire obbligatoriamente i file a un servizio remoto.
+- Un'altra applicazione può modificare la stessa cartella; il watcher e la risincronizzazione aggiornano Fub.
+- Le operazioni richieste dall'utente, come salvataggio, rinomina e ripristino, modificano realmente quei file.
 
----
+“File normali” non significa “file che Fub non tocca”: significa che le modifiche
+restano leggibili fuori dall'app e non richiedono un formato contenitore
+proprietario.
 
-## Se vuoi il dettaglio
+## Attenzione a `.fub/`
 
-- Guarda [`docs/05-disco/01-note-utente.md`](../05-disco/01-note-utente.md) per scoprire i dettagli tecnici del formato delle note.
-- Guarda [`docs/05-disco/02-cartella-fub.md`](../05-disco/02-cartella-fub.md) per la struttura della cartella `.fub/`.
+Non eliminare `.fub/` pensando che sia tutta cache. Alcuni contenuti sono
+autorevoli, come l'organizzazione del vault e i dati persistenti dei plugin. La
+struttura e ciò che può essere ricostruito sono spiegati in
+[`../05-disco/02-cartella-fub.md`](../05-disco/02-cartella-fub.md).
+
+## Approfondimenti
+
+- [`../05-disco/01-note-utente.md`](../05-disco/01-note-utente.md): formato delle note Markdown.
+- [`../05-disco/03-cestino-e-sidecar.md`](../05-disco/03-cestino-e-sidecar.md): cestino e ripristino.

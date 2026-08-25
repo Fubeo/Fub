@@ -1,51 +1,58 @@
-# La cartella `.fub/`: stato, indici e metadati
+# La cartella `.fub/`
 
-## Due categorie di file: Autorevoli vs Derivati
+Fub usa una sola radice di servizio dentro il vault. Il path indica la disciplina
+del dato, ma la situazione corrente richiede una precauzione importante: **non
+eliminare `.fub/` o `.fub/data/` in blocco senza un backup**.
 
-All'interno di ogni vault aperto, Fub crea una cartella nascosta chiamata `.fub/`. I file al suo interno si dividono rigorosamente in due categorie:
+## Layout corrente
 
-```mermaid
-flowchart TD
-    subgraph FubDir [".fub/ (Cartella di servizio)"]
-        subgraph Autorevoli ["File Autorevoli (NON cancellare)"]
-            A1["settings.json<br>(Configurazioni e preferenze del vault)"]
-            A2["workspace.json<br>(Organizzazione del vault: note fissate, ordinamento, spazi)"]
-            A3["journal.jsonl<br>(Registro cronologico delle modifiche)"]
-            A4["drafts/<br>(Directory bozze e testi non ancora salvati)"]
-        end
-
-        subgraph Derivati [".fub/data/ — Dati Derivati (Cancellabili)"]
-            D1["entries.json<br>(Cache dell'anagrafe dei file)"]
-            D2["plugins/<br>(Indici di ricerca Tantivy e storage per-plugin)"]
-        end
-    end
+```text
+.fub/
+├── settings.json
+├── workspace.json
+├── plugins/
+│   └── <plugin-id>/
+└── data/
+    ├── entries.json
+    ├── trash/
+    └── plugins/
+        └── <plugin-id>/
 ```
 
----
+Non tutte le voci devono essere presenti in ogni vault; i provider creano solo
+ciò che usano.
 
-## 1. File Autorevoli (di configurazione e stato)
+## Dati autorevoli
 
-Questi file contengono informazioni che non possono essere ricostruite a partire dal testo delle note:
-- `.fub/settings.json`: impostazioni specifiche per quel vault (ad esempio lingua, tema o plugin abilitati).
-- `.fub/workspace.json`: organizzazione del vault (note fissate/pinned, ordinamento manuale delle cartelle, icone, folder note e spazi).
-- `.fub/journal.jsonl`: registro delle ultime operazioni per consentire il ripristino sicuro dopo una chiusura inaspettata.
-- `.fub/drafts/`: directory con il contenuto temporaneo delle modifiche digitate per ciascuna bozza e non ancora consolidate sul file definitivo.
+| Percorso | Perché va conservato |
+|---|---|
+| `.fub/settings.json` | Impostazioni specifiche del vault. |
+| `.fub/workspace.json` | Icone, note appuntate, ordinamenti manuali e spazi. |
+| `.fub/plugins/<id>/` | Dati persistenti assegnati al plugin, per esempio la cronologia del versioning. |
 
----
+Questi dati non si ricostruiscono leggendo le note. Le scritture usano schema e
+sostituzione atomica; un file illeggibile non deve essere sovrascritto come se
+fosse vuoto.
 
-## 2. File Derivati (`.fub/data/`)
+## Dati sotto `.fub/data/`
 
-Tutto ciò che sta sotto `.fub/data/` è **derivato**:
-- Cache persistente dell'anagrafe dei file (`.fub/data/entries.json`).
-- Indici di ricerca full-text costruiti da `tantivy` (`.fub/data/plugins/fub.search/`).
-- Metadati sidecar delle note nel cestino (`.fub/data/trash/`).
-- Cache delle intestazioni e dei collegamenti per velocizzare l'avvio.
+La radice nasce per contenere derivati, come anagrafe e indice di ricerca. Il
+codice può buttare e ricostruire un derivato che non capisce.
 
-**Proprietà fondamentale**: se chiudi Fub ed elimini l'intera cartella `.fub/data/`, all'avvio successivo Fub rileggerà tutte le note `.md` e ricostruirà gli indici e l'anagrafe in automatico, senza perdere nessun dato personale!
+Esistono però ancora contenuti storicamente collocati qui che non sono davvero
+ricostruibili, in particolare i sidecar del cestino e dati di plugin creati con
+il vecchio layout. Il kernel legge entrambe le radici dei plugin durante la
+migrazione. Per questo la regola sicura per l'utente non è “cancella tutta
+`data/`”, ma “elimina soltanto una cache identificata e ricostruibile”.
 
----
+## Dati della macchina
 
-## Se vuoi il dettaglio
+Non tutto lo stato dell'app vive nel vault. Registro dei vault conosciuti, log e
+altre configurazioni della macchina appartengono a `fub-host` e seguono la
+cartella di configurazione del sistema operativo.
 
-- Guarda [`crates/fub-kernel/src/organization.rs`](../../crates/fub-kernel/src/organization.rs) per la gestione del sidecar dell'organizzazione (`workspace.json`) e [`crates/fub-kernel/src/settings.rs`](../../crates/fub-kernel/src/settings.rs) per le preferenze (`settings.json`).
-- Guarda [`docs/05-disco/03-cestino-e-sidecar.md`](./03-cestino-e-sidecar.md) per scoprire come vengono gestite le note eliminate.
+## Fonti
+
+- [`../../crates/fub-kernel/src/vault.rs`](../../crates/fub-kernel/src/vault.rs): radici del vault e sidecar del cestino.
+- [`../../crates/fub-kernel/src/documents.rs`](../../crates/fub-kernel/src/documents.rs): spazi persistenti e cache dei plugin.
+- [`../../crates/fub-abi/src/organization.rs`](../../crates/fub-abi/src/organization.rs): contenuto di `workspace.json`.

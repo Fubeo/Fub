@@ -1,37 +1,50 @@
-# I Plugin: mattoncini Lego intercambiabili
+# I plugin e i provider
 
-## L'analogia: la presa USB o i mattoncini Lego
+Fub usa un contratto comune per aggiungere formati, comandi, viste, indici,
+servizi e altre capacità. Un **provider** implementa una di queste famiglie; un
+**bundle** raccoglie manifest, ciclo di vita e provider che vengono montati
+insieme.
 
-Quando colleghi una chiavetta USB, un mouse o una tastiera al tuo computer, non devi aprire il case e saldare nuovi fili alla scheda madre: il computer ha una **porta standard** (USB) e ogni accessorio sa come parlarci.
+## Due backend
 
-In Fub, un **plugin** è proprio un accessorio modulare:
-- Tutte le funzioni aggiuntive (come il motore di ricerca veloce `tantivy`, la mappa grafica dei collegamenti o il cestino) sono scritte come plugin.
-- Si collegano al programma attraverso un insieme di regole fisse chiamate **trait** (definiti nel modulo [`crates/fub-abi`](../../crates/fub-abi)).
+| Backend | Stato | Caratteristiche |
+|---|---|---|
+| Nativo | **Implementato** | Codice Rust compilato con Fub; è fidato e gira nello stesso processo. |
+| WebAssembly | **Parziale** | Componente caricato da Wasmtime; oggi attraversa `Plugin` e `CommandProvider`, ma non è ancora installabile dalla shell. |
+
+Le funzionalità ufficiali in `fub-features` sono bundle nativi. Il runtime WASM
+serve a portare lo stesso modello di estensione a componenti di terzi senza
+aggiungere una seconda architettura.
 
 ```mermaid
 flowchart TD
-    Kernel["🚀 Fub Kernel (La base del programma)"]
-    Kernel --- Slot1["🔌 Presa: FormatProvider"]
-    Kernel --- Slot2["🔌 Presa: ViewProvider"]
-    Kernel --- Slot3["🔌 Presa: IndexProvider"]
-
-    Slot1 --- P1["🧩 Modulo Markdown (Legge e scrive .md)"]
-    Slot2 --- P2["🧩 Modulo Grafo (Disegna i collegamenti)"]
-    Slot3 --- P3["🧩 Modulo Ricerca (Trova le parole nei testi)"]
+    Abi["fub-abi: contratto comune"]
+    Native["bundle nativo"] --> Abi
+    Wasm["componente WASM"] --> Adapter["fub-wasm-host"]
+    Adapter --> Abi
+    Abi --> Kernel["registri del kernel"]
 ```
 
----
+## Sicurezza: cosa è già vero
 
-## Chiunque può scrivere un plugin
+Un componente WASM non riceve un ambiente WASI generale. Può chiamare soltanto
+le famiglie che `fub-wasm-host` collega esplicitamente e le operazioni protette
+passano dai permessi del kernel. Memoria e durata delle chiamate hanno limiti.
 
-Fub permette a chiunque di scrivere estensioni usando lo standard WebAssembly (WASM):
-1. Scrivi il tuo codice nel linguaggio che preferisci (Rust, C, Go, ecc.).
-2. Lo compili in un file `.wasm`.
-3. Fub carica il file ed esegue il tuo plugin in una "stanza protetta" (chiamata **sandbox**), impedendogli di fare danni o rubare dati.
+Questa protezione non si applica allo stesso modo al codice nativo: un crate
+Rust compilato nel processo potrebbe usare direttamente le API del sistema
+operativo. I provider nativi sono quindi codice fidato; `HostApi` è per loro un
+confine architetturale e di policy, non una sandbox del sistema operativo.
 
----
+## Cosa manca al percorso utente
 
-## Se vuoi il dettaglio
+- scoperta dei bundle esterni;
+- installazione, aggiornamento e disinstallazione dalla shell;
+- adattatori WASM per tutte le famiglie del contratto;
+- passaggio completo delle viste dichiarative prodotte dal guest.
 
-- Guarda [`docs/04-plugin/01-nativo-vs-wasm.md`](../04-plugin/01-nativo-vs-wasm.md) per capire la differenza tra plugin interni e WebAssembly.
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](../04-plugin/04-esempio-ping.md) per un esempio pratico.
+Un toolchain può produrre un plugin soltanto se sa generare un componente
+compatibile con il WIT di Fub; non basta produrre un modulo `.wasm` generico.
+
+Vedere [`../04-plugin/01-nativo-vs-wasm.md`](../04-plugin/01-nativo-vs-wasm.md)
+e [`../04-plugin/04-esempio-ping.md`](../04-plugin/04-esempio-ping.md).
