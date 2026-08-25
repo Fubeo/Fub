@@ -1,33 +1,50 @@
-# Guida Pratica: Creare un Plugin WebAssembly
+# Creare un componente WASM sperimentale
 
-Questa guida spiega passo dopo passo come scrivere, compilare e collaudare una nuova estensione WebAssembly per Fub.
+> **Stato:** guida per contributori durante la milestone M5. Il runtime sa
+> caricare e collaudare componenti compatibili, ma Fub non offre ancora un
+> flusso utente per scoprire e installare automaticamente un `.wasm` dal vault.
 
----
+Questa pagina spiega come preparare un componente che il banco di
+`fub-wasm-host` può compilare, caricare e montare. Non descrive un sistema di
+plugin già distribuito agli utenti.
 
-## 1. Prerequisiti
+## Prerequisiti
 
-1. **Rust** installato (versione ≥ 1.89).
-2. Il target WebAssembly Component Model installato tramite `rustup`:
-   ```bash
-   rustup target add wasm32-wasip2
-   ```
-
----
-
-## 2. Creare il progetto
-
-Crea una nuova cartella per il plugin fuori dal workspace principale (es. `mio-plugin/`):
+- Rust 1.89;
+- il target `wasm32-wasip2`;
+- una copia del contratto WIT corrente di Fub;
+- familiarità con l'esempio [`ping-wasm`](04-esempio-ping.md).
 
 ```bash
-cargo new --lib mio-plugin
-cd mio-plugin
+rustup target add wasm32-wasip2
 ```
 
-Nel file `Cargo.toml`, configura la libreria come `cdylib` e aggiungi `wit-bindgen`:
+Durante M5 il riferimento canonico resta
+[`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit). Non
+esiste ancora un pacchetto pubblico che sostituisca quel contratto nella catena
+di distribuzione.
+
+## Partire dall'esempio
+
+La base più affidabile è la struttura di
+[`esempi/ping-wasm/`](../../esempi/ping-wasm):
+
+```text
+mio-plugin-wasm/
+├── Cargo.toml
+├── src/
+│   └── lib.rs
+└── wit/
+    └── mio-plugin.wit
+```
+
+Il manifest deve produrre una `cdylib` per il component model. La versione di
+`wit-bindgen` va mantenuta allineata a quella usata dall'esempio verificato in
+CI.
 
 ```toml
 [package]
-name = "mio-plugin"
+name = "mio-plugin-wasm"
 version = "0.1.0"
 edition = "2021"
 
@@ -36,103 +53,119 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wit-bindgen = "0.60"
-
-[profile.release]
-strip = true
-opt-level = "s"
 ```
 
----
+Un componente di prova può vivere fuori dal workspace principale, come gli
+esempi esistenti. In questo modo `cargo test --workspace` non richiede il target
+WASM a chi lavora soltanto sui crate nativi.
 
-## 3. Definire il world WIT del plugin (`wit/mio-plugin.wit`)
+## Dichiarare un mondo minimo
 
-Invece di esportare `fub:abi/plugin-world` (che costringerebbe ad implementare tutte le 11 interfacce del contratto), ogni plugin dichiara un proprio `world` locale contenente solo le interfacce esportate e importate effettivamente:
+Non esportare il mondo generale del contratto quando il componente implementa
+soltanto alcune interfacce. Dichiarare invece un mondo locale con ciò che viene
+usato davvero.
+
+Esempio per un plugin che espone comandi, legge documenti e usa l'orologio:
 
 ```wit
-package mio-namespace:mio-plugin@0.1.0;
+package esempio:mio-plugin@0.1.0;
 
 world mio-plugin {
+    import fub:abi/host-env@0.1.1;
+    import fub:abi/host-vault-read@0.1.1;
+
     export fub:abi/plugin@0.1.1;
+    export fub:abi/command@0.1.1;
 }
 ```
 
----
+La regola è semplice:
 
-## 4. Scrivere il codice del plugin (`src/lib.rs`)
+- ogni `import` è una capacità richiesta all'host;
+- ogni `export` è un'interfaccia implementata dal componente;
+- una famiglia non servita causa un rifiuto esplicito al caricamento;
+- un'operazione protetta richiede anche il permesso corrispondente nel manifest.
 
-Nel file `src/lib.rs`, usa la macro `wit_bindgen::generate!` per generare i binding a partire dai file WIT, e implementa il trait `Guest`:
+## Generare i binding
+
+`wit_bindgen::generate!` deve vedere sia il contratto di Fub sia il mondo locale.
+I percorsi dipendono da dove si trova il progetto:
 
 ```rust
-// Genera i tipi per il world definito nel plugin
 wit_bindgen::generate!({
-    path: ["percorso/verso/fub-abi/wit/fub", "wit"],
-    world: "mio-plugin",
+    path: ["percorso/al/contratto/fub", "wit"],
+    world: "esempio:mio-plugin/mio-plugin",
     generate_all,
 });
-
-use exports::fub::abi::plugin::{Guest, PluginManifest, PluginPermissions};
-use fub::abi::errors::PluginError;
-
-struct MioPlugin;
-
-impl Guest for MioPlugin {
-    fn manifest() -> PluginManifest {
-        PluginManifest {
-            id: "community.mio-plugin".to_string(),
-            name: "Mio Plugin".to_string(),
-            version: "0.1.0".to_string(),
-            abi_version: "0.1.1".to_string(),
-            permissions: PluginPermissions { granted: vec![] },
-            provides: vec![],
-            requires: vec![],
-            settings: vec![],
-            strings: vec![],
-            default_locale: "it".to_string(),
-            timers: vec![],
-        }
-    }
-
-    fn activate() -> Result<(), PluginError> {
-        Ok(())
-    }
-
-    fn deactivate() -> Result<(), PluginError> {
-        Ok(())
-    }
-
-    fn run_job(_job: String, _payload: String) -> Result<String, PluginError> {
-        Ok("ok".to_string())
-    }
-}
-
-export!(MioPlugin);
 ```
 
----
+Nel repository, [`ping-wasm/src/lib.rs`](../../esempi/ping-wasm/src/lib.rs)
+mostra la forma compilata e verificata. È preferibile adattare quel codice
+invece di ricopiare in questa guida una seconda implementazione completa che
+potrebbe divergere.
 
-## 5. Compilare il file `.wasm`
+## Implementare il contratto
 
-Esegui la compilazione specificando il target WebAssembly Component Model:
+Un componente utile al banco deve almeno:
+
+1. esportare `fub:abi/plugin`;
+2. restituire un manifest con identificativo, versione ABI e permessi;
+3. implementare attivazione, disattivazione e gli eventuali job;
+4. implementare ogni altra interfaccia esportata dal mondo locale;
+5. mantenere comandi e risorse nel namespace dichiarato dal manifest.
+
+Per un provider di comandi, il sorgente dell'esempio mostra anche specifiche,
+parametri, convalida ed esiti annidati. Le forme del contratto non vanno
+reinventate in JSON arbitrario: i binding generati sono il confine tipizzato.
+
+## Compilare
+
+Dalla directory che contiene il progetto:
 
 ```bash
-cargo build --target wasm32-wasip2 --release
+cargo build --target wasm32-wasip2
 ```
 
-Il file generato si troverà in:
-`target/wasm32-wasip2/release/mio_plugin.wasm`
+Per un progetto mantenuto dentro questa repo, usare un comando esplicito dalla
+radice:
 
----
+```bash
+cargo build --manifest-path percorso/al/Cargo.toml --target wasm32-wasip2
+```
 
-## 6. Installare e provare il plugin
+## Collegarlo al banco
 
-1. Apri la cartella del tuo vault in Fub.
-2. Posiziona il file `.wasm` compilato dentro `.fub/plugins/mio_plugin.wasm`.
-3. Avvia Fub: il manifest del plugin verrà caricato e i comandi registrati appariranno nella palette.
+Oggi la verifica richiede un test di integrazione che:
 
----
+1. compili o individui l'artefatto prodotto;
+2. lo carichi con `WasmBundle::from_file`;
+3. scelga il livello di fiducia assegnato dall'host;
+4. apra un vault di prova;
+5. monti il bundle attraverso il registro;
+6. interroghi il registro o invochi il comportamento esportato;
+7. smonti il bundle e controlli il ciclo di chiusura.
 
-## Se vuoi il dettaglio
+Usare come riferimenti eseguibili:
 
-- Guarda [`docs/04-plugin/04-esempio-ping.md`](./04-esempio-ping.md) per l'analisi del codice di riferimento di `ping-wasm`.
-- Guarda [`docs/06-contratto/03-il-contratto-wit.md`](../06-contratto/03-il-contratto-wit.md) per tutte le interfacce disponibili nel file `abi.wit`.
+- [`the_first_component.rs`](../../crates/fub-wasm-host/tests/the_first_component.rs) per caricamento, ciclo di vita, permessi e capacità;
+- [`commands_cross_the_boundary.rs`](../../crates/fub-wasm-host/tests/commands_cross_the_boundary.rs) per un provider registrato e invocato attraverso il contratto comune;
+- [`tests/common/mod.rs`](../../crates/fub-wasm-host/tests/common/mod.rs) per la compilazione riproducibile degli esempi.
 
+```bash
+cargo test -p fub-wasm-host --test the_first_component
+cargo test -p fub-wasm-host --test commands_cross_the_boundary
+```
+
+## Installazione nell'app
+
+Non copiare il componente in `.fub/plugins/` aspettandosi che Fub lo scopra. Il
+percorso di installazione utente, l'inventario dei bundle esterni e la loro
+attivazione automatica non sono ancora completi.
+
+Finché M5 resta aperta, un componente nuovo entra nel progetto attraverso un
+esempio e un test di integrazione. Diventerà un plugin installabile soltanto
+quando scoperta, formato del bundle, provenienza, aggiornamento e disattivazione
+saranno collegati alla shell e documentati come percorso stabile.
+
+Lo stato corrente è in [`../PIANO.md`](../PIANO.md) e nella milestone
+[`M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md).
