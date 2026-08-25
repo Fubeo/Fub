@@ -3,8 +3,9 @@
 > **Stato:** prossimo passo approvato, non ancora avviato.
 > **Tracker:** [issue #11](https://github.com/Fubeo/Fub/issues/11).
 > **Aggiornato:** 25 agosto 2026.
-> **Origine:** recupero e revisione del piano storico
-> `docs/07-ui/05-superfici-di-editing-condivise.md`.
+> **Origine:** recupero e revisione del piano storico sulle superfici
+> condivise, conservato nella cronologia Git al commit
+> `5d8af02050700c738e73461a7a0a98059d91dfc2`.
 > **Regola di uscita:** quando il lavoro è concluso, le invarianti stabili
 > confluiscono nelle pagine di architettura e in un eventuale ADR; questo TODO
 > viene eliminato.
