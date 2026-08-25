@@ -1,49 +1,50 @@
 # Cos'è Fub
 
-## In poche parole
+Fub è un workspace di scrittura local-first. L'utente sceglie una cartella, Fub
+lavora sui file presenti in quella cartella e mantiene separati i dati personali
+dalle cache ricostruibili.
 
-**Fub** è un'applicazione desktop per prendere appunti in formato Markdown.
+Il primo formato supportato è Markdown, con compatibilità per le convenzioni più
+comuni dei vault Obsidian. L'architettura, però, non assume che ogni documento
+sia Markdown: il kernel vede un modello comune e chiama provider attraverso i
+trait definiti in `fub-abi`.
 
-A differenza di molte altre applicazioni per note:
-- **È *local-first***: tutti i tuoi dati sono conservati direttamente sul tuo computer, in una normale cartella di file `.md`. Non ci sono database nascosti, server proprietari o account obbligatori.
-- **È compatibile con Obsidian**: puoi aprire una cartella esistente di Obsidian direttamente con Fub senza dover convertire le tue note.
-- **È modulare e basata su plugin**: ogni funzione (ricerca, visualizzazione dei collegamenti, tag, anteprime) è costruita come un componente intercambiabile.
+## Cosa offre oggi
 
-```mermaid
-flowchart LR
-    Cartella["📁 La tua cartella di note (.md)"] <--> Fub["🚀 Fub (Desktop App)"]
-    Fub <--> Note["📝 I tuoi appunti restano leggibili da qualunque editor"]
-```
+| Area | Stato | In pratica |
+|---|---|---|
+| Vault locale | **Implementato** | Apertura, scansione, watcher e operazioni sui file. |
+| Markdown | **Implementato** | Parsing, serializzazione e resa HTML tramite provider dedicato. |
+| Ricerca e collegamenti | **Implementato** | Ricerca indicizzata, wikilink, backlink, tag e outline. |
+| Interfaccia desktop | **Implementato** | Explorer, editor, anteprima, comandi, impostazioni e grafo. |
+| Plugin nativi | **Implementato** | Le funzionalità ufficiali usano gli stessi registri pubblici dei provider. |
+| Plugin WASM di terzi | **Parziale** | Runtime e primi adattatori sono presenti; la copertura completa è la milestone M5. |
 
----
+## Principi
 
-## I quattro principi di Fub
+### I file appartengono all'utente
 
-1. **La verità è nei tuoi file**: se disinstalli Fub, tutte le tue note, i tag e i collegamenti restano file di testo perfettamente leggibili.
-2. **Il Markdown è un modulo, non il padrone**: il nucleo di Fub gestisce strutture generiche di documenti e non dipende da una specifica variante di Markdown.
-3. **Le funzioni integrate sono plugin**: la ricerca con `tantivy`, la vista a grafo e i backlink utilizzano le stesse identiche interfacce che useranno gli sviluppatori di terze parti.
-4. **Sicurezza per i plugin**: i plugin esterni girano dentro WebAssembly (WASM), in una sandbox protetta con permessi controllati.
+Le note restano leggibili senza Fub. Gli indici e le cache devono poter essere
+ricostruiti dai dati autorevoli.
 
----
+### Il kernel non conosce il formato
 
-## Funzionalità principali
+`fub-kernel` gestisce workspace, policy, identità, indici ed eventi. Il provider
+`fub-format-markdown` è il componente che conosce la sintassi Markdown.
 
-- **Navigazione e collegamenti**: supporto a `[[wikilink]]`, tag, backlink e vista a grafo.
-- **Ricerca full-text istantanea**: motore di ricerca integrato basato su `tantivy`.
-- **Interfaccia ed editor**: editor moderno basato su CodeMirror 6 con anteprima e pannelli estendibili.
-- **Nessun vincolo di piattaforma (*no vendor lock-in*)**: i file rimangono testo puro modificabile con qualsiasi altro strumento.
+### Un solo contratto di estensione
 
----
+Provider nativi e componenti WASM devono convergere sugli stessi tipi e trait.
+Il runtime non deve creare una seconda architettura parallela.
 
-## Marchi e compatibilità
+### La shell resta sottile
 
-Obsidian è un marchio del rispettivo titolare. Fub non è affiliato né approvato da Obsidian: supporta il formato dei file e la struttura delle cartelle per garantire la piena interoperabilità dei tuoi dati.
+Il frontend usa comandi, query e viste registrate. Un comportamento esprimibile
+attraverso il contratto comune non riceve un canale IPC speciale.
 
----
+## Prossimi passi
 
-## Se vuoi il dettaglio
-
-- Scopri come avviare Fub sul tuo computer in [`docs/00-inizia-qui/02-come-si-avvia.md`](./02-come-si-avvia.md).
-- Guarda la spiegazione dei concetti base in [`docs/01-concetti/01-il-vault.md`](../01-concetti/01-il-vault.md).
-- Consulta l'indice generale della documentazione in [`docs/README.md`](../README.md).
-
+- Per avviare il progetto: [`02-come-si-avvia.md`](02-come-si-avvia.md).
+- Per orientarsi nel codice: [`03-struttura-del-repo.md`](03-struttura-del-repo.md).
+- Per lo stato del prodotto: [`../FEATURES.md`](../FEATURES.md).
+- Per il piano corrente: [`../PIANO.md`](../PIANO.md).
