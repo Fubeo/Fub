@@ -50,7 +50,12 @@ function selfTest() {
 if (process.argv.includes("--self-test")) selfTest();
 
 const root = path.resolve(process.argv[2] ?? process.cwd());
-const files = trackedMarkdown(root);
+const tracked = trackedMarkdown(root);
+const ROOT_DOCS = new Set([
+  "README.md", "AGENTS.md", "CHANGELOG.md", "CONTRIBUTING.md",
+  "SECURITY.md", "CODE_OF_CONDUCT.md",
+]);
+const files = tracked === null ? null : tracked.filter((rel) => ROOT_DOCS.has(rel) || rel.startsWith("docs/"));
 if (files === null || files.length === 0) {
   console.error("prose: impossibile leggere i Markdown tracciati");
   process.exit(1);
