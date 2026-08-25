@@ -43,6 +43,15 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
   registration.show = () => {
     registration.timer = undefined;
     if (registration.disposed || registration.text.trim() === "") return;
+    // Un ridisegno può rimuovere il bersaglio mentre il ritardo è ancora in
+    // corso. Quel nodo non riceverà più `mouseleave`, quindi il suo timer non
+    // verrà cancellato: senza questo cancello aprirebbe un tooltip senza
+    // coordinate nell'angolo della finestra. Un bersaglio staccato non è più
+    // una superficie della shell e porta via con sé anche la registrazione.
+    if (!target.isConnected) {
+      registration.dispose();
+      return;
+    }
     if (current && current.target !== target) current.registration.hide();
     const element = tooltipElement();
     element.textContent = registration.text;

@@ -57,4 +57,17 @@ describe("il suggerimento della shell", () => {
     second.dispatchEvent(new FocusEvent("blur"));
     expect(document.querySelector('[role="tooltip"]')?.hasAttribute("hidden")).toBe(true);
   });
+
+  it("non apre il suggerimento di una riga rimossa durante il ritardo", () => {
+    const row = document.createElement("div");
+    document.body.append(row);
+    attachTooltip(row, "Progetti/Archivio");
+
+    row.dispatchEvent(new MouseEvent("mouseenter"));
+    row.remove();
+    vi.advanceTimersByTime(TOOLTIP_DELAY_MS);
+
+    expect(document.querySelector('[role="tooltip"]')).toBeNull();
+    expect(row.hasAttribute("aria-describedby")).toBe(false);
+  });
 });
