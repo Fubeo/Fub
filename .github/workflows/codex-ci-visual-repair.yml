@@ -1,0 +1,144 @@
+name: Ripara il banco visivo una volta
+
+on:
+  push:
+    branches:
+      - codex/ci-visual-green
+
+permissions:
+  contents: write
+
+concurrency:
+  group: codex-ci-visual-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: codex/ci-visual-green
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Allinea le fixture del banco al contratto corrente
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("frontend/bench/fake-ipc.ts")
+          source = path.read_text(encoding="utf-8")
+          old = '''/// I componenti montati, per la scheda «Componenti» delle impostazioni.
+          const BUNDLE: BundleInfo[] = [
+            { id: "fub.core", name: "Core", mounted: true, trust: "core" },
+            { id: "fub.outline", name: "Struttura", mounted: true, trust: "core" },
+            { id: "fub.graph", name: "Grafo", mounted: true, trust: "core" },
+            { id: "fub.versioning", name: "Versioni", mounted: false, trust: "core" },
+          ] as BundleInfo[];
+
+          /// I vault che questa macchina conosce, per la scheda «Vault».
+          const KNOWN_VAULTS = [
+            { path: "/Bench vault", name: "Vault del banco", icon: "📷", favorite: true, last_opened: 0 },
+            { path: "/Appunti", name: "", icon: null, favorite: false, last_opened: 0 },
+          ] as unknown as KnownVault[];
+          '''
+          new = '''/// I componenti montati, per la scheda «Componenti» delle impostazioni.
+          ///
+          /// `satisfies` è deliberato: queste fixture attraversano lo stesso confine
+          /// dell'host reale, quindi un campo nuovo nel contratto deve rompere il
+          /// type-check invece di arrivare come errore dentro una fotografia.
+          const BUNDLE = [
+            {
+              id: "fub.core",
+              name: "Core",
+              mounted: true,
+              kind: "component",
+              trust: "core",
+              permissions: {},
+            },
+            {
+              id: "fub.outline",
+              name: "Struttura",
+              mounted: true,
+              kind: "component",
+              trust: "core",
+              permissions: { "fub:read-vault": true, "fub:read-session": true },
+            },
+            {
+              id: "fub.graph",
+              name: "Grafo",
+              mounted: true,
+              kind: "component",
+              trust: "core",
+              permissions: { "fub:read-vault": true },
+            },
+            {
+              id: "fub.versioning",
+              name: "Versioni",
+              mounted: false,
+              kind: "component",
+              trust: "core",
+              permissions: {
+                "fub:call-service": true,
+                "fub:read-selection": true,
+                "fub:read-session": true,
+                "fub:read-vault": true,
+                "fub:run-command": true,
+                "fub:write-settings": true,
+                "fub:write-vault": true,
+              },
+            },
+          ] satisfies BundleInfo[];
+
+          /// I vault che questa macchina conosce, per la scheda «Vault».
+          const KNOWN_VAULTS = [
+            {
+              root: "/Bench vault",
+              name: "Vault del banco",
+              icon: "📷",
+              favorite: true,
+              last_opened: 0,
+              keys_seen: {},
+            },
+            {
+              root: "/Appunti",
+              name: "",
+              icon: null,
+              favorite: false,
+              last_opened: 0,
+              keys_seen: {},
+            },
+          ] satisfies KnownVault[];
+          '''
+
+          if old not in source:
+              raise SystemExit("Il blocco atteso delle fixture non è presente: nessuna modifica applicata")
+          path.write_text(source.replace(old, new, 1), encoding="utf-8")
+
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run typecheck
+        working-directory: frontend
+      - name: Installa il browser pinnato dal lock
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Rigenera le baseline sul runner Linux canonico
+        run: npm run bench:update
+        working-directory: frontend
+      - name: Verifica immediatamente le baseline appena generate
+        run: npm run bench:verify
+        working-directory: frontend
+      - name: Registra la correzione e le baseline
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add frontend/bench/fake-ipc.ts frontend/bench/baseline
+          git commit -m "test(frontend): riallinea le fixture e le baseline visive"
+          git push origin HEAD:codex/ci-visual-green
