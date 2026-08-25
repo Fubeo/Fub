@@ -1,0 +1,53 @@
+name: Rimuovi branch alternativo
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/remove-alternate-branch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  delete:
+    if: "${{ github.event.head_commit.message == 'chore(repo): prepara la rimozione del branch alternativo' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Elimina codex/ci-visual-green
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          status="$(curl --silent --show-error \
+            --output /tmp/delete-response \
+            --write-out '%{http_code}' \
+            --request DELETE \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/git/refs/heads/codex%2Fci-visual-green")"
+
+          if [[ "${status}" != "204" ]]; then
+            echo "Eliminazione fallita con HTTP ${status}:" >&2
+            cat /tmp/delete-response >&2
+            exit 1
+          fi
+
+          check="$(curl --silent --show-error \
+            --output /tmp/check-response \
+            --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header "Accept: application/vnd.github+json" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/codex%2Fci-visual-green")"
+
+          if [[ "${check}" != "404" ]]; then
+            echo "Il branch risulta ancora presente (HTTP ${check}):" >&2
+            cat /tmp/check-response >&2
+            exit 1
+          fi
+
+          echo "Branch alternativo eliminato e assenza verificata."
