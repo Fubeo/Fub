@@ -1,86 +1,89 @@
-# Walkthrough: Il plugin `ping-wasm`
+# L'esempio `ping-wasm`
 
-## 1. L'Idea
+> **Stato:** esempio di integrazione della milestone M5. Non è ancora un plugin
+> che l'utente può installare copiando un file dentro il vault.
 
-L'esempio [`esempi/ping-wasm`](../../esempi/ping-wasm) implementa un plugin WebAssembly minimale con due compiti:
-1. Rispondere a un'operazione di verifica ("ping") leggendo una nota (`Nota.md`) e contando i caratteri.
-2. Registrare due comandi per la palette (`demo.ping:conta` e `demo.ping:esito-ricco`).
+[`esempi/ping-wasm/`](../../esempi/ping-wasm) è il componente più piccolo che
+attraversa davvero il runtime Wasmtime di Fub. Serve a provare il contratto e il
+backend WASM, non a simulare il futuro sistema di distribuzione.
 
-Questo plugin ha un corrispettivo nativo nel test [`crates/fub-host/tests/the_first_plugin.rs`](../../crates/fub-host/tests/the_first_plugin.rs): entrambi eseguono lo stesso compito, dimostrando che Fub tratta codice nativo e WebAssembly con le stesse identiche regole.
+## Cosa dimostra
 
----
+| Parte | Prova eseguibile |
+|---|---|
+| Ciclo di vita | Il componente viene caricato, attivato, montato, interrogato, smontato e disattivato. |
+| Permessi | La lettura del vault riesce soltanto quando il manifest dichiara `fub:read-vault`. |
+| Capacità dell'host | Il componente usa l'orologio e legge `Nota.md` attraverso le interfacce WIT collegate dall'host. |
+| Comandi | Le specifiche e gli esiti del provider di comandi attraversano il confine e arrivano nel registro comune. |
+| Errori | Errori del contratto, permessi negati e famiglie non servite restano esiti leggibili invece di diventare risposte plausibili. |
+| Parità | Il kernel vede gli stessi trait usati dai provider nativi; la differenza resta nell'adattatore del runtime. |
 
-## 2. I Passi nel codice
+## Struttura dell'esempio
 
-### Passo A: Dichiarazione del Manifest
-Il plugin dichiara il proprio identificativo (`demo.ping`), la versione del contratto ABI (`0.1.1`) e i permessi richiesti (`fub:read-vault`):
+| Percorso | Ruolo |
+|---|---|
+| [`Cargo.toml`](../../esempi/ping-wasm/Cargo.toml) | Dichiara una libreria `cdylib`, il target component model e la dipendenza da `wit-bindgen`. |
+| [`wit/ping.wit`](../../esempi/ping-wasm/wit/ping.wit) | Definisce un mondo locale con le sole importazioni ed esportazioni usate dall'esempio. |
+| [`src/lib.rs`](../../esempi/ping-wasm/src/lib.rs) | Implementa il manifest, il ciclo di vita, i job e il provider di comandi. |
 
-```rust
-// Estratto da esempi/ping-wasm/src/lib.rs
-fn manifest() -> PluginManifest {
-    PluginManifest {
-        id: "demo.ping".to_string(),
-        name: "Demo Ping (WASM)".to_string(),
-        version: "0.1.0".to_string(),
-        abi_version: "0.1.1".to_string(),
-        permissions: PluginPermissions {
-            granted: vec![OptionEntry {
-                key: "fub:read-vault".to_string(),
-                value: "true".to_string(),
-            }],
-        },
-        // ...
-    }
+Il componente non dipende dal crate Rust `fub-abi`. Compila contro il contratto
+WIT, come farebbe codice prodotto da un'altra toolchain compatibile con il
+component model.
+
+Il mondo principale è volutamente piccolo:
+
+```wit
+package esempio:ping@0.1.0;
+
+world ping {
+    import fub:abi/host-env@0.1.1;
+    import fub:abi/host-vault-read@0.1.1;
+
+    export fub:abi/plugin@0.1.1;
+    export fub:abi/command@0.1.1;
 }
 ```
 
-### Passo B: Attivazione e orologio
-Quando Fub attiva il plugin, viene invocata la funzione `activate()`, che memorizza il timestamp di avvio senza richiedere permessi speciali:
+Un componente dichiara soltanto le famiglie che usa. L'host risolve ogni
+interfaccia esportata e rifiuta al caricamento una famiglia importata che non sa
+servire.
 
-```rust
-fn activate() -> Result<(), PluginError> {
-    let adesso = fub::abi::host_env::now_unix_millis();
-    unsafe { ACCESO = adesso; }
-    Ok(())
-}
-```
+## Compilazione
 
-### Passo C: Esecuzione del comando `conta`
-Quando l'utente esegue il comando `demo.ping:conta`, il plugin usa l'interfaccia `HostApi` per leggere il file e restituire il conteggio:
-
-```rust
-fn conta() -> Result<CommandOutcome, PluginError> {
-    let testo = crate::fub::abi::host_vault_read::read_document("Nota.md")?;
-    let caratteri = testo.chars().count();
-    Ok(CommandOutcome {
-        notify: Some(Text::Literal(format!("{caratteri} caratteri"))),
-        // ...
-    })
-}
-```
-
----
-
-## 3. Il Contratto WIT
-
-Il plugin non include il codice Rust di Fub, ma compila a partire dalle definizioni di interfaccia scritte in WebAssembly Interface Types ([`crates/fub-abi/wit/fub/abi.wit`](../../crates/fub-abi/wit/fub/abi.wit)).
-
-Questo garantisce che:
-1. Il binario `.wasm` sia leggero e indipendente dal compilatore Rust interno di Fub.
-2. Il plugin possa essere scritto in futuro in qualunque altro linguaggio (come C, Go, Zig o TypeScript) che supporti WASI 0.2.
-
----
-
-## Come compilarlo e provarlo
+Dalla radice del repository:
 
 ```bash
-# Compilazione del plugin WASM
+rustup target add wasm32-wasip2
 cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
 ```
 
----
+`wasm32-wasip2` produce un componente. Il target `wasm32-unknown-unknown`
+produrrebbe invece un modulo core e richiederebbe un passaggio di conversione
+che questo esempio evita.
 
-## Se vuoi il dettaglio
+## Verifica reale
 
-- Esplora il codice completo in [`esempi/ping-wasm/src/lib.rs`](../../esempi/ping-wasm/src/lib.rs).
-- Guarda [`crates/fub-wasm-host/src/component.rs`](../../crates/fub-wasm-host/src/component.rs) per vedere come Fub carica questo file `.wasm`.
+I test compilano il componente da soli, lo caricano con `WasmBundle::from_file`
+e lo montano su un host headless:
+
+```bash
+cargo test -p fub-wasm-host --test the_first_component
+cargo test -p fub-wasm-host --test commands_cross_the_boundary
+```
+
+- [`the_first_component.rs`](../../crates/fub-wasm-host/tests/the_first_component.rs) verifica ciclo di vita, permessi, job, dati e famiglie non servite.
+- [`commands_cross_the_boundary.rs`](../../crates/fub-wasm-host/tests/commands_cross_the_boundary.rs) verifica registrazione, convalida, invocazione ed esiti dei comandi.
+
+## Cosa non dimostra
+
+L'esempio non prova ancora:
+
+- scoperta automatica dei componenti da una cartella del vault;
+- installazione, aggiornamento o disinstallazione dalla shell;
+- un formato pubblico e stabile per distribuire bundle di terzi;
+- adattatori WASM completi per ogni famiglia di provider del contratto.
+
+Queste parti appartengono al lavoro residuo di
+[`M5-wasm-runtime.md`](../milestones/M5-wasm-runtime.md). La guida per creare un
+nuovo esperimento compatibile è in
+[`05-creare-un-plugin.md`](05-creare-un-plugin.md).
