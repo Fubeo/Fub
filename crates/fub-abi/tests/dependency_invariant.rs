@@ -202,9 +202,7 @@ impl<'a> Graph<'a> {
                     .get("kind")
                     .map(Value::is_null)
                     .unwrap_or(true),
-                Some(expected) => {
-                    dependency.get("kind").and_then(Value::as_str) == Some(expected)
-                }
+                Some(expected) => dependency.get("kind").and_then(Value::as_str) == Some(expected),
             })
             .map(|dependency| string(dependency, "name"))
             .collect()
@@ -465,9 +463,7 @@ fn read_diagram(source: &str) -> Diagram {
 }
 
 fn show_edges<'a>(edges: impl Iterator<Item = &'a (String, String)>) -> Vec<String> {
-    edges
-        .map(|(from, to)| format!("{from} -> {to}"))
-        .collect()
+    edges.map(|(from, to)| format!("{from} -> {to}")).collect()
 }
 
 #[test]
@@ -513,10 +509,7 @@ fn the_diagram_declares_the_real_dependencies() {
             real_normal.insert((member.to_string(), dependency.to_string()));
         }
 
-        for dependency in graph
-            .declared(member, Some("dev"))
-            .intersection(&members)
-        {
+        for dependency in graph.declared(member, Some("dev")).intersection(&members) {
             if !normal.contains(dependency) {
                 real_dev.insert((member.to_string(), dependency.to_string()));
             }
