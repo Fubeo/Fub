@@ -1,10 +1,11 @@
 # Componenti e dipendenze del workspace
 
-## Il grafo delle dipendenze
+## Grafo verificato
 
-Il diagramma seguente mostra tutti i crate Rust presenti nel workspace e le relazioni tra di essi.
-- **Freccia continua (`-->`)**: dipendenza normale (il modulo è necessario per compilare ed eseguire la libreria).
-- **Freccia tratteggiata (`-.->`)**: dipendenza di solo test (`[dev-dependencies]`, usata solo durante l'esecuzione dei test automatici).
+Il diagramma mostra tutti i crate Rust del workspace e le dipendenze fra membri.
+
+- `-->`: dipendenza normale;
+- `-.->`: dipendenza presente soltanto in `[dev-dependencies]`.
 
 ```mermaid
 flowchart TD
@@ -55,18 +56,16 @@ flowchart TD
     wasmhost -.-> testkit
 ```
 
----
+## Invarianti principali
 
-## Regole chiave dell'architettura
+1. `fub-abi` non dipende da altri crate del workspace ed evita dipendenze legate a UI, formato e runtime.
+2. `fub-features` usa `fub-abi` come una vera estensione; il kernel compare soltanto nei test.
+3. `fub-testkit` è un banco di prova e non entra come dipendenza normale nelle librerie.
+4. `fub-host` assembla il sistema senza dipendere da Tauri.
+5. `fub-app` è il solo adattatore desktop e non sostituisce il composition root.
 
-1. **`fub-abi` non dipende da nessuno**: è la radice di tutto il sistema. Contiene solo definizioni di tipi e trait, senza dipendere da motori grafici, parser o runtime esterni.
-2. **`fub-features` non dipende dal kernel**: le funzionalità ufficiali (ricerca, tag, grafici) usano unicamente le interfacce pubbliche di `fub-abi`, esattamente come farà un plugin di terze parti.
-3. **`fub-testkit` non entra in nessuna libreria**: serve solo per eseguire test automatici e non viene mai incluso nei file finali distribuiti all'utente.
-4. **`fub-host` non dipende da Tauri**: l'assemblaggio di Fub è separato dall'interfaccia grafica per consentire in futuro l'uso da riga di comando (CLI) o altri ambienti.
+## Fonte di verità
 
----
+Il test [`dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs) legge il blocco marcato `@grafo-dipendenze` e lo confronta nei due versi con i manifest. Un crate o una freccia mancanti rendono la CI rossa.
 
-## Se vuoi il dettaglio
-
-- Guarda [`crates/fub-abi/tests/dependency_invariant.rs`](../../crates/fub-abi/tests/dependency_invariant.rs) per il test automatico che verifica la fedeltà di questo diagramma.
-- Guarda la panoramica in [`docs/02-componenti/01-panoramica.md`](../02-componenti/01-panoramica.md) per la spiegazione dettagliata di ciascun crate.
+Per una descrizione dei componenti consulta [`riferimento/componenti.md`](../riferimento/componenti.md).

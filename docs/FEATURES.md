@@ -1,7 +1,11 @@
-# Compatibilità: FEATURES.md
+# Funzionalità: come leggere le specifiche
 
-Questo percorso è mantenuto come **alias di compatibilità** per documenti e commenti storici che citano il vecchio `FEATURES.md` monolitico.
+Le specifiche dettagliate vivono in [`features/`](features/README.md). I comportamenti piccoli e osservabili vivono in [`microfeatures/`](microfeatures/README.md).
 
-Il capitolato funzionale corrente è stato suddiviso in documenti tematici sotto [`features/`](features/01-principi-fondanti.md). La scomposizione granulare dei gesti utente vive invece in [`microfeatures/`](microfeatures/vault-ed-esploratore.md).
+Questi documenti rispondono a “che cosa dovrebbe offrire Fub?”, non a “che cosa funziona già oggi?”.
 
-Per capire cosa è già implementato e cosa resta aperto, usa [`todo.md`](todo.md): le specifiche descrivono il prodotto, il registro aperto descrive lo stato dei lavori.
+Per lo stato corrente usa [`STATO.md`](STATO.md). Per il lavoro realmente aperto usa [`todo.md`](todo.md). Per l'ordine futuro usa [`roadmap/`](roadmap/README.md) e [`milestones/`](milestones/README.md).
+
+## Regola
+
+Una funzione si considera disponibile soltanto quando esistono codice collegato alla build, test o verifiche adeguate e una descrizione corrente coerente. Una checklist di prodotto, da sola, non basta.
