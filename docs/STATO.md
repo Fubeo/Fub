@@ -1,6 +1,6 @@
 # Stato del progetto
 
-Questa pagina è la fotografia sintetica della versione presente nel repository. Non sostituisce i test o i manifest: li rende leggibili.
+Questa pagina è la fotografia sintetica della versione presente nel repository. Non sostituisce test o manifest: li rende leggibili.
 
 ## Versione e distribuzione
 
@@ -58,7 +58,11 @@ Il WIT vivo, le baseline congelate, il varco compilabile e il runtime dedicato e
 
 ## Lavoro aperto
 
-Le attività tecniche realmente aperte sono in [`todo.md`](todo.md). Le milestone e la roadmap spiegano l'ordine e le dipendenze del lavoro; le specifiche di prodotto restano separate.
+- [`PIANO.md`](PIANO.md) definisce direzione, milestone e priorità correnti;
+- [`todo.md`](todo.md) contiene le attività e le decisioni realmente aperte;
+- [`milestones/`](milestones/README.md) conserva criteri e prove dei traguardi;
+- [`roadmap/`](roadmap/README.md) è l'archivio storico delle sedute di progettazione;
+- [`features/`](features/README.md) resta separata perché descrive requisiti di prodotto.
 
 ## Fonti di verità
 
@@ -69,4 +73,5 @@ Le attività tecniche realmente aperte sono in [`todo.md`](todo.md). Le mileston
 | qual è il contratto WASM | `crates/fub-abi/wit/fub/abi.wit` |
 | quali comandi verifica la CI | `.github/workflows/ci.yml` |
 | quali attività sono aperte | `docs/todo.md` |
+| quali priorità sono correnti | `docs/PIANO.md` |
 | perché è stata presa una decisione | `docs/decisions/` |

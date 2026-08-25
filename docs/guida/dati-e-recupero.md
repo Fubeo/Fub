@@ -1,20 +1,31 @@
 # Dati, backup e recupero
 
-## La regola più importante
+## Regola più importante
 
-Non cancellare tutta `.fub/` o tutta `.fub/data/` pensando che contengano soltanto cache. Alcuni dati sono ricostruibili, altri conservano informazioni che non esistono nelle note: bozze, organizzazione della sidebar, stato delle viste, snapshot e metadati di recupero.
+Non cancellare tutta `.fub/` o tutta `.fub/data/` pensando che contengano soltanto cache. Alcuni dati sono ricostruibili; altri conservano informazioni che non esistono nelle note, come bozze, organizzazione della sidebar, stato delle viste, snapshot e metadati di recupero.
 
 La vecchia documentazione applicava una regola troppo ampia alla cartella `.fub/data/`; questa pagina la sostituisce.
+
+```mermaid
+flowchart TD
+    FILE["File sotto il vault"] --> SOURCE{"È un documento o allegato dell'utente?"}
+    SOURCE -->|"sì"| KEEP["Conserva sempre<br>e includi nel backup"]
+    SOURCE -->|"no"| SCHEMA{"Lo schema dichiara che è ricostruibile?"}
+    SCHEMA -->|"sì"| CACHE["Può essere rigenerato<br>con il comando previsto"]
+    SCHEMA -->|"no o dubbio"| STATE["Trattalo come stato non ricostruibile"]
+    STATE --> KEEP
+    CACHE -. "mai cancellare l'intera cartella" .-> KEEP
+```
 
 ## Tre categorie
 
 ### File dell'utente
 
-Sono i documenti e gli allegati del vault. Sono la sorgente principale e devono entrare sempre nel backup.
+Sono documenti e allegati del vault. Sono la sorgente principale e devono entrare sempre nel backup.
 
 ### Stato non ricostruibile
 
-Comprende, a seconda delle funzionalità attive:
+Comprende, secondo le funzionalità attive:
 
 - impostazioni del vault;
 - organizzazione manuale, note fissate e stato delle viste;
@@ -33,13 +44,23 @@ Indici di ricerca, anagrafi e altre cache possono essere rigenerati dal vault. L
 
 Per un backup completo copia il vault intero, inclusa `.fub/`, mentre Fub è chiuso. Non escludere automaticamente le cartelle nascoste.
 
-Per un backup minimo delle sole note puoi copiare i documenti e gli allegati, ma perderai preferenze, organizzazione, bozze, versioni e altri dati applicativi.
+Per un backup minimo delle sole note puoi copiare documenti e allegati, ma perderai preferenze, organizzazione, bozze, versioni e altri dati applicativi.
 
 ## Cestino e versioni
 
 La cancellazione deve passare dal cestino gestito dal vault, non da una rimozione definitiva. Gli snapshot di versioning sono una rete di sicurezza, non una copia completa del vault e non sostituiscono un backup esterno.
 
 ## In caso di problema
+
+```mermaid
+flowchart TD
+    PROBLEM["Errore o dati incoerenti"] --> CLOSE["Chiudi Fub"]
+    CLOSE --> COPY["Copia l'intero vault<br>inclusa .fub/"]
+    COPY --> COLLECT["Raccogli errore e diagnostica"]
+    COLLECT --> SAFE{"Esiste un comando di manutenzione previsto?"}
+    SAFE -->|"sì"| RUN["Eseguilo sulla copia o dopo il backup"]
+    SAFE -->|"no"| STOP["Non modificare a mano JSON o indici"]
+```
 
 1. chiudi Fub;
 2. crea una copia completa del vault, inclusa `.fub/`;

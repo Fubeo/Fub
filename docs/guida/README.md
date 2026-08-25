@@ -12,4 +12,4 @@ Fub è ancora in sviluppo: non esiste un rilascio pubblico né un installer uffi
 4. [Problemi comuni](problemi-comuni.md)
 5. [Sviluppare un provider o un plugin](creare-un-plugin.md)
 
-Per sapere cosa è realmente disponibile nel codice consulta [lo stato del progetto](../STATO.md). Le specifiche future sono separate nelle cartelle [`features/`](../features/README.md), [`microfeatures/`](../microfeatures/README.md) e [`roadmap/`](../roadmap/README.md).
+Per sapere cosa è realmente disponibile consulta [lo stato del progetto](../STATO.md). Le specifiche di prodotto sono in [`features/`](../features/README.md) e [`microfeatures/`](../microfeatures/README.md); le priorità correnti sono in [`PIANO.md`](../PIANO.md).

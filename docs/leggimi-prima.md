@@ -1,12 +1,12 @@
 # Leggimi prima
 
-I documenti di Fub usano quattro categorie. Confonderle è il modo più semplice per ottenere una documentazione tecnicamente corretta ma sostanzialmente falsa.
+I documenti di Fub usano quattro categorie. Confonderle è il modo più semplice per ottenere una documentazione formalmente corretta ma sostanzialmente falsa.
 
 ## Corrente
 
-Descrive il comportamento presente nel repository. Le pagine correnti principali sono [`STATO.md`](STATO.md), [`guida/`](guida/README.md), [`architecture/`](architecture/README.md), [`06-contratto/`](06-contratto/README.md), [`frontend/`](frontend/README.md) e [`riferimento/`](riferimento/README.md).
+Descrive il comportamento presente nel repository. Le fonti principali sono [`STATO.md`](STATO.md), [`guida/`](guida/README.md), [`architecture/`](architecture/README.md), [`06-contratto/`](06-contratto/README.md), [`frontend/`](frontend/README.md) e [`riferimento/`](riferimento/README.md).
 
-Quando una pagina corrente contraddice il codice o i test, va corretta nello stesso cambiamento.
+Quando una pagina corrente contraddice codice, manifest o test, va corretta nello stesso cambiamento.
 
 ## Specifica
 
@@ -14,15 +14,19 @@ Le cartelle [`features/`](features/README.md), [`microfeatures/`](microfeatures/
 
 ## Piano
 
-[`roadmap/`](roadmap/README.md), [`milestones/`](milestones/README.md), [`PIANO.md`](PIANO.md) e i documenti che includono “piano” nel titolo descrivono lavoro deciso o esplorato. Un piano può essere molto dettagliato senza essere già implementato.
+[`PIANO.md`](PIANO.md), [`milestones/`](milestones/README.md), [`todo.md`](todo.md) e i documenti che includono “piano” nel titolo descrivono priorità, traguardi o lavoro ancora aperto. Un piano può essere molto dettagliato senza essere già implementato.
 
 ## Storico
 
-[`decisions/`](decisions/README.md) conserva il perché delle scelte. [`todo.md`](todo.md) è anche un registro tecnico dell'evoluzione del progetto. I nomi e i percorsi citati nello storico possono essere quelli del momento in cui il documento è stato scritto.
+[`decisions/`](decisions/README.md) conserva il perché delle scelte chiuse. [`roadmap/`](roadmap/README.md) conserva le sedute che hanno portato a quelle scelte. I nomi e i percorsi citati nei documenti storici possono essere quelli del momento in cui furono scritti.
 
 ## Ordine consigliato
 
-Per usare Fub: [`guida/`](guida/README.md).  
-Per contribuire: [`CONTRIBUTING.md`](CONTRIBUTING.md).  
-Per capire il sistema: [`architecture/panoramica.md`](architecture/panoramica.md).  
-Per verificare una funzione: [`STATO.md`](STATO.md), poi codice e test collegati.
+| Obiettivo | Percorso |
+|---|---|
+| Usare Fub | [`guida/`](guida/README.md) |
+| Contribuire | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Capire il sistema | [`architecture/panoramica.md`](architecture/panoramica.md) |
+| Verificare una funzione | [`STATO.md`](STATO.md), poi codice e test collegati |
+| Capire una priorità | [`PIANO.md`](PIANO.md), poi [`todo.md`](todo.md) |
+| Ricostruire una scelta | [`decisions/`](decisions/README.md), poi la seduta collegata |
