@@ -68,7 +68,7 @@ Issue:
 ### Architettura della shell
 
 - [#11 — superfici di editing condivise con un secondo cliente](https://github.com/Fubeo/Fub/issues/11)
-  ([piano operativo](todo-modularita-superfici-di-editing.md))
+  ([piano operativo](todo-superfici-di-editing-condivise.md))
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
@@ -84,7 +84,7 @@ prova.
 2. completare le prove di resilienza #5–#7;
 3. separare la Graph View soltanto con benchmark e test #6/#12;
 4. eseguire il
-   [TODO sulle superfici di editing](todo-modularita-superfici-di-editing.md)
+   [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md)
    con il secondo cliente reale tracciato in #11;
 5. chiudere le decisioni sui temi #13;
 6. preparare la prima release dopo il ciclo completo di compatibilità,
@@ -94,6 +94,6 @@ prova.
 
 - [Roadmap](roadmap.md)
 - [M5](m5-wasm-runtime.md)
-- [TODO sulle superfici di editing](todo-modularita-superfici-di-editing.md)
+- [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md)
 - [Changelog](../../CHANGELOG.md)
 - [Issue aperte](https://github.com/Fubeo/Fub/issues)
