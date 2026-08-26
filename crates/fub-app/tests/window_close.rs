@@ -18,7 +18,7 @@
 //! si sposta, questo test **non compila**.
 
 const CAPABILITIES: &str = include_str!("../capabilities/default.json");
-const IPC: &str = include_str!("../../../frontend/src/host/ipc.ts");
+const IPC: &str = include_str!("../../../apps/client/src/host/ipc.ts");
 
 /// Il permesso senza cui la `destroy()` di `onCloseRequested` viene rifiutata.
 const DESTROY: &str = "core:window:allow-destroy";
@@ -33,7 +33,7 @@ fn listener_of_close_has_destroy_permission() {
 
     assert!(
         !listens || can_destroy,
-        "the shell subscribes to `onCloseRequested` in `frontend/src/host/ipc.ts`, \
+        "the shell subscribes to `onCloseRequested` in `apps/client/src/host/ipc.ts`, \
          so the backend cancels the native close and the window dies only with \
          `destroy()`: add `{DESTROY}` to the permissions of \
          `crates/fub-app/capabilities/default.json`, or the X stops closing the \
