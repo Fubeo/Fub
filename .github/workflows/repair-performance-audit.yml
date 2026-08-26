@@ -37,6 +37,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import subprocess
           from textwrap import dedent
 
           workflow_path = Path(".github/workflows/apply-performance-audit.yml")
@@ -57,6 +58,73 @@ jobs:
           script = script.replace(old_lifetime, new_lifetime, 1)
           exec(compile(script, "performance-audit-patch.py", "exec"), {})
 
+          # exists+remove e remove+NotFound non sono equivalenti per un supporto
+          # personalizzato né in presenza di concorrenza. La bozza conserva
+          # quindi integralmente la semantica originaria.
+          subprocess.run(
+              [
+                  "git",
+                  "restore",
+                  "--source=HEAD",
+                  "--",
+                  "crates/fub-kernel/src/drafts.rs",
+              ],
+              check=True,
+          )
+
+          # Un ordinamento instabile può cambiare quale errore viene riportato
+          # per input invalidi con lo stesso punto iniziale. Il guadagno è
+          # marginale e non soddisfa il vincolo di equivalenza.
+          edit_path = Path("crates/fub-abi/src/edit.rs")
+          edit = edit_path.read_text()
+          unstable_sort = "        ordered.sort_unstable_by_key(|and| and.span.start);\n"
+          stable_sort = "        ordered.sort_by_key(|and| and.span.start);\n"
+          if edit.count(unstable_sort) != 1:
+              raise SystemExit("ordinamento degli edit inatteso dopo l'audit")
+          edit_path.write_text(edit.replace(unstable_sort, stable_sort, 1))
+
+          # Conserva anche i casi limite della scansione originaria: `from`
+          # fuori intervallo, dentro un carattere UTF-8 e il confine finale.
+          # La scansione principale resta sui soli confini di carattere.
+          occurrences_path = Path("crates/fub-kernel/src/occurrences.rs")
+          occurrences = occurrences_path.read_text()
+          optimized_scan = r"""fn first_at_or_after(source: &str, needle: &str, from: usize) -> Option<Span> {
+              debug_assert!(source.is_char_boundary(from));
+              for (offset, _) in source[from..].char_indices() {
+                  let at = from + offset;
+                  if let Some(len) = prefix_len_there(&source[at..], needle) {
+                      return Some(Span::new(at, at + len));
+                  }
+              }
+              None
+          }
+          """
+          equivalent_scan = r"""fn first_at_or_after(source: &str, needle: &str, from: usize) -> Option<Span> {
+              if from > source.len() {
+                  return None;
+              }
+              let mut start = from;
+              while start < source.len() && !source.is_char_boundary(start) {
+                  start += 1;
+              }
+              for at in source[start..]
+                  .char_indices()
+                  .map(|(offset, _)| start + offset)
+                  .chain(std::iter::once(source.len()))
+              {
+                  if let Some(len) = prefix_len_there(&source[at..], needle) {
+                      return Some(Span::new(at, at + len));
+                  }
+              }
+              None
+          }
+          """
+          if occurrences.count(optimized_scan) != 1:
+              raise SystemExit("scansione delle occorrenze inattesa dopo l'audit")
+          occurrences_path.write_text(
+              occurrences.replace(optimized_scan, equivalent_scan, 1)
+          )
+
           parse_path = Path("crates/fub-format-markdown/src/parse.rs")
           parse = parse_path.read_text()
           old_slice = (
@@ -71,29 +139,6 @@ jobs:
           if parse.count(old_slice) != 1:
               raise SystemExit("slicing Markdown inatteso")
           parse_path.write_text(parse.replace(old_slice, new_slice, 1))
-
-          # Il tentativo di ridurre exists+remove a una sola remove non è
-          # equivalente per i supporti personalizzati: introduce una chiamata
-          # osservabile anche quando la bozza non esiste e altera le finestre
-          # concorrenti. Si conserva quindi il comportamento originario.
-          drafts_path = Path("crates/fub-kernel/src/drafts.rs")
-          drafts = drafts_path.read_text()
-          optimized_discard = r"""    pub(crate) fn discard(&self, doc: &DocId) -> std::io::Result<()> {
-              crate::error::optional(self.storage.remove(&self.path(doc)))?;
-              Ok(())
-          }
-          """
-          equivalent_discard = r"""    pub(crate) fn discard(&self, doc: &DocId) -> std::io::Result<()> {
-              let path = self.path(doc);
-              if !self.storage.exists(&path) {
-                  return Ok(());
-              }
-              self.storage.remove(&path)
-          }
-          """
-          if drafts.count(optimized_discard) != 1:
-              raise SystemExit("implementazione discard inattesa dopo l'audit")
-          drafts_path.write_text(drafts.replace(optimized_discard, equivalent_discard, 1))
           PY
       - run: cargo fmt --all
       - run: cargo fmt --all --check
