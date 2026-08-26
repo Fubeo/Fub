@@ -1,0 +1,490 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+base_sha="bb064a44aecc1bdef7873f264d3aae8e9b264c88"
+git config user.name "Fubeo"
+git config user.email "83821420+Fubeo@users.noreply.github.com"
+
+mkdir -p apps
+git mv frontend apps/client
+git mv crates/fub-app apps/client/src-tauri
+
+mkdir -p \
+  apps/client/src/entrypoints \
+  apps/client/src/platform \
+  apps/client/src/shells/desktop \
+  apps/client/src/shells/mobile
+
+git mv \
+  apps/client/src/main.ts \
+  apps/client/src/shells/desktop/bootstrap.ts
+
+python3 <<'PY'
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+root = Path(".")
+
+def read_text(path: Path) -> str | None:
+    try:
+        return path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return None
+
+def write_if_changed(path: Path, before: str, after: str) -> None:
+    if before != after:
+        path.write_text(after, encoding="utf-8")
+
+# Il crate Tauri si è avvicinato al client e si è allontanato di un
+# livello dalla radice. Corregge prima i path relativi, affinché la
+# sostituzione dei percorsi canonici non li trasformi in path ibridi.
+tauri_root = root / "apps/client/src-tauri"
+for path in tauri_root.rglob("*"):
+    if not path.is_file():
+        continue
+    before = read_text(path)
+    if before is None:
+        continue
+    after = before.replace("../../frontend/", "../")
+    after = after.replace("../../frontend", "..")
+    after = after.replace("../../../docs/", "../../../../docs/")
+    write_if_changed(path, before, after)
+
+# Il bootstrap desktop è lo stesso codice di prima, ma ora vive dentro
+# la shell che lo possiede. Gli import tornano alla radice condivisa.
+bootstrap = root / "apps/client/src/shells/desktop/bootstrap.ts"
+before = bootstrap.read_text(encoding="utf-8")
+after = re.sub(r'(from\s+["\'])\./', r'\1../../', before)
+after = re.sub(r'(import\s+["\'])\./', r'\1../../', after)
+after = re.sub(r'(import\(\s*["\'])\./', r'\1../../', after)
+marker = 'import { DESKTOP_SHELL } from "./index";\n'
+if marker not in after:
+    after = marker + after
+after = after.replace("`main.ts`", "`bootstrap.ts`")
+dataset = 'document.documentElement.dataset.clientShell = DESKTOP_SHELL.id;\n\n'
+if dataset not in after:
+    imports = list(re.finditer(r"(?ms)^import\b.*?;\n", after))
+    if not imports:
+        raise SystemExit("nessun import nel bootstrap desktop")
+    end = imports[-1].end()
+    after = after[:end] + "\n" + dataset + after[end:]
+bootstrap.write_text(after, encoding="utf-8")
+
+# Aggiorna i percorsi canonici in codice, guard, workflow e prosa.
+replacements = (
+    ("crates/fub-app", "apps/client/src-tauri"),
+    ("frontend/", "apps/client/"),
+    ("cd frontend", "cd apps/client"),
+    ("working-directory: frontend", "working-directory: apps/client"),
+    ('"fub-frontend"', '"fub-client"'),
+)
+ignored = root / ".github/workflows/migrate-unified-client.yml"
+for path in root.rglob("*"):
+    if not path.is_file() or path == ignored:
+        continue
+    before = read_text(path)
+    if before is None:
+        continue
+    after = before
+    for old, new in replacements:
+        after = after.replace(old, new)
+    write_if_changed(path, before, after)
+
+# I guard JavaScript che nominavano la directory come singolo segmento
+# ora nominano il percorso canonico del client.
+scripts = root / ".github/scripts"
+for path in scripts.rglob("*.mjs"):
+    before = path.read_text(encoding="utf-8")
+    after = before.replace('"frontend"', '"apps/client"')
+    after = after.replace("'frontend'", "'apps/client'")
+    write_if_changed(path, before, after)
+
+# Configurazione del client e adattatore nativo.
+package = root / "apps/client/package.json"
+data = json.loads(package.read_text(encoding="utf-8"))
+data["name"] = "fub-client"
+package.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+lock = root / "apps/client/package-lock.json"
+lock_text = lock.read_text(encoding="utf-8").replace('"fub-frontend"', '"fub-client"')
+lock.write_text(lock_text, encoding="utf-8")
+
+tauri_config = root / "apps/client/src-tauri/tauri.conf.json"
+config = json.loads(tauri_config.read_text(encoding="utf-8"))
+config["build"]["frontendDist"] = "../dist"
+config["build"]["beforeDevCommand"] = (
+    "sh -c 'cd \"$(git rev-parse --show-toplevel)/apps/client\" && npm run dev'"
+)
+config["build"]["beforeBuildCommand"] = (
+    "sh -c 'cd \"$(git rev-parse --show-toplevel)/apps/client\" && npm run build'"
+)
+tauri_config.write_text(
+    json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+    encoding="utf-8",
+)
+
+# Il cartello locale non duplica la documentazione canonica: spiega
+# soltanto il confine fisico appena introdotto.
+(root / "apps/client/README.md").write_text(
+    """# apps/client/
+
+Il client unificato di Fub: una sola applicazione, una sola logica e più shell
+di presentazione.
+
+- `src/main.ts` sceglie l'entrypoint corrente;
+- `src/entrypoints/desktop.ts` avvia la shell desktop;
+- `src/shells/desktop/` possiede layout e interazioni desktop;
+- `src/shells/mobile/` dichiara il confine della futura shell mobile;
+- `src/platform/` descrive capacità della piattaforma, senza spargere
+  condizioni `isMobile`;
+- `src-tauri/` è il crate `fub-app`, adattatore Tauri comune al client.
+
+Editor, stato, host TypeScript, temi e feature restano condivisi finché una
+differenza di presentazione non richiede una vista specifica della shell.
+
+La documentazione canonica è in
+[`docs/architecture/frontend-and-ipc.md`](../../docs/architecture/frontend-and-ipc.md).
+L'avvio completo è nel [README della radice](../../README.md).
+
+Comandi locali: `npm ci`, `npm run dev`, `npm run typecheck`, `npm test` e
+`npm run build`.
+""",
+    encoding="utf-8",
+)
+
+# La mappa del repository deve mostrare che fub-app è ancora un membro
+# Cargo, ma non è più una libreria condivisa sotto crates/.
+tour = root / "docs/getting-started/repository-tour.md"
+before = tour.read_text(encoding="utf-8")
+map_re = re.compile(r"```text\nFub/\n.*?\n```", re.S)
+repository_map = """```text
+Fub/
+├── apps/
+│   └── client/
+│       ├── src/               logica UI condivisa e shell
+│       └── src-tauri/         crate fub-app e adattatore Tauri
+├── crates/                    librerie Rust condivise
+│   ├── fub-abi/
+│   ├── fub-kernel/
+│   ├── fub-host/
+│   ├── fub-sdk/
+│   ├── fub-testkit/
+│   ├── fub-format-markdown/
+│   ├── fub-features/
+│   └── fub-wasm-host/
+├── esempi/                    componenti WASM eseguiti dai test
+├── tools/                     verifiche fuori dal workspace
+├── docs/                      documentazione canonica
+└── .github/                   workflow e guard
+```"""
+after, count = map_re.subn(repository_map, before, count=1)
+if count != 1:
+    raise SystemExit("mappa del repository non trovata")
+tour.write_text(after, encoding="utf-8")
+
+# La pagina dei confini usa il nome fisico del client, non il vecchio
+# contenitore generico.
+boundaries = root / "docs/architecture/components-and-boundaries.md"
+before = boundaries.read_text(encoding="utf-8")
+after = before.replace('FRONTEND["frontend"] --> APP', 'CLIENT["apps/client"] --> APP')
+after = after.replace("| `frontend` |", "| `apps/client` |")
+after = after.replace("file frontend arbitrario", "file arbitrario del client")
+after = after.replace("Modifica `frontend`", "Modifica `apps/client`")
+after = after.replace("| seam frontend |", "| seam client |")
+boundaries.write_text(after, encoding="utf-8")
+
+# Descrive il nuovo confine nella pagina canonica già proprietaria
+# dell'argomento.
+architecture = root / "docs/architecture/frontend-and-ipc.md"
+text = architecture.read_text(encoding="utf-8")
+section = """## Un client, più shell
+
+`apps/client/` è una sola applicazione. Stato, editor, feature, contratto host e
+componenti condivisi non vengono copiati per piattaforma. Le differenze di
+presentazione vivono in `src/shells/desktop/` e `src/shells/mobile/`.
+
+La shell desktop può usare pannelli permanenti, mouse, tastiera e finestre. La
+shell mobile può usare schermate, gesture e superfici a tutto schermo. Entrambe
+invocano le stesse operazioni e leggono lo stesso stato.
+
+Le eccezioni non controllano il nome della piattaforma. Passano da
+`src/platform/capabilities.ts`: una funzione chiede una capacità concreta e
+sceglie un fallback. In questo modo tablet, desktop touch e piattaforme future
+possono combinare capacità senza diventare nuovi rami globali.
+
+`src/main.ts` resta deliberatamente sottile: seleziona l'entrypoint desktop
+corrente. La shell mobile riceverà un entrypoint eseguibile quando esisterà il
+primo flusso mobile reale; fino ad allora ne esistono contratto e capacità, non
+una seconda applicazione vuota.
+
+"""
+if "## Un client, più shell" not in text:
+    first_heading = text.find("\n## ")
+    if first_heading == -1:
+        text = text.rstrip() + "\n\n" + section
+    else:
+        text = text[: first_heading + 1] + "\n" + section + text[first_heading + 1 :]
+architecture.write_text(text, encoding="utf-8")
+
+# README: nome e comandi della nuova casa fisica.
+readme = root / "README.md"
+text = readme.read_text(encoding="utf-8")
+text = text.replace(
+    "La shell usa Tauri v2 e un frontend Vite/TypeScript. Il core è un workspace\n"
+    "Rust. Markdown è il primo `FormatProvider`, non il formato incorporato nel\n"
+    "kernel.",
+    "Il client unificato usa Tauri v2 e Vite/TypeScript, con shell di\n"
+    "presentazione separate per piattaforma. Il core è un workspace Rust.\n"
+    "Markdown è il primo `FormatProvider`, non il formato incorporato nel kernel.",
+)
+readme.write_text(text, encoding="utf-8")
+
+# ADR: una sola identità applicativa, shell distinte.
+adr = root / "docs/decisions/0199-un-client-piu-shell.md"
+adr.write_text(
+    """# 0199 — Un solo client espone più shell di presentazione
+
+- **Stato:** accolta
+- **Data:** 2026-08-26
+- **Ambito:** frontend
+- **Sostituisce:** —
+- **Sostituita da:** —
+
+## Contesto
+
+Desktop e mobile devono offrire quasi le stesse funzioni, ma layout,
+navigazione e interazioni non possono essere la stessa interfaccia riempita di
+condizioni. Due applicazioni complete copierebbero stato, editor, comandi,
+salvataggio e integrazione con l'host.
+
+## Decisione
+
+Fub ha un solo client in `apps/client/`. La logica applicativa e i motori
+restano condivisi. Le differenze di presentazione vivono in shell esplicite:
+`src/shells/desktop/` e `src/shells/mobile/`.
+
+Le differenze di piattaforma passano da capacità nominate in
+`src/platform/capabilities.ts`; il codice condiviso non controlla globalmente
+`isMobile`. Il crate Tauri `fub-app` vive in `apps/client/src-tauri/` perché è
+l'adattatore nativo del client, non una libreria condivisa.
+
+## Conseguenze
+
+### Positive
+
+- una correzione alla logica raggiunge desktop e mobile;
+- le interfacce possono divergere senza duplicare il prodotto;
+- le funzioni assenti hanno un requisito di piattaforma esplicito;
+- una futura piattaforma combina capacità già nominate.
+
+### Negative
+
+- una feature può richiedere due viste di presentazione;
+- i confini tra logica condivisa e shell devono essere verificati;
+- il bootstrap desktop deve restare distinto dai moduli di dominio.
+
+## Verifica
+
+`src/main.ts` delega a un entrypoint di shell. Le capacità desktop e mobile
+condividono lo stesso vocabolario e hanno test. La documentazione e la CI usano
+la nuova casa canonica; le due case precedenti non esistono più.
+""",
+    encoding="utf-8",
+)
+
+decisions = root / "docs/decisions/README.md"
+text = decisions.read_text(encoding="utf-8")
+row = (
+    "| [0199 — Un solo client espone più shell di presentazione]"
+    "(0199-un-client-piu-shell.md) | accolta | frontend | — |\n"
+)
+if row not in text:
+    text = text.rstrip() + "\n" + row
+decisions.write_text(text, encoding="utf-8")
+PY
+
+cat > apps/client/src/platform/capabilities.ts <<'EOF'
+export type ShellId = "desktop" | "mobile";
+
+export interface PlatformCapabilities {
+  readonly multipleWindows: boolean;
+  readonly nativeWindowControls: boolean;
+  readonly nativeMenus: boolean;
+  readonly systemTray: boolean;
+  readonly finePointer: boolean;
+  readonly hover: boolean;
+  readonly physicalKeyboard: boolean;
+  readonly fileDrop: boolean;
+  readonly touchFirst: boolean;
+}
+
+export interface ClientShell {
+  readonly id: ShellId;
+  readonly capabilities: PlatformCapabilities;
+}
+
+function capabilities(
+  value: PlatformCapabilities,
+): Readonly<PlatformCapabilities> {
+  return Object.freeze({ ...value });
+}
+
+export const DESKTOP_CAPABILITIES = capabilities({
+  multipleWindows: true,
+  nativeWindowControls: true,
+  nativeMenus: true,
+  systemTray: true,
+  finePointer: true,
+  hover: true,
+  physicalKeyboard: true,
+  fileDrop: true,
+  touchFirst: false,
+});
+
+export const MOBILE_CAPABILITIES = capabilities({
+  multipleWindows: false,
+  nativeWindowControls: false,
+  nativeMenus: false,
+  systemTray: false,
+  finePointer: false,
+  hover: false,
+  physicalKeyboard: false,
+  fileDrop: false,
+  touchFirst: true,
+});
+
+export function supports(
+  shell: ClientShell,
+  capability: keyof PlatformCapabilities,
+): boolean {
+  return shell.capabilities[capability];
+}
+EOF
+
+cat > apps/client/src/platform/capabilities.test.ts <<'EOF'
+import { describe, expect, it } from "vitest";
+
+import {
+  DESKTOP_CAPABILITIES,
+  MOBILE_CAPABILITIES,
+  type PlatformCapabilities,
+} from "./capabilities";
+
+function keys(
+  value: PlatformCapabilities,
+): Array<keyof PlatformCapabilities> {
+  return Object.keys(value).sort() as Array<keyof PlatformCapabilities>;
+}
+
+describe("capacità delle shell", () => {
+  it("usano lo stesso vocabolario", () => {
+    expect(keys(DESKTOP_CAPABILITIES)).toEqual(keys(MOBILE_CAPABILITIES));
+  });
+
+  it("descrivono differenze di piattaforma, non feature del prodotto", () => {
+    expect(keys(DESKTOP_CAPABILITIES)).toEqual([
+      "fileDrop",
+      "finePointer",
+      "hover",
+      "multipleWindows",
+      "nativeMenus",
+      "nativeWindowControls",
+      "physicalKeyboard",
+      "systemTray",
+      "touchFirst",
+    ]);
+  });
+
+  it("la shell mobile è touch-first", () => {
+    expect(MOBILE_CAPABILITIES.touchFirst).toBe(true);
+    expect(DESKTOP_CAPABILITIES.touchFirst).toBe(false);
+  });
+});
+EOF
+
+cat > apps/client/src/shells/desktop/index.ts <<'EOF'
+import {
+  DESKTOP_CAPABILITIES,
+  type ClientShell,
+} from "../../platform/capabilities";
+
+export const DESKTOP_SHELL: ClientShell = Object.freeze({
+  id: "desktop",
+  capabilities: DESKTOP_CAPABILITIES,
+});
+EOF
+
+cat > apps/client/src/shells/mobile/index.ts <<'EOF'
+import {
+  MOBILE_CAPABILITIES,
+  type ClientShell,
+} from "../../platform/capabilities";
+
+export const MOBILE_SHELL: ClientShell = Object.freeze({
+  id: "mobile",
+  capabilities: MOBILE_CAPABILITIES,
+});
+EOF
+
+cat > apps/client/src/entrypoints/desktop.ts <<'EOF'
+import "../shells/desktop/bootstrap";
+EOF
+
+cat > apps/client/src/main.ts <<'EOF'
+// Vite entra da qui. La logica di avvio appartiene alla shell scelta.
+import "./entrypoints/desktop";
+EOF
+
+# Prettier non è una dipendenza del progetto: il codice nuovo segue
+# direttamente lo stile TypeScript esistente.
+node .github/scripts/check-cargo-versions.mjs
+node .github/scripts/check-cargo-feature-default.mjs
+node .github/scripts/check-crate-type.mjs
+node .github/scripts/check-doc-links.mjs
+node .github/scripts/check-doc-orphans.mjs
+node .github/scripts/check-doc-size.mjs
+node .github/scripts/check-markdown-style.mjs
+node .github/scripts/check-prose.mjs
+node .github/scripts/check-tables.mjs
+node .github/scripts/check-listeners.mjs
+node .github/scripts/check-races.mjs
+node .github/scripts/check-npm-copies.mjs
+
+(
+  cd apps/client
+  npm ci
+  npm run typecheck
+  npm test
+  npm run build
+)
+
+cargo fmt --all --check
+cargo check -p fub-app --all-targets
+
+if [[ -e frontend || -e crates/fub-app ]]; then
+  echo "le vecchie case del client esistono ancora" >&2
+  exit 1
+fi
+if git grep -n "crates/fub-app" -- \
+  ':(exclude).github/workflows/migrate-unified-client.yml' \
+  ':(exclude).github/scripts/migrate-unified-client.sh'; then
+  echo "restano riferimenti al vecchio path del crate Tauri" >&2
+  exit 1
+fi
+if git grep -n "frontend/" -- \
+  ':(exclude).github/workflows/migrate-unified-client.yml' \
+  ':(exclude).github/scripts/migrate-unified-client.sh'; then
+  echo "restano riferimenti al vecchio path del client" >&2
+  exit 1
+fi
+
+git rm \
+  .github/workflows/migrate-unified-client.yml \
+  .github/scripts/migrate-unified-client.sh
+git add -A
+git reset --soft "$base_sha"
+git commit -m "refactor(client): unifica desktop e mobile sotto più shell"
+git push --force-with-lease origin HEAD:refactor/unified-client-shells
