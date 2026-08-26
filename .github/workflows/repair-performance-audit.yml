@@ -1,0 +1,58 @@
+name: Ripara audit prestazioni
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/repair-performance-audit.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Correggi i rilievi Clippy nel workflow di applicazione
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/workflows/apply-performance-audit.yml")
+          text = path.read_text()
+
+          old_lifetime = "fn lines_of<'a>(slice: &'a str) -> impl Iterator<Item = &'a str>"
+          new_lifetime = "fn lines_of(slice: &str) -> impl Iterator<Item = &str>"
+          if text.count(old_lifetime) != 1:
+              raise SystemExit("firma lines_of inattesa nel workflow")
+          text = text.replace(old_lifetime, new_lifetime, 1)
+
+          marker = "\n".join([
+              "          replace_once(",
+              '              "crates/fub-format-markdown/src/parse.rs",',
+          ]) + "\n"
+          if text.count(marker) != 1:
+              raise SystemExit("punto di inserimento per parse.rs inatteso")
+
+          block = "\n".join([
+              "          replace_once(",
+              '              "crates/fub-format-markdown/src/parse.rs",',
+              '              "                let line_end = source[line_start..]\\n                    .as_bytes()\\n                    .iter()\\n",',
+              '              "                let line_end = source.as_bytes()[line_start..]\\n                    .iter()\\n",',
+              "          )",
+              "",
+              "",
+          ])
+          path.write_text(text.replace(marker, block + marker, 1))
+          PY
+      - name: Registra la correzione
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/apply-performance-audit.yml
+          git diff --cached --check
+          git commit -m "ci: correggi i rilievi Clippy dell'audit prestazioni"
+          git push origin HEAD:main
