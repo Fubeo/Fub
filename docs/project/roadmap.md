@@ -52,7 +52,7 @@ l'API interna.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:
-  [TODO — modularità delle superfici di editing](todo-modularita-superfici-di-editing.md).
+  [TODO — superfici di editing condivise](todo-superfici-di-editing-condivise.md).
 
 ### Contratto dei temi
 
