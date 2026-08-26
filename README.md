@@ -2,17 +2,23 @@
 
 Fub è un workspace di scrittura **local-first**: apre vault di file Markdown
 senza convertirli, conserva i dati dell'utente sul disco e separa il core dai
-formati, dalla shell desktop e dai runtime dei plugin.
+formati, dalla shell nativa e dai runtime dei plugin.
 
-La shell usa Tauri v2 e un frontend Vite/TypeScript. Il core è un workspace
-Rust. Markdown è il primo `FormatProvider`, non il formato incorporato nel
-kernel.
+Il client unificato vive in `apps/client/`: logica applicativa, editor, stato e
+contratto host sono condivisi, mentre desktop e mobile hanno shell di
+presentazione distinte. La shell corrente usa Tauri v2 e Vite/TypeScript. Il
+core è un workspace Rust. Markdown è il primo `FormatProvider`, non il formato
+incorporato nel kernel.
 
 ## Architettura in un minuto
 
 ```mermaid
 flowchart LR
-    UI["frontend/src<br/>Vite · TypeScript · CodeMirror"] --> APP["fub-app<br/>Tauri e IPC"]
+    ENTRY["apps/client/src/main.ts"] --> DESKTOP["shell desktop"]
+    ENTRY -. futuro .-> MOBILE["shell mobile"]
+    DESKTOP --> SHARED["editor · stato · feature condivise"]
+    MOBILE --> SHARED
+    SHARED --> APP["fub-app<br/>Tauri e IPC"]
     APP --> HOST["fub-host<br/>sessioni e composizione"]
     APP --> WASM["fub-wasm-host<br/>Wasmtime"]
     HOST --> KERNEL["fub-kernel<br/>workspace e policy"]
@@ -51,9 +57,9 @@ Prerequisiti supportati dal repository:
 - dipendenze native richieste da Tauri v2 sul sistema operativo.
 
 ```bash
-cd frontend
+cd apps/client
 npm ci
-cd ..
+cd ../..
 
 cargo tauri dev --config crates/fub-app/tauri.conf.json
 ```
