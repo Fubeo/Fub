@@ -1,0 +1,89 @@
+# Checkpoint finale — autorizzazione Fase 4
+
+La Fase 4 (`DocumentSession`) non può iniziare finché ogni voce seguente non è provata sul risultato aggregato F0–F3.
+
+## Architettura
+
+- [ ] `TextEngine` è l'unico owner della meccanica CodeMirror condivisa.
+- [ ] `TextEngine` non importa né nomina Markdown, wikilink, tag, live preview o `SyntaxForm`.
+- [ ] `MarkdownProfile` usa `TextEngine` e conserva il comportamento osservabile precedente.
+- [ ] `createEditor` è assente oppure resta soltanto come adapter temporaneo; non è un secondo engine.
+- [ ] `PlainTextProfile` usa lo stesso engine e non acquisisce semantica Markdown.
+- [ ] `FormulaProfile` usa lo stesso engine e dimostra single-line, operatori, numeri, stringhe, A1, completamenti, commit e cancel.
+- [ ] Una fixture a tre profili prova una capacità/fix generica senza duplicazioni nei profili.
+- [ ] Nessun import `@codemirror/*` o `codemirror` esiste fuori da `apps/client/src/editors/text/**`.
+- [ ] Il guard CI rende permanente il confine CodeMirror.
+
+## Comportamento
+
+- [ ] Cambio documento elimina la history precedente.
+- [ ] Sync programmatico fra surface non entra nell'undo locale.
+- [ ] Due pane sullo stesso documento condividono il testo ma conservano history/cursore locali.
+- [ ] UTF-8 e offset restano corretti.
+- [ ] CRLF e politica sui file misti restano corrette.
+- [ ] Cambio tema non ricostruisce il documento né perde history.
+- [ ] `destroy()` rilascia la surface senza danneggiare le altre.
+- [ ] Markdown source/live preview/completions/comandi/corpus restano verdi.
+- [ ] Nessuna differenza visuale intenzionale è stata introdotta.
+
+## Confini non toccati
+
+Sul diff aggregato da `ROOT_BASE_SHA` alla HEAD della integration branch:
+
+- [ ] nessuna modifica in `crates/**`;
+- [ ] nessuna modifica `*.wit`;
+- [ ] nessuna modifica a `apps/client/src/host/**`;
+- [ ] nessuna modifica a `apps/client/src/panels/document.ts`;
+- [ ] nessuna modifica a `apps/client/src/state/layout.ts`;
+- [ ] nessuna modifica a `apps/client/package.json` o `package-lock.json`;
+- [ ] nessun nuovo contratto pubblico;
+- [ ] nessuna nuova dipendenza.
+
+L'unica eccezione attesa fuori dal frontend text/docs è il task CI `SURF-041` nei path dichiarati dalla sua spec.
+
+## Ownership prima della Fase 4
+
+- [ ] `document.ts` possiede ancora buffer, revisione/base, dirty, queue, debounce, draft, conflitto, rename/delete/close coordination.
+- [ ] nessun pezzo di `DocumentSession` è stato estratto opportunisticamente durante F1–F3.
+- [ ] layout/tab/focus/mode restano responsabilità della shell corrente.
+
+## Check aggregati
+
+Da `apps/client/`:
+
+```bash
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run bench:verify
+npm run bench:a11y
+```
+
+Dalla root, eseguire inoltre tutti i guard frontend/documentali toccati dal lavoro, incluso il nuovo guard CodeMirror e `check-locale-loop.mjs`.
+
+Poi verificare la CI GitHub della integration branch quando disponibile. Tutti i job pertinenti devono essere verdi; una baseline visuale modificata non può essere accettata come soluzione.
+
+## Verifica finale indipendente
+
+Un Luna che non ha implementato l'ultimo task deve effettuare una review aggregata di:
+
+```text
+ROOT_BASE_SHA...HEAD(surf/shared-editing-f0-f3)
+```
+
+Deve restituire una sola decisione:
+
+```text
+READY_FOR_PHASE_4
+```
+
+oppure
+
+```text
+NOT_READY_FOR_PHASE_4
+```
+
+con blockers osservabili.
+
+Anche con `READY_FOR_PHASE_4`, l'orchestratore si ferma: non implementa la Fase 4 senza nuova autorizzazione.
