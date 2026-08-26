@@ -55,7 +55,7 @@ cargo test --workspace
 ### Frontend
 
 ```bash
-cd frontend
+cd apps/client
 npm run typecheck
 npm test
 npm run build
