@@ -27,6 +27,9 @@ import re
 from pathlib import Path
 
 root = Path(".")
+workflow = root / ".github/workflows/migrate-unified-client.yml"
+script = root / ".github/scripts/migrate-unified-client.sh"
+
 
 def read_text(path: Path) -> str | None:
     try:
@@ -34,13 +37,35 @@ def read_text(path: Path) -> str | None:
     except (UnicodeDecodeError, OSError):
         return None
 
+
 def write_if_changed(path: Path, before: str, after: str) -> None:
     if before != after:
         path.write_text(after, encoding="utf-8")
 
-# Il crate Tauri si è avvicinato al client e si è allontanato di un
-# livello dalla radice. Corregge prima i path relativi, affinché la
-# sostituzione dei percorsi canonici non li trasformi in path ibridi.
+
+def is_internal(path: Path) -> bool:
+    return ".git" in path.parts or path in {workflow, script}
+
+
+# Entrambi i sottoalberi si sono allontanati di un livello dalla radice. Ogni
+# collegamento relativo a una casa della root guadagna quindi un `../`, senza
+# cambiare i percorsi interni al client.
+root_relative = re.compile(
+    r"((?:\.\./)+)(?=(?:docs|crates|tests|tools|\.github)/|"
+    r"(?:README\.md|Cargo\.toml|deny\.toml)\b)"
+)
+client_root = root / "apps/client"
+for path in client_root.rglob("*"):
+    if not path.is_file():
+        continue
+    before = read_text(path)
+    if before is None:
+        continue
+    after = root_relative.sub(lambda match: "../" + match.group(1), before)
+    write_if_changed(path, before, after)
+
+# Il crate Tauri si è avvicinato al client. I riferimenti alla vecchia cartella
+# frontend diventano riferimenti al fratello che ora lo contiene.
 tauri_root = root / "apps/client/src-tauri"
 for path in tauri_root.rglob("*"):
     if not path.is_file():
@@ -48,13 +73,14 @@ for path in tauri_root.rglob("*"):
     before = read_text(path)
     if before is None:
         continue
-    after = before.replace("../../frontend/", "../")
+    after = before.replace("../../../frontend/", "../")
+    after = after.replace("../../../frontend", "..")
+    after = after.replace("../../frontend/", "../")
     after = after.replace("../../frontend", "..")
-    after = after.replace("../../../docs/", "../../../../docs/")
     write_if_changed(path, before, after)
 
-# Il bootstrap desktop è lo stesso codice di prima, ma ora vive dentro
-# la shell che lo possiede. Gli import tornano alla radice condivisa.
+# Il bootstrap desktop è lo stesso codice di prima, ma ora vive dentro la shell
+# che lo possiede. Gli import tornano alla radice condivisa.
 bootstrap = root / "apps/client/src/shells/desktop/bootstrap.ts"
 before = bootstrap.read_text(encoding="utf-8")
 after = re.sub(r'(from\s+["\'])\./', r'\1../../', before)
@@ -81,9 +107,8 @@ replacements = (
     ("working-directory: frontend", "working-directory: apps/client"),
     ('"fub-frontend"', '"fub-client"'),
 )
-ignored = root / ".github/workflows/migrate-unified-client.yml"
 for path in root.rglob("*"):
-    if not path.is_file() or path == ignored:
+    if not path.is_file() or is_internal(path):
         continue
     before = read_text(path)
     if before is None:
@@ -93,10 +118,12 @@ for path in root.rglob("*"):
         after = after.replace(old, new)
     write_if_changed(path, before, after)
 
-# I guard JavaScript che nominavano la directory come singolo segmento
-# ora nominano il percorso canonico del client.
+# I guard JavaScript che nominavano la directory come singolo segmento ora
+# nominano il percorso canonico del client.
 scripts = root / ".github/scripts"
 for path in scripts.rglob("*.mjs"):
+    if path == script:
+        continue
     before = path.read_text(encoding="utf-8")
     after = before.replace('"frontend"', '"apps/client"')
     after = after.replace("'frontend'", "'apps/client'")
@@ -126,8 +153,8 @@ tauri_config.write_text(
     encoding="utf-8",
 )
 
-# Il cartello locale non duplica la documentazione canonica: spiega
-# soltanto il confine fisico appena introdotto.
+# Il cartello locale non duplica la documentazione canonica: spiega soltanto il
+# confine fisico appena introdotto.
 (root / "apps/client/README.md").write_text(
     """# apps/client/
 
@@ -155,8 +182,8 @@ Comandi locali: `npm ci`, `npm run dev`, `npm run typecheck`, `npm test` e
     encoding="utf-8",
 )
 
-# La mappa del repository deve mostrare che fub-app è ancora un membro
-# Cargo, ma non è più una libreria condivisa sotto crates/.
+# La mappa del repository deve mostrare che fub-app è ancora un membro Cargo,
+# ma non è più una libreria condivisa sotto crates/.
 tour = root / "docs/getting-started/repository-tour.md"
 before = tour.read_text(encoding="utf-8")
 map_re = re.compile(r"```text\nFub/\n.*?\n```", re.S)
@@ -438,8 +465,6 @@ cat > apps/client/src/main.ts <<'EOF'
 import "./entrypoints/desktop";
 EOF
 
-# Prettier non è una dipendenza del progetto: il codice nuovo segue
-# direttamente lo stile TypeScript esistente.
 node .github/scripts/check-cargo-versions.mjs
 node .github/scripts/check-cargo-feature-default.mjs
 node .github/scripts/check-crate-type.mjs
