@@ -11,8 +11,8 @@
 //!
 //! Il giro è quello di `mirror-samples.json`, applicato a coppie
 //! **input → output** invece che a campioni di tipo: qui si genera
-//! `frontend/src/__fixtures__/rules-samples.json` con la risposta **di Rust**
-//! per ogni caso, e il gemello vitest (`frontend/src/rules/rules-mirror.test.ts`)
+//! `apps/client/src/__fixtures__/rules-samples.json` con la risposta **di Rust**
+//! per ogni caso, e il gemello vitest (`apps/client/src/rules/rules-mirror.test.ts`)
 //! passa gli stessi input all'implementazione TypeScript e pretende la stessa
 //! risposta. Cambiare la regola da un lato solo è rosso: se cambia Rust la
 //! fixture è stantia (questo test), e rigenerandola (`UPDATE_MIRROR=1`) il rosso
@@ -678,7 +678,7 @@ fn expected() -> Value {
 fn fixture_path() -> std::path::PathBuf {
     std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../frontend/src/__fixtures__/rules-samples.json"
+        "/../../apps/client/src/__fixtures__/rules-samples.json"
     ))
 }
 

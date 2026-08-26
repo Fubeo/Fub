@@ -12,7 +12,7 @@
 //! questa shell **non può premere** (difetto 0148). Qui la forma è dichiarata
 //! una volta sola, e la copia della shell è tenuta uguale dal mirror delle
 //! regole (`crates/fub-abi/tests/rules_mirror.rs` con la gemella
-//! `frontend/src/rules/rules-mirror.test.ts`).
+//! `apps/client/src/rules/rules-mirror.test.ts`).
 //!
 //! # Le due metà della forma
 //!

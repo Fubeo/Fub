@@ -3,7 +3,7 @@
 //! Non sono tipi «dell'app»: erano tali finché l'unico chiamante era un comando
 //! Tauri, ma un'API locale (27.2) risponderebbe con gli stessi tre e una CLI
 //! (27.1) stamperebbe i primi due. Restano rispecchiati in
-//! `frontend/src/host/contract.ts`, e il legame è la fixture di
+//! `apps/client/src/host/contract.ts`, e il legame è la fixture di
 //! `crates/fub-app/tests/ts_mirror_app.rs`: il mirror sta dal lato dell'app
 //! perché è l'app a farli attraversare l'IPC, e `fub-app` li ri-esporta.
 
@@ -11,7 +11,7 @@ use fub_abi::error::PluginError;
 use fub_kernel::{PluginInfo, RenderedDocument};
 use serde::Serialize;
 
-/// Rispecchiato da `VaultInfo` in `frontend/src/host/contract.ts`; il legame è la
+/// Rispecchiato da `VaultInfo` in `apps/client/src/host/contract.ts`; il legame è la
 /// fixture di `crates/fub-app/tests/ts_mirror_app.rs`.
 #[derive(Serialize)]
 pub struct VaultInfo {
@@ -61,7 +61,7 @@ pub struct VaultInfo {
 ///
 /// È [`fub_kernel::Scarto`] con il `DocId` già in stringa, come ogni altro id
 /// che attraversa questo confine. Rispecchiato da `UnreadDoc` in
-/// `frontend/src/host/contract.ts`.
+/// `apps/client/src/host/contract.ts`.
 #[derive(Clone, Serialize)]
 pub struct UnreadDoc {
     pub doc_id: String,
@@ -70,7 +70,7 @@ pub struct UnreadDoc {
     pub why: PluginError,
 }
 
-/// Rispecchiato da `EmbedContent` in `frontend/src/host/contract.ts` (fixture di
+/// Rispecchiato da `EmbedContent` in `apps/client/src/host/contract.ts` (fixture di
 /// `crates/fub-app/tests/ts_mirror_app.rs`).
 ///
 /// Porta un [`RenderedDocument`] e non una stringa perché un embed passa dai

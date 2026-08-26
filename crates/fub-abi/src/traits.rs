@@ -1566,7 +1566,7 @@ pub trait CommandProvider: Send + Sync {
 /// «Chi sta sopra» non è un campo di [`ViewSpec`] e non lo sarà: una view non
 /// porta una superficie, ci si **attacca**, e a dipingere è la shell. Il piano
 /// appartiene quindi alla superficie — è dichiarato una volta sola, accanto
-/// agli altri, in `frontend/src/theme/struttura.css` — e la regola che lo lega ai
+/// agli altri, in `apps/client/src/theme/struttura.css` — e la regola che lo lega ai
 /// tasti è che fra due superfici che intrappolano il fuoco comanda **l'ultima
 /// aperta**, che sullo stesso piano è anche l'ultima dipinta. Un numero
 /// dichiarato da chi non dipinge sarebbe un secondo ordine accanto a questo, e
@@ -1605,7 +1605,7 @@ pub enum ViewSurface {
     Menu,
     /// Una voce nel menu contestuale. Questa shell non ne ospita uno
     /// estendibile, e lo dichiara a chi ci dichiara una view (`NON_OSPITATE`,
-    /// `frontend/src/ui/views.ts`).
+    /// `apps/client/src/ui/views.ts`).
     ///
     /// Il bersaglio del clic **non** lo dice il contesto di sessione:
     /// [`ViewContext`](crate::session::ViewContext) non ha quel campo e non lo

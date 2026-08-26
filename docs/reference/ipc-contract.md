@@ -1,8 +1,8 @@
 # Contratto IPC
 
 > **Ambito:** confine JSON fra shell TypeScript e `fub-app`.
-> **Fonti autorevoli:** `frontend/src/host/contract.ts`,
-> `frontend/src/host/ipc.ts`, `crates/fub-app/src/lib.rs`.
+> **Fonti autorevoli:** `apps/client/src/host/contract.ts`,
+> `apps/client/src/host/ipc.ts`, `crates/fub-app/src/lib.rs`.
 
 ## Principio
 
@@ -116,8 +116,8 @@ vault.
 
 Sono consentiti soltanto:
 
-- `frontend/src/host/ipc.ts`;
-- `frontend/src/host/dialog.ts`.
+- `apps/client/src/host/ipc.ts`;
+- `apps/client/src/host/dialog.ts`.
 
 Ogni altro modulo importa l'interfaccia host.
 

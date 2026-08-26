@@ -2,7 +2,7 @@
 
 > **Domanda:** quali confini attraversa una richiesta e dove vive ogni
 > responsabilità?
-> **Fonti autorevoli:** `Cargo.toml`, `crates/*/Cargo.toml`, `frontend/src/`.
+> **Fonti autorevoli:** `Cargo.toml`, `crates/*/Cargo.toml`, `apps/client/src/`.
 
 ## In breve
 
@@ -115,7 +115,7 @@ path o logica di business.
 
 ### Shell dietro un seam
 
-Il frontend importa l'host da `frontend/src/host/`. Soltanto i moduli di IPC e
+Il frontend importa l'host da `apps/client/src/host/`. Soltanto i moduli di IPC e
 dialogo conoscono `@tauri-apps`; i test usano un fake host.
 
 ### Un trait, più backend

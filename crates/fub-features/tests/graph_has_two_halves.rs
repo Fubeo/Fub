@@ -26,10 +26,10 @@ use fub_features::graph::{GRAPH_NS, GRAPH_VIEW};
 fn metadata_shell() -> String {
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../frontend/src/panels/graph.ts"
+        "/../../apps/client/src/panels/graph.ts"
     );
     std::fs::read_to_string(path)
-        .expect("la metà shell del grafo sta in frontend/src/panels/graph.ts")
+        .expect("la metà shell del grafo sta in apps/client/src/panels/graph.ts")
 }
 
 /// Il `ns` con cui il provider manda i dati è quello che la shell registra.

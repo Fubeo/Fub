@@ -285,7 +285,7 @@ mod tests {
     }
 
     /// Il contratto con la shell: lo `ns` che riconosce e le due chiavi che
-    /// legge. Se questo test cambia, cambia `frontend/src/panels/graph.ts`.
+    /// legge. Se questo test cambia, cambia `apps/client/src/panels/graph.ts`.
     #[test]
     fn the_graph_is_a_custom_node_with_nodes_and_edges() {
         let host = MemoryHost::new()

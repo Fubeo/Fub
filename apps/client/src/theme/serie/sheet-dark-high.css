@@ -70,7 +70,7 @@
 
      `text-xs`…`text-xl` non si muovono: sono i sei valori di prima, e restano
      perché cambiarli è un ridisegno di ogni componente che li spende — cinquantanove
-     regole nella pelle (`grep -cF 'var(--text-' frontend/src/theme/serie/skin.css`)
+     regole nella pelle (`grep -cF 'var(--text-' apps/client/src/theme/serie/skin.css`)
      — e quello è lavoro della §31.4, non di questa voce. La
      scala **si allarga**: due gradini nuovi in cima (`text-2xl`, `text-3xl`),
      che seguono un passo dichiarato (×1,2 da `text-xl`, arrotondato al pixel) al

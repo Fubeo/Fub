@@ -1912,7 +1912,7 @@ impl IndexProvider for SearchIndex {
 ///
 /// [`Event::SettingChanged`] dice **quale** chiave è cambiata e in che livello,
 /// non il valore nuovo — è una scelta di progetto (vedi il contratto in
-/// `frontend/src/host/contract.ts`), e la ragione è che un evento che portasse
+/// `apps/client/src/host/contract.ts`), e la ragione è che un evento che portasse
 /// il valore sarebbe una seconda fonte di verità che arriva in ritardo. Qui si
 /// rilegge, e si rilegge **tutto**: quattro `setting()` su un file già in
 /// memoria costano meno del ramo che deciderebbe quale delle quattro toccare.

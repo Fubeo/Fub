@@ -785,7 +785,7 @@ mod tests {
     /// L'ultima metà è quella che tiene ferma la parte che **non** deve
     /// cambiare: un kind del core non ha namespace, quindi la sua classe è
     /// quella di prima. `.inline-highlight` è un selettore vero della shell
-    /// (`frontend/src/theme/serie/pelle.css`), e allargare la classe con un prefisso
+    /// (`apps/client/src/theme/serie/pelle.css`), e allargare la classe con un prefisso
     /// avrebbe scollegato il tema senza che niente diventasse rosso.
     #[test]
     fn two_kind_same_named_of_namespace_different_not_collide_on_the_class() {

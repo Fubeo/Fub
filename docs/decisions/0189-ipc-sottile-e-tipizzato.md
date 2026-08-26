@@ -14,7 +14,7 @@ si duplicano senza presidio. JSON perde precisione per alcuni `u64`.
 
 ## Decisione
 
-La shell dipende da un'interfaccia in `frontend/src/host/`. Soltanto
+La shell dipende da un'interfaccia in `apps/client/src/host/`. Soltanto
 `host/ipc.ts` e `host/dialog.ts` importano Tauri. `fub-app` traduce forme IPC e
 delega all'host. Errori mantengono `kind` e `message`; identità e hash `u64`
 viaggiano come stringhe. Enum semplici e fixture vengono generati o verificati

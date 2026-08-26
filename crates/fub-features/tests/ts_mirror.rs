@@ -5,12 +5,12 @@
 //! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef`,
 //! `IndexQuery`/`IndexResult`, `DocumentMatch`, `BacklinkRef`, `TrashEntry`,
 //! `ViewSpec` sono rispecchiati a
-//! mano in TypeScript (`frontend/src/host/contract.ts`): il confine può divergere in
+//! mano in TypeScript (`apps/client/src/host/contract.ts`): il confine può divergere in
 //! silenzio — un caso aggiunto in Rust e non nel mirror, un campo rinominato.
 //! Questo test è metà del presidio: serializza un campione per ogni
 //! variante/tipo con **serde** (la stessa serializzazione che attraversa l'IPC)
 //! e lo confronta con la fixture committata. L'altra metà è in TypeScript
-//! (`frontend/src/host/mirror.test.ts`), che prende la stessa fixture e verifica che
+//! (`apps/client/src/host/mirror.test.ts`), che prende la stessa fixture e verifica che
 //! ogni discriminante sia gestito — un `assertNever` scatta su un caso nuovo.
 //!
 //! Il giro completo: aggiungere un caso in Rust rende **rossa questa** (la
@@ -1420,7 +1420,7 @@ fn expected() -> Value {
 fn fixture_path() -> std::path::PathBuf {
     std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../frontend/src/__fixtures__/mirror-samples.json"
+        "/../../apps/client/src/__fixtures__/mirror-samples.json"
     ))
 }
 

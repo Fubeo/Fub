@@ -37,7 +37,7 @@
 //! 0081 aveva messo la tabella degli accordi di shell in un modulo TypeScript e
 //! li aveva fatti incontrare in un banco di là; da questa voce la tabella è
 //! **una sola**, sta qui, e di là arriva emessa
-//! (`frontend/src/ui/shell-keys.generated.ts`). Così la domanda sui due registri
+//! (`apps/client/src/ui/shell-keys.generated.ts`). Così la domanda sui due registri
 //! insieme si può porre anche di qua, dove il registro del kernel è in casa.
 //!
 //! Che la tabella resti **completa** non è una convenzione da ricordare: di là

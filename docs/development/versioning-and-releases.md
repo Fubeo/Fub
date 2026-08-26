@@ -8,7 +8,7 @@
 
 | Versione | Protegge | Fonte |
 |---|---|---|
-| applicazione e crate | chi compila o installa Fub | `Cargo.toml`, `frontend/package.json` |
+| applicazione e crate | chi compila o installa Fub | `Cargo.toml`, `apps/client/package.json` |
 | ABI | plugin già compilati | Rust e `package fub:abi` |
 | schema su disco | file che sopravvivono all'app | costanti `SchemaVersion` |
 

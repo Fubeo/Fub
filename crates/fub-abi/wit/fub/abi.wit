@@ -3050,7 +3050,7 @@ interface view {
         menu,
         /// Questa shell non ospita un menu contestuale estendibile, e lo
         /// dichiara a chi ci dichiara una view (`NON_OSPITATE`,
-        /// `frontend/src/ui/views.ts`).
+        /// `apps/client/src/ui/views.ts`).
         ///
         /// Il bersaglio del clic **non** lo dice il contesto di sessione, e
         /// diceva il contrario proprio qui: `view-context` non ha quel campo e

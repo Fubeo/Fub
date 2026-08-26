@@ -18,7 +18,7 @@
 //! firma era `Result<_, String>` e dodici `map_err(|e| e.to_string())`
 //! buttavano via il tipo sul confine: al frontend arrivava una frase italiana,
 //! e l'unico modo di distinguere «esiste già» da «disco pieno» era cercarci
-//! dentro una sottostringa — che `frontend/src/panels/trash.ts` non faceva
+//! dentro una sottostringa — che `apps/client/src/panels/trash.ts` non faceva
 //! nemmeno, intercettando con un `catch` nudo qualunque fallimento e chiedendo
 //! sempre la stessa cosa. Adesso passa un [`PluginError`], che è serializzabile
 //! e **discriminabile**: `{"kind": "already_exists", "message": …}`.
@@ -46,7 +46,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 pub use fub_host::{BundleInfo, EmbedContent, UnreadDoc, VaultEntry, VaultInfo};
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
-/// `frontend/src/host/contract.ts`.
+/// `apps/client/src/host/contract.ts`.
 ///
 /// Il "corrente" è una comodità della shell e non un'assunzione del backend:
 /// serve a chi non nomina un vault, e chi ne ha due davanti li nomina.
@@ -189,7 +189,7 @@ fn session_notice(host: State<Host>) -> Option<fub_abi::Notice> {
 // la `Page` la prende, ed è l'elenco dei plugin, non quello della shell.
 
 /// Il sorgente di un documento **e la revisione che lo nomina** (§18.1):
-/// rispecchiato da `DocumentSource` in `frontend/src/host/contract.ts`.
+/// rispecchiato da `DocumentSource` in `apps/client/src/host/contract.ts`.
 ///
 /// Due campi e non uno perché chi apre un documento è chi lo salverà, e per
 /// salvarlo in sicurezza deve poter dire da cosa era partito. Viaggiano

@@ -27,7 +27,7 @@ cargo test --workspace
 cargo deny check
 ```
 
-Dentro `frontend/`:
+Dentro `apps/client/`:
 
 ```bash
 npm ci

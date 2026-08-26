@@ -1,7 +1,7 @@
 //! **Gli accordi della shell, emessi verso la shell** (§16.3).
 //!
 //! La tabella dei comandi di shell sta in [`fub_host::shell::SHELL_COMMANDS`], e
-//! di là arriva generata: `frontend/src/ui/shell-keys.generated.ts`. Il giro è
+//! di là arriva generata: `apps/client/src/ui/shell-keys.generated.ts`. Il giro è
 //! quello degli altri mirror di questo repo — genera, confronta il committato,
 //! `UPDATE_MIRROR=1` per rigenerare — e la ragione per cui è un derivato e non
 //! due elenchi è quella della
@@ -48,7 +48,8 @@ const HEADER: &str = "\
 ";
 
 fn path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/ui/shell-keys.generated.ts")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/ui/shell-keys.generated.ts")
 }
 
 fn render() -> String {
@@ -92,7 +93,7 @@ fn emitted_bindings_match_table() {
 
     assert_eq!(
         emitted, committed,
-        "`frontend/src/ui/shell-keys.generated.ts` is stale: the shell \
+        "`apps/client/src/ui/shell-keys.generated.ts` is stale: the shell \
          command table changed without regenerating it.\nRegenerate with \
          `UPDATE_MIRROR=1 cargo test -p fub-host --test shell_keys_mirror`."
     );
@@ -100,7 +101,7 @@ fn emitted_bindings_match_table() {
 
 /// **I due registri, guardati insieme di qua.**
 ///
-/// La stessa domanda del gemello vitest (`frontend/src/ui/keybindings.test.ts`),
+/// La stessa domanda del gemello vitest (`apps/client/src/ui/keybindings.test.ts`),
 /// che finora era l'unico posto in cui i due registri si potevano incontrare —
 /// il kernel da una fixture, la shell da una tabella TypeScript. Da quando la
 /// tabella sta in Rust si può porre anche qui, e vale la pena porla in tutti e

@@ -17,7 +17,7 @@ Fub/
 │   ├── fub-format-markdown/
 │   ├── fub-features/
 │   └── fub-wasm-host/
-├── frontend/               shell Vite e TypeScript
+├── apps/client/               shell Vite e TypeScript
 ├── esempi/                 componenti WASM eseguiti dai test
 ├── tools/                  verifiche fuori dal workspace
 ├── docs/                   documentazione canonica
@@ -37,7 +37,7 @@ Fub/
 | cambiare parsing o rendering Markdown | `crates/fub-format-markdown/src/` |
 | cambiare ricerca, grafo o feature ufficiali | `crates/fub-features/src/` |
 | cambiare il runtime dei componenti | `crates/fub-wasm-host/src/` |
-| cambiare editor, pannelli o tema | `frontend/src/` |
+| cambiare editor, pannelli o tema | `apps/client/src/` |
 | testare un provider in memoria | `crates/fub-sdk/` |
 | testare host e kernel insieme | `crates/fub-testkit/` |
 
@@ -64,7 +64,7 @@ Fub/
 3. implementa il provider nel crate proprietario;
 4. monta il provider in `fub-host`;
 5. esponi soltanto l'adattamento necessario in `fub-app`;
-6. usa il seam `frontend/src/host/` nella shell;
+6. usa il seam `apps/client/src/host/` nella shell;
 7. aggiungi test al livello più basso e un'integrazione sul flusso.
 
 ### Un nuovo formato

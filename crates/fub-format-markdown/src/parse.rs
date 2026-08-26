@@ -1181,7 +1181,7 @@ fn push_text_features(
 /// A confrontare le due strade adesso c'è
 /// `tests/il_corpus.rs::un_embed_comincia_dal_suo_punto_esclamativo`, e il
 /// contorno che ne dipende è dichiarato nel corpus della shell
-/// (`frontend/src/editor/corpus.test.ts`: «lo span del modello comprende il `!`
+/// (`apps/client/src/editor/corpus.test.ts`: «lo span del modello comprende il `!`
 /// dell'embed»).
 fn embed_before(source: &str, parentheses: Span) -> (bool, Span) {
     if parentheses.start > 0

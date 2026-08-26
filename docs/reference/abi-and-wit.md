@@ -11,8 +11,8 @@
 | Rust | `crates/fub-abi/src/` | tipi e trait usati dai crate |
 | WIT vivo | `crates/fub-abi/wit/fub/abi.wit` | component model |
 | WIT congelato | `crates/fub-abi/wit/frozen/` | baseline di compatibilità |
-| TypeScript | `frontend/src/host/contract.ts` | forma serializzata verso la shell |
-| enum TS | `frontend/src/host/enums.generated.ts` | derivato dai tipi Rust |
+| TypeScript | `apps/client/src/host/contract.ts` | forma serializzata verso la shell |
+| enum TS | `apps/client/src/host/enums.generated.ts` | derivato dai tipi Rust |
 
 Il package WIT corrente è:
 

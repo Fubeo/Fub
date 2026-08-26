@@ -2,7 +2,7 @@
 //
 // La §4.4 chiedeva chi, fra il parser Lezer del buffer e il modello del file,
 // fosse la verità. La misura ha risposto che la domanda era mal posta e che i
-// parser erano più di due: dentro `frontend/` la stessa sintassi era scritto
+// parser erano più di due: dentro `apps/client/` la stessa sintassi era scritto
 // **tredici** volte in sei costrutti, in tre moduli che non si parlavano —
 // `livepreview.ts` per decorare, `editor-commands.ts` per i gesti,
 // `completions.ts` per il popup — e le tre non erano d'accordo fra loro. Su

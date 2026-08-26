@@ -98,9 +98,9 @@ ogni battuta.
 
 ## Dove si trova
 
-- `frontend/src/editor/`
-- `frontend/src/panels/document.ts`
-- `frontend/src/state/`
+- `apps/client/src/editor/`
+- `apps/client/src/panels/document.ts`
+- `apps/client/src/state/`
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`

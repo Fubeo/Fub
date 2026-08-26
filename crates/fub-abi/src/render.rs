@@ -57,7 +57,7 @@ impl RenderedDocument {
 /// resta un diagramma, e le sue parti dichiarative vanno montate dal frontend
 /// dentro il segnaposto che ha appena idratato.
 ///
-/// Rispecchiato da `EmbedContent` in `frontend/src/host/contract.ts` (fixture di
+/// Rispecchiato da `EmbedContent` in `apps/client/src/host/contract.ts` (fixture di
 /// `crates/fub-app/tests/ts_mirror_app.rs`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EmbedContent {

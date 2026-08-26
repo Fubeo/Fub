@@ -246,7 +246,7 @@ impl DocumentStore {
     /// fare per conto suo (in ordine di `OptionMap`, cioè di dichiarazione del
     /// provider), poi ciò che le regole innestano, in ordine di applicazione.
     /// Un elenco che cambiasse ordine a ogni chiamata renderebbe il file
-    /// generato di `frontend/` rumoroso senza che niente sia cambiato.
+    /// generato di `apps/client/` rumoroso senza che niente sia cambiato.
     ///
     /// Chi arriva due volte compare **una**, e vince chi porta il trigger: una
     /// regola che innesta un nome che il provider dichiara già è la stessa

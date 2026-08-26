@@ -10,7 +10,7 @@
 //! `allCommands()` vede solo il registro di là.
 //!
 //! Questa fixture è la metà che mancava: gli accordi del kernel scritti in un
-//! JSON che il gemello vitest (`frontend/src/ui/keybindings.test.ts`) legge
+//! JSON che il gemello vitest (`apps/client/src/ui/keybindings.test.ts`) legge
 //! insieme alla tabella `SHELL_KEYS`, per porre la domanda sui due registri
 //! insieme. Il giro è quello di `ts_mirror.rs` e di `rules_mirror.rs` — genera
 //! Rust, confronta il committato, `UPDATE_MIRROR=1` per rigenerare — e la
@@ -61,7 +61,7 @@ fn expected() -> Value {
 fn fixture_path() -> std::path::PathBuf {
     std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../frontend/src/__fixtures__/command-keys.json"
+        "/../../apps/client/src/__fixtures__/command-keys.json"
     ))
 }
 
@@ -96,7 +96,7 @@ fn command_keys_fixture_is_in_sync_with_the_command_registry() {
         "la fixture degli accordi è stantia: il registro dei comandi è cambiato \
          senza rigenerarla. Rigenerala con `UPDATE_MIRROR=1 cargo test -p \
          fub-features --test command_keys`, poi lascia parlare \
-         `frontend/src/ui/keybindings.test.ts`: se l'accordo nuovo è già di \
+         `apps/client/src/ui/keybindings.test.ts`: se l'accordo nuovo è già di \
          qualcun altro, è là che diventa rosso."
     );
 }

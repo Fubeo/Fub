@@ -10,7 +10,7 @@
 //!
 //! Le due pile che non si fondono restano due: quella del testo vive
 //! nell'editor e ha il suo banco di prova dall'altra parte del confine
-//! (`frontend/src/editor/editor.test.ts`). Da qui non si vede, ed è il punto.
+//! (`apps/client/src/editor/editor.test.ts`). Da qui non si vede, ed è il punto.
 
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;

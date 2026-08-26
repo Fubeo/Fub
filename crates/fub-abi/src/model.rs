@@ -94,7 +94,7 @@ impl DocId {
     /// gestita ce l'ha già — filtrarci sopra faceva divergere risoluzione e
     /// display su nomi come `note.backup`.
     ///
-    /// La gemella TypeScript è `pageName` in `frontend/src/rules/mirrored.ts`, e
+    /// La gemella TypeScript è `pageName` in `apps/client/src/rules/mirrored.ts`, e
     /// a tenerle uguali sui nomi ostili non è più un elenco copiato a mano ma la
     /// fixture generata di `tests/rules_mirror.rs` (§6.2).
     pub fn page_name(&self) -> &str {

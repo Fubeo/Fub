@@ -22,7 +22,7 @@ IPC sono contratti pubblici: non cambiarli come dettagli locali.
 - `fub-app` contiene il binario Tauri e adattatori IPC sottili.
 - `fub-format-markdown` è l'unico crate che conosce Markdown.
 - `fub-wasm-host` è l'unico crate che dipende da Wasmtime.
-- `frontend/src/host/` è il seam della shell. Soltanto `host/ipc.ts` e
+- `apps/client/src/host/` è il seam della shell. Soltanto `host/ipc.ts` e
   `host/dialog.ts` possono importare API Tauri.
 - `fub-testkit` è una dipendenza di sviluppo, non una dipendenza normale.
 

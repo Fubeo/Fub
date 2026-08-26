@@ -20,7 +20,7 @@
 //! Chi è soggetto alla regola oggi: [`JobId`](crate::traits::JobId) (impl
 //! manuale, qui accanto) e l'`hash` di `VersionRef` in `fub-features`. Il
 //! mirror TS dichiara `string` e la fixture generata da serde
-//! (`frontend/src/__fixtures__/`) tiene i due lati allineati.
+//! (`apps/client/src/__fixtures__/`) tiene i due lati allineati.
 
 use serde::{Deserialize, Deserializer, Serializer};
 

@@ -256,7 +256,7 @@ fn granted(host: &Host, plugin: &str, permission: &str) -> bool {
 #[test]
 fn the_permissions_are_the_same_of_here_and_of_the() {
     let permissions_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/src/ui/permissions.ts");
+        .join("../../apps/client/src/ui/permissions.ts");
     let source = std::fs::read_to_string(&permissions_ts).unwrap_or_else(|and| {
         panic!(
             "the shell no longer has {}: {and}",
@@ -610,7 +610,7 @@ fn a_host_without_installation_remembers_only_until_lasts() {
 ///
 /// `appearance.theme` esiste qui, in `core_settings()`; ma chi la legge è la
 /// shell, che è TypeScript e non può importare una costante Rust — quindi se
-/// la riscrive (`frontend/src/theme/theme.ts`). Due stringhe uguali per
+/// la riscrive (`apps/client/src/theme/theme.ts`). Due stringhe uguali per
 /// convenzione sono due stringhe che divergono, e questa divergerebbe **in
 /// silenzio**: l'impostazione resterebbe nel pannello, si potrebbe cambiare, e
 /// non succederebbe niente. Nessun compilatore ha modo di accorgersene, il che
@@ -622,8 +622,8 @@ fn a_host_without_installation_remembers_only_until_lasts() {
 /// commento.
 #[test]
 fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
-    let theme_ts =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/theme/theme.ts");
+    let theme_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/theme/theme.ts");
     let source = std::fs::read_to_string(&theme_ts)
         .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", theme_ts.display()));
     let expected = [
@@ -679,8 +679,8 @@ fn the_keys_of_appearance_are_the_same_here_and_there_and_are_machine_keys() {
 /// è peggio di un interruttore che non c'è, perché è una promessa.
 #[test]
 fn the_key_of_the_memory_and_the_same_of_here_and_of_the() {
-    let recent_ts =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/state/recent.ts");
+    let recent_ts = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/state/recent.ts");
     let source = std::fs::read_to_string(&recent_ts)
         .unwrap_or_else(|and| panic!("the shell no longer has {}: {and}", recent_ts.display()));
 

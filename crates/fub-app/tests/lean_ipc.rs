@@ -901,7 +901,7 @@ fn bridges_stay_six() {
 /// chi lo ha perso deve scrivere qui perché resta — o toglierlo.
 const WITHOUT_CALLER: &[&str] = &["close_vault", "list_vaults", "set_current_vault"];
 
-/// I nomi di comando che la shell invoca, letti da `frontend/src`.
+/// I nomi di comando che la shell invoca, letti da `apps/client/src`.
 ///
 /// **Zona cieca dichiarata**: si riconosce `invoke("nome")` col nome
 /// *letterale*, che è la sola forma che questa shell usa — chi costruisse il
@@ -912,7 +912,7 @@ const WITHOUT_CALLER: &[&str] = &["close_vault", "list_vaults", "set_current_vau
 ///
 /// Non distingue il codice dai test della shell, ed è voluto: `finto.ts` e
 /// `shell.e2e.test.ts` sono la shell che si prova da sola, e un comando invocato
-/// solo dal proprio doppio è comunque un comando che qualcuno in `frontend/`
+/// solo dal proprio doppio è comunque un comando che qualcuno in `apps/client/`
 /// nomina. La domanda a cui questo elenco risponde è più grossolana e più
 /// robusta di «lo usa la UI»: è «esiste una riga di shell che lo conosce».
 fn invoked_by_shell() -> BTreeSet<String> {
@@ -933,7 +933,7 @@ fn invoked_by_shell() -> BTreeSet<String> {
         }
     }
 
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../apps/client/src");
     let mut sources = Vec::new();
     collect(&root, &mut sources);
 
@@ -988,7 +988,7 @@ fn every_registered_command_has_a_caller_or_says_why_not() {
     // esserci — è la riga con cui un vault comincia a esistere.
     assert!(
         invoked.len() >= 20 && invoked.contains("open_vault"),
-        "walking `frontend/src` found {} invoked commands: this walk is not\n\
+        "walking `apps/client/src` found {} invoked commands: this walk is not\n\
          looking at the shell, and what it says below means nothing",
         invoked.len()
     );
@@ -1003,7 +1003,7 @@ fn every_registered_command_has_a_caller_or_says_why_not() {
     let new: BTreeSet<&str> = orphans.difference(&expected).copied().collect();
     assert!(
         new.is_empty(),
-        "no line of `frontend/src` invokes anymore: {}\n\
+        "no line of `apps/client/src` invokes anymore: {}\n\
          \nAn IPC command without a caller does not stop costing: it remains surface\n\
          to maintain, document, and sandbox, and at M5 it remains reachable from\n\
          the webview. The two answers are to remove the command from\n\

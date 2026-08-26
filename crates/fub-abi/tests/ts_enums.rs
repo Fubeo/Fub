@@ -2,8 +2,8 @@
 //! (decisione 0053).
 //!
 //! È il primo posto del contratto che non si scrive a mano.
-//! `frontend/src/host/enums.generated.ts` non è un mirror: è un **derivato**,
-//! e `frontend/src/host/contract.ts` lo ri-esporta tenendo accanto la prosa —
+//! `apps/client/src/host/enums.generated.ts` non è un mirror: è un **derivato**,
+//! e `apps/client/src/host/contract.ts` lo ri-esporta tenendo accanto la prosa —
 //! che è l'unica cosa, di quelle union, che non si deriva da niente.
 //!
 //! # Perché da Rust e non dal WIT
@@ -94,7 +94,7 @@ fn render() -> String {
 fn path() -> std::path::PathBuf {
     std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../frontend/src/host/enums.generated.ts"
+        "/../../apps/client/src/host/enums.generated.ts"
     ))
 }
 
@@ -145,7 +145,7 @@ fn mirror_unions_match_the_rust_types() {
 
     if let Some(lines) = diff(&emitted, &committed) {
         panic!(
-            "`frontend/src/host/enums.generated.ts` is stale: a contract \
+            "`apps/client/src/host/enums.generated.ts` is stale: a contract \
              enum changed without regenerating it.\n{lines}\n\nRegenerate with \
              `UPDATE_MIRROR=1 cargo test -p fub-abi --test ts_enums`."
         );

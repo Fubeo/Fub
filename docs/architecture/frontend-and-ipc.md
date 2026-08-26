@@ -2,12 +2,12 @@
 
 > **Domanda:** come comunica la shell TypeScript con il core senza diffondere
 > Tauri e senza duplicare il contratto?
-> **Fonti autorevoli:** `frontend/src/host/`,
+> **Fonti autorevoli:** `apps/client/src/host/`,
 > `crates/fub-app/src/lib.rs`, `crates/fub-abi/src/ipc.rs`.
 
 ## Il seam
 
-`frontend/src/host/` contiene:
+`apps/client/src/host/` contiene:
 
 - tipi del confine;
 - interfaccia usata dalla shell;
@@ -129,10 +129,10 @@ Un guard CI deve impedire:
 
 ## Dove si trova
 
-- `frontend/src/host/contract.ts`
-- `frontend/src/host/ipc.ts`
-- `frontend/src/host/dialog.ts`
-- `frontend/src/panels/`
-- `frontend/src/state/`
-- `frontend/src/ui/`
+- `apps/client/src/host/contract.ts`
+- `apps/client/src/host/ipc.ts`
+- `apps/client/src/host/dialog.ts`
+- `apps/client/src/panels/`
+- `apps/client/src/state/`
+- `apps/client/src/ui/`
 - `crates/fub-app/src/lib.rs`

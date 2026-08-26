@@ -1199,7 +1199,7 @@ fn no_corpus_mutation_breaks_a_property() {
 // prova. In un editor quel caso lo trova l'utente tutti i giorni.
 //
 // Qui si **emette** ciò che il modello dice delle stesse sorgenti; il gemello
-// `frontend/src/editor/corpus.test.ts` ci passa la passata della shell. È la
+// `apps/client/src/editor/corpus.test.ts` ci passa la passata della shell. È la
 // mossa della 0060 applicata all'altro asse, ed è la parte della §4.4 che non
 // aspetta la dichiarazione condivisa e non costa quanto lei.
 //
@@ -1335,7 +1335,7 @@ fn corpus_for_the_shell() -> Value {
 
 fn fixture_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../frontend/src/__fixtures__/corpus-syntax.json")
+        .join("../../apps/client/src/__fixtures__/corpus-syntax.json")
 }
 
 #[test]
@@ -1364,7 +1364,7 @@ fn the_corpus_fixture_matches_the_model_one() {
         "la fixture del corpus è stantia: il modello dice qualcosa di diverso \
          di queste sorgenti. Rigenerala con `UPDATE_MIRROR=1 cargo test -p \
          fub-format-markdown --test the_corpus`, poi guarda se \
-         `frontend/src/editor/corpus.test.ts` è ancora d'accordo — se non lo è, \
+         `apps/client/src/editor/corpus.test.ts` è ancora d'accordo — se non lo è, \
          le due passate hanno cominciato a dire due cose diverse."
     );
 }

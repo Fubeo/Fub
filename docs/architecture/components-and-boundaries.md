@@ -105,6 +105,6 @@ indipendenti.
 | Markdown | `crates/fub-format-markdown/src/` |
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
-| seam frontend | `frontend/src/host/` |
-| shell | `frontend/src/main.ts`, `panels/`, `state/`, `ui/` |
-| test | `crates/*/tests/`, `frontend/src/**/*.test.ts` |
+| seam frontend | `apps/client/src/host/` |
+| shell | `apps/client/src/main.ts`, `panels/`, `state/`, `ui/` |
+| test | `crates/*/tests/`, `apps/client/src/**/*.test.ts` |

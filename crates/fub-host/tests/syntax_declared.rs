@@ -12,7 +12,7 @@
 //! `livepreview.ts` era la copia scritta due volte di
 //! `HighlightRule::spec().trigger`.
 //!
-//! Questo file la **emette** in `frontend/src/rules/sintassi.generated.ts`, con
+//! Questo file la **emette** in `apps/client/src/rules/sintassi.generated.ts`, con
 //! la stessa forma dei mirror che il repo ha già (0053): un derivato, non un
 //! mirror scritto a mano, quindi non c'è il modo di fallimento in cui i due lati
 //! divergono restando verdi.
@@ -75,7 +75,8 @@ const HEADER: &str = "\
 ";
 
 fn path() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../frontend/src/rules/syntax.generated.ts")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../apps/client/src/rules/syntax.generated.ts")
 }
 
 /// Le forme dichiarate da un montaggio vero, per un `.md`.
@@ -230,7 +231,7 @@ fn emitted_declaration_matches_mount() {
 
     assert_eq!(
         emitted, committed,
-        "`frontend/src/rules/syntax.generated.ts` is stale: the syntax \
+        "`apps/client/src/rules/syntax.generated.ts` is stale: the syntax \
          declared by the mount changed without regenerating it.\nRegenerate \
          with `UPDATE_MIRROR=1 cargo test -p fub-host --test syntax_declared`."
     );
@@ -267,7 +268,7 @@ fn syntax_forms_without_declared_trigger_belong_to_provider() {
         "the syntax forms the markdown provider knows as grammar have \
          changed. If one gained a declared trigger, the shell can now \
          GENERATE it instead of rewriting it: remove it from here and \
-         remove its regex from `frontend/src/rules/syntax.ts`. If a new \
+         remove its regex from `apps/client/src/rules/syntax.ts`. If a new \
          one appeared without a trigger, the shell will have to rewrite it \
          by hand — which is the multiplier from section 4.4, and needs a \
          decision rather than an immediate fix"

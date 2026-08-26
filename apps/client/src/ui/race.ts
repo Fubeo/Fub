@@ -7,7 +7,7 @@
 // del giro sbagliato. Sono righe diverse in file diversi, e sono una frase sola.
 //
 // La risposta non è ricordarsi l'`if (mio !== seq) return` dopo ogni `await` —
-// quella è la stessa promessa ripetuta, e in `frontend/src/` era già scritto a
+// quella è la stessa promessa ripetuta, e in `apps/client/src/` era già scritto a
 // mano **quattro** volte con tre nomi diversi (`searchSeq`, due `seq`,
 // `generazione`). Una difesa che va ricordata quattro volte è una difesa che al
 // quinto posto non c'è, e i posti che ne avrebbero bisogno sono trentanove.

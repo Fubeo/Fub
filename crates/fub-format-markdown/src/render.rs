@@ -381,7 +381,7 @@ fn text_content<'a>(kind: &str, attrs: &'a serde_json::Value) -> Option<&'a str>
 ///
 /// I kind del core non hanno namespace, quindi per loro non cambia niente:
 /// `highlight` resta `.inline-highlight`, che è il selettore su cui il tema
-/// della shell è scritto (`frontend/src/theme/serie/pelle.css`). Il `:` in un nome di
+/// della shell è scritto (`apps/client/src/theme/serie/pelle.css`). Il `:` in un nome di
 /// classe è lecito in HTML; in un selettore CSS si scrive `\:`, ed è la stessa
 /// forma che i blocchi emettono già da prima di questa riga.
 fn css_class(side: &str, custom_kind: &str) -> String {

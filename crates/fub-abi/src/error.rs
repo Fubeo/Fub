@@ -30,7 +30,7 @@
 //! poteva solo leggerne la prosa.
 //!
 //! Il costo lo pagava un cliente vero, ed è quello che il §12.2 nomina: il
-//! ripristino dal cestino (`frontend/src/panels/trash.ts`) aveva un `catch` nudo
+//! ripristino dal cestino (`apps/client/src/panels/trash.ts`) aveva un `catch` nudo
 //! che intercettava **qualunque** errore e assumeva «il path è di nuovo
 //! occupato». Un disco pieno o un permesso negato producevano quindi la domanda
 //! sbagliata — *«esiste già: la ripristino con un altro nome?»* — e la risposta

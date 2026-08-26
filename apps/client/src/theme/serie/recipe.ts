@@ -279,7 +279,7 @@ const SCALE: readonly Group[] = [
       "\n" +
       "`text-xs`…`text-xl` non si muovono: sono i sei valori di prima, e restano\n" +
       "perché cambiarli è un ridisegno di ogni componente che li spende — cinquantanove\n" +
-      "regole nella pelle (`grep -cF 'var(--text-' frontend/src/theme/serie/skin.css`)\n" +
+      "regole nella pelle (`grep -cF 'var(--text-' apps/client/src/theme/serie/skin.css`)\n" +
       "— e quello è lavoro della §31.4, non di questa voce. La\n" +
       "scala **si allarga**: due gradini nuovi in cima (`text-2xl`, `text-3xl`),\n" +
       "che seguono un passo dichiarato (×1,2 da `text-xl`, arrotondato al pixel) al\n" +

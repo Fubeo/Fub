@@ -59,7 +59,7 @@
 //!
 //! - **i `tests/`**. Un banco che scrive `to_lowercase()` per costruirsi
 //!   un'attesa non sta installando una regola di produzione.
-//! - **la shell TypeScript.** `frontend/` ha le sue regole di nome, e nessun
+//! - **la shell TypeScript.** `apps/client/` ha le sue regole di nome, e nessun
 //!   attore le lega a queste; è la zona cieca che la 0115 aveva già nominata,
 //!   e resta.
 //! - **una regola scritta senza uno di questi gesti.** `MemoryHost::data_list`

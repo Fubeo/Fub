@@ -52,11 +52,11 @@ proprio cursore, scroll, selezione, modalità e undo locale.
 
 Fonti principali da verificare prima di ogni fase:
 
-- [`frontend/src/editor/editor.ts`](../../frontend/src/editor/editor.ts);
-- [`frontend/src/editor/editor-commands.ts`](../../frontend/src/editor/editor-commands.ts);
-- [`frontend/src/panels/document.ts`](../../frontend/src/panels/document.ts);
-- [`frontend/src/state/layout.ts`](../../frontend/src/state/layout.ts);
-- [`frontend/src/ui/custom.ts`](../../frontend/src/ui/custom.ts);
+- [`apps/client/src/editor/editor.ts`](../../apps/client/src/editor/editor.ts);
+- [`apps/client/src/editor/editor-commands.ts`](../../apps/client/src/editor/editor-commands.ts);
+- [`apps/client/src/panels/document.ts`](../../apps/client/src/panels/document.ts);
+- [`apps/client/src/state/layout.ts`](../../apps/client/src/state/layout.ts);
+- [`apps/client/src/ui/custom.ts`](../../apps/client/src/ui/custom.ts);
 - [`crates/fub-abi/src/format.rs`](../../crates/fub-abi/src/format.rs);
 - [`crates/fub-abi/src/model.rs`](../../crates/fub-abi/src/model.rs);
 - [`crates/fub-abi/src/ui.rs`](../../crates/fub-abi/src/ui.rs);
@@ -234,10 +234,10 @@ mappa interna e non la svuota manualmente.
 ## Struttura candidata
 
 La struttura seguente è una destinazione, non un vincolo per il primo commit.
-Durante la migrazione `frontend/src/editor/editor.ts` può restare come adapter.
+Durante la migrazione `apps/client/src/editor/editor.ts` può restare come adapter.
 
 ```text
-frontend/src/editors/
+apps/client/src/editors/
 ├── core/
 │   ├── surface.ts
 │   ├── registry.ts
@@ -482,7 +482,7 @@ rich text.
 
 ### Guard da aggiungere
 
-- [ ] nessun import `@codemirror/*` fuori da `frontend/src/editors/text/`;
+- [ ] nessun import `@codemirror/*` fuori da `apps/client/src/editors/text/`;
 - [ ] ogni binding usa famiglia, profilo e fallback registrati;
 - [ ] ogni famiglia pubblica ha implementazione shell, fallback, mirror,
   conformità nativa e conformità WASM.
