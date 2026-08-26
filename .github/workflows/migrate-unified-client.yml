@@ -6,6 +6,10 @@ on:
     branches:
       - refactor/unified-client-shells
 
+concurrency:
+  group: migrazione-client-unificato
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
