@@ -187,3 +187,28 @@ jobs:
       - name: il contrasto della pagina vera, in tutte e due le luci
         run: npm run bench:a11y
         working-directory: frontend
+
+  migrate-unified-client:
+    name: migrazione atomica del client unificato
+    if: github.event_name == 'pull_request' && github.head_ref == 'refactor/unified-client-shells'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: refactor/unified-client-shells
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@1.89
+        with:
+          components: rustfmt
+      - name: Dipendenze native di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - name: Migra, verifica e pubblica il commit finale
+        run: bash .github/scripts/migrate-unified-client.sh
