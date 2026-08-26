@@ -10,8 +10,8 @@
 //!
 //! Stesso meccanismo: la fixture è generata da serde (la stessa
 //! serializzazione che attraversa l'IPC), committata, e verificata dal lato TS
-//! in `frontend/src/host/mirror.test.ts`. Rigenerazione: `UPDATE_MIRROR=1 cargo
-//! test -p fub-app --test ts_mirror_app`.
+//! in `apps/client/src/host/mirror.test.ts`. Rigenerazione:
+//! `UPDATE_MIRROR=1 cargo test -p fub-app --test ts_mirror_app`.
 
 use fub_abi::error::PluginError;
 use fub_abi::options::permission;
@@ -180,7 +180,7 @@ fn expected() -> Value {
 fn fixture_path() -> std::path::PathBuf {
     std::path::PathBuf::from(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../frontend/src/__fixtures__/mirror-samples-app.json"
+        "/../../apps/client/src/__fixtures__/mirror-samples-app.json"
     ))
 }
 
@@ -212,7 +212,7 @@ fn the_app_side_ts_mirror_fixture_is_in_sync_with_the_rust_types() {
         committed, expected,
         "la fixture dei mirror dell'app è stantia: un tipo è cambiato senza \
          rigenerarla (`UPDATE_MIRROR=1 cargo test -p fub-app --test \
-         ts_mirror_app`), poi riallinea `frontend/src/host/contract.ts` finché \
+         ts_mirror_app`), poi riallinea `apps/client/src/host/contract.ts` finché \
          `mirror.test.ts` non torna verde."
     );
 }
