@@ -3,9 +3,10 @@ name: Riparazione client unificato
 on:
   push:
     branches:
-      - refactor/unified-client-direct
+      - main
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -111,10 +112,13 @@ jobs:
 
       - name: Registra la riparazione e rimuove il workflow temporaneo
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           rm .github/workflows/repair-unified-client.yml
           git add -A
           git diff --cached --check
           git commit -m "fix(repo): riallinea i riferimenti al client unificato"
-          git push origin HEAD:refactor/unified-client-direct
+          git push origin HEAD:main
+          gh workflow run ci.yml --ref main
