@@ -92,6 +92,78 @@ describe("setDoc", () => {
   });
 });
 
+describe("syncDoc", () => {
+  it("non crea una voce di undo per la modifica remota", () => {
+    const { ed, view } = editor();
+
+    ed.setDoc("prima nota");
+    ed.syncDoc("seconda nota");
+
+    expect(undo(view())).toBe(false);
+    expect(ed.getDoc()).toBe("seconda nota");
+  });
+
+  it("conserva l'undo locale mentre applica la modifica remota", () => {
+    const { ed, view } = editor();
+
+    ed.setDoc("base");
+    writes(view(), "X");
+    ed.syncDoc("Xbase?");
+
+    expect(ed.getDoc()).toBe("Xbase?");
+    expect(undo(view())).toBe(true);
+    expect(ed.getDoc()).toBe("base?");
+  });
+
+  it("rimappa il cursore senza riportarlo all'inizio", () => {
+    const { ed, view } = editor();
+
+    ed.setDoc("uno due");
+    view().dispatch({ selection: EditorSelection.single(6) });
+    ed.syncDoc("uno nuovo due");
+
+    expect(ed.selections().primary).toEqual({ start: 12, end: 12, text: "" });
+  });
+});
+
+describe("revealByteOffset", () => {
+  it("porta un offset UTF-8 alla posizione giusta tra caratteri multibyte", () => {
+    const { ed, view } = editor();
+    const text = "prima 🎯 seconda";
+    const before = "prima 🎯 ";
+
+    ed.setDoc(text);
+    ed.revealByteOffset(new TextEncoder().encode(before).length);
+
+    expect(view().state.selection.main.anchor).toBe(before.length);
+  });
+
+  it("combina UTF-8 e CRLF nel ponte verso la posizione dell'editor", () => {
+    const { ed, view } = editor();
+    const text = "inizio\r\n🙂 café\r\nfine";
+    const before = "inizio\r\n🙂 café\r\n";
+
+    ed.setDoc(text);
+    ed.revealByteOffset(new TextEncoder().encode(before).length);
+
+    expect(view().state.selection.main.anchor).toBe("inizio\n🙂 café\n".length);
+  });
+});
+
+describe("cambio di tema", () => {
+  it("non distrugge la history locale", () => {
+    const { ed, view } = editor();
+
+    ed.setDoc("base");
+    writes(view(), "X");
+    ed.setTheme("light");
+
+    expect(undo(view())).toBe(true);
+    expect(ed.getDoc()).toBe("base");
+  });
+});
+
+
 // Un vault non è fatto solo di note nate qui: ci si sincronizza una cartella
 // scritto su Windows, ci si clona un repo, ci si copia dentro l'esportazione di
 // un altro programma. CodeMirror spezza su `\r\n` e ricompone su `\n`, quindi
