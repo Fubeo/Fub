@@ -1,4 +1,4 @@
-name: Ripara audit prestazioni
+name: Applica audit prestazioni corretto
 
 on:
   push:
@@ -10,49 +10,91 @@ permissions:
   contents: write
 
 jobs:
-  repair:
+  apply:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Correggi i rilievi Clippy nel workflow di applicazione
+      - uses: dtolnay/rust-toolchain@1.89
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Dipendenze di sistema di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - run: npm ci
+        working-directory: frontend
+      - name: Applica tutte le ottimizzazioni e le regressioni
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          from textwrap import dedent
 
-          path = Path(".github/workflows/apply-performance-audit.yml")
-          text = path.read_text()
+          workflow_path = Path(".github/workflows/apply-performance-audit.yml")
+          workflow = workflow_path.read_text()
+          start_marker = "          python3 - <<'PY'\n"
+          end_marker = "          PY\n"
+          if workflow.count(start_marker) != 1 or workflow.count(end_marker) != 1:
+              raise SystemExit("script dell'audit originale non individuato in modo univoco")
+
+          start = workflow.index(start_marker) + len(start_marker)
+          end = workflow.index(end_marker, start)
+          script = dedent(workflow[start:end])
 
           old_lifetime = "fn lines_of<'a>(slice: &'a str) -> impl Iterator<Item = &'a str>"
           new_lifetime = "fn lines_of(slice: &str) -> impl Iterator<Item = &str>"
-          if text.count(old_lifetime) != 1:
-              raise SystemExit("firma lines_of inattesa nel workflow")
-          text = text.replace(old_lifetime, new_lifetime, 1)
+          if script.count(old_lifetime) != 1:
+              raise SystemExit("firma lines_of inattesa nello script dell'audit")
+          script = script.replace(old_lifetime, new_lifetime, 1)
+          exec(compile(script, "performance-audit-patch.py", "exec"), {})
 
-          marker = "\n".join([
-              "          replace_once(",
-              '              "crates/fub-format-markdown/src/parse.rs",',
-          ]) + "\n"
-          if text.count(marker) != 1:
-              raise SystemExit("punto di inserimento per parse.rs inatteso")
-
-          block = "\n".join([
-              "          replace_once(",
-              '              "crates/fub-format-markdown/src/parse.rs",',
-              '              "                let line_end = source[line_start..]\\n                    .as_bytes()\\n                    .iter()\\n",',
-              '              "                let line_end = source.as_bytes()[line_start..]\\n                    .iter()\\n",',
-              "          )",
-              "",
-              "",
-          ])
-          path.write_text(text.replace(marker, block + marker, 1))
+          parse_path = Path("crates/fub-format-markdown/src/parse.rs")
+          parse = parse_path.read_text()
+          old_slice = (
+              "                let line_end = source[line_start..]\n"
+              "                    .as_bytes()\n"
+              "                    .iter()\n"
+          )
+          new_slice = (
+              "                let line_end = source.as_bytes()[line_start..]\n"
+              "                    .iter()\n"
+          )
+          if parse.count(old_slice) != 1:
+              raise SystemExit("slicing Markdown inatteso")
+          parse_path.write_text(parse.replace(old_slice, new_slice, 1))
           PY
-      - name: Registra la correzione
+      - run: cargo fmt --all
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Il ramo Windows del kernel compila
+        run: cargo check -p fub-kernel --all-targets --target x86_64-pc-windows-msvc
+      - name: Prepara il componente WASM usato dai test
+        run: |
+          rustup target add wasm32-wasip2
+          cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+      - run: cargo test --workspace
+      - run: npm run typecheck
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - name: Verifica le affermazioni della prosa sui sorgenti
+        run: node .github/scripts/check-prose.mjs
+      - name: Registra la patch verificata
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows/apply-performance-audit.yml
+          git add crates frontend
           git diff --cached --check
-          git commit -m "ci: correggi i rilievi Clippy dell'audit prestazioni"
+          git commit -m "perf(core): elimina scansioni e allocazioni superflue"
           git push origin HEAD:main
