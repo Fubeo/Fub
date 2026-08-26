@@ -146,8 +146,8 @@ jobs:
       - name: Ogni comando della CI sta nel ciclo locale di CONTRIBUTING.md, o fra le sue eccezioni
         run: node .github/scripts/check-locale-loop.mjs
 
-  frontend:
-    name: frontend (type-check + test + build)
+  client:
+    name: client (type-check + test + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -155,15 +155,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: apps/client/package-lock.json
       - run: npm ci
-        working-directory: frontend
+        working-directory: apps/client
       - run: npm run typecheck
-        working-directory: frontend
+        working-directory: apps/client
       - run: npm test
-        working-directory: frontend
+        working-directory: apps/client
       - run: npm run build
-        working-directory: frontend
+        working-directory: apps/client
       - name: ogni ascoltatore globale della shell ha una Vita
         run: node .github/scripts/check-listeners.mjs
       - name: dentro un giro non si aspetta di nascosto
@@ -172,18 +172,18 @@ jobs:
         run: node .github/scripts/check-npm-copies.mjs
       - name: il browser del banco visivo, alla revisione che il lock pinna
         run: npx playwright install --with-deps chromium
-        working-directory: frontend
+        working-directory: apps/client
       - name: le scene restano uguali alle baseline del runner
         id: bench_verify
         run: npm run bench:verify
-        working-directory: frontend
+        working-directory: apps/client
       - name: differenze e foglio di contatto del banco visivo
         if: ${{ failure() && steps.bench_verify.outcome == 'failure' }}
         uses: actions/upload-artifact@v6
         with:
           name: banco-visivo-${{ github.sha }}
-          path: frontend/bench/.output/
+          path: apps/client/bench/.output/
           include-hidden-files: true
       - name: il contrasto della pagina vera, in tutte e due le luci
         run: npm run bench:a11y
-        working-directory: frontend
+        working-directory: apps/client

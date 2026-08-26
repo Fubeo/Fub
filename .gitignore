@@ -10,7 +10,7 @@
 /esempi/*/target
 **/*.rs.bk
 
-# Node / frontend
+# Node / client
 node_modules/
 dist/
 .vite/
@@ -41,8 +41,8 @@ dist/
 /TestVault
 
 # What a visual bench run produces: current photos, diffs, and the
-# contact sheet. The baseline — `frontend/bench/baseline/` — is versioned
+# contact sheet. The baseline — `apps/client/bench/baseline/` — is versioned
 # on purpose and is NOT here: a diff without a baseline is not a diff,
 # it is just a photo.
-frontend/bench/.output/
-frontend/dist-bench/
+apps/client/bench/.output/
+apps/client/dist-bench/

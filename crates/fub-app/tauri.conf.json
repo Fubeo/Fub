@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "identifier": "dev.fub.app",
   "build": {
-    "frontendDist": "../../frontend/dist",
+    "frontendDist": "../../apps/client/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)/frontend\" && npm run dev'",
-    "beforeBuildCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)/frontend\" && npm run build'"
+    "beforeDevCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)/apps/client\" && npm run dev'",
+    "beforeBuildCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)/apps/client\" && npm run build'"
   },
   "app": {
     "windows": [
