@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   migrate:
-    if: "github.event.head_commit.message == 'chore(repo): avvia migrazione client unificato'"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -36,7 +35,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          base_sha="$(git rev-parse HEAD^)"
+          base_sha="bb064a44aecc1bdef7873f264d3aae8e9b264c88"
           git config user.name "Fubeo"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
 
