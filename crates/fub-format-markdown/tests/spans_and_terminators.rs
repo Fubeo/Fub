@@ -199,23 +199,62 @@ fn mixed_terminators_do_not_shift_spans() {
 }
 
 #[test]
+fn reference_definitions_in_containers_accept_crlf() {
+    let source = "> [rif]: nota.md\r\n> testo [[Dest]]\r\n";
+    let doc = parse(source);
+    let link = doc
+        .links
+        .iter()
+        .find(|link| matches!(&link.target, LinkTarget::Wiki { page, .. } if page == "Dest"))
+        .expect("il wikilink dopo la definizione c'è");
+    assert_eq!(slice(source, link.span), "[[Dest]]");
+}
+
+#[test]
 fn reference_definitions_in_containers_keep_inline_spans() {
     for (name, source) in [
         ("blockquote", "> [rif]: nota.md\n> testo [[Dest]]\n"),
         ("blockquote lazy", "> [rif]: nota.md\ntesto [[Dest]]\n"),
-        ("blockquote indented", "> [rif]: nota.md\n  testo [[Dest]]\n"),
+        (
+            "blockquote indented",
+            "> [rif]: nota.md\n  testo [[Dest]]\n",
+        ),
         ("blockquote compact", ">[rif]: nota.md\n>testo [[Dest]]\n"),
-        ("blockquote compact lazy", ">[rif]: nota.md\ntesto [[Dest]]\n"),
-        ("blockquote nested", "> > [rif]: nota.md\n> > testo [[Dest]]\n"),
-        ("blockquote nested lazy", "> > [rif]: nota.md\n> testo [[Dest]]\n"),
+        (
+            "blockquote compact lazy",
+            ">[rif]: nota.md\ntesto [[Dest]]\n",
+        ),
+        (
+            "blockquote nested",
+            "> > [rif]: nota.md\n> > testo [[Dest]]\n",
+        ),
+        (
+            "blockquote nested lazy",
+            "> > [rif]: nota.md\n> testo [[Dest]]\n",
+        ),
         ("list", "- [rif]: nota.md\n  testo [[Dest]]\n"),
         ("list indented", "- [rif]: nota.md\n    testo [[Dest]]\n"),
         ("ordered", "1. [rif]: nota.md\n   testo [[Dest]]\n"),
-        ("blockquote indented marker", "  > [rif]: nota.md\n  > testo [[Dest]]\n"),
-        ("list blockquote", "- > [rif]: nota.md\n  > testo [[Dest]]\n"),
-        ("blockquote list", "> - [rif]: nota.md\n>   testo [[Dest]]\n"),
-        ("list leading indent", "  - [rif]: nota.md\n    testo [[Dest]]\n"),
-        ("ordered leading indent", "  1. [rif]: nota.md\n     testo [[Dest]]\n"),
+        (
+            "blockquote indented marker",
+            "  > [rif]: nota.md\n  > testo [[Dest]]\n",
+        ),
+        (
+            "list blockquote",
+            "- > [rif]: nota.md\n  > testo [[Dest]]\n",
+        ),
+        (
+            "blockquote list",
+            "> - [rif]: nota.md\n>   testo [[Dest]]\n",
+        ),
+        (
+            "list leading indent",
+            "  - [rif]: nota.md\n    testo [[Dest]]\n",
+        ),
+        (
+            "ordered leading indent",
+            "  1. [rif]: nota.md\n     testo [[Dest]]\n",
+        ),
     ] {
         let doc = parse(source);
         let link = doc

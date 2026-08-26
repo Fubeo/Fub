@@ -109,6 +109,12 @@ struct RegistryFile {
     vaults: Vec<VaultEntry>,
 }
 
+#[derive(Serialize)]
+struct RegistryFileWrite<'a> {
+    version: SchemaVersion,
+    vaults: &'a [VaultEntry],
+}
+
 /// Il registro, con il file su cui vive.
 ///
 /// `path: None` è il registro **in memoria**, che è ciò che ha un host senza
@@ -200,7 +206,17 @@ impl VaultRegistry {
     /// [`Host::ultimo_vault`](crate::Host::ultimo_vault) — scorre i candidati e
     /// salta chi non è più sul disco.
     pub fn last_opened(&self) -> Option<VaultEntry> {
-        self.in_recency_order().into_iter().next()
+        let Ok(entries) = self.entries.read() else {
+            return None;
+        };
+        entries
+            .iter()
+            .min_by(|a, b| {
+                b.last_opened
+                    .cmp(&a.last_opened)
+                    .then_with(|| a.root.cmp(&b.root))
+            })
+            .cloned()
     }
 
     /// Questa radice è in elenco **esattamente sotto questo nome**?
@@ -253,7 +269,7 @@ impl VaultRegistry {
         root: &Utf8Path,
         keys: BTreeMap<String, String>,
     ) -> Result<(), PluginError> {
-        self.update(root, |entry| entry.keys_seen = keys.clone())
+        self.update(root, move |entry| entry.keys_seen = keys)
     }
 
     /// **L'aspetto intero**: l'icona (`None` = nessuna) e il nome (vuoto =
@@ -279,9 +295,9 @@ impl VaultRegistry {
         icon: Option<String>,
         name: String,
     ) -> Result<(), PluginError> {
-        self.update(root, |entry| {
-            entry.icon = icon.clone();
-            entry.name = name.clone();
+        self.update(root, move |entry| {
+            entry.icon = icon;
+            entry.name = name;
         })
     }
 
@@ -434,9 +450,9 @@ fn load(path: &Utf8Path) -> Result<Vec<VaultEntry>, String> {
 }
 
 fn encode(entries: &[VaultEntry]) -> Result<Vec<u8>, String> {
-    let file = RegistryFile {
+    let file = RegistryFileWrite {
         version: SCHEMA_VERSION,
-        vaults: entries.to_vec(),
+        vaults: entries,
     };
     serde_json::to_vec_pretty(&file).map_err(|and| and.to_string())
 }
@@ -454,6 +470,21 @@ mod tests {
         let list = reg.list();
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].root, "/a");
+    }
+
+    #[test]
+    fn last_opened_ignores_favorites_and_breaks_ties_by_root() {
+        let reg = VaultRegistry::in_memory();
+        reg.notes_opened(Utf8Path::new("/z"), 300).unwrap();
+        reg.notes_opened(Utf8Path::new("/a"), 300).unwrap();
+        reg.notes_opened(Utf8Path::new("/favorite"), 1).unwrap();
+        reg.set_favorite(Utf8Path::new("/favorite"), true).unwrap();
+
+        assert_eq!(
+            reg.last_opened().expect("un vault recente").root,
+            "/a",
+            "vince la data, e a parità la radice lessicograficamente minore"
+        );
     }
 
     #[test]

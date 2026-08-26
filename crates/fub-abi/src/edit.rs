@@ -429,7 +429,10 @@ impl EditRequest {
             previous = Some(span);
         }
 
-        let mut out = String::with_capacity(source.len());
+        let capacity = ordered.iter().fold(source.len(), |len, edit| {
+            len - (edit.span.end - edit.span.start) + edit.text.len()
+        });
+        let mut out = String::with_capacity(capacity);
         let mut applied = Vec::with_capacity(ordered.len());
         let mut pos = 0usize;
         for edit in ordered {

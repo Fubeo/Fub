@@ -29,7 +29,7 @@
 // e collegarli agli eventi della shell (il segnale `layout` per le note aperte,
 // `onLanguage` per i testi). Il dispose restituisce lo smontaggio di entrambi.
 
-import { openViewIn, documents, layout, pane, panes } from "../state/layout";
+import { openViewIn, layout, pane, panes } from "../state/layout";
 import { registerCustomRenderer, type OnAction } from "../ui/custom";
 import { registerShellCommand } from "../ui/commands";
 import { $ } from "../ui/dom";
@@ -108,12 +108,15 @@ function openGraph(): void {
 /// entrambe; e la nota «attiva» sarebbe per giunta `null` proprio mentre si
 /// guarda il grafo, visto che il fuoco ce l'ha lui.
 function openDocuments(): Set<string> {
-  return new Set(
-    panes().flatMap((id) => {
-      const p = pane(id);
-      return p ? documents(p) : [];
-    }),
-  );
+  const open = new Set<string>();
+  for (const id of panes()) {
+    const p = pane(id);
+    if (!p) continue;
+    for (const tab of p.tabs) {
+      if (tab.k === "doc") open.add(tab.doc);
+    }
+  }
+  return open;
 }
 
 /// Legge il payload del provider, con la tolleranza che si deve a un dato che

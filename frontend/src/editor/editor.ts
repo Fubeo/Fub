@@ -314,19 +314,25 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       // CodeMirror è indietro di una riga per ogni riga che la precede.
       const text = rendered();
       const { ranges, mainIndex } = view.state.selection;
-      const endpoints = ranges.map((r) => [renderedOffset(r.from), renderedOffset(r.to)] as const);
+      const endpoints = new Array<number>(ranges.length * 2);
+      for (let i = 0; i < ranges.length; i++) {
+        const range = ranges[i];
+        endpoints[2 * i] = renderedOffset(range.from);
+        endpoints[2 * i + 1] = renderedOffset(range.to);
+      }
       // Una conversione sola per tutte le endpointstà: `charToByteIndex` è una
       // scansione dall'inizio, e questa funzione gira a ogni battuta di
       // tastiera. Vedi `charToByteIndices`.
-      const byte = charToByteIndices(
-        text,
-        endpoints.flatMap(([from, a]) => [from, a]),
-      );
-      const selections = endpoints.map(([from, a], i) => ({
-        start: byte[2 * i],
-        end: byte[2 * i + 1],
-        text: text.slice(from, a),
-      }));
+      const byte = charToByteIndices(text, endpoints);
+      const selections = ranges.map((_, i) => {
+        const from = endpoints[2 * i];
+        const to = endpoints[2 * i + 1];
+        return {
+          start: byte[2 * i],
+          end: byte[2 * i + 1],
+          text: text.slice(from, to),
+        };
+      });
       return {
         primary: selections[mainIndex],
         secondary: selections.filter((_, i) => i !== mainIndex),

@@ -162,14 +162,20 @@ export function activeDoc(id: string = layout.focus, l: Layout = layout): string
 
 /// I documenti che un riquadro tiene aperti, in ordine di linguetta.
 export function documents(p: PaneState): string[] {
-  return p.tabs.flatMap((t) => (t.k === "doc" ? [t.doc] : []));
+  const out: string[] = [];
+  for (const tab of p.tabs) {
+    if (tab.k === "doc") out.push(tab.doc);
+  }
+  return out;
 }
 
 /// In quali riquadri è aperto un documento. Serve a chi deve chiuderlo
 /// dappertutto — cancellato, spostato nel cestino — e a chi deve capire se una
 /// modifica riguarda qualche superficie a schermo.
 export function panesWithDoc(doc: string, l: Layout = layout): string[] {
-  return panes(l).filter((id) => documents(l.panes[id]).includes(doc));
+  return panes(l).filter((id) =>
+    l.panes[id].tabs.some((tab) => tab.k === "doc" && tab.doc === doc),
+  );
 }
 
 // --- scrivere ---------------------------------------------------------------
@@ -228,12 +234,14 @@ export function split(id: string, dir: "row" | "col", l: Layout = layout): strin
 /// uno stato che si possa disegnare, e «chiudi l'ultimo» vorrebbe dire «chiudi
 /// la finestra», che è un altro comando e di un altro modulo.
 export function closePane(id: string, l: Layout = layout): boolean {
-  if (!l.panes[id] || panes(l).length <= 1) return false;
+  if (!l.panes[id]) return false;
+  const orderedPanes = panes(l);
+  if (orderedPanes.length <= 1) return false;
   const potato = removeNode(l.tree, id);
   if (!potato) return false;
   l.tree = flatten(potato);
   delete l.panes[id];
-  if (l.focus === id) l.focus = panes(l)[0];
+  if (l.focus === id) l.focus = orderedPanes.find((pane) => pane !== id)!;
   changed();
   return true;
 }

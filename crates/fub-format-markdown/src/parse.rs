@@ -1710,8 +1710,7 @@ fn walk_definitions<'a>(
                 let line_start = offsets.byte(item_start.line, 1);
                 let marker_start = offsets.byte(item_start.line, item_start.column);
                 let marker_indent = marker_start.saturating_sub(line_start);
-                let line_end = source[line_start..]
-                    .as_bytes()
+                let line_end = source.as_bytes()[line_start..]
                     .iter()
                     .position(|&c| matches!(c, b'\r' | b'\n'))
                     .map_or(source.len(), |end| line_start + end);
@@ -1868,23 +1867,28 @@ fn row_prefixes(
 }
 
 /// comincia al primo byte non bianco.
-fn lines_of(slice: &str) -> Vec<&str> {
-    let mut result = Vec::new();
-    let mut the = 0;
-    let b = slice.as_bytes();
-    for (j, &c) in b.iter().enumerate() {
-        if c == b'\n' || c == b'\r' {
-            result.push(&slice[the..j]);
-            the = j + 1;
-            if c == b'\r' && b.get(j + 1) == Some(&b'\n') {
-                the = j + 2;
-            }
+fn lines_of(slice: &str) -> impl Iterator<Item = &str> {
+    let mut rest = Some(slice);
+    std::iter::from_fn(move || {
+        let current = rest.take()?;
+        if current.is_empty() {
+            return None;
         }
-    }
-    if the < slice.len() {
-        result.push(&slice[the..]);
-    }
-    result
+        let bytes = current.as_bytes();
+        let end = bytes
+            .iter()
+            .position(|&c| matches!(c, b'\r' | b'\n'))
+            .unwrap_or(current.len());
+        if end < current.len() {
+            let width = if bytes[end] == b'\r' && bytes.get(end + 1) == Some(&b'\n') {
+                2
+            } else {
+                1
+            };
+            rest = Some(&current[end + width..]);
+        }
+        Some(&current[..end])
+    })
 }
 
 /// La larghezza del marcatore della citazione sulla riga d'apertura.

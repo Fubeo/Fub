@@ -185,7 +185,7 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
     // l'unico caso è lo stesso pezzo di testo trovato da due termini diversi, e
     // chiederlo a una lista che cresce costava un confronto per ogni coppia —
     // una parola comune in una nota lunga sono migliaia di occorrenze, cioè
-    spans.sort_by_key(|s| (s.start, s.end));
+    spans.sort_unstable_by_key(|s| (s.start, s.end));
     spans.dedup();
     spans.truncate(MAX_PER_DOC);
     spans
@@ -193,16 +193,21 @@ pub(crate) fn locate(source: &str, needles: &[String]) -> Vec<Span> {
 
 // milioni di confronti per scartarne una manciata.
 fn first_at_or_after(source: &str, needle: &str, from: usize) -> Option<Span> {
-    let mut at = from;
-    while at <= source.len() {
-        if !source.is_char_boundary(at) {
-            at += 1;
-            continue;
-        }
+    if from > source.len() {
+        return None;
+    }
+    let mut start = from;
+    while start < source.len() && !source.is_char_boundary(start) {
+        start += 1;
+    }
+    for at in source[start..]
+        .char_indices()
+        .map(|(offset, _)| start + offset)
+        .chain(std::iter::once(source.len()))
+    {
         if let Some(len) = prefix_len_there(&source[at..], needle) {
             return Some(Span::new(at, at + len));
         }
-        at += 1;
     }
     None
 }

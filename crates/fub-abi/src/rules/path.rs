@@ -46,7 +46,14 @@ use crate::rules::composition::composed;
 /// l'autocompletamento — deve passare da qui, o due pezzi del sistema avranno
 /// due idee di quando due nomi sono lo stesso nome.
 pub fn resolution_key(s: &str) -> String {
-    composed(s.trim()).to_lowercase()
+    let s = s.trim();
+    if s.is_ascii() {
+        let mut key = s.to_string();
+        key.make_ascii_lowercase();
+        key
+    } else {
+        composed(s).to_lowercase()
+    }
 }
 
 /// La stessa chiave **senza** il passo che collassa le maiuscole: trim e NFC.
@@ -63,7 +70,12 @@ pub fn resolution_key(s: &str) -> String {
 /// La differenza in una riga: `resolution_key` dice **chi è candidato**,
 /// `exact_key` dice **chi ha ragione fra i candidati**.
 pub fn exact_key(s: &str) -> String {
-    composed(s.trim())
+    let s = s.trim();
+    if s.is_ascii() {
+        s.to_string()
+    } else {
+        composed(s)
+    }
 }
 
 /// Il path senza l'ultima estensione: `note/v1.2.md` → `note/v1.2`.
@@ -157,16 +169,18 @@ fn is_safe(c: char) -> bool {
 
 /// Codifica un path perché possa stare in `[testo](qui)`.
 pub fn percent_encode_path(s: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+
     let mut out = String::with_capacity(s.len());
     for c in s.chars() {
         if is_safe(c) {
             out.push(c);
         } else {
-            // Fin qui `c` è ASCII per costruzione, ma un `encode_utf8` costa
-            // niente e non lascia in giro l'ipotesi.
             let mut buf = [0u8; 4];
-            for b in c.encode_utf8(&mut buf).as_bytes() {
-                out.push_str(&format!("%{b:02X}"));
+            for &byte in c.encode_utf8(&mut buf).as_bytes() {
+                out.push('%');
+                out.push(HEX[(byte >> 4) as usize] as char);
+                out.push(HEX[(byte & 0x0f) as usize] as char);
             }
         }
     }

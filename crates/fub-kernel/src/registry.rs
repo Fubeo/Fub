@@ -57,6 +57,7 @@ impl FormatRegistry {
     /// registrato, perché funziona per alcuni file e non per altri.
     pub fn register(&mut self, provider: Box<dyn FormatProvider>) -> Result<(), RegistryConflict> {
         let descriptor = provider.descriptor();
+        let mut extensions = Vec::with_capacity(descriptor.extensions.len());
         for ext in &descriptor.extensions {
             let ext = ext.to_lowercase();
             if let Some(&at) = self.by_ext.get(&ext) {
@@ -66,8 +67,9 @@ impl FormatRegistry {
                     challenger: descriptor.id,
                 });
             }
+            extensions.push(ext);
         }
-        self.insert(provider, &descriptor.extensions);
+        self.insert_normalized(provider, extensions);
         Ok(())
     }
 
@@ -80,17 +82,25 @@ impl FormatRegistry {
     }
 
     fn insert(&mut self, provider: Box<dyn FormatProvider>, extensions: &[String]) {
+        let extensions = extensions.iter().map(|ext| ext.to_lowercase()).collect();
+        self.insert_normalized(provider, extensions);
+    }
+
+    fn insert_normalized(&mut self, provider: Box<dyn FormatProvider>, extensions: Vec<String>) {
         let idx = self.providers.len();
         for ext in extensions {
-            self.by_ext.insert(ext.to_lowercase(), idx);
+            self.by_ext.insert(ext, idx);
         }
         self.providers.push(provider);
     }
 
     pub fn provider_for_ext(&self, ext: &str) -> Option<&dyn FormatProvider> {
+        if let Some(&at) = self.by_ext.get(ext) {
+            return Some(self.providers[at].as_ref());
+        }
         self.by_ext
             .get(&ext.to_lowercase())
-            .map(|&the| self.providers[the].as_ref())
+            .map(|&at| self.providers[at].as_ref())
     }
 
     /// Tutte le estensioni conosciute, per la scansione del vault.
@@ -103,7 +113,11 @@ impl FormatRegistry {
     /// confronto resta disarmato sul caso, com'è in `kind_of` — le chiavi di
     /// `by_ext` sono già minuscole, ma la risposta dev'essere quella di sempre.
     pub fn has_doc_ext(&self, ext: &str) -> bool {
-        self.by_ext.keys().any(|and| and.eq_ignore_ascii_case(ext))
+        if self.by_ext.contains_key(ext) {
+            return true;
+        }
+        ext.bytes().any(|b| b.is_ascii_uppercase())
+            && self.by_ext.contains_key(&ext.to_ascii_lowercase())
     }
 
     /// L'estensione con cui nasce una nota nuova a cui nessuno ne ha data una:
@@ -213,6 +227,24 @@ mod tests {
             reg.provider_for_ext("mdx").is_none(),
             "l'estensione libera non deve restare registrata dal perdente"
         );
+    }
+
+    #[test]
+    fn extension_lookups_use_normalized_hash_keys() {
+        let mut reg = FormatRegistry::new();
+        reg.register(Box::new(Fake("markdown", "md"))).unwrap();
+
+        assert_eq!(
+            reg.provider_for_ext("md").unwrap().descriptor().id,
+            "markdown"
+        );
+        assert_eq!(
+            reg.provider_for_ext("MD").unwrap().descriptor().id,
+            "markdown"
+        );
+        assert!(reg.has_doc_ext("md"));
+        assert!(reg.has_doc_ext("MD"));
+        assert!(!reg.has_doc_ext("txt"));
     }
 
     #[test]
