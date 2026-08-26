@@ -81,7 +81,26 @@ jobs:
         run: |
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
-      - run: cargo test --workspace
+      - name: Suite Rust con diagnostica
+        id: rust_tests
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          cargo test --workspace --no-fail-fast 2>&1 | tee /tmp/rust-tests.log
+      - name: Pubblica la diagnostica temporanea
+        if: steps.rust_tests.outcome == 'failure'
+        run: |
+          {
+            grep -n -E 'FAILED|panicked at|failures:|test result: FAILED|error:' /tmp/rust-tests.log || true
+            printf '\n--- ultime 800 righe ---\n'
+            tail -n 800 /tmp/rust-tests.log
+          } > .github/audit-rust-test-failure.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/audit-rust-test-failure.log
+          git commit -m "chore: registra il test Rust fallito"
+          git push origin HEAD:main
+          exit 1
       - run: npm run typecheck
         working-directory: frontend
       - run: npm test
