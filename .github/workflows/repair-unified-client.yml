@@ -3,10 +3,9 @@ name: Riparazione client unificato
 on:
   push:
     branches:
-      - main
+      - refactor/unified-client-direct
 
 permissions:
-  actions: write
   contents: write
 
 jobs:
@@ -107,18 +106,16 @@ jobs:
         run: |
           rustup target add wasm32-wasip2
           cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+          cargo fmt --all
           cargo fmt --all --check
           cargo test --workspace
 
       - name: Registra la riparazione e rimuove il workflow temporaneo
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           rm .github/workflows/repair-unified-client.yml
           git add -A
           git diff --cached --check
           git commit -m "fix(repo): riallinea i riferimenti al client unificato"
-          git push origin HEAD:main
-          gh workflow run ci.yml --ref main
+          git push origin HEAD:refactor/unified-client-direct
