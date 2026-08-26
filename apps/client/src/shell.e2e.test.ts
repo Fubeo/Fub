@@ -343,6 +343,81 @@ describe("scrivi", () => {
   });
 });
 
+describe("due superfici dello stesso documento", () => {
+  it("sincronizza le battute ma conserva l'undo locale di ciascun riquadro", async () => {
+    const host = await start(VAULT);
+    const readsBeforeSplit = host.atGate("readDocument").length;
+
+    // Gesto 1 — con la nota aperta in A, `Ctrl-\` divide a destra e porta in B
+    // la stessa nota, non una rilettura separata.
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "\\",
+        ctrlKey: true,
+      }),
+    );
+    await waitFor("le due superfici mostrano la nota", () => {
+      const panes = [...document.querySelectorAll<HTMLElement>(".pane")];
+      return (
+        panes.length === 2 &&
+        panes.every((p) =>
+          [...p.querySelectorAll(".cm-content .cm-line")]
+            .map((line) => line.textContent)
+            .join("\n")
+            .includes("Il primo documento"),
+        )
+      );
+    });
+    await settle();
+    // Dividere riusa il buffer già letto: la seconda superficie non deve
+    // rileggere il documento dal disco.
+    expect(host.atGate("readDocument")).toHaveLength(readsBeforeSplit);
+
+    const initial = textInPane("main");
+    expect(initial).toContain("Il primo documento");
+    expect(textInPane("pane-2")).toBe(initial);
+    expect([...document.querySelectorAll(".pane .tab-name")].map((tab) => tab.textContent)).toEqual([
+      "Benvenuto",
+      "Benvenuto",
+    ]);
+
+    // Gesto 2 — A digita « [A]»: il testo del buffer arriva anche in B.
+    focusPane("main");
+    typeInPane("main", " [A]");
+    await settle();
+    const afterA = `${initial} [A]`;
+    expect([textInPane("main"), textInPane("pane-2")]).toEqual([afterA, afterA]);
+
+    // Gesto 3 — B digita « [B]»: A riceve la modifica senza guadagnare una
+    // voce nella propria history.
+    focusPane("pane-2");
+    typeInPane("pane-2", " [B]");
+    await settle();
+    const afterAB = `${afterA} [B]`;
+    expect([textInPane("main"), textInPane("pane-2")]).toEqual([afterAB, afterAB]);
+
+    // Gesto 4 — Ctrl-Z in A rimuove solo « [A]», lasciando la modifica locale
+    // di B visibile in entrambe le superfici.
+    focusPane("main");
+    expect(await undoInPane("main")).toBe(true);
+    await settle();
+    const afterUndoA = `${initial} [B]`;
+    expect([textInPane("main"), textInPane("pane-2")]).toEqual([afterUndoA, afterUndoA]);
+
+    // Gesto 5 — Ctrl-Z in B agisce sulla sua history e rimuove « [B]».
+    focusPane("pane-2");
+    expect(await undoInPane("pane-2")).toBe(true);
+    await settle();
+    expect([textInPane("main"), textInPane("pane-2")]).toEqual([initial, initial]);
+    // La caratterizzazione lascia il buffer pulito e scarica i due timer della
+    // shell, così nessuna scrittura ritardata raggiunge il test successivo.
+    await host.close();
+    await settle();
+  });
+});
+
 describe("due salvataggi della stessa nota", () => {
   it("non si accavallano: chi flussa non ne fa partire un secondo", async () => {
     // Il difetto 0030, **costruito** e non aspettato. La prima stesura di questo
@@ -766,6 +841,41 @@ function typeInEditor(text: string): void {
   const view = shell?.parentElement ? EditorView.findFromDOM(shell.parentElement) : null;
   if (!view) throw new Error("l'editor non è montato");
   view.dispatch({ changes: { from: view.state.doc.length, insert: text } });
+}
+
+function paneElement(id: string): HTMLElement {
+  const pane = document.querySelector<HTMLElement>(`.pane[data-pane="${id}"]`);
+  if (!pane) throw new Error(`il riquadro «${id}» non è montato`);
+  return pane;
+}
+
+function editorInPane(id: string): EditorView {
+  const shell = paneElement(id).querySelector<HTMLElement>(".cm-editor");
+  const view = shell?.parentElement ? EditorView.findFromDOM(shell.parentElement) : null;
+  if (!view) throw new Error(`l'editor del riquadro «${id}» non è montato`);
+  return view;
+}
+
+function textInPane(id: string): string {
+  return [...paneElement(id).querySelectorAll(".cm-content .cm-line")]
+    .map((line) => line.textContent)
+    .join("\n");
+}
+
+function focusPane(id: string): void {
+  paneElement(id).dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+}
+
+function typeInPane(id: string, text: string): void {
+  const view = editorInPane(id);
+  view.dispatch({ changes: { from: view.state.doc.length, insert: text } });
+}
+
+async function undoInPane(id: string): Promise<boolean> {
+  // Il comando viene caricato dopo `start`, così usa la stessa istanza
+  // CodeMirror della shell rimontata dal vero harness.
+  const { undo } = await import("@codemirror/commands");
+  return undo(editorInPane(id));
 }
 
 describe("riconfigura una scorciatoia", () => {
