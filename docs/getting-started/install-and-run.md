@@ -44,9 +44,9 @@ Clona il repository e installa le dipendenze frontend dal lockfile.
 git clone https://github.com/Fubeo/Fub.git
 cd Fub
 
-cd frontend
+cd apps/client
 npm ci
-cd ..
+cd ../..
 ```
 
 Non eseguire `npm install` per aggiornare dipendenze durante il setup: cambierebbe
@@ -71,10 +71,10 @@ flowchart LR
 ## Build
 
 ```bash
-cd frontend
+cd apps/client
 npm run typecheck
 npm run build
-cd ..
+cd ../..
 
 cargo build --workspace
 cargo tauri build --config crates/fub-app/tauri.conf.json
@@ -88,7 +88,7 @@ cargo tauri build --config crates/fub-app/tauri.conf.json
 ```bash
 cargo test --workspace
 
-cd frontend
+cd apps/client
 npm run typecheck
 npm test
 npm run build
