@@ -1,3 +1,4 @@
+# Workflow monouso: viene rimosso dal commit prodotto.
 name: Migrazione client unificato
 
 on:
