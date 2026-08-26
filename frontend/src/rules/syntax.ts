@@ -331,10 +331,10 @@ export function listItem(row: string): ListEntry | null {
   const quote = mq ? mq[1] : "";
   const rest = row.slice(quote.length);
 
-  const readBox = (from: number): { symbol: string | null; end: number } => {
+  const readBox = (from: number): { symbol: string | null; start: number; end: number } => {
     const mb = RE_BOX.exec(rest.slice(from));
-    if (!mb) return { symbol: null, end: from };
-    return { symbol: mb[1], end: from + mb[0].length };
+    if (!mb) return { symbol: null, start: from, end: from };
+    return { symbol: mb[1], start: from, end: from + mb[0].length };
   };
 
   const mb = RE_BULLET.exec(rest);
@@ -353,7 +353,7 @@ export function listItem(row: string): ListEntry | null {
       number: null,
       symbol: box.symbol,
       markerEnd: quote.length + end,
-      boxFrom: box.symbol === null ? -1 : quote.length + box.end - 3,
+      boxFrom: box.symbol === null ? -1 : quote.length + box.start,
       boxTo: box.symbol === null ? -1 : quote.length + box.end,
       content: rest.slice(end),
     };
@@ -372,7 +372,7 @@ export function listItem(row: string): ListEntry | null {
       number: Number(mo[2]),
       symbol: box.symbol,
       markerEnd: quote.length + end,
-      boxFrom: box.symbol === null ? -1 : quote.length + box.end - 3,
+      boxFrom: box.symbol === null ? -1 : quote.length + box.start,
       boxTo: box.symbol === null ? -1 : quote.length + box.end,
       content: rest.slice(end),
     };

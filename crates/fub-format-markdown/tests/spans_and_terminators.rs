@@ -26,7 +26,7 @@
 //! qualunque cosa dica il resto del modello.
 
 use fub_abi::format::{FormatProvider, ParseContext};
-use fub_abi::model::{Block, DocumentModel, Inline, Span};
+use fub_abi::model::{Block, DocumentModel, Inline, LinkTarget, Span};
 use fub_format_markdown::MarkdownProvider;
 
 fn parse(src: &str) -> DocumentModel {
@@ -196,6 +196,40 @@ fn mixed_terminators_do_not_shift_spans() {
     assert_eq!(text, "Titolo");
     let link = doc.links.first().expect("un link");
     assert_eq!(slice(source, link.span), "[[Altra]]");
+}
+
+#[test]
+fn reference_definitions_in_containers_keep_inline_spans() {
+    for (name, source) in [
+        ("blockquote", "> [rif]: nota.md\n> testo [[Dest]]\n"),
+        ("blockquote lazy", "> [rif]: nota.md\ntesto [[Dest]]\n"),
+        ("blockquote indented", "> [rif]: nota.md\n  testo [[Dest]]\n"),
+        ("blockquote compact", ">[rif]: nota.md\n>testo [[Dest]]\n"),
+        ("blockquote compact lazy", ">[rif]: nota.md\ntesto [[Dest]]\n"),
+        ("blockquote nested", "> > [rif]: nota.md\n> > testo [[Dest]]\n"),
+        ("blockquote nested lazy", "> > [rif]: nota.md\n> testo [[Dest]]\n"),
+        ("list", "- [rif]: nota.md\n  testo [[Dest]]\n"),
+        ("list indented", "- [rif]: nota.md\n    testo [[Dest]]\n"),
+        ("ordered", "1. [rif]: nota.md\n   testo [[Dest]]\n"),
+        ("blockquote indented marker", "  > [rif]: nota.md\n  > testo [[Dest]]\n"),
+        ("list blockquote", "- > [rif]: nota.md\n  > testo [[Dest]]\n"),
+        ("blockquote list", "> - [rif]: nota.md\n>   testo [[Dest]]\n"),
+        ("list leading indent", "  - [rif]: nota.md\n    testo [[Dest]]\n"),
+        ("ordered leading indent", "  1. [rif]: nota.md\n     testo [[Dest]]\n"),
+    ] {
+        let doc = parse(source);
+        let link = doc
+            .links
+            .iter()
+            .find(|link| matches!(&link.target, LinkTarget::Wiki { page, .. } if page == "Dest"))
+            .unwrap_or_else(|| panic!("{name}: manca il wikilink residuo"));
+        assert_eq!(
+            slice(source, link.span),
+            "[[Dest]]",
+            "{name}: span {:?}",
+            link.span
+        );
+    }
 }
 
 #[test]

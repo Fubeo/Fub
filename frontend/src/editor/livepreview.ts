@@ -578,9 +578,13 @@ const theme = EditorView.baseTheme({
     padding: "0 0.45em",
     fontSize: "0.95em",
     cursor: "pointer",
+    // Un solo colore per entrambe le luci: il valore vive nei token del
+    // foglio (`--doc-link`) e cambia con la luce. Prima c'erano due regole
+    // `&light`/`&dark` con fallback cablati (#2f6bd8, #82aaff) che non
+    // coincidevano coi token — una terza copia della stessa coppia, e una
+    // divergenza che si vedeva solo a tema non caricato.
+    color: "var(--doc-link)",
   },
-  "&light .cm-fub-tag": { color: "var(--doc-link, #2f6bd8)" },
-  "&dark .cm-fub-tag": { color: "var(--doc-link, #82aaff)" },
   ".cm-fub-done": { textDecoration: "line-through", opacity: "0.55" },
   ".cm-fub-checkbox": {
     cursor: "pointer",

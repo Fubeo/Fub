@@ -48,6 +48,20 @@ pub fn build_options(ctx: &ParseContext) -> Options<'static> {
     }
     or
 }
+/// Controlla il limite di annidamento senza ricorrere: le passate preliminari
+/// (`recover_definitions`) devono poter rifiutare anche un AST ostile.
+fn exceeds_max_depth<'a>(root: &'a AstNode<'a>) -> bool {
+    let mut pending = vec![(root, 0)];
+    while let Some((node, depth)) = pending.pop() {
+        if depth > MAX_DEPTH {
+            return true;
+        }
+        for child in node.children() {
+            pending.push((child, depth.saturating_add(1)));
+        }
+    }
+    false
+}
 
 /// Accumulatore delle tabelle piatte estratte durante la visita.
 #[derive(Default)]
@@ -77,6 +91,14 @@ pub fn parse_markdown(source: &str, ctx: &ParseContext) -> Result<DocumentModel,
     let arena = Arena::new();
     let options = build_options(ctx);
     let root = comrak::parse_document(&arena, text_policy::strip_bom(source), &options);
+    // Le passate di recupero attraversano l'AST prima del convertitore e non
+    // possono affidarsi al suo guard ricorsivo: per un documento ostile la
+    // ricorsione preventiva sarebbe già sufficiente a esaurire lo stack.
+    if exceeds_max_depth(root) {
+        return Err(FormatError::Parse(format!(
+            "annidamento del documento oltre {MAX_DEPTH} livelli"
+        )));
+    }
 
     // comrak consuma le reference definitions durante il parsing senza lasciare
     // un nodo nell'AST (§4: senza il recupero, `[a][rif]` + `[rif]: nota.md`
@@ -1578,10 +1600,10 @@ fn frontmatter_verbatim(raw: &str, reason: String, span: Span) -> Block {
 /// (che è privato) per correggere le colonne degli inline residui.
 #[derive(Clone, Copy)]
 enum Container {
-    /// Una citazione: `>` più uno spazio opzionale per riga.
-    BlockQuote,
-    /// Una voce di lista: la larghezza del suo marcatore in byte (`- ` → 2).
-    ListItem(usize),
+    /// Una citazione: la larghezza del marcatore (`>` o `> `).
+    BlockQuote(usize),
+    /// Una voce di lista: rientro del marcatore e larghezza del suo prefisso.
+    ListItem { width: usize, indent: usize },
 }
 
 /// Una definizione letta dalla sorgente, già tradotta in byte e decodificata.
@@ -1659,21 +1681,23 @@ fn walk_definitions<'a>(
             let mut sp = node.data.borrow().sourcepos;
             let row_zero = sp.start.line;
             sp.start.line += n;
-            let prefixes = row_prefixes(source, span.start, slice, containers);
+            let (prefixes, virtual_prefixes) = row_prefixes(source, span.start, slice, containers);
             sp.start.column = 1 + prefixes[n];
             node.data.borrow_mut().sourcepos = sp;
             let delta = |row: usize| -> isize {
-                // è `row - row_zero`, e comrak ha contato le colonne come
-                // se quella riga fosse la prima del paragrafo — il vero
-                // prefisso di riga è `prefixes[k]`.
-                // Gli altri contenitori (footnote, definition list, html…) non
+                // `comrak` conta le colonne come se ogni riga fosse la prima
+                // del paragrafo: il prefisso virtuale è quello implicito nei
+                // suoi sourcepos, mentre `prefixes[k]` è quello fisico.
                 let k = row.saturating_sub(row_zero) + n;
-                prefixes.get(k).copied().unwrap_or(0) as isize
+                let physical = prefixes.get(k).copied().unwrap_or(0) as isize;
+                let virtual_prefix = virtual_prefixes.get(k).copied().unwrap_or(0) as isize;
+                physical - virtual_prefix
             };
             shift_descendants(node, n, &delta);
         }
         NodeValue::BlockQuote => {
-            containers.push(Container::BlockQuote);
+            let width = blockquote_width(source, span.start);
+            containers.push(Container::BlockQuote(width));
             for child in node.children() {
                 walk_definitions(child, source, offsets, defs, containers);
             }
@@ -1682,7 +1706,18 @@ fn walk_definitions<'a>(
         NodeValue::List(_) => {
             for item in node.children() {
                 let width = marker_width(source, offsets, item);
-                containers.push(Container::ListItem(width));
+                let item_start = item.data.borrow().sourcepos.start;
+                let line_start = offsets.byte(item_start.line, 1);
+                let marker_start = offsets.byte(item_start.line, item_start.column);
+                let marker_indent = marker_start.saturating_sub(line_start);
+                let line_end = source[line_start..]
+                    .as_bytes()
+                    .iter()
+                    .position(|&c| matches!(c, b'\r' | b'\n'))
+                    .map_or(source.len(), |end| line_start + end);
+                let parent_prefix = container_prefix(&source[line_start..line_end], containers);
+                let indent = marker_indent.saturating_sub(parent_prefix);
+                containers.push(Container::ListItem { width, indent });
                 for child in item.children() {
                     walk_definitions(child, source, offsets, defs, containers);
                 }
@@ -1799,21 +1834,28 @@ fn terminators_in(slice: &str) -> usize {
 
 // il terminatore sta fra le righe della fetta? la riga seguente
 // comincia dopo; `righe_di` non lo include.
-/// Le righe di una fetta, senza i terminatori.
+/// Le righe di una fetta, senza i terminatori. Restituisce il prefisso
+/// fisico della riga e quello virtuale che `comrak` riflette nei sourcepos.
 fn row_prefixes(
     source: &str,
     slice_start: usize,
     slice: &str,
     containers: &[Container],
-) -> Vec<usize> {
+) -> (Vec<usize>, Vec<usize>) {
     let mut prefixes = Vec::new();
+    let mut virtual_prefixes = Vec::new();
     let mut row_start = slice_start;
     for row in lines_of(slice) {
         let end = row_start + row.len();
-        prefixes.push(row_prefix(&source[row_start..end], containers));
+        let row = &source[row_start..end];
+        let physical = row_prefix(row, containers);
+        prefixes.push(physical);
+        virtual_prefixes.push(virtual_prefix(row, containers));
         row_start = end;
         // Quanti byte della riga appartengono ai contenitori (e all'indentazione del
         // paragrafo): per una riga pigra (citazione che non si apre) il contenuto
+        // reale resta nella stessa posizione fisica, anche se `comrak` ne assume
+        // il marcatore implicito.
         if row_start < source.len() {
             let was_cr = source.as_bytes()[row_start] == b'\r';
             row_start += 1;
@@ -1822,7 +1864,7 @@ fn row_prefixes(
             }
         }
     }
-    prefixes
+    (prefixes, virtual_prefixes)
 }
 
 /// comincia al primo byte non bianco.
@@ -1845,42 +1887,111 @@ fn lines_of(slice: &str) -> Vec<&str> {
     result
 }
 
-/// La larghezza in byte del marcatore della voce: `- ` → 2, `1. ` → 3.
+/// La larghezza del marcatore della citazione sulla riga d'apertura.
+fn blockquote_width(source: &str, start: usize) -> usize {
+    let Some(row) = source.get(start..) else {
+        return 2;
+    };
+    let line_end = row
+        .as_bytes()
+        .iter()
+        .position(|&c| matches!(c, b'\r' | b'\n'))
+        .unwrap_or(row.len());
+    let bytes = &row.as_bytes()[..line_end];
+    let Some(marker) = bytes.iter().position(|&c| c == b'>') else {
+        return 2;
+    };
+    1 + usize::from(bytes.get(marker + 1) == Some(&b' '))
+}
+
 /// Sposta i sourcepos dei discendenti di un paragrafo misto: righe di `n`,
-/// colonne secondo lo scarto di prefisso della loro riga.
-fn row_prefix(row: &str, containers: &[Container]) -> usize {
+/// colonne secondo lo scarto fra il prefisso fisico e quello implicito nei
+/// sourcepos di `comrak`.
+fn container_prefix(row: &str, containers: &[Container]) -> usize {
     let b = row.as_bytes();
     let mut the = 0;
-    let mut lazy = false;
-    for m in containers {
+    for &m in containers {
         match m {
-            Container::BlockQuote => {
+            Container::BlockQuote(_) => {
+                let indent = b[the..]
+                    .iter()
+                    .take_while(|&&c| c == b' ' || c == b'\t')
+                    .count();
+                the += indent;
                 if b.get(the) == Some(&b'>') {
                     the += 1;
                     if b.get(the) == Some(&b' ') {
                         the += 1;
                     }
                 } else {
-                    lazy = true;
                     break;
                 }
             }
-            Container::ListItem(width) => {
-                if lazy {
-                    break;
+            Container::ListItem { width, .. } => {
+                let line_indent = b[the..]
+                    .iter()
+                    .take_while(|&&c| c == b' ' || c == b'\t')
+                    .count();
+                let marker = the + line_indent;
+                if matches!(b.get(marker), Some(b'-' | b'+' | b'*' | b'0'..=b'9')) {
+                    the = (marker + width).min(b.len());
+                } else {
+                    the = (the + line_indent.max(width)).min(b.len());
                 }
-                the = (the + width).min(b.len());
             }
         }
     }
-    if lazy {
-        b.iter().take_while(|&&c| c == b' ' || c == b'\t').count()
-    } else {
-        the + b[the..]
-            .iter()
-            .take_while(|&&c| c == b' ' || c == b'\t')
-            .count()
+    the
+}
+
+fn row_prefix(row: &str, containers: &[Container]) -> usize {
+    let b = row.as_bytes();
+    let the = container_prefix(row, containers);
+    the + b[the..]
+        .iter()
+        .take_while(|&&c| c == b' ' || c == b'\t')
+        .count()
+}
+
+/// Prefisso che `comrak` ha già incorporato nei sourcepos della riga.
+fn virtual_prefix(row: &str, containers: &[Container]) -> usize {
+    let b = row.as_bytes();
+    let mut the = 0;
+    let mut prefix = 0;
+    for &m in containers {
+        match m {
+            Container::BlockQuote(width) => {
+                let indent = b[the..]
+                    .iter()
+                    .take_while(|&&c| c == b' ' || c == b'\t')
+                    .count();
+                the += indent;
+                if b.get(the) == Some(&b'>') {
+                    let marker = 1 + usize::from(b.get(the + 1) == Some(&b' '));
+                    the += marker;
+                    prefix += indent + marker;
+                } else {
+                    prefix += width + indent;
+                    break;
+                }
+            }
+            Container::ListItem { width, indent } => {
+                let line_indent = b[the..]
+                    .iter()
+                    .take_while(|&&c| c == b' ' || c == b'\t')
+                    .count();
+                let marker = the + line_indent;
+                if matches!(b.get(marker), Some(b'-' | b'+' | b'*' | b'0'..=b'9')) {
+                    the = (marker + width).min(b.len());
+                    prefix += line_indent + width;
+                } else {
+                    the = (the + line_indent.max(width)).min(b.len());
+                    prefix += indent + width;
+                }
+            }
+        }
     }
+    prefix
 }
 
 /// Una definizione grezza, con la sua estensione consumata (incluso il
@@ -1928,10 +2039,12 @@ fn shift_node<'a>(node: &'a AstNode<'a>, n: usize, delta: &dyn Fn(usize) -> isiz
     let mut sp = node.data.borrow().sourcepos;
     let start_line = sp.start.line;
     let end_line = sp.end.line;
+    let start_delta = delta(start_line);
+    let end_delta = delta(end_line);
     sp.start.line += n;
     sp.end.line += n;
-    sp.start.column = (sp.start.column as isize + delta(start_line)).max(1) as usize;
-    sp.end.column = (sp.end.column as isize + delta(end_line)).max(1) as usize;
+    sp.start.column = (sp.start.column as isize + start_delta).max(1) as usize;
+    sp.end.column = (sp.end.column as isize + end_delta).max(1) as usize;
     node.data.borrow_mut().sourcepos = sp;
     for child in node.children() {
         shift_node(child, n, delta);

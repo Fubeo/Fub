@@ -171,6 +171,18 @@ describe("la voce di lista", () => {
     expect([bareItem.boxFrom, bareItem.boxTo, bareItem.content]).toEqual([2, 5, ""]);
   });
 
+  it("una casella con simbolo multibyte ha i confini giusti (niente coppia surrogata tagliata)", () => {
+    // `[🚀]` è lungo 4 code unit: contare tre caratteri all'indietro dalla
+    // fine della casella atterrerebbe in mezzo alla coppia surrogata. La
+    // posizione si calcola dal **match**, e l'inizio sta sul `[`.
+    const v = listItem("- [🚀] task")!;
+    expect([v.boxFrom, v.boxTo, v.symbol]).toEqual([2, 6, "🚀"]);
+    expect("- [🚀] task".slice(v.boxFrom, v.boxTo)).toBe("[🚀]");
+    // E la casella resta riconosciuta anche in una voce numerata.
+    const o = listItem("3) [🔁] ciclo")!;
+    expect([o.boxFrom, o.boxTo, o.symbol]).toEqual([3, 7, "🔁"]);
+  });
+
   it("continuare una citazione annidata la lascia annidata", () => {
     expect(nextMarker(listItem("> > citata")!)).toBe("> > ");
   });
