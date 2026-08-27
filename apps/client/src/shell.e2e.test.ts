@@ -42,7 +42,10 @@
 // `happy-dom` non c'è né CSS né misura, quindi si asserisce su *cosa* c'è e
 // mai su *dove*.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EditorView } from "@codemirror/view";
+import {
+  appendToTextEditor as typeInEditor,
+  mountedTextEditors as editorViews,
+} from "./editors/text/test-support";
 import type { FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec } from "./host/contract";
 import { SHELL_KEYS } from "./ui/shell-keys.generated";
@@ -255,12 +258,6 @@ function editorTexts(): string[] {
   return [...document.querySelectorAll(".cm-content")].map((content) =>
     [...content.querySelectorAll(".cm-line")].map((line) => line.textContent ?? "").join("\n"),
   );
-}
-
-function editorViews(): EditorView[] {
-  return [...document.querySelectorAll<HTMLElement>(".cm-editor")]
-    .map((shell) => (shell.parentElement ? EditorView.findFromDOM(shell.parentElement) : null))
-    .filter((view): view is EditorView => view !== null);
 }
 
 beforeEach(() => {
@@ -817,22 +814,6 @@ describe("ripristina", () => {
 
 function trashEntries(): HTMLElement[] {
   return [...document.querySelectorAll<HTMLElement>("#views-left .ui-list-item")];
-}
-
-/// Batte del testo nell'editor.
-///
-/// La view di CodeMirror si ripesca dal DOM con `findFromDOM`, che è **come la
-/// trova la tastiera di questa shell** (`ui/keyboard.ts`): il tipo `Editor` non
-/// la espone, e allargarlo per un banco di prova vorrebbe dire che il resto
-/// della shell può prenderla — è la stessa scelta di `editor/editor.test.ts`.
-/// Un `beforeinput` finto non basterebbe: in `happy-dom` non c'è
-/// `execCommand`, e l'evento che il browser vero traduce in una modifica qui
-/// non lo traduce nessuno.
-function typeInEditor(text: string): void {
-  const shell = document.querySelector<HTMLElement>(".cm-editor");
-  const view = shell?.parentElement ? EditorView.findFromDOM(shell.parentElement) : null;
-  if (!view) throw new Error("l'editor non è montato");
-  view.dispatch({ changes: { from: view.state.doc.length, insert: text } });
 }
 
 describe("riconfigura una scorciatoia", () => {

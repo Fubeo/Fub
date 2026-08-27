@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { EditorView } from "@codemirror/view";
-import { createEditor, type Editor } from "./editor";
+import { createEditor, type Editor } from "../../editor/editor";
 
 interface TestEditor {
   ed: Editor;

@@ -15,12 +15,7 @@
 // pannelli che dichiarano i comandi non si possono importare in un banco senza
 // un `document`.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
-import { foldKeymap } from "@codemirror/language";
-import { lintKeymap } from "@codemirror/lint";
-import { searchKeymap } from "@codemirror/search";
-import type { KeyBinding } from "@codemirror/view";
+import { editorKeymap } from "../editors/text/test-support";
 import kernelKeys from "../__fixtures__/command-keys.json";
 import { obsidianKeymap } from "../editor/editor-commands";
 import { conflicts, normalize, shadowedPrefixes, registerShellCommand, resetShellCommands, type CommandEntry } from "./commands";
@@ -143,17 +138,7 @@ describe("gli accordi dei due registri, guardati insieme", () => {
 /// elenco di tasti. Se un giorno quel pacchetto cambiasse composizione, questo
 /// elenco resterebbe indietro senza dirlo — è il solo punto in cui questo banco
 /// crede a qualcosa invece di misurarlo.
-const KEYMAP_EDITOR: readonly KeyBinding[] = [
-  ...obsidianKeymap,
-  ...closeBracketsKeymap,
-  ...defaultKeymap,
-  ...searchKeymap,
-  ...historyKeymap,
-  ...foldKeymap,
-  ...completionKeymap,
-  ...lintKeymap,
-  indentWithTab,
-];
+const KEYMAP_EDITOR = editorKeymap;
 
 /// Una collisione nota: la forma canonica, chi la dichiara nei due registri, e
 /// il comando dell'editor che se la prende comunque.
