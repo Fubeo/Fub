@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorState } from "@codemirror/state";
 import { CompletionContext, type CompletionResult } from "@codemirror/autocomplete";
 import {
@@ -15,7 +16,11 @@ import {
 // esercitano headless con un `CompletionContext` costruito su un
 // `EditorState`, che è pura struttura dati.
 function ctxAt(doc: string, pos: number, explicit = false): CompletionContext {
-  return new CompletionContext(EditorState.create({ doc }), pos, explicit);
+  return new CompletionContext(
+    EditorState.create({ doc, extensions: [markdown({ base: markdownLanguage })] }),
+    pos,
+    explicit,
+  );
 }
 
 describe("wikilinkContext", () => {
@@ -207,6 +212,24 @@ describe("tagSource (headless)", () => {
       { label: "#rust", detail: "2", type: "keyword" },
       { label: "#area/lavoro", detail: "1", type: "keyword" },
     ]);
+  });
+
+  it("un tag Unicode fuori dal codice conserva gli offset in code unit", async () => {
+    const doc = "nota 🎯 #città";
+    const res = (await tagSource(listTags)(ctxAt(doc, doc.length))) as CompletionResult;
+    expect(res.from).toBe(8);
+    expect(res.to).toBe(doc.length);
+  });
+
+  it("dentro il codice inline non propone tag", async () => {
+    const doc = "`🎯 #città`";
+    expect(await tagSource(listTags)(ctxAt(doc, doc.length - 1))).toBeNull();
+  });
+
+  it("dentro una fence non propone tag", async () => {
+    const doc = "```\n#città\n```";
+    const pos = doc.indexOf("#") + "#città".length;
+    expect(await tagSource(listTags)(ctxAt(doc, pos))).toBeNull();
   });
 
   it("su un heading risponde null", async () => {

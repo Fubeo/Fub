@@ -22,7 +22,7 @@ import {
   type CompletionSource,
 } from "@codemirror/autocomplete";
 import type { Extension } from "@codemirror/state";
-import { syntaxTree } from "@codemirror/language";
+import { isStrictlyInsideCode } from "./parser";
 import { childName, pageName, resolutionKey } from "../../../../rules/mirrored";
 import { TAG_CHARACTER } from "../../../../rules/mirrored";
 import { tagInProgress } from "../../../../rules/syntax";
@@ -154,18 +154,8 @@ export function tagCompletions(tags: { name: string; count: number }[]): Complet
 /// `CompletionContext` costruito su un `EditorState`.
 export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
     const line = ctx.state.doc.lineAt(ctx.pos);
-    const node = syntaxTree(ctx.state).resolve(ctx.pos, -1);
-    if (node.name === "CodeBlock" || node.name === "FencedCode" || node.name === "InlineCode") {
-      return null;
-    }
-    let parent = node.parent;
-    while (parent) {
-      if (parent.name === "CodeBlock" || parent.name === "FencedCode" || parent.name === "InlineCode") {
-        return null;
-      }
-      parent = parent.parent;
-    }
     const match = wikilinkContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;
     const cursorOffset = ctx.pos - line.from;
@@ -205,6 +195,7 @@ export function wikilinkSource(searchNotes: CompletionSources["searchNotes"]): C
 /// La sorgente CM6 dei tag; come `wikilinkSource`, esportata per i test.
 export function tagSource(listTags: CompletionSources["listTags"]): CompletionSource {
   return async (ctx: CompletionContext): Promise<CompletionResult | null> => {
+    if (isStrictlyInsideCode(ctx.state, ctx.pos)) return null;
     const line = ctx.state.doc.lineAt(ctx.pos);
     const match = tagContext(ctx.state.sliceDoc(line.from, ctx.pos));
     if (!match) return null;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { EditorSelection, EditorState, type StateCommand } from "@codemirror/state";
 import {
   autoPairDecision,
@@ -28,12 +29,14 @@ function mk(spec: string): EditorState {
     return EditorState.create({
       doc: stripped.replace("›", ""),
       selection: EditorSelection.single(open, close),
+      extensions: [markdown({ base: markdownLanguage })],
     });
   }
   const bar = spec.indexOf("|");
   return EditorState.create({
     doc: spec.replace("|", ""),
     selection: EditorSelection.single(bar === -1 ? 0 : bar),
+    extensions: [markdown({ base: markdownLanguage })],
   });
 }
 
@@ -254,10 +257,43 @@ describe("autoPairDecision", () => {
     return autoPairDecision(state, from, to, typed);
   };
 
+  it("non apre un wikilink dentro il codice inline", () => {
+    expect(decide("`🎯[|`", "[")).toBeNull();
+  });
+
+  it("non apre un wikilink dentro una fence", () => {
+    expect(decide("```\n[|\n```", "[")).toBeNull();
+  });
   it("[[ chiude con ]]", () => {
     expect(decide("[|", "[")).toEqual({ action: "insert", text: "[]]", cursor: 1 });
   });
 
+  it("nessun auto-pair Markdown dentro il codice inline", () => {
+    expect(decide("`x[|`", "[")).toBeNull();
+    expect(decide("`x|]`", "]")).toBeNull();
+    expect(decide("`x=|`", "=")).toBeNull();
+    expect(decide("`x$|`", "$")).toBeNull();
+  });
+
+  it("nessun auto-pair Markdown dentro una fence", () => {
+    expect(decide("```\n[|\n```", "[")).toBeNull();
+    expect(decide("```\n[|]\n```", "]")).toBeNull();
+    expect(decide("```\nx=|\n```", "=")).toBeNull();
+    expect(decide("```\nx$|\n```", "$")).toBeNull();
+  });
+  it("nessun auto-pair Markdown dentro un blocco indentato", () => {
+    expect(decide("    x[|", "[")).toBeNull();
+    expect(decide("    x[|]", "]")).toBeNull();
+    expect(decide("    x=|", "=")).toBeNull();
+    expect(decide("    x$|", "$")).toBeNull();
+  });
+
+  it("il carattere subito dopo il codice torna al comportamento normale", () => {
+    expect(decide("`codice`|", "$")).toEqual({ action: "insert", text: "$$", cursor: 1 });
+    expect(decide("```\ncodice\n```|", "$")).toEqual({ action: "insert", text: "$$", cursor: 1 });
+    expect(decide("`codice`|]", "]")).toEqual({ action: "skip" });
+    expect(decide("```\ncodice\n```\n[|]", "]")).toEqual({ action: "skip" });
+  });
   it("ma non se la chiusura c'è già", () => {
     expect(decide("[|]]", "[")).toBeNull();
   });
