@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { EditorView } from "@codemirror/view";
 import { insertNewlineAndIndent } from "@codemirror/commands";
-import { EditorSelection } from "@codemirror/state";
+import { EditorSelection, StateField, type Extension } from "@codemirror/state";
 import { createTextEngine, type EditorChange, type TextEngine } from "./engine";
 
 interface TestEditor {
@@ -11,12 +11,16 @@ interface TestEditor {
   parent: HTMLElement;
 }
 
-function editor(onChange: (change: EditorChange) => void = () => {}): TestEditor {
+function editor(
+  onChange: (change: EditorChange) => void = () => {},
+  extensions?: () => Extension,
+): TestEditor {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
   const ed = createTextEngine(parent, {
     onChange,
     onSelectionChange: () => {},
+    extensions,
   });
   return {
     ed,
@@ -277,6 +281,66 @@ describe("cambio di tema", () => {
 
     expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("base");
+  });
+});
+
+describe("seam del profilo testuale", () => {
+  it("monta, sostituisce e rimuove estensioni senza ricostruire la superficie", () => {
+    const first = StateField.define({
+      create: () => "primo",
+      update: (value) => value,
+    });
+    const second = StateField.define({
+      create: () => "secondo",
+      update: (value) => value,
+    });
+    let active: Extension = [];
+    const { ed, view } = editor(() => {}, () => active);
+    const initialView = view();
+
+    ed.setDoc("prima");
+    initialView.dispatch({ selection: EditorSelection.single(2) });
+    initialView.dispatch({
+      changes: { from: 2, insert: "X" },
+      selection: EditorSelection.single(3),
+      userEvent: "input.type",
+    });
+    ed.setTheme("dark");
+
+    const documentBefore = initialView.state.doc;
+    const selectionBefore = ed.selections();
+    const themeBefore = initialView.state.facet(EditorView.darkTheme);
+    expect(themeBefore).toBe(true);
+
+    active = first;
+    ed.reconfigure();
+    expect(view()).toBe(initialView);
+    expect(initialView.state.field(first, false)).toBe("primo");
+    expect(ed.getDoc()).toBe("prXima");
+    expect(initialView.state.doc).toBe(documentBefore);
+    expect(ed.selections()).toEqual(selectionBefore);
+    expect(initialView.state.facet(EditorView.darkTheme)).toBe(themeBefore);
+
+    active = second;
+    ed.reconfigure();
+    expect(view()).toBe(initialView);
+    expect(initialView.state.field(first, false)).toBeUndefined();
+    expect(initialView.state.field(second, false)).toBe("secondo");
+    expect(initialView.state.doc).toBe(documentBefore);
+    expect(ed.selections()).toEqual(selectionBefore);
+
+    active = [];
+    ed.reconfigure();
+    expect(view()).toBe(initialView);
+    expect(initialView.state.field(second, false)).toBeUndefined();
+    expect(initialView.state.doc).toBe(documentBefore);
+    expect(ed.selections()).toEqual(selectionBefore);
+    expect(initialView.state.facet(EditorView.darkTheme)).toBe(themeBefore);
+
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("prima");
+    expect(ed.selections().primary).toEqual({ start: 2, end: 2, text: "" });
+    ed.destroy();
   });
 });
 

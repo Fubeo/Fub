@@ -224,6 +224,8 @@ export class TextEngine {
     this.view.dispatch({ effects: this.theme.reconfigure(editorTheme(theme)) });
   }
 
+  /// Rimpiazza soltanto l'estensione del profilo: la stessa vista conserva
+  /// documento, selezione, tema e cronologia locale.
   public reconfigure(): void {
     if (this.disposed) return;
     this.view.dispatch({ effects: this.profile.reconfigure(this.profileExtensions()) });
