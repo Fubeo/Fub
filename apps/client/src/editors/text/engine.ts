@@ -90,11 +90,13 @@ type PendingDecision =
 export class TextEngine {
   private readonly profile = new Compartment();
   private readonly theme = new Compartment();
+  private readonly readOnly = new Compartment();
   private readonly originAnnotation = Annotation.define<ApplyOrigin>();
   private readonly localHistory = new LocalHistory();
   private readonly options: TextEngineOptions;
   private readonly listener: Extension;
   private applyOrigin: ApplyOrigin = "user";
+  private readOnlyEnabled = false;
   private pendingDecision: PendingDecision;
   private disposed = false;
   private currentTheme: Theme;
@@ -222,6 +224,12 @@ export class TextEngine {
     if (this.disposed) return;
     this.currentTheme = theme;
     this.view.dispatch({ effects: this.theme.reconfigure(editorTheme(theme)) });
+  }
+
+  public setReadOnly(readOnly: boolean): void {
+    if (this.disposed || this.readOnlyEnabled === readOnly) return;
+    this.readOnlyEnabled = readOnly;
+    this.view.dispatch({ effects: this.readOnly.reconfigure(EditorState.readOnly.of(readOnly)) });
   }
 
   /// Rimpiazza soltanto l'estensione del profilo: la stessa vista conserva
@@ -392,6 +400,7 @@ export class TextEngine {
     return [
       ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
       this.profile.of(this.profileExtensions()),
+      this.readOnly.of(EditorState.readOnly.of(this.readOnlyEnabled)),
       lineNumbers(),
       highlightActiveLineGutter(),
       highlightSpecialChars(),

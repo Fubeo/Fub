@@ -284,6 +284,62 @@ describe("cambio di tema", () => {
   });
 });
 
+describe("sola lettura", () => {
+  it("blocca l'input utente e riabilita l'editing senza perdere stato", () => {
+    const { ed, view } = editor();
+    ed.setDoc("base");
+    const initialView = view();
+    initialView.dispatch({ selection: EditorSelection.single(2) });
+    initialView.dispatch({
+      changes: { from: 2, insert: "X" },
+      selection: EditorSelection.single(3),
+      userEvent: "input.type",
+    });
+    const selectionBefore = ed.selections();
+    const textBefore = ed.getDoc();
+
+    ed.setReadOnly(true);
+    expect(view()).toBe(initialView);
+    expect(initialView.state.readOnly).toBe(true);
+    expect(ed.selections()).toEqual(selectionBefore);
+
+    initialView.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+    expect(ed.getDoc()).toBe(textBefore);
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("base");
+    expect(ed.redo()).toBe(true);
+    expect(ed.getDoc()).toBe(textBefore);
+
+    ed.setReadOnly(false);
+    expect(view()).toBe(initialView);
+    expect(initialView.state.readOnly).toBe(false);
+    initialView.dispatch({ selection: EditorSelection.single(2) });
+    initialView.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+    expect(ed.getDoc()).toBe("ba\nXse");
+  });
+
+  it("consente aggiornamenti programmatici mentre è in sola lettura", () => {
+    const { ed, view } = editor();
+    ed.setDoc("prima");
+    const initialView = view();
+
+    ed.setReadOnly(true);
+    ed.syncDoc("seconda");
+    expect(ed.getDoc()).toBe("seconda");
+    expect(view()).toBe(initialView);
+    expect(initialView.state.readOnly).toBe(true);
+
+    ed.setDoc("terza");
+    expect(ed.getDoc()).toBe("terza");
+    expect(view()).toBe(initialView);
+    expect(initialView.state.readOnly).toBe(true);
+  });
+});
+
 describe("seam del profilo testuale", () => {
   it("monta, sostituisce e rimuove estensioni senza ricostruire la superficie", () => {
     const first = StateField.define({
