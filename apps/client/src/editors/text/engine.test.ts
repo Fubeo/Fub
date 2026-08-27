@@ -4,7 +4,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
 import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
 import { createTextEngine, type EditorChange, type TextEngine } from "./engine";
-import { MAX_FOOTPRINTS } from "./history-footprints";
+import { MAX_FOOTPRINTS, type FootprintState } from "./history-footprints";
 interface TestEditor {
   ed: TextEngine;
   view: () => EditorView;
@@ -37,6 +37,30 @@ function editor(
 /// cronologia registra.
 function writes(view: EditorView, text: string): void {
   view.dispatch({ changes: { from: 0, to: 0, insert: text } });
+}
+
+function seededRandom(seed: number): () => number {
+  let value = seed >>> 0;
+  return () => {
+    value = (value + 0x6d2b79f5) | 0;
+    let result = Math.imul(value ^ (value >>> 15), 1 | value);
+    result ^= result + Math.imul(result ^ (result >>> 7), 61 | result);
+    return ((result ^ (result >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+function renderedChange(view: EditorView, from: number, to: number, insert: string): string {
+  const { doc, lineBreak } = view.state;
+  return `${doc.sliceString(0, from, lineBreak)}${insert}${doc.sliceString(to, doc.length, lineBreak)}`;
+}
+
+type TextEngineInternals = { footprints: { state: FootprintState } };
+
+function footprintState(ed: TextEngine): FootprintState {
+  // `footprints` è privato per il motore, ma il test deve presidiare il suo
+  // contratto di metadata bounded senza introdurre una seconda API pubblica.
+  const internals = ed as unknown as TextEngineInternals;
+  return internals.footprints.state;
 }
 
 describe("setDoc", () => {
@@ -474,6 +498,323 @@ describe("due superfici dello stesso documento", () => {
 
     first.ed.destroy();
     second.ed.destroy();
+  });
+});
+
+describe("stress seeded F0-F3", () => {
+  it("mantiene convergenza, dati e metadata in una sequenza mista", () => {
+    const seed = 0xf03f03;
+    const random = seededRandom(seed);
+    const pick = <T>(values: readonly T[]): T => values[Math.floor(random() * values.length)]!;
+    const trace = [`seed=0x${seed.toString(16)}`];
+    const payloads: string[] = [];
+    const callbackOrigins: string[] = [];
+    let clock = 0;
+    let second: TestEditor | undefined;
+    const first = editor((change) => {
+      callbackOrigins.push(`A:${change.origin}`);
+      second?.ed.syncDoc({ text: change.text, operation: change.operation });
+    });
+    const secondEditor = editor((change) => {
+      callbackOrigins.push(`B:${change.origin}`);
+      first.ed.syncDoc({ text: change.text, operation: change.operation });
+    });
+    second = secondEditor;
+    const surfaces = [first, secondEditor] as const;
+
+    const assertState = (label: string): void => {
+      const message = `seed=0x${seed.toString(16)} trace=${trace.join(" -> ")} (${label})`;
+      expect(first.ed.getDoc(), message).toBe(secondEditor.ed.getDoc());
+      for (const surface of surfaces) {
+        const view = surface.view();
+        const length = view.state.doc.length;
+        expect(
+          view.state.selection.ranges.every(
+            (range) =>
+              Number.isInteger(range.from) &&
+              Number.isInteger(range.to) &&
+              range.from >= 0 &&
+              range.from <= range.to &&
+              range.to <= length,
+          ),
+          message,
+        ).toBe(true);
+
+        const bytes = new TextEncoder().encode(surface.ed.getDoc()).length;
+        const selections = surface.ed.selections();
+        for (const selection of [selections.primary, ...selections.secondary]) {
+          expect(selection.start, message).toBeGreaterThanOrEqual(0);
+          expect(selection.start, message).toBeLessThanOrEqual(bytes);
+          expect(selection.end, message).toBeGreaterThanOrEqual(selection.start);
+          expect(selection.end, message).toBeLessThanOrEqual(bytes);
+        }
+
+        const footprints = footprintState(surface.ed);
+        expect(
+          footprints.ranges.length + footprints.anchors.length,
+          message,
+        ).toBeLessThanOrEqual(MAX_FOOTPRINTS);
+        expect(
+          footprints.ranges.every(
+            (range) =>
+              Number.isInteger(range.from) &&
+              Number.isInteger(range.to) &&
+              range.from >= 0 &&
+              range.from < range.to,
+          ),
+          message,
+        ).toBe(true);
+        expect(footprints.anchors.every((anchor) => Number.isInteger(anchor) && anchor >= 0), message).toBe(
+          true,
+        );
+        expect(footprints).not.toHaveProperty("text");
+        expect(footprints).not.toHaveProperty("inverse");
+        expect(footprints).not.toHaveProperty("stack");
+        const metadata = JSON.stringify(footprints);
+        for (const payload of payloads) expect(metadata, message).not.toContain(payload);
+      }
+    };
+    const expectCallbackDelta = (before: number, expected: readonly string[]): void => {
+      expect(callbackOrigins.slice(before)).toEqual(expected);
+    };
+    const step = (label: string, action: () => void): void => {
+      trace.push(label);
+      action();
+      assertState(label);
+    };
+    const nextTime = (): number => {
+      clock += 1;
+      return clock * 1_000;
+    };
+
+    const initial = "alpha\r\nbeta\r\ngamma\r\ndelta";
+    step("setDoc CRLF", () => {
+      const before = callbackOrigins.length;
+      first.ed.setDoc(initial);
+      secondEditor.ed.setDoc(initial);
+      expectCallbackDelta(before, []);
+    });
+
+    const localInsert = `L${pick(["a", "b", "c"])}`;
+    const localAt = 1 + Math.floor(random() * 3);
+    payloads.push(localInsert);
+    step(`local edit A ${JSON.stringify(localInsert)}@${localAt}`, () => {
+      const before = callbackOrigins.length;
+      first.view().dispatch({
+        changes: { from: localAt, insert: localInsert },
+        selection: EditorSelection.single(localAt + localInsert.length),
+        userEvent: "input.type",
+        annotations: Transaction.time.of(nextTime()),
+      });
+      expectCallbackDelta(before, ["A:input"]);
+      expect(first.ed.getDoc()).toContain(localInsert);
+      expect(undoDepth(first.view().state)).toBe(1);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    const remoteOne = `remote-${pick(["a", "b", "c"])}`;
+    payloads.push(remoteOne);
+    const remoteOneText = `${first.ed.getDoc()}\r\n${remoteOne}`;
+    step(`remote edit append ${JSON.stringify(remoteOne)}`, () => {
+      const before = callbackOrigins.length;
+      first.ed.syncDoc(remoteOneText);
+      secondEditor.ed.syncDoc(remoteOneText);
+      expectCallbackDelta(before, []);
+      expect(undoDepth(first.view().state)).toBe(1);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    step("undo local edit", () => {
+      const before = callbackOrigins.length;
+      expect(first.ed.undo()).toBe(true);
+      expectCallbackDelta(before, ["A:undo"]);
+      expect(first.ed.getDoc()).toBe(`${initial}\r\n${remoteOne}`);
+      expect(first.ed.getDoc()).not.toContain(localInsert);
+      expect(redoDepth(first.view().state)).toBe(1);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    const newLocalInsert = `N${pick(["x", "y", "z"])}`;
+    const newLocalAt = Math.floor(random() * 3);
+    payloads.push(newLocalInsert);
+    step(`new local edit A ${JSON.stringify(newLocalInsert)}@${newLocalAt}`, () => {
+      const before = callbackOrigins.length;
+      first.view().dispatch({
+        changes: { from: newLocalAt, insert: newLocalInsert },
+        selection: EditorSelection.single(newLocalAt + newLocalInsert.length),
+        userEvent: "input.type",
+        annotations: Transaction.time.of(nextTime()),
+      });
+      expectCallbackDelta(before, ["A:input"]);
+      expect(redoDepth(first.view().state)).toBe(0);
+      expect(undoDepth(first.view().state)).toBe(1);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    step("eliminated redo", () => {
+      const before = callbackOrigins.length;
+      const beforeDoc = first.ed.getDoc();
+      expect(first.ed.redo()).toBe(false);
+      expectCallbackDelta(before, []);
+      expect(first.ed.getDoc()).toBe(beforeDoc);
+      expect(redoDepth(first.view().state)).toBe(0);
+    });
+
+    const remoteTwo = `remote-${pick(["d", "e", "f"])}`;
+    payloads.push(remoteTwo);
+    const remoteTwoText = `${first.ed.getDoc()}\r\n${remoteTwo}`;
+    step(`remote edit append ${JSON.stringify(remoteTwo)}`, () => {
+      const before = callbackOrigins.length;
+      first.ed.syncDoc(remoteTwoText);
+      secondEditor.ed.syncDoc(remoteTwoText);
+      expectCallbackDelta(before, []);
+      expect(undoDepth(first.view().state)).toBe(1);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    const multiSource = first.view().state.doc.toString();
+    let multiFrom = Math.max(1, Math.floor(multiSource.length / 3));
+    while (multiFrom < multiSource.length - 2 && multiSource[multiFrom] === "\n") multiFrom += 1;
+    let multiTo = Math.max(multiFrom + 2, Math.floor((multiSource.length * 2) / 3));
+    while (multiTo < multiSource.length - 1 && multiSource[multiTo] === "\n") multiTo += 1;
+    const multiLeft = `M${pick(["g", "h", "i"])}`;
+    const multiRight = `Q${pick(["j", "k", "l"])}`;
+    payloads.push(multiLeft, multiRight);
+    const beforeMulti = first.ed.getDoc();
+    step(`multi-range ${multiFrom},${multiTo}`, () => {
+      const before = callbackOrigins.length;
+      const time = nextTime();
+      first.view().dispatch({
+        changes: [
+          { from: multiFrom, insert: multiLeft },
+          { from: multiTo, insert: multiRight },
+        ],
+        selection: EditorSelection.create(
+          [
+            EditorSelection.range(multiFrom, multiFrom + multiLeft.length),
+            EditorSelection.range(
+              multiTo + multiLeft.length,
+              multiTo + multiLeft.length + multiRight.length,
+            ),
+          ],
+          1,
+        ),
+        userEvent: "input.type",
+        annotations: Transaction.time.of(time),
+      });
+      expectCallbackDelta(before, ["A:input"]);
+      expect(first.view().state.selection.ranges).toHaveLength(2);
+      expect(first.view().state.selection.mainIndex).toBe(1);
+      expect(undoDepth(first.view().state)).toBe(2);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    step("undo multi-range", () => {
+      const before = callbackOrigins.length;
+      expect(first.ed.undo()).toBe(true);
+      expectCallbackDelta(before, ["A:undo"]);
+      expect(first.ed.getDoc()).toBe(beforeMulti);
+      expect(undoDepth(first.view().state)).toBe(1);
+      expect(redoDepth(first.view().state)).toBe(1);
+    });
+
+    const overwrite = `REMOTE-${pick(["m", "n", "o"])}`;
+    payloads.push(overwrite);
+    const ambiguousOverwrite = renderedChange(
+      first.view(),
+      multiFrom,
+      multiFrom + 1,
+      overwrite,
+    );
+    step(`remote ambiguous overwrite @${multiFrom}`, () => {
+      const before = callbackOrigins.length;
+      first.ed.syncDoc(ambiguousOverwrite);
+      secondEditor.ed.syncDoc(ambiguousOverwrite);
+      expectCallbackDelta(before, []);
+      expect(first.ed.getDoc()).toBe(ambiguousOverwrite);
+      expect(first.ed.undo()).toBe(false);
+      expect(first.ed.redo()).toBe(false);
+      expect(first.ed.getDoc()).toBe(ambiguousOverwrite);
+      expect(secondEditor.ed.undo()).toBe(false);
+      expect(secondEditor.ed.redo()).toBe(false);
+    });
+
+    const composed = ["あ", "い"] as const;
+    payloads.push(...composed);
+    const compositionAt = first.view().state.doc.length;
+    step("composition", () => {
+      const before = callbackOrigins.length;
+      const time = nextTime();
+      first.view().dispatch({
+        changes: { from: compositionAt, insert: composed[0] },
+        selection: EditorSelection.single(compositionAt + composed[0].length),
+        userEvent: "input.type.compose",
+        annotations: Transaction.time.of(time),
+      });
+      first.view().dispatch({
+        changes: { from: compositionAt + composed[0].length, insert: composed[1] },
+        selection: EditorSelection.single(compositionAt + composed[0].length + composed[1].length),
+        userEvent: "input.type.compose",
+        annotations: Transaction.time.of(time),
+      });
+      expectCallbackDelta(before, ["A:input", "A:input"]);
+      expect(undoDepth(first.view().state)).toBe(1);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    const paste = ` paste-${pick(["p", "q", "r"])}`;
+    payloads.push(paste);
+    const pasteAt = first.view().state.doc.length;
+    step(`paste ${JSON.stringify(paste)}`, () => {
+      const before = callbackOrigins.length;
+      first.view().dispatch({
+        changes: { from: pasteAt, insert: paste },
+        selection: EditorSelection.single(pasteAt + paste.length),
+        userEvent: "input.paste",
+        annotations: Transaction.time.of(nextTime()),
+      });
+      expectCallbackDelta(before, ["A:input"]);
+      expect(undoDepth(first.view().state)).toBe(2);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+      expect(secondEditor.ed.undo()).toBe(false);
+      expect(secondEditor.ed.redo()).toBe(false);
+    });
+
+    const crlfRemote = `\r\nremote-crlf-${pick(["s", "t", "u"])}`;
+    payloads.push(crlfRemote);
+    const crlfText = `${first.ed.getDoc()}${crlfRemote}`;
+    step("remote CRLF edit", () => {
+      const before = callbackOrigins.length;
+      first.ed.syncDoc(crlfText);
+      secondEditor.ed.syncDoc(crlfText);
+      expectCallbackDelta(before, []);
+      expect(first.ed.getDoc()).toContain("\r\n");
+      expect(first.ed.getDoc().replace(/\r\n/g, "")).not.toContain("\n");
+      expect(undoDepth(first.view().state)).toBe(2);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+    });
+
+    const unicode = pick([" 🎯", " café", " 日本語"]);
+    payloads.push(unicode);
+    const unicodeAt = first.view().state.doc.length;
+    step(`Unicode edit ${JSON.stringify(unicode)}`, () => {
+      const before = callbackOrigins.length;
+      first.view().dispatch({
+        changes: { from: unicodeAt, insert: unicode },
+        selection: EditorSelection.single(unicodeAt + unicode.length),
+        userEvent: "input.type",
+        annotations: Transaction.time.of(nextTime()),
+      });
+      expectCallbackDelta(before, ["A:input"]);
+      expect(first.ed.getDoc()).toContain(unicode);
+      expect(undoDepth(first.view().state)).toBe(3);
+      expect(undoDepth(secondEditor.view().state)).toBe(0);
+      expect(secondEditor.ed.undo()).toBe(false);
+      expect(secondEditor.ed.redo()).toBe(false);
+    });
+
+    first.ed.destroy();
+    secondEditor.ed.destroy();
   });
 });
 
