@@ -34,14 +34,19 @@ vi.mock("./document", () => ({
 }));
 
 vi.mock("../state/document-session", () => ({
-  suspendSave: vi.fn(() => true),
-  resumeSave: vi.fn(),
-  discardDraft: vi.fn(async () => {}),
+  documentSessions: {
+    beginDeletion: vi.fn(() => true),
+    cancelDeletion: vi.fn(),
+    delete: vi.fn(async (_id: string, run: () => Promise<void>) => {
+      await run();
+      return { kind: "deleted", dirty: true };
+    }),
+  },
 }));
 
 import { trashWithConfirm } from "./trash";
 import { closeDocument, openDocument } from "./document";
-import { resumeSave, discardDraft } from "../state/document-session";
+import { documentSessions } from "../state/document-session";
 
 describe("cestinare una nota", () => {
   beforeEach(() => {
@@ -69,18 +74,16 @@ describe("cestinare una nota", () => {
   it("non tocca niente se l'utente ci ripensa, e il salvataggio torna in coda", async () => {
     fake.confirm = false;
     await trashWithConfirm("vittima.md");
-    expect(resumeSave).toHaveBeenCalledWith("vittima.md");
+    expect(documentSessions.cancelDeletion).toHaveBeenCalledWith("vittima.md");
+    expect(documentSessions.delete).not.toHaveBeenCalled();
     expect(closeDocument).not.toHaveBeenCalled();
-    expect(discardDraft).not.toHaveBeenCalled();
   });
 
-  // La bozza è il gemello su disco del buffer sporco, e `trashWithConfirm`
-  // dichiara che quel buffer «muore col documento». Sopravvivendogli, al
-  // prossimo avvio la nota buttata tornava come `orfana`: riofferta a chi
-  // aveva appena risposto di sì (difetto 0211).
-  it("la bozza muore col documento cestinato", async () => {
+  // La sessione possiede la bozza e la scarta insieme al documento, così il
+  // pannello non può dimenticare il gemello su disco di un buffer sporco.
+  it("delega alla sessione la cancellazione della bozza", async () => {
     await trashWithConfirm("vittima.md");
-    expect(discardDraft).toHaveBeenCalledWith("vittima.md");
+    expect(documentSessions.delete).toHaveBeenCalledWith("vittima.md", expect.any(Function));
   });
 
   it("non cerca un rimpiazzo per una nota che non era aperta", async () => {

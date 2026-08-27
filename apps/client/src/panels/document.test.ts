@@ -54,19 +54,15 @@ function body(): string {
 }
 
 describe("l'ascoltatore di document_changed", () => {
-  it("consuma l'eco prima di guardare se c'è un riquadro", () => {
+  it("delega echo e politica di ricarica alla sessione prima degli effetti UI", () => {
     const text = body();
-    const consumeCall = text.indexOf("warnIfBufferCovers(");
-    const guardCall = text.indexOf("panesWithDoc(");
-    expect(consumeCall, "non consuma più l'eco").toBeGreaterThan(-1);
-    expect(guardCall, "non guarda più i riquadri").toBeGreaterThan(-1);
-    expect(
-      consumeCall,
-      "la guardia sui riquadri sta davanti al conto degli echoes: un documento " +
-        "con un buffer e nessun riquadro non consuma il proprio eco, e quell'eco " +
-        "appeso si mangia il prossimo avviso vero — «il file è cambiato sotto di " +
-        "te» detto da un plugin o dal kernel, che non comparirà",
-    ).toBeLessThan(guardCall);
+    const sessionCall = text.indexOf("documentSessions.handleExternalChange(");
+    const effectCall = text.indexOf("applyExternalChange(");
+    expect(sessionCall, "la sessione non riceve il fatto esterno").toBeGreaterThan(-1);
+    expect(effectCall, "il pannello non applica gli effetti del risultato").toBeGreaterThan(-1);
+    expect(sessionCall).toBeLessThan(effectCall);
+    expect(text).not.toContain("warnIfBufferCovers(");
+    expect(text).not.toContain("documentSessions.isDirty(");
   });
 });
 
@@ -128,6 +124,20 @@ function listenerBody(event: string): string {
   const after = source.indexOf("onEvent(", opens + 1);
   return source.slice(opens, after === -1 ? source.length : after);
 }
+describe("l'ascoltatore di document_removed", () => {
+  it("chiede alla sessione la disposizione prima di invalidare e rimuovere le superfici", () => {
+    const text = listenerBody("document_removed");
+    const sessionCall = text.indexOf("documentSessions.handleExternalRemoval(");
+    const invalidateCall = text.indexOf("invalidateLoads(");
+    const layoutCall = text.indexOf("removeEverywhere(");
+    expect(sessionCall).toBeGreaterThan(-1);
+    expect(invalidateCall).toBeGreaterThan(-1);
+    expect(layoutCall).toBeGreaterThan(-1);
+    expect(sessionCall).toBeLessThan(invalidateCall);
+    expect(invalidateCall).toBeLessThan(layoutCall);
+    expect(text).not.toContain("documentSessions.isDirty(");
+  });
+});
 
 // **La finestra di migrazione di una rinomina** (difetto 0210).
 //
@@ -157,7 +167,7 @@ describe("la finestra di migrazione di una rinomina", () => {
 
   it("chi rinomina tiene fermo prima di chiedere, e scioglie se la richiesta fallisce", () => {
     const text = methodBodyOf("async renameKeepingBuffer(from: string, to: string)");
-    const stopButton = text.indexOf("this.#sessions.get(from)?.suspend()");
+    const stopButton = text.indexOf("session?.suspend()");
     const renameCall = text.indexOf("await renameNote(");
     expect(stopButton, "non tiene più fermo il documento").toBeGreaterThan(-1);
     expect(renameCall, "non chiede più la rinomina").toBeGreaterThan(-1);
@@ -165,7 +175,7 @@ describe("la finestra di migrazione di una rinomina", () => {
     expect(
       text,
       "una rinomina che fallisce non scioglie il fermo",
-    ).toContain("this.#sessions.get(from)?.resume()");
+    ).toContain("session?.resume()");
   });
 
   it("il fermo si scioglie dove finisce la finestra", () => {

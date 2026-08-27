@@ -23,31 +23,14 @@ import { beforeNote, refreshDocuments, trashNote } from "../state/vault";
 import { pageName } from "../rules/organizer";
 import { activeDoc } from "../state/layout";
 import { closeDocument, isOpen, openDocument } from "./document";
-import { resumeSave, discardDraft, suspendSave } from "../state/document-session";
+import { documentSessions } from "../state/document-session";
 import { t } from "../i18n/strings";
 
-/// Cestina una nota, chiedendo prima conferma.
-///
-/// Un salvataggio in attesa su quel documento lo farebbe risorgere subito dopo
-/// la cancellazione: si disinnesca **prima ancora di chiedere**, e lo si rimette
-/// in coda se l'utente ci ripensa.
-///
-/// # Si chiude **quella** nota, non quella a schermo
-///
-/// `isOpen` domanda «è aperta in *qualche* riquadro», e la risposta veniva usata
-/// per chiudere il documento **attivo** — che con due riquadri non è lo stesso.
-/// Cestinare dall'esploratore una nota aperta nell'altro riquadro chiudeva
-/// quella su cui l'utente stava scrivendo, e col buffer sporco dentro: il testo
-/// non salvato se ne andava senza che niente lo dicesse, mentre la nota appena
-/// cestinata restava a schermo. La frase qui sotto — «il buffer sporco di un
-/// documento cancellato muore col documento» — vale solo se il documento è
-/// quello cancellato.
-///
-/// Per la stessa ragione la nota di rimpiazzo si apre **solo se non è rimasto
-/// niente**: chiudere una nota in un riquadro che non si guarda non è un motivo
-/// per cambiare quello che si guarda.
+/// Cestina una nota, chiedendo prima conferma. La sessione sospende i ritardi
+/// durante la domanda e invalida il documento prima del comando distruttivo.
 export async function trashWithConfirm(id: string): Promise<void> {
-  suspendSave(id);
+  documentSessions.beginDeletion(id);
+  const wasOpen = isOpen(id);
 
   const ok = await confirm(t("trash.confirm_delete", { doc: pageName(id) }), {
     title: t("trash.delete_title"),
@@ -55,26 +38,18 @@ export async function trashWithConfirm(id: string): Promise<void> {
     okLabel: t("explorer.delete"),
   });
   if (!ok) {
-    resumeSave(id);
+    documentSessions.cancelDeletion(id);
     return;
   }
 
-  await trashNote(id);
-  // La bozza muore col documento, come il buffer sporco qui sotto: è il gemello
-  // su disco di quello, e sopravvivergli vorrebbe dire riproporre al prossimo
-  // avvio — come `orfana` — la nota che l'utente ha appena buttato rispondendo
-  // di sì a una domanda (difetto 0211). Vale anche per una bozza scritto prima
-  // che questo gesto cominciasse: la decisione è la stessa.
-  await discardDraft(id);
-  const wasOpen = isOpen(id);
-  if (wasOpen) {
-    // Il buffer sporco di un documento cancellato muore col documento: non è
-    // una perdita silenziosa, è l'azione che l'utente ha appena confermato.
-    closeDocument(id);
-  }
+  const outcome = await documentSessions.delete(id, () => trashNote(id));
+  if (outcome.kind !== "deleted") return;
+  // La sessione ha già invalidato buffer, ritardi e bozza; qui restano soltanto
+  // gli effetti delle superfici e dell'elenco delle note.
+  if (isOpen(id)) closeDocument(id);
   refreshDocuments();
   if (wasOpen && !activeDoc()) {
-    // La prima nota che c'è, chiesta con una finestra da uno: prendere il primo
+    // La prima nota che c'è, chiesta con una finestra da uno, prendere il primo
     // elemento di un elenco intero era chiedere il vault per aprirne una (§14.4).
     const first = await beforeNote();
     if (first) await openDocument(first);

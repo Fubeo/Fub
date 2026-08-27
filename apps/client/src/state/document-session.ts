@@ -13,7 +13,6 @@ import {
   writeCountingEcho,
   type Outcome,
   type SaveState,
-  type UnderChange,
 } from "./saving";
 import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts";
 import { renameNote } from "./vault";
@@ -40,6 +39,44 @@ export interface DocumentSessionSnapshot {
   readonly lifecycle: "open" | "closed";
 }
 
+export type ExternalChangeResult =
+  | { kind: "untracked" }
+  | { kind: "echo" }
+  | { kind: "warning"; cause: "altra_app" | "riscrittura" }
+  | { kind: "reloaded"; text: string; changed: boolean }
+  | { kind: "stale" }
+  | { kind: "unavailable" };
+
+export type ReloadResult =
+  | { kind: "missing" }
+  | { kind: "dirty" }
+  | { kind: "reloaded"; text: string; changed: boolean }
+  | { kind: "stale" }
+  | { kind: "unavailable" };
+type DiskReloadResult = Exclude<ReloadResult, { kind: "missing" } | { kind: "dirty" }>;
+
+export type ConflictResolutionResult =
+  | { kind: "none" }
+  | { kind: "kept" }
+  | { kind: "discarded"; reload: ReloadResult };
+
+export type RenameResult =
+  | { kind: "renamed"; from: string; to: string }
+  | { kind: "already-renamed"; from: string; to: string }
+  | { kind: "missing"; from: string; to: string }
+  | { kind: "collision"; from: string; to: string };
+
+export type DeletionResult =
+  | { kind: "deleted"; dirty: boolean }
+  | { kind: "ignored" };
+export type CloseResult =
+  | { kind: "closed"; dirty: boolean }
+  | { kind: "active" }
+  | { kind: "missing" };
+
+export type ExternalRemovalResult = { kind: "removed"; dirty: boolean };
+
+export type ConflictChoice = "mine" | "theirs";
 export type DocumentSessionEvent =
   | { kind: "changed"; id: string }
   | { kind: "saved"; id: string }
@@ -73,6 +110,21 @@ function copyBase(base: WriteBase): WriteBase {
     : { kind: "descends_from", value: base.value };
 }
 
+class DocumentDeletedDuringRead extends Error {
+  constructor(id: string) {
+    super(`document ${id} was deleted while it was loading`);
+    this.name = "DocumentDeletedDuringRead";
+  }
+}
+
+function failDeletedRead(id: string): never {
+  throw new DocumentDeletedDuringRead(id);
+}
+
+export function isDocumentDeletedDuringRead(error: unknown): boolean {
+  return error instanceof DocumentDeletedDuringRead;
+}
+
 /** The per-document owner. Its constructor is guarded by the collection token. */
 export class DocumentSession implements DraftBuffer {
   #id: string;
@@ -80,6 +132,8 @@ export class DocumentSession implements DraftBuffer {
   #queue = new Queue();
   #saveTimer: number | undefined;
   #draftTimer: number | undefined;
+  #externalGeneration = 0;
+  #activityGeneration = 0;
   readonly #api: DocumentSessionApi;
   readonly #hooks: SessionHooks;
 
@@ -139,23 +193,29 @@ export class DocumentSession implements DraftBuffer {
       lifecycle: this.#state.lifecycle,
     };
   }
+  activityGeneration(): number {
+    return this.#activityGeneration;
+  }
 
-  consumeChange(source: Origin): UnderChange {
-    return consumeUnderChange(this.#state, source);
+  retain(): void {
+    if (this.#isOpen()) this.#activityGeneration++;
   }
 
   /** The panel calls this only after validating the editor operation. */
   acceptEditorChange(text: string): void {
     if (!this.#isOpen()) return;
+    this.#activityGeneration++;
+    this.#externalGeneration++;
     this.#state.text = text;
     this.#state.dirty = true;
     this.#emit({ kind: "changed", id: this.#id });
     this.scheduleSave();
     this.scheduleDraft();
   }
-
   restoreDraft(text: string, base: WriteBase): void {
     if (!this.#isOpen()) return;
+    this.#activityGeneration++;
+    this.#externalGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.text = text;
@@ -166,33 +226,98 @@ export class DocumentSession implements DraftBuffer {
     this.#emit({ kind: "changed", id: this.#id });
   }
 
-  /** Reread a clean session and return whether its visible text changed. */
-  reloadIfClean(text: string, revision: string): boolean {
-    if (!this.#isOpen() || this.#state.dirty) return false;
-    const changed = this.#state.text !== text;
-    this.#state.base = { kind: "descends_from", value: revision };
-    if (changed) {
-      this.#state.text = text;
-      this.#emit({ kind: "changed", id: this.#id });
+  /** Consume an external event before applying the clean/dirty policy. */
+  async handleExternalChange(source: Origin): Promise<ExternalChangeResult> {
+    const generation = ++this.#externalGeneration;
+    const underChange = consumeUnderChange(this.#state, source);
+    if (underChange === "eco") return { kind: "echo" };
+    if (underChange === "altra_app" || underChange === "riscrittura") {
+      return { kind: "warning", cause: underChange };
     }
-    return changed;
+    return this.#reloadFromDisk(generation);
   }
 
-  /** Used by an explicit reload after a version restore. */
-  markClean(): void {
-    if (!this.#isOpen()) return;
+  /** Reread a clean document during event reconciliation. */
+  async reloadIfClean(): Promise<ReloadResult> {
+    if (!this.#isOpen()) return { kind: "missing" };
+    if (this.#state.dirty) return { kind: "dirty" };
+    return this.#reloadFromDisk(++this.#externalGeneration);
+  }
+  /** Reread a document after an explicit command invalidated the buffer. */
+  async forceReload(): Promise<ReloadResult> {
+    if (!this.#isOpen()) return { kind: "missing" };
+    this.#activityGeneration++;
+    const generation = ++this.#externalGeneration;
+    this.#clearSaveTimer();
+    this.#clearDraftTimer();
     this.#state.dirty = false;
+    this.#state.result = "ok";
+    this.#state.echoes = 0;
     this.#emit({ kind: "changed", id: this.#id });
+    return this.#reloadFromDisk(generation);
+  }
+
+  async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
+    if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
+    if (choice === "mine") {
+      await this.saveKeepingMine();
+      return { kind: "kept" };
+    }
+    this.discardChanges();
+    await this.discardDraft();
+    return { kind: "discarded", reload: await this.#reloadFromDisk(++this.#externalGeneration) };
+  }
+
+  #reloadFromDisk(generation: number): Promise<DiskReloadResult> {
+    const id = this.#id;
+    return this.#api.readDocument(id).then(
+      (source) => {
+        if (
+          !this.#isOpen() ||
+          this.#id !== id ||
+          this.#externalGeneration !== generation ||
+          this.#state.dirty
+        ) {
+          return { kind: "stale" as const };
+        }
+        const changed = this.#applyCleanReload(source.text, source.revision);
+        return { kind: "reloaded" as const, text: this.#state.text, changed };
+      },
+      () => {
+        if (
+          !this.#isOpen() ||
+          this.#id !== id ||
+          this.#externalGeneration !== generation ||
+          this.#state.dirty
+        ) {
+          return { kind: "stale" as const };
+        }
+        return { kind: "unavailable" as const };
+      },
+    );
+  }
+
+  #applyCleanReload(text: string, revision: string): boolean {
+    if (!this.#isOpen() || this.#state.dirty) return false;
+    const changed = this.#state.text !== text;
+    const resultChanged = this.#state.result !== "ok";
+    this.#state.base = { kind: "descends_from", value: revision };
+    this.#state.result = "ok";
+    if (changed) this.#state.text = text;
+    if (changed || resultChanged) this.#emit({ kind: "changed", id: this.#id });
+    return changed;
   }
 
   discardChanges(): void {
     if (!this.#isOpen()) return;
-    this.#clearSaveTimer();
+    this.#activityGeneration++;
+    this.#externalGeneration++;
+    this.#clearDraftTimer();
     this.#state.dirty = false;
     this.#state.result = "ok";
+    this.#state.echoes = 0;
     this.#emit({ kind: "changed", id: this.#id });
   }
-
   scheduleSave(): void {
     if (!this.#isOpen() || this.#state.suspended) return;
     if (this.#state.result === "conflitto") return;
@@ -233,15 +358,16 @@ export class DocumentSession implements DraftBuffer {
 
   suspend(): boolean {
     if (!this.#isOpen()) return false;
+    this.#activityGeneration++;
     this.#state.suspended = true;
     const dirty = this.#state.dirty;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     return dirty;
   }
-
   resume(): void {
     if (!this.#isOpen() || !this.#state.suspended) return;
+    this.#activityGeneration++;
     this.#state.suspended = false;
     if (!this.#state.dirty) return;
     this.scheduleSave();
@@ -255,17 +381,42 @@ export class DocumentSession implements DraftBuffer {
     await this.#dropDraft(this.#id);
   }
 
+  /**
+   * Close before running a destructive command, then discard its draft in the
+   * same per-session queue. A failed command reopens the exact old session.
+   */
+  async delete(run: () => Promise<void>): Promise<boolean> {
+    if (!this.#isOpen()) return false;
+    this.close();
+    try {
+      await this.#queue.enqueue(run);
+      await this.#dropDraft(this.#id);
+    } catch (error) {
+      this.#reopen();
+      throw error;
+    }
+    return true;
+  }
+
+  /** Drop a draft after an external deletion already closed this session. */
+  discardDraftAfterClose(): Promise<void> {
+    this.#clearDraftTimer();
+    return this.#dropDraft(this.#id);
+  }
+
   async saveKeepingMine(): Promise<void> {
     if (!this.#isOpen() || this.#state.result !== "conflitto") return;
+    this.#activityGeneration++;
     this.#clearSaveTimer();
     this.#state.base = { kind: "dictated" };
     this.#state.result = "in_corso";
     this.#emit({ kind: "changed", id: this.#id });
     await this.#saveNow(this.#id);
   }
-
   rename(id: string): void {
     if (!this.#isOpen() || id === this.#id) return;
+    this.#activityGeneration++;
+    this.#externalGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#id = id;
@@ -278,12 +429,25 @@ export class DocumentSession implements DraftBuffer {
 
   close(): void {
     if (!this.#isOpen()) return;
+    this.#activityGeneration++;
+    this.#externalGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.suspended = false;
     this.#state.lifecycle = "closed";
   }
 
+  #reopen(): void {
+    if (this.#state.lifecycle !== "closed") return;
+    this.#activityGeneration++;
+    this.#externalGeneration++;
+    this.#state.lifecycle = "open";
+    this.#state.suspended = false;
+    if (this.#state.dirty) {
+      this.scheduleSave();
+      this.scheduleDraft();
+    }
+  }
   #isOpen(): boolean {
     return this.#state.lifecycle === "open";
   }
@@ -320,7 +484,7 @@ export class DocumentSession implements DraftBuffer {
     try {
       produced = await writeCountingEcho(this.#state, () => this.#api.writeDocument(id, text, base));
     } catch (error) {
-      if (!this.#isOpen()) return;
+      if (!this.#isOpen() || this.#id !== id) return;
       const outcome = failureOutcome(error);
       this.#state.result = outcome;
       this.#clearDraftTimer();
@@ -329,7 +493,7 @@ export class DocumentSession implements DraftBuffer {
       return;
     }
 
-    if (!this.#isOpen()) return;
+    if (!this.#isOpen() || this.#id !== id) return;
     this.#state.result = "ok";
     this.#state.base = { kind: "descends_from", value: produced };
     if (this.#state.text === text) {
@@ -374,6 +538,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
   readonly #api: DocumentSessionApi;
   readonly #sessions = new Map<string, DocumentSession>();
   readonly #listeners = new Set<SessionListener>();
+  readonly #identityVersions = new Map<string, number>();
+  readonly #renaming = new Set<string>();
+  readonly #deletions = new Map<string, Promise<DeletionResult>>();
   #blindDraft = false;
 
   constructor(api: DocumentSessionApi = defaultApi) {
@@ -405,41 +572,48 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return this.#sessions.get(id)?.saveState() ?? null;
   }
 
-  consumeChange(id: string, source: Origin): UnderChange {
-    return this.#sessions.get(id)?.consumeChange(source) ?? "muto";
+  async handleExternalChange(id: string, source: Origin): Promise<ExternalChangeResult> {
+    const session = this.#sessions.get(id);
+    if (!session) return { kind: "untracked" };
+    return session.handleExternalChange(source);
+  }
+  async reloadIfClean(id: string): Promise<ReloadResult> {
+    return (await this.#sessions.get(id)?.reloadIfClean()) ?? { kind: "missing" };
   }
 
   async read(id: string): Promise<string> {
+    const pendingDeletion = this.#deletions.get(id);
+    if (pendingDeletion) {
+      const outcome = await pendingDeletion;
+      if (outcome.kind === "deleted") return failDeletedRead(id);
+      return this.read(id);
+    }
     const existing = this.#sessions.get(id);
-    if (existing) return existing.text();
+    if (existing?.snapshot().lifecycle === "open") {
+      existing.retain();
+      return existing.text();
+    }
+    const version = this.#identityVersion(id);
     const source = await this.#api.readDocument(id);
     const current = this.#sessions.get(id);
-    if (current) return current.text();
+    if (current?.snapshot().lifecycle === "open") return current.text();
+    const deletion = this.#deletions.get(id);
+    if (deletion) {
+      const outcome = await deletion;
+      if (outcome.kind === "deleted") return failDeletedRead(id);
+      return this.read(id);
+    }
+    if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
     return this.#create(id, source.text, { kind: "descends_from", value: source.revision }).text();
   }
 
   acceptEditorChange(id: string, text: string): void {
-    const session = this.#sessions.get(id) ?? this.#create(id, text, { kind: "dictated" });
+    const session = this.#sessions.get(id);
+    if (!session) return;
     session.acceptEditorChange(text);
   }
-
-  async reloadIfClean(id: string): Promise<{ text: string; changed: boolean } | null> {
-    const session = this.#sessions.get(id);
-    if (session?.dirty) return null;
-    let source: { text: string; revision: string };
-    try {
-      source = await this.#api.readDocument(id);
-    } catch {
-      return null;
-    }
-    const current = this.#sessions.get(id);
-    if (!session || current !== session || session.dirty) return null;
-    const changed = session.reloadIfClean(source.text, source.revision);
-    return { text: session.text(), changed };
-  }
-
-  markClean(id: string): void {
-    this.#sessions.get(id)?.markClean();
+  async forceReload(id: string): Promise<ReloadResult> {
+    return (await this.#sessions.get(id)?.forceReload()) ?? { kind: "missing" };
   }
 
   restore(id: string, text: string, base: WriteBase): void {
@@ -484,69 +658,148 @@ export class DocumentSessionCollection implements DraftBufferStore {
     for (const id of pending) await this.#sessions.get(id)?.flushDraft();
   }
 
-  suspendSave(id: string): boolean {
+  beginDeletion(id: string): boolean {
     return this.#sessions.get(id)?.suspend() ?? false;
   }
 
-  resumeSave(id: string): void {
+  cancelDeletion(id: string): void {
     this.#sessions.get(id)?.resume();
   }
 
-  async renameKeepingBuffer(from: string, to: string): Promise<void> {
-    this.#sessions.get(from)?.suspend();
+  async delete(id: string, run: () => Promise<void>): Promise<DeletionResult> {
+    const pending = this.#deletions.get(id);
+    if (pending) {
+      await pending;
+      return { kind: "ignored" };
+    }
+    this.#invalidate(id);
+    let settle!: (outcome: DeletionResult) => void;
+    const reservation = new Promise<DeletionResult>((resolve) => {
+      settle = resolve;
+    });
+    this.#deletions.set(id, reservation);
+    let outcome: DeletionResult | undefined;
+    try {
+      const session = this.#sessions.get(id);
+      if (!session) {
+        await run();
+        try {
+          await this.#api.discardDraft(id);
+        } catch {
+          // Keep the same best-effort cleanup as a live session.
+        }
+        outcome = { kind: "deleted", dirty: false };
+        return outcome;
+      }
+      const dirty = session.dirty;
+      const deletion = session.delete(run);
+      this.#sessions.delete(id);
+      try {
+        if (!(await deletion)) {
+          outcome = { kind: "ignored" };
+          return outcome;
+        }
+        outcome = { kind: "deleted", dirty };
+        return outcome;
+      } catch (error) {
+        if (session.snapshot().lifecycle === "open") this.#sessions.set(id, session);
+        throw error;
+      }
+    } finally {
+      settle(outcome ?? { kind: "ignored" });
+      if (this.#deletions.get(id) === reservation) this.#deletions.delete(id);
+    }
+  }
+
+  handleExternalRemoval(id: string): ExternalRemovalResult {
+    this.#invalidate(id);
+    const session = this.#sessions.get(id);
+    if (!session) return { kind: "removed", dirty: false };
+    const dirty = session.dirty;
+    session.close();
+    this.#sessions.delete(id);
+    void session.discardDraftAfterClose();
+    return { kind: "removed", dirty };
+  }
+
+  async release(id: string): Promise<CloseResult> {
+    const session = this.#sessions.get(id);
+    if (!session) return { kind: "missing" };
+    const activity = session.activityGeneration();
+    await session.flush();
+    if (session.dirty) await session.flushDraft();
+    if (this.#sessions.get(id) !== session) return { kind: "missing" };
+    if (session.activityGeneration() !== activity) return { kind: "active" };
+    return this.close(id);
+  }
+
+  async resolveConflict(id: string, choice: ConflictChoice): Promise<ConflictResolutionResult> {
+    return (await this.#sessions.get(id)?.resolveConflict(choice)) ?? { kind: "none" };
+  }
+
+  async renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
+    const session = this.#sessions.get(from);
+    const target = this.#sessions.get(to);
+    if (target && target !== session) return { kind: "collision", from, to };
+    this.#invalidate(from);
+    this.#invalidate(to);
+    this.#renaming.add(from);
+    this.#renaming.add(to);
+    session?.suspend();
     try {
       await renameNote(from, to);
     } catch (error) {
-      this.#sessions.get(from)?.resume();
+      session?.resume();
+      this.#renaming.delete(from);
+      this.#renaming.delete(to);
       throw error;
     }
+    const outcome = this.rename(from, to);
+    this.#renaming.delete(from);
+    this.#renaming.delete(to);
+    return outcome;
   }
 
-  rename(from: string, to: string): void {
-    if (from === to) return;
+  rename(from: string, to: string): RenameResult {
+    this.#invalidate(from);
+    this.#invalidate(to);
+    if (from === to) return { kind: "already-renamed", from, to };
     const session = this.#sessions.get(from);
-    if (!session) return;
-    this.#sessions.delete(from);
-    const previous = this.#sessions.get(to);
-    previous?.close();
+    const target = this.#sessions.get(to);
+    if (!session) {
+      return target ? { kind: "already-renamed", from, to } : { kind: "missing", from, to };
+    }
+    if (target && target !== session) {
+      session.resume();
+      return { kind: "collision", from, to };
+    }
     session.rename(to);
+    this.#sessions.delete(from);
     this.#sessions.set(to, session);
+    return { kind: "renamed", from, to };
   }
 
-  async discardDraft(id: string): Promise<void> {
+  close(id: string): CloseResult {
+    this.#invalidate(id);
     const session = this.#sessions.get(id);
-    if (session) {
-      await session.discardDraft();
-      return;
-    }
-    try {
-      await this.#api.discardDraft(id);
-    } catch {
-      // Keep the same best-effort behavior when there is no local session.
-    }
-  }
-
-  async saveConflictMine(id: string): Promise<void> {
-    await this.#sessions.get(id)?.saveKeepingMine();
-  }
-
-  async discardChanges(id: string): Promise<void> {
-    const session = this.#sessions.get(id);
-    if (!session) return;
-    session.discardChanges();
-    await session.discardDraft();
-  }
-
-  close(id: string): void {
-    const session = this.#sessions.get(id);
-    if (!session) return;
+    if (!session) return { kind: "missing" };
+    const dirty = session.dirty;
     session.close();
     this.#sessions.delete(id);
+    return { kind: "closed", dirty };
   }
 
+  #identityVersion(id: string): number {
+    return this.#identityVersions.get(id) ?? 0;
+  }
+
+  #invalidate(id: string): void {
+    this.#identityVersions.set(id, this.#identityVersion(id) + 1);
+  }
   #create(id: string, text: string, base: WriteBase): DocumentSession {
     const existing = this.#sessions.get(id);
-    if (existing) return existing;
+    if (existing?.snapshot().lifecycle === "open") return existing;
+    if (existing) this.#sessions.delete(id);
     const session = new DocumentSession(OWNER_TOKEN, id, text, base, this.#api, {
       emit: (event) => this.#emit(event),
       draftSucceeded: () => {
@@ -583,18 +836,7 @@ export function flushBeforeClose(): Promise<void> {
   return documentSessions.flushBeforeClose();
 }
 
-export function suspendSave(id: string): boolean {
-  return documentSessions.suspendSave(id);
-}
-
-export function resumeSave(id: string): void {
-  documentSessions.resumeSave(id);
-}
-
-export function renameKeepingBuffer(from: string, to: string): Promise<void> {
+export function renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
   return documentSessions.renameKeepingBuffer(from, to);
 }
 
-export function discardDraft(id: string): Promise<void> {
-  return documentSessions.discardDraft(id);
-}

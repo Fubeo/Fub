@@ -24,7 +24,7 @@ import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, notesByName, resolvedReference, vaultTags } from "../host/query";
-import type { Origin, PaneMode, SelectionSet, ViewContext } from "../host/contract";
+import type { PaneMode, SelectionSet, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { existingRecentNotes } from "../state/recent";
 import { emit, on, state } from "../state/store";
@@ -33,7 +33,10 @@ import { syntaxForms, unsavedDrafts } from "../host/query";
 import type { DraftInfo } from "../host/contract";
 import {
   documentSessions,
+  isDocumentDeletedDuringRead,
   type DocumentSessionEvent,
+  type ExternalChangeResult,
+  type ReloadResult,
 } from "../state/document-session";
 import {
   openIn,
@@ -144,55 +147,27 @@ export function mountDocument(d: DocumentDeps): void {
   });
 
   onEvent("document_changed", (e, origin) => {
-    // La nota è cambiata (anche da fuori: watcher, altra app).
-    //
-    // **Il conto degli echoes risponde per primo, prima di qualunque guardia.**
-    // È del *buffer*, e un buffer può benissimo esistere senza che nessun
-    // riquadro mostri quel documento: succede fra la chiusura di una linguetta e il
-    // `flush` che la releaseTab, ed è esattamente il momento in cui una scrittura
-    // in volo produrrà il suo eco. Con la guardia davanti, quell'eco non veniva
-    // consumato da nessuno — e la regola degli echoes promette il
-    // contrario, «l'evento con l'identità di una nostra scrittura lo consuma,
-    // anche se non c'è niente da dire». Un eco non consumato non si ripara più:
-    // si mangia il prossimo avviso vero.
-    warnIfBufferCovers(e.id, origin);
-    // Ciò che segue riguarda invece ogni riquadro che la sta mostrando, non
-    // «il» riquadro — e se non ce n'è nessuno non c'è niente da rileggere né da
-    // ridisegnare: la guardia sta davanti a ciò che disegna, che è ciò di cui
-    // parla.
-    if (panesWithDoc(e.id).length === 0) return;
-    void reloadIfClean(e.id);
-    void redrawReading(e.id);
+    void documentSessions.handleExternalChange(e.id, origin).then((outcome) => {
+      void applyExternalChange(e.id, outcome);
+    });
   });
 
   onEvent("document_removed", (e) => {
-    if (panesWithDoc(e.id).length === 0) return;
-    // La nota aperta è sparita da fuori (watcher, altra app). Col documento
-    // sporco la sessione vince e il primo salvataggio la ricrea; col documento
-    // pulito si lascia andare la sessione e si rimuovono le linguette.
-    if (documentSessions.isDirty(e.id)) {
-      notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
-      return;
-    }
-    forget(e.id);
+    const outcome = documentSessions.handleExternalRemoval(e.id);
+    invalidateLoads(e.id);
+    if (outcome.dirty) notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
     removeEverywhere(e.id);
   });
-  onEvent("document_renamed", (e) => {
-    // L'identità è il path (0043): linguette e sessione seguono il nuovo nome.
-    // La finestra di migrazione finisce qui: il servizio tiene fermi i due
-    // ritardi dalla richiesta fino a questo evento e li rimette in coda ora.
-    documentSessions.rename(e.from, e.to);
-    rename(e.from, e.to);
-  });
 
+  onEvent("document_renamed", (e) => {
+    const outcome = documentSessions.rename(e.from, e.to);
+    if (outcome.kind !== "collision") rename(e.from, e.to);
+  });
 
   onEvent("overflow", () => {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi va
     // riconciliato da zero, non aggiornato.
-    for (const id of openDocuments()) {
-      void reloadIfClean(id);
-      void redrawReading(id);
-    }
+    for (const id of openDocuments()) void reloadDocument(id);
   });
 
   // Il testo dello stato di salvataggio non passa da `applicaStringhe` — non ha
@@ -210,6 +185,13 @@ function openDocuments(): string[] {
     return state ? documents(state) : [];
   });
   return [...new Set(p)];
+}
+
+function invalidateLoads(doc: string): void {
+  for (const paneId of panesWithDoc(doc)) {
+    const pane = panes.get(paneId);
+    if (pane) pane.loadGeneration++;
+  }
 }
 
 // --- i comandi dei riquadri (§18.2) -----------------------------------------
@@ -287,40 +269,32 @@ function registerCommands(): void {
   });
 }
 
-/// «Vince il mio testo»: si **detta**, cioè si copre apposta ciò che c'è.
-///
-/// Azzerare la base e non rileggerla è la differenza fra decidere e indovinare:
-/// rileggere la revisione di adesso e riprovare con quella sarebbe la
-/// sovrascrittura silenziosa di prima con un giro in più, e la guardia non
-/// guarderebbe niente. Qui la sovrascrittura c'è, ed è ciò che l'utente ha
-/// chiesto — dopo che gli è stato detto cosa stava coprendo.
+/// «Vince il mio testo»: la sessione esegue la decisione, questa funzione
+/// aggiorna soltanto ciò che la shell disegna.
 async function resolveKeepingMine(): Promise<void> {
   const doc = activeDoc();
-  if (!doc || documentSessions.inspect(doc)?.result !== "conflitto") {
+  if (!doc) {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  await documentSessions.saveConflictMine(doc);
+  const outcome = await documentSessions.resolveConflict(doc, "mine");
+  if (outcome.kind === "none") notify(t("document.conflict_none"), "info");
 }
 
-/// «Vince il testo sul disco»: si butta il buffer e si ricarica.
-///
-/// È l'unico gesto di questa voce che **perde** qualcosa, e per questo è l'unico
-/// che non si può innescare da solo: sta nella palette, dove per arrivarci
-/// bisogna averlo scritto — la stessa regola per cui `shell.history.clear` non
-/// ha un accordo.
+/// «Vince il testo sul disco»: la sessione scarta il buffer e rileggere il
+/// documento, poi il pannello riallinea le superfici.
 async function resolveDiscardingMine(): Promise<void> {
   const doc = activeDoc();
-  if (!doc || documentSessions.inspect(doc)?.result !== "conflitto") {
+  if (!doc) {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  // La bozza se ne va con lui: teneva *questo* testo, ed è appena stato
-  // scartato da chi l'aveva scritto. Lasciarla vorrebbe dire riproporlo al
-  // prossimo avvio come se fosse andato perso.
-  await documentSessions.discardChanges(doc);
-  await reloadIfClean(doc);
-  await redrawReading(doc);
+  const outcome = await documentSessions.resolveConflict(doc, "theirs");
+  if (outcome.kind === "none") {
+    notify(t("document.conflict_none"), "info");
+    return;
+  }
+  if (outcome.kind === "discarded") await applyReload(doc, outcome.reload);
   drawSave();
   redrawTabs(doc);
 }
@@ -372,19 +346,11 @@ async function releaseTab(paneId: string, tab: Tab | null): Promise<void> {
   else unmountViewFromPane(tab.view, paneId);
 }
 
-/// Un documento che nessun riquadro mostra più: si salva se era sporco, e poi si
-/// lascia andare. Salvare **prima** di dimenticare è il punto — chiudere una linguetta
-/// non è annullare ciò che si era scritto, e il debounce poteva avere ancora
-/// qualcosa in coda.
+/// Un documento che nessun riquadro mostra più viene rilasciato dalla sessione:
+/// il flush, la bozza e la chiusura sono una sola decisione del suo owner.
 async function dismissIfUnwatched(doc: string): Promise<void> {
   if (panesWithDoc(doc).length > 0) return;
-  await documentSessions.flush(doc);
-  if (documentSessions.isDirty(doc)) await documentSessions.flushDraft(doc);
-  forget(doc);
-}
-
-function forget(doc: string): void {
-  documentSessions.close(doc);
+  await documentSessions.release(doc);
 }
 
 // --- disegnare i riquadri ---------------------------------------------------
@@ -712,7 +678,14 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     clearPreview(r.previewEl);
     return;
   }
-  const [text, forms] = await Promise.all([readBuffer(tab.doc), syntaxForms(tab.doc)]);
+  let text: string;
+  let forms: Awaited<ReturnType<typeof syntaxForms>>;
+  try {
+    [text, forms] = await Promise.all([readBuffer(tab.doc), syntaxForms(tab.doc)]);
+  } catch (error) {
+    if (isDocumentDeletedDuringRead(error)) return;
+    throw error;
+  }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
   r.editor.setSyntaxForms(forms);
   r.editor.setDoc(text);
@@ -860,7 +833,8 @@ export async function openDocument(id: string): Promise<void> {
 /// aveva un riquadro solo.
 export function closeDocument(id: string | null = state.currentDoc): void {
   if (!id) return;
-  forget(id);
+  documentSessions.close(id);
+  invalidateLoads(id);
   removeEverywhere(id);
   // Il kernel svuota già il documento del contesto in `remove_document`: qui
   // si ripubblica per allineare i due stati **e** per farsi dire quali view
@@ -993,71 +967,45 @@ const STATE_KEY = {
   "conflitto": "save.conflitto",
 } as const;
 
-
-/// Ricarica un documento dal disco, ma solo se non ha modifiche non salvate.
-///
-/// L'origine (decisione 0012) distingue i due casi che prima erano un avviso
-/// solo, e sono molto diversi: se ha scritto un'ALTRA APP il lavoro che il
-/// buffer sta per coprire non è nostro e non lo possiamo rifare, mentre una
-/// riscrittura del kernel o di un plugin la si riottiene rifacendo
-/// l'operazione.
-/// Qualcuno ha riscritto il file **sotto un buffer sporco**: dirlo, se c'è
-/// davvero qualcuno.
-///
-/// Due casi e due toni, ed è la ragione per cui la 0012 distingue l'origine: se
-/// ha scritto un'ALTRA APP il lavoro che il buffer sta per coprire non è nostro
-/// e non lo possiamo rifare — è un guasto; una riscrittura del kernel o di un
-/// plugin la si riottiene rifacendo l'operazione, e informa. Fino al §20.4 la
-/// diagnosi era giusta, completa, e andava in un posto che non ha lettori.
-///
-/// **E c'è un terzo caso, che non è nessuno dei due**: l'eco del nostro
-/// salvataggio. Scrivere `issues.md` e continuare a battere durante i 400 ms del
-/// debounce produce, ogni volta, un `document_changed` di origine `user` su un
-/// buffer tornato sporco — cioè la frase «il file è cambiato sotto di te» detta
-/// del file che contiene esattamente ciò che abbiamo appena scritto noi. È
-/// sempre stata emessa; finché finiva in `console` nessuno l'ha vista, e il
-/// §20.4 l'ha portata sullo schermo tre volte di fila. Un avviso che compare
-/// quando non è successo niente non è un avviso in più: è ciò che insegna a
-/// ignorare gli altri tredici.
-function warnIfBufferCovers(id: string, source: Origin): void {
-  // The session owns the echo counter; this panel only turns the pure
-  // classification into a notification.
-  switch (documentSessions.consumeChange(id, source)) {
-    case "muto":
-      return;
-    case "eco":
-      return;
-    case "altra_app":
+async function applyExternalChange(id: string, outcome: ExternalChangeResult): Promise<void> {
+  if (outcome.kind === "warning") {
+    if (outcome.cause === "altra_app") {
       notify(t("document.overwritten", { doc: id }), "guasto");
-      return;
-    case "riscrittura":
+    } else {
       notify(t("document.changed_on_disk", { doc: id }), "info");
+    }
+  } else if (outcome.kind === "echo" || outcome.kind === "untracked") {
+    return;
+  } else if (outcome.kind === "reloaded" && outcome.changed) {
+    syncDocument(id, outcome.text);
   }
+  await redrawReading(id);
 }
-/// Ricarica un documento dal disco, ma solo se non ha modifiche non salvate.
-///
-/// La sessione decide se il testo può essere sostituito; il pannello riallinea
-/// soltanto gli editor che stanno mostrando quel documento.
-async function reloadIfClean(id: string): Promise<void> {
-  const reloaded = await documentSessions.reloadIfClean(id);
-  if (!reloaded?.changed) return;
+
+async function reloadDocument(id: string): Promise<void> {
+  await applyReload(id, await documentSessions.reloadIfClean(id));
+}
+
+async function applyReload(id: string, outcome: ReloadResult): Promise<void> {
+  if (outcome.kind === "reloaded" && outcome.changed) syncDocument(id, outcome.text);
+  await redrawReading(id);
+}
+
+function syncDocument(id: string, text: string): void {
   for (const paneId of panesWithDoc(id)) {
     const r = panes.get(paneId);
     // `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il testo
     // sotto — e chi lo sta guardando non deve perdere il punto in cui era.
-    if (r && r.shown?.k === "doc" && r.shown.doc === id) r.editor.syncDoc(reloaded.text);
+    if (r && r.shown?.k === "doc" && r.shown.doc === id) r.editor.syncDoc(text);
   }
 }
-
 
 /// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
 /// che riscrive il file sotto al buffer).
 export async function reloadCurrent(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;
-  documentSessions.markClean(doc);
-  await reloadIfClean(doc);
-  await redrawReading(doc);
+  await applyReload(doc, await documentSessions.forceReload(doc));
   drawSave();
   redrawTabs(doc);
 }

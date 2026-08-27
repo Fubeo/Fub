@@ -35,7 +35,7 @@ import { activatable } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { focusEditor, openDocument } from "./document";
-import { flushPendingSave, renameKeepingBuffer } from "../state/document-session";
+import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
@@ -821,6 +821,19 @@ const FAILURE_REASON: Record<NameFault, Key> = {
   "too-long": "name_fault.too_long",
 };
 
+function reportRenameCollision(outcome: RenameResult): boolean {
+  if (outcome.kind !== "collision") return false;
+  notify(
+    t("explorer.rename_failed", {
+      doc: outcome.from,
+      to: outcome.to,
+      reason: "la destinazione è già aperta",
+    }),
+    "guasto",
+  );
+  renderFileList();
+  return true;
+}
 async function renameDoc(from: string, newPageName: string): Promise<void> {
   const slash = from.lastIndexOf("/");
   const dir = slash === -1 ? "" : from.slice(0, slash + 1);
@@ -854,7 +867,8 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
     return;
   }
   try {
-    await renameKeepingBuffer(from, to);
+    const outcome = await renameKeepingBuffer(from, to);
+    if (reportRenameCollision(outcome)) return;
   } catch (e) {
     notify(t("explorer.rename_failed", { doc: from, to, reason: errorText(e) }), "guasto");
     renderFileList();
@@ -897,7 +911,11 @@ async function convertToFolder(id: string): Promise<void> {
   const dir = parentOf(id);
   const folderPath = dir ? `${dir}/${stem}` : stem;
   try {
-    await renameKeepingBuffer(id, `${folderPath}/${childName(id)}`);
+    const outcome = await renameKeepingBuffer(id, `${folderPath}/${childName(id)}`);
+    if (outcome.kind === "collision") {
+      notify(t("explorer.to_folder_failed", { doc: id, reason: "la destinazione è già aperta" }), "guasto");
+      return;
+    }
   } catch (e) {
     notify(t("explorer.to_folder_failed", { doc: id, reason: errorText(e) }), "guasto");
     return;
@@ -993,12 +1011,22 @@ function applyReorder(parent: string, dragged: string, target: string, before: b
   names.splice(before ? at : at + 1, 0, dragged);
   void setOrder(parent, names);
 }
-
 async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
   if (to === id) return;
   try {
-    await renameKeepingBuffer(id, to);
+    const outcome = await renameKeepingBuffer(id, to);
+    if (outcome.kind === "collision") {
+      notify(
+        t("explorer.move_failed", {
+          doc: id,
+          folder: folderPath || t("explorer.root"),
+          reason: "la destinazione è già aperta",
+        }),
+        "guasto",
+      );
+      return;
+    }
   } catch (e) {
     notify(
       t("explorer.move_failed", {
