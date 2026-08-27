@@ -87,14 +87,18 @@ tracciato nell'issue [#10](https://github.com/Fubeo/Fub/issues/10).
 
 ## Superfici condivise
 
-Il motore testuale contiene già parti riusabili, ma il profilo Markdown è ancora
-composto con esse. L'estrazione di un `TextEngine` generico non è architettura
-corrente: richiede un secondo cliente reale ed è tracciata nell'issue
-[#11](https://github.com/Fubeo/Fub/issues/11).
+`TextEngine` è il motore testuale corrente della shell e fornisce la meccanica
+condivisa. L'unico percorso montato dall'utente è l'editor Markdown, che passa
+da `createEditor()` e `MarkdownProfile`.
 
-La regola che guida quel lavoro è semplice: la shell può fornire motori comuni;
-un plugin li configura, ma non invia codice JavaScript o un'operazione IPC per
-ogni battuta.
+`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
+stesso `TextEngine`: vengono esercitati dai test dedicati e dalla fixture a tre
+profili, ma non sono superfici esposte all'utente. La loro presenza dimostra il
+seam interno; non introduce una nuova modalità del prodotto né anticipa
+`DocumentSession` o altre fasi successive.
+
+Il coordinamento del buffer resta nel pannello documento e nessun profilo invia
+una chiamata IPC o WASM per ogni battuta.
 
 ## Dove si trova
 

@@ -192,6 +192,7 @@ Tu, come orchestratore, devi inoltre eseguire controlli aggregati:
 
 - dopo ogni wave parallela;
 - dopo `SURF-023`;
+- dopo `SURF-023R`;
 - dopo `SURF-032`;
 - dopo `SURF-041`;
 - al checkpoint finale.

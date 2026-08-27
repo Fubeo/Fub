@@ -2,7 +2,7 @@
 
 - **Fase:** 3
 - **Specie:** nuova funzionalità / secondo cliente
-- **Dipendenze:** SURF-023
+- **Dipendenze:** SURF-023R
 - **Rischio:** basso-medio
 - **Parallelismo:** Wave C con SURF-031
 - **Hotspot:** nessuno; `engine.ts` è vietato
