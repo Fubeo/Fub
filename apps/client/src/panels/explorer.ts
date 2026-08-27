@@ -34,12 +34,8 @@ import { $ } from "../ui/dom";
 import { activatable } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
-import {
-  flushPendingSave,
-  focusEditor,
-  openDocument,
-  renameKeepingBuffer,
-} from "./document";
+import { focusEditor, openDocument } from "./document";
+import { flushPendingSave, renameKeepingBuffer } from "../state/document-session";
 import { trashWithConfirm } from "./trash";
 import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";

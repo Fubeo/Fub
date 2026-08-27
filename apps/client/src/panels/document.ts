@@ -1,63 +1,40 @@
-// I riquadri dell'area principale: gli editor, i buffer, le linguetta, la modalità di
-// ciascuno, e il contesto di sessione che ne esce.
+// I riquadri dell'area principale: editor, linguette, modalità e contesto.
 //
-// # Le due verità, e perché sono due
+// La sessione di un documento non è una superficie. `state/document-session.ts`
+// possiede il testo autorevole, la base della scrittura, il dirty, la coda, i
+// debounce e il lifecycle; questo modulo possiede soltanto ciò che è a schermo.
+// Due riquadri possono quindi mostrare la stessa sessione senza duplicare testo
+// o salvataggi, mentre ciascun editor conserva la propria history.
 //
-// Questo modulo ne tiene due, e tenerle separate è la decisione centrale del
-// §1.2. La prima è **il layout** — quali riquadri ci sono e cosa tiene aperto
-// ognuno — e non sta qui: sta in `state/layout.ts`, perché è ciò che si ricorda
-// fra un avvio e l'altro. La seconda è **il buffer**, che è la verità del
-// documento aperto finché è sporco (../../../docs/architecture/document-model.md, "Fonte di
-// verità"), e sta qui.
+// Qui restano:
+//   - layout, tab, focus, modalità e struttura DOM;
+//   - il collegamento tra editor e sessione, inclusa la validazione delle
+//     operazioni stantie;
+//   - il disegno delle superfici e la pubblicazione del contesto.
 //
-// E il buffer è **per documento, non per riquadro**. È la domanda che il §1.2
-// lasciava scoperta e che si scopre solo arrivandoci: una nota aperta in due
-// riquadri, se ognuno tenesse il suo testo, sarebbero due note — si scrive di
-// qua, si salva di là, e il salvataggio più recente copre l'altro senza che
-// niente lo dica. La risposta è che **una nota aperta due volte è un buffer**, e
-// da lì scendono tre cose che questo file presidia:
+// Il documento vive nella sessione finché il servizio lo tiene aperto. Quando
+// l'ultima linguetta lo lascia, il servizio esegue il flush e chiude la sessione.
 //
-//   - il testo lo tiene la mappa dei buffer, e gli editor sono superfici sopra
-//     di lui: chi scrive aggiorna il buffer, e gli altri editor sullo stesso
-//     documento ricevono la modifica minima (`Editor.syncDoc`);
-//   - il debounce del salvataggio è del **documento**, non del riquadro: due
-//     riquadri che scrivono sulla stessa nota non fanno due salvataggi in corsa;
-//   - la pila di undo resta di ciascun editor (0045): le due pile non si
-//     fondono: la history nativa mappa il cambiamento esterno, ma non lo rende un evento di undo locale.
-//
-// Il buffer vive finché qualche riquadro tiene aperto quel documento; chiudendo
-// l'ultima linguetta si mette in salvo ciò che c'era di sporco e poi si dimentica.
-//
-// # Cosa resta di prima
-//
-// La superficie pubblica di questo modulo è quasi la stessa: `openDocument`,
-// `isOpen`, `closeDocument`, `flushPendingSave` sono le stesse domande di
-// quando il riquadro era uno — «apri», «è aperto», «chiudi», «metti in salvo» —
-// e le risposte adesso sono «nel riquadro col fuoco», «in un riquadro
-// qualunque», «in tutti», «tutti i buffer». Non è pigrizia nel non rinominarle:
-// i cinque clienti (esploratore, ricerca, cestino, intent, view) fanno davvero
-// quella domanda lì, e obbligarli a nominare un riquadro vorrebbe dire far
-// sapere a tutti cos'è un riquadro per non guadagnare niente.
+// La superficie pubblica di questo modulo continua a rispondere alle domande
+// della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
+// lo stato mutabile della sessione ai suoi clienti.
 import { createEditor, type Editor, type EditorChange } from "../editor/editor";
 import { tryApplyOperation } from "../editor/text-operation";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, notesByName, resolvedReference, vaultTags } from "../host/query";
-import type { Origin, PaneMode, SelectionSet, ViewContext, WriteBase } from "../host/contract";
+import type { Origin, PaneMode, SelectionSet, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { existingRecentNotes } from "../state/recent";
 import { emit, on, state } from "../state/store";
-import {
-  consumeUnderChange,
-  failureOutcome,
-  writeCountingEcho,
-  stateOf,
-  type Outcome,
-} from "../state/saving";
-import { CASE_KEY, caseOf, toRecover, rejoinDrafts } from "../state/drafts";
+import { CASE_KEY, caseOf, toRecover } from "../state/drafts";
 import { syntaxForms, unsavedDrafts } from "../host/query";
 import type { DraftInfo } from "../host/contract";
+import {
+  documentSessions,
+  type DocumentSessionEvent,
+} from "../state/document-session";
 import {
   openIn,
   activateTab,
@@ -80,7 +57,7 @@ import {
   type LayoutNode,
   type Tab,
 } from "../state/layout";
-import { createNote, renameNote } from "../state/vault";
+import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
@@ -96,17 +73,6 @@ export interface DocumentDeps {
   /// importassero a vicenda sarebbe un ciclo.
   searchTag(tag: string): void;
 }
-
-/// «Questo testo non discende da un testo di prima»: il caso *dettato* di
-/// `WriteBase`, che non porta niente e quindi si può tenere in una costante.
-///
-/// Sta qui e ha un nome perché nella shell i posti che la usano sono pochi e
-/// ognuno è una decisione — «vince il mio testo», un buffer nato da una
-/// battuta prima di aver letto il disco — e un nome li rende cercabili tutti
-/// insieme. Il terzo posto, la bozza vecchia che la sua base non la sapeva, è
-/// passato con `rejoinDrafts` a `state/drafts.ts`, dove il dettato si
-/// scrive dove la decisione si prende.
-const DICTATED: WriteBase = { kind: "dictated" };
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
 /// documento l'editor sta effettivamente mostrando.
@@ -132,85 +98,10 @@ interface Pane {
   loadGeneration: number;
 }
 
-/// Il testo di un documento aperto, con lo stato del suo salvataggio.
-///
-/// Uno per documento, non uno per riquadro: vedi la nota in testa al file.
-interface Buffer {
-  text: string;
-  /// I salvataggi di **questo** documento, uno alla volta (0134, difetto 0030).
-  ///
-  /// Sta sul buffer e non in una mappa accanto perché è del documento: due note
-  /// che si salvano insieme non hanno niente da spartire, e una coda unica le
-  /// metterebbe in fila per niente. Che sia un campo obbligatorio è la parte che
-  /// non si dimentica: un buffer nuovo senza coda non compila.
-  queue: Queue;
-  /// Ha modifiche non ancora scritte su disco? Finché è sporco, questo testo è
-  /// la verità del documento: non va MAI sovrascritto da un reload.
-  dirty: boolean;
-  /// Com'è andata **l'ultima scrittura tentata** (§20.4). È un fatto diverso da
-  /// `dirty`, e per questo è un campo suo: `dirty` dice se c'è qualcosa da
-  /// scrivere, questo dice se ciò che si è provato a scrivere è arrivato. Un
-  /// buffer può essere pulito e l'ultima scrittura essere fallita — è il caso in
-  /// cui prima di oggi la shell non diceva niente — e può essere sporco mentre
-  /// una scrittura è in volo.
-  result: Outcome;
-  /// Quanti `document_changed` **nostri** stiamo ancora aspettando.
-  ///
-  /// Ogni scrittura che va a buon fine torna indietro come evento: il documento
-  /// è cambiato su disco, ed è cambiato perché l'abbiamo cambiato noi. L'evento
-  /// non porta una revisione, ma porta l'**origine** (decisione 0012), e l'eco
-  /// si appaia a quella: una scrittura della shell viaggia da attore `user`
-  /// **fuori da un lotto**, ed è l'unica origine che `consumaCambioSotto`
-  /// consuma. Prima l'identità era «il primo evento non-watcher su quel
-  /// documento», ed era troppo larga: un comando che l'utente lancia — una
-  /// rinomina, un annulla — riscrive dentro un lotto con lo stesso attore
-  /// `user`, e il `batch` è ciò che la distingue da una nostra scrittura. Una
-  /// scrittura mette un eco in attesa **prima di partire** — **anche se non
-  /// c'è niente da dire**, che è la parte che per un po' questa riga ha
-  /// promesso e il codice non ha fatto. Prima di partire perché l'evento nasce
-  /// dentro la scrittura e può arrivare mentre la si aspetta.
-  ///
-  /// Le due metà del conto stanno tutte e due in `state/salvataggio.ts`, e da
-  /// qui non si tocca: `writeCountingEcho` lo mette e lo riprende se la
-  /// scrittura fallisce, `consumaCambioSotto` lo toglie quando l'evento arriva.
-  ///
-  /// Il modo in cui questo conto può sbagliare è uno solo ed è **limitato**: se
-  /// un eco non arrivasse (coda troncata), il contatore resterebbe alto e si
-  /// mangerebbe un avviso vero **di origine `user` fuori da un lotto** — cioè
-  /// una scrittura diretta di un'altra finestra della shell — mai uno della
-  /// watcher o di un comando, che è il caso grave, perché quelli non li
-  /// consuma mai. Torna a zero a ogni caricamento del documento.
-  echoes: number;
-  /// **Da cosa questo testo si è discostato** (§18.1): la revisione che il file
-  /// aveva quando il buffer l'ha preso in mano, o che l'ultimo salvataggio ha
-  /// prodotto.
-  ///
-  /// È ciò che rende il salvataggio una scrittura *guardata* invece che una
-  /// sovrascrittura: viaggia in `writeDocument`, e se il file non è più quello
-  /// il kernel risponde `conflict` senza toccare niente. Prima di questa voce
-  /// il salvataggio dell'editor copriva una scrittura altrui che il watcher non
-  /// aveva visto, e nessuna delle due metà del sistema se ne accorgeva.
-  ///
-  /// Non si calcola di qua e non si potrebbe: la deriva il kernel dallo stesso
-  /// testo che ci consegna.
-  ///
-  /// È un `WriteBase` e non più una revisione opzionale
-  /// ([0092](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)): `null`
-  /// teneva insieme due cose diverse — «non so da cosa discendo» e «ho scelto
-  /// di sovrascrivere» — e le due si leggono uguali proprio nel punto in cui
-  /// contano. Adesso chi non lo sa lo **dichiara** dove lo scopre (il recupero
-  /// di una bozza vecchia), e chi sceglie lo dichiara dove sceglie.
-  base: WriteBase;
-  /// Il debounce della **bozza** (§15.2), separato da quello del salvataggio
-  /// perché ha un ritmo suo: vedi `scheduleDraft`.
-  draftTimer?: number;
-  timer?: number;
-}
-
 const panes = new Map<string, Pane>();
-const buffers = new Map<string, Buffer>();
 
 let panesEl: HTMLElement;
+let sessionEventsStop: (() => void) | undefined;
 let deps: DocumentDeps;
 let theme: Theme | null = null;
 
@@ -230,6 +121,8 @@ let contextTimer: number | undefined;
 export function mountDocument(d: DocumentDeps): void {
   deps = d;
   panesEl = $("#panes");
+  sessionEventsStop?.();
+  sessionEventsStop = documentSessions.subscribe(handleSessionEvent);
 
   for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
     b.addEventListener("click", () => void setMode(b.dataset.mode as PaneMode));
@@ -258,7 +151,7 @@ export function mountDocument(d: DocumentDeps): void {
     // riquadro mostri quel documento: succede fra la chiusura di una linguetta e il
     // `flush` che la releaseTab, ed è esattamente il momento in cui una scrittura
     // in volo produrrà il suo eco. Con la guardia davanti, quell'eco non veniva
-    // consumato da nessuno — e il commento su `Buffer.echoes` promette il
+    // consumato da nessuno — e la regola degli echoes promette il
     // contrario, «l'evento con l'identità di una nostra scrittura lo consuma,
     // anche se non c'è niente da dire». Un eco non consumato non si ripara più:
     // si mangia il prossimo avviso vero.
@@ -274,48 +167,24 @@ export function mountDocument(d: DocumentDeps): void {
 
   onEvent("document_removed", (e) => {
     if (panesWithDoc(e.id).length === 0) return;
-    // La nota aperta è sparita da fuori (watcher, altra app). Col buffer
-    // sporco il buffer vince — è la verità del documento aperto, e il primo
-    // salvataggio la ricrea: qui la resurrezione è voluta. Col buffer pulito
-    // no: gli editor resterebbero su un contenuto fantasma che il primo
-    // autosave resusciterebbe alle spalle dell'utente.
-    if (buffers.get(e.id)?.dirty) {
+    // La nota aperta è sparita da fuori (watcher, altra app). Col documento
+    // sporco la sessione vince e il primo salvataggio la ricrea; col documento
+    // pulito si lascia andare la sessione e si rimuovono le linguette.
+    if (documentSessions.isDirty(e.id)) {
       notify(t("document.deleted_dirty", { doc: e.id }), "guasto");
       return;
     }
     forget(e.id);
     removeEverywhere(e.id);
   });
-
   onEvent("document_renamed", (e) => {
-    // L'identità è il path (0043): le linguetta che lo mostravano seguono, in tutti i
-    // riquadri. Il buffer segue anche lui, o il salvataggio successivo
-    // scriverebbe col nome vecchio.
-    // La finestra di migrazione finisce qui: chi rinomina ha tenuto fermi i due
-    // ritardi dal momento della richiesta (difetto 0210), e ciò che si è battuto
-    // nel frattempo riparte adesso, col nome nuovo.
-    suspended.delete(e.from);
-    const buf = buffers.get(e.from);
-    if (buf) {
-      buffers.delete(e.from);
-      buffers.set(e.to, buf);
-      // **E il salvataggio in attesa segue col buffer** (§17.2). Il timer del
-      // debounce porta il nome vecchio dentro la sua chiusura, quindi allo
-      // scadere cercava un buffer che non c'è più e usciva subito: il testo
-      // restava in RAM per sempre, senza che nulla lo dicesse.
-      //
-      // Non succede quando è questa finestra a rinominare — `renameDoc` mette
-      // in salvo i buffer prima di chiedere — e succede per la specie di
-      // rinomina che nessuno qui ha chiesto: un'altra applicazione, un `mv` da
-      // terminale, un sync. È il caso in cui l'utente non ha fatto niente di
-      // strano ed è quello in cui si perde la sua battuta.
-      if (buf.dirty) {
-        scheduleSave(e.to);
-        scheduleDraft(e.to);
-      }
-    }
+    // L'identità è il path (0043): linguette e sessione seguono il nuovo nome.
+    // La finestra di migrazione finisce qui: il servizio tiene fermi i due
+    // ritardi dalla richiesta fino a questo evento e li rimette in coda ora.
+    documentSessions.rename(e.from, e.to);
     rename(e.from, e.to);
   });
+
 
   onEvent("overflow", () => {
     // Eventi persi (coda troncata): ciò che deriviamo dagli eventi va
@@ -427,15 +296,11 @@ function registerCommands(): void {
 /// chiesto — dopo che gli è stato detto cosa stava coprendo.
 async function resolveKeepingMine(): Promise<void> {
   const doc = activeDoc();
-  const buf = doc ? buffers.get(doc) : undefined;
-  if (!doc || buf?.result !== "conflitto") {
+  if (!doc || documentSessions.inspect(doc)?.result !== "conflitto") {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  buf.base = DICTATED;
-  buf.result = "in_corso";
-  window.clearTimeout(buf.timer);
-  await saveDoc(doc);
+  await documentSessions.saveConflictMine(doc);
 }
 
 /// «Vince il testo sul disco»: si butta il buffer e si ricarica.
@@ -446,26 +311,18 @@ async function resolveKeepingMine(): Promise<void> {
 /// ha un accordo.
 async function resolveDiscardingMine(): Promise<void> {
   const doc = activeDoc();
-  const buf = doc ? buffers.get(doc) : undefined;
-  if (!doc || buf?.result !== "conflitto") {
+  if (!doc || documentSessions.inspect(doc)?.result !== "conflitto") {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  window.clearTimeout(buf.timer);
-  buf.dirty = false;
-  buf.result = "ok";
   // La bozza se ne va con lui: teneva *questo* testo, ed è appena stato
   // scartato da chi l'aveva scritto. Lasciarla vorrebbe dire riproporlo al
   // prossimo avvio come se fosse andato perso.
-  await dropDraft(doc);
+  await documentSessions.discardChanges(doc);
   await reloadIfClean(doc);
   await redrawReading(doc);
   drawSave();
-  for (const paneId of panesWithDoc(doc)) {
-    const r = panes.get(paneId);
-    const p = paneState(paneId);
-    if (r && p) drawTab(r, p.tabs, p.active);
-  }
+  redrawTabs(doc);
 }
 
 /// Divide il riquadro col fuoco e ci porta dentro **lo stesso documento**.
@@ -521,16 +378,13 @@ async function releaseTab(paneId: string, tab: Tab | null): Promise<void> {
 /// qualcosa in coda.
 async function dismissIfUnwatched(doc: string): Promise<void> {
   if (panesWithDoc(doc).length > 0) return;
-  await flushDoc(doc);
-  if (buffers.get(doc)?.dirty) await writeDraft(doc);
+  await documentSessions.flush(doc);
+  if (documentSessions.isDirty(doc)) await documentSessions.flushDraft(doc);
   forget(doc);
 }
 
 function forget(doc: string): void {
-  const buf = buffers.get(doc);
-  if (buf?.timer !== undefined) window.clearTimeout(buf.timer);
-  if (buf?.draftTimer !== undefined) window.clearTimeout(buf.draftTimer);
-  buffers.delete(doc);
+  documentSessions.close(doc);
 }
 
 // --- disegnare i riquadri ---------------------------------------------------
@@ -744,7 +598,7 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
       // Il pallino del non salvato: è l'unica cosa che dica, guardando una tab
       // che non è quella davanti, che lì dentro c'è del lavoro in coda. Una view
       // non ha un buffer, quindi non si sporca.
-      if (t0.k === "doc" && buffers.get(t0.doc)?.dirty) tab.classList.add("dirty");
+      if (t0.k === "doc" && documentSessions.isDirty(t0.doc)) tab.classList.add("dirty");
       if (t0.k === "view") tab.classList.add("tab-view");
 
       const close = document.createElement("span");
@@ -771,6 +625,39 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
     "aria-label",
     open ? t("pane.named", { name: open }) : t("pane.empty"),
   );
+}
+
+function redrawTabs(doc: string): void {
+  for (const paneId of panesWithDoc(doc)) {
+    const r = panes.get(paneId);
+    const p = paneState(paneId);
+    if (r && p) drawTab(r, p.tabs, p.active);
+  }
+}
+
+function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
+  if (event.kind === "changed") {
+    drawSave();
+    redrawTabs(event.id);
+    return;
+  }
+  if (event.kind === "draft-blind") {
+    notify(t("draft.blind"), "guasto");
+    return;
+  }
+  if (event.kind === "save-failed") {
+    if (event.outcome === "conflitto") {
+      notify(t("document.save_conflict", { doc: event.id }), "guasto");
+    } else {
+      notify(t("document.save_failed", { doc: event.id, reason: errorText(event.error) }), "guasto");
+    }
+    drawSave();
+    redrawTabs(event.id);
+    return;
+  }
+  drawSave();
+  redrawTabs(event.id);
+  return publishContext().then(() => redrawReading(event.id));
 }
 
 /// Come si chiama una tab.
@@ -841,18 +728,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
 /// che mostrano due testi diversi dello stesso documento, che è esattamente ciò
 /// che questa decisione esiste per non avere.
 async function readBuffer(doc: string): Promise<string> {
-  const already = buffers.get(doc);
-  if (already) return already.text;
-  const { text, revision } = await api.readDocument(doc);
-  buffers.set(doc, {
-    text,
-    dirty: false,
-    result: "ok",
-    echoes: 0,
-    queue: new Queue(),
-    base: { kind: "descends_from", value: revision },
-  });
-  return text;
+  return documentSessions.read(doc);
 }
 
 /// Ridisegna la superficie di lettura di ogni riquadro che mostra questo
@@ -922,14 +798,13 @@ export async function recoverDrafts(): Promise<number> {
     // rete. Ciò che non si è letto lo dice il rapporto diagnostico.
     return 0;
   }
-  const rejoined = rejoinDrafts(drafts, buffers);
+  const rejoined = documentSessions.rejoin(drafts);
   // Chi arrivava già a schermo leggeva il disco **prima** del recupero — la
   // tab ripristinata dal layout, che `synchronize` ha appena disegnato — e la
   // bozza è più nuova di lui: le superfici vanno portate con lei, o la prima
   // battuta, riscritta sopra il testo vecchio che si vede, coprirebbe il
   // recupero senza che nessuno l'abbia mai visto.
   for (const b of rejoined) {
-    scheduleSave(b.doc);
     notify(`${b.doc}: ${t(CASE_KEY[caseOf(b)])}`, "info");
     for (const paneId of panesWithDoc(b.doc)) {
       const r = panes.get(paneId);
@@ -967,7 +842,7 @@ export async function openDocument(id: string): Promise<void> {
     // nessuna modifica resta indietro. Tutti i buffer e non solo quello che si sta
     // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
     // azioni di view.
-    await flushPendingSave();
+    await documentSessions.flushPendingSave();
     openIn(layout.focus, id);
     await synchronize();
     // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
@@ -1049,43 +924,30 @@ export async function openWikilink(
 // testo e la seconda scrittura arriverebbe dopo un evento che dice che il file
 // è cambiato.
 
-/// Qualcuno ha scritto in un riquadro: il buffer è la nuova verità, gli altri
-/// editor sullo stesso documento la ricevono, e il salvataggio si mette in coda.
+/// Qualcuno ha scritto in un riquadro: la sessione è la nuova verità, gli altri
+/// editor sullo stesso documento la ricevono, e il servizio programma il
+/// salvataggio.
 function written(paneId: string, change: EditorChange): void {
   const doc = activeDoc(paneId);
   if (!doc) return;
   const { text, operation } = change;
-  // The operation is checked against the authoritative Buffer before it can
-  // replace it. A stale surface is brought back to that Buffer instead of
+  const current = documentSessions.text(doc);
+  // The operation is checked against the authoritative session before it can
+  // replace it. A stale surface is brought back to that session instead of
   // silently overwriting a newer sibling edit.
-  const existing = buffers.get(doc);
-  if (existing) {
-    const current = existing.text.replace(/\r\n?/g, "\n");
+  if (current !== undefined) {
     const expected = text.replace(/\r\n?/g, "\n");
-    const applied = tryApplyOperation(current, operation);
+    const applied = tryApplyOperation(current.replace(/\r\n?/g, "\n"), operation);
     if (applied.kind !== "applied" || applied.text !== expected) {
       const source = panes.get(paneId);
       if (source?.shown?.k === "doc" && source.shown.doc === doc) {
-        source.editor.syncDoc(existing.text);
+        source.editor.syncDoc(current);
       }
       return;
     }
   }
 
-  // Un buffer che nasce qui non ha mai letto il disco — è il testo che sta
-  // arrivando dall'editor su un documento che nessuno aveva aperto — quindi non
-  // discende da niente che si possa nominare.
-  const buf = existing ?? {
-    text,
-    dirty: false,
-    result: "ok" as Outcome,
-    echoes: 0,
-    queue: new Queue(),
-    base: DICTATED,
-  };
-  buf.text = text;
-  buf.dirty = true;
-  buffers.set(doc, buf);
+  documentSessions.acceptEditorChange(doc, text);
   for (const other of panesWithDoc(doc)) {
     if (other === paneId) continue;
     const r = panes.get(other);
@@ -1093,112 +955,10 @@ function written(paneId: string, change: EditorChange): void {
       r.editor.syncDoc({ text, operation });
     }
   }
-  // Il pallino del non salvato compare adesso, su ogni tab che mostra questa
-  // nota. Ridisegnare le tab a ogni battuta costa poco — sono N pulsanti — e
-  // l'alternativa sarebbe un secondo posto che sa quando un buffer si sporca.
-  for (const id of panesWithDoc(doc)) {
-    const r = panes.get(id);
-    const p = paneState(id);
-    if (r && p) drawTab(r, p.tabs, p.active);
-  }
+  redrawTabs(doc);
   drawSave();
-  scheduleSave(doc);
-  scheduleDraft(doc);
 }
 
-// --- il buffer di crash (§15.2) ---------------------------------------------
-//
-// Perché serve, dato che l'autosave scatta dopo 400 ms: perché i 400 ms non sono
-// il caso interessante. I casi sono tre, e nessuno dei tre lo copre l'autosave —
-// il salvataggio che **fallisce** (disco pieno, file in sola lettura, share di
-// rete caduta: il buffer resta sporco a tempo indeterminato, ed è la ragione per
-// cui `salvataggio.ts` tiene «fallito» come stato a sé), la nota che non è
-// **mai** stata salvata, e la finestra fra l'ultima battuta e la scrittura.
-//
-// Il debounce è più **lungo** di quello del salvataggio, non più corto, e la
-// ragione è che i due non fanno la stessa cosa: il salvataggio è la strada
-// normale e va veloce, la bozza è la rete sotto e deve costare poco. Quando il
-// salvataggio riesce, la bozza si butta — il disco è di nuovo la verità.
-const DRAFT_MS = 1_000;
-
-function scheduleDraft(doc: string): void {
-  if (suspended.has(doc)) return;
-  const buf = buffers.get(doc);
-  if (!buf) return;
-  window.clearTimeout(buf.draftTimer);
-  buf.draftTimer = window.setTimeout(() => void writeDraft(doc), DRAFT_MS);
-}
-
-/// **La rete è caduta**: da qui in poi le bozze non arrivano più sul disco.
-///
-/// Uno solo per volta, e non uno per bozza: il debounce ne prova una al secondo
-/// finché si scrive, e un avviso a ogni tentativo insegnerebbe a ignorare gli
-/// avvisi — che è il difetto che `consumaCambioSotto` esiste per non avere. Una
-/// volta però va detta, perché una rete di sicurezza che non c'è **si distingue
-/// da una che non è servita solo quando è troppo tardi** (difetto 0209).
-let blindDraft = false;
-
-/// Mette la bozza sul disco.
-///
-/// Il fallimento della singola bozza resta muto — è una rete che gira di fianco
-/// al lavoro vero, e chi vuole il dettaglio lo trova nel rapporto diagnostico —
-/// ma il **passaggio** da «scrive» a «non scrive più» no: un vault in sola
-/// lettura, un disco pieno, una share di rete caduta spengono il buffer di crash
-/// (§15.2) mentre chi scrive continua a credere di averlo, e lo scopre al
-/// riavvio dopo il crash, cioè nell'unico momento in cui non può più farci
-/// niente.
-async function writeDraft(doc: string): Promise<void> {
-  const buf = buffers.get(doc);
-  if (!buf?.dirty) return;
-  // La stessa fila del salvataggio (`buf.coda`): `save_draft` e `discard_draft`
-  // competono per la stessa bozza sul disco, e senza ordine un discard può
-  // vincere su un `save_draft` in volo e lasciare una bozza stantia che al
-  // riavvio sopravvive al buffer pulito. Uno sbaglio non avvelena la fila: a
-  // tenerlo è la `Coda`, non questa funzione.
-  await buf.queue.enqueue(async () => {
-    // Riletto dentro la coda: fra l'accodamento e il turno il documento può
-    // essere stato dimenticato, o pulito da un salvataggio riuscito.
-    const b = buffers.get(doc);
-    if (!b?.dirty) return;
-    try {
-      // La base c'è davvero, da questa voce: la 0088 aveva dovuto lasciarla a
-      // `null` perché la shell non aveva modo di dire da cosa il buffer si fosse
-      // discostato — e ricalcolarla di qua sarebbe stata una seconda
-      // implementazione dell'impronta, cioè una seconda verità. Adesso la porta
-      // il documento quando lo si apre.
-      await api.saveDraft(
-        doc,
-        b.text,
-        b.base.kind === "descends_from" ? b.base.value : null,
-      );
-      // Tornata a scrivere: il silenzio riparte da capo, così una share che va e
-      // viene lo dice ogni volta che se ne va invece di dirlo la prima e basta.
-      blindDraft = false;
-    } catch {
-      if (!blindDraft) {
-        blindDraft = true;
-        notify(t("draft.blind"), "guasto");
-      }
-    }
-  });
-}
-
-/// La bozza non serve più: il disco è tornato a essere la verità.
-async function dropDraft(doc: string): Promise<void> {
-  const buf = buffers.get(doc);
-  if (buf) window.clearTimeout(buf.draftTimer);
-  const remove = async (): Promise<void> => {
-    try {
-      await api.discardDraft(doc);
-    } catch {
-      // Muto per la ragione di `writeDraft`.
-    }
-  };
-  // C'è un buffer → la stessa fila di `writeDraft` e del salvataggio: il
-  // discard va dietro un `save_draft` in volo, non davanti. Non c'è → niente
-  // coda, ma nemmeno un salvataggio in volo da ordinare: il discard va dritto.
-  await (buf ? buf.queue.enqueue(remove) : remove());
-}
 
 /// Lo stato del salvataggio **del documento che si sta guardando**, nella barra
 /// di stato.
@@ -1215,7 +975,7 @@ function drawSave(): void {
   const el = document.getElementById("save-state");
   if (!el) return;
   const doc = activeDoc();
-  const state = doc ? stateOf(buffers.get(doc)) : null;
+  const state = doc ? documentSessions.saveState(doc) : null;
   if (!state) {
     el.textContent = "";
     delete el.dataset.state;
@@ -1233,280 +993,6 @@ const STATE_KEY = {
   "conflitto": "save.conflitto",
 } as const;
 
-function scheduleSave(doc: string): void {
-  if (suspended.has(doc)) return;
-  const buf = buffers.get(doc);
-  if (!buf || buf.result === "conflitto") return;
-  window.clearTimeout(buf.timer);
-  buf.timer = window.setTimeout(() => void saveDoc(doc), 400);
-}
-
-/// Salva subito **ogni** buffer che ha un salvataggio in attesa, e **dice quali
-/// non ce l'hanno fatta**.
-///
-/// Da chiamare prima di ogni operazione che riscrive file (rename, ripristino di
-/// una versione): la riscrittura del kernel finirebbe altrimenti sotto una copia
-/// più vecchia. Con N riquadri il «buffer corrente» non basta più — l'operazione
-/// può riguardare una nota aperta in un riquadro che non ha il fuoco.
-///
-/// La risposta è l'elenco dei documenti **ancora sporchi**, e prima non c'era:
-/// un salvataggio che fallisce non alza — lo dice il buffer, che resta sporco e
-/// riproverà — quindi questa funzione tornava uguale che i byte fossero sul
-/// disco o no, e chi la chiamava proseguiva a spostare il file (difetto 0206).
-/// Una precondizione di cui non si legge l'esito è una decorazione: chi chiede
-/// «mettimi in salvo» deve poter sapere che non è successo.
-export async function flushPendingSave(): Promise<string[]> {
-  const outcomes = await Promise.all([...buffers.keys()].map(flushDoc));
-  return outcomes.filter((doc): doc is string => doc !== null);
-}
-
-/// Il documento, se dopo il tentativo è **ancora** sporco; `null` se è a posto.
-async function flushDoc(doc: string): Promise<string | null> {
-  const buf = buffers.get(doc);
-  if (!buf?.dirty) return null;
-  window.clearTimeout(buf.timer);
-  await saveDoc(doc);
-  // Riletto dalla mappa: fra l'attesa e adesso il buffer può essere stato
-  // releaseTabto, e un buffer che non c'è più non è un lavoro rimasto indietro.
-  return buffers.get(doc)?.dirty === true ? doc : null;
-}
-
-/// **Si sta chiudendo**: ciò che è ancora in RAM esce adesso o non esce più.
-///
-/// I due ritardi della shell sono nati per non scrivere a ogni tasto — 400 ms il
-/// salvataggio, un secondo la bozza — e sono innocui finché c'è un dopo. Alla
-/// chiusura il dopo non c'è: chiudere la finestra mentre il ritardo corre
-/// buttava via l'ultima battuta senza chiedere niente e senza lasciarne traccia
-/// nemmeno nella bozza, che è la rete tesa apposta sotto questo caso e che al
-/// momento del guasto poteva essere più vecchia del testo (difetto 0205).
-///
-/// Non chiede conferma e non trattiene la chiusura oltre il proprio giro: chi ha
-/// premuto la X vuole chiudere, e la domanda giusta non è «vuoi salvare?» ma
-/// «dove finisce ciò che ho battuto». Se il disco rifiuta — vault in sola
-/// lettura, share di rete caduta — la battuta resta comunque nella bozza, cioè
-/// nel posto da cui il riavvio la ripesca (§15.2).
-export async function flushBeforeClose(): Promise<void> {
-  for (const buf of buffers.values()) window.clearTimeout(buf.draftTimer);
-  const pending = await flushPendingSave();
-  // In fila e non insieme, perché sono l'ultima cosa che questa finestra fa: la
-  // chiusura aspetta questa promessa, e un `Promise.all` che ne perde una a
-  // metà lascerebbe l'ultima bozza a metà file.
-  for (const doc of pending) await writeDraft(doc);
-}
-
-/// Tiene fermi **i due ritardi** di quel documento — quelli già in attesa, che
-/// disinnesca senza eseguirli, e quelli che nascerebbero da una battuta mentre
-/// il fermo dura —, e dice se ce n'era uno da disinnescare.
-///
-/// Il fermo copre anche ciò che nasce dopo per il difetto 0210: fermare solo i
-/// timer già armati lascia scoperta la finestra intera, che è il tempo in cui
-/// l'utente può battere.
-///
-/// Serve a chi sta per **chiedere conferma** di una cancellazione: senza,
-/// l'autosave scatterebbe durante la domanda e farebbe risorgere la nota
-/// subito dopo. Chi lo chiama deve rimettere in coda con `resumeSave(id)` se
-/// l'utente ci ripensa.
-///
-/// # Due ritardi, non uno (difetto 0211)
-///
-/// Prima si fermava il solo salvataggio, e la bozza no. Ma i due ritardi
-/// scrivono tutti e due, e chi chiede conferma di una cancellazione non ha
-/// deciso «non salvare»: ha deciso **che quel testo non tocchi il disco finché
-/// non c'è una risposta**. Una domanda modale la disegna il sistema operativo e
-/// può restare aperta quanto vuole l'utente, mentre il ritardo della bozza è di
-/// un secondo: la rete si stendeva *dentro* la finestra in cui la shell aveva
-/// appena deciso che non si scrive. Sulla strada del sì è peggio che rumore —
-/// `trash.ts` dichiara che «il buffer sporco di un documento cancellato muore
-/// col documento», e quella bozza è il gemello su disco di quel buffer: gli
-/// sopravviveva, e al riavvio dopo tornava come `orfana`, cioè la nota buttata
-/// riofferta a chi l'aveva appena buttata.
-///
-/// # Un posto per documento, non un posto solo
-///
-/// Il sospeso era **uno**, una stringa: la seconda sospensione copriva la prima,
-/// e la prima ripresa riaccendeva il documento sbagliato lasciando l'altro
-/// fermo per sempre. Oggi il chiamante è uno solo e il caso non si produce —
-/// ma è la prova del secondo chiamante, e i secondi chiamanti hanno già un
-/// nome: una rinomina dentro una conversione, un'importazione mentre una
-/// modale è aperta. Un insieme costa una riga e li fa nascere giusti.
-export function suspendSave(id: string): boolean {
-  suspended.add(id);
-  const buf = buffers.get(id);
-  if (!buf?.dirty) return false;
-  window.clearTimeout(buf.timer);
-  window.clearTimeout(buf.draftTimer);
-  return true;
-}
-
-const suspended = new Set<string>();
-
-/// Scioglie il fermo e rimette in coda i due ritardi, se il buffer è ancora
-/// sporco.
-///
-/// Nessuno dei due `if` è di comodo: su un documento che nessuno ha fermato si
-/// programmerebbe una scrittura che nessuno aveva in attesa, e su un buffer
-/// pulito si scriverebbe sul disco un testo che il disco ha già.
-export function resumeSave(id: string): void {
-  if (!suspended.delete(id)) return;
-  if (!buffers.get(id)?.dirty) return;
-  scheduleSave(id);
-  scheduleDraft(id);
-}
-
-/// Rinomina, e **tiene fermo il buffer per tutta la finestra di migrazione**
-/// (difetto 0210).
-///
-/// Chi rinomina mette in salvo prima di chiedere, e quello bastava finché la
-/// finestra era vuota. Non lo è: fra la richiesta e l'evento che migra
-/// l'identità c'è un giro IPC che riscrive anche i wikilink entranti di tutto
-/// il vault, e in quel tempo si può battere un tasto. La battuta programmava un
-/// salvataggio **col nome di prima**, che scadeva mentre il file si era già
-/// mosso: il kernel ricreava la nota al vecchio path, e la stessa nota si
-/// ritrovava in due posti con due contenuti diversi — quello vecchio con
-/// l'ultima battuta, quello nuovo senza.
-///
-/// Il fermo si scioglie dove finisce davvero la finestra: sull'evento
-/// `document_renamed`, che è il punto in cui il buffer prende il nome nuovo, e
-/// da lì la battuta trattenuta parte col nome giusto. Se la rinomina **fallisce**
-/// non arriverà nessun evento, e allora lo scioglie il `catch`: un buffer tenuto
-/// fermo per sempre sarebbe il testo dell'utente che non raggiunge più il disco,
-/// cioè un danno peggiore di quello che si sta togliendo.
-export async function renameKeepingBuffer(from: string, to: string): Promise<void> {
-  suspendSave(from);
-  try {
-    await renameNote(from, to);
-  } catch (e) {
-    resumeSave(from);
-    throw e;
-  }
-}
-
-/// La bozza di quel documento non ha più un documento sotto: si butta.
-///
-/// La chiama chi ha appena cestinato una nota **da qui**, e solo lui. Una nota
-/// che sparisce da **fuori** non passa di qua apposta: lì la bozza è la rete
-/// tesa per quel caso, e il recupero ha un caso suo che si chiama `orfana`.
-export async function discardDraft(doc: string): Promise<void> {
-  suspended.delete(doc);
-  await dropDraft(doc);
-}
-
-/// Scrive il buffer su disco, e **dice com'è andata** (§20.4).
-///
-/// Prima di questa voce la scrittura era una riga sola senza `catch`, invocata
-/// da un `setTimeout`: un vault in sola lettura, un disco pieno, un file tenuto
-/// da un'altra app rifiutavano la scrittura, la promise veniva rigettata in un
-/// contesto senza gestore, e nella finestra non cambiava niente. Si continuava a
-/// scrivere per un'ora dentro una nota che nessuno stava scrivendo su disco.
-///
-/// Adesso il fallimento ha due destinazioni, e servono tutte e due: un avviso,
-/// che interrompe una volta, e lo **stato** accanto al documento, che resta.
-/// L'avviso da solo lo si perde girandosi dall'altra parte; lo stato da solo non
-/// si guarda finché non si ha già il sospetto.
-///
-/// Non rilancia, e non è una svista: il chiamante è un `setTimeout` che non ha
-/// dove prenderlo. Chi ha bisogno di sapere se il disco ha ricevuto il testo —
-/// `flushDoc`, cioè chi sta per far riscrivere quel file al kernel — legge
-/// l'esito dal buffer, che è il posto dove adesso l'esito c'è.
-async function saveDoc(doc: string): Promise<void> {
-  const buf = buffers.get(doc);
-  if (!buf) return;
-  // **Uno alla volta**, ed è il difetto 0030. Due salvataggi dello stesso
-  // documento potevano essere in volo insieme — `flushDoc` toglie il timer, ma
-  // un `saveDoc` che il timer ha già fatto partire il `clearTimeout` non lo
-  // richiama indietro — e allora leggevano tutti e due la stessa `buf.base`.
-  // Il primo scriveva e ne produceva una nuova; il secondo arrivava con quella
-  // vecchia in mano, e il kernel faceva esattamente ciò per cui la guardia
-  // esiste: rispondeva `conflict`. Cioè l'utente vedeva «il file è cambiato
-  // sotto di te» di un file che aveva toccato solo lui, e la seconda scrittura
-  // non arrivava sul disco.
-  //
-  // Una corsa qui sarebbe il rimedio sbagliato: il testo del secondo
-  // salvataggio è ciò che l'utente ha scritto, e buttarlo perché ne è partito
-  // un altro vuol dire perdere delle battute. Va in fila, non nel cestino.
-  await buf.queue.enqueue(() => writeBuffer(doc));
-}
-
-async function writeBuffer(doc: string): Promise<void> {
-  // Riletto dentro la coda e non catturato fuori: fra l'accodamento e il turno
-  // il documento può essere stato dimenticato (chiuso, rinominato, cancellato),
-  // e scrivere su un buffer staccato dalla mappa vuol dire scrivere in un
-  // oggetto che nessuno legge più.
-  const buf = buffers.get(doc);
-  if (!buf?.dirty) return;
-  const text = buf.text;
-  buf.result = "in_corso";
-  drawSave();
-  let produced: string;
-  try {
-    // La base viaggia con la scrittura: se il file non è più quello da cui
-    // questo buffer è partito, il kernel risponde `conflict` e **non scrive
-    // niente** (§18.1).
-    //
-    // L'eco lo conta `writeCountingEcho`, e lo conta **prima** di chiamare: il
-    // `document_changed` che questa scrittura produce lo emette il kernel
-    // *dentro* la scrittura, cioè prima che questa `await` risolva. Contarlo
-    // qui sotto voleva dire arrivare tardi ogni volta che l'evento vinceva la
-    // corsa, e dire «il file è cambiato sotto di te» di ciò che abbiamo appena
-    // scritto noi. I due rami di `catch` qui sotto non devono sottrarre niente:
-    // la sottrazione è dentro quella funzione, che è l'unico posto che non si
-    // può dimenticare di aggiornare aggiungendo un ramo.
-    produced = await writeCountingEcho(buf, () => api.writeDocument(doc, text, buf.base));
-  } catch (e) {
-    // Un conflitto non è un disco pieno, ed è la ragione per cui questo ramo è
-    // suo (0041 ha reso la specie interrogabile proprio per poterlo fare). Il
-    // secondo si riprova — e la battuta dopo ci riprova da sola. Il primo no:
-    // riprovare è la sovrascrittura che la guardia ha appena impedito, e ciò
-    // che manca non è un tentativo ma una decisione, che è dell'utente.
-    if (failureOutcome(e) === "conflitto") {
-      buf.result = "conflitto";
-      notify(t("document.save_conflict", { doc }), "guasto");
-      // Come per il fallimento: il testo è solo in RAM finché la decisione non
-      // è presa, e la rete si stende adesso invece che al debounce.
-      window.clearTimeout(buf.draftTimer);
-      void writeDraft(doc);
-      drawSave();
-      return;
-    }
-    buf.result = "fallito";
-    notify(t("document.save_failed", { doc, reason: errorText(e) }), "guasto");
-    // **Qui la bozza conta più che altrove**, ed è il caso per cui esiste: il
-    // disco ha appena rifiutato questo testo, quindi l'unica copia è in RAM.
-    // Non si aspetta il debounce — si scrive adesso.
-    window.clearTimeout(buf.draftTimer);
-    void writeDraft(doc);
-    // Il buffer resta sporco: è la verità del documento, e il tentativo
-    // successivo — la battuta dopo, o il flush di una rinomina — riparte da qui.
-    drawSave();
-    return;
-  }
-  buf.result = "ok";
-  // Il disco adesso è questo testo: la scrittura dopo riparte da qui. È ciò che
-  // rende la guardia una catena invece di un controllo alla prima battuta —
-  // senza, il secondo salvataggio nominerebbe una base ormai vecchia e
-  // fallirebbe contro sé stesso.
-  buf.base = { kind: "descends_from", value: produced };
-  // Pulito solo se nel frattempo non è arrivato altro input: `dirty` è stato
-  // rimesso a true da `scritto` se l'utente ha continuato a scrivere.
-  if (buf.text === text) {
-    buf.dirty = false;
-    // Il testo è sul disco: la rete si può togliere. Solo se il buffer è
-    // davvero pulito — chi ha continuato a battere durante la scrittura ha una
-    // bozza che vale ancora.
-    void dropDraft(doc);
-  }
-  drawSave();
-  for (const id of panesWithDoc(doc)) {
-    const r = panes.get(id);
-    const p = paneState(id);
-    if (r && p) drawTab(r, p.tabs, p.active);
-  }
-  // Il sorgente sul disco è ora quello del buffer: la selezione torna
-  // posizionabile, e il kernel — che l'aveva lasciata cadere alla scrittura —
-  // deve risaperlo. È l'altra metà della regola dello span.
-  await publishContext();
-  await redrawReading(doc);
-}
 
 /// Ricarica un documento dal disco, ma solo se non ha modifiche non salvate.
 ///
@@ -1534,13 +1020,9 @@ async function writeBuffer(doc: string): Promise<void> {
 /// quando non è successo niente non è un avviso in più: è ciò che insegna a
 /// ignorare gli altri tredici.
 function warnIfBufferCovers(id: string, source: Origin): void {
-  const buf = buffers.get(id);
-  // Il conto degli echoes non si tocca da qui: `consumaCambioSotto` lo consuma
-  // decidendo, perché la nascita e la morte di quell'eco sono due eventi dello
-  // stesso conto e stanno da chi lo possiede. Questa funzione decide solo se e
-  // come **parlare**, che è ciò che sa fare — e ciò che il modulo dello stato,
-  // che non ha un DOM, non saprebbe.
-  switch (consumeUnderChange(buf, source)) {
+  // The session owns the echo counter; this panel only turns the pure
+  // classification into a notification.
+  switch (documentSessions.consumeChange(id, source)) {
     case "muto":
       return;
     case "eco":
@@ -1552,57 +1034,32 @@ function warnIfBufferCovers(id: string, source: Origin): void {
       notify(t("document.changed_on_disk", { doc: id }), "info");
   }
 }
-
 /// Ricarica un documento dal disco, ma solo se non ha modifiche non salvate.
 ///
-/// Non dice niente: chi è arrivato da un evento sa l'origine e ha già parlato
-/// (`avvisaSeIlBufferCopre`), e chi è arrivato da una riconciliazione — un
-/// `overflow`, un ripristino di versione — non sa **chi** abbia scritto e non ha
-/// niente da raccontare. Prima l'avviso stava qui, e quelle due strade lo
-/// facevano partire senza un'origine da cui dedurne il tono.
+/// La sessione decide se il testo può essere sostituito; il pannello riallinea
+/// soltanto gli editor che stanno mostrando quel documento.
 async function reloadIfClean(id: string): Promise<void> {
-  const buf = buffers.get(id);
-  if (buf?.dirty) return;
-  let source: string;
-  let revision: string;
-  try {
-    ({ text: source, revision } = await api.readDocument(id));
-  } catch {
-    return;
-  }
-  const current = buffers.get(id);
-  if (!current || current.dirty) return;
-  // La base segue il testo, e si aggiorna **prima** dell'uscita anticipata: un
-  // buffer pulito il cui testo coincide già col disco non ha niente da
-  // ricaricare, ma può benissimo non sapere da cosa discende — ed è il caso di
-  // chi ha appena scelto di sovrascrivere comunque.
-  current.base = { kind: "descends_from", value: revision };
-  // Evita il reset del cursore quando l'evento è l'eco del nostro salvataggio.
-  if (current.text === source) return;
-  current.text = source;
+  const reloaded = await documentSessions.reloadIfClean(id);
+  if (!reloaded?.changed) return;
   for (const paneId of panesWithDoc(id)) {
     const r = panes.get(paneId);
     // `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il testo
     // sotto — e chi lo sta guardando non deve perdere il punto in cui era.
-    if (r && r.shown?.k === "doc" && r.shown.doc === id) r.editor.syncDoc(source);
+    if (r && r.shown?.k === "doc" && r.shown.doc === id) r.editor.syncDoc(reloaded.text);
   }
 }
+
 
 /// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
 /// che riscrive il file sotto al buffer).
 export async function reloadCurrent(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;
-  const buf = buffers.get(doc);
-  if (buf) buf.dirty = false;
+  documentSessions.markClean(doc);
   await reloadIfClean(doc);
   await redrawReading(doc);
   drawSave();
-  for (const paneId of panesWithDoc(doc)) {
-    const r = panes.get(paneId);
-    const p = paneState(paneId);
-    if (r && p) drawTab(r, p.tabs, p.active);
-  }
+  redrawTabs(doc);
 }
 
 // --- contesto di sessione (decisione 0007) ----------------------------------
@@ -1631,7 +1088,7 @@ function paneContext(): ViewContext {
   const r = panes.get(layout.focus);
   const sel = r?.editor.selections();
   const inEditing = doc !== null && p.mode !== "reading" && sel !== undefined;
-  const dirty = doc ? (buffers.get(doc)?.dirty ?? false) : false;
+  const dirty = doc ? documentSessions.isDirty(doc) : false;
   if (!inEditing || !sel) {
     return { pane: layout.focus, doc, selections: null, mode: p.mode };
   }
@@ -1697,7 +1154,7 @@ export async function setMode(next: PaneMode): Promise<void> {
   // Il documento reso lo produce il kernel dal **sorgente salvato**: entrare in
   // lettura con del testo appeso al debounce mostrerebbe la nota di un minuto
   // fa. Si salva prima, e la lettura è sempre di ciò che si è scritto.
-  if (next === "reading" && doc) await flushDoc(doc);
+  if (next === "reading" && doc) await documentSessions.flush(doc);
   setPaneMode(layout.focus, next);
   const r = panes.get(layout.focus);
   if (r) {

@@ -15,8 +15,6 @@
 
 import type { DraftInfo, WriteBase } from "../host/contract";
 import type { Key } from "../i18n/strings";
-import { Queue } from "../ui/race";
-import type { Outcome } from "./saving";
 
 /// Che caso è questa bozza, cioè **quale domanda va fatta**.
 ///
@@ -82,61 +80,48 @@ export const CASE_KEY: Record<DraftCase, Key> = {
   "incerta": "draft.case.incerta",
 };
 
-/// Il buffer di un documento aperto, per la parte che il ricongiungimento
-/// vede e scrive.
+/// L'owner di una sessione documento, per la parte che il ricongiungimento
+/// vede e aggiorna.
 ///
-/// È la firma minima della `Buffer` della shell (`panels/document.ts`): ciò
-/// che la decisione non guarda non c'è, e ciò che il buffer che nasce qui
-/// deve avere per stare in piedi nella shell c'è. La mappa della shell passa
-/// così com'è, perché la sua `Buffer` soddisfa questa firma.
+/// È la firma minima di `DocumentSession`: ciò che la decisione non guarda
+/// non c'è, mentre la coda, i timer e il resto dello stato restano privati.
 export interface DraftBuffer {
-  text: string;
-  dirty: boolean;
-  result: Outcome;
-  echoes: number;
-  base: WriteBase;
-  queue: Queue;
+  readonly dirty: boolean;
+}
+
+export interface DraftBufferStore {
+  get(doc: string): DraftBuffer | undefined;
+  restore(doc: string, text: string, base: WriteBase): void;
 }
 
 /// Il ricongiungimento, come decisione sul buffer: quali bozze rientrano nel
 /// loro documento, e con che testo.
 ///
-/// È la metà di `recoverDrafts` (in `panels/document.ts`) che si prova senza
-/// un DOM: riceve la mappa dei buffer e la muta — la bozza **sostituisce** la
-/// copia pulita che c'era, sporcandola, e se il documento non era aperto il
-/// buffer nasce — e restituisce le bozze rientrate, una per documento. Un
-/// buffer **sporco** invece non si tocca: porta un'identità diversa — un testo
-/// battuto dopo, in questa sessione — e sovrascriverlo la farebbe sparire; la
-/// bozza resta orfana sul disco. E il buffer sporco che il rientro produce
-/// ferma la voce successiva che nomina lo stesso documento: il ricongiungimento
-/// è **uno** solo, il documento giusto — il suo.
+/// È la metà di `recoverDrafts` che si prova senza un DOM: riceve un owner di
+/// sessioni e lo muta — la bozza **sostituisce** la copia pulita che c'era,
+/// sporcandola, e se il documento non era aperto la sessione nasce — e
+/// restituisce le bozze rientrate, una per documento. Una sessione **sporca**
+/// invece non si tocca: porta un'identità diversa — un testo battuto dopo, in
+/// questa sessione — e sovrascriverlo la farebbe sparire; la bozza resta orfana
+/// sul disco. E la sessione sporca che il rientro produce ferma la voce
+/// successiva che nomina lo stesso documento: il ricongiungimento è **uno** solo,
+/// il documento giusto — il suo.
 export function rejoinDrafts(
   drafts: DraftInfo[],
-  buffer: Map<string, DraftBuffer>,
+  buffers: DraftBufferStore,
 ): DraftInfo[] {
   const rejoined: DraftInfo[] = [];
   for (const b of drafts) {
-    // Solo se nessuno tiene già quel buffer **sporco** in questa sessione: un
-    // buffer sporco porta un testo più recente della bozza — un'identità
-    // diversa — e sovrascriverlo la farebbe sparire. Un buffer **pulito**
-    // invece è solo il disco riletto da poco (la linguetta ripristinata dal layout,
-    // che `sincronizza` ha già caricato, o una nota appena aperta), e la bozza
-    // è più nuova di lei: è il ricongiungimento.
-    if (buffer.get(b.doc)?.dirty) continue;
-    // `b.base` è la revisione da cui quel testo si era discostato, e da questa
-    // voce non è più `null` per forza: chi ha scritto la bozza la sapeva
-    // (§18.1). Una bozza vecchia, scritto da una sessione che non la sapeva,
-    // riparte **dettando**: è l'unica risposta possibile — non c'è nessuna
-    // revisione da esibire — ed è qui che si scrive, dove il fatto si scopre,
-    // invece che al salvataggio, dove sembrerebbe una scelta di chi salva.
-    buffer.set(b.doc, {
-      text: b.text,
-      dirty: true,
-      result: "ok",
-      echoes: 0,
-      queue: new Queue(),
-      base: b.base === null ? { kind: "dictated" } : { kind: "descends_from", value: b.base },
-    });
+    // Solo se nessuno tiene già quel documento **sporco** in questa sessione:
+    // una sessione sporca porta un testo più recente della bozza — un'identità
+    // diversa — e sovrascriverlo la farebbe sparire. Una sessione pulita è
+    // invece solo il disco riletto da poco, e la bozza è più nuova di lei.
+    if (buffers.get(b.doc)?.dirty) continue;
+    buffers.restore(
+      b.doc,
+      b.text,
+      b.base === null ? { kind: "dictated" } : { kind: "descends_from", value: b.base },
+    );
     rejoined.push(b);
   }
   return rejoined;

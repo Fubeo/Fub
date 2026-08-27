@@ -47,8 +47,6 @@ import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
 import { reducedMotion } from "./theme/reduced-motion";
 import {
-  flushPendingSave,
-  flushBeforeClose,
   mountDocument,
   openDocument,
   openWikilink,
@@ -56,6 +54,7 @@ import {
   setEditorTheme,
   synchronize,
 } from "./panels/document";
+import { flushPendingSave, flushBeforeClose } from "./state/document-session";
 import { mountExplorer } from "./panels/explorer";
 import { mountDocSearch } from "./panels/doc-search";
 import { mountGraph } from "./panels/graph";

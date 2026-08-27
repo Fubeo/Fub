@@ -36,17 +36,13 @@
 import { describe, expect, it } from "vitest";
 
 import source from "./document.ts?raw";
+import sessionSource from "../state/document-session.ts?raw";
 import explorer from "./explorer.ts?raw";
 
-// Il presidio del ricongiungimento (in fondo a questo file) importa la
-// decisione dal modulo puro `state/drafts.ts`, che non tocca né DOM, né
-// editor, né IPC: la metà di `recoverDrafts` che muta la mappa dei buffer si
-// prova come comportamento, senza montare la shell. Gli altri presidi di
-// questo file restano sul sorgente — vedi la nota in cima — perché guardano
-// ordini di righe che nessuna funzione pura potrebbe rendere.
-import { Queue } from "../ui/race";
-import type { DraftInfo } from "../host/contract";
-import { rejoinDrafts, type DraftBuffer } from "../state/drafts";
+// Il presidio del ricongiungimento importa la decisione dal modulo puro
+// `state/drafts.ts`, mentre l'owner costruisce e conserva le sessioni.
+import type { DraftInfo, WriteBase } from "../host/contract";
+import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
 
 /// Il corpo dell'ascoltatore di `document_changed`, dalla sua apertura al
 /// prossimo `onEvent(`.
@@ -74,15 +70,12 @@ describe("l'ascoltatore di document_changed", () => {
   });
 });
 
-/// Il corpo di una funzione esportata, dalla sua firma alla prima riga che
-/// chiude in colonna zero. Stessa forma — e stessa zona cieca dichiarata — del
-/// ritaglio qui sopra: una riga scritto in una funzione chiamata da lì, invece
-/// che lì, non la si vedrebbe.
-function bodyOf(name: string): string {
-  const opens = source.indexOf(`export function ${name}(`);
-  expect(opens, `\`${name}\` non si chiama più così`).toBeGreaterThan(-1);
-  const closes = source.indexOf("\n}\n", opens);
-  return source.slice(opens, closes === -1 ? source.length : closes);
+
+function methodBodyOf(signature: string, text: string = sessionSource): string {
+  const opens = text.indexOf(signature);
+  expect(opens, `\`${signature}\` non si chiama più così`).toBeGreaterThan(-1);
+  const closes = text.indexOf("\n  }\n", opens);
+  return text.slice(opens, closes === -1 ? text.length : closes);
 }
 
 // **I due ritardi si fermano insieme** (difetto 0211).
@@ -101,37 +94,28 @@ function bodyOf(name: string): string {
 // funzione pura potrebbe rendere.
 describe("sospendere e riprendere i ritardi", () => {
   it("ne ferma due, non uno", () => {
-    const text = bodyOf("suspendSave");
-    expect(text).toContain("clearTimeout(buf.timer)");
+    const text = methodBodyOf("suspend(): boolean");
+    expect(text).toContain("#clearSaveTimer()");
     expect(
       text,
-      "`suspendSave` ferma il salvataggio e lascia correre la bozza: la rete " +
-        "si stende dentro la finestra in cui la shell ha appena deciso che quel " +
-        "testo non tocca il disco, e su un sì sopravvive alla nota cestinata",
-    ).toContain("clearTimeout(buf.draftTimer)");
+      "`suspend` ferma il salvataggio e la bozza insieme: la rete non deve " +
+        "scriversi durante la conferma di una cancellazione",
+    ).toContain("#clearDraftTimer()");
   });
 
   it("ne rimette in coda due, non uno", () => {
-    const text = bodyOf("resumeSave");
-    expect(text).toContain("scheduleSave(");
+    const text = methodBodyOf("resume(): void");
+    expect(text).toContain("scheduleSave()");
     expect(
       text,
-      "la ripresa riaccende il salvataggio e non la bozza: dopo un ripensamento " +
-        "il buffer resta sporco senza la sua rete sotto",
-    ).toContain("scheduleDraft(");
+      "la ripresa riaccende il salvataggio e la bozza: dopo un ripensamento " +
+        "il documento sporco torna ad avere la sua rete sotto",
+    ).toContain("scheduleDraft()");
   });
 
-  // L'altra metà: il sospeso era **uno**, e la seconda sospensione copriva la
-  // prima. Oggi il chiamante è uno solo — ma i secondi chiamanti hanno già un
-  // nome (una rinomina dentro una conversione, un'importazione mentre una
-  // modale è aperta), e un insieme li fa nascere giusti invece di aspettarli.
-  it("tiene un posto per documento, non un posto solo", () => {
-    expect(
-      source,
-      "il documento sospeso è tornato a essere una casella sola: due " +
-        "sospensioni annidate si pestano, e la prima ripresa riaccende quello " +
-        "sbagliato lasciando l'altro fermo per sempre",
-    ).toContain("const suspended = new Set<string>()");
+  it("tiene un posto di sospensione privato a ogni sessione", () => {
+    expect(sessionSource).toContain("suspended: boolean");
+    expect(sessionSource).not.toContain("const suspended = new Set<string>()");
     expect(source).not.toContain("let sospeso: string | null");
   });
 });
@@ -143,15 +127,6 @@ function listenerBody(event: string): string {
   expect(opens, `l'ascoltatore di \`${event}\` non si chiama più così`).toBeGreaterThan(-1);
   const after = source.indexOf("onEvent(", opens + 1);
   return source.slice(opens, after === -1 ? source.length : after);
-}
-
-/// Il corpo di una funzione **privata**, dalla sua firma alla prima riga che
-/// chiude in colonna zero.
-function privateBodyOf(name: string): string {
-  const opens = source.indexOf(`function ${name}(`);
-  expect(opens, `\`${name}\` non si chiama più così`).toBeGreaterThan(-1);
-  const closes = source.indexOf("\n}\n", opens);
-  return source.slice(opens, closes === -1 ? source.length : closes);
 }
 
 // **La finestra di migrazione di una rinomina** (difetto 0210).
@@ -171,51 +146,42 @@ function privateBodyOf(name: string): string {
 // niente).
 describe("la finestra di migrazione di una rinomina", () => {
   it("il fermo copre anche i ritardi che nascono dopo", () => {
-    for (const name of ["scheduleSave", "scheduleDraft"]) {
+    for (const signature of ["scheduleSave(): void", "scheduleDraft(): void"]) {
       expect(
-        privateBodyOf(name),
-        `\`${name}\` non guarda il fermo: una battuta dentro la finestra di ` +
-          "migrazione programma una scrittura col nome di prima, e la nota " +
-          "rinominata ricompare al vecchio path",
-      ).toContain("suspended.has(doc)");
+        methodBodyOf(signature),
+        `\`${signature}\` non guarda il fermo: una battuta dentro la finestra ` +
+          "di migrazione programma una scrittura col nome di prima",
+      ).toContain("#state.suspended");
     }
   });
 
   it("chi rinomina tiene fermo prima di chiedere, e scioglie se la richiesta fallisce", () => {
-    const text = privateBodyOf("renameKeepingBuffer");
-    const stopButton = text.indexOf("suspendSave(from)");
+    const text = methodBodyOf("async renameKeepingBuffer(from: string, to: string)");
+    const stopButton = text.indexOf("this.#sessions.get(from)?.suspend()");
     const renameCall = text.indexOf("await renameNote(");
-    expect(stopButton, "non tiene più fermo il buffer").toBeGreaterThan(-1);
+    expect(stopButton, "non tiene più fermo il documento").toBeGreaterThan(-1);
     expect(renameCall, "non chiede più la rinomina").toBeGreaterThan(-1);
-    expect(stopButton, "chiede la rinomina prima di tenere fermo il buffer").toBeLessThan(renameCall);
+    expect(stopButton, "chiede la rinomina prima di tenere fermo il documento").toBeLessThan(renameCall);
     expect(
       text,
-      "una rinomina che fallisce non scioglie il fermo: non arriverà nessun " +
-        "evento, e quel buffer non raggiunge più il disco",
-    ).toContain("resumeSave(from)");
+      "una rinomina che fallisce non scioglie il fermo",
+    ).toContain("this.#sessions.get(from)?.resume()");
   });
 
   it("il fermo si scioglie dove finisce la finestra", () => {
     expect(
       listenerBody("document_renamed"),
-      "l'evento che migra l'identità non scioglie il fermo preso da chi ha " +
-        "chiesto la rinomina",
-    ).toContain("suspended.delete(e.from)");
+      "l'evento che migra l'identità non aggiorna la sessione",
+    ).toContain("documentSessions.rename(e.from, e.to)");
   });
 
-  // La porta è una: le tre rinomine dell'esploratore — dal campo di testo, dal
-  // trascinamento su una cartella, dal menù — ereditano la finestra chiusa
-  // senza saperlo, e la quarta pure.
   it("si rinomina da una porta sola", () => {
     expect(
       explorer,
-      "l'esploratore torna a chiamare `renameNote` da sé: quella strada non " +
-        "tiene fermo il buffer, e la finestra di migrazione si riapre",
+      "l'esploratore torna a chiamare `renameNote` da sé",
     ).not.toContain("renameNote(");
   });
 });
-
-// **Il ricongiungimento delle bozze orfane** (§15.2).
 //
 // Il recupero corre DOPO che `sincronizza` ha disegnato le linguetta ripristinate dal
 // layout, e disegnarle significa aver già letto il disco in un buffer **pulito**
@@ -253,25 +219,39 @@ describe("il ricongiungimento delle bozze orfane", () => {
     return { doc, at: 1, base, exists: true, current: base, text };
   }
 
-  /// Un buffer come lo lascia `leggiBuffer`: il disco riletto da poco, pulito.
-  function clean(text: string): DraftBuffer {
+  interface TestBuffer {
+    dirty: boolean;
+    text: string;
+    base: WriteBase;
+  }
+
+  class TestStore implements DraftBufferStore {
+    readonly buffers = new Map<string, TestBuffer>();
+
+    constructor(entries: Array<[string, TestBuffer]> = []) {
+      for (const [doc, buffer] of entries) this.buffers.set(doc, buffer);
+    }
+
+    get(doc: string): TestBuffer | undefined {
+      return this.buffers.get(doc);
+    }
+
+    restore(doc: string, text: string, base: WriteBase): void {
+      this.buffers.set(doc, { text, dirty: true, base });
+    }
+  }
+
+  /// Un documento come lo lascia `read`: la copia sul disco, pulita.
+  function clean(text: string): TestBuffer {
     return {
       text,
       dirty: false,
-      result: "ok",
-      echoes: 0,
-      queue: new Queue(),
       base: { kind: "descends_from", value: "la revisione del disco" },
     };
   }
 
   it("fa rientrare la bozza sopra la copia pulita, e conta 1", () => {
-    // La linguetta ripristinata dal layout ha già letto il disco in un buffer pulito:
-    // la bozza è più nuova di lui, e il ricongiungimento la rimette sopra —
-    // testo, sporco e base sono i suoi, non quelli del disco.
-    const buffer = new Map<string, DraftBuffer>([
-      ["nota.md", clean("il testo sul disco")],
-    ]);
+    const buffer = new TestStore([["nota.md", clean("il testo sul disco")]]);
 
     const rejoined = rejoinDrafts(
       [draft("nota.md", "il testo non salvato", "la base della bozza")],
@@ -280,19 +260,15 @@ describe("il ricongiungimento delle bozze orfane", () => {
 
     expect(rejoined, "una sola bozza in fila, una sola rientrata").toHaveLength(1);
     expect(rejoined[0].doc).toBe("nota.md");
-    expect(buffer.get("nota.md")).toMatchObject({
+    expect(buffer.buffers.get("nota.md")).toMatchObject({
       text: "il testo non salvato",
       dirty: true,
-      result: "ok",
       base: { kind: "descends_from", value: "la base della bozza" },
     });
   });
 
   it("lascia intatto il buffer sporco, e conta 0", () => {
-    // Un buffer sporco è un'identità diversa — un testo battuto dopo, in
-    // questa sessione — e sovrascriverlo la farebbe sparire: la bozza resta
-    // orfana sul disco, e il conto dice che non è rientrata.
-    const buffer = new Map<string, DraftBuffer>([
+    const buffer = new TestStore([
       [
         "nota.md",
         {
@@ -309,22 +285,19 @@ describe("il ricongiungimento delle bozze orfane", () => {
     );
 
     expect(rejoined).toHaveLength(0);
-    expect(buffer.get("nota.md")).toMatchObject({
+    expect(buffer.buffers.get("nota.md")).toMatchObject({
       text: "scritto dopo, in questa sessione",
       dirty: true,
     });
   });
 
   it("senza buffer la bozza diventa il buffer, e chi non sapeva la base detta", () => {
-    // Una bozza per un documento che nessuno ha aperto: nasce il buffer, e la
-    // base resta quella che la bozza portava — o, se non la sapeva, «dettata»:
-    // non c'è nessuna revisione da esibire.
-    const buffer = new Map<string, DraftBuffer>();
+    const buffer = new TestStore();
 
     const rejoined = rejoinDrafts([draft("nuova.md", "il testo non salvato")], buffer);
 
     expect(rejoined).toHaveLength(1);
-    expect(buffer.get("nuova.md")).toMatchObject({
+    expect(buffer.buffers.get("nuova.md")).toMatchObject({
       text: "il testo non salvato",
       dirty: true,
       base: { kind: "dictated" },
@@ -332,10 +305,7 @@ describe("il ricongiungimento delle bozze orfane", () => {
   });
 
   it("il rientro è uno solo per documento, anche se la fila lo nomina due volte", () => {
-    // Il buffer sporco che il rientro produce ferma la voce successiva che
-    // nomina lo stesso documento: il ricongiungimento è unico, e il testo che
-    // rientra è quello più recente (la fila arriva dalla più recente).
-    const buffer = new Map<string, DraftBuffer>();
+    const buffer = new TestStore();
 
     const rejoined = rejoinDrafts(
       [
@@ -346,6 +316,6 @@ describe("il ricongiungimento delle bozze orfane", () => {
     );
 
     expect(rejoined).toHaveLength(1);
-    expect(buffer.get("nota.md")).toMatchObject({ text: "il testo più recente" });
+    expect(buffer.buffers.get("nota.md")).toMatchObject({ text: "il testo più recente" });
   });
 });

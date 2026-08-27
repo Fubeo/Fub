@@ -31,13 +31,17 @@ vi.mock("./document", () => ({
   isOpen: vi.fn(() => fake.open),
   closeDocument: vi.fn(),
   openDocument: vi.fn(async () => {}),
+}));
+
+vi.mock("../state/document-session", () => ({
   suspendSave: vi.fn(() => true),
   resumeSave: vi.fn(),
   discardDraft: vi.fn(async () => {}),
 }));
 
 import { trashWithConfirm } from "./trash";
-import { closeDocument, openDocument, resumeSave, discardDraft } from "./document";
+import { closeDocument, openDocument } from "./document";
+import { resumeSave, discardDraft } from "../state/document-session";
 
 describe("cestinare una nota", () => {
   beforeEach(() => {

@@ -44,7 +44,7 @@ import { activatable, trapFocus } from "./a11y";
 import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
-import { flushPendingSave } from "../panels/document";
+import { flushPendingSave } from "../state/document-session";
 import { refreshPanel, registerPanel, unregisterPanel } from "./panel-host";
 import { notify } from "./notify";
 import { t } from "../i18n/strings";

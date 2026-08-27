@@ -22,14 +22,8 @@ import { confirm } from "../host/dialog";
 import { beforeNote, refreshDocuments, trashNote } from "../state/vault";
 import { pageName } from "../rules/organizer";
 import { activeDoc } from "../state/layout";
-import {
-  closeDocument,
-  isOpen,
-  openDocument,
-  resumeSave,
-  discardDraft,
-  suspendSave,
-} from "./document";
+import { closeDocument, isOpen, openDocument } from "./document";
+import { resumeSave, discardDraft, suspendSave } from "../state/document-session";
 import { t } from "../i18n/strings";
 
 /// Cestina una nota, chiedendo prima conferma.

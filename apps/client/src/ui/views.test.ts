@@ -45,9 +45,9 @@ vi.mock("../host/ipc", () => ({
     setViewState: async () => {},
   },
 }));
-// `panels/document` tira dentro CodeMirror e mezza shell: di lui qui serve la
-// sola cosa che `ui/views` gli chiede.
-vi.mock("../panels/document", () => ({ flushPendingSave: async () => {} }));
+// `state/document-session` possiede il flush senza trascinare qui CodeMirror
+// e il pannello del documento.
+vi.mock("../state/document-session", () => ({ flushPendingSave: async () => {} }));
 
 function spec(id: string, surface: ViewSpec["surface"]): ViewSpec {
   return {
