@@ -1,13 +1,12 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import { currentCompletions, startCompletion } from "@codemirror/autocomplete";
+import { completionStatus, currentCompletions, startCompletion } from "@codemirror/autocomplete";
 import { syntaxTree } from "@codemirror/language";
 import { EditorSelection } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { createTextEngine, type TextEngine } from "../engine";
 import {
   createFormulaProfile,
-  formulaKeyBindings,
   tokenizeFormula,
   type FormulaProfile,
 } from "./formula";
@@ -28,6 +27,20 @@ function mounted(profile: FormulaProfile): { engine: TextEngine; view: () => Edi
       return view;
     },
   };
+}
+
+function keydown(view: EditorView, key: string, init: KeyboardEventInit = {}): void {
+  view.contentDOM.dispatchEvent(
+    new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init }),
+  );
+}
+
+async function openPopup(view: EditorView): Promise<void> {
+  expect(startCompletion(view)).toBe(true);
+  await vi.waitFor(() => {
+    expect(completionStatus(view.state)).toBe("active");
+    expect(view.dom.querySelector(".cm-tooltip-autocomplete")).not.toBeNull();
+  });
 }
 
 describe("FormulaProfile", () => {
@@ -114,16 +127,36 @@ describe("FormulaProfile", () => {
     });
     expect(engine.getDoc()).toBe("=A1+B2");
     expect(engine.getDoc().includes("\n")).toBe(false);
-    const bindings = formulaKeyBindings({ callbacks: { commit, cancel } });
-    const escape = bindings.find((binding) => binding.key === "Escape");
-    const enter = bindings.find((binding) => binding.key === "Enter");
-    if (!escape?.run || !enter?.run) throw new Error("i comandi formula non sono montati");
-    expect(escape.run(initial)).toBe(true);
+
+    initial.focus();
+    keydown(initial, "Escape");
     expect(cancel).toHaveBeenCalledWith("=A1+B2");
 
-    expect(enter.run(initial)).toBe(true);
+    keydown(initial, "Enter");
     expect(commit).toHaveBeenCalledWith("=A1+B2");
     expect(engine.getDoc()).toBe("=A1+B2");
+    engine.destroy();
+  });
+
+  it("conserva la single-line per input, paste e composition", () => {
+    const profile = createFormulaProfile();
+    const { engine, view } = mounted(profile);
+    const editor = view();
+    engine.setDoc("=A1");
+    editor.dispatch({
+      changes: { from: editor.state.doc.length, insert: "\n+B2" },
+      userEvent: "input.type",
+    });
+    editor.dispatch({
+      changes: { from: editor.state.doc.length, insert: "\n+C3" },
+      userEvent: "input.paste",
+    });
+    editor.dispatch({
+      changes: { from: editor.state.doc.length, insert: "\n+D4" },
+      userEvent: "input.type.compose",
+    });
+    expect(engine.getDoc()).toBe("=A1+B2+C3+D4");
+    expect(engine.getDoc()).not.toContain("\n");
     engine.destroy();
   });
 
@@ -138,10 +171,132 @@ describe("FormulaProfile", () => {
       userEvent: "input.type",
     });
     expect(engine.getDoc()).toBe("=A1\n+B2");
-    const enter = formulaKeyBindings({ onCommit: commit }).find((binding) => binding.key === "Enter");
-    if (!enter?.run) throw new Error("il comando Enter non è montato");
-    expect(enter.run(initial)).toBe(true);
+
+    initial.focus();
+    keydown(initial, "Enter");
     expect(commit).toHaveBeenCalledWith("=A1\n+B2");
     engine.destroy();
+  });
+
+  it("usa Enter per accettare un completamento dal popup prima del commit", async () => {
+    vi.useFakeTimers();
+    const commit = vi.fn();
+    const profile = createFormulaProfile({ completions: { functions: ["SUM"] }, onCommit: commit });
+    const { engine, view } = mounted(profile);
+    const editor = view();
+    try {
+      engine.setDoc("=SU");
+      editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+      editor.focus();
+
+      await openPopup(editor);
+      vi.advanceTimersByTime(76);
+      keydown(editor, "Enter");
+      expect(engine.getDoc()).toBe("=SUM");
+      expect(commit).not.toHaveBeenCalled();
+      expect(completionStatus(editor.state)).toBeNull();
+      expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).toBeNull();
+      keydown(editor, "Enter");
+      expect(commit).toHaveBeenCalledWith("=SUM");
+    } finally {
+      engine.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it("non committa un completamento ancora nel ritardo di interazione", async () => {
+    vi.useFakeTimers();
+    const commit = vi.fn();
+    const profile = createFormulaProfile({ completions: { functions: ["SUM"] }, onCommit: commit });
+    const { engine, view } = mounted(profile);
+    const editor = view();
+    try {
+      engine.setDoc("=SU");
+      editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+      editor.focus();
+
+      await openPopup(editor);
+      keydown(editor, "Enter");
+      expect(engine.getDoc()).toBe("=SU");
+      expect(commit).not.toHaveBeenCalled();
+      expect(completionStatus(editor.state)).toBe("active");
+      expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).not.toBeNull();
+    } finally {
+      engine.destroy();
+      vi.useRealTimers();
+    }
+  });
+
+  it("Escape chiude il popup prima di eseguire cancel", async () => {
+    let editor: EditorView | null = null;
+    const cancel = vi.fn((value: string) => {
+      expect(value).toBe("=SU");
+      expect(editor && completionStatus(editor.state)).toBeNull();
+    });
+    const profile = createFormulaProfile({ completions: { functions: ["SUM"] }, onCancel: cancel });
+    const { engine, view } = mounted(profile);
+    editor = view();
+    engine.setDoc("=SU");
+    editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+    editor.focus();
+    await openPopup(editor);
+
+    keydown(editor, "Escape");
+    expect(completionStatus(editor.state)).toBeNull();
+    expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).toBeNull();
+    expect(cancel).toHaveBeenCalledWith("=SU");
+    engine.destroy();
+  });
+
+  it("Shift-Enter chiude il popup senza lasciare una completion stantia", async () => {
+    let editor: EditorView | null = null;
+    const commit = vi.fn((value: string) => {
+      expect(value).toBe("=SU");
+      expect(editor && completionStatus(editor.state)).toBeNull();
+    });
+    const profile = createFormulaProfile({ completions: { functions: ["SUM"] }, onCommit: commit });
+    const { engine, view } = mounted(profile);
+    editor = view();
+    engine.setDoc("=SU");
+    editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+    editor.focus();
+    await openPopup(editor);
+
+    keydown(editor, "Enter", { shiftKey: true });
+    expect(engine.getDoc()).toBe("=SU");
+    expect(completionStatus(editor.state)).toBeNull();
+    expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).toBeNull();
+    expect(commit).toHaveBeenCalledWith("=SU");
+    engine.destroy();
+  });
+
+  it("Tab arbitra il popup e non indenta il testo formula", async () => {
+    vi.useFakeTimers();
+    const commit = vi.fn();
+    const profile = createFormulaProfile({ completions: { functions: ["SUM"] }, onCommit: commit });
+    const { engine, view } = mounted(profile);
+    const editor = view();
+    try {
+      engine.setDoc("=SU");
+      editor.dispatch({ selection: EditorSelection.cursor(editor.state.doc.length) });
+      editor.focus();
+      await openPopup(editor);
+
+      keydown(editor, "Tab");
+      expect(engine.getDoc()).toBe("=SU");
+      expect(engine.getDoc()).not.toContain("\t");
+      expect(completionStatus(editor.state)).toBe("active");
+
+      vi.advanceTimersByTime(76);
+      keydown(editor, "Tab");
+      expect(engine.getDoc()).toBe("=SUM");
+      expect(engine.getDoc()).not.toContain("\t");
+      expect(completionStatus(editor.state)).toBeNull();
+      expect(editor.dom.querySelector(".cm-tooltip-autocomplete")).toBeNull();
+      expect(commit).not.toHaveBeenCalled();
+    } finally {
+      engine.destroy();
+      vi.useRealTimers();
+    }
   });
 });

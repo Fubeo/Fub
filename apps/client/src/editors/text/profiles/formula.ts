@@ -1,5 +1,9 @@
 import {
+  acceptCompletion,
   autocompletion,
+  closeCompletion,
+  completionKeymap,
+  completionStatus,
   type Completion,
   type CompletionContext,
   type CompletionResult,
@@ -282,7 +286,11 @@ export function formulaCompletionSource(sources: FormulaCompletionSources): Comp
 
 /** Mounts the profile-local completion source, without a workbook or host dependency. */
 export function formulaCompletions(sources: FormulaCompletionSources = {}): Extension {
-  return autocompletion({ override: [formulaCompletionSource(sources)], activateOnTyping: true });
+  return autocompletion({
+    override: [formulaCompletionSource(sources)],
+    activateOnTyping: true,
+    defaultKeymap: false,
+  });
 }
 
 function withoutLineBreaks(text: string): string {
@@ -334,14 +342,21 @@ export interface FormulaProfile {
   extensions(): Extension;
 }
 
-/** Key bindings are exposed as a deterministic test seam for the profile. */
-export function formulaKeyBindings(options: FormulaProfileOptions): readonly KeyBinding[] {
+const formulaCompletionKeymap = completionKeymap.filter(
+  ({ key }) => key !== "Enter" && key !== "Escape",
+);
+
+function formulaKeyBindings(options: FormulaProfileOptions): readonly KeyBinding[] {
   const commit = options.callbacks?.commit ?? options.onCommit;
   const cancel = options.callbacks?.cancel ?? options.onCancel;
   return [
     {
       key: "Enter",
       run: (view) => {
+        if (completionStatus(view.state) === "active") {
+          acceptCompletion(view);
+          return true;
+        }
         commit?.(view.state.doc.toString());
         return true;
       },
@@ -349,6 +364,7 @@ export function formulaKeyBindings(options: FormulaProfileOptions): readonly Key
     {
       key: "Shift-Enter",
       run: (view) => {
+        closeCompletion(view);
         commit?.(view.state.doc.toString());
         return true;
       },
@@ -356,10 +372,20 @@ export function formulaKeyBindings(options: FormulaProfileOptions): readonly Key
     {
       key: "Escape",
       run: (view) => {
+        closeCompletion(view);
         cancel?.(view.state.doc.toString());
         return true;
       },
     },
+    {
+      key: "Tab",
+      run: (view) => {
+        if (completionStatus(view.state) !== "active") return false;
+        acceptCompletion(view);
+        return true;
+      },
+    },
+    ...formulaCompletionKeymap,
   ];
 }
 
