@@ -31,3 +31,4 @@ Nuove decisioni usano il [template](template.md).
 | [0196 — I guard verificano proprietà e gli artefatti derivano da una sorgente](0196-test-e-artefatti-generati.md) | accolta | contratto | 0054–0056, 0072, 0112–0115, 0145, 0166 |
 | [0197 — La documentazione descrive il presente e Git conserva la storia](0197-documentazione-presente-git-storia.md) | accolta | contratto | 0014, 0142–0144 |
 | [0198 — Le feature ufficiali restano moduli indipendenti](0198-feature-ufficiali-modulari.md) | accolta | host | 0073, 0129 |
+| [0199 — History nativa CodeMirror e gate conservativo sugli overlap](0199-history-nativa-e-gate-di-overlap.md) | accolta | frontend | — |

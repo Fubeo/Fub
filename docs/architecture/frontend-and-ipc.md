@@ -128,14 +128,37 @@ corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
 sincronizzazione del documento, selezioni e offset byte UTF-8, terminatori di
 riga, focus, reveal, tema, sola lettura, undo/redo e `destroy()`. Il seam
 `extensions` monta la configurazione di un profilo; `reconfigure()` sostituisce
-le estensioni senza ricostruire vista, documento, selezione, tema o cronologia.
+le estensioni senza ricostruire vista, documento, selezione, tema o history
+nativa.
 
-Ogni istanza di `TextEngine` crea una `LocalHistory` distinta, implementata in
-`apps/client/src/editor/local-history.ts`. Una modifica locale aggiorna il
-`Buffer` e viene inoltrata alle altre superfici con `syncDoc()`; la ricezione
-usa il percorso esterno della cronologia e non aggiunge l'operazione all'undo
-locale. Il buffer e la coda di scrittura sono quindi condivisi per documento,
-mentre cursore, scroll, focus e history sono locali alla superficie.
+Ogni `TextEngine` monta `history({ minDepth: 100, newGroupDelay: 500 })` nel
+proprio `historyCompartment`. CodeMirror possiede quindi i due rami per
+superficie, l'inversione, il raggruppamento, la composizione, la history delle
+selezioni e il mapping attraverso cambi esterni. `historyKeymap` è montata nel
+keymap effettivo insieme ai comandi dell'editor: include undo/redo del contenuto
+e `undoSelection`/`redoSelection`; l'estensione `history()` registra anche gli
+eventi DOM `beforeinput` `historyUndo` e `historyRedo`. `TextEngine.undo()` e
+`redo()` sono adapter dei comandi nativi e non leggono campi o strutture private
+di CodeMirror.
+
+Una modifica locale diventa un evento della history nativa della superficie.
+`TextEngine.syncDoc()` costruisce la transazione dal risultato effettivo di
+`EditorState.update()`, dopo i filtri del profilo, con
+`Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`. Il cambio
+esterno viene così applicato e mappato sui due rami senza aggiungere un evento
+locale.
+
+Prima di inviare un cambio esterno, `HistoryFootprints` conserva al massimo 512
+intervalli non vuoti e anchor di cancellazione, soltanto come coordinate UTF-16:
+non conserva testo, inversi o frame. `footprintsOverlap()` valuta il
+`ChangeDesc` reale. Quando il controllo segnala un overlap o una metadata
+sconosciuta, anche per un errore di mapping, fa eseguire a
+`resetNativeHistory()` due transazioni pubbliche
+successive: prima `historyCompartment.reconfigure([])`, poi il reinserimento
+della history nativa. La transazione di sync viene ricostruita dopo il reset e
+soltanto allora inviata. Il reset scarta entrambi i rami nativi (anche la
+history di selezione) prima di mostrare il cambio esterno; se il reset fallisce,
+il sync viene interrotto.
 
 ### Confine delle operazioni tra superfici
 
@@ -144,34 +167,41 @@ Il flusso delle modifiche è esplicito e resta interno alla shell:
 (`TextOperation`) e `origin`; `createEditor()` lo inoltra al callback
 legacy senza ridurre l'operazione al solo testo.
 
-`written(paneId, change)` in `document.ts` legge il `Buffer` autorevole del
-documento. Quando il buffer esiste, normalizza i terminatori e applica
-`tryApplyOperation(current, operation)`, accettando il cambio soltanto se
-l'operazione è applicabile e il risultato coincide con `text`. Se la
-superficie è stantia o l'operazione è malformata o incoerente, non sovrascrive
-il buffer: riallinea la superficie sorgente con `syncDoc(existing.text)` e
-termina il percorso.
+`TextOperation` vive in `apps/client/src/editor/text-operation.ts` e non conosce
+CodeMirror, DOM o history. `written(paneId, change)` in `document.ts` legge il
+`Buffer` autorevole del documento. Quando il buffer esiste, normalizza i
+terminatori e applica `tryApplyOperation(current, operation)`, accettando il
+cambio soltanto se l'operazione è applicabile e il risultato coincide con
+`text`. Se la superficie è stantia o l'operazione è malformata o incoerente,
+non sovrascrive il buffer: riallinea la superficie sorgente con
+`syncDoc(existing.text)` e termina il percorso.
 
-Dopo una validazione riuscita, `written()` aggiorna `Buffer.text` e `dirty`,
-poi pianifica salvataggio e bozza. Il fan-out percorre `panesWithDoc(doc)` e
-chiama `syncDoc({ text, operation })` sulle altre superfici dello stesso
-documento, lasciando la superficie sorgente fuori dal giro.
+Dopo una validazione riuscita, `written()` aggiorna `Buffer.text` e `dirty`, poi
+pianifica salvataggio e bozza. Il fan-out percorre `panesWithDoc(doc)` e chiama
+`syncDoc({ text, operation })` sulle altre superfici dello stesso documento,
+lasciando la superficie sorgente fuori dal giro.
 
-La superficie destinataria esegue una seconda guardia: `TextEngine.syncDoc()`
-valida l'operazione ricevuta contro il proprio testo corrente e contro il
-testo obiettivo normalizzato. Se l'operazione è stantia o non produce
-l'obiettivo, usa `operationFromText(current, normalizedText)` come fallback
-locale e limitato. Applica quindi il cambio con origine `sync` e
-`LocalHistory.acceptExternal(operation)`, così il cambio esterno aggiorna il
-journal ma non diventa una battuta nella history locale della superficie
-destinataria.
+La superficie destinataria esegue una seconda guardia:
+`TextEngine.syncDoc()` valida l'operazione ricevuta contro il proprio testo
+corrente e contro il testo obiettivo normalizzato. Se l'operazione è stantia o
+non produce l'obiettivo, usa `operationFromText(current, normalizedText)` come
+fallback locale e limitato. Il cambio passa quindi dalla history nativa con
+origine `sync`, senza diventare una battuta locale; l'eventuale overlap viene
+gestito dalla guardia `HistoryFootprints` descritta sopra.
 
 `EditorChange`, `DocumentUpdate` e `TextOperation` sono tipi interni della
-shell TypeScript: non attraversano `host/contract.ts`, IPC, WIT o ABI. Non
-esiste un bridge nascosto fra motori; il coordinamento del `Buffer` e del
-fan-out resta in `document.ts`, mentre ogni `TextEngine` conserva la propria
-`LocalHistory`. `operationFromText()` è soltanto il fallback del ricevente,
-non una sostituzione del metadato tipizzato emesso dalla sorgente.
+shell TypeScript: non attraversano `host/contract.ts`, IPC, WIT o ABI.
+`document.ts` conserva l'ownership di `Buffer`, revisione o base, dirty, coda e
+coordinamento di salvataggio, bozza, conflitto, rinomina, cancellazione e
+chiusura. Il coordinamento del `Buffer` e del fan-out resta in `document.ts`,
+mentre ogni `TextEngine` conserva i propri rami nativi e la propria metadata
+di sicurezza. `operationFromText()` è soltanto il fallback del ricevente, non
+la sostituzione dell'operazione tipizzata emessa dalla sorgente.
+
+La distinzione è motivata da [0190](../decisions/0190-sessioni-documento-e-undo.md)
+e il confine di sicurezza della history nativa è precisato in
+[0199](../decisions/0199-history-nativa-e-gate-di-overlap.md); 0199 completa
+0190 senza sostituirla.
 
 I profili condividono lo stesso motore e aggiungono soltanto semantica di
 dominio:
@@ -220,14 +250,15 @@ Gli altri guard del frontend impediscono:
 ## Dove si trova
 
 - `apps/client/src/editors/text/engine.ts`
+- `apps/client/src/editors/text/history-footprints.ts`
 - `apps/client/src/editors/text/profiles/markdown/profile.ts`
 - `apps/client/src/editors/text/profiles/markdown/commands.ts`
 - `apps/client/src/editors/text/profiles/markdown/completions.ts`
 - `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
 - `apps/client/src/editors/text/profiles/plain-text.ts`
 - `apps/client/src/editors/text/profiles/formula.ts`
+- `apps/client/src/editor/text-operation.ts`
 - `apps/client/src/editor/editor.ts`
-- `apps/client/src/editor/local-history.ts`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/host/contract.ts`
 - `apps/client/src/host/ipc.ts`

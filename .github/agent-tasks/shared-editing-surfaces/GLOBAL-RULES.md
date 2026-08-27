@@ -43,16 +43,25 @@ interno delle operazioni già presente fra `TextEngine`,
 sono quelli elencati nella spec; ogni altro path resta soggetto a
 `GLOBAL-FORBIDDEN`.
 
-- `TextEngine` emette `EditorChange`, che conserva `text` e `TextOperation`;
-  `createEditor` inoltra il valore tipizzato come adapter legacy.
+- `TextEngine` emette `EditorChange`, che conserva `text`, `TextOperation` e
+  `origin`; `createEditor` inoltra il valore tipizzato come adapter legacy.
 - `document.ts`, quando il `Buffer` esiste, valida `TextOperation` contro il
   testo autorevole con `tryApplyOperation`, rifiuta un'operazione stantia o
   incoerente e riallinea la superficie sorgente, senza sovrascrivere un cambio
   più recente.
 - Il coordinatore può fare fan-out di `{ text, operation }` soltanto alle
   altre superfici dello stesso documento. `TextEngine.syncDoc()` valida il
-  valore ricevuto, usa `operationFromText()` solo come fallback locale e la
-  `LocalHistory` della superficie destinataria registra il cambio come esterno.
+  valore ricevuto e usa `operationFromText()` soltanto come fallback locale.
+- La history del testo appartiene a CodeMirror: `TextEngine` monta `history()`
+  nel `historyCompartment` e il keymap effettivo include `historyKeymap`.
+  `syncDoc()` usa insieme `Transaction.addToHistory.of(false)` e
+  `Transaction.remote.of(true)`, così un cambio esterno viene mappato sui rami
+  senza diventare un evento locale.
+- `HistoryFootprints` conserva soltanto al massimo 512 intervalli o anchor,
+  senza testo. Se l'overlap è ambiguo, la metadata è sconosciuta o il mapping
+  fallisce, `TextEngine` rimuove e reinserisce la history in due transazioni
+  pubbliche successive, ricostruisce il sync e scarta entrambi i rami prima
+  dell'applicazione. Se il reset fallisce, il sync viene interrotto.
 
 Questa è una forma interna alla shell TypeScript: non è un contratto IPC,
 ABI, WIT o pubblico. `document.ts` conserva l'ownership di `Buffer`, revisione

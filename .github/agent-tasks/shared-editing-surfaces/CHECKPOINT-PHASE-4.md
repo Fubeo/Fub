@@ -8,6 +8,8 @@ La Fase 4 (`DocumentSession`) non può iniziare finché ogni voce seguente non �
 - [ ] `TextEngine` non importa né nomina Markdown, wikilink, tag, live preview o `SyntaxForm`.
 - [ ] `MarkdownProfile` usa `TextEngine` e conserva il comportamento osservabile precedente.
 - [ ] `createEditor` è assente oppure resta soltanto come adapter temporaneo; non è un secondo engine.
+- [ ] La history del testo usa le API pubbliche native nel `historyCompartment`
+  di `TextEngine`; non esiste una seconda pila custom.
 - [ ] [`SURF-023R`](tasks/SURF-023R.md): `EditorChange` conserva `text` e
   `TextOperation` emessi da `TextEngine` attraverso l'adapter legacy
   `createEditor`; questo tipo resta interno e non diventa un contratto IPC,
@@ -22,18 +24,31 @@ La Fase 4 (`DocumentSession`) non può iniziare finché ogni voce seguente non �
 
 - [ ] Cambio documento elimina la history precedente.
 - [ ] Sync programmatico fra surface non entra nell'undo locale.
-- [ ] Due pane sullo stesso documento condividono il testo ma conservano history/cursore locali.
+- [ ] Due pane sullo stesso documento condividono il testo ma conservano rami
+  nativi, history di selezione e cursore locali.
+- [ ] `historyKeymap` completa gestisce undo/redo del contenuto e
+  `undoSelection`/`redoSelection`; `history()` gestisce `beforeinput` con
+  `historyUndo` e `historyRedo`.
+- [ ] Sync esterno usa `Transaction.addToHistory.of(false)` insieme a
+  `Transaction.remote.of(true)` e rimappa i rami non ambigui.
+- [ ] `HistoryFootprints` conserva al massimo 512 intervalli o anchor, senza
+  payload testuale, e valuta il `ChangeDesc` effettivo.
+- [ ] Un overlap ambiguo, una metadata sconosciuta o un mapping fallito
+  rimuove e reinserisce la history in due transazioni pubbliche successive,
+  scartando entrambi i rami prima del sync; un reset fallito interrompe il
+  cambio esterno.
 - [ ] [`SURF-023R`](tasks/SURF-023R.md): `written()` in `document.ts`, quando il
   `Buffer` esiste, valida `EditorChange.operation` contro il `Buffer`
   autorevole e rifiuta un'operazione stantia o incoerente, riallineando la
   superficie sorgente senza sovrascrivere il testo corrente.
 - [ ] Il fan-out passa `{ text, operation }` soltanto alle altre superfici dello
-  stesso documento; `TextEngine.syncDoc()` valida il cambio, usa
-  `operationFromText()` solo come fallback e la `LocalHistory` destinataria lo
-  registra come esterno.
+  stesso documento; `TextEngine.syncDoc()` valida il cambio e usa
+  `operationFromText()` solo come fallback.
 - [ ] UTF-8 e offset restano corretti.
 - [ ] CRLF e politica sui file misti restano corrette.
 - [ ] Cambio tema non ricostruisce il documento né perde history.
+- [ ] Sola lettura blocca undo/redo del contenuto ma conserva i rami nativi fino
+  al ritorno in scrittura; la history della selezione resta distinta.
 - [ ] `destroy()` rilascia la surface senza danneggiare le altre.
 - [ ] Markdown source/live preview/completions/comandi/corpus restano verdi.
 - [ ] Nessuna differenza visuale intenzionale è stata introdotta.

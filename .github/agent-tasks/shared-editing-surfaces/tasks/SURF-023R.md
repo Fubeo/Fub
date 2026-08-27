@@ -18,10 +18,12 @@ una correzione di governance: non riapre né riscrive `SURF-023`, non amplia
 
 ```text
 apps/client/src/editor/editor.ts
-apps/client/src/editor/local-history.ts
-apps/client/src/editor/local-history.test.ts
+apps/client/src/editor/text-operation.ts
+apps/client/src/editor/text-operation.test.ts
 apps/client/src/editors/text/engine.ts
 apps/client/src/editors/text/engine.test.ts
+apps/client/src/editors/text/history-footprints.ts
+apps/client/src/editors/text/history-footprints.test.ts
 apps/client/src/panels/document.ts
 apps/client/src/shell.e2e.test.ts
 ```
@@ -48,7 +50,17 @@ lockfile o a una nuova dipendenza.
   alle altre superfici dello stesso documento.
 - `TextEngine.syncDoc()` valida l'operazione ricevuta contro il testo corrente
   e il testo obiettivo; `operationFromText()` è soltanto il fallback locale del
-  ricevente. La `LocalHistory` destinataria registra il cambio come esterno.
+  ricevente.
+- La history del testo appartiene alle API pubbliche native di CodeMirror:
+  `TextEngine` monta `history()` nel `historyCompartment` e il keymap effettivo
+  include `historyKeymap`. Il sync usa insieme
+  `Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`, così
+  il cambio esterno viene mappato sui rami senza diventare una battuta locale.
+- `HistoryFootprints` conserva al massimo 512 intervalli o anchor, senza testo.
+  Un overlap ambiguo, una metadata sconosciuta o un mapping fallito rimuove e
+  reinserisce la history in due transazioni pubbliche successive, ricostruisce
+  il sync e scarta entrambi i rami prima dell'applicazione; un reset fallito
+  interrompe il sync.
 
 Il confine è interno alla shell TypeScript. `EditorChange`, `DocumentUpdate` e
 `TextOperation` non attraversano `host/contract.ts`, IPC, WIT o ABI.
@@ -63,7 +75,9 @@ history al pannello.
 - un cambio stantia o incoerente non sovrascrive un cambio più recente;
 - il fan-out non raggiunge documenti diversi e non rientra nella superficie
   sorgente;
-- una sincronizzazione esterna non diventa una battuta nella history locale;
+- una sincronizzazione esterna non diventa una battuta nei rami nativi locali;
+- un overlap ambiguo non permette a undo o redo di ripristinare testo
+  sovrascritto: entrambi i rami vengono scartati prima del sync;
 - la rappresentazione tipizzata resta interna e non crea un nuovo contratto;
 - tutte le responsabilità del `Buffer` restano nel pannello documento;
 - ogni modifica resta entro i path autorizzati e lascia intatti gli altri
@@ -75,9 +89,12 @@ history al pannello.
 - un'operazione stantia o incoerente riallinea la sorgente senza sovrascrivere il
   `Buffer` autorevole;
 - il fan-out passa l'operazione solo a superfici dello stesso documento;
-- il destinatario valida l'operazione e preserva l'undo locale;
-- le prove focalizzate richieste devono coprire il percorso positivo, il rifiuto
-  e il fallback;
+- il destinatario valida l'operazione e preserva i rami nativi per i cambi
+  esterni disgiunti;
+- un overlap ambiguo invalida entrambi i rami con il reset pubblico a due fasi
+  prima di applicare il cambio esterno;
+- le prove focalizzate richieste devono coprire il percorso positivo, il rifiuto,
+  il fallback, il mapping e l'invalidazione conservativa;
 - non compaiono modifiche a IPC, ABI, WIT, Rust, `DocumentSession` o dipendenze.
 
 ## Test da aggiungere/modificare
@@ -85,21 +102,26 @@ history al pannello.
 Mantenere o aggiornare soltanto le prove focalizzate in:
 
 - `apps/client/src/editors/text/engine.test.ts`;
-- `apps/client/src/editor/local-history.test.ts`;
+- `apps/client/src/editors/text/history-footprints.test.ts`;
+- `apps/client/src/editor/text-operation.test.ts`;
 - `apps/client/src/shell.e2e.test.ts`.
 
-Non duplicare la suite Markdown e non creare un secondo coordinatore del buffer.
+Le prove dell'engine devono esercitare history nativa, keymap completa,
+`beforeinput`, selezioni, sync disgiunto e reset su overlap. Non duplicare la
+suite Markdown e non creare un secondo coordinatore del buffer.
 
 ## required_checks
 
 ```bash
 cd apps/client
-npm test -- src/editors/text/engine.test.ts src/editor/local-history.test.ts src/shell.e2e.test.ts
+npm test -- src/editors/text/engine.test.ts src/editors/text/history-footprints.test.ts src/editor/text-operation.test.ts src/shell.e2e.test.ts
 npm run typecheck
 ```
 
 Verificare inoltre il diff contro `GLOBAL-FORBIDDEN` e che nessun tipo del
 confine compaia in `apps/client/src/host/contract.ts`, IPC, WIT o ABI.
+Verificare che il guard CodeMirror continui a confinare gli import a
+`apps/client/src/editors/text/`.
 
 ## Commit
 
@@ -123,6 +145,7 @@ docs(governance): registra il confine delle operazioni tipizzate
 
 - matrice path → regola autorizzata;
 - prova di validazione, rifiuto, riallineamento e fan-out same-document;
-- prova che l'undo esterno resta distinto;
+- prova che un sync esterno disgiunto preserva i rami nativi e che un overlap
+  invalida entrambi prima dell'applicazione;
 - prova di assenza di contratto IPC/ABI/WIT e di diff fuori scope;
 - SHA e output dei required checks.

@@ -44,7 +44,7 @@ Ogni superficie conserva invece:
 - scroll;
 - modalità;
 - focus;
-- pila locale di undo.
+- la propria history nativa di undo e redo.
 
 Questa distinzione impedisce di creare due copie concorrenti dello stesso
 buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
@@ -58,15 +58,33 @@ ponte di conversione è una responsabilità esplicita e coperta da test.
 La sorgente conserva i terminatori di riga. Caricare o sincronizzare un
 documento non deve normalizzare CRLF involontariamente.
 
-## Undo
+## Undo, redo e selezione
 
-Esistono due piani distinti:
+L'editor offre due piani distinti:
 
-1. undo locale dell'editor, legato alla superficie;
+1. undo e redo del contenuto, legati alla superficie;
 2. undo di un comando applicato dal core, descritto nel suo esito.
 
-Una modifica ricevuta da un altro riquadro aggiorna il testo ma non entra nella
-pila locale come se fosse stata digitata lì.
+Nel piano del contenuto, i comandi visibili sono `Mod-z` per annullare e
+`Mod-y` per rifare. Sono disponibili anche `Mod-Shift-z` su macOS e
+`Ctrl-Shift-z` su Linux per rifare. `Mod-u` annulla l'ultima selezione e `Alt-u`
+la rifà; su macOS il redo della selezione è `Mod-Shift-u`. `Mod` indica il
+modificatore della piattaforma.
+
+Gli undo e redo del contenuto sono disponibili anche negli eventi di modifica
+del browser `historyUndo` e `historyRedo`. Le battute adiacenti vengono
+raggruppate secondo le regole native dell'editor; composizione, incolla,
+cancellazione, sostituzione e modifiche multi-cursore conservano i propri
+confini osservabili. La history della selezione è distinta da quella del
+contenuto.
+
+Una modifica ricevuta da un altro riquadro aggiorna il testo ma non diventa una
+battuta nella history della superficie destinataria. Se il cambio esterno è
+disgiunto, i rami locali restano disponibili e seguono il nuovo testo. Se
+invece tocca in modo ambiguo il contenuto che una superficie potrebbe ancora
+annullare, l'editor mantiene il testo esterno e scarta in sicurezza i rami undo
+e redo di quella superficie. Questa perdita conservativa impedisce a un undo
+stale di riportare contenuto già sovrascritto.
 
 ## Salvataggio e conflitti
 
