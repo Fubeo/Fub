@@ -38,7 +38,8 @@
 // i cinque clienti (esploratore, ricerca, cestino, intent, view) fanno davvero
 // quella domanda lì, e obbligarli a nominare un riquadro vorrebbe dire far
 // sapere a tutti cos'è un riquadro per non guadagnare niente.
-import { createEditor, type Editor } from "../editor/editor";
+import { createEditor, type Editor, type EditorChange } from "../editor/editor";
+import { tryApplyOperation } from "../editor/local-history";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
@@ -665,7 +666,7 @@ function renderPane(id: string): Pane {
   root.addEventListener("focusin", () => focusPane(id));
 
   const editor = createEditor(editorEl, {
-    onChange: (text) => written(id, text),
+    onChange: (change) => written(id, change),
     onSelectionChange: () => {
       // Solo il riquadro col fuoco pubblica: il contesto di sessione è «cosa
       // sta guardando l'utente adesso», e con N riquadri la risposta resta una
@@ -1050,13 +1051,31 @@ export async function openWikilink(
 
 /// Qualcuno ha scritto in un riquadro: il buffer è la nuova verità, gli altri
 /// editor sullo stesso documento la ricevono, e il salvataggio si mette in coda.
-function written(paneId: string, text: string): void {
+function written(paneId: string, change: EditorChange): void {
   const doc = activeDoc(paneId);
   if (!doc) return;
+  const { text, operation } = change;
+  // The operation is checked against the authoritative Buffer before it can
+  // replace it. A stale surface is brought back to that Buffer instead of
+  // silently overwriting a newer sibling edit.
+  const existing = buffers.get(doc);
+  if (existing) {
+    const current = existing.text.replace(/\r\n?/g, "\n");
+    const expected = text.replace(/\r\n?/g, "\n");
+    const applied = tryApplyOperation(current, operation);
+    if (applied.kind !== "applied" || applied.text !== expected) {
+      const source = panes.get(paneId);
+      if (source?.shown?.k === "doc" && source.shown.doc === doc) {
+        source.editor.syncDoc(existing.text);
+      }
+      return;
+    }
+  }
+
   // Un buffer che nasce qui non ha mai letto il disco — è il testo che sta
   // arrivando dall'editor su un documento che nessuno aveva aperto — quindi non
   // discende da niente che si possa nominare.
-  const buf = buffers.get(doc) ?? {
+  const buf = existing ?? {
     text,
     dirty: false,
     result: "ok" as Outcome,
@@ -1070,7 +1089,9 @@ function written(paneId: string, text: string): void {
   for (const other of panesWithDoc(doc)) {
     if (other === paneId) continue;
     const r = panes.get(other);
-    if (r && r.shown?.k === "doc" && r.shown.doc === doc) r.editor.syncDoc(text);
+    if (r && r.shown?.k === "doc" && r.shown.doc === doc) {
+      r.editor.syncDoc({ text, operation });
+    }
   }
   // Il pallino del non salvato compare adesso, su ogni tab che mostra questa
   // nota. Ridisegnare le tab a ogni battuta costa poco — sono N pulsanti — e

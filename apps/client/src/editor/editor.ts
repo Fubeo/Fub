@@ -4,27 +4,60 @@
 // tree Lezer (`livepreview.ts`). I tre moduli sono autonomi e ricevono i
 // collegamenti col mondo (aprire una nota, cercare un tag, le sorgenti dei
 // completamenti) da chi crea l'editor: qui si compone, non si decide.
-import { EditorView, keymap } from "@codemirror/view";
-import { Compartment, EditorState, Transaction } from "@codemirror/state";
-// `basicSetup` viene dal pacchetto ombrello `codemirror`, che a sua volta
-// dipende da `@codemirror/state` come questo file. È l'import che il difetto
-// 0015 chiamava «due copie dello stato a un aggiornamento di distanza», e la
-// misura ha corretto la frase: la copia oggi è **una** — `npm ls
-// @codemirror/state` risponde `6.7.1` e undici `deduped`, e nel lock non c'è
-// nessun `node_modules/x/node_modules/y`. Due copie sarebbero due insiemi di
-// identità per i `Facet`, cioè extensions che la configurazione non vede, e la
-// rottura sarebbe muta: nessun errore di tipo, nessuna eccezione, solo una vivi
-// preview che non fa niente. A tenerle una è `.github/scripts/check-npm-copie.mjs`,
-// perché quella promessa la mantiene l'albero delle dipendenze e non questa riga.
-import { basicSetup } from "codemirror";
+import {
+  Annotation,
+  Compartment,
+  EditorSelection,
+  EditorState,
+  Prec,
+  Transaction,
+  type Extension,
+} from "@codemirror/state";
+import {
+  EditorView,
+  crosshairCursor,
+  drawSelection,
+  dropCursor,
+  highlightActiveLine,
+  highlightActiveLineGutter,
+  highlightSpecialChars,
+  keymap,
+  lineNumbers,
+  rectangularSelection,
+} from "@codemirror/view";
+import {
+  bracketMatching,
+  defaultHighlightStyle,
+  foldGutter,
+  foldKeymap,
+  indentOnInput,
+  syntaxHighlighting,
+} from "@codemirror/language";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionKeymap,
+} from "@codemirror/autocomplete";
+import { defaultKeymap, indentWithTab } from "@codemirror/commands";
+import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
+import { lintKeymap } from "@codemirror/lint";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { indentWithTab } from "@codemirror/commands";
-import { editorTheme } from "./theme";
 import { currentTheme as getCurrentTheme, type Theme } from "../theme/theme";
 import { byteToCharIndex, charToByteIndices } from "../rules/offsets";
 import { editingExtensions } from "./editor-commands";
+import { editorTheme } from "./theme";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview } from "./livepreview";
+import {
+  LocalHistory,
+  operationFromText,
+  tryApplyOperation,
+  type HistoryGrouping,
+  type SelectionSnapshot,
+  type TextEdit,
+  type TextOperation,
+} from "./local-history";
 import type { SyntaxForm } from "../host/contract";
 
 /// Una selezione dell'editor come la capisce il kernel: **byte UTF-8** del
@@ -49,6 +82,19 @@ export interface EditorSelections {
   primary: EditorRange;
   /// Le altre, in ordine di posizione (CodeMirror tiene `ranges` ordinato).
   secondary: EditorRange[];
+}
+
+export type EditorChangeOrigin = "input" | "undo" | "redo";
+
+export interface EditorChange {
+  readonly text: string;
+  readonly operation: TextOperation;
+  readonly origin: EditorChangeOrigin;
+}
+
+export interface DocumentUpdate {
+  readonly text: string;
+  readonly operation: TextOperation | null;
 }
 
 export interface Editor {
@@ -88,7 +134,9 @@ export interface Editor {
   ///
   /// Chiamarla con un testo identico a quello che c'è non fa niente: è il caso
   /// normale — l'eco del proprio salvataggio — e costa un confronto.
-  syncDoc(text: string): void;
+  syncDoc(update: DocumentUpdate | string): void;
+  undo(): boolean;
+  redo(): boolean;
   getDoc(): string;
   focus(): void;
   /// Porta la vista su un offset in **byte UTF-8** del documento (es. l'inizio
@@ -128,7 +176,7 @@ export interface Editor {
 export interface EditorOptions {
   /// Invocato a ogni modifica fatta dall'utente (non quando impostiamo il
   /// documento a livello di programma).
-  onChange(text: string): void;
+  onChange(change: EditorChange): void;
   /// Invocato quando cambia la selezione (cursore compreso), anche senza
   /// modifiche al testo: è ciò che la shell pubblica come contesto di sessione.
   onSelectionChange(): void;
@@ -144,19 +192,22 @@ export interface EditorOptions {
 
 /// Crea l'editor.
 export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
-  let programmatic = false;
+  type ApplyOrigin = "user" | "sync" | "undo" | "redo" | "replace";
 
-  // La resa inline sta in un compartment perché la modalità Sorgente è
-  // esattamente "quella stessa configurazione, senza questa estensione": si
-  // riconfigura a caldo, senza ricostruire l'editor e senza perdere né
-  // documento né cronologia di undo.
   const preview = new Compartment();
-  // Cosa i due compartment stanno portando **adesso**: `Compartment.get` lo
-  // direbbe, ma solo di uno stato vivo, e `setDoc` costruisce il prossimo prima
-  // di avere il vecchio sotto mano. Tenerlo qui è anche ciò che rende la
-  // ricostruzione una funzione di due valori invece che di uno stato.
+  const theme = new Compartment();
+  const originAnnotation = Annotation.define<ApplyOrigin>();
+  const localHistory = new LocalHistory();
+  let applyOrigin: ApplyOrigin = "user";
+  let pendingDecision:
+    | { readonly kind: "apply"; readonly token: number; readonly operation: TextOperation }
+    | undefined;
+  let disposed = false;
   let previewOn = true;
   let syntaxForms: readonly SyntaxForm[] | undefined;
+  let currentTheme: Theme = getCurrentTheme();
+  let view: EditorView;
+
   const livePreviewExtension = () =>
     livePreview(
       {
@@ -166,78 +217,183 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       syntaxForms,
     );
 
-  // Il tema sta in un compartment per la stessa ragione della resa inline: si
-  // cambia luce a caldo, senza ricostruire l'editor e quindi senza perdere né
-  // il documento né la cronologia di undo. Il tema nasce con quello che la
-  // pagina sta già portando — `theme/theme.ts` lo scrive sulla radice prima che
-  // questa funzione venga chiamata — e non con un default cablato, che sarebbe
-  // un lampo di scuro a ogni nota aperta in tema chiaro.
-  const theme = new Compartment();
-  let currentTheme: Theme = getCurrentTheme();
-
-  /// Il documento **nella forma in cui sta sul disco**.
-  ///
-  /// Dichiarare il separatore non basta da solo, e la misura lo dice: dentro,
-  /// un a capo è un carattere solo qualunque forma abbia, e `Text.toString` lo
-  /// ricompone sempre a LF — la forma dichiarata la rende `sliceString`, ed è
-  /// `state.lineBreak` che la sa. Chi esce di qui passa da questa riga: il
-  /// salvataggio, la bozza, il riquadro gemello, la selezione (difetto 0207).
-  const rendered = (state: EditorState = view.state) =>
+  const rendered = (state: EditorState = view.state): string =>
     state.doc.sliceString(0, state.doc.length, state.lineBreak);
 
-  /// La stessa posizione, contata sul testo reso: sotto CRLF ogni a capo che
-  /// sta prima vale un carattere in più, e sono tanti quante le righe finite.
-  const renderedOffset = (pos: number) =>
+  const renderedOffset = (pos: number): number =>
     view.state.lineBreak === "\n" ? pos : pos + view.state.doc.lineAt(pos).number - 1;
 
-  const listener = EditorView.updateListener.of((u) => {
-    if (u.docChanged && !programmatic) {
-      opts.onChange(rendered(u.state));
-    }
-    // Anche una modifica sposta il cursore: chi ascolta vuole saperlo in
-    // entrambi i casi, e un `setDoc` a livello di programma rimappa la
-    // selezione, quindi conta pure lui.
-    if (u.selectionSet || u.docChanged) {
-      opts.onSelectionChange();
-    }
-  });
-
-  /// **Con che cosa questo documento va a capo**, o `null` per «come capita».
-  ///
-  /// CodeMirror spezza su `/\r\n?|\n/` e ricompone sempre con `\n`: un file
-  /// scritto su Windows, aperto e toccato in un punto solo, tornava sul disco
-  /// con **ogni riga cambiata** — un diff che non si legge, e in un vault sotto
-  /// git una cronologia che non serve più a niente (difetto 0207). La forma
-  /// originale non la ricordava nessuno perché la si perdeva all'ingresso, e
-  /// dichiararla a CodeMirror è il modo di non perderla affatto: il documento
-  /// *è* fatto di quelle righe, quindi anche l'a capo che si batte adesso è
-  /// quello, e chiunque legga `getDoc` — il salvataggio, la bozza, la
-  /// selezione — riceve ciò che c'era senza doverselo ricordare.
-  ///
-  /// Solo se il file è **tutto** CRLF. Un file misto non ha una forma da
-  /// preservare, e prendere il CRLF come separatore vorrebbe dire che i suoi
-  /// `\n` solitari smettono di essere righe: lì la normalizzazione di prima è
-  /// la risposta meno peggio, e resta.
   const lineSeparator = (text: string): string | null =>
     text.includes("\r\n") && !/(^|[^\r])\n/.test(text) ? "\r\n" : null;
 
-  // La configurazione sta in una funzione perché serve **due volte**: alla
-  // costruzione e a ogni `setDoc`, che rifà lo stato da zero per non portarsi
-  // dietro la cronologia di un altro documento (§13.3). I due compartment
-  // partono da ciò che vale adesso, o cambiare nota rimetterebbe la modalità
-  // Sorgente in Live Preview e riaccenderebbe il tema di sistema.
-  const extensions = (convertLineBreaks: string | null = null) => [
-    // Prima di `basicSetup` e di tutto il resto perché non è un'estensione fra
-    // le altre: è come il documento si legge.
+  const selectionSnapshot = (selection: EditorSelection): SelectionSnapshot => ({
+    ranges: selection.ranges.map((range) => ({ from: range.from, to: range.to })),
+    mainIndex: selection.mainIndex,
+  });
+
+  const selectionFromSnapshot = (
+    selection: SelectionSnapshot,
+    documentLength: number,
+  ): EditorSelection => {
+    const ranges = selection.ranges.map((range) => {
+      const from = Math.max(0, Math.min(documentLength, range.from));
+      const to = Math.max(0, Math.min(documentLength, range.to));
+      return EditorSelection.range(Math.min(from, to), Math.max(from, to));
+    });
+    if (ranges.length === 0) return EditorSelection.single(0);
+    const mainIndex = Math.max(0, Math.min(selection.mainIndex, ranges.length - 1));
+    return EditorSelection.create(ranges, mainIndex);
+  };
+
+  const operationFromUpdate = (update: {
+    readonly changes: { iterChanges: (f: (fromA: number, toA: number, fromB: number, toB: number, inserted: { toString(): string }) => void) => void };
+    readonly startState: EditorState;
+    readonly state: EditorState;
+  }): TextOperation => {
+    const edits: TextEdit[] = [];
+    update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+      edits.push({
+        from: fromA,
+        to: toA,
+        deleted: update.startState.doc.sliceString(fromA, toA),
+        inserted: inserted.toString(),
+      });
+    });
+    return {
+      beforeLength: update.startState.doc.length,
+      afterLength: update.state.doc.length,
+      edits,
+    };
+  };
+
+  const groupingFor = (update: { readonly transactions: readonly Transaction[] }): HistoryGrouping => {
+    const event = update.transactions
+      .map((transaction) => transaction.annotation(Transaction.userEvent))
+      .find((value): value is string => value !== undefined);
+    if (event?.startsWith("input.type.compose")) return "composition";
+    if (event?.startsWith("input.paste")) return "paste";
+    if (event?.startsWith("input") || event?.startsWith("delete")) return "input";
+    return "command";
+  };
+
+  const operationChanges = (
+    operation: TextOperation,
+    separator: string,
+  ): Array<{ readonly from: number; readonly to: number; readonly insert: string }> =>
+    operation.edits.map((edit) => ({
+      from: edit.from,
+      to: edit.to,
+      insert: separator === "\n" ? edit.inserted : edit.inserted.split("\n").join(separator),
+    }));
+
+  const runHistory = (direction: "undo" | "redo"): boolean => {
+    if (disposed) return false;
+    const current = view.state.doc.toString();
+    const decision = direction === "undo" ? localHistory.undo(current) : localHistory.redo(current);
+    if (decision.kind !== "apply") return false;
+    pendingDecision = decision;
+    applyOrigin = direction;
+    try {
+      const changes = operationChanges(decision.operation, view.state.lineBreak);
+      const selection = decision.selection
+        ? selectionFromSnapshot(decision.selection, decision.operation.afterLength)
+        : undefined;
+      view.dispatch({
+        changes,
+        ...(selection ? { selection } : {}),
+        annotations: originAnnotation.of(direction),
+        userEvent: direction,
+      });
+    } catch {
+      pendingDecision = undefined;
+      localHistory.cancelPending();
+    } finally {
+      applyOrigin = "user";
+    }
+    return true;
+  };
+
+  const listener = EditorView.updateListener.of((update) => {
+    if (disposed) return;
+    if (update.docChanged) {
+      const operation = operationFromUpdate(update);
+      const transactionOrigin =
+        update.transactions
+          .map((transaction) => transaction.annotation(originAnnotation))
+          .find((value): value is ApplyOrigin => value !== undefined) ?? applyOrigin;
+
+      if (transactionOrigin === "user") {
+        localHistory.acceptLocal(
+          operation,
+          groupingFor(update),
+          selectionSnapshot(update.startState.selection),
+          selectionSnapshot(update.state.selection),
+        );
+        opts.onChange({ text: rendered(update.state), operation, origin: "input" });
+      } else if (transactionOrigin === "sync") {
+        localHistory.acceptExternal(operation);
+      } else if (transactionOrigin === "undo" || transactionOrigin === "redo") {
+        const decision = pendingDecision;
+        pendingDecision = undefined;
+        const before = selectionSnapshot(update.startState.selection);
+        const after = selectionSnapshot(update.state.selection);
+        if (decision) {
+          if (!localHistory.commit(decision, before, after, operation)) {
+            localHistory.acceptExternal(operation);
+          }
+          opts.onChange({
+            text: rendered(update.state),
+            operation,
+            origin: transactionOrigin,
+          });
+        }
+      }
+    }
+    if (update.selectionSet || update.docChanged) opts.onSelectionChange();
+  });
+
+  const extensions = (convertLineBreaks: string | null = null): Extension => [
     ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
-    // Le scorciatoie di editing sono già in `Prec.high`: l'ordine rispetto
-    // a `basicSetup` non conta, ma il popup dei completamenti (precedenza
-    // massima) vince comunque su Enter/frecce quando è aperto.
     editingExtensions(),
-    basicSetup,
+    // This is the basic CodeMirror setup copied without `history()` and
+    // `historyKeymap`: all document undo is owned by `localHistory`.
+    lineNumbers(),
+    highlightActiveLineGutter(),
+    highlightSpecialChars(),
+    foldGutter(),
+    drawSelection(),
+    dropCursor(),
+    EditorState.allowMultipleSelections.of(true),
+    indentOnInput(),
+    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+    bracketMatching(),
+    closeBrackets(),
+    autocompletion(),
+    rectangularSelection(),
+    crosshairCursor(),
+    highlightActiveLine(),
+    highlightSelectionMatches(),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...foldKeymap,
+      ...completionKeymap,
+      ...lintKeymap,
+    ]),
+    Prec.high(
+      keymap.of([
+        { key: "Mod-z", run: () => runHistory("undo"), preventDefault: true },
+        {
+          key: "Mod-y",
+          mac: "Mod-Shift-z",
+          run: () => runHistory("redo"),
+          preventDefault: true,
+        },
+        { linux: "Ctrl-Shift-z", run: () => runHistory("redo"), preventDefault: true },
+      ]),
+    ),
     keymap.of([indentWithTab]),
-    // La base GFM non è un dettaglio: senza, il parser non produce i nodi
-    // di `~~barrato~~`/tabelle/todo e la vivi preview degrada in silenzio.
     markdown({ base: markdownLanguage }),
     theme.of(editorTheme(currentTheme)),
     EditorView.lineWrapping,
@@ -246,83 +402,69 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     listener,
   ];
 
-  const view = new EditorView({ parent, state: EditorState.create({ extensions: extensions() }) });
+  view = new EditorView({ parent, state: EditorState.create({ extensions: extensions() }) });
 
   return {
     setDoc(text: string) {
-      // Uno **stato nuovo**, non un `dispatch`: è ciò che porta via la
-      // cronologia insieme al documento. CodeMirror non ha un «svuota la
-      // history» — la si azzera ricostruendo, ed è anche la forma più onesta,
-      // perché ciò che si sta facendo è appunto cominciare un altro documento.
-      programmatic = true;
-      view.setState(
-        EditorState.create({ doc: text, extensions: extensions(lineSeparator(text)) }),
-      );
-      programmatic = false;
-      // `setState` non passa dai listener di aggiornamento (non è una
-      // transazione), quindi il cursore nuovo lo annuncia questa riga. Senza,
-      // il contesto di sessione resterebbe quello del documento di prima —
-      // che è metà del difetto che questa funzione esiste per non avere.
+      if (disposed) return;
+      localHistory.reset();
+      applyOrigin = "replace";
+      try {
+        view.setState(
+          EditorState.create({ doc: text, extensions: extensions(lineSeparator(text)) }),
+        );
+      } finally {
+        applyOrigin = "user";
+      }
       opts.onSelectionChange();
     },
-    syncDoc(text: string) {
-      // **L'a capo resta quello con cui il documento è nato.** Qui non si rifà
-      // lo stato — è tutto il punto di questa funzione, che tiene il cursore
-      // dove sta — quindi un file che cambia fine riga *sul disco* a nota
-      // aperta continua a essere letto con la vecchia: è un limite dichiarato e
-      // non un caso da indovinare, perché la forma la decide chi apre e
-      // riaprire la nota la rimisura.
-      // Dentro si conta a LF — le posizioni della transazione sono di lì — ma
-      // ciò che si **inserisce** deve nascere già con la forma del documento:
-      // sotto un separatore CRLF un `\n` solitario non è un a capo, è un
-      // carattere in mezzo a una riga.
-      const sep = view.state.lineBreak;
-      const normalizedText = sep === "\n" ? text : text.split(sep).join("\n");
-      const convertLineBreaks = (t: string) => (sep === "\n" ? t : t.split("\n").join(sep));
+    syncDoc(update: DocumentUpdate | string) {
+      if (disposed) return;
+      const requested = typeof update === "string" ? { text: update, operation: null } : update;
+      const separator = view.state.lineBreak;
+      const normalizedText = requested.text.replace(/\r\n?/g, "\n");
       const current = view.state.doc.toString();
       if (current === normalizedText) return;
-      // La modifica minima: il prefisso e il suffisso in comune non si toccano,
-      // e ciò che resta in mezzo è l'unica cosa che è davvero cambiata. Un
-      // `changes` che rimpiazza tutto il documento sarebbe corretto e
-      // sposterebbe il cursore in fondo a ogni battuta dell'altro riquadro.
-      let prefixLength = 0;
-      const minimum = Math.min(current.length, normalizedText.length);
-      while (prefixLength < minimum && current[prefixLength] === normalizedText[prefixLength]) prefixLength++;
-      let queue = 0;
-      while (
-        queue < minimum - prefixLength &&
-        current[current.length - 1 - queue] === normalizedText[normalizedText.length - 1 - queue]
-      ) {
-        queue++;
+
+      let operation: TextOperation;
+      if (requested.operation) {
+        const candidate = tryApplyOperation(current, requested.operation);
+        operation =
+          candidate.kind === "applied" && candidate.text === normalizedText
+            ? requested.operation
+            : operationFromText(current, normalizedText);
+      } else {
+        operation = operationFromText(current, normalizedText);
       }
-      programmatic = true;
-      view.dispatch({
-        changes: {
-          from: prefixLength,
-          to: current.length - queue,
-          insert: convertLineBreaks(normalizedText.slice(prefixLength, normalizedText.length - queue)),
-        },
-        annotations: Transaction.addToHistory.of(false),
-      });
-      programmatic = false;
+      const applied = tryApplyOperation(current, operation);
+      if (applied.kind !== "applied" || applied.text !== normalizedText) return;
+
+      applyOrigin = "sync";
+      try {
+        view.dispatch({
+          changes: operationChanges(operation, separator),
+          annotations: originAnnotation.of("sync"),
+          userEvent: "sync",
+        });
+      } finally {
+        applyOrigin = "user";
+      }
     },
+    undo: () => runHistory("undo"),
+    redo: () => runHistory("redo"),
     getDoc: () => rendered(),
-    focus: () => view.focus(),
+    focus: () => {
+      if (!disposed) view.focus();
+    },
     selections() {
-      // Il testo reso, e le endpointstà contate su di lui: questi offset li usa
-      // chi taglia i **byte del file**, e in un file CRLF una posizione di
-      // CodeMirror è indietro di una riga per ogni riga che la precede.
       const text = rendered();
       const { ranges, mainIndex } = view.state.selection;
       const endpoints = new Array<number>(ranges.length * 2);
-      for (let i = 0; i < ranges.length; i++) {
+      for (let i = 0; i < ranges.length; i += 1) {
         const range = ranges[i];
         endpoints[2 * i] = renderedOffset(range.from);
         endpoints[2 * i + 1] = renderedOffset(range.to);
       }
-      // Una conversione sola per tutte le endpointstà: `charToByteIndex` è una
-      // scansione dall'inizio, e questa funzione gira a ogni battuta di
-      // tastiera. Vedi `charToByteIndices`.
       const byte = charToByteIndices(text, endpoints);
       const selections = ranges.map((_, i) => {
         const from = endpoints[2 * i];
@@ -339,21 +481,29 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       };
     },
     destroy() {
+      if (disposed) return;
+      disposed = true;
+      pendingDecision = undefined;
+      localHistory.dispose();
       view.destroy();
     },
     setLivePreview(on: boolean) {
+      if (disposed) return;
       previewOn = on;
       view.dispatch({ effects: preview.reconfigure(on ? livePreviewExtension() : []) });
     },
     setSyntaxForms(forms: readonly SyntaxForm[]) {
+      if (disposed) return;
       syntaxForms = forms;
       if (previewOn) view.dispatch({ effects: preview.reconfigure(livePreviewExtension()) });
     },
     setTheme(next: Theme) {
+      if (disposed) return;
       currentTheme = next;
       view.dispatch({ effects: theme.reconfigure(editorTheme(next)) });
     },
     revealByteOffset(byteOffset: number) {
+      if (disposed) return;
       const text = rendered();
       const renderedPos = byteToCharIndex(text, byteOffset);
       const crlfBefore = text.slice(0, renderedPos + 1).match(/\r\n/g)?.length ?? 0;

@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Ventuno gesti, contati da fuori
+// # Ventidue gesti, contati da fuori
 //
-// I gesti sono **ventuno** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **ventidue** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -251,6 +251,18 @@ const VAULT = {
   "note/Spesa.md": "pane, latte, arance\n",
 };
 
+function editorTexts(): string[] {
+  return [...document.querySelectorAll(".cm-content")].map((content) =>
+    [...content.querySelectorAll(".cm-line")].map((line) => line.textContent ?? "").join("\n"),
+  );
+}
+
+function editorViews(): EditorView[] {
+  return [...document.querySelectorAll<HTMLElement>(".cm-editor")]
+    .map((shell) => (shell.parentElement ? EditorView.findFromDOM(shell.parentElement) : null))
+    .filter((view): view is EditorView => view !== null);
+}
+
 beforeEach(() => {
   document.body.innerHTML = "";
   localStorage.clear();
@@ -340,6 +352,61 @@ describe("scrivi", () => {
     // `dictated` che copre in silenzio ciò che c'era.
     expect(written.args[2]).toEqual({ kind: "descends_from", value: "r1" });
     expect(host.files()["Benvenuto.md"]).toContain("Una riga nuova.");
+  });
+});
+
+describe("undo locale tra riquadri", () => {
+  it("condivide il testo ma non la cronologia, senza rileggere o lasciare timer", async () => {
+    const host = await start(VAULT);
+    const readsAtSplit = host.atGate("readDocument").length;
+    const initial = editorTexts();
+    expect(initial).toHaveLength(1);
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "\\", ctrlKey: true }),
+    );
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    expect(host.atGate("readDocument").length).toBe(readsAtSplit);
+    expect(editorTexts()).toEqual([initial[0], initial[0]]);
+
+    const views = editorViews();
+    views[0]!.dispatch({
+      changes: { from: views[0]!.state.doc.length, insert: " [A]" },
+    });
+    views[1]!.dispatch({
+      changes: { from: views[1]!.state.doc.length, insert: " [B]" },
+    });
+    await settle();
+    const both = `${initial[0]} [A] [B]`;
+    expect(editorTexts()).toEqual([both, both]);
+
+    views[0]!.focus();
+    views[0]!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "z", ctrlKey: true }),
+    );
+    await settle();
+    expect(editorTexts()).toEqual([`${initial[0]} [B]`, `${initial[0]} [B]`]);
+    views[1]!.focus();
+    views[1]!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "z", ctrlKey: true }),
+    );
+    await settle();
+    expect(editorTexts()).toEqual([initial[0], initial[0]]);
+
+    views[1]!.focus();
+    views[1]!.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "y", ctrlKey: true }),
+    );
+    await settle();
+    expect(editorTexts()).toEqual([`${initial[0]} [B]`, `${initial[0]} [B]`]);
+
+    const writesBeforeClose = host.atGate("writeDocument").length;
+    await host.close();
+    await settle();
+    expect(host.atGate("writeDocument").length).toBe(writesBeforeClose + 1);
+    await settle();
+    expect(host.atGate("writeDocument").length).toBe(writesBeforeClose + 1);
   });
 });
 

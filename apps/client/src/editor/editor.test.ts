@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { EditorView } from "@codemirror/view";
-import { insertNewlineAndIndent, undo } from "@codemirror/commands";
+import { insertNewlineAndIndent } from "@codemirror/commands";
 import { EditorSelection } from "@codemirror/state";
-import { createEditor, type Editor } from "./editor";
+import { createEditor, type Editor, type EditorChange } from "./editor";
 
 // Il difetto che questo file presidia è **una perdita di dati a portata di
 // scorciatoia** (§13.3): finché `setDoc` era un `dispatch` di `changes`
@@ -20,11 +20,17 @@ import { createEditor, type Editor } from "./editor";
 // tastiera: il tipo `Editor` non la espone, e allargarlo per un banco di prova
 // vorrebbe dire che il resto della shell può prenderla.
 
-function editor(): { ed: Editor; view: () => EditorView; parent: HTMLElement } {
+interface TestEditor {
+  ed: Editor;
+  view: () => EditorView;
+  parent: HTMLElement;
+}
+
+function editor(onChange: (change: EditorChange) => void = () => {}): TestEditor {
   const parent = document.createElement("div");
   document.body.appendChild(parent);
   const ed = createEditor(parent, {
-    onChange: () => {},
+    onChange,
     onSelectionChange: () => {},
     onOpenWikilink: () => {},
     onSearchTag: () => {},
@@ -60,14 +66,14 @@ describe("setDoc", () => {
     // leggerebbe «prima nota» — cioè il testo di un altro documento scritto
     // dentro questo, e persistito subito dopo dal debounce del salvataggio.
     ed.setDoc("seconda nota");
-    expect(undo(view())).toBe(false);
+    expect(ed.undo()).toBe(false);
     expect(ed.getDoc()).toBe("seconda nota");
   });
 
   it("il testo che mette non è annullabile nemmeno da solo", () => {
-    const { ed, view } = editor();
+    const { ed } = editor();
     ed.setDoc("contenuto");
-    expect(undo(view())).toBe(false);
+    expect(ed.undo()).toBe(false);
     expect(ed.getDoc()).toBe("contenuto");
   });
 
@@ -76,7 +82,7 @@ describe("setDoc", () => {
     ed.setDoc("base");
     writes(view(), "X");
     expect(ed.getDoc()).toBe("Xbase");
-    expect(undo(view())).toBe(true);
+    expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("base");
   });
 
@@ -94,13 +100,34 @@ describe("setDoc", () => {
 
 describe("syncDoc", () => {
   it("non crea una voce di undo per la modifica remota", () => {
-    const { ed, view } = editor();
+    const changes: EditorChange[] = [];
+    const { ed } = editor((change) => changes.push(change));
 
     ed.setDoc("prima nota");
     ed.syncDoc("seconda nota");
 
-    expect(undo(view())).toBe(false);
+    expect(ed.undo()).toBe(false);
     expect(ed.getDoc()).toBe("seconda nota");
+    expect(changes).toEqual([]);
+  });
+
+  it("ripiega sul testo autoritativo se la patch sorgente è stantia", () => {
+    const changes: EditorChange[] = [];
+    const { ed } = editor((change) => changes.push(change));
+
+    ed.setDoc("base");
+    ed.syncDoc({
+      text: "server",
+      operation: {
+        beforeLength: 4,
+        afterLength: 6,
+        edits: [{ from: 0, to: 4, deleted: "xxxx", inserted: "server" }],
+      },
+    });
+
+    expect(ed.getDoc()).toBe("server");
+    expect(ed.undo()).toBe(false);
+    expect(changes).toEqual([]);
   });
 
   it("conserva l'undo locale mentre applica la modifica remota", () => {
@@ -111,7 +138,7 @@ describe("syncDoc", () => {
     ed.syncDoc("Xbase?");
 
     expect(ed.getDoc()).toBe("Xbase?");
-    expect(undo(view())).toBe(true);
+    expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("base?");
   });
 
@@ -123,6 +150,125 @@ describe("syncDoc", () => {
     ed.syncDoc("uno nuovo due");
 
     expect(ed.selections().primary).toEqual({ start: 12, end: 12, text: "" });
+  });
+});
+
+describe("raggruppamento degli eventi utente", () => {
+  it("raggruppa l'auto-pair con il carattere digitato al suo interno", () => {
+    const { ed, view } = editor();
+    ed.setDoc("");
+    // closeBrackets emits this transaction for `[` and leaves the cursor
+    // between the delimiters; the following real input transaction inserts A.
+    view().dispatch({
+      changes: { from: 0, insert: "[]" },
+      selection: EditorSelection.single(1),
+      userEvent: "input.type",
+    });
+    view().dispatch({
+      changes: { from: 1, insert: "A" },
+      selection: EditorSelection.single(2),
+      userEvent: "input.type",
+    });
+
+    expect(ed.getDoc()).toBe("[A]");
+    view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(ed.getDoc()).toBe("");
+    view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "y", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(ed.getDoc()).toBe("[A]");
+  });
+
+  it("mantiene separate le transazioni di composizione", () => {
+    const { ed, view } = editor();
+    ed.setDoc("");
+    view().dispatch({ changes: { from: 0, insert: "あ" }, userEvent: "input.type.compose" });
+    view().dispatch({ changes: { from: 1, insert: "い" }, userEvent: "input.type.compose" });
+
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("あ");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("");
+  });
+
+  it("mantiene separate le transazioni di incolla", () => {
+    const { ed, view } = editor();
+    ed.setDoc("");
+    view().dispatch({ changes: { from: 0, insert: "uno" }, userEvent: "input.paste" });
+    view().dispatch({ changes: { from: 3, insert: "due" }, userEvent: "input.paste" });
+
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("uno");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("");
+  });
+
+  it("ripristina la selezione dopo undo e redo", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ selection: EditorSelection.single(1) });
+    view().dispatch({
+      changes: { from: 1, insert: "X" },
+      selection: EditorSelection.single(2),
+      userEvent: "input.type",
+    });
+
+    expect(ed.selections().primary.start).toBe(2);
+    expect(ed.undo()).toBe(true);
+    expect(ed.selections().primary.start).toBe(1);
+    expect(ed.redo()).toBe(true);
+    expect(ed.selections().primary.start).toBe(2);
+  });
+});
+
+describe("due superfici dello stesso documento", () => {
+  it("mantiene buffer condiviso, undo locali e redo senza echi", () => {
+    let buffer = "base";
+    let changesA = 0;
+    let changesB = 0;
+    let second: TestEditor | undefined;
+    const first = editor((change) => {
+      changesA += 1;
+      buffer = change.text;
+      second?.ed.syncDoc({ text: buffer, operation: change.operation });
+    });
+    second = editor((change) => {
+      changesB += 1;
+      buffer = change.text;
+      first.ed.syncDoc({ text: buffer, operation: change.operation });
+    });
+
+    first.ed.setDoc(buffer);
+    second.ed.setDoc(buffer);
+    first.view().dispatch({
+      changes: { from: first.view().state.doc.length, insert: " [A]" },
+    });
+    second.view().dispatch({
+      changes: { from: second.view().state.doc.length, insert: " [B]" },
+    });
+    expect(first.ed.getDoc()).toBe("base [A] [B]");
+    expect(second.ed.getDoc()).toBe("base [A] [B]");
+    expect(changesA).toBe(1);
+    expect(changesB).toBe(1);
+
+    expect(first.ed.undo()).toBe(true);
+    expect(first.ed.getDoc()).toBe("base [B]");
+    expect(second.ed.getDoc()).toBe("base [B]");
+    expect(changesA).toBe(2);
+    expect(changesB).toBe(1);
+
+    expect(second.ed.undo()).toBe(true);
+    expect(first.ed.getDoc()).toBe("base");
+    expect(second.ed.getDoc()).toBe("base");
+
+    expect(second.ed.redo()).toBe(true);
+    expect(first.ed.getDoc()).toBe("base [B]");
+    expect(second.ed.getDoc()).toBe("base [B]");
+
+    first.ed.destroy();
+    second.ed.destroy();
   });
 });
 
@@ -158,7 +304,7 @@ describe("cambio di tema", () => {
     writes(view(), "X");
     ed.setTheme("light");
 
-    expect(undo(view())).toBe(true);
+    expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("base");
   });
 });
@@ -209,6 +355,22 @@ per mano nostra",
       "un file senza una forma sola se n'è vista imporre una: le sue righe \
 non sono più quelle che erano",
     ).toBe("Xuno\ndue\ntre\n");
+  });
+  it("annulla e rifà testo UTF-8 mantenendo CRLF", () => {
+    const { ed, view } = editor();
+    const initial = "inizio\r\n🙂 café\r\nfine";
+    ed.setDoc(initial);
+    const at = "inizio\n🙂".length;
+    view().dispatch({
+      changes: { from: at, insert: " ✓" },
+      userEvent: "input.type",
+    });
+
+    expect(ed.getDoc()).toBe("inizio\r\n🙂 ✓ café\r\nfine");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe(initial);
+    expect(ed.redo()).toBe(true);
+    expect(ed.getDoc()).toBe("inizio\r\n🙂 ✓ café\r\nfine");
   });
 });
 
@@ -317,5 +479,18 @@ describe("smontare un editor", () => {
 
     expect(secondEditor.ed.getDoc()).toBe("resto io");
     expect(EditorView.findFromDOM(secondEditor.parent)).not.toBeNull();
+  });
+  it("non emette modifiche dopo la distruzione", () => {
+    let emitted = 0;
+    const surface = editor(() => {
+      emitted += 1;
+    });
+    surface.ed.setDoc("resto");
+    surface.ed.destroy();
+    surface.ed.syncDoc("cambiato");
+    expect(surface.ed.undo()).toBe(false);
+    expect(surface.ed.redo()).toBe(false);
+    expect(emitted).toBe(0);
+    surface.ed.destroy();
   });
 });
