@@ -4,16 +4,10 @@ import { currentTheme as getCurrentTheme, type Theme } from "../theme/theme";
 import { createMarkdownProfile } from "../editors/text/profiles/markdown/profile";
 import type { CompletionSources } from "./completions";
 import { createTextEngine } from "../editors/text/engine";
-import type { DocumentUpdate, EditorChange, EditorSelections } from "../editors/text/engine";
+import type { EditorSelections } from "../editors/text/engine";
 import type { SyntaxForm } from "../host/contract";
 
-export type {
-  DocumentUpdate,
-  EditorChange,
-  EditorChangeOrigin,
-  EditorRange,
-  EditorSelections,
-} from "../editors/text/engine";
+export type { EditorRange, EditorSelections } from "../editors/text/engine";
 
 export interface Editor {
   /// Aggiorna la dichiarazione sintattica letta dal canale runtime.
@@ -21,7 +15,7 @@ export interface Editor {
   /// Mette nell'editor un testo che **l'utente non ha scritto**.
   setDoc(text: string): void;
   /// Porta l'editor su un testo scritto da un'altra superficie.
-  syncDoc(update: DocumentUpdate | string): void;
+  syncDoc(text: string): void;
   undo(): boolean;
   redo(): boolean;
   getDoc(): string;
@@ -40,7 +34,7 @@ export interface Editor {
 
 export interface EditorOptions {
   /// Invocato a ogni modifica fatta dall'utente.
-  onChange(change: EditorChange): void;
+  onChange(text: string): void;
   /// Invocato quando cambia la selezione.
   onSelectionChange(): void;
   /// Mod-click su un wikilink nella vivi preview.
@@ -61,7 +55,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     completions: opts.completions,
   });
   const engine = createTextEngine(parent, {
-    onChange: opts.onChange,
+    onChange: (change) => opts.onChange(change.text),
     onSelectionChange: opts.onSelectionChange,
     theme: getCurrentTheme(),
     extensions: () => profile.extensions(),
@@ -73,7 +67,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       engine.reconfigure();
     },
     setDoc: (text) => engine.setDoc(text),
-    syncDoc: (update) => engine.syncDoc(update),
+    syncDoc: (text) => engine.syncDoc(text),
     undo: () => engine.undo(),
     redo: () => engine.redo(),
     getDoc: () => engine.getDoc(),

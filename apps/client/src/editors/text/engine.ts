@@ -42,8 +42,8 @@ import { byteToCharIndex, charToByteIndices } from "../../rules/offsets";
 import { editorTheme } from "./theme";
 import {
   LocalHistory,
-  operationFromText,
   tryApplyOperation,
+  type ExternalTextPolicy,
   type HistoryGrouping,
   type SelectionSnapshot,
   type TextEdit,
@@ -69,11 +69,6 @@ export interface EditorChange {
   readonly origin: EditorChangeOrigin;
 }
 
-export interface DocumentUpdate {
-  readonly text: string;
-  readonly operation: TextOperation | null;
-}
-
 export interface TextEngineOptions {
   onChange(change: EditorChange): void;
   onSelectionChange(): void;
@@ -87,6 +82,28 @@ type PendingDecision =
   | { readonly kind: "apply"; readonly token: number; readonly operation: TextOperation }
   | undefined;
 
+type PendingSync =
+  | {
+      readonly operation: TextOperation;
+      readonly target: string;
+      readonly policy: ExternalTextPolicy;
+    }
+  | undefined;
+
+function sameOperation(a: TextOperation, b: TextOperation): boolean {
+  if (a.beforeLength !== b.beforeLength || a.afterLength !== b.afterLength) return false;
+  if (a.edits.length !== b.edits.length) return false;
+  return a.edits.every((edit, index) => {
+    const other = b.edits[index];
+    return (
+      edit.from === other?.from &&
+      edit.to === other?.to &&
+      edit.deleted === other?.deleted &&
+      edit.inserted === other?.inserted
+    );
+  });
+}
+
 export class TextEngine {
   private readonly profile = new Compartment();
   private readonly theme = new Compartment();
@@ -97,6 +114,7 @@ export class TextEngine {
   private readonly listener: Extension;
   private applyOrigin: ApplyOrigin = "user";
   private readOnlyEnabled = false;
+  private pendingSync: PendingSync;
   private pendingDecision: PendingDecision;
   private disposed = false;
   private currentTheme: Theme;
@@ -114,6 +132,7 @@ export class TextEngine {
 
   public setDoc(text: string): void {
     if (this.disposed) return;
+    this.pendingSync = undefined;
     this.localHistory.reset();
     this.applyOrigin = "replace";
     try {
@@ -126,35 +145,32 @@ export class TextEngine {
     this.options.onSelectionChange();
   }
 
-  public syncDoc(update: DocumentUpdate | string): void {
+  public syncDoc(text: string): void {
     if (this.disposed) return;
-    const requested = typeof update === "string" ? { text: update, operation: null } : update;
     const separator = this.view.state.lineBreak;
-    const normalizedText = requested.text.replace(/\r\n?/g, "\n");
+    const normalizedText = text.replace(/\r\n?/g, "\n");
     const current = this.view.state.doc.toString();
     if (current === normalizedText) return;
 
-    let operation: TextOperation;
-    if (requested.operation) {
-      const candidate = tryApplyOperation(current, requested.operation);
-      operation =
-        candidate.kind === "applied" && candidate.text === normalizedText
-          ? requested.operation
-          : operationFromText(current, normalizedText);
-    } else {
-      operation = operationFromText(current, normalizedText);
-    }
-    const applied = tryApplyOperation(current, operation);
+    const plan = this.localHistory.planExternalText(current, normalizedText);
+    if (plan.kind === "noop") return;
+    const applied = tryApplyOperation(current, plan.operation);
     if (applied.kind !== "applied" || applied.text !== normalizedText) return;
 
+    this.pendingSync = {
+      operation: plan.operation,
+      target: normalizedText,
+      policy: plan.policy,
+    };
     this.applyOrigin = "sync";
     try {
       this.view.dispatch({
-        changes: this.operationChanges(operation, separator),
+        changes: this.operationChanges(plan.operation, separator),
         annotations: this.originAnnotation.of("sync"),
         userEvent: "sync",
       });
     } finally {
+      this.pendingSync = undefined;
       this.applyOrigin = "user";
     }
   }
@@ -215,6 +231,7 @@ export class TextEngine {
   public destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.pendingSync = undefined;
     this.pendingDecision = undefined;
     this.localHistory.dispose();
     this.view.destroy();
@@ -288,6 +305,7 @@ export class TextEngine {
           toB: number,
           inserted: { toString(): string },
         ) => void,
+        individual?: boolean,
       ) => void;
     };
     readonly startState: EditorState;
@@ -301,7 +319,7 @@ export class TextEngine {
         deleted: update.startState.doc.sliceString(fromA, toA),
         inserted: inserted.toString(),
       });
-    });
+    }, true);
     return {
       beforeLength: update.startState.doc.length,
       afterLength: update.state.doc.length,
@@ -375,7 +393,15 @@ export class TextEngine {
         );
         this.options.onChange({ text: this.rendered(update.state), operation, origin: "input" });
       } else if (transactionOrigin === "sync") {
-        this.localHistory.acceptExternal(operation);
+        const pending = this.pendingSync;
+        this.pendingSync = undefined;
+        if (
+          pending &&
+          sameOperation(operation, pending.operation) &&
+          update.state.doc.toString() === pending.target
+        ) {
+          this.localHistory.acceptExternal(operation, pending.policy);
+        }
       } else if (transactionOrigin === "undo" || transactionOrigin === "redo") {
         const decision = this.pendingDecision;
         this.pendingDecision = undefined;

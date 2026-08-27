@@ -91,18 +91,27 @@ describe("syncDoc", () => {
     const { ed } = editor((change) => changes.push(change));
 
     ed.setDoc("base");
-    ed.syncDoc({
-      text: "server",
-      operation: {
-        beforeLength: 4,
-        afterLength: 6,
-        edits: [{ from: 0, to: 4, deleted: "xxxx", inserted: "server" }],
-      },
-    });
+    ed.syncDoc("server");
 
     expect(ed.getDoc()).toBe("server");
     expect(ed.undo()).toBe(false);
     expect(changes).toEqual([]);
+  });
+
+  it("svuota la history solo quando il fallback autoritativo è applicato", () => {
+    const changes: EditorChange[] = [];
+    const { ed, view } = editor((change) => changes.push(change));
+
+    ed.setDoc("aax");
+    writes(view(), "x");
+    expect(ed.getDoc()).toBe("xaax");
+
+    ed.syncDoc("axax");
+
+    expect(ed.getDoc()).toBe("axax");
+    expect(ed.undo()).toBe(false);
+    expect(ed.redo()).toBe(false);
+    expect(changes).toHaveLength(1);
   });
 
   it("conserva l'undo locale mentre applica la modifica remota", () => {
@@ -196,7 +205,26 @@ describe("raggruppamento degli eventi utente", () => {
     expect(ed.redo()).toBe(true);
     expect(ed.selections().primary.start).toBe(2);
   });
+  it("mantiene una transazione multi-intervallo come una sola voce", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abcd");
+    view().dispatch({
+      changes: [
+        { from: 1, insert: "X" },
+        { from: 3, insert: "Y" },
+      ],
+      userEvent: "input.type",
+    });
+
+    expect(ed.getDoc()).toBe("aXbcYd");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abcd");
+    expect(ed.undo()).toBe(false);
+    expect(ed.redo()).toBe(true);
+    expect(ed.getDoc()).toBe("aXbcYd");
+  });
 });
+
 
 describe("due superfici dello stesso documento", () => {
   it("mantiene buffer condiviso, undo locali e redo senza echi", () => {
@@ -207,12 +235,12 @@ describe("due superfici dello stesso documento", () => {
     const first = editor((change) => {
       changesA += 1;
       buffer = change.text;
-      second?.ed.syncDoc({ text: buffer, operation: change.operation });
+      second?.ed.syncDoc(buffer);
     });
     second = editor((change) => {
       changesB += 1;
       buffer = change.text;
-      first.ed.syncDoc({ text: buffer, operation: change.operation });
+      first.ed.syncDoc(buffer);
     });
 
     first.ed.setDoc(buffer);

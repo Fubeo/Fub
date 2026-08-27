@@ -222,6 +222,165 @@ describe("LocalHistory", () => {
     expect(history.undoDepth).toBe(0);
   });
 
+  it("protegge il residuo locale dal diff ambiguo con parentesi ripetute", () => {
+    const history = new LocalHistory();
+    const initial = "Il primo documento di questo vault.\n";
+    const withA = `${initial} [A]`;
+    const before = `${withA} [B]`;
+    const withAOperation = operationFromText(initial, withA);
+    const localB = operationFromText(withA, before);
+    history.acceptExternal(withAOperation);
+    history.acceptLocal(localB, "command");
+
+    const target = `${initial} [B]`;
+    const plan = history.planExternalText(before, target);
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("preserve");
+    expect(plan.operation.edits).toEqual([
+      { from: initial.length, to: withA.length, deleted: " [A]", inserted: "" },
+    ]);
+    expect(applyOperation(before, plan.operation)).toBe(target);
+
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    const undo = history.undo(target);
+    expect(undo.kind).toBe("apply");
+    if (undo.kind !== "apply") return;
+    expect(applyOperation(target, undo.operation)).toBe(initial);
+  });
+
+  it("ripiega sul target e cancella la history quando due ancoraggi sono equivalenti", () => {
+    const history = new LocalHistory();
+    const base = "aax";
+    const local = operationFromText(base, "xaax");
+    history.acceptLocal(local, "command");
+
+    const plan = history.planExternalText("xaax", "axax");
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("authoritative");
+    expect(plan.reason).toBeTruthy();
+    expect(applyOperation("xaax", plan.operation)).toBe("axax");
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    expect(history.undoDepth).toBe(0);
+    expect(history.redoDepth).toBe(0);
+    expect(history.journalSize).toBe(0);
+  });
+
+  it("rifiuta la reintroduzione vicina dell'inverso di una sostituzione", () => {
+    const history = new LocalHistory();
+    const local = operationFromText("abc", "aXc");
+    history.acceptLocal(local, "command");
+
+    const plan = history.planExternalText("aXc", "aXbc");
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("authoritative");
+    expect(applyOperation("aXc", plan.operation)).toBe("aXbc");
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    expect(history.undoDepth).toBe(0);
+    expect(history.redoDepth).toBe(0);
+  });
+
+  it("non sceglie un'occorrenza solo perché è più vicina all'ancoraggio", () => {
+    const history = new LocalHistory();
+    const other = new LocalHistory();
+    const local = operationFromText("aa", "aaa");
+    history.acceptLocal(local, "command");
+    other.acceptLocal(operationFromText("", "altro"), "command");
+
+    const plan = history.planExternalText("aaa", "aaaa");
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("authoritative");
+    expect(applyOperation("aaa", plan.operation)).toBe("aaaa");
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    expect(history.undoDepth).toBe(0);
+    expect(history.redoDepth).toBe(0);
+    expect(other.undoDepth).toBe(1);
+  });
+
+  it("ripiega se più residui hanno assegnazioni monotone possibili", () => {
+    const history = new LocalHistory();
+    const base = "abcd";
+    const local = operation(base, [edit(base, 1, 1, "x"), edit(base, 3, 3, "x")]);
+    const current = applyOperation(base, local);
+    const target = `x${current}x`;
+    history.acceptLocal(local, "command");
+
+    const plan = history.planExternalText(current, target);
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("authoritative");
+    expect(applyOperation(current, plan.operation)).toBe(target);
+  });
+
+  it("separa gli aggiornamenti esterni da un confine locale assente", () => {
+    const history = new LocalHistory();
+    const other = new LocalHistory();
+    const base = "abcd";
+    const current = applyOperation(base, operation(base, [edit(base, 1, 3, "")]));
+    expect(current).toBe("ad");
+    history.acceptLocal(operationFromText(base, current), "command");
+    other.acceptLocal(operationFromText("", "other"), "command");
+
+    const target = "QadR";
+    const plan = history.planExternalText(current, target);
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("preserve");
+    expect(plan.operation.edits).toEqual([
+      { from: 0, to: 0, deleted: "", inserted: "Q" },
+      { from: 2, to: 2, deleted: "", inserted: "R" },
+    ]);
+    expect(applyOperation(current, plan.operation)).toBe(target);
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    expect(other.undoDepth).toBe(1);
+
+    const undo = history.undo(target);
+    expect(undo.kind).toBe("apply");
+    if (undo.kind !== "apply") return;
+    expect(applyOperation(target, undo.operation)).toBe("QabcdR");
+  });
+
+  it("ripiega quando un confine assente ha contesto ripetuto", () => {
+    const history = new LocalHistory();
+    const base = "aXa";
+    const current = applyOperation(base, operation(base, [edit(base, 1, 2, "")]));
+    history.acceptLocal(operation(base, [edit(base, 1, 2, "")]), "command");
+
+    const plan = history.planExternalText(current, "aaaa");
+    expect(plan.kind).toBe("apply");
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("authoritative");
+    expect(applyOperation(current, plan.operation)).toBe("aaaa");
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    expect(history.undoDepth).toBe(0);
+  });
+
+  it("mantiene separati più confini assenti monotoni", () => {
+    const history = new LocalHistory();
+    const base = "abcdef";
+    const local = operation(base, [edit(base, 1, 2, ""), edit(base, 4, 5, "")]);
+    const current = applyOperation(base, local);
+    history.acceptLocal(local, "command");
+
+    const target = "QacdfR";
+    const plan = history.planExternalText(current, target);
+    if (plan.kind !== "apply") return;
+    expect(plan.policy).toBe("preserve");
+    expect(plan.operation.edits).toEqual([
+      { from: 0, to: 0, deleted: "", inserted: "Q" },
+      { from: 4, to: 4, deleted: "", inserted: "R" },
+    ]);
+    expect(applyOperation(current, plan.operation)).toBe(target);
+    expect(history.acceptExternal(plan.operation, plan.policy)).toBe(true);
+    const undo = history.undo(target);
+    expect(undo.kind).toBe("apply");
+    if (undo.kind !== "apply") return;
+    expect(applyOperation(target, undo.operation)).toBe("QabcdefR");
+  });
+
   it("resetta stack e journal e dispone in modo idempotente", () => {
     const history = new LocalHistory({ maxFrames: 2, maxJournalOperations: 2 });
     let current = "";

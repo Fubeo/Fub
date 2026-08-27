@@ -20,6 +20,17 @@ export interface TextOperation {
   readonly afterLength: number;
   readonly edits: readonly TextEdit[];
 }
+export type ExternalTextPolicy = "preserve" | "authoritative";
+
+export type ExternalTextPlan =
+  | { readonly kind: "noop" }
+  | {
+      readonly kind: "apply";
+      readonly operation: TextOperation;
+      readonly policy: ExternalTextPolicy;
+      readonly reason?: string;
+    };
+
 
 export interface SelectionRangeSnapshot {
   readonly from: TextOffset;
@@ -89,6 +100,8 @@ interface PendingDecision {
 const DEFAULT_MAX_FRAMES = 128;
 const DEFAULT_MAX_JOURNAL_OPERATIONS = 512;
 const DEFAULT_MAX_JOURNAL_BYTES = 2_000_000;
+const MAX_SYNC_ANCHORS = 256;
+
 
 type Affinity = "left" | "right";
 
@@ -320,6 +333,27 @@ function operationFromEdits(
     beforeLength,
     afterLength: beforeLength + delta,
     edits: normalized,
+  };
+  return operationShapeError(operation) ? null : operation;
+}
+
+/** Builds a synchronization operation without merging edits at protected gaps. */
+function operationFromSyncEdits(
+  beforeLength: number,
+  edits: readonly TextEdit[],
+): TextOperation | null {
+  const retained = edits
+    .filter((edit) => edit.deleted.length > 0 || edit.inserted.length > 0)
+    .map(copyEdit)
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  const delta = retained.reduce(
+    (total, edit) => total + edit.inserted.length - edit.deleted.length,
+    0,
+  );
+  const operation: TextOperation = {
+    beforeLength,
+    afterLength: beforeLength + delta,
+    edits: retained,
   };
   return operationShapeError(operation) ? null : operation;
 }
@@ -637,6 +671,231 @@ function operationPayloadBytes(operation: TextOperation): number {
     0,
   );
 }
+interface SyncAnchor {
+  readonly kind: "present" | "absent";
+  readonly from: number;
+  readonly to: number;
+  readonly text: string;
+}
+
+interface SyncMatchCandidate {
+  readonly from: number;
+  readonly to: number;
+}
+
+interface SyncMatchState {
+  readonly candidate: SyncMatchCandidate;
+  readonly count: number;
+  readonly previous: number;
+}
+
+function fullReplacement(before: string, target: string): TextOperation {
+  return {
+    beforeLength: before.length,
+    afterLength: target.length,
+    edits: [{ from: 0, to: before.length, deleted: before, inserted: target }],
+  };
+}
+
+function authoritativeTextPlan(
+  before: string,
+  target: string,
+  reason: string,
+): ExternalTextPlan {
+  return {
+    kind: "apply",
+    operation: fullReplacement(before, target),
+    policy: "authoritative",
+    reason,
+  };
+}
+
+function syncAnchorError(anchors: readonly SyncAnchor[]): string | null {
+  if (anchors.length > MAX_SYNC_ANCHORS) return "troppi ancoraggi locali";
+
+  const present = anchors
+    .filter((anchor): anchor is SyncAnchor & { readonly kind: "present" } => anchor.kind === "present")
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  for (let index = 1; index < present.length; index += 1) {
+    if (present[index]!.from < present[index - 1]!.to) {
+      return "ancoraggi locali sovrapposti";
+    }
+  }
+
+  const absent = new Set<number>();
+  for (const anchor of anchors) {
+    if (anchor.kind !== "absent") continue;
+    if (absent.has(anchor.from)) return "ancoraggi locali coincidenti";
+    absent.add(anchor.from);
+    if (present.some((item) => anchor.from > item.from && anchor.from < item.to)) {
+      return "ancoraggio assente dentro un residuo locale";
+    }
+  }
+  return null;
+}
+function hasSyncOccurrenceNear(
+  text: string,
+  needle: string,
+  from: number,
+  to: number,
+  radius: number,
+): boolean {
+  const occurrence = text.indexOf(needle, Math.max(0, from - radius));
+  return occurrence >= 0 && occurrence <= to + radius;
+}
+
+/**
+ * Maps an absent residue to a unique target boundary using exact surrounding
+ * source context.  The right context supplies the existing right affinity.
+ */
+function findSyncBoundary(
+  before: string,
+  target: string,
+  sourceFrom: number,
+  sourcePoint: number,
+  sourceTo: number,
+  targetFrom: number,
+  targetTo: number,
+): number | null {
+  const left = before.slice(sourceFrom, sourcePoint);
+  const right = before.slice(sourcePoint, sourceTo);
+  if (left.length === 0 && right.length === 0) return null;
+
+  const candidates = new Set<number>();
+  if (right.length > 0) {
+    let rightAt = target.indexOf(right, targetFrom);
+    while (rightAt >= 0 && rightAt + right.length <= targetTo) {
+      if (left.length === 0) {
+        candidates.add(rightAt);
+      } else {
+        let leftAt = target.indexOf(left, targetFrom);
+        while (leftAt >= 0 && leftAt + left.length <= rightAt) {
+          candidates.add(rightAt);
+          break;
+        }
+      }
+      rightAt = target.indexOf(right, rightAt + 1);
+    }
+  } else {
+    let leftAt = target.indexOf(left, targetFrom);
+    while (leftAt >= 0 && leftAt + left.length <= targetTo) {
+      candidates.add(leftAt + left.length);
+      leftAt = target.indexOf(left, leftAt + 1);
+    }
+  }
+
+  if (candidates.size !== 1) return null;
+  return candidates.values().next().value ?? null;
+}
+
+/**
+ * Chooses a unique monotone assignment of current local residues to target
+ * occurrences.  The rough full-text patch only supplies a position hint; it
+ * never decides an occurrence by itself.
+ */
+function matchPresentAnchors(
+  anchors: readonly SyncAnchor[],
+  target: string,
+  rough: TextOperation,
+): number[] | null {
+  const present = anchors
+    .filter((anchor): anchor is SyncAnchor & { readonly kind: "present" } => anchor.kind === "present")
+    .sort((a, b) => a.from - b.from || a.to - b.to);
+  if (present.length === 0) return [];
+
+  let previous: SyncMatchState[] | undefined;
+  const rows: SyncMatchState[][] = [];
+  for (const anchor of present) {
+    const expected = mapPoint(anchor.from, rough, "right");
+    if (expected === null) return null;
+    const candidates: SyncMatchCandidate[] = [];
+    let from = target.indexOf(anchor.text);
+    while (from >= 0) {
+      candidates.push({ from, to: from + anchor.text.length });
+      from = target.indexOf(anchor.text, from + 1);
+    }
+    if (candidates.length === 0) return null;
+
+    const states: SyncMatchState[] = [];
+    if (!previous) {
+      for (const candidate of candidates) {
+        states.push({ candidate, count: 1, previous: -1 });
+      }
+    } else {
+      let previousIndex = 0;
+      let viableCount = 0;
+      let onlyPrevious = -1;
+      for (const candidate of candidates) {
+        while (
+          previousIndex < previous.length &&
+          previous[previousIndex]!.candidate.to <= candidate.from
+        ) {
+          const prior = previous[previousIndex]!;
+          if (viableCount === 0 && prior.count === 1) {
+            onlyPrevious = previousIndex;
+          } else {
+            onlyPrevious = -1;
+          }
+          viableCount = Math.min(2, viableCount + prior.count);
+          if (viableCount > 1) onlyPrevious = -1;
+          previousIndex += 1;
+        }
+        if (viableCount === 0) continue;
+        states.push({
+          candidate,
+          count: viableCount,
+          previous: viableCount === 1 ? onlyPrevious : -1,
+        });
+      }
+    }
+    if (states.length === 0) return null;
+    rows.push(states);
+    previous = states;
+  }
+
+  if (!previous) return null;
+  let finalCount = 0;
+  let finalIndex = -1;
+  for (let index = 0; index < previous.length; index += 1) {
+    const state = previous[index]!;
+    if (finalCount === 0 && state.count === 1) finalIndex = index;
+    else finalIndex = -1;
+    finalCount = Math.min(2, finalCount + state.count);
+    if (finalCount > 1) finalIndex = -1;
+  }
+  if (finalCount !== 1 || finalIndex < 0) return null;
+
+  const matches = new Array<number>(rows.length);
+  let index = finalIndex;
+  for (let row = rows.length - 1; row >= 0; row -= 1) {
+    const state = rows[row]![index]!;
+    matches[row] = state.candidate.from;
+    index = state.previous;
+    if (row > 0 && index < 0) return null;
+  }
+  return matches;
+}
+
+
+function appendSyncGap(
+  before: string,
+  target: string,
+  from: number,
+  to: number,
+  targetFrom: number,
+  targetTo: number,
+  edits: TextEdit[],
+): void {
+  const gap = operationFromText(before.slice(from, to), target.slice(targetFrom, targetTo));
+  for (const edit of gap.edits) {
+    edits.push({
+      from: from + edit.from,
+      to: from + edit.to,
+      deleted: edit.deleted,
+      inserted: edit.inserted,
+    });
+  }
+}
 
 /**
  * Owns one undo/redo stack and the complete bounded journal for one surface.
@@ -756,11 +1015,173 @@ export class LocalHistory {
     this.boundFrames();
     return true;
   }
+  /**
+   * Plans a string-only external synchronization while protecting residues
+   * owned by this surface's undo and redo frames.
+   */
+  public planExternalText(before: string, target: string): ExternalTextPlan {
+    if (this.disposed || before === target) return { kind: "noop" };
 
-  public acceptExternal(operation: TextOperation): boolean {
+    const rough = operationFromText(before, target);
+    const anchors: SyncAnchor[] = [];
+    for (const frame of [...this.undoStack, ...this.redoStack]) {
+      let action = frame.action;
+      for (const entry of this.journal) {
+        if (entry.sequence <= frame.validAtJournalSequence) continue;
+        const mapped = rebaseOperation(action, entry.operation);
+        if (mapped.kind === "conflict") {
+          return authoritativeTextPlan(before, target, "proiezione dell'ancoraggio ambigua");
+        }
+        if (mapped.kind === "noop") {
+          action = emptyOperation(action.afterLength);
+          break;
+        }
+        action = mapped.operation;
+      }
+
+      if (action.edits.length === 0) continue;
+      const available = tryApplyOperation(before, action);
+      if (available.kind === "invalid") {
+        return authoritativeTextPlan(before, target, "preimmagine dell'ancoraggio assente");
+      }
+      for (const edit of action.edits) {
+        if (edit.deleted.length > 0) {
+          anchors.push({
+            kind: "present",
+            from: edit.from,
+            to: edit.to,
+            text: edit.deleted,
+          });
+        }
+        if (edit.inserted.length > 0) {
+          anchors.push({
+            kind: "absent",
+            from: edit.from,
+            to: edit.from,
+            text: edit.inserted,
+          });
+        }
+      }
+    }
+
+    const anchorError = syncAnchorError(anchors);
+    if (anchorError) return authoritativeTextPlan(before, target, anchorError);
+    const present = anchors
+      .filter((anchor): anchor is SyncAnchor & { readonly kind: "present" } => anchor.kind === "present")
+      .sort((a, b) => a.from - b.from || a.to - b.to);
+    const matches = matchPresentAnchors(anchors, target, rough);
+    if (matches === null) {
+      return authoritativeTextPlan(before, target, "ancoraggio presente non univoco");
+    }
+
+    const ordered = [...anchors].sort((a, b) => {
+      if (a.from !== b.from) return a.from - b.from;
+      if (a.kind !== b.kind) return a.kind === "absent" ? -1 : 1;
+      return a.to - b.to;
+    });
+    const edits: TextEdit[] = [];
+    let cursor = 0;
+    let targetCursor = 0;
+    let presentIndex = 0;
+    for (const anchor of ordered) {
+      if (anchor.kind === "present") {
+        const targetFrom = matches[presentIndex++]!;
+        const targetTo = targetFrom + anchor.text.length;
+        if (
+          anchor.from < cursor ||
+          anchor.to > before.length ||
+          targetFrom < targetCursor ||
+          targetTo > target.length ||
+          target.slice(targetFrom, targetTo) !== anchor.text
+        ) {
+          return authoritativeTextPlan(before, target, "mappatura dell'ancoraggio non monotona");
+        }
+        appendSyncGap(before, target, cursor, anchor.from, targetCursor, targetFrom, edits);
+        cursor = anchor.to;
+        targetCursor = targetTo;
+        continue;
+      }
+
+      const sourceFrom = cursor;
+      const targetFrom = targetCursor;
+      let sourceTo = before.length;
+      let targetTo = target.length;
+      for (let index = 0; index < present.length; index += 1) {
+        const item = present[index]!;
+        if (item.from < anchor.from) continue;
+        sourceTo = item.from;
+        targetTo = matches[index]!;
+        break;
+      }
+      if (
+        sourceFrom > anchor.from ||
+        sourceTo < anchor.from ||
+        targetFrom < targetCursor ||
+        targetTo < targetFrom
+      ) {
+        return authoritativeTextPlan(before, target, "contesto dell'ancoraggio non monotono");
+      }
+      const targetBoundary = findSyncBoundary(
+        before,
+        target,
+        sourceFrom,
+        anchor.from,
+        sourceTo,
+        targetFrom,
+        targetTo,
+      );
+      if (
+        targetBoundary === null ||
+        targetBoundary < targetCursor ||
+        targetBoundary > target.length ||
+        targetBoundary > targetTo
+      ) {
+        return authoritativeTextPlan(before, target, "confine dell'ancoraggio non univoco");
+      }
+      const paired = present.find((item) => item.from === anchor.from || item.to === anchor.from);
+      const radius = Math.max(anchor.text.length, paired?.text.length ?? 0, 1);
+      if (
+        anchor.text.length > 0 &&
+        hasSyncOccurrenceNear(target, anchor.text, targetBoundary, targetBoundary, radius)
+      ) {
+        return authoritativeTextPlan(before, target, "reintroduzione di una cancellazione locale");
+      }
+      appendSyncGap(before, target, cursor, anchor.from, targetCursor, targetBoundary, edits);
+      cursor = anchor.from;
+      targetCursor = targetBoundary;
+    }
+
+    if (cursor > before.length || targetCursor > target.length) {
+      return authoritativeTextPlan(before, target, "limiti del testo non validi");
+    }
+    appendSyncGap(before, target, cursor, before.length, targetCursor, target.length, edits);
+    const operation = operationFromSyncEdits(before.length, edits);
+    if (!operation) return authoritativeTextPlan(before, target, "piano di sincronizzazione non valido");
+    const applied = tryApplyOperation(before, operation);
+    if (applied.kind !== "applied" || applied.text !== target) {
+      return authoritativeTextPlan(before, target, "verifica del testo sincronizzato fallita");
+    }
+    if (operationPayloadBytes(operation) > this.maxRetainedBytes) {
+      return authoritativeTextPlan(before, target, "limite di conservazione dell'operazione");
+    }
+    return { kind: "apply", operation, policy: "preserve" };
+  }
+
+
+  public acceptExternal(
+    operation: TextOperation,
+    policy: ExternalTextPolicy = "preserve",
+  ): boolean {
     if (this.disposed || operationShapeError(operation)) return false;
     this.pending = undefined;
     if (operation.edits.length === 0) return true;
+    if (policy === "authoritative") {
+      this.sequence += 1;
+      this.undoStack.length = 0;
+      this.redoStack.length = 0;
+      this.journal.length = 0;
+      return true;
+    }
     const sequence = this.appendJournal(operation);
     if (sequence === null) return false;
     this.compactJournal();
