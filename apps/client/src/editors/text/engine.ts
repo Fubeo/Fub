@@ -1,9 +1,7 @@
 import {
   Annotation,
   Compartment,
-  EditorSelection,
   EditorState,
-  Prec,
   Transaction,
   type Extension,
 } from "@codemirror/state";
@@ -34,21 +32,28 @@ import {
   closeBracketsKeymap,
   completionKeymap,
 } from "@codemirror/autocomplete";
-import { defaultKeymap, indentWithTab } from "@codemirror/commands";
+import {
+  defaultKeymap,
+  history as nativeHistory,
+  historyKeymap,
+  indentWithTab,
+  redo as nativeRedo,
+  undo as nativeUndo,
+  undoDepth,
+  redoDepth,
+} from "@codemirror/commands";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToCharIndex, charToByteIndices } from "../../rules/offsets";
 import { editorTheme } from "./theme";
+import { HistoryFootprints } from "./history-footprints";
 import {
-  LocalHistory,
   operationFromText,
   tryApplyOperation,
-  type HistoryGrouping,
-  type SelectionSnapshot,
   type TextEdit,
   type TextOperation,
-} from "../../editor/local-history";
+} from "../../editor/text-operation";
 
 export interface EditorRange {
   start: number;
@@ -83,21 +88,21 @@ export interface TextEngineOptions {
 
 type ApplyOrigin = "user" | "sync" | "undo" | "redo" | "replace";
 
-type PendingDecision =
-  | { readonly kind: "apply"; readonly token: number; readonly operation: TextOperation }
-  | undefined;
-
 export class TextEngine {
   private readonly profile = new Compartment();
   private readonly theme = new Compartment();
   private readonly readOnly = new Compartment();
+  private readonly historyCompartment = new Compartment();
+  private readonly nativeHistoryExtension = nativeHistory({
+    minDepth: 100,
+    newGroupDelay: 500,
+  });
   private readonly originAnnotation = Annotation.define<ApplyOrigin>();
-  private readonly localHistory = new LocalHistory();
+  private readonly footprints = new HistoryFootprints();
   private readonly options: TextEngineOptions;
   private readonly listener: Extension;
   private applyOrigin: ApplyOrigin = "user";
   private readOnlyEnabled = false;
-  private pendingDecision: PendingDecision;
   private disposed = false;
   private currentTheme: Theme;
   private view: EditorView;
@@ -114,12 +119,12 @@ export class TextEngine {
 
   public setDoc(text: string): void {
     if (this.disposed) return;
-    this.localHistory.reset();
     this.applyOrigin = "replace";
     try {
       this.view.setState(
         EditorState.create({ doc: text, extensions: this.extensions(this.lineSeparator(text)) }),
       );
+      this.footprints.reset();
     } finally {
       this.applyOrigin = "user";
     }
@@ -147,13 +152,47 @@ export class TextEngine {
     const applied = tryApplyOperation(current, operation);
     if (applied.kind !== "applied" || applied.text !== normalizedText) return;
 
+    const spec = {
+      changes: this.operationChanges(operation, separator),
+      annotations: [
+        this.originAnnotation.of("sync"),
+        Transaction.addToHistory.of(false),
+        Transaction.remote.of(true),
+      ],
+      userEvent: "sync",
+    };
+    let transaction: Transaction;
+    try {
+      transaction = this.view.state.update(spec);
+    } catch {
+      this.footprints.markUnknown();
+      return;
+    }
+    if (!transaction.docChanged) {
+      this.clearFootprintsWithoutHistory();
+      return;
+    }
+
+    const unsafe = this.footprints.unknown || this.footprints.overlaps(transaction.changes);
+    if (unsafe && !this.resetNativeHistory()) return;
+    if (unsafe) {
+      try {
+        transaction = this.view.state.update(spec);
+      } catch {
+        this.footprints.markUnknown();
+        return;
+      }
+      if (!transaction.docChanged) {
+        this.clearFootprintsWithoutHistory();
+        return;
+      }
+    }
+
     this.applyOrigin = "sync";
     try {
-      this.view.dispatch({
-        changes: this.operationChanges(operation, separator),
-        annotations: this.originAnnotation.of("sync"),
-        userEvent: "sync",
-      });
+      this.view.dispatch(transaction);
+    } catch {
+      this.footprints.markUnknown();
     } finally {
       this.applyOrigin = "user";
     }
@@ -174,6 +213,7 @@ export class TextEngine {
   public focus(): void {
     if (!this.disposed) this.view.focus();
   }
+
   public revealByteOffset(byteOffset: number): void {
     if (this.disposed) return;
     const text = this.rendered();
@@ -215,8 +255,7 @@ export class TextEngine {
   public destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.pendingDecision = undefined;
-    this.localHistory.dispose();
+    this.footprints.reset();
     this.view.destroy();
   }
 
@@ -257,42 +296,7 @@ export class TextEngine {
     return text.includes("\r\n") && !/(^|[^\r])\n/.test(text) ? "\r\n" : null;
   }
 
-  private selectionSnapshot(selection: EditorSelection): SelectionSnapshot {
-    return {
-      ranges: selection.ranges.map((range) => ({ from: range.from, to: range.to })),
-      mainIndex: selection.mainIndex,
-    };
-  }
-
-  private selectionFromSnapshot(
-    selection: SelectionSnapshot,
-    documentLength: number,
-  ): EditorSelection {
-    const ranges = selection.ranges.map((range) => {
-      const from = Math.max(0, Math.min(documentLength, range.from));
-      const to = Math.max(0, Math.min(documentLength, range.to));
-      return EditorSelection.range(Math.min(from, to), Math.max(from, to));
-    });
-    if (ranges.length === 0) return EditorSelection.single(0);
-    const mainIndex = Math.max(0, Math.min(selection.mainIndex, ranges.length - 1));
-    return EditorSelection.create(ranges, mainIndex);
-  }
-
-  private operationFromUpdate(update: {
-    readonly changes: {
-      iterChanges: (
-        f: (
-          fromA: number,
-          toA: number,
-          fromB: number,
-          toB: number,
-          inserted: { toString(): string },
-        ) => void,
-      ) => void;
-    };
-    readonly startState: EditorState;
-    readonly state: EditorState;
-  }): TextOperation {
+  private operationFromUpdate(update: ViewUpdate): TextOperation {
     const edits: TextEdit[] = [];
     update.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
       edits.push({
@@ -309,14 +313,43 @@ export class TextEngine {
     };
   }
 
-  private groupingFor(update: { readonly transactions: readonly Transaction[] }): HistoryGrouping {
-    const event = update.transactions
-      .map((transaction) => transaction.annotation(Transaction.userEvent))
-      .find((value): value is string => value !== undefined);
-    if (event?.startsWith("input.type.compose")) return "composition";
-    if (event?.startsWith("input.paste")) return "paste";
-    if (event?.startsWith("input") || event?.startsWith("delete")) return "input";
-    return "command";
+  private updateOrigin(update: ViewUpdate): ApplyOrigin {
+    const annotated = update.transactions
+      .map((transaction) => transaction.annotation(this.originAnnotation))
+      .find((value): value is ApplyOrigin => value !== undefined);
+    if (annotated) return annotated;
+    if (update.transactions.some((transaction) => transaction.isUserEvent("sync"))) return "sync";
+    if (update.transactions.some((transaction) => transaction.isUserEvent("undo"))) return "undo";
+    if (update.transactions.some((transaction) => transaction.isUserEvent("redo"))) return "redo";
+    return this.applyOrigin;
+  }
+
+  private isHistoryableLocal(update: ViewUpdate): boolean {
+    return update.transactions.some(
+      (transaction) =>
+        transaction.docChanged &&
+        transaction.annotation(Transaction.addToHistory) !== false &&
+        transaction.annotation(Transaction.remote) !== true,
+    );
+  }
+
+  private clearFootprintsWithoutHistory(): void {
+    this.footprints.clearIfNoHistory(undoDepth(this.view.state), redoDepth(this.view.state));
+  }
+
+  private resetNativeHistory(): boolean {
+    if (undoDepth(this.view.state) === 0 && redoDepth(this.view.state) === 0) {
+      this.footprints.reset();
+      return true;
+    }
+    try {
+      this.view.dispatch({ effects: this.historyCompartment.reconfigure([]) });
+      this.view.dispatch({ effects: this.historyCompartment.reconfigure(this.nativeHistoryExtension) });
+      return true;
+    } catch {
+      this.footprints.markUnknown();
+      return false;
+    }
   }
 
   private operationChanges(
@@ -332,67 +365,37 @@ export class TextEngine {
 
   private runHistory(direction: "undo" | "redo"): boolean {
     if (this.disposed) return false;
-    const current = this.view.state.doc.toString();
-    const decision = direction === "undo" ? this.localHistory.undo(current) : this.localHistory.redo(current);
-    if (decision.kind !== "apply") return false;
-    this.pendingDecision = decision;
+    const command = direction === "undo" ? nativeUndo : nativeRedo;
     this.applyOrigin = direction;
     try {
-      const changes = this.operationChanges(decision.operation, this.view.state.lineBreak);
-      const selection = decision.selection
-        ? this.selectionFromSnapshot(decision.selection, decision.operation.afterLength)
-        : undefined;
-      this.view.dispatch({
-        changes,
-        ...(selection ? { selection } : {}),
-        annotations: this.originAnnotation.of(direction),
-        userEvent: direction,
+      return command({
+        state: this.view.state,
+        dispatch: (transaction) => this.view.dispatch(transaction),
       });
     } catch {
-      this.pendingDecision = undefined;
-      this.localHistory.cancelPending();
+      return false;
     } finally {
       this.applyOrigin = "user";
     }
-    return true;
   }
 
   private handleUpdate(update: ViewUpdate): void {
     if (this.disposed) return;
+    const origin = this.updateOrigin(update);
     if (update.docChanged) {
       const operation = this.operationFromUpdate(update);
-      const transactionOrigin =
-        update.transactions
-          .map((transaction) => transaction.annotation(this.originAnnotation))
-          .find((value): value is ApplyOrigin => value !== undefined) ?? this.applyOrigin;
-
-      if (transactionOrigin === "user") {
-        this.localHistory.acceptLocal(
-          operation,
-          this.groupingFor(update),
-          this.selectionSnapshot(update.startState.selection),
-          this.selectionSnapshot(update.state.selection),
-        );
+      this.footprints.advance(update.changes, origin === "user" && this.isHistoryableLocal(update));
+      if (origin === "user") {
         this.options.onChange({ text: this.rendered(update.state), operation, origin: "input" });
-      } else if (transactionOrigin === "sync") {
-        this.localHistory.acceptExternal(operation);
-      } else if (transactionOrigin === "undo" || transactionOrigin === "redo") {
-        const decision = this.pendingDecision;
-        this.pendingDecision = undefined;
-        const before = this.selectionSnapshot(update.startState.selection);
-        const after = this.selectionSnapshot(update.state.selection);
-        if (decision) {
-          if (!this.localHistory.commit(decision, before, after, operation)) {
-            this.localHistory.acceptExternal(operation);
-          }
-          this.options.onChange({
-            text: this.rendered(update.state),
-            operation,
-            origin: transactionOrigin,
-          });
-        }
+      } else if (origin === "undo" || origin === "redo") {
+        this.options.onChange({
+          text: this.rendered(update.state),
+          operation,
+          origin,
+        });
       }
     }
+    this.clearFootprintsWithoutHistory();
     if (update.selectionSet || update.docChanged) this.options.onSelectionChange();
   }
 
@@ -401,6 +404,7 @@ export class TextEngine {
       ...(convertLineBreaks === null ? [] : [EditorState.lineSeparator.of(convertLineBreaks)]),
       this.profile.of(this.profileExtensions()),
       this.readOnly.of(EditorState.readOnly.of(this.readOnlyEnabled)),
+      this.historyCompartment.of(this.nativeHistoryExtension),
       lineNumbers(),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
@@ -420,23 +424,12 @@ export class TextEngine {
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,
+        ...historyKeymap,
         ...searchKeymap,
         ...foldKeymap,
         ...completionKeymap,
         ...lintKeymap,
       ]),
-      Prec.high(
-        keymap.of([
-          { key: "Mod-z", run: () => this.runHistory("undo"), preventDefault: true },
-          {
-            key: "Mod-y",
-            mac: "Mod-Shift-z",
-            run: () => this.runHistory("redo"),
-            preventDefault: true,
-          },
-          { linux: "Ctrl-Shift-z", run: () => this.runHistory("redo"), preventDefault: true },
-        ]),
-      ),
       keymap.of([indentWithTab]),
       this.theme.of(editorTheme(this.currentTheme)),
       EditorView.lineWrapping,
