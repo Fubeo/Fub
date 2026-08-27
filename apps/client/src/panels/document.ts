@@ -23,7 +23,7 @@
 //   - il debounce del salvataggio è del **documento**, non del riquadro: due
 //     riquadri che scrivono sulla stessa nota non fanno due salvataggi in corsa;
 //   - la pila di undo resta di ciascun editor (0045): le due pile non si
-//     fondono, ed è per questo che la sincronizzazione non passa dalla history.
+//     fondono: la history nativa mappa il cambiamento esterno, ma non lo rende un evento di undo locale.
 //
 // Il buffer vive finché qualche riquadro tiene aperto quel documento; chiudendo
 // l'ultima linguetta si mette in salvo ciò che c'era di sporco e poi si dimentica.
