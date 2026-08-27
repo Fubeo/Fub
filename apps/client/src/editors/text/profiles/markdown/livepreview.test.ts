@@ -54,6 +54,20 @@ describe("heading ATX", () => {
     expect(ofKind(ds, "h3")).toContainEqual({ from: 4, to: 7, kind: "h3" });
   });
 });
+describe("heading Setext", () => {
+  it("nasconde solo il marcatore e marca il titolo Unicode col livello", () => {
+    const doc = "Titolo 🎯\n======";
+    const ds = decorate(doc);
+    expect(ofKind(ds, "hide")).toEqual([{ from: 10, to: 16, kind: "hide" }]);
+    expect(ofKind(ds, "h1")).toEqual([{ from: 0, to: 9, kind: "h1" }]);
+  });
+
+  it("sulla riga del marcatore lascia visibile la sorgente", () => {
+    const doc = "Sotto\n------";
+    expect(ofKind(decorate(doc, [2]), "hide")).toEqual([]);
+    expect(ofKind(decorate(doc, [2]), "h2")).toEqual([{ from: 0, to: 5, kind: "h2" }]);
+  });
+});
 
 describe("enfasi", () => {
   it("grassetto e corsivo annidati: marcatori nascosti, contenuti marcati", () => {

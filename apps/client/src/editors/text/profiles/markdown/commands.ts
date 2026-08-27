@@ -11,6 +11,7 @@ import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
 import { indentUnit } from "@codemirror/language";
 import { taskChecked } from "../../../../rules/mirrored";
 import { nextMarker, listItem } from "../../../../rules/syntax";
+import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
 
 // ── Formattazione inline ─────────────────────────────────────────────────────
@@ -377,6 +378,9 @@ export function autoPairDecision(
 ): PairDecision | null {
   // Solo battute singole a selezione vuota: incolla e IME non si toccano.
   if (from !== to || typed.length !== 1) return null;
+  // Tutti i marker gestiti sotto sono sintassi Markdown: dentro il codice
+  // prevale il confine del parser, non il carattere appena battuto.
+  if (isStrictlyInsideCode(state, from)) return null;
   const next = (n: number) => state.sliceDoc(from, from + n);
   const prev = (n: number) => state.sliceDoc(Math.max(0, from - n), from);
   switch (typed) {

@@ -198,10 +198,27 @@ export function computeDecorations(
     from,
     to,
     enter(node) {
-      const heading = /^ATXHeading([1-6])$/.exec(node.name);
+      const heading = /^(ATX|Setext)Heading([1-6])$/.exec(node.name);
       if (heading) {
         const marks = node.node.getChildren("HeaderMark");
         if (!marks.length) return;
+        if (heading[1] === "Setext") {
+          // Nel Setext il contenuto è sulla riga precedente al marcatore:
+          // nascondere il nodo intero cancellerebbe proprio il titolo.
+          const underline = marks[marks.length - 1];
+          const title = doc.lineAt(node.from);
+          if (!active(underline.from)) {
+            out.push({ from: underline.from, to: underline.to, kind: "hide" });
+          }
+          if (node.from < title.to) {
+            out.push({
+              from: node.from,
+              to: title.to,
+              kind: ("h" + heading[2]) as LiveDecoKind,
+            });
+          }
+          return;
+        }
         // Lo spazio dopo i `#` (e quello prima dei `#` di chiusura) fa parte
         // del marcatore percepito: nasconderlo evita il testo che "salta".
         let textFrom = marks[0].to;
@@ -217,7 +234,7 @@ export function computeDecorations(
           if (close && textEnd < node.to) out.push({ from: textEnd, to: node.to, kind: "hide" });
         }
         if (textFrom < textEnd) {
-          out.push({ from: textFrom, to: textEnd, kind: ("h" + heading[1]) as LiveDecoKind });
+          out.push({ from: textFrom, to: textEnd, kind: ("h" + heading[2]) as LiveDecoKind });
         }
         return;
       }
