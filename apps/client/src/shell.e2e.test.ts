@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Ventidue gesti, contati da fuori
+// # Trentadue gesti, contati da fuori
 //
-// I gesti sono **ventidue** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **trentadue** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -352,6 +352,127 @@ describe("scrivi", () => {
   });
 });
 
+describe("i confini del buffer", () => {
+  it("accorpa le battute ravvicinate in un solo debounce", async () => {
+    const host = await start(VAULT);
+
+    typeInEditor("prima battuta");
+    typeInEditor(" e seconda battuta");
+    await waitFor("il debounce parte", () => host.atGate("writeDocument").length === 1);
+    // The integration exercises the real 400 ms app debounce; fake timers would
+    // also freeze `waitFor`/`settle` and cannot observe the host gate naturally.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await settle();
+
+    expect(host.atGate("writeDocument")).toHaveLength(1);
+    expect(host.files()["Benvenuto.md"]).toContain("prima battuta e seconda battuta");
+  });
+
+  it("mantiene il testo e lo stato quando una scrittura fallisce", async () => {
+    const host = await start(VAULT);
+    const repair = host.fault("writeDocument", "disco pieno");
+    // `vi.resetModules` gives each mounted shell its own notification history.
+    const { recentNotices } = await import("./ui/notify");
+
+    typeInEditor("testo rifiutato dal disco");
+    await waitFor(
+      "la scrittura rifiutata parte",
+      () => host.atGate("writeDocument").length === 1,
+    );
+    await waitFor(
+      "lo stato diventa fallito",
+      () => document.getElementById("save-state")?.dataset.state === "fallito",
+    );
+
+    expect(host.files()["Benvenuto.md"]).not.toContain("testo rifiutato dal disco");
+    expect(
+      recentNotices().some((notice) => notice.text.includes("non è stato salvato")),
+      "il fallimento della scrittura non è visibile",
+    ).toBe(true);
+    repair();
+  });
+
+  it("ricarica un cambio watcher quando il buffer è pulito", async () => {
+    const host = await start(VAULT);
+    const readsBefore = host.atGate("readDocument").length;
+
+    await host.module.api.writeDocument(
+      "Benvenuto.md",
+      "testo arrivato dal watcher\n",
+      { kind: "dictated" },
+    );
+    expect(host.emit({ type: "document_changed", id: "Benvenuto.md" })).toBe(true);
+
+    await waitFor(
+      "il documento viene riletto dopo il cambio watcher",
+      () => host.atGate("readDocument").length > readsBefore,
+    );
+    await waitFor(
+      "il testo watcher arriva all'editor",
+      () => textToVideo().includes("testo arrivato dal watcher"),
+    );
+    expect(textToVideo()).toContain("testo arrivato dal watcher");
+  });
+
+  it("non sovrascrive il buffer sporco quando il watcher cambia il file", async () => {
+    const host = await start(VAULT);
+    typeInEditor("testo locale non salvato");
+    const readsBefore = host.atGate("readDocument").length;
+
+    await host.module.api.writeDocument(
+      "Benvenuto.md",
+      "testo arrivato dal watcher\n",
+      { kind: "dictated" },
+    );
+    expect(host.emit({ type: "document_changed", id: "Benvenuto.md" })).toBe(true);
+
+    await settle();
+    expect(host.atGate("readDocument").length).toBe(readsBefore);
+    expect(textToVideo()).toContain("testo locale non salvato");
+    expect(textToVideo()).not.toContain("testo arrivato dal watcher");
+    await host.close();
+  });
+
+  it("rifiuta la scrittura su una revisione superata senza coprire il file", async () => {
+    const host = await start(VAULT);
+
+    typeInEditor("testo locale");
+    await host.module.api.writeDocument(
+      "Benvenuto.md",
+      "testo scritto altrove\n",
+      { kind: "dictated" },
+    );
+
+    const revisionOf = (call: { args: unknown[] }): string | undefined => {
+      const base = call.args[2];
+      if (typeof base !== "object" || base === null || !("kind" in base)) return undefined;
+      if (base.kind !== "descends_from" || !("value" in base) || typeof base.value !== "string") {
+        return undefined;
+      }
+      return base.value;
+    };
+    await waitFor(
+      "la scrittura locale arriva con la base letta",
+      () =>
+        host
+          .atGate("writeDocument")
+          .some((call) => revisionOf(call) !== undefined),
+    );
+    await waitFor(
+      "lo stato diventa conflitto",
+      () => document.getElementById("save-state")?.dataset.state === "conflitto",
+    );
+    await waitFor("la bozza del conflitto parte", () => host.atGate("saveDraft").length > 0);
+
+    const attempted = host
+      .atGate("writeDocument")
+      .find((call) => revisionOf(call) !== undefined);
+    expect(attempted).toBeDefined();
+    expect(revisionOf(attempted!)).toBe("r1");
+    expect(host.files()["Benvenuto.md"]).toBe("testo scritto altrove\n");
+  });
+});
+
 describe("undo locale tra riquadri", () => {
   it("condivide il testo ma non la cronologia, senza rileggere o lasciare timer", async () => {
     const host = await start(VAULT);
@@ -487,6 +608,39 @@ describe("rinomina", () => {
   });
 });
 
+describe("rinomina durante un salvataggio in volo", () => {
+  it("aspetta il salvataggio e non ricrea il nome vecchio", async () => {
+    const host = await start(VAULT);
+    const unlock = host.throttle("writeDocument");
+
+    typeInEditor("testo prima della rinomina");
+    await waitFor(
+      "la prima scrittura è in volo",
+      () => host.atGate("writeDocument").length === 1,
+    );
+
+    await contextMenu(row("Benvenuto"), "Rinomina");
+    const field = document.querySelector<HTMLInputElement>("#file-list input");
+    if (!field) throw new Error("la riga non è diventata un campo");
+    field.value = "Indice";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await settle();
+    expect(host.atGate("invokeCommand").filter((c) => c.args[0] === "note.rename")).toHaveLength(0);
+
+    unlock();
+    await waitFor(
+      "la rinomina parte dopo il salvataggio",
+      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.rename"),
+    );
+    await settle();
+
+    expect(host.atGate("writeDocument")).toHaveLength(1);
+    expect(Object.keys(host.files())).toContain("Indice.md");
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+    expect(host.files()["Indice.md"]).toContain("testo prima della rinomina");
+  });
+});
+
 describe("chiudere la finestra col ritardo che corre", () => {
   /// I due ritardi della shell — 400 ms il salvataggio, un secondo la bozza —
   /// non hanno un dopo quando la finestra si chiude, e non lo aveva nessuno:
@@ -547,6 +701,103 @@ describe("chiudere la finestra col ritardo che corre", () => {
     unlock();
     await close;
     repair();
+  });
+});
+
+describe("chiudere linguette e superfici", () => {
+  it("chiude una linguetta senza chiudere le altre", async () => {
+    const host = await start(VAULT);
+    const folder = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
+    folder?.click();
+    await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
+
+    row("Riunione").click();
+    await waitFor("la seconda linguetta si apre", () =>
+      textToVideo().includes("Appunti della riunione"),
+    );
+    const tabs = [...document.querySelectorAll<HTMLElement>(".pane .tab")];
+    expect(tabs).toHaveLength(2);
+
+    const close = tabs[1]?.querySelector<HTMLElement>(".tab-close");
+    close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await waitFor(
+      "resta la linguetta iniziale",
+      () => document.querySelectorAll(".pane .tab").length === 1,
+    );
+    expect(textToVideo()).toContain("Il primo documento");
+    expect(host.files()["Benvenuto.md"]).toBe(VAULT["Benvenuto.md"]);
+  });
+
+  it("chiude l'ultima linguetta, salva una volta e non lascia timer", async () => {
+    const host = await start(VAULT);
+    typeInEditor("testo prima di chiudere la linguetta");
+
+    const close = document.querySelector<HTMLElement>(".pane .tab-close");
+    close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await waitFor(
+      "l'ultima linguetta si chiude",
+      () => document.querySelectorAll(".pane .tab").length === 0,
+    );
+    await waitFor("il salvataggio della linguetta parte", () =>
+      host.atGate("writeDocument").length === 1,
+    );
+    expect(host.files()["Benvenuto.md"]).toContain("testo prima di chiudere la linguetta");
+    expect(editorViews()).toHaveLength(1);
+
+    // This integration must let the real save/debounce deadlines pass: a
+    // residual timer is the behavior under test, not an injectable callback.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await settle();
+    expect(host.atGate("writeDocument")).toHaveLength(1);
+  });
+
+  it("distrugge la superficie del riquadro chiuso", async () => {
+    await start(VAULT);
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "\\", ctrlKey: true }),
+    );
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+
+    const panes = [...document.querySelectorAll<HTMLElement>(".pane")];
+    const removed = editorViews()[1]!;
+    panes[1]!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "w",
+        ctrlKey: true,
+        shiftKey: true,
+      }),
+    );
+
+    await waitFor("il riquadro si chiude", () => document.querySelectorAll(".pane").length === 1);
+    expect(editorViews()).toHaveLength(1);
+    expect(removed.dom.isConnected).toBe(false);
+  });
+
+  it("non fa risorgere una nota sporca appena cancellata", async () => {
+    const host = await start(VAULT);
+    typeInEditor("testo della nota cancellata");
+    const unlock = host.throttle("invokeCommand");
+
+    await contextMenu(row("Benvenuto"), "Elimina");
+    await waitFor(
+      "la cancellazione arriva al kernel",
+      () => host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash"),
+    );
+
+    // Keep the delete command in flight past the save debounce. If the delete
+    // left a timer armed, its write would recreate the now-missing path here.
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await settle();
+    expect(host.atGate("writeDocument")).toHaveLength(0);
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+
+    unlock();
+    await waitFor("la bozza viene scartata", () => host.atGate("discardDraft").length > 0);
+    await settle();
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
   });
 });
 

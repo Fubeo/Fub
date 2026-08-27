@@ -49,6 +49,7 @@ import type {
   KernelEvent,
   KernelNotice,
   Organization,
+  PluginError,
   QueryExpr,
   QueryPredicate,
   SettingEntry,
@@ -476,10 +477,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
         }
         const before = docs.get(id);
         if (base.kind === "descends_from" && before && before.revision !== base.value) {
+          const conflict: PluginError = {
+            kind: "conflict",
+            message: `conflict: «${id}» è changed sotto`,
+          };
           return gate(
             "writeDocument",
             [id, source, base],
-            Promise.reject(new Error(`conflict: «${id}» è changed sotto`)),
+            Promise.reject(conflict),
           );
         }
         return gate("writeDocument", [id, source, base], Promise.resolve(write(id, source)));
