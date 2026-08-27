@@ -69,6 +69,11 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 - revisioni e conflitti espliciti;
 - sincronizzazione fra più riquadri sullo stesso documento.
 
+Nella shell corrente, l'unico percorso montato dall'utente è Markdown.
+`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
+stesso `TextEngine`, esercitati dai test e dalla fixture a tre profili, ma non
+sono superfici esposte all'utente.
+
 ### Navigazione e conoscenza
 
 - ricerca full-text persistente;
@@ -96,7 +101,7 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 | plugin nativi | disponibili nel codice |
 | runtime WASM | parziale, M5 in corso |
 | installazione di plugin di terzi | non completata |
-| superfici di editing riusabili | proposta in issue, non architettura corrente |
+| superfici testuali interne | `TextEngine` e profili reali nel codice; solo Markdown è montato dall'utente |
 | database, sync, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
 
 Una descrizione dettagliata di un'idea non la rende parte del prodotto. Lo stato

@@ -23,7 +23,11 @@ apps/client/src/editor/livepreview.test.ts
 apps/client/src/editor/completions.ts
 apps/client/src/editor/completions.test.ts
 apps/client/src/editor/corpus.test.ts
-apps/client/src/editors/text/profiles/markdown/**
+apps/client/src/editors/text/profiles/markdown/livepreview.ts
+apps/client/src/editors/text/profiles/markdown/livepreview.test.ts
+apps/client/src/editors/text/profiles/markdown/completions.ts
+apps/client/src/editors/text/profiles/markdown/completions.test.ts
+apps/client/src/editors/text/profiles/markdown/corpus.test.ts
 ```
 
 ## forbidden_paths

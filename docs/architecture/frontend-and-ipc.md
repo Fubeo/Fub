@@ -182,6 +182,11 @@ dominio:
 | `PlainTextProfile` | `createPlainTextProfile()` monta estensioni vuote, senza sintassi o comandi di dominio. |
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
+Questi profili sono un'architettura interna della shell. `MarkdownProfile` è
+l'unico profilo montato dal percorso utente; `PlainTextProfile` e
+`FormulaProfile` sono esercitati dai test e dalla fixture a tre profili, ma non
+sono superfici esposte all'utente.
+
 I moduli sono rispettivamente
 `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `apps/client/src/editors/text/profiles/plain-text.ts` e

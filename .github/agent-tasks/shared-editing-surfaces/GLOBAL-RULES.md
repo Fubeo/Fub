@@ -37,9 +37,11 @@ Se un task elenca esplicitamente un path appartenente a `GLOBAL-FORBIDDEN` nei p
 
 ## Eccezione approvata — confine delle operazioni tipizzate
 
-L'eccezione esplicita per `SURF-023R-operation` autorizza soltanto il
-confine interno delle operazioni già presente fra `TextEngine` e
-`apps/client/src/panels/document.ts`:
+La spec [`SURF-023R`](tasks/SURF-023R.md) autorizza soltanto il confine
+interno delle operazioni già presente fra `TextEngine`,
+`createEditor()` e `apps/client/src/panels/document.ts`. I path autorizzati
+sono quelli elencati nella spec; ogni altro path resta soggetto a
+`GLOBAL-FORBIDDEN`.
 
 - `TextEngine` emette `EditorChange`, che conserva `text` e `TextOperation`;
   `createEditor` inoltra il valore tipizzato come adapter legacy.
@@ -49,8 +51,8 @@ confine interno delle operazioni già presente fra `TextEngine` e
   più recente.
 - Il coordinatore può fare fan-out di `{ text, operation }` soltanto alle
   altre superfici dello stesso documento. `TextEngine.syncDoc()` valida il
-  valore ricevuto e la `LocalHistory` della superficie destinataria registra
-  il cambio come esterno.
+  valore ricevuto, usa `operationFromText()` solo come fallback locale e la
+  `LocalHistory` della superficie destinataria registra il cambio come esterno.
 
 Questa è una forma interna alla shell TypeScript: non è un contratto IPC,
 ABI, WIT o pubblico. `document.ts` conserva l'ownership di `Buffer`, revisione
