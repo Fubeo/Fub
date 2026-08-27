@@ -8,6 +8,9 @@ La Fase 4 (`DocumentSession`) non può iniziare finché ogni voce seguente non �
 - [ ] `TextEngine` non importa né nomina Markdown, wikilink, tag, live preview o `SyntaxForm`.
 - [ ] `MarkdownProfile` usa `TextEngine` e conserva il comportamento osservabile precedente.
 - [ ] `createEditor` è assente oppure resta soltanto come adapter temporaneo; non è un secondo engine.
+- [ ] `EditorChange` conserva `text` e `TextOperation` emessi da `TextEngine`
+  attraverso l'adapter legacy `createEditor`; questo tipo resta interno e
+  non diventa un contratto IPC, ABI o WIT.
 - [ ] `PlainTextProfile` usa lo stesso engine e non acquisisce semantica Markdown.
 - [ ] `FormulaProfile` usa lo stesso engine e dimostra single-line, operatori, numeri, stringhe, A1, completamenti, commit e cancel.
 - [ ] Una fixture a tre profili prova una capacità/fix generica senza duplicazioni nei profili.
@@ -19,6 +22,14 @@ La Fase 4 (`DocumentSession`) non può iniziare finché ogni voce seguente non �
 - [ ] Cambio documento elimina la history precedente.
 - [ ] Sync programmatico fra surface non entra nell'undo locale.
 - [ ] Due pane sullo stesso documento condividono il testo ma conservano history/cursore locali.
+- [ ] `written()` in `document.ts`, quando il `Buffer` esiste, valida
+  `EditorChange.operation` contro il `Buffer` autorevole e rifiuta un'operazione
+  stantia o incoerente, riallineando la superficie sorgente senza sovrascrivere
+  il testo corrente.
+- [ ] Il fan-out passa `{ text, operation }` soltanto alle altre superfici dello
+  stesso documento; `TextEngine.syncDoc()` valida il cambio, usa
+  `operationFromText()` solo come fallback e la `LocalHistory` destinataria lo
+  registra come esterno.
 - [ ] UTF-8 e offset restano corretti.
 - [ ] CRLF e politica sui file misti restano corrette.
 - [ ] Cambio tema non ricostruisce il documento né perde history.
@@ -33,7 +44,10 @@ Sul diff aggregato da `ROOT_BASE_SHA` alla HEAD della integration branch:
 - [ ] nessuna modifica in `crates/**`;
 - [ ] nessuna modifica `*.wit`;
 - [ ] nessuna modifica a `apps/client/src/host/**`;
-- [ ] nessuna modifica a `apps/client/src/panels/document.ts`;
+- [ ] nessuna modifica a `apps/client/src/panels/document.ts`, salvo il solo
+  confine autorizzato: `written()` valida l'operazione tipizzata contro il
+  `Buffer` autorevole e fa fan-out nello stesso documento; non aggiunge
+  meccanica generica di editor o history.
 - [ ] nessuna modifica a `apps/client/src/state/layout.ts`;
 - [ ] nessuna modifica a `apps/client/package.json` o `package-lock.json`;
 - [ ] nessun nuovo contratto pubblico;
@@ -43,8 +57,12 @@ L'unica eccezione attesa fuori dal frontend text/docs è il task CI `SURF-041` n
 
 ## Ownership prima della Fase 4
 
-- [ ] `document.ts` possiede ancora buffer, revisione/base, dirty, queue, debounce, draft, conflitto, rename/delete/close coordination.
-- [ ] nessun pezzo di `DocumentSession` è stato estratto opportunisticamente durante F1–F3.
+- [ ] `document.ts` possiede ancora buffer, revisione/base, dirty, queue, debounce,
+  draft, conflitto, rename/delete/close coordination; il confine operativo non
+  trasferisce nessuna di queste responsabilità.
+- [ ] Nessun pezzo di `DocumentSession` è stato estratto opportunisticamente
+  durante F1–F3 e il pannello non acquisisce meccanica generica di editor o
+  history.
 - [ ] layout/tab/focus/mode restano responsabilità della shell corrente.
 
 ## Check aggregati

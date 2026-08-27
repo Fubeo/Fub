@@ -137,6 +137,42 @@ usa il percorso esterno della cronologia e non aggiunge l'operazione all'undo
 locale. Il buffer e la coda di scrittura sono quindi condivisi per documento,
 mentre cursore, scroll, focus e history sono locali alla superficie.
 
+### Confine delle operazioni tra superfici
+
+Il flusso delle modifiche è esplicito e resta interno alla shell:
+`TextEngine.handleUpdate()` crea un `EditorChange` con `text`, `operation`
+(`TextOperation`) e `origin`; `createEditor()` lo inoltra al callback
+legacy senza ridurre l'operazione al solo testo.
+
+`written(paneId, change)` in `document.ts` legge il `Buffer` autorevole del
+documento. Quando il buffer esiste, normalizza i terminatori e applica
+`tryApplyOperation(current, operation)`, accettando il cambio soltanto se
+l'operazione è applicabile e il risultato coincide con `text`. Se la
+superficie è stantia o l'operazione è malformata o incoerente, non sovrascrive
+il buffer: riallinea la superficie sorgente con `syncDoc(existing.text)` e
+termina il percorso.
+
+Dopo una validazione riuscita, `written()` aggiorna `Buffer.text` e `dirty`,
+poi pianifica salvataggio e bozza. Il fan-out percorre `panesWithDoc(doc)` e
+chiama `syncDoc({ text, operation })` sulle altre superfici dello stesso
+documento, lasciando la superficie sorgente fuori dal giro.
+
+La superficie destinataria esegue una seconda guardia: `TextEngine.syncDoc()`
+valida l'operazione ricevuta contro il proprio testo corrente e contro il
+testo obiettivo normalizzato. Se l'operazione è stantia o non produce
+l'obiettivo, usa `operationFromText(current, normalizedText)` come fallback
+locale e limitato. Applica quindi il cambio con origine `sync` e
+`LocalHistory.acceptExternal(operation)`, così il cambio esterno aggiorna il
+journal ma non diventa una battuta nella history locale della superficie
+destinataria.
+
+`EditorChange`, `DocumentUpdate` e `TextOperation` sono tipi interni della
+shell TypeScript: non attraversano `host/contract.ts`, IPC, WIT o ABI. Non
+esiste un bridge nascosto fra motori; il coordinamento del `Buffer` e del
+fan-out resta in `document.ts`, mentre ogni `TextEngine` conserva la propria
+`LocalHistory`. `operationFromText()` è soltanto il fallback del ricevente,
+non una sostituzione del metadato tipizzato emesso dalla sorgente.
+
 I profili condividono lo stesso motore e aggiungono soltanto semantica di
 dominio:
 

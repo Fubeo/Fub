@@ -35,6 +35,33 @@ apps/client/bench/baseline/**
 
 Se un task elenca esplicitamente un path appartenente a `GLOBAL-FORBIDDEN` nei propri `allowed_paths`, quell'eccezione vale soltanto per quel task e soltanto per quei path.
 
+## Eccezione approvata — confine delle operazioni tipizzate
+
+L'eccezione esplicita per `SURF-023R-operation` autorizza soltanto il
+confine interno delle operazioni già presente fra `TextEngine` e
+`apps/client/src/panels/document.ts`:
+
+- `TextEngine` emette `EditorChange`, che conserva `text` e `TextOperation`;
+  `createEditor` inoltra il valore tipizzato come adapter legacy.
+- `document.ts`, quando il `Buffer` esiste, valida `TextOperation` contro il
+  testo autorevole con `tryApplyOperation`, rifiuta un'operazione stantia o
+  incoerente e riallinea la superficie sorgente, senza sovrascrivere un cambio
+  più recente.
+- Il coordinatore può fare fan-out di `{ text, operation }` soltanto alle
+  altre superfici dello stesso documento. `TextEngine.syncDoc()` valida il
+  valore ricevuto e la `LocalHistory` della superficie destinataria registra
+  il cambio come esterno.
+
+Questa è una forma interna alla shell TypeScript: non è un contratto IPC,
+ABI, WIT o pubblico. `document.ts` conserva l'ownership di `Buffer`, revisione
+o base, dirty, coda e coordinamento di salvataggio, bozza, conflitto,
+rinomina, cancellazione e chiusura.
+
+L'eccezione non autorizza un callback text-only, un bridge nascosto fra
+motori, la ricostruzione arbitraria dell'operazione, meccanica generica di
+editor o history nel pannello, né l'estrazione di `DocumentSession` o di
+qualsiasi responsabilità del `Buffer`.
+
 ## Disciplina dei test
 
 - Prima di estrarre un comportamento, deve esistere una caratterizzazione osservabile sufficiente.
