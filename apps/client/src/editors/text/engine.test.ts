@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { EditorView } from "@codemirror/view";
-import { insertNewlineAndIndent } from "@codemirror/commands";
-import { EditorSelection, StateField, type Extension } from "@codemirror/state";
+import { EditorView, keymap } from "@codemirror/view";
+import { insertNewlineAndIndent, redoDepth, undoDepth } from "@codemirror/commands";
+import { EditorSelection, EditorState, StateField, Transaction, type Extension } from "@codemirror/state";
 import { createTextEngine, type EditorChange, type TextEngine } from "./engine";
-
+import { MAX_FOOTPRINTS } from "./history-footprints";
 interface TestEditor {
   ed: TextEngine;
   view: () => EditorView;
@@ -126,6 +126,112 @@ describe("syncDoc", () => {
 
     expect(ed.selections().primary).toEqual({ start: 12, end: 12, text: "" });
   });
+  it("azzera entrambi i branch prima di applicare una sostituzione sovrapposta", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ changes: { from: 0, to: 3, insert: "local" }, userEvent: "input.type" });
+    expect(ed.getDoc()).toBe("local");
+    const initialView = view();
+    view().dispatch({ selection: EditorSelection.single(2) });
+    const selectionBeforeReset = initialView.state.selection.main.anchor;
+    expect(selectionBeforeReset).toBe(2);
+    ed.syncDoc("external");
+
+    expect(ed.getDoc()).toBe("external");
+    expect(view()).toBe(initialView);
+    expect(initialView.state.selection.main.anchor).toBe(0);
+    expect(undoDepth(initialView.state)).toBe(0);
+    expect(redoDepth(initialView.state)).toBe(0);
+    expect(ed.undo()).toBe(false);
+    expect(ed.redo()).toBe(false);
+    expect(ed.getDoc()).toBe("external");
+  });
+  it("invalida anche il redo branch su overlap dopo un undo", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ changes: { from: 1, insert: "L" }, userEvent: "input.type" });
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abc");
+    expect(redoDepth(view().state)).toBe(1);
+
+    ed.syncDoc("aXbc");
+
+    expect(ed.getDoc()).toBe("aXbc");
+    expect(redoDepth(view().state)).toBe(0);
+    expect(ed.redo()).toBe(false);
+  });
+  it("fallisce chiuso dopo un transaction con footprint overflow", () => {
+    const { ed, view } = editor();
+    const base = " ".repeat(MAX_FOOTPRINTS * 2 + 1);
+    ed.setDoc(base);
+    const changes = Array.from({ length: MAX_FOOTPRINTS + 1 }, (_, index) => ({
+      from: index * 2,
+      insert: "x",
+    }));
+    view().dispatch({ changes, userEvent: "input.type" });
+    const local = ed.getDoc();
+    ed.syncDoc(`${local}?`);
+
+    expect(ed.getDoc()).toBe(`${local}?`);
+    expect(ed.undo()).toBe(false);
+    expect(undoDepth(view().state)).toBe(0);
+  });
+
+  it("azzera la history quando un remote tocca l'anchor di una cancellazione", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ changes: { from: 1, to: 2, insert: "" }, userEvent: "delete.backward" });
+    expect(ed.getDoc()).toBe("ac");
+
+    ed.syncDoc("aXc");
+
+    expect(ed.getDoc()).toBe("aXc");
+    expect(undoDepth(view().state)).toBe(0);
+    expect(ed.undo()).toBe(false);
+  });
+
+  it("non cancella l'undo per un inserimento remoto al bordo destro", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ changes: { from: 3, insert: "L" }, userEvent: "input.type" });
+    ed.syncDoc("abcLB");
+
+    expect(ed.getDoc()).toBe("abcLB");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abcB");
+  });
+
+  it("controlla le modifiche effettive dopo un transactionFilter", () => {
+    let seen = 0;
+    const filter = EditorState.transactionFilter.of((transaction) => {
+      if (!transaction.isUserEvent("sync")) return transaction;
+      seen += 1;
+      return {
+        changes: {
+          from: 0,
+          to: transaction.startState.doc.length,
+          insert: transaction.newDoc.toString(),
+        },
+        annotations: [
+          Transaction.userEvent.of("sync"),
+          Transaction.addToHistory.of(false),
+          Transaction.remote.of(true),
+        ],
+        filter: false,
+      };
+    });
+    const { ed, view } = editor(() => {}, () => filter);
+    ed.setDoc("abc");
+    const initialView = view();
+    view().dispatch({ changes: { from: 1, insert: "L" }, userEvent: "input.type" });
+    ed.syncDoc("aLbc?");
+
+    expect(seen).toBe(2);
+    expect(ed.getDoc()).toBe("aLbc?");
+    expect(view()).toBe(initialView);
+    expect(undoDepth(view().state)).toBe(0);
+    expect(ed.undo()).toBe(false);
+  });
 });
 
 describe("raggruppamento degli eventi utente", () => {
@@ -156,15 +262,15 @@ describe("raggruppamento degli eventi utente", () => {
     expect(ed.getDoc()).toBe("[A]");
   });
 
-  it("mantiene separate le transazioni di composizione", () => {
+  it("adotta il raggruppamento nativo della composizione", () => {
     const { ed, view } = editor();
     ed.setDoc("");
     view().dispatch({ changes: { from: 0, insert: "あ" }, userEvent: "input.type.compose" });
     view().dispatch({ changes: { from: 1, insert: "い" }, userEvent: "input.type.compose" });
 
     expect(ed.undo()).toBe(true);
-    expect(ed.getDoc()).toBe("あ");
-    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("");
+    expect(ed.undo()).toBe(false);
     expect(ed.getDoc()).toBe("");
   });
 
@@ -195,6 +301,130 @@ describe("raggruppamento degli eventi utente", () => {
     expect(ed.selections().primary.start).toBe(1);
     expect(ed.redo()).toBe(true);
     expect(ed.selections().primary.start).toBe(2);
+  });
+  it("delega a native la finestra temporale e la contiguità", () => {
+    const { ed, view } = editor();
+    ed.setDoc("");
+    view().dispatch({
+      changes: { from: 0, insert: "a" },
+      userEvent: "input.type",
+      annotations: Transaction.time.of(100),
+    });
+    view().dispatch({
+      changes: { from: 1, insert: "b" },
+      userEvent: "input.type",
+      annotations: Transaction.time.of(599),
+    });
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("");
+
+    ed.setDoc("");
+    view().dispatch({
+      changes: { from: 0, insert: "a" },
+      userEvent: "input.type",
+      annotations: Transaction.time.of(100),
+    });
+    view().dispatch({
+      changes: { from: 1, insert: "b" },
+      userEvent: "input.type",
+      annotations: Transaction.time.of(600),
+    });
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("a");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("");
+  });
+
+  it("raggruppa cancellazioni backward consecutive", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ changes: { from: 2, to: 3 }, userEvent: "delete.backward" });
+    view().dispatch({ changes: { from: 1, to: 2 }, userEvent: "delete.backward" });
+
+    expect(ed.getDoc()).toBe("a");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abc");
+  });
+
+  it("raggruppa una sostituzione dopo la selezione", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ selection: EditorSelection.range(1, 2) });
+    view().dispatch({
+      changes: { from: 1, to: 2, insert: "x" },
+      selection: EditorSelection.single(2),
+      userEvent: "input.type",
+    });
+    view().dispatch({
+      changes: { from: 2, insert: "y" },
+      selection: EditorSelection.single(3),
+      userEvent: "input.type",
+    });
+
+    expect(ed.getDoc()).toBe("axyc");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abc");
+  });
+});
+describe("keymap e input history nativi", () => {
+  it("gestisce beforeinput historyUndo e historyRedo sulla vista reale", () => {
+    const { ed, view } = editor();
+    ed.setDoc("base");
+    view().dispatch({ changes: { from: 4, insert: "!" }, userEvent: "input.type" });
+    expect(ed.getDoc()).toBe("base!");
+
+    view().contentDOM.dispatchEvent(
+      new InputEvent("beforeinput", {
+        inputType: "historyUndo",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(ed.getDoc()).toBe("base");
+
+    view().contentDOM.dispatchEvent(
+      new InputEvent("beforeinput", {
+        inputType: "historyRedo",
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    expect(ed.getDoc()).toBe("base!");
+  });
+
+  it("monta undoSelection e redoSelection nel keymap nativo", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abc");
+    view().dispatch({ selection: EditorSelection.single(2) });
+    view().dispatch({ selection: EditorSelection.single(1) });
+
+    view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "u", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(ed.selections().primary.start).toBe(2);
+
+    view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "u", altKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(ed.selections().primary.start).toBe(1);
+  });
+  it("monta ed esegue il redo Linux nativo", () => {
+    const { ed, view } = editor();
+    ed.setDoc("base");
+    view().dispatch({ changes: { from: 4, insert: "!" }, userEvent: "input.type" });
+    view().contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(ed.getDoc()).toBe("base");
+
+    const linuxRedo = view()
+      .state
+      .facet(keymap)
+      .flat()
+      .find((binding) => binding.linux === "Ctrl-Shift-z");
+    expect(linuxRedo).toBeDefined();
+    expect(linuxRedo?.run?.(view())).toBe(true);
+    expect(ed.getDoc()).toBe("base!");
   });
 });
 
@@ -297,6 +527,8 @@ describe("sola lettura", () => {
     });
     const selectionBefore = ed.selections();
     const textBefore = ed.getDoc();
+    const undoBeforeReadOnly = undoDepth(initialView.state);
+    const redoBeforeReadOnly = redoDepth(initialView.state);
 
     ed.setReadOnly(true);
     expect(view()).toBe(initialView);
@@ -307,14 +539,28 @@ describe("sola lettura", () => {
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
     );
     expect(ed.getDoc()).toBe(textBefore);
+    initialView.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    initialView.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "y", ctrlKey: true, bubbles: true, cancelable: true }),
+    );
+    expect(ed.getDoc()).toBe(textBefore);
+    expect(ed.undo()).toBe(false);
+    expect(ed.getDoc()).toBe(textBefore);
+    expect(ed.redo()).toBe(false);
+    expect(ed.getDoc()).toBe(textBefore);
+    expect(undoDepth(initialView.state)).toBe(undoBeforeReadOnly);
+    expect(redoDepth(initialView.state)).toBe(redoBeforeReadOnly);
+
+    ed.setReadOnly(false);
+    expect(view()).toBe(initialView);
+    expect(initialView.state.readOnly).toBe(false);
     expect(ed.undo()).toBe(true);
     expect(ed.getDoc()).toBe("base");
     expect(ed.redo()).toBe(true);
     expect(ed.getDoc()).toBe(textBefore);
 
-    ed.setReadOnly(false);
-    expect(view()).toBe(initialView);
-    expect(initialView.state.readOnly).toBe(false);
     initialView.dispatch({ selection: EditorSelection.single(2) });
     initialView.contentDOM.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
@@ -515,6 +761,43 @@ describe("selections", () => {
     const sel = ed.selections();
     expect(sel.primary).toEqual({ start: 4, end: 4, text: "" });
     expect(sel.secondary).toEqual([]);
+  });
+  it("mantiene multi-selezione e indice principale in undo/redo", () => {
+    const { ed, view } = editor();
+    ed.setDoc("abcdef");
+    view().dispatch({
+      selection: EditorSelection.create(
+        [EditorSelection.range(1, 2), EditorSelection.range(4, 5)],
+        1,
+      ),
+    });
+    view().dispatch({
+      changes: [
+        { from: 1, to: 2, insert: "X" },
+        { from: 4, to: 5, insert: "Y" },
+      ],
+      selection: EditorSelection.create(
+        [EditorSelection.range(1, 2), EditorSelection.range(4, 5)],
+        1,
+      ),
+      userEvent: "input.type",
+    });
+
+    expect(ed.getDoc()).toBe("aXcdYf");
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("abcdef");
+    expect(view().state.selection.mainIndex).toBe(1);
+    expect(view().state.selection.ranges.map((range) => [range.from, range.to])).toEqual([
+      [1, 2],
+      [4, 5],
+    ]);
+    expect(ed.redo()).toBe(true);
+    expect(ed.getDoc()).toBe("aXcdYf");
+    expect(view().state.selection.mainIndex).toBe(1);
+    expect(view().state.selection.ranges.map((range) => [range.from, range.to])).toEqual([
+      [1, 2],
+      [4, 5],
+    ]);
   });
 });
 

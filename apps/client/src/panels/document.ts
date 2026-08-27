@@ -39,7 +39,7 @@
 // quella domanda lì, e obbligarli a nominare un riquadro vorrebbe dire far
 // sapere a tutti cos'è un riquadro per non guadagnare niente.
 import { createEditor, type Editor, type EditorChange } from "../editor/editor";
-import { tryApplyOperation } from "../editor/local-history";
+import { tryApplyOperation } from "../editor/text-operation";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
