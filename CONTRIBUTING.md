@@ -61,6 +61,7 @@ cargo test --workspace
 npm run typecheck
 npm test
 npm run build
+node .github/scripts/check-codemirror-boundary.mjs
 node .github/scripts/check-doc-links.mjs
 node .github/scripts/check-doc-orphans.mjs
 node .github/scripts/check-doc-size.mjs
