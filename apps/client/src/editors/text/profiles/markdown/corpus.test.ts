@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { computeDecorations, type LiveDeco, type LiveDecoKind } from "./livepreview";
-import { parseWikilinkInner } from "../rules/syntax";
-import corpus from "../__fixtures__/corpus-syntax.json";
+import { parseWikilinkInner } from "../../../../rules/syntax";
+import corpus from "../../../../__fixtures__/corpus-syntax.json";
 
 // **Il corpus su cui le due passate devono concordare** (§4.4, decisione 0115).
 //
