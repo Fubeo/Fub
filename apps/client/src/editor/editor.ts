@@ -1,10 +1,8 @@
 // Compatibilità per l'editor Markdown corrente: la meccanica vive in
 // `TextEngine`, mentre qui resta soltanto la configurazione del profilo.
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { currentTheme as getCurrentTheme, type Theme } from "../theme/theme";
-import { editingExtensions } from "./editor-commands";
-import { markdownCompletions, type CompletionSources } from "./completions";
-import { livePreview } from "./livepreview";
+import { createMarkdownProfile } from "../editors/text/profiles/markdown/profile";
+import type { CompletionSources } from "./completions";
 import { createTextEngine } from "../editors/text/engine";
 import type { DocumentUpdate, EditorChange, EditorSelections } from "../editors/text/engine";
 import type { SyntaxForm } from "../host/contract";
@@ -55,33 +53,24 @@ export interface EditorOptions {
 
 /// Costruisce l'adapter compatibile con i chiamanti esistenti.
 export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
-  let previewOn = true;
-  let syntaxForms: readonly SyntaxForm[] | undefined;
-
+  const profile = createMarkdownProfile({
+    callbacks: {
+      openWikilink: opts.onOpenWikilink,
+      searchTag: opts.onSearchTag,
+    },
+    completions: opts.completions,
+  });
   const engine = createTextEngine(parent, {
     onChange: opts.onChange,
     onSelectionChange: opts.onSelectionChange,
     theme: getCurrentTheme(),
-    extensions: () => [
-      editingExtensions(),
-      markdown({ base: markdownLanguage }),
-      previewOn
-        ? livePreview(
-            {
-              openWikilink: opts.onOpenWikilink,
-              searchTag: opts.onSearchTag,
-            },
-            syntaxForms,
-          )
-        : [],
-      markdownCompletions(opts.completions),
-    ],
+    extensions: () => profile.extensions(),
   });
 
   return {
     setSyntaxForms(forms) {
-      syntaxForms = forms;
-      if (previewOn) engine.reconfigure();
+      profile.setSyntaxForms(forms);
+      engine.reconfigure();
     },
     setDoc: (text) => engine.setDoc(text),
     syncDoc: (update) => engine.syncDoc(update),
@@ -92,7 +81,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
     revealByteOffset: (byteOffset) => engine.revealByteOffset(byteOffset),
     selections: () => engine.selections(),
     setLivePreview(on) {
-      previewOn = on;
+      profile.setLivePreview(on);
       engine.reconfigure();
     },
     destroy: () => engine.destroy(),
