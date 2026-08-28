@@ -408,7 +408,7 @@ export class TextEngine {
       lineNumbers(),
       highlightActiveLineGutter(),
       highlightSpecialChars(),
-      foldGutter(),
+      foldGutter({ openText: "↓" }),
       drawSelection(),
       dropCursor(),
       EditorState.allowMultipleSelections.of(true),

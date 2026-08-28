@@ -110,6 +110,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
   background: var(--bg-input);
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
 }
 

@@ -122,6 +122,7 @@ const surfaces = EditorView.theme({
   ".cm-gutters": {
     backgroundColor: "var(--doc-bg)",
     color: "var(--doc-gutter-fg)",
+    fontFamily: "var(--font-mono)",
     border: "none",
   },
   ".cm-activeLineGutter": {
