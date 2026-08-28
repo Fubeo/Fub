@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Trentacinque gesti, contati da fuori
+// # Trentasette gesti, contati da fuori
 //
-// I gesti sono **trentacinque** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **trentasette** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -45,6 +45,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   appendToTextEditor as typeInEditor,
   mountedTextEditors as editorViews,
+  undoDepth,
 } from "./editors/text/test-support";
 import type { FakeHost } from "./host/fake";
 import type { KernelNotice, SettingEntry, CommandSpec } from "./host/contract";
@@ -164,6 +165,12 @@ async function start(
 async function settle(rounds = 6): Promise<void> {
   for (let i = 0; i < rounds; i += 1) await Promise.resolve();
   await new Promise((r) => setTimeout(r, 0));
+}
+/// Flushes promise continuations without turning a timing guess into an
+/// ordering primitive. Command gates below decide when the destructive action
+/// runs; this helper only lets the shell observe already-resolved work.
+async function microtasks(rounds = 8): Promise<void> {
+  for (let i = 0; i < rounds; i += 1) await Promise.resolve();
 }
 
 /// Aspetta che una condizione diventi vera, o fallisce dicendo cosa aspettava.
@@ -914,12 +921,105 @@ describe("chiudere linguette e superfici", () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
     await settle();
     expect(host.atGate("writeDocument")).toHaveLength(0);
-    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+    expect(Object.keys(host.files())).toContain("Benvenuto.md");
 
     unlock();
     await waitFor("la bozza viene scartata", () => host.atGate("discardDraft").length > 0);
     await settle();
     expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+  });
+
+  it("blocca un input reale durante una cancellazione lenta e non resuscita la bozza", async () => {
+    const host = await start(VAULT);
+    // Dynamic imports are required because `start` resets the shell module graph
+    // for every isolated fake host.
+    const { documentSessions } = await import("./state/document-session");
+    const { trashWithConfirm } = await import("./panels/trash");
+    const view = editorViews()[0];
+    if (!view) throw new Error("l'editor non è montato");
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: " testo da cancellare" },
+      userEvent: "input.type",
+    });
+    const before = view.state.doc.toString();
+    const unlock = host.throttle("invokeCommand");
+
+    const deleting = trashWithConfirm("Benvenuto.md");
+    await microtasks();
+    expect(host.atGate("invokeCommand").some((c) => c.args[0] === "note.trash")).toBe(true);
+    expect(view.state.readOnly).toBe(true);
+
+    view.focus();
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+    expect(view.state.doc.toString()).toBe(before);
+    expect(host.atGate("writeDocument")).toHaveLength(0);
+
+    unlock();
+    await deleting;
+    await microtasks();
+    expect(host.atGate("writeDocument")).toHaveLength(0);
+    expect(host.atGate("saveDraft")).toHaveLength(0);
+    expect(Object.keys(host.files())).not.toContain("Benvenuto.md");
+    expect(documentSessions.get("Benvenuto.md")).toBeUndefined();
+  });
+
+  it("scongela lo stesso owner dopo un rifiuto e salva il primo input successivo", async () => {
+    const host = await start(VAULT);
+    // Dynamic imports are required because `start` resets the shell module graph
+    // for every isolated fake host.
+    const { documentSessions } = await import("./state/document-session");
+    const { trashWithConfirm } = await import("./panels/trash");
+    const view = editorViews()[0];
+    if (!view) throw new Error("l'editor non è montato");
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: " testo da conservare" },
+      userEvent: "input.type",
+    });
+    const before = view.state.doc.toString();
+    const owner = documentSessions.get("Benvenuto.md");
+    if (!owner) throw new Error("sessione non costruita");
+    const historyBefore = undoDepth(view.state);
+    const unlock = host.throttle("invokeCommand");
+    const repair = host.fault("invokeCommand", "cancellazione rifiutata");
+
+    const deleting = trashWithConfirm("Benvenuto.md");
+    await microtasks();
+    expect(view.state.readOnly).toBe(true);
+    expect(host.files()["Benvenuto.md"]).toBe(VAULT["Benvenuto.md"]);
+    expect(host.trash()).toHaveLength(0);
+    view.focus();
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+    expect(view.state.doc.toString()).toBe(before);
+    unlock();
+    await expect(deleting).rejects.toThrow("cancellazione rifiutata");
+    repair();
+
+    expect(documentSessions.get("Benvenuto.md")).toBe(owner);
+    expect(view.state.readOnly).toBe(false);
+    expect(view.state.doc.toString()).toBe(before);
+    expect(documentSessions.inspect("Benvenuto.md")).toMatchObject({
+      dirty: true,
+      pendingDeletion: false,
+      text: before,
+    });
+    expect(undoDepth(view.state)).toBe(historyBefore);
+
+    view.dispatch({ selection: { anchor: view.state.doc.length } });
+    view.contentDOM.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+    );
+    const after = view.state.doc.toString();
+    expect(after).not.toBe(before);
+    await waitFor(
+      "il primo input dopo il rifiuto viene salvato",
+      () => host.atGate("writeDocument").length > 0,
+    );
+    expect(host.files()["Benvenuto.md"]).toBe(after);
+    expect(documentSessions.inspect("Benvenuto.md")?.dirty).toBe(false);
   });
 });
 

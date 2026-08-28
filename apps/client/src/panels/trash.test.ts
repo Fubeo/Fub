@@ -35,10 +35,11 @@ vi.mock("./document", () => ({
 
 vi.mock("../state/document-session", () => ({
   documentSessions: {
+    isDeletionPending: vi.fn(() => false),
     beginDeletion: vi.fn(() => true),
     cancelDeletion: vi.fn(),
-    delete: vi.fn(async (_id: string, run: () => Promise<void>) => {
-      await run();
+    delete: vi.fn(async (_id: string, run: (id: string) => Promise<void>) => {
+      await run(_id);
       return { kind: "deleted", dirty: true };
     }),
   },
@@ -51,6 +52,7 @@ import { documentSessions } from "../state/document-session";
 describe("cestinare una nota", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(documentSessions.isDeletionPending).mockReturnValue(false);
     fake.confirm = true;
     fake.open = true;
     fake.active = null;
@@ -91,5 +93,14 @@ describe("cestinare una nota", () => {
     await trashWithConfirm("vittima.md");
     expect(closeDocument).not.toHaveBeenCalled();
     expect(openDocument).not.toHaveBeenCalled();
+  });
+  it("ignora un secondo gesto mentre la conferma è pendente", async () => {
+    vi.mocked(documentSessions.isDeletionPending).mockReturnValue(true);
+
+    await trashWithConfirm("vittima.md");
+
+    expect(documentSessions.beginDeletion).not.toHaveBeenCalled();
+    expect(documentSessions.delete).not.toHaveBeenCalled();
+    expect(closeDocument).not.toHaveBeenCalled();
   });
 });

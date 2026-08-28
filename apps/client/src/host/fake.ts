@@ -512,12 +512,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
         throw new Error(`host fake: la view «${v}» non ha l'azione «${action}»`);
       },
       listCommands: () => gate("listCommands", [], Promise.resolve(options.commands ?? [])),
-      invokeCommand: (commandId, args, mode) =>
-        gate(
-          "invokeCommand",
-          [commandId, args, mode],
-          Promise.resolve(command(commandId, args ?? null)),
-        ),
+      invokeCommand: (commandId, args, mode) => {
+        const callArgs = [commandId, args, mode];
+        calls.push({ gate: "invokeCommand", args: callArgs });
+        const execute = () => {
+          const fault = faults.get("invokeCommand");
+          if (fault !== undefined) return Promise.reject(new Error(fault));
+          return Promise.resolve(command(commandId, args ?? null));
+        };
+        const throttle = throttles.get("invokeCommand");
+        return throttle ? throttle.then(execute) : execute();
+      },
       queryIndex: (q) => gate("queryIndex", [q], Promise.resolve(query(q))),
       cancelJob: (id) => gate("cancelJob", [id], Promise.resolve()),
       setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),

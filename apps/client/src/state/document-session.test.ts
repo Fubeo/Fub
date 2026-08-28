@@ -5,6 +5,7 @@ import {
   type DocumentSessionApi,
   type DocumentSurface,
   type DocumentSurfaceUpdate,
+  type DocumentSessionEvent,
   type SurfaceEdit,
 } from "./document-session";
 import { operationFromText } from "../editor/text-operation";
@@ -16,6 +17,21 @@ function fakeApi(): DocumentSessionApi {
     saveDraft: vi.fn(async () => {}),
     discardDraft: vi.fn(async () => {}),
   };
+}
+function acceptText(
+  sessions: DocumentSessionCollection,
+  id: string,
+  text: string,
+  surface = "test-surface",
+): void {
+  const before = sessions.text(id);
+  if (before === undefined) throw new Error(`sessione assente: ${id}`);
+  expect(
+    sessions.acceptSurfaceChange(id, surface, {
+      text,
+      operation: operationFromText(before, text),
+    }),
+  ).toEqual({ kind: "accepted" });
 }
 
 describe("ownership delle DocumentSession", () => {
@@ -42,7 +58,7 @@ describe("ownership delle DocumentSession", () => {
 
     await sessions.read("nota.md");
     const first = sessions.get("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo nuovo");
+    acceptText(sessions, "nota.md", "testo nuovo");
 
     expect(first).toBeDefined();
     expect(sessions.get("nota.md")).toBe(first);
@@ -56,7 +72,7 @@ describe("ownership delle DocumentSession", () => {
   it("non espone stato mutabile e chiude la sessione cancellando i timer", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo non salvato");
+    acceptText(sessions, "nota.md", "testo non salvato");
 
     const retained = sessions.get("nota.md");
     const snapshot = sessions.inspect("nota.md");
@@ -72,24 +88,53 @@ describe("ownership delle DocumentSession", () => {
 
     expect(sessions.get("nota.md")).toBeUndefined();
     expect(retained.snapshot().lifecycle).toBe("closed");
-    retained.acceptEditorChange("non deve rientrare");
+    expect(
+      retained.acceptSurfaceChange(
+        "test-surface",
+        { text: "non deve rientrare", operation: operationFromText("testo non salvato", "non deve rientrare") },
+      ),
+    ).toEqual({ kind: "untracked" });
     expect(retained.text()).toBe("testo non salvato");
     expect(clearTimeout).toHaveBeenCalledTimes(2);
   });
 
-  it("tiene la sospensione dentro la sessione corretta", async () => {
+  it("tiene la cancellazione in sospeso dentro la sessione corretta", async () => {
     const sessions = new DocumentSessionCollection(api);
     await Promise.all([sessions.read("a.md"), sessions.read("b.md")]);
-    sessions.acceptEditorChange("a.md", "a sporco");
-    sessions.acceptEditorChange("b.md", "b sporco");
+    acceptText(sessions, "a.md", "a sporco");
+    acceptText(sessions, "b.md", "b sporco");
 
     expect(sessions.beginDeletion("a.md")).toBe(true);
+    expect(sessions.inspect("a.md")?.pendingDeletion).toBe(true);
     expect(sessions.inspect("a.md")?.suspended).toBe(true);
-    expect(sessions.inspect("b.md")?.suspended).toBe(false);
+    expect(sessions.inspect("b.md")?.pendingDeletion).toBe(false);
 
     sessions.cancelDeletion("a.md");
-    expect(sessions.inspect("a.md")?.suspended).toBe(false);
-    expect(sessions.inspect("b.md")?.suspended).toBe(false);
+    expect(sessions.inspect("a.md")?.pendingDeletion).toBe(false);
+    expect(sessions.inspect("b.md")?.pendingDeletion).toBe(false);
+  });
+  it("rifiuta il secondo inizio e notifica inizio e annullamento", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("pulita.md");
+    const events: DocumentSessionEvent[] = [];
+    sessions.subscribe((event) => {
+      events.push(event);
+    });
+
+    expect(sessions.beginDeletion("pulita.md")).toBe(true);
+    expect(sessions.beginDeletion("pulita.md")).toBe(false);
+    expect(sessions.inspect("pulita.md")).toMatchObject({
+      dirty: false,
+      pendingDeletion: true,
+      suspended: true,
+    });
+
+    sessions.cancelDeletion("pulita.md");
+    expect(sessions.inspect("pulita.md")?.pendingDeletion).toBe(false);
+    expect(events.filter((event) => event.kind === "deletion-changed")).toEqual([
+      { kind: "deletion-changed", id: "pulita.md", pending: true },
+      { kind: "deletion-changed", id: "pulita.md", pending: false },
+    ]);
   });
 });
 
@@ -112,9 +157,9 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("consuma l'eco prima di qualunque ricarica", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "prima versione");
+    acceptText(sessions, "nota.md", "prima versione");
     await sessions.flush("nota.md");
-    sessions.acceptEditorChange("nota.md", "seconda versione");
+    acceptText(sessions, "nota.md", "seconda versione");
 
     const reads = vi.mocked(api.readDocument).mock.calls.length;
     const outcome = await sessions.handleExternalChange("nota.md", {
@@ -130,7 +175,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("lascia il buffer autorevole e restituisce un warning per un cambio sporco", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo locale");
+    acceptText(sessions, "nota.md", "testo locale");
     const reads = vi.mocked(api.readDocument).mock.calls.length;
 
     const outcome = await sessions.handleExternalChange("nota.md", {
@@ -170,7 +215,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     api.readDocument = vi.fn(async () => source);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "modifica da scartare");
+    acceptText(sessions, "nota.md", "modifica da scartare");
 
     const outcome = await sessions.forceReload("nota.md");
 
@@ -188,7 +233,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo locale");
+    acceptText(sessions, "nota.md", "testo locale");
     await sessions.flush("nota.md");
     expect(sessions.inspect("nota.md")?.result).toBe("conflitto");
 
@@ -201,7 +246,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("rinomina senza duplicare l'owner e rifiuta una destinazione occupata", async () => {
     const sessions = new DocumentSessionCollection(api);
     await Promise.all([sessions.read("a.md"), sessions.read("b.md")]);
-    sessions.acceptEditorChange("a.md", "a sporco");
+    acceptText(sessions, "a.md", "a sporco");
     const first = sessions.get("a.md");
     const renamed = sessions.rename("a.md", "c.md");
 
@@ -239,14 +284,14 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "prima battuta");
+    acceptText(sessions, "nota.md", "prima battuta");
     const retained = sessions.get("nota.md");
     if (!retained) throw new Error("sessione non costruita");
 
     const releasing = sessions.release("nota.md");
     await writeStarted;
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "battuta durante il rilascio");
+    acceptText(sessions, "nota.md", "battuta durante il rilascio");
     finishWrite("rev-2");
 
     expect(await releasing).toEqual({ kind: "active" });
@@ -269,7 +314,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "prima battuta");
+    acceptText(sessions, "nota.md", "prima battuta");
     const owner = sessions.get("nota.md");
     if (!owner) throw new Error("sessione non costruita");
 
@@ -308,7 +353,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo da proteggere");
+    acceptText(sessions, "nota.md", "testo da proteggere");
 
     const releasing = sessions.release("nota.md");
     await draftStarted;
@@ -327,7 +372,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo da ritentare");
+    acceptText(sessions, "nota.md", "testo da ritentare");
 
     await sessions.flushDraft("nota.md");
     await sessions.flushDraft("nota.md");
@@ -372,7 +417,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("chiude anche un buffer sporco quando il documento sparisce fuori", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("sparita.md");
-    sessions.acceptEditorChange("sparita.md", "lavoro da non resuscitare");
+    acceptText(sessions, "sparita.md", "lavoro da non resuscitare");
     const retained = sessions.get("sparita.md");
     if (!retained) throw new Error("sessione non costruita");
 
@@ -389,7 +434,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("una rimozione esterna chiude prima che un salvataggio accodato possa partire", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("sparita.md");
-    sessions.acceptEditorChange("sparita.md", "non deve resuscitare");
+    acceptText(sessions, "sparita.md", "non deve resuscitare");
     const owner = sessions.get("sparita.md");
     if (!owner) throw new Error("sessione non costruita");
 
@@ -421,7 +466,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     const readDocument = vi.mocked(api.readDocument);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo da eliminare");
+    acceptText(sessions, "nota.md", "testo da eliminare");
     sessions.beginDeletion("nota.md");
 
     const deleting = sessions.delete("nota.md", async () => {
@@ -483,7 +528,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo da conservare");
+    acceptText(sessions, "nota.md", "testo da conservare");
     const retained = sessions.get("nota.md");
     if (!retained) throw new Error("sessione non costruita");
 
@@ -512,7 +557,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo da conservare");
+    acceptText(sessions, "nota.md", "testo da conservare");
     const owner = sessions.get("nota.md");
     if (!owner) throw new Error("sessione non costruita");
 
@@ -541,7 +586,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "scrittura da annullare");
+    acceptText(sessions, "nota.md", "scrittura da annullare");
     timers[0]!();
     expect(sessions.beginDeletion("nota.md")).toBe(true);
 
@@ -567,7 +612,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("invalida timer e coda prima della cancellazione", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    sessions.acceptEditorChange("nota.md", "testo da eliminare");
+    acceptText(sessions, "nota.md", "testo da eliminare");
     const retained = sessions.get("nota.md");
     if (!retained) throw new Error("sessione non costruita");
 
@@ -579,6 +624,124 @@ describe("decisioni del ciclo di vita della sessione", () => {
     await deleted;
     expect(vi.mocked(api.writeDocument).mock.calls).toHaveLength(0);
     expect(vi.mocked(api.discardDraft).mock.calls).toHaveLength(1);
+  });
+  it("consente la cancellazione di un documento non aperto", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    let called = false;
+
+    expect(
+      await sessions.delete("mai-aperto.md", async () => {
+        called = true;
+      }),
+    ).toEqual({ kind: "deleted", dirty: false });
+    expect(called).toBe(true);
+    expect(sessions.get("mai-aperto.md")).toBeUndefined();
+  });
+  it("non rilascia né chiude l'owner mentre la conferma è pendente", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("pendente.md");
+    const owner = sessions.get("pendente.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    expect(sessions.beginDeletion("pendente.md")).toBe(true);
+    expect(await sessions.release("pendente.md")).toEqual({ kind: "active" });
+    expect(sessions.close("pendente.md")).toEqual({ kind: "active" });
+    expect(sessions.get("pendente.md")).toBe(owner);
+    expect(sessions.inspect("pendente.md")).toMatchObject({
+      lifecycle: "open",
+      pendingDeletion: true,
+    });
+
+    sessions.cancelDeletion("pendente.md");
+    expect(sessions.close("pendente.md")).toEqual({ kind: "closed", dirty: false });
+  });
+
+  it("conserva l'owner pendente attraverso rinomina e annullamento", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("prima.md");
+    const owner = sessions.get("prima.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    expect(sessions.beginDeletion("prima.md")).toBe(true);
+    expect(sessions.rename("prima.md", "dopo.md")).toEqual({
+      kind: "renamed",
+      from: "prima.md",
+      to: "dopo.md",
+    });
+    expect(sessions.isDeletionPending("prima.md")).toBe(true);
+    expect(sessions.isDeletionPending("dopo.md")).toBe(true);
+
+    sessions.cancelDeletion("prima.md");
+    expect(sessions.get("dopo.md")).toBe(owner);
+    expect(sessions.isDeletionPending("prima.md")).toBe(false);
+    expect(sessions.isDeletionPending("dopo.md")).toBe(false);
+  });
+
+  it("un fallimento dopo la rinomina riapre lo stesso owner e usa il nuovo path", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("prima.md");
+    acceptText(sessions, "prima.md", "testo da conservare");
+    const owner = sessions.get("prima.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    sessions.beginDeletion("prima.md");
+    sessions.rename("prima.md", "dopo.md");
+    let calledWith = "";
+    const deleting = sessions.delete("prima.md", async (id) => {
+      calledWith = id;
+      throw new Error("cancellazione rifiutata");
+    });
+
+    await expect(deleting).rejects.toThrow("cancellazione rifiutata");
+    expect(calledWith).toBe("dopo.md");
+    expect(sessions.get("dopo.md")).toBe(owner);
+    expect(sessions.inspect("dopo.md")).toMatchObject({
+      lifecycle: "open",
+      pendingDeletion: false,
+      dirty: true,
+      text: "testo da conservare",
+    });
+    acceptText(sessions, "dopo.md", "testo dopo il rifiuto");
+  });
+
+  it("arma la persistenza prima di un observer changed che lancia", async () => {
+    const timers: Array<() => void> = [];
+    vi.stubGlobal("window", {
+      setTimeout: vi.fn((callback: () => void) => {
+        timers.push(callback);
+        return ++nextTimer;
+      }),
+      clearTimeout: vi.fn(),
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("observer.md");
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("scrittura rifiutata");
+    });
+    let throwOnce = true;
+    sessions.subscribe((event) => {
+      if (event.kind === "changed" && throwOnce) {
+        throwOnce = false;
+        throw new Error("observer guasto");
+      }
+    });
+
+    const before = sessions.text("observer.md");
+    if (before === undefined) throw new Error("sessione non costruita");
+    expect(() =>
+      sessions.acceptSurfaceChange("observer.md", "test-surface", {
+        text: "testo osservato",
+        operation: operationFromText(before, "testo osservato"),
+      }),
+    ).toThrow("observer guasto");
+    expect(sessions.inspect("observer.md")).toMatchObject({ dirty: true, text: "testo osservato" });
+    expect(timers).toHaveLength(2);
+
+    timers[0]!();
+    timers[1]!();
+    for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    expect(vi.mocked(api.writeDocument)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(1);
   });
 });
 

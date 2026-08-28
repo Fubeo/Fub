@@ -32,6 +32,8 @@ export interface Editor {
   selections(): EditorSelections;
   /// Accende o spegne la resa inline.
   setLivePreview(on: boolean): void;
+  /// Accende o spegne il blocco degli input utente senza ricostruire la vista.
+  setReadOnly(readOnly: boolean): void;
   /// Smonta l'editor e rilascia la vista e i suoi ascoltatori.
   destroy(): void;
   /// Passa all'altra luce.
@@ -84,6 +86,7 @@ export function createEditor(parent: HTMLElement, opts: EditorOptions): Editor {
       profile.setLivePreview(on);
       engine.reconfigure();
     },
+    setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
     destroy: () => engine.destroy(),
     setTheme: (theme) => engine.setTheme(theme),
   };

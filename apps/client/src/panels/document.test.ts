@@ -115,6 +115,14 @@ describe("sospendere e riprendere i ritardi", () => {
     expect(source).not.toContain("let sospeso: string | null");
   });
 });
+describe("la sola lettura della cancellazione", () => {
+  it("propaga il pending a ogni superficie, anche a una montata dopo", () => {
+    expect(sessionSource).toContain("pendingDeletion: boolean");
+    expect(source).toContain("setReadOnlyForDocument(event.id, event.pending)");
+    expect(source).toContain("r.editor.setReadOnly(documentSessions.isDeletionPending(tab.doc))");
+    expect(source).toContain("r.editor.setReadOnly(documentSessions.isDeletionPending(doc))");
+  });
+});
 
 /// Il corpo di un ascoltatore, dalla sua apertura al prossimo `onEvent(`.
 /// Stesso ritaglio — e stessa zona cieca dichiarata — di `corpo()`.

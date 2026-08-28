@@ -163,7 +163,12 @@ export function mountDocument(d: DocumentDeps): void {
 
   onEvent("document_renamed", (e) => {
     const outcome = documentSessions.rename(e.from, e.to);
-    if (outcome.kind !== "collision") rename(e.from, e.to);
+    if (outcome.kind !== "collision") {
+      // The layout still names the old path until `rename` below runs. Keep
+      // those editors read-only across that tiny migration window.
+      setReadOnlyForDocument(e.from, documentSessions.isDeletionPending(e.to));
+      rename(e.from, e.to);
+    }
   });
 
   onEvent("overflow", () => {
@@ -610,6 +615,12 @@ function redrawTabs(doc: string): void {
 }
 
 function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
+  if (event.kind === "deletion-changed") {
+    setReadOnlyForDocument(event.id, event.pending);
+    drawSave();
+    redrawTabs(event.id);
+    return;
+  }
   if (event.kind === "changed") {
     drawSave();
     redrawTabs(event.id);
@@ -632,6 +643,12 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
   drawSave();
   redrawTabs(event.id);
   return publishContext().then(() => redrawReading(event.id));
+}
+
+function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
+  for (const paneId of panesWithDoc(doc)) {
+    panes.get(paneId)?.editor.setReadOnly(readOnly);
+  }
 }
 
 /// Come si chiama una tab.
@@ -679,6 +696,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     // dichiarata costa un `render_view`, che è la stessa cosa che il pannello
     // farebbe da sé al primo evento.
     r.editor.setDoc("");
+    r.editor.setReadOnly(false);
     clearPreview(r.previewEl);
     await mountViewInPane(tab.view, r.id, r.viewEl);
     return;
@@ -686,6 +704,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (!changed) return;
   if (!tab) {
     r.editor.setDoc("");
+    r.editor.setReadOnly(false);
     clearPreview(r.previewEl);
     return;
   }
@@ -700,6 +719,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (generation !== r.loadGeneration || r.shown !== tab) return;
   r.editor.setSyntaxForms(forms);
   r.editor.setDoc(text);
+  r.editor.setReadOnly(documentSessions.isDeletionPending(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
@@ -715,6 +735,7 @@ function attachSurface(r: Pane, doc: string): void {
     id: r.id,
     sync: (update) => applySurfaceUpdate(r, doc, update),
   });
+  r.editor.setReadOnly(documentSessions.isDeletionPending(doc));
 }
 
 function detachSurface(r: Pane): void {

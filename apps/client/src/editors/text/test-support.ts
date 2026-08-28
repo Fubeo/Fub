@@ -1,5 +1,5 @@
 import { closeBracketsKeymap, completionKeymap } from "@codemirror/autocomplete";
-import { defaultKeymap, historyKeymap, indentWithTab } from "@codemirror/commands";
+import { defaultKeymap, historyKeymap, indentWithTab, undoDepth } from "@codemirror/commands";
 import { foldKeymap } from "@codemirror/language";
 import { lintKeymap } from "@codemirror/lint";
 import { searchKeymap } from "@codemirror/search";
@@ -46,3 +46,7 @@ export const editorKeymap: readonly KeyBinding[] = [
   ...lintKeymap,
   indentWithTab,
 ];
+
+/// Espone ai test della shell la profondità della cronologia senza far
+/// attraversare il confine CodeMirror al codice della shell.
+export { undoDepth };

@@ -70,6 +70,7 @@ export interface DocumentSessionSnapshot {
   readonly saveState: SaveState | null;
   readonly echoes: number;
   readonly suspended: boolean;
+  readonly pendingDeletion: boolean;
   readonly lifecycle: "open" | "closed";
 }
 
@@ -115,9 +116,11 @@ export type DocumentSessionEvent =
   | { kind: "changed"; id: string }
   | { kind: "saved"; id: string }
   | { kind: "save-failed"; id: string; error: unknown; outcome: "conflitto" | "fallito" }
-  | { kind: "draft-blind"; id: string };
+  | { kind: "draft-blind"; id: string }
+  | { kind: "deletion-changed"; id: string; pending: boolean };
 
 type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
+
 
 type SessionHooks = {
   emit(event: DocumentSessionEvent): void | Promise<void>;
@@ -132,6 +135,7 @@ interface SessionState {
   result: Outcome;
   echoes: number;
   suspended: boolean;
+  pendingDeletion: boolean;
   lifecycle: "open" | "closed";
 }
 
@@ -206,6 +210,7 @@ export class DocumentSession implements DraftBuffer {
       result: "ok",
       echoes: 0,
       suspended: false,
+      pendingDeletion: false,
       lifecycle: "open",
     };
     this.#api = api;
@@ -242,6 +247,7 @@ export class DocumentSession implements DraftBuffer {
       saveState: this.saveState(),
       echoes: this.#state.echoes,
       suspended: this.#state.suspended,
+      pendingDeletion: this.#state.pendingDeletion,
       lifecycle: this.#state.lifecycle,
     };
   }
@@ -254,20 +260,22 @@ export class DocumentSession implements DraftBuffer {
   }
 
   /**
-   * Trusted programmatic update: no operation, no validation. The surface
-   * path (`acceptSurfaceChange`) is the only one that carries a typed
-   * operation, and it validates it before reaching for anything else.
+   * The validated surface path is the only production mutation entry. This
+   * helper keeps the mutation itself private while programmatic replacement
+   * paths continue to use `restoreDraft`/`syncDoc` without a fake operation.
    */
-  acceptEditorChange(text: string): void {
-    if (!this.#isOpen()) return;
+  #acceptTextChange(text: string): void {
+    if (!this.#isOpen() || this.#state.pendingDeletion) return;
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#draftGeneration++;
     this.#state.text = text;
     this.#state.dirty = true;
-    this.#emit({ kind: "changed", id: this.#id });
+    // Persistence is armed before observers can throw. A synchronous UI
+    // observer may still reject the call, but it cannot lose the edit.
     this.scheduleSave();
     this.scheduleDraft();
+    this.#emit({ kind: "changed", id: this.#id });
   }
 
   /**
@@ -281,6 +289,9 @@ export class DocumentSession implements DraftBuffer {
    */
   acceptSurfaceChange(surfaceId: string, edit: SurfaceEdit): SurfaceChangeResult {
     if (!this.#isOpen()) return { kind: "untracked" };
+    // A pending destructive command makes every editor read-only. Keep the
+    // authoritative buffer untouched even if a stale adapter callback arrives.
+    if (this.#state.pendingDeletion) return { kind: "realigned", text: this.#state.text };
     // I due `replace` sono lo stesso lavello: preimage e atteso devono essere
     // normalizzati identicamente, o la validazione regge per caso.
     const expected = edit.text.replace(/\r\n?/g, "\n");
@@ -288,7 +299,7 @@ export class DocumentSession implements DraftBuffer {
     if (applied.kind !== "applied" || applied.text !== expected) {
       return { kind: "realigned", text: this.#state.text };
     }
-    this.acceptEditorChange(edit.text);
+    this.#acceptTextChange(edit.text);
     this.#fanOut({ kind: "operation", text: edit.text, operation: edit.operation }, surfaceId);
     return { kind: "accepted" };
   }
@@ -433,7 +444,7 @@ export class DocumentSession implements DraftBuffer {
     this.#emit({ kind: "changed", id: this.#id });
   }
   scheduleSave(): void {
-    if (!this.#isOpen() || this.#state.suspended) return;
+    if (!this.#isOpen() || this.#state.suspended || this.#state.pendingDeletion) return;
     if (this.#state.result === "conflitto") return;
     this.#clearSaveTimer();
     const id = this.#id;
@@ -444,7 +455,7 @@ export class DocumentSession implements DraftBuffer {
   }
 
   scheduleDraft(): void {
-    if (!this.#isOpen() || this.#state.suspended) return;
+    if (!this.#isOpen() || this.#state.suspended || this.#state.pendingDeletion) return;
     this.#clearDraftTimer();
     const id = this.#id;
     this.#draftTimer = window.setTimeout(() => {
@@ -470,6 +481,33 @@ export class DocumentSession implements DraftBuffer {
     this.#clearDraftTimer();
   }
 
+  isDeletionPending(): boolean {
+    return this.#isOpen() && this.#state.pendingDeletion;
+  }
+
+  beginDeletion(): boolean {
+    if (!this.#isOpen() || this.#state.pendingDeletion) return false;
+    this.#activityGeneration++;
+    this.#state.pendingDeletion = true;
+    this.#state.suspended = true;
+    this.#clearSaveTimer();
+    this.#clearDraftTimer();
+    this.#emit({ kind: "deletion-changed", id: this.#id, pending: true });
+    return true;
+  }
+
+  cancelDeletion(): void {
+    if (!this.#isOpen() || !this.#state.pendingDeletion) return;
+    this.#activityGeneration++;
+    this.#state.pendingDeletion = false;
+    this.#state.suspended = false;
+    if (this.#state.dirty) {
+      this.scheduleSave();
+      this.scheduleDraft();
+    }
+    this.#emit({ kind: "deletion-changed", id: this.#id, pending: false });
+  }
+
   suspend(): boolean {
     if (!this.#isOpen()) return false;
     this.#activityGeneration++;
@@ -480,7 +518,7 @@ export class DocumentSession implements DraftBuffer {
     return dirty;
   }
   resume(): void {
-    if (!this.#isOpen() || !this.#state.suspended) return;
+    if (!this.#isOpen() || !this.#state.suspended || this.#state.pendingDeletion) return;
     this.#activityGeneration++;
     this.#state.suspended = false;
     if (!this.#state.dirty) return;
@@ -490,7 +528,7 @@ export class DocumentSession implements DraftBuffer {
 
   async discardDraft(): Promise<void> {
     if (!this.#isOpen()) return;
-    this.#state.suspended = false;
+    if (!this.#state.pendingDeletion) this.#state.suspended = false;
     this.#clearDraftTimer();
     await this.#dropDraft(this.#id);
   }
@@ -501,14 +539,24 @@ export class DocumentSession implements DraftBuffer {
    * con le sue superfici: la chiusura qui è provvisoria, e staccarle sarebbe
    * un licenziamento che al ritorno non si ritira.
    */
-  async delete(run: () => Promise<void>): Promise<boolean> {
+  async delete(run: (id: string) => Promise<void>): Promise<boolean> {
     if (!this.#isOpen()) return false;
-    this.#closeState();
+    if (!this.#state.pendingDeletion) {
+      if (!this.beginDeletion()) return false;
+    }
+    if (!this.#closeState(true)) return false;
+    const closeActivity = this.#activityGeneration;
+    const id = this.#id;
     try {
-      await this.#queue.enqueue(run);
-      await this.#dropDraft(this.#id);
+      await this.#queue.enqueue(() => run(id));
+      await this.#dropDraft(id);
     } catch (error) {
-      this.#reopen();
+      if (
+        this.#state.lifecycle === "closed" &&
+        this.#activityGeneration === closeActivity
+      ) {
+        this.#reopen();
+      }
       throw error;
     }
     this.#surfaces.clear();
@@ -539,29 +587,34 @@ export class DocumentSession implements DraftBuffer {
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#id = id;
-    this.#state.suspended = false;
+    if (!this.#state.pendingDeletion) this.#state.suspended = false;
     if (this.#state.dirty) {
       this.scheduleSave();
       this.scheduleDraft();
     }
   }
 
-  close(): void {
-    if (!this.#isOpen()) return;
-    this.#closeState();
+  close(force = false): boolean {
+    if (!this.#isOpen()) return false;
+    if (!force && this.#state.pendingDeletion) return false;
+    if (!this.#closeState(force)) return false;
     // La chiusura è definitiva: nessuna superficie deve restare sottoscritta
     // a una sessione che non esiste più.
     this.#surfaces.clear();
+    return true;
   }
 
-  #closeState(): void {
+  #closeState(force = false): boolean {
+    if (!force && this.#state.pendingDeletion) return false;
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.suspended = false;
+    this.#state.pendingDeletion = false;
     this.#state.lifecycle = "closed";
+    return true;
   }
 
   #reopen(): void {
@@ -571,10 +624,12 @@ export class DocumentSession implements DraftBuffer {
     this.#draftGeneration++;
     this.#state.lifecycle = "open";
     this.#state.suspended = false;
+    this.#state.pendingDeletion = false;
     if (this.#state.dirty) {
       this.scheduleSave();
       this.scheduleDraft();
     }
+    this.#emit({ kind: "deletion-changed", id: this.#id, pending: false });
   }
   #isOpen(): boolean {
     return this.#state.lifecycle === "open";
@@ -597,12 +652,18 @@ export class DocumentSession implements DraftBuffer {
   }
 
   #saveNow(id: string): Promise<void> {
-    if (!this.#isOpen()) return Promise.resolve();
+    if (!this.#isOpen() || this.#state.pendingDeletion) return Promise.resolve();
     return this.#queue.enqueue(() => this.#writeBuffer(id));
   }
 
   async #writeBuffer(id: string): Promise<void> {
-    if (!this.#isOpen() || this.#state.suspended || this.#id !== id || !this.#state.dirty) return;
+    if (
+      !this.#isOpen() ||
+      this.#state.suspended ||
+      this.#state.pendingDeletion ||
+      this.#id !== id ||
+      !this.#state.dirty
+    ) return;
     const text = this.#state.text;
     const base = copyBase(this.#state.base);
     this.#state.result = "in_corso";
@@ -637,7 +698,13 @@ export class DocumentSession implements DraftBuffer {
   }
 
   #writeDraft(id: string): Promise<void> {
-    if (!this.#isOpen() || this.#state.suspended || this.#id !== id || !this.#state.dirty) {
+    if (
+      !this.#isOpen() ||
+      this.#state.suspended ||
+      this.#state.pendingDeletion ||
+      this.#id !== id ||
+      !this.#state.dirty
+    ) {
       return Promise.resolve();
     }
     const generation = this.#draftGeneration;
@@ -651,6 +718,7 @@ export class DocumentSession implements DraftBuffer {
       if (
         !this.#isOpen() ||
         this.#state.suspended ||
+        this.#state.pendingDeletion ||
         this.#id !== id ||
         !this.#state.dirty ||
         this.#draftGeneration !== generation
@@ -716,6 +784,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
   readonly #identityVersions = new Map<string, number>();
   readonly #renaming = new Set<string>();
   readonly #deletions = new Map<string, Promise<DeletionResult>>();
+  /// Aliases for an owner whose confirmation survives a rename. The pending
+  /// bit itself remains owned by `DocumentSession`; this index only lets the
+  /// original path resolve that same owner until cancellation/failure/success.
+  readonly #pendingDeletionOwners = new Map<string, DocumentSession>();
   /// Counts deletion attempts so a release already waiting on the old owner
   /// can retry after a failed deletion reopens that same owner.
   readonly #deletionVersions = new Map<string, number>();
@@ -746,6 +818,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
   isDirty(id: string): boolean {
     return this.#sessions.get(id)?.dirty === true;
+  }
+  isDeletionPending(id: string): boolean {
+    const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
+    return session?.isDeletionPending() === true;
   }
 
   saveState(id: string): SaveState | null {
@@ -787,6 +863,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
       if (outcome.kind === "deleted") return failDeletedRead(id);
       return this.read(id);
     }
+    const pendingOwner = this.#pendingDeletionOwners.get(id);
+    if (pendingOwner?.isDeletionPending()) return pendingOwner.text();
     const existing = this.#sessions.get(id);
     if (existing?.snapshot().lifecycle === "open") {
       existing.retain();
@@ -796,6 +874,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const source = await this.#api.readDocument(id);
     const current = this.#sessions.get(id);
     if (current?.snapshot().lifecycle === "open") return current.text();
+    const renamedPendingOwner = this.#pendingDeletionOwners.get(id);
+    if (renamedPendingOwner?.isDeletionPending()) return renamedPendingOwner.text();
     const deletion = this.#deletions.get(id);
     if (deletion) {
       const outcome = await deletion;
@@ -806,12 +886,6 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return this.#create(id, source.text, { kind: "descends_from", value: source.revision }).text();
   }
 
-  /** Trusted programmatic update: the validated surface path is below. */
-  acceptEditorChange(id: string, text: string): void {
-    const session = this.#sessions.get(id);
-    if (!session) return;
-    session.acceptEditorChange(text);
-  }
 
   /**
    * Una superficie si sottoscrive alla sessione **unica** del documento. Non
@@ -822,7 +896,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
    * rimasto appeso.
    */
   attachSurface(id: string, surface: DocumentSurface): () => void {
-    const session = this.#sessions.get(id);
+    const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
     if (!session) return () => {};
     const dispose = session.attachSurface(surface);
     return () => {
@@ -885,31 +959,55 @@ export class DocumentSessionCollection implements DraftBufferStore {
   }
 
   beginDeletion(id: string): boolean {
-    return this.#sessions.get(id)?.suspend() ?? false;
+    const session = this.#sessions.get(id);
+    if (!session) return false;
+    const started = session.beginDeletion();
+    if (started) this.#rememberPendingOwner(id, session);
+    return started;
   }
 
   cancelDeletion(id: string): void {
-    this.#sessions.get(id)?.resume();
+    const session = this.#pendingDeletionOwner(id);
+    if (!session) return;
+    session.cancelDeletion();
+    if (!session.isDeletionPending()) this.#forgetPendingOwner(session);
   }
 
-  async delete(id: string, run: () => Promise<void>): Promise<DeletionResult> {
-    const pending = this.#deletions.get(id);
+  async delete(id: string, run: (id: string) => Promise<void>): Promise<DeletionResult> {
+    const pending =
+      this.#deletions.get(id) ??
+      (this.#pendingDeletionOwners.get(id)
+        ? this.#deletions.get(this.#pendingDeletionOwners.get(id)!.id)
+        : undefined);
     if (pending) {
       await pending;
       return { kind: "ignored" };
     }
-    this.#deletionVersions.set(id, this.#deletionVersion(id) + 1);
-    this.#invalidate(id);
+
+    const session = this.#pendingDeletionOwner(id) ?? this.#sessions.get(id);
+    if (session) this.#rememberPendingOwner(id, session);
+    const aliases = session
+      ? [...this.#pendingDeletionOwners.entries()]
+          .filter(([, owner]) => owner === session)
+          .map(([alias]) => alias)
+      : [];
+    if (!aliases.includes(id)) aliases.push(id);
+    if (session && !aliases.includes(session.id)) aliases.push(session.id);
+    for (const alias of aliases) {
+      this.#deletionVersions.set(alias, this.#deletionVersion(alias) + 1);
+      this.#invalidate(alias);
+    }
+
     let settle!: (outcome: DeletionResult) => void;
     const reservation = new Promise<DeletionResult>((resolve) => {
       settle = resolve;
     });
-    this.#deletions.set(id, reservation);
+    for (const alias of aliases) this.#deletions.set(alias, reservation);
+
     let outcome: DeletionResult | undefined;
     try {
-      const session = this.#sessions.get(id);
       if (!session) {
-        await run();
+        await run(id);
         try {
           await this.#api.discardDraft(id);
         } catch {
@@ -918,9 +1016,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
         outcome = { kind: "deleted", dirty: false };
         return outcome;
       }
+
       const dirty = session.dirty;
       const deletion = session.delete(run);
-      this.#sessions.delete(id);
+      this.#sessions.delete(session.id);
       try {
         if (!(await deletion)) {
           outcome = { kind: "ignored" };
@@ -929,36 +1028,47 @@ export class DocumentSessionCollection implements DraftBufferStore {
         outcome = { kind: "deleted", dirty };
         return outcome;
       } catch (error) {
-        if (session.snapshot().lifecycle === "open") this.#sessions.set(id, session);
+        if (session.snapshot().lifecycle === "open") this.#sessions.set(session.id, session);
         throw error;
       }
     } finally {
       settle(outcome ?? { kind: "ignored" });
-      if (this.#deletions.get(id) === reservation) this.#deletions.delete(id);
+      for (const alias of aliases) {
+        if (this.#deletions.get(alias) === reservation) this.#deletions.delete(alias);
+      }
+      if (session) this.#forgetPendingOwner(session);
     }
   }
 
   handleExternalRemoval(id: string): ExternalRemovalResult {
     this.#invalidate(id);
-    const session = this.#sessions.get(id);
+    const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
     if (!session) return { kind: "removed", dirty: false };
+    this.#invalidate(session.id);
     const dirty = session.dirty;
-    session.close();
-    this.#sessions.delete(id);
+    session.close(true);
+    if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
+    this.#forgetPendingOwner(session);
     void session.discardDraftAfterClose();
     return { kind: "removed", dirty };
   }
   async release(id: string): Promise<CloseResult> {
     if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
 
+    const pendingOwner = this.#pendingDeletionOwner(id);
+    const deletingOwner = this.#pendingDeletionOwners.get(id);
+    if (pendingOwner) return { kind: "active" };
     const deletionVersion = this.#deletionVersion(id);
-    const pendingDeletion = this.#deletions.get(id);
+    const pendingDeletion =
+      this.#deletions.get(id) ??
+      (deletingOwner ? this.#deletions.get(deletingOwner.id) : undefined);
     if (pendingDeletion) {
+      const ownerId = deletingOwner?.id ?? id;
       const outcome = await pendingDeletion;
       if (outcome.kind === "deleted") return { kind: "missing" };
       // A failed deletion reopened the exact old owner. Re-run the release
       // decision against that owner instead of leaving it unwatched.
-      return this.release(id);
+      return this.release(ownerId);
     }
 
     const session = this.#sessions.get(id);
@@ -974,12 +1084,13 @@ export class DocumentSessionCollection implements DraftBufferStore {
     await session.flush();
     if (session.dirty) await session.flushDraft();
 
+    if (session.isDeletionPending()) return { kind: "active" };
     if (this.#sessions.get(id) !== session) {
-      const pending = this.#deletions.get(id);
+      const pending = this.#deletions.get(id) ?? this.#deletions.get(session.id);
       if (pending) {
         const outcome = await pending;
         if (outcome.kind === "deleted") return { kind: "missing" };
-        return this.release(id);
+        return this.release(session.id);
       }
       // A rename can move this owner while it is being flushed. If no newer
       // owner replaced it, continue the same close decision under its key.
@@ -1004,9 +1115,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
   async resolveConflict(id: string, choice: ConflictChoice): Promise<ConflictResolutionResult> {
     return (await this.#sessions.get(id)?.resolveConflict(choice)) ?? { kind: "none" };
   }
-
   async renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
-    const session = this.#sessions.get(from);
+    const pendingAlias = this.#pendingDeletionOwners.get(from);
+    const session =
+      this.#sessions.get(from) ??
+      (pendingAlias?.snapshot().lifecycle === "open" ? pendingAlias : undefined);
     const target = this.#sessions.get(to);
     if (target && target !== session) return { kind: "collision", from, to };
     this.#invalidate(from);
@@ -1032,28 +1145,39 @@ export class DocumentSessionCollection implements DraftBufferStore {
     this.#invalidate(from);
     this.#invalidate(to);
     if (from === to) return { kind: "already-renamed", from, to };
-    const session = this.#sessions.get(from);
+    const pendingAlias = this.#pendingDeletionOwners.get(from);
+    const session =
+      this.#sessions.get(from) ??
+      (pendingAlias?.snapshot().lifecycle === "open" ? pendingAlias : undefined);
     const target = this.#sessions.get(to);
     if (!session) {
       return target ? { kind: "already-renamed", from, to } : { kind: "missing", from, to };
+    }
+    if (session.id === to && target === session) {
+      return { kind: "already-renamed", from, to };
     }
     if (target && target !== session) {
       session.resume();
       return { kind: "collision", from, to };
     }
     session.rename(to);
-    this.#sessions.delete(from);
+    if (this.#sessions.get(from) === session) this.#sessions.delete(from);
     this.#sessions.set(to, session);
+    if (session.isDeletionPending()) this.#rememberPendingOwner(from, session);
     return { kind: "renamed", from, to };
   }
 
   close(id: string): CloseResult {
+    const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
+    if (!session) {
+      this.#invalidate(id);
+      return { kind: "missing" };
+    }
+    if (session.isDeletionPending()) return { kind: "active" };
     this.#invalidate(id);
-    const session = this.#sessions.get(id);
-    if (!session) return { kind: "missing" };
     const dirty = session.dirty;
-    session.close();
-    this.#sessions.delete(id);
+    if (!session.close()) return { kind: "active" };
+    if (this.#sessions.get(session.id) === session) this.#sessions.delete(session.id);
     return { kind: "closed", dirty };
   }
 
@@ -1063,6 +1187,24 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
   #deletionVersion(id: string): number {
     return this.#deletionVersions.get(id) ?? 0;
+  }
+
+  #pendingDeletionOwner(id: string): DocumentSession | undefined {
+    const direct = this.#sessions.get(id);
+    if (direct?.isDeletionPending()) return direct;
+    const alias = this.#pendingDeletionOwners.get(id);
+    return alias?.isDeletionPending() ? alias : undefined;
+  }
+
+  #rememberPendingOwner(alias: string, session: DocumentSession): void {
+    this.#pendingDeletionOwners.set(alias, session);
+    this.#pendingDeletionOwners.set(session.id, session);
+  }
+
+  #forgetPendingOwner(session: DocumentSession): void {
+    for (const [alias, owner] of this.#pendingDeletionOwners) {
+      if (owner === session) this.#pendingDeletionOwners.delete(alias);
+    }
   }
 
   #invalidate(id: string): void {

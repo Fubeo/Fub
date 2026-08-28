@@ -29,6 +29,10 @@ import { t } from "../i18n/strings";
 /// Cestina una nota, chiedendo prima conferma. La sessione sospende i ritardi
 /// durante la domanda e invalida il documento prima del comando distruttivo.
 export async function trashWithConfirm(id: string): Promise<void> {
+  // A second gesture for the same open document must not create a second
+  // confirmation or race the first destructive command. An unopened document
+  // has no owner, so its `beginDeletion` rejection is intentionally ignored.
+  if (documentSessions.isDeletionPending(id)) return;
   documentSessions.beginDeletion(id);
   const wasOpen = isOpen(id);
 
@@ -42,7 +46,7 @@ export async function trashWithConfirm(id: string): Promise<void> {
     return;
   }
 
-  const outcome = await documentSessions.delete(id, () => trashNote(id));
+  const outcome = await documentSessions.delete(id, (currentId) => trashNote(currentId));
   if (outcome.kind !== "deleted") return;
   // La sessione ha già invalidato buffer, ritardi e bozza; qui restano soltanto
   // gli effetti delle superfici e dell'elenco delle note.

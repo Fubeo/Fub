@@ -42,4 +42,17 @@ describe("adapter dell'editor Markdown", () => {
     ed.setLivePreview(true);
     ed.destroy();
   });
+  it("delega la sola lettura al motore senza bloccare la sincronizzazione", () => {
+    const { ed, view } = editor();
+    ed.setDoc("prima");
+    ed.setReadOnly(true);
+
+    expect(view().state.readOnly).toBe(true);
+    ed.syncDoc("seconda");
+    expect(ed.getDoc()).toBe("seconda");
+
+    ed.setReadOnly(false);
+    expect(view().state.readOnly).toBe(false);
+    ed.destroy();
+  });
 });
