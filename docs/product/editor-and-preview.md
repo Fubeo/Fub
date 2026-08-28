@@ -1,7 +1,8 @@
 # Editor e anteprima
 
 > **Per chi:** chi usa o modifica l'esperienza di scrittura.
-> **Risultato:** capire buffer, modalità, salvataggio e responsabilità locali.
+> **Risultato:** capire la sessione documento, il buffer condiviso, il
+> salvataggio e le responsabilità locali.
 
 ## Modalità
 
@@ -18,18 +19,22 @@ focus, selezione, scroll, tema e lifecycle.
 
 ```mermaid
 flowchart LR
-    FILE["file e revisione"] --> SESSION["sessione documento"]
-    SESSION --> BUFFER["buffer condiviso"]
-    BUFFER --> SURFACE_A["superficie nel riquadro A"]
-    BUFFER --> SURFACE_B["superficie nel riquadro B"]
-    SURFACE_A --> SAVE["debounce e scrittura"]
-    SURFACE_B --> SAVE
+    FILE["file e revisione"] --> SESSION["DocumentSession"]
+    SESSION --> BUFFER["buffer autorevole"]
+    SESSION --> SAVE["debounce e scrittura"]
+    SESSION --> SURFACE_A["superficie nel riquadro A"]
+    SESSION --> SURFACE_B["superficie nel riquadro B"]
+    SURFACE_A -->|modifica tipizzata| SESSION
+    SURFACE_B -->|modifica tipizzata| SESSION
+    SESSION -->|sincronizzazione| SURFACE_A
+    SESSION -->|sincronizzazione| SURFACE_B
     SAVE --> FILE
 ```
 
 ## Documento e superficie
 
-Un documento aperto in più riquadri condivide:
+Un documento aperto in più riquadri condivide, tramite un'unica
+`DocumentSession`:
 
 - testo;
 - revisione di base;
@@ -38,7 +43,8 @@ Un documento aperto in più riquadri condivide:
 - bozza;
 - ultimo esito di scrittura.
 
-Ogni superficie conserva invece:
+La sessione coordina questo buffer autorevole e il suo lifecycle. Ogni
+superficie conserva invece:
 
 - cursore e selezioni;
 - scroll;
@@ -48,7 +54,8 @@ Ogni superficie conserva invece:
 
 Questa distinzione impedisce di creare due copie concorrenti dello stesso
 buffer e, allo stesso tempo, evita che il cursore di un riquadro muova quello
-dell'altro.
+dell'altro. Il pannello collega e scollega le superfici visibili, ma non
+coordina il buffer, il salvataggio o il fan-out delle modifiche.
 
 ## Offset e terminatori
 
@@ -88,11 +95,13 @@ stale di riportare contenuto già sovrascritto.
 
 ## Salvataggio e conflitti
 
-La shell accoda le scritture per documento. Il core applica la revisione di
-base. Un contenuto esterno più recente produce un conflitto esplicito.
+La `DocumentSession` accoda le scritture per documento. Il core applica la
+revisione di base. Un contenuto esterno più recente produce un conflitto
+esplicito.
 
-Una chiusura non deve distruggere la superficie prima che flush e protezione
-della bozza abbiano avuto il proprio esito.
+Il rilascio dell'ultima tab esegue il flush della scrittura e, se necessario,
+della bozza prima di chiudere la sessione; il lifecycle del riquadro e
+dell'editor resta separato da quello del documento.
 
 ## Preview e contenuto non fidato
 
@@ -110,13 +119,18 @@ condivisa. L'unico percorso montato dall'utente è l'editor Markdown, che passa
 da `createEditor()` e `MarkdownProfile`.
 
 `PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
-stesso `TextEngine`: vengono esercitati dai test dedicati e dalla fixture a tre
-profili, ma non sono superfici esposte all'utente. La loro presenza dimostra il
-seam interno; non introduce una nuova modalità del prodotto né anticipa
-`DocumentSession` o altre fasi successive.
+stesso `TextEngine`: vengono esercitati soltanto dai test dedicati e dalla
+fixture a tre profili, ma non sono superfici esposte all'utente. La loro
+presenza dimostra il seam interno; non introduce una nuova modalità del
+prodotto.
 
-Il coordinamento del buffer resta nel pannello documento e nessun profilo invia
-una chiamata IPC o WASM per ogni battuta.
+La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle;
+il pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
+chiamata IPC o WASM per ogni battuta.
+
+Il percorso corrente non include un `DocumentSurfaceRegistry`, una griglia di
+superfici o la `Phase 5`: restano assenti e l'esperienza utente rimane quella
+del percorso Markdown esistente.
 
 ## Dove si trova
 

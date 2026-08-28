@@ -3,8 +3,8 @@
 > **Domanda:** come comunica la shell TypeScript con il core senza diffondere
 > Tauri e senza duplicare il contratto?
 > **Fonti autorevoli:** `apps/client/src/host/`, `apps/client/src/editors/text/`,
-> `apps/client/src/panels/document.ts`, `crates/fub-app/src/lib.rs`,
-> `crates/fub-abi/src/ipc.rs`.
+> `apps/client/src/state/document-session.ts`, `apps/client/src/panels/document.ts`,
+> `crates/fub-app/src/lib.rs`, `crates/fub-abi/src/ipc.rs`.
 
 ## Il seam
 
@@ -97,25 +97,41 @@ La shell possiede:
 - cursore, scroll e modalità;
 - tema visuale;
 - animazioni;
-- preferenze locali della resa.
+- preferenze locali della resa;
+- lo stato autorevole in memoria dei documenti aperti, tramite le sessioni
+  documento.
 
 Il core possiede:
 
-- documenti e revisioni;
+- documenti persistenti e revisioni;
 - policy e permessi;
 - indici;
 - esito dei comandi;
 - eventi;
 - dati persistenti dichiarati dal contratto.
 
+La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
+scrittura del documento aperto; il core resta l'autorità del file persistente e
+della revisione verificata dalla scrittura.
+
 ## Superfici di editing
 
-La sessione documento e la superficie non sono la stessa cosa. Nel codice
-corrente non esiste però un `DocumentSession` estratto: `buffers` è una mappa
-privata di `apps/client/src/panels/document.ts` con un `Buffer` per documento.
-Il `Buffer` possiede testo, revisione di base, stato dirty, coda di salvataggio,
-bozza, esito e timer; `Queue`, `scheduleSave()` e `saveDoc()` restano in quel
-pannello.
+La sessione documento e la superficie non sono la stessa cosa. Il percorso
+corrente crea una sola `DocumentSession` per documento tramite
+`DocumentSessionCollection`, l'unico owner e percorso di costruzione in
+`apps/client/src/state/document-session.ts`.
+
+La sessione possiede il buffer autorevole in memoria: testo, revisione di base,
+stato dirty, coda e debounce di salvataggio e bozza, esiti, riconciliazione degli
+eventi esterni, conflitti, rinomina, cancellazione e chiusura. Il buffer è lo
+stato condiviso del documento, non una copia per riquadro.
+
+La collection mantiene la sessione finché il documento è trattenuto da almeno
+un riquadro o da un'apertura in corso. Il rilascio dell'ultima tab esegue il
+flush della scrittura e, se il testo resta sporco, della bozza, prima di
+chiudere l'owner. Una rinomina mantiene lo stesso owner e il suo buffer; una
+cancellazione riuscita o una rimozione esterna lo chiudono. La riapertura crea o
+riusa l'owner a partire dalla sorgente.
 
 Ogni `Pane` possiede invece un `Editor`. `renderPane()` crea l'editor chiamando
 `createEditor()` da `apps/client/src/editor/editor.ts`, che costruisce un
@@ -164,22 +180,23 @@ il sync viene interrotto.
 
 Il flusso delle modifiche è esplicito e resta interno alla shell:
 `TextEngine.handleUpdate()` crea un `EditorChange` con `text`, `operation`
-(`TextOperation`) e `origin`; `createEditor()` lo inoltra al callback
-legacy senza ridurre l'operazione al solo testo.
+(`TextOperation`) e `origin`; il pannello inoltra questi dati alla sessione,
+senza ridurre l'operazione al solo testo.
 
 `TextOperation` vive in `apps/client/src/editor/text-operation.ts` e non conosce
-CodeMirror, DOM o history. `written(paneId, change)` in `document.ts` legge il
-`Buffer` autorevole del documento. Quando il buffer esiste, normalizza i
-terminatori e applica `tryApplyOperation(current, operation)`, accettando il
-cambio soltanto se l'operazione è applicabile e il risultato coincide con
-`text`. Se la superficie è stantia o l'operazione è malformata o incoerente,
-non sovrascrive il buffer: riallinea la superficie sorgente con
-`syncDoc(existing.text)` e termina il percorso.
+CodeMirror, DOM o history. La `DocumentSession` valida l'operazione tipizzata
+contro il testo autorevole, usando la stessa normalizzazione dei terminatori per
+preimmagine e testo obiettivo. Un'operazione stantia, malformata o incoerente
+lascia invariato il buffer e riallinea la superficie sorgente col testo
+autorevole.
 
-Dopo una validazione riuscita, `written()` aggiorna `Buffer.text` e `dirty`, poi
-pianifica salvataggio e bozza. Il fan-out percorre `panesWithDoc(doc)` e chiama
-`syncDoc({ text, operation })` sulle altre superfici dello stesso documento,
-lasciando la superficie sorgente fuori dal giro.
+Quando la validazione riesce, la sessione aggiorna una volta testo e dirty,
+pianifica salvataggio e bozza e diffonde l'operazione alle superfici sottoscritte
+tranne la sorgente. Una sostituzione autorevole — ricarica pulita, conflitto
+scartato o bozza recuperata — diffonde invece il testo intero a tutte le
+superfici. Il pannello possiede il collegamento delle superfici e applica questi
+dati all'editor; non possiede la validazione, il buffer o il fan-out delle
+modifiche.
 
 La superficie destinataria esegue una seconda guardia:
 `TextEngine.syncDoc()` valida l'operazione ricevuta contro il proprio testo
@@ -191,12 +208,12 @@ gestito dalla guardia `HistoryFootprints` descritta sopra.
 
 `EditorChange`, `DocumentUpdate` e `TextOperation` sono tipi interni della
 shell TypeScript: non attraversano `host/contract.ts`, IPC, WIT o ABI.
-`document.ts` conserva l'ownership di `Buffer`, revisione o base, dirty, coda e
-coordinamento di salvataggio, bozza, conflitto, rinomina, cancellazione e
-chiusura. Il coordinamento del `Buffer` e del fan-out resta in `document.ts`,
-mentre ogni `TextEngine` conserva i propri rami nativi e la propria metadata
-di sicurezza. `operationFromText()` è soltanto il fallback del ricevente, non
-la sostituzione dell'operazione tipizzata emessa dalla sorgente.
+`DocumentSessionCollection` costruisce e conserva gli owner; ogni
+`DocumentSession` coordina testo, revisione di base, dirty, coda, salvataggio,
+bozza, conflitto, rinomina, cancellazione e chiusura. Le superfici sottoscritte
+ricevono soltanto dati e ciascun `TextEngine` conserva i propri rami nativi e la
+metadata di sicurezza. `operationFromText()` è soltanto il fallback del
+ricevente, non la sostituzione dell'operazione tipizzata emessa dalla sorgente.
 
 La distinzione è motivata da [0190](../decisions/0190-sessioni-documento-e-undo.md)
 e il confine di sicurezza della history nativa è precisato in
@@ -224,9 +241,9 @@ I moduli sono rispettivamente
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
-Non fa parte dell'architettura corrente un `DocumentSurfaceRegistry`: il
-pannello crea direttamente i propri `Editor` e non risolve le superfici tramite
-un registro.
+Non fanno parte dell'architettura corrente un `DocumentSurfaceRegistry`, una
+griglia condivisa di superfici o la `Phase 5`: il pannello collega direttamente
+le superfici alla sessione e il percorso attuale resta quello testuale.
 
 ## Confine CodeMirror
 

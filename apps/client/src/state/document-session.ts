@@ -1111,4 +1111,3 @@ export function flushBeforeClose(): Promise<void> {
 export function renameKeepingBuffer(from: string, to: string): Promise<RenameResult> {
   return documentSessions.renameKeepingBuffer(from, to);
 }
-
