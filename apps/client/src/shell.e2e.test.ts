@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Trentadue gesti, contati da fuori
+// # Trentaquattro gesti, contati da fuori
 //
-// I gesti sono **trentadue** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **trentaquattro** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -525,6 +525,86 @@ describe("undo locale tra riquadri", () => {
     expect(host.atGate("writeDocument").length).toBe(writesBeforeClose + 1);
     await settle();
     expect(host.atGate("writeDocument").length).toBe(writesBeforeClose + 1);
+  });
+});
+
+describe("una sessione e le sue superfici", () => {
+  it("dopo il rimonto della linguetta il secondo riquadro continua a seguire", async () => {
+    await start(VAULT);
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "\\", ctrlKey: true }),
+    );
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+
+    // Il secondo riquadro mostra un altro documento e poi torna: la
+    // registrazione alla sessione si toglie e si rifà. Ciò che si guarda è
+    // che **dopo** il rimonto la sessione raggiunge ancora entrambe le
+    // superfici — una registrazione persa qui non si riparebbe più.
+    const folder = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
+    folder?.click();
+    await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
+    const panes = [...document.querySelectorAll<HTMLElement>(".pane")];
+    panes[1]?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    row("Spesa").click();
+    await waitFor(
+      "la nota della cartella arriva nel secondo riquadro",
+      () => editorViews()[1]?.state.doc.toString().includes("pane, latte") === true,
+    );
+    const tabs = [...document.querySelectorAll<HTMLElement>(".pane")][1]!.querySelectorAll<HTMLElement>(".tab");
+    tabs[0]?.click();
+    await waitFor(
+      "il secondo riquadro torna sul documento di partenza",
+      () => editorViews()[1]?.state.doc.toString().includes("Il primo documento") === true,
+    );
+    await settle();
+
+    const views = editorViews();
+    views[0]!.dispatch({ changes: { from: views[0]!.state.doc.length, insert: " [dopo il rimonto]" } });
+    await settle();
+    const texts = editorTexts();
+    expect(texts).toEqual([texts[0], texts[0]]);
+    expect(texts[0]).toContain(" [dopo il rimonto]");
+  });
+
+  it("la rinomina non stacca le superfici: due riquadri restano una sessione", async () => {
+    const host = await start(VAULT);
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "\\", ctrlKey: true }),
+    );
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+
+    await contextMenu(row("Benvenuto"), "Rinomina");
+    const field = document.querySelector<HTMLInputElement>("#file-list input");
+    if (!field) throw new Error("la riga non è diventata un campo");
+    field.value = "Indice";
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await waitFor("la rinomina arriva al kernel", () => host.atGate("invokeCommand").length > 0);
+    await settle();
+    // La barriera è la **linguetta**: l'albero si riscrive con un evento, la
+    // migrazione dell'identità aperta (evento `document_renamed` → layout →
+    // sessione) con un altro. Battere nel mezzo scriverebbe col nome di
+    // prima — una corsa del sistema, non ciò che questo banco prova.
+    await waitFor("la linguetta segue la rinomina", () =>
+      [...document.querySelectorAll<HTMLElement>(".tab-name")].some(
+        (el) => el.textContent === "Indice",
+      ),
+    );
+    await settle();
+
+    const views = editorViews();
+    views[0]!.dispatch({ changes: { from: views[0]!.state.doc.length, insert: " dopo la rinomina" } });
+    await settle();
+    const texts = editorTexts();
+    expect(texts).toEqual([texts[0], texts[0]]);
+    expect(texts[0]).toContain(" dopo la rinomina");
+    // Il salvataggio parte col nome nuovo: la sessione è quella, se ne è
+    // costruita una seconda le due superfici starebbero su due buffer.
+    await waitFor(
+      "il salvataggio parte col nome nuovo",
+      () => host.atGate("writeDocument").some((w) => w.args[0] === "Indice.md"),
+    );
   });
 });
 

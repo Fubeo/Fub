@@ -19,7 +19,6 @@
 // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
 // lo stato mutabile della sessione ai suoi clienti.
 import { createEditor, type Editor, type EditorChange } from "../editor/editor";
-import { tryApplyOperation } from "../editor/text-operation";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
@@ -35,8 +34,8 @@ import {
   documentSessions,
   isDocumentDeletedDuringRead,
   type DocumentSessionEvent,
+  type DocumentSurfaceUpdate,
   type ExternalChangeResult,
-  type ReloadResult,
 } from "../state/document-session";
 import {
   openIn,
@@ -99,6 +98,9 @@ interface Pane {
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
   shown: Tab | null;
   loadGeneration: number;
+  /// Il disposer della registrazione di questo riquadro alla sessione del
+  /// documento mostrato. Null finché il riquadro non mostra un documento.
+  disposeSurface: (() => void) | null;
 }
 
 const panes = new Map<string, Pane>();
@@ -281,8 +283,10 @@ async function resolveKeepingMine(): Promise<void> {
   if (outcome.kind === "none") notify(t("document.conflict_none"), "info");
 }
 
-/// «Vince il testo sul disco»: la sessione scarta il buffer e rileggere il
-/// documento, poi il pannello riallinea le superfici.
+/// «Vince il testo sul disco»: la sessione scarta il buffer e rilegge il
+/// documento. Gli editor seguono perché la sessione ha diffuso il testo
+/// autorevole alle superfici sottoscritte; qui restano il ridisegno della
+/// lettura e delle scritte di stato.
 async function resolveDiscardingMine(): Promise<void> {
   const doc = activeDoc();
   if (!doc) {
@@ -294,7 +298,7 @@ async function resolveDiscardingMine(): Promise<void> {
     notify(t("document.conflict_none"), "info");
     return;
   }
-  if (outcome.kind === "discarded") await applyReload(doc, outcome.reload);
+  await redrawReading(doc);
   drawSave();
   redrawTabs(doc);
 }
@@ -430,6 +434,9 @@ function buildStructure(): void {
       // lasciava indietro uno vivo — e la mappa era l'unico riferimento che lo
       // teneva, quindi spariva anche il modo di accorgersene.
       if (r.shown?.k === "view") unmountViewFromPane(r.shown.view, id);
+      // Prima la registrazione, poi il nodo: un disposer rimasto appeso è un
+      // abbonamento a una sessione che il riquadro non mostra più.
+      detachSurface(r);
       r.editor.destroy();
       r.root.remove();
       panes.delete(id);
@@ -537,6 +544,7 @@ function renderPane(id: string): Pane {
     editor,
     shown: null,
     loadGeneration: 0,
+    disposeSurface: null,
   };
   panes.set(id, r);
   return r;
@@ -657,6 +665,9 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
+  // Cambia ciò che il riquadro mostra: la registrazione precedente alla
+  // sessione precedente si toglie, chi attacca dopo lo farà con la nuova.
+  if (changed) detachSurface(r);
   r.shown = tab;
   r.root.classList.toggle("con-vista", tab?.k === "view");
 
@@ -689,7 +700,38 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (generation !== r.loadGeneration || r.shown !== tab) return;
   r.editor.setSyntaxForms(forms);
   r.editor.setDoc(text);
+  // Il contenuto è a posto: da qui la sessione può raggiungere questo
+  // riquadro come superficie, finché non mostra altro.
+  attachSurface(r, tab.doc);
   await redrawReading(tab.doc);
+}
+
+/// La sottoscrizione di un riquadro alla sessione del documento mostrato.
+/// L'identità di registrazione è l'id del riquadro: stabile per quanto il
+/// riquadro vive, opaco per la sessione. Attacare due volte con lo stesso id
+/// è la stessa superficie rimontata, non due superfici.
+function attachSurface(r: Pane, doc: string): void {
+  r.disposeSurface = documentSessions.attachSurface(doc, {
+    id: r.id,
+    sync: (update) => applySurfaceUpdate(r, doc, update),
+  });
+}
+
+function detachSurface(r: Pane): void {
+  r.disposeSurface?.();
+  r.disposeSurface = null;
+}
+
+/// Applica alla superficie di questo riquadro il dato che la sessione ha
+/// diffuso. `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il
+/// testo sotto — e chi lo sta guardando non perde il punto in cui era. Il
+/// cambio non entra nella history locale: un aggiornamento arrivato da un
+/// altro riquadro non diventa un undo di questo.
+function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate): void {
+  if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
+  r.editor.syncDoc(
+    update.kind === "operation" ? { text: update.text, operation: update.operation } : update.text,
+  );
 }
 
 /// Il testo di un documento: dal buffer se qualcuno lo tiene già aperto, dal
@@ -772,32 +814,15 @@ export async function recoverDrafts(): Promise<number> {
     return 0;
   }
   const rejoined = documentSessions.rejoin(drafts);
-  // Chi arrivava già a schermo leggeva il disco **prima** del recupero — la
-  // tab ripristinata dal layout, che `synchronize` ha appena disegnato — e la
-  // bozza è più nuova di lui: le superfici vanno portate con lei, o la prima
-  // battuta, riscritta sopra il testo vecchio che si vede, coprirebbe il
-  // recupero senza che nessuno l'abbia mai visto.
+  // Editor, pallino sulla tab e barra di stato vengono portati dal recupero
+  // stesso: `restoreDraft` sostituisce il testo autorevole e la sessione lo
+  // diffonde alle superfici sottoscritte — una volta, senza un giro di sync
+  // in più qui. Restano le due cose che sono del pannello: le notifiche e la
+  // lettura, che mostrava il disco e ora mostra il testo rientrato.
   for (const b of rejoined) {
     notify(`${b.doc}: ${t(CASE_KEY[caseOf(b)])}`, "info");
-    for (const paneId of panesWithDoc(b.doc)) {
-      const r = panes.get(paneId);
-      if (r && r.shown?.k === "doc" && r.shown.doc === b.doc) {
-        r.editor.syncDoc(b.text);
-      }
-    }
-  }
-  // Il pallino sulla tab diceva «pulito» — lo si è disegnato prima del
-  // recupero — e il buffer rientrato è sporco: si ridisegna, come fa `scritto`
-  // quando una battuta sporca un buffer.
-  for (const b of rejoined) {
-    for (const paneId of panesWithDoc(b.doc)) {
-      const r = panes.get(paneId);
-      const p = paneState(paneId);
-      if (r && p) drawTab(r, p.tabs, p.active);
-    }
   }
   drawSave();
-  // E la lettura, che mostrava il disco, mostra il testo rientrato.
   await Promise.all(rejoined.map((b) => redrawReading(b.doc)));
   // Il conto dice quante sono **rientrate davvero**, non quante erano in fila:
   // la notifica dice «è stato ritrovato, aprile per decidere», e una bozza
@@ -898,39 +923,21 @@ export async function openWikilink(
 // testo e la seconda scrittura arriverebbe dopo un evento che dice che il file
 // è cambiato.
 
-/// Qualcuno ha scritto in un riquadro: la sessione è la nuova verità, gli altri
-/// editor sullo stesso documento la ricevono, e il servizio programma il
-/// salvataggio.
+/// Qualcuno ha scritto in un riquadro. Il pannello non valida niente e non
+/// sincronizza nessuno: porta l'operazione tipizzata alla sessione, che la
+/// misura sul testo autorevole, aggiorna una volta, programma il salvataggio
+/// e diffonde l'esito ai pari. Se l'operazione non regge — una superficie
+/// rimasta indietro — la sessione risponde col testo autorevole e questo
+/// riquadro si riallinea, senza coprire la battuta arrivata altrove.
 function written(paneId: string, change: EditorChange): void {
   const doc = activeDoc(paneId);
   if (!doc) return;
-  const { text, operation } = change;
-  const current = documentSessions.text(doc);
-  // The operation is checked against the authoritative session before it can
-  // replace it. A stale surface is brought back to that session instead of
-  // silently overwriting a newer sibling edit.
-  if (current !== undefined) {
-    const expected = text.replace(/\r\n?/g, "\n");
-    const applied = tryApplyOperation(current.replace(/\r\n?/g, "\n"), operation);
-    if (applied.kind !== "applied" || applied.text !== expected) {
-      const source = panes.get(paneId);
-      if (source?.shown?.k === "doc" && source.shown.doc === doc) {
-        source.editor.syncDoc(current);
-      }
-      return;
-    }
+  const outcome = documentSessions.acceptSurfaceChange(doc, paneId, change);
+  if (outcome.kind !== "realigned") return;
+  const source = panes.get(paneId);
+  if (source?.shown?.k === "doc" && source.shown.doc === doc) {
+    source.editor.syncDoc(outcome.text);
   }
-
-  documentSessions.acceptEditorChange(doc, text);
-  for (const other of panesWithDoc(doc)) {
-    if (other === paneId) continue;
-    const r = panes.get(other);
-    if (r && r.shown?.k === "doc" && r.shown.doc === doc) {
-      r.editor.syncDoc({ text, operation });
-    }
-  }
-  redrawTabs(doc);
-  drawSave();
 }
 
 
@@ -976,28 +983,16 @@ async function applyExternalChange(id: string, outcome: ExternalChangeResult): P
     }
   } else if (outcome.kind === "echo" || outcome.kind === "untracked") {
     return;
-  } else if (outcome.kind === "reloaded" && outcome.changed) {
-    syncDocument(id, outcome.text);
   }
+  // L'editor, quando il testo autorevole è cambiato, è già stato allineato
+  // dalla sessione, che lo ha diffuso alle sue superfici. Qui resta la
+  // lettura, che è del pannello.
   await redrawReading(id);
 }
 
 async function reloadDocument(id: string): Promise<void> {
-  await applyReload(id, await documentSessions.reloadIfClean(id));
-}
-
-async function applyReload(id: string, outcome: ReloadResult): Promise<void> {
-  if (outcome.kind === "reloaded" && outcome.changed) syncDocument(id, outcome.text);
+  await documentSessions.reloadIfClean(id);
   await redrawReading(id);
-}
-
-function syncDocument(id: string, text: string): void {
-  for (const paneId of panesWithDoc(id)) {
-    const r = panes.get(paneId);
-    // `syncDoc` e non `setDoc`: il documento è lo stesso, è cambiato il testo
-    // sotto — e chi lo sta guardando non deve perdere il punto in cui era.
-    if (r && r.shown?.k === "doc" && r.shown.doc === id) r.editor.syncDoc(text);
-  }
 }
 
 /// Rilegge dal disco il documento attivo (usato dopo un ripristino di versione,
@@ -1005,7 +1000,8 @@ function syncDocument(id: string, text: string): void {
 export async function reloadCurrent(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;
-  await applyReload(doc, await documentSessions.forceReload(doc));
+  await documentSessions.forceReload(doc);
+  await redrawReading(doc);
   drawSave();
   redrawTabs(doc);
 }

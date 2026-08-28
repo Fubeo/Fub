@@ -16,9 +16,43 @@ import {
 } from "./saving";
 import { rejoinDrafts, type DraftBuffer, type DraftBufferStore } from "./drafts";
 import { renameNote } from "./vault";
+import { tryApplyOperation, type TextOperation } from "../editor/text-operation";
 
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
+
+/// La porta con cui una superficie si sottoscrive a una sessione. Soltanto
+/// dati: niente DOM, niente editor, niente cursore, selezione o history —
+/// ciò che la superficie fa del dato ricevuto resta tutto suo.
+export interface DocumentSurface {
+  /// Identità stabile e opaca della registrazione. Due registrazioni con la
+  /// stessa identità sono la stessa superficie rimontata, non due superfici.
+  readonly id: string;
+  /// Il dato autorevole da applicare. Sincrono: la sessione non aspetta
+  /// niente da chi lo riceve.
+  sync(update: DocumentSurfaceUpdate): void;
+}
+
+/// Ciò che la sessione diffonde alle superfici: o l'operazione tipizzata
+/// appena accettata (ai **pari** della sorgente), o il testo autorevole per
+/// intero (una sostituzione esterna: ricarica pulita, conflitto, bozza).
+export type DocumentSurfaceUpdate =
+  | { kind: "operation"; text: string; operation: TextOperation }
+  | { kind: "text"; text: string };
+
+/// Una modifica dell'editor ridotta ai soli dati che la sessione valida.
+export interface SurfaceEdit {
+  readonly text: string;
+  readonly operation: TextOperation;
+}
+
+/// Esito di una modifica portata da una superficie: accettata (e diffusa ai
+/// pari), oppure respinta col testo autorevole a cui la sorgente si
+/// riallinea, senza che la sessione abbia mutato nulla.
+export type SurfaceChangeResult =
+  | { kind: "accepted" }
+  | { kind: "realigned"; text: string }
+  | { kind: "untracked" };
 
 export interface DocumentSessionApi {
   readDocument(id: string): Promise<{ text: string; revision: string }>;
@@ -136,6 +170,10 @@ export class DocumentSession implements DraftBuffer {
   #activityGeneration = 0;
   readonly #api: DocumentSessionApi;
   readonly #hooks: SessionHooks;
+  /// Le superfici sottoscritte, per identità di registrazione. È ownership di
+  /// ciclo di vita, non un registro di famiglie: chi si toglie chiude, la
+  /// chiusura della sessione chiude tutti.
+  readonly #surfaces = new Map<string, DocumentSurface>();
 
   constructor(
     token: OwnerToken,
@@ -201,7 +239,11 @@ export class DocumentSession implements DraftBuffer {
     if (this.#isOpen()) this.#activityGeneration++;
   }
 
-  /** The panel calls this only after validating the editor operation. */
+  /**
+   * Trusted programmatic update: no operation, no validation. The surface
+   * path (`acceptSurfaceChange`) is the only one that carries a typed
+   * operation, and it validates it before reaching for anything else.
+   */
   acceptEditorChange(text: string): void {
     if (!this.#isOpen()) return;
     this.#activityGeneration++;
@@ -212,6 +254,44 @@ export class DocumentSession implements DraftBuffer {
     this.scheduleSave();
     this.scheduleDraft();
   }
+
+  /**
+   * Una superficie porta la sua operazione tipizzata. La sessione è l'unico
+   * posto che la valida: preimage e risultato si misurano sul testo
+   * autorevole (sulla stessa normalizzazione di terminatori che poi applica
+   * il motore). Respingere non muta niente: la sorgente riceve il testo
+   * autorevole e si riallinea da sé. Accettare aggiorna una volta, programma
+   * salvataggio e bozza, e diffonde l'operazione a tutti i pari **tranne la
+   * sorgente** — che la sua editor ce l'ha già.
+   */
+  acceptSurfaceChange(surfaceId: string, edit: SurfaceEdit): SurfaceChangeResult {
+    if (!this.#isOpen()) return { kind: "untracked" };
+    // I due `replace` sono lo stesso lavello: preimage e atteso devono essere
+    // normalizzati identicamente, o la validazione regge per caso.
+    const expected = edit.text.replace(/\r\n?/g, "\n");
+    const applied = tryApplyOperation(this.#state.text.replace(/\r\n?/g, "\n"), edit.operation);
+    if (applied.kind !== "applied" || applied.text !== expected) {
+      return { kind: "realigned", text: this.#state.text };
+    }
+    this.acceptEditorChange(edit.text);
+    this.#fanOut({ kind: "operation", text: edit.text, operation: edit.operation }, surfaceId);
+    return { kind: "accepted" };
+  }
+
+  /**
+   * Attacca una superficie a questa sessione. L'identità è la chiave: la
+   * stessa registrazione attaccata due volte resta una sola sottoscrizione,
+   * una rimontata con la stessa identità rimpiazza la precedente. Il disposer
+   * è indempiente e stacca soltanto la registrazione che gli è stata data.
+   */
+  attachSurface(surface: DocumentSurface): () => void {
+    if (!this.#isOpen()) return () => {};
+    this.#surfaces.set(surface.id, surface);
+    return () => {
+      if (this.#surfaces.get(surface.id) === surface) this.#surfaces.delete(surface.id);
+    };
+  }
+
   restoreDraft(text: string, base: WriteBase): void {
     if (!this.#isOpen()) return;
     this.#activityGeneration++;
@@ -224,6 +304,17 @@ export class DocumentSession implements DraftBuffer {
     this.#state.result = "ok";
     this.#state.echoes = 0;
     this.#emit({ kind: "changed", id: this.#id });
+    this.#fanOut({ kind: "text", text });
+  }
+
+  /// Diffonde un dato autorevole alle superfici sottoscritte, esclusa
+  /// l'eventuale sorgente. Una diffusione per dato accettato: chi riceve non
+  /// ri-entra nella sessione (il motore marca il cambio come remoto).
+  #fanOut(update: DocumentSurfaceUpdate, except?: string): void {
+    for (const surface of this.#surfaces.values()) {
+      if (surface.id === except) continue;
+      surface.sync(update);
+    }
   }
 
   /** Consume an external event before applying the clean/dirty policy. */
@@ -305,6 +396,10 @@ export class DocumentSession implements DraftBuffer {
     this.#state.result = "ok";
     if (changed) this.#state.text = text;
     if (changed || resultChanged) this.#emit({ kind: "changed", id: this.#id });
+    // Ricarica pulita, conflitto scartato, comando esplicito: il testo è
+    // stato **sostituito** dall'autorità, e tutte le superfici lo ricevono —
+    // una volta, e per intero: non c'è una sorgente da escludere.
+    if (changed) this.#fanOut({ kind: "text", text });
     return changed;
   }
 
@@ -383,11 +478,13 @@ export class DocumentSession implements DraftBuffer {
 
   /**
    * Close before running a destructive command, then discard its draft in the
-   * same per-session queue. A failed command reopens the exact old session.
+   * same per-session queue. A failed command reopens the exact old session —
+   * con le sue superfici: la chiusura qui è provvisoria, e staccarle sarebbe
+   * un licenziamento che al ritorno non si ritira.
    */
   async delete(run: () => Promise<void>): Promise<boolean> {
     if (!this.#isOpen()) return false;
-    this.close();
+    this.#closeState();
     try {
       await this.#queue.enqueue(run);
       await this.#dropDraft(this.#id);
@@ -395,6 +492,7 @@ export class DocumentSession implements DraftBuffer {
       this.#reopen();
       throw error;
     }
+    this.#surfaces.clear();
     return true;
   }
 
@@ -429,6 +527,13 @@ export class DocumentSession implements DraftBuffer {
 
   close(): void {
     if (!this.#isOpen()) return;
+    this.#closeState();
+    // La chiusura è definitiva: nessuna superficie deve restare sottoscritta
+    // a una sessione che non esiste più.
+    this.#surfaces.clear();
+  }
+
+  #closeState(): void {
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#clearSaveTimer();
@@ -607,10 +712,37 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return this.#create(id, source.text, { kind: "descends_from", value: source.revision }).text();
   }
 
+  /** Trusted programmatic update: the validated surface path is below. */
   acceptEditorChange(id: string, text: string): void {
     const session = this.#sessions.get(id);
     if (!session) return;
     session.acceptEditorChange(text);
+  }
+
+  /**
+   * Una superficie si sottoscrive alla sessione **unica** del documento. Non
+   * c'è sessione, non c'è sottoscrizione: il disposer è comunque restituito,
+   * così chi attacca non deve sapere se il documento era già aperto. Il
+   * disposer copre solo la sessione a cui ha attaccato: una sessione nata
+   * dopo sotto lo stesso id non perde la sua registrazione per un disposer
+   * rimasto appeso.
+   */
+  attachSurface(id: string, surface: DocumentSurface): () => void {
+    const session = this.#sessions.get(id);
+    if (!session) return () => {};
+    const dispose = session.attachSurface(surface);
+    return () => {
+      // L'owner può cambiare chiave con una rinomina: si deve ancora poter
+      // staccare la registrazione, ma mai una sessione nuova nata sotto l'id.
+      if (this.#sessions.get(session.id) === session) dispose();
+    };
+  }
+
+  /** La modifica di una superficie, validata e diffusa dalla sessione. */
+  acceptSurfaceChange(id: string, surfaceId: string, edit: SurfaceEdit): SurfaceChangeResult {
+    const session = this.#sessions.get(id);
+    if (!session) return { kind: "untracked" };
+    return session.acceptSurfaceChange(surfaceId, edit);
   }
   async forceReload(id: string): Promise<ReloadResult> {
     return (await this.#sessions.get(id)?.forceReload()) ?? { kind: "missing" };

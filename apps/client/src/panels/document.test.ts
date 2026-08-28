@@ -329,3 +329,58 @@ describe("il ricongiungimento delle bozze orfane", () => {
     expect(buffer.buffers.get("nota.md")).toMatchObject({ text: "il testo più recente" });
   });
 });
+
+/// Il corpo di una funzione a colonna zero, dalla sua firma alla chiusura.
+/// Stessa zona cieca dichiarata di `corpo()`: guarda quali righe ci sono,
+/// perché ciò che è sbagliato qui è un giro che non deve più esistere.
+function functionBody(signature: string): string {
+  const opens = source.indexOf(signature);
+  expect(opens, `\`${signature}\` non si chiama più così`).toBeGreaterThan(-1);
+  const closes = source.indexOf("\n}\n", opens);
+  return source.slice(opens, closes === -1 ? source.length : closes);
+}
+
+// **La validazione e la sincronia fra superfici appartengono alla sessione.**
+//
+// Finché il pannello misurava l'operazione sul testo autorevole e poi
+// girava i riquadri per sincronizzarli, la regola del buffer unico viveva in
+// due posti che nessun tipo legava fra loro. Ora il pannello porta
+// l'operazione alla sessione e applica al proprio editor ciò che la sessione
+// diffonde; i presidi guardano il sorgente per la ragione scritta in cima a
+// questo file — ciò che è sbagliato sarebbe una riga di giro in più.
+describe("il pannello non possiede più la validazione né la sincronia fra superfici", () => {
+  it("la battuta porta l'operazione alla sessione, e basta", () => {
+    const text = functionBody("function written(");
+    expect(text).toContain("documentSessions.acceptSurfaceChange(");
+    expect(text).not.toContain("tryApplyOperation(");
+    expect(text).not.toContain("panesWithDoc(");
+    expect(text).not.toContain("syncDoc({");
+  });
+
+  it("non resta un giro di sync autorevole nel pannello", () => {
+    expect(source).not.toContain("function syncDocument(");
+  });
+
+  it("il recupero delle bozze non sincronizza più gli editor a mano", () => {
+    const text = functionBody("export async function recoverDrafts(");
+    expect(text).not.toContain("editor.syncDoc(");
+    expect(text).not.toContain("panesWithDoc(");
+  });
+
+  it("mostrare un documento attacca la superficie, e cambiare linguetta stacca prima", () => {
+    const text = functionBody("async function show(");
+    const detach = text.indexOf("detachSurface(r)");
+    const attach = text.indexOf("attachSurface(r, tab.doc)");
+    expect(detach, "cambiando ciò che il riquadro mostra, la registrazione vecchia resta appesa").toBeGreaterThan(-1);
+    expect(attach, "il documento mostrato non arriva alla sessione come superficie").toBeGreaterThan(-1);
+    expect(detach).toBeLessThan(attach);
+  });
+
+  it("chiudere un riquadro stacca la registrazione prima di buttare l'editor", () => {
+    const text = functionBody("function buildStructure(");
+    const detach = text.indexOf("detachSurface(r)");
+    const destroy = text.indexOf("r.editor.destroy()");
+    expect(detach).toBeGreaterThan(-1);
+    expect(destroy).toBeGreaterThan(detach);
+  });
+});

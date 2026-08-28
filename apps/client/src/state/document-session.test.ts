@@ -3,7 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DocumentSessionCollection,
   type DocumentSessionApi,
+  type DocumentSurface,
+  type DocumentSurfaceUpdate,
+  type SurfaceEdit,
 } from "./document-session";
+import { operationFromText } from "../editor/text-operation";
 
 function fakeApi(): DocumentSessionApi {
   return {
@@ -391,5 +395,256 @@ describe("decisioni del ciclo di vita della sessione", () => {
     await deleted;
     expect(vi.mocked(api.writeDocument).mock.calls).toHaveLength(0);
     expect(vi.mocked(api.discardDraft).mock.calls).toHaveLength(1);
+  });
+});
+
+
+describe("le superfici sottoscritte alla sessione", () => {
+  let api: DocumentSessionApi;
+  let nextTimer = 0;
+
+  beforeEach(() => {
+    api = fakeApi();
+    nextTimer = 0;
+    vi.stubGlobal("window", {
+      setTimeout: vi.fn(() => ++nextTimer),
+      clearTimeout: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /// Una superficie di prova che registra ciò che la sessione le manda.
+  function recordingSurface(
+    id: string,
+    log: { surface: string; update: DocumentSurfaceUpdate }[],
+  ): DocumentSurface {
+    return {
+      id,
+      sync: (update) => log.push({ surface: id, update }),
+    };
+  }
+
+  function editFor(before: string, after: string): SurfaceEdit {
+    return { text: after, operation: operationFromText(before, after) };
+  }
+
+  it("diffonde l'operazione accettata ai pari, mai alla sorgente, una volta sola", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-b", log));
+
+    const before = "nota.md: disco";
+    const outcome = sessions.acceptSurfaceChange(
+      "nota.md",
+      "riquadro-a",
+      editFor(before, `${before} due`),
+    );
+
+    expect(outcome).toEqual({ kind: "accepted" });
+    expect(sessions.inspect("nota.md")).toMatchObject({ text: `${before} due`, dirty: true });
+    expect(log).toHaveLength(1);
+    expect(log[0]).toMatchObject({ surface: "riquadro-b", update: { kind: "operation" } });
+    // Salvataggio e bozza: i due ritardi sono della sessione, armati una volta.
+    expect(nextTimer).toBe(2);
+  });
+
+  it("ristabilizza la sorgente su una preimmagine stantia senza mutare la sessione", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-b", log));
+
+    // Forma corretta, preimmagine stantia: al posto 13 la sessione ha «o»,
+    // l'operazione dichiara di togliere «z» — un'altra superficie ha battuto
+    // nel frattempo, o il disco è cambiato sotto.
+    const stale: SurfaceEdit = {
+      text: "nota.md: discX",
+      operation: {
+        beforeLength: "nota.md: disco".length,
+        afterLength: "nota.md: discX".length,
+        edits: [{ from: 13, to: 14, deleted: "z", inserted: "X" }],
+      },
+    };
+    const outcome = sessions.acceptSurfaceChange("nota.md", "riquadro-a", stale);
+
+    expect(outcome).toEqual({ kind: "realigned", text: "nota.md: disco" });
+    expect(sessions.inspect("nota.md")).toMatchObject({ text: "nota.md: disco", dirty: false });
+    expect(log).toHaveLength(0);
+  });
+
+  it("ristabilizza la sorgente anche se l'operazione regge ma il risultato non è quello dichiarato", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const authoritative = "nota.md: disco";
+    // L'operazione, applicata al testo autorevole, produce «disc0»; la
+    // sorgente dichiara di essere arrivata a «disc9»: il risultato non è
+    // ciò che l'operazione costruisce, e la sessione non lo prende.
+    const lies: SurfaceEdit = {
+      text: "nota.md: disc9",
+      operation: {
+        beforeLength: authoritative.length,
+        afterLength: "nota.md: disc0".length,
+        edits: [{ from: 13, to: 14, deleted: "o", inserted: "0" }],
+      },
+    };
+
+    const outcome = sessions.acceptSurfaceChange("nota.md", "riquadro-a", lies);
+
+    expect(outcome).toEqual({ kind: "realigned", text: authoritative });
+    expect(sessions.inspect("nota.md")?.text).toBe(authoritative);
+    expect(nextTimer).toBe(0);
+  });
+  it("confronta preimmagine e atteso sulla stessa normalizzazione di terminatori", async () => {
+    api.readDocument = vi.fn(async () => ({ text: "riga1\r\nriga2\n", revision: "rev-1" }));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+
+    const outcome = sessions.acceptSurfaceChange(
+      "nota.md",
+      "riquadro-a",
+      editFor("riga1\nriga2\n", "riga1\nriga2\nX"),
+    );
+
+    expect(outcome).toEqual({ kind: "accepted" });
+    expect(sessions.inspect("nota.md")?.text).toBe("riga1\nriga2\nX");
+  });
+
+  it("attacca due volte la stessa identità una volta sola, e il disposer è indempiente", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    const disposeFirst = sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+    const disposeSecond = sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+
+    sessions.acceptSurfaceChange("nota.md", "riquadro-b", editFor("nota.md: disco", "uno"));
+    // La rimontata con la stessa identità rimpiazza: una registrazione, una
+    // diffusione — non due superfici che ricevono la stessa cosa due volte.
+    expect(log).toHaveLength(1);
+
+    disposeFirst();
+    sessions.acceptSurfaceChange("nota.md", "riquadro-b", editFor("uno", "due"));
+    expect(log).toHaveLength(2);
+
+    disposeSecond();
+    disposeSecond();
+    sessions.acceptSurfaceChange("nota.md", "riquadro-b", editFor("due", "tre"));
+    expect(log).toHaveLength(2);
+  });
+
+  it("la rinomina tiene le superfici sullo stesso owner e il disposer segue la nuova chiave", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("a.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    const dispose = sessions.attachSurface("a.md", recordingSurface("riquadro-a", log));
+    const owner = sessions.get("a.md");
+
+    sessions.rename("a.md", "c.md");
+
+    expect(sessions.get("c.md")).toBe(owner);
+    const peer = recordingSurface("riquadro-b", log);
+    sessions.attachSurface("c.md", peer);
+    dispose();
+    const outcome = sessions.acceptSurfaceChange(
+      "c.md",
+      "riquadro-b",
+      editFor("a.md: disco", "spostato"),
+    );
+    expect(outcome).toEqual({ kind: "accepted" });
+    expect(log).toHaveLength(0);
+    expect(sessions.inspect("c.md")?.text).toBe("spostato");
+  });
+
+  it("la chiusura svuota le sottoscrizioni: nessuna superficie resta abbonata", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    const surface = recordingSurface("riquadro-a", log);
+    sessions.attachSurface("nota.md", surface);
+    const owner = sessions.get("nota.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    sessions.close("nota.md");
+
+    // Attaccare a una sessione chiusa non mette niente in piedi...
+    expect(owner.attachSurface(surface)()).toBeUndefined();
+    // ...e portare una modifica a una sessione chiusa non tocca nessuno.
+    const outcome = sessions.acceptSurfaceChange(
+      "nota.md",
+      "riquadro-a",
+      editFor("nota.md: disco", "tarocco"),
+    );
+    expect(outcome).toEqual({ kind: "untracked" });
+    expect(log).toHaveLength(0);
+  });
+
+  it("una cancellazione fallita riapre lo stesso owner con le superfici attaccate", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("a.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("a.md", recordingSurface("riquadro-a", log));
+    const owner = sessions.get("a.md");
+
+    const failing = sessions.delete("a.md", async () => {
+      throw new Error("il disco rifiuta");
+    });
+    await expect(failing).rejects.toThrow("il disco rifiuta");
+
+    // La chiusura era provvisoria: le superfici non sono state staccate, o
+    // la seconda di due riquadri resterebbe orfana dopo un ripensamento.
+    expect(sessions.get("a.md")).toBe(owner);
+    const outcome = sessions.acceptSurfaceChange(
+      "a.md",
+      "riquadro-a",
+      editFor("a.md: disco", "ancora vivo"),
+    );
+    expect(outcome).toEqual({ kind: "accepted" });
+  });
+
+  it("una cancellazione riuscita non lascia superfici sottoscritte", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("a.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("a.md", recordingSurface("riquadro-a", log));
+
+    await sessions.delete("a.md", async () => {});
+
+    expect(
+      sessions.acceptSurfaceChange("a.md", "riquadro-a", editFor("a.md: disco", "fantasma")),
+    ).toEqual({ kind: "untracked" });
+    expect(sessions.attachSurface("a.md", recordingSurface("riquadro-a", log))()).toBeUndefined();
+    expect(log).toHaveLength(0);
+  });
+
+  it("la sostituzione autorevole raggiunge ogni superficie una volta sola, in testo pieno", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-b", log));
+
+    api.readDocument = vi.fn(async () => ({ text: "testo nuovo dal disco", revision: "rev-2" }));
+    const reloaded = await sessions.reloadIfClean("nota.md");
+    expect(reloaded).toMatchObject({ kind: "reloaded", changed: true });
+    expect(log.map((entry) => entry.surface).sort()).toEqual(["riquadro-a", "riquadro-b"]);
+    expect(log.every((entry) => entry.update.kind === "text")).toBe(true);
+
+    // Il disco non è cambiato davvero: nessuna superficie viene risincronizzata.
+    log.length = 0;
+    await sessions.reloadIfClean("nota.md");
+    expect(log).toHaveLength(0);
+
+    // La bozza rientrata è un'altra sostituzione autorevole: testo pieno a tutti.
+    sessions.restore("nota.md", "testo della bozza", { kind: "descends_from", value: "rev-2" });
+    expect(log.map((entry) => entry.surface).sort()).toEqual(["riquadro-a", "riquadro-b"]);
+    expect(log[0]?.update).toEqual({ kind: "text", text: "testo della bozza" });
+    expect(log[1]?.update).toEqual({ kind: "text", text: "testo della bozza" });
   });
 });
