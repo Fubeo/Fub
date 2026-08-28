@@ -254,6 +254,87 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(sessions.inspect("nota.md")).toMatchObject({ dirty: true });
   });
 
+  it("una apertura prenotata prima del flush tiene vivo lo stesso owner", async () => {
+    let startWrite!: () => void;
+    const writeStarted = new Promise<void>((resolve) => {
+      startWrite = resolve;
+    });
+    let finishWrite!: (revision: string) => void;
+    const writeFinished = new Promise<string>((resolve) => {
+      finishWrite = resolve;
+    });
+    api.writeDocument = vi.fn(async () => {
+      startWrite();
+      return writeFinished;
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    sessions.acceptEditorChange("nota.md", "prima battuta");
+    const owner = sessions.get("nota.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    const releasing = sessions.release("nota.md");
+    await writeStarted;
+    const releaseIntent = sessions.retain("nota.md");
+    finishWrite("rev-2");
+
+    expect(await releasing).toEqual({ kind: "active" });
+    expect(sessions.get("nota.md")).toBe(owner);
+
+    releaseIntent();
+    expect(await sessions.release("nota.md")).toEqual({
+      kind: "closed",
+      dirty: false,
+    });
+    releaseIntent();
+    expect(sessions.get("nota.md")).toBeUndefined();
+  });
+
+  it("il rilascio attende la bozza già in fila senza accodarne una seconda", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw new Error("disco pieno");
+    });
+    let startDraft!: () => void;
+    const draftStarted = new Promise<void>((resolve) => {
+      startDraft = resolve;
+    });
+    let finishDraft!: () => void;
+    const draftFinished = new Promise<void>((resolve) => {
+      finishDraft = resolve;
+    });
+    api.saveDraft = vi.fn(async () => {
+      startDraft();
+      await draftFinished;
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    sessions.acceptEditorChange("nota.md", "testo da proteggere");
+
+    const releasing = sessions.release("nota.md");
+    await draftStarted;
+    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(1);
+
+    finishDraft();
+    expect(await releasing).toEqual({ kind: "closed", dirty: true });
+    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(1);
+  });
+
+  it("ritenta una bozza fallita mentre l'owner resta vivo", async () => {
+    let attempts = 0;
+    api.saveDraft = vi.fn(async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("bozza non disponibile");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    sessions.acceptEditorChange("nota.md", "testo da ritentare");
+
+    await sessions.flushDraft("nota.md");
+    await sessions.flushDraft("nota.md");
+
+    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(2);
+  });
+
   it("chiude prima che una lettura lenta possa ricreare la sessione", async () => {
     let releaseRead!: (source: { text: string; revision: string }) => void;
     api.readDocument = vi.fn(
@@ -268,6 +349,24 @@ describe("decisioni del ciclo di vita della sessione", () => {
     releaseRead({ text: "non deve diventare owner", revision: "rev-1" });
 
     await pending;
+    expect(sessions.get("lenta.md")).toBeUndefined();
+  });
+
+  it("il rilascio invalida una lettura lenta senza creare un owner orfano", async () => {
+    let releaseRead!: (source: { text: string; revision: string }) => void;
+    api.readDocument = vi.fn(
+      () =>
+        new Promise<{ text: string; revision: string }>((resolve) => {
+          releaseRead = resolve;
+        }),
+    );
+    const sessions = new DocumentSessionCollection(api);
+    const pending = sessions.read("lenta.md");
+
+    expect(await sessions.release("lenta.md")).toEqual({ kind: "missing" });
+    releaseRead({ text: "non deve diventare owner", revision: "rev-1" });
+
+    expect(await pending).toBe("non deve diventare owner");
     expect(sessions.get("lenta.md")).toBeUndefined();
   });
   it("chiude anche un buffer sporco quando il documento sparisce fuori", async () => {
@@ -285,6 +384,28 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(sessions.get("sparita.md")).toBeUndefined();
     await Promise.resolve();
     expect(vi.mocked(api.writeDocument).mock.calls).toHaveLength(0);
+  });
+
+  it("una rimozione esterna chiude prima che un salvataggio accodato possa partire", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("sparita.md");
+    sessions.acceptEditorChange("sparita.md", "non deve resuscitare");
+    const owner = sessions.get("sparita.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    const pendingSave = sessions.flush("sparita.md");
+    expect(sessions.handleExternalRemoval("sparita.md")).toEqual({
+      kind: "removed",
+      dirty: true,
+    });
+
+    await pendingSave;
+    expect(vi.mocked(api.writeDocument)).not.toHaveBeenCalled();
+    expect(owner.snapshot()).toMatchObject({
+      lifecycle: "closed",
+      text: "non deve resuscitare",
+    });
+    expect(sessions.get("sparita.md")).toBeUndefined();
   });
 
 
@@ -378,6 +499,69 @@ describe("decisioni del ciclo di vita della sessione", () => {
     await expect(pendingRead).resolves.toBe("testo da conservare");
     expect(sessions.get("nota.md")).toBe(retained);
     expect(sessions.inspect("nota.md")).toMatchObject({ lifecycle: "open", dirty: true });
+  });
+
+  it("un rilascio sospeso durante una cancellazione chiude l'owner riaperto se resta orfano", async () => {
+    let startDelete!: () => void;
+    const deleteStarted = new Promise<void>((resolve) => {
+      startDelete = resolve;
+    });
+    let rejectDelete!: (error: Error) => void;
+    const deleteFinished = new Promise<void>((_, reject) => {
+      rejectDelete = reject;
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    sessions.acceptEditorChange("nota.md", "testo da conservare");
+    const owner = sessions.get("nota.md");
+    if (!owner) throw new Error("sessione non costruita");
+
+    const deleting = sessions.delete("nota.md", async () => {
+      startDelete();
+      await deleteFinished;
+    });
+    await deleteStarted;
+    const releasing = sessions.release("nota.md");
+    rejectDelete(new Error("cancellazione rifiutata"));
+
+    await expect(deleting).rejects.toThrow("cancellazione rifiutata");
+    expect(await releasing).toEqual({ kind: "closed", dirty: false });
+    expect(sessions.get("nota.md")).toBeUndefined();
+    expect(owner.snapshot().lifecycle).toBe("closed");
+  });
+
+  it("sospende una scrittura già accodata prima del comando distruttivo", async () => {
+    const timers: Array<() => void> = [];
+    vi.stubGlobal("window", {
+      setTimeout: vi.fn((callback: () => void) => {
+        timers.push(callback);
+        return ++nextTimer;
+      }),
+      clearTimeout: vi.fn(),
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    sessions.acceptEditorChange("nota.md", "scrittura da annullare");
+    timers[0]!();
+    expect(sessions.beginDeletion("nota.md")).toBe(true);
+
+    let startDelete!: () => void;
+    const deleteStarted = new Promise<void>((resolve) => {
+      startDelete = resolve;
+    });
+    let finishDelete!: () => void;
+    const deleteFinished = new Promise<void>((resolve) => {
+      finishDelete = resolve;
+    });
+    const deleting = sessions.delete("nota.md", async () => {
+      startDelete();
+      await deleteFinished;
+    });
+
+    await deleteStarted;
+    expect(vi.mocked(api.writeDocument)).not.toHaveBeenCalled();
+    finishDelete();
+    await deleting;
   });
 
   it("invalida timer e coda prima della cancellazione", async () => {

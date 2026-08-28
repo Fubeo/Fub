@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Trentaquattro gesti, contati da fuori
+// # Trentacinque gesti, contati da fuori
 //
-// I gesti sono **trentaquattro** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **trentacinque** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -829,6 +829,48 @@ describe("chiudere linguette e superfici", () => {
     await new Promise((resolve) => setTimeout(resolve, 450));
     await settle();
     expect(host.atGate("writeDocument")).toHaveLength(1);
+  });
+
+  it("una riapertura prenotata durante il flush conserva lo stesso owner", async () => {
+    const host = await start(VAULT);
+    const { documentSessions } = await import("./state/document-session");
+    const owner = documentSessions.get("Benvenuto.md");
+    if (!owner) throw new Error("sessione non costruita");
+    const unlock = host.throttle("writeDocument");
+
+    typeInEditor("battuta prima di chiudere");
+    await waitFor("la prima scrittura parte", () => host.atGate("writeDocument").length === 1);
+
+    const close = document.querySelector<HTMLElement>(".pane .tab-close");
+    close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    await waitFor(
+      "la linguetta si chiude",
+      () => document.querySelectorAll(".pane .tab").length === 0,
+    );
+
+    // Il click arriva mentre il rilascio dell'ultima linguetta aspetta la
+    // scrittura frenata: l'intento di apertura deve precederla, non arrivare
+    // dopo che l'owner è già stato chiuso.
+    row("Benvenuto").click();
+    await settle();
+    expect(documentSessions.get("Benvenuto.md")).toBe(owner);
+
+    unlock();
+    await waitFor(
+      "la nota si riapre",
+      () =>
+        document.querySelectorAll(".pane .tab").length === 1 &&
+        textToVideo().includes("battuta prima di chiudere"),
+    );
+    expect(documentSessions.get("Benvenuto.md")).toBe(owner);
+
+    const writesBeforeReopen = host.atGate("writeDocument").length;
+    typeInEditor(" e dopo la riapertura");
+    await waitFor(
+      "la battuta dopo la riapertura viene salvata",
+      () => host.atGate("writeDocument").length === writesBeforeReopen + 1,
+    );
+    expect(host.files()["Benvenuto.md"]).toContain("e dopo la riapertura");
   });
 
   it("distrugge la superficie del riquadro chiuso", async () => {

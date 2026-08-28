@@ -835,19 +835,30 @@ export async function recoverDrafts(): Promise<number> {
 
 /// Apre un documento nel riquadro col fuoco.
 export async function openDocument(id: string): Promise<void> {
-  await openQueue.enqueue(async () => {
-    // Cambio documento: prima si mette in salvo ciò che è appeso al debounce, così
-    // nessuna modifica resta indietro. Tutti i buffer e non solo quello che si sta
-    // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
-    // azioni di view.
-    await documentSessions.flushPendingSave();
-    openIn(layout.focus, id);
-    await synchronize();
-    // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
-    // selezione sarebbe quello del documento precedente.
-    await publishContext();
-    if (activePane().mode !== "reading") focusEditor();
-  });
+  // Reserve the target before entering the shared flush queue. Otherwise the
+  // last-tab release can close the owner while this opening is still waiting
+  // for that same queue.
+  const releaseIntent = documentSessions.retain(id);
+  try {
+    await openQueue.enqueue(async () => {
+      // Cambio documento: prima si mette in salvo ciò che è appeso al debounce, così
+      // nessuna modifica resta indietro. Tutti i buffer e non solo quello che si sta
+      // lasciando: costa zero quando sono puliti, ed è la regola già scritta per le
+      // azioni di view.
+      await documentSessions.flushPendingSave();
+      openIn(layout.focus, id);
+      await synchronize();
+      // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
+      // selezione sarebbe quello del documento precedente.
+      await publishContext();
+      if (activePane().mode !== "reading") focusEditor();
+    });
+  } finally {
+    releaseIntent();
+    // A failed or superseded opening must not leave the owner retained solely
+    // by its reservation. A tab already present still counts as a watcher.
+    if (!isOpen(id)) await documentSessions.release(id);
+  }
 }
 
 /// Chiude il documento aperto **in ogni riquadro**, senza salvarlo: lo si usa

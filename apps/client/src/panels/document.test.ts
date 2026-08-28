@@ -376,6 +376,17 @@ describe("il pannello non possiede più la validazione né la sincronia fra supe
     expect(detach).toBeLessThan(attach);
   });
 
+  it("prenota l'apertura prima del flush e non trattiene un owner su errore", () => {
+    const text = functionBody("export async function openDocument(");
+    const retain = text.indexOf("documentSessions.retain(id)");
+    const queue = text.indexOf("openQueue.enqueue(");
+    expect(retain, "l'apertura non prenota l'owner prima dell'attesa").toBeGreaterThan(-1);
+    expect(queue, "l'apertura non passa dalla coda").toBeGreaterThan(-1);
+    expect(retain).toBeLessThan(queue);
+    expect(text).toContain("releaseIntent();");
+    expect(text).toContain("if (!isOpen(id)) await documentSessions.release(id);");
+  });
+
   it("chiudere un riquadro stacca la registrazione prima di buttare l'editor", () => {
     const text = functionBody("function buildStructure(");
     const detach = text.indexOf("detachSurface(r)");

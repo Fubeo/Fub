@@ -135,6 +135,17 @@ interface SessionState {
   lifecycle: "open" | "closed";
 }
 
+interface DraftWork {
+  readonly id: string;
+  readonly generation: number;
+  readonly promise: Promise<void>;
+}
+
+interface DraftOutcome {
+  readonly generation: number;
+  readonly succeeded: boolean;
+}
+
 const OWNER_TOKEN = Symbol("DocumentSession owner");
 type OwnerToken = typeof OWNER_TOKEN;
 
@@ -166,6 +177,9 @@ export class DocumentSession implements DraftBuffer {
   #queue = new Queue();
   #saveTimer: number | undefined;
   #draftTimer: number | undefined;
+  #draftGeneration = 0;
+  #draftWork: DraftWork | undefined;
+  #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
   readonly #api: DocumentSessionApi;
@@ -248,6 +262,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen()) return;
     this.#activityGeneration++;
     this.#externalGeneration++;
+    this.#draftGeneration++;
     this.#state.text = text;
     this.#state.dirty = true;
     this.#emit({ kind: "changed", id: this.#id });
@@ -296,6 +311,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen()) return;
     this.#activityGeneration++;
     this.#externalGeneration++;
+    this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.text = text;
@@ -339,6 +355,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen()) return { kind: "missing" };
     this.#activityGeneration++;
     const generation = ++this.#externalGeneration;
+    this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.dirty = false;
@@ -395,6 +412,7 @@ export class DocumentSession implements DraftBuffer {
     this.#state.base = { kind: "descends_from", value: revision };
     this.#state.result = "ok";
     if (changed) this.#state.text = text;
+    if (changed) this.#draftGeneration++;
     if (changed || resultChanged) this.#emit({ kind: "changed", id: this.#id });
     // Ricarica pulita, conflitto scartato, comando esplicito: il testo è
     // stato **sostituito** dall'autorità, e tutte le superfici lo ricevono —
@@ -407,6 +425,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen()) return;
     this.#activityGeneration++;
     this.#externalGeneration++;
+    this.#draftGeneration++;
     this.#clearDraftTimer();
     this.#state.dirty = false;
     this.#state.result = "ok";
@@ -506,6 +525,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen() || this.#state.result !== "conflitto") return;
     this.#activityGeneration++;
     this.#clearSaveTimer();
+    this.#draftGeneration++;
     this.#state.base = { kind: "dictated" };
     this.#state.result = "in_corso";
     this.#emit({ kind: "changed", id: this.#id });
@@ -515,6 +535,7 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen() || id === this.#id) return;
     this.#activityGeneration++;
     this.#externalGeneration++;
+    this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#id = id;
@@ -536,6 +557,7 @@ export class DocumentSession implements DraftBuffer {
   #closeState(): void {
     this.#activityGeneration++;
     this.#externalGeneration++;
+    this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.suspended = false;
@@ -546,6 +568,7 @@ export class DocumentSession implements DraftBuffer {
     if (this.#state.lifecycle !== "closed") return;
     this.#activityGeneration++;
     this.#externalGeneration++;
+    this.#draftGeneration++;
     this.#state.lifecycle = "open";
     this.#state.suspended = false;
     if (this.#state.dirty) {
@@ -579,7 +602,7 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async #writeBuffer(id: string): Promise<void> {
-    if (!this.#isOpen() || this.#id !== id || !this.#state.dirty) return;
+    if (!this.#isOpen() || this.#state.suspended || this.#id !== id || !this.#state.dirty) return;
     const text = this.#state.text;
     const base = copyBase(this.#state.base);
     this.#state.result = "in_corso";
@@ -599,9 +622,14 @@ export class DocumentSession implements DraftBuffer {
     }
 
     if (!this.#isOpen() || this.#id !== id) return;
+    const changed = this.#state.text !== text;
     this.#state.result = "ok";
     this.#state.base = { kind: "descends_from", value: produced };
-    if (this.#state.text === text) {
+    if (changed) {
+      // The newer dirty text now descends from the revision just written.
+      // Any draft queued before that write captured the old base.
+      this.#draftGeneration++;
+    } else {
       this.#state.dirty = false;
       void this.#dropDraft(this.#id);
     }
@@ -609,20 +637,62 @@ export class DocumentSession implements DraftBuffer {
   }
 
   #writeDraft(id: string): Promise<void> {
-    if (!this.#isOpen() || this.#id !== id || !this.#state.dirty) return Promise.resolve();
-    return this.#queue.enqueue(async () => {
-      if (!this.#isOpen() || this.#id !== id || !this.#state.dirty) return;
+    if (!this.#isOpen() || this.#state.suspended || this.#id !== id || !this.#state.dirty) {
+      return Promise.resolve();
+    }
+    const generation = this.#draftGeneration;
+    const pending = this.#draftWork;
+    if (pending?.id === id && pending.generation === generation) return pending.promise;
+    if (this.#draftOutcome?.generation === generation && this.#draftOutcome.succeeded) {
+      return Promise.resolve();
+    }
+
+    const promise = this.#queue.enqueue(async () => {
+      if (
+        !this.#isOpen() ||
+        this.#state.suspended ||
+        this.#id !== id ||
+        !this.#state.dirty ||
+        this.#draftGeneration !== generation
+      ) {
+        return;
+      }
+      const text = this.#state.text;
+      const base = this.#state.base.kind === "descends_from" ? this.#state.base.value : null;
       try {
-        await this.#api.saveDraft(
-          id,
-          this.#state.text,
-          this.#state.base.kind === "descends_from" ? this.#state.base.value : null,
-        );
+        await this.#api.saveDraft(id, text, base);
+        if (
+          !this.#isOpen() ||
+          this.#id !== id ||
+          this.#draftGeneration !== generation
+        ) {
+          return;
+        }
+        this.#draftOutcome = { generation, succeeded: true };
         this.#hooks.draftSucceeded();
       } catch {
+        if (
+          !this.#isOpen() ||
+          this.#id !== id ||
+          this.#draftGeneration !== generation
+        ) {
+          return;
+        }
+        this.#draftOutcome = { generation, succeeded: false };
         this.#hooks.draftFailed(id);
       }
     });
+    const work: DraftWork = { id, generation, promise };
+    this.#draftWork = work;
+    void promise.then(
+      () => {
+        if (this.#draftWork === work) this.#draftWork = undefined;
+      },
+      () => {
+        if (this.#draftWork === work) this.#draftWork = undefined;
+      },
+    );
+    return promise;
   }
 
   #dropDraft(id: string): Promise<void> {
@@ -646,7 +716,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
   readonly #identityVersions = new Map<string, number>();
   readonly #renaming = new Set<string>();
   readonly #deletions = new Map<string, Promise<DeletionResult>>();
+  /// Counts deletion attempts so a release already waiting on the old owner
+  /// can retry after a failed deletion reopens that same owner.
+  readonly #deletionVersions = new Map<string, number>();
   #blindDraft = false;
+  /// A pending open reserves this owner before any flush/read `await`.
+  readonly #openIntents = new Map<string, number>();
 
   constructor(api: DocumentSessionApi = defaultApi) {
     this.#api = api;
@@ -676,7 +751,26 @@ export class DocumentSessionCollection implements DraftBufferStore {
   saveState(id: string): SaveState | null {
     return this.#sessions.get(id)?.saveState() ?? null;
   }
-
+  /**
+   * Reserve an opening before the panel waits for the shared save queue.
+   *
+   * The reservation is also kept when no session exists yet: that is the
+   * window in which a panel read may still be creating the owner. The returned
+   * disposer is idempotent and is called by the opening path on both success
+   * and failure.
+   */
+  retain(id: string): () => void {
+    this.#sessions.get(id)?.retain();
+    this.#openIntents.set(id, (this.#openIntents.get(id) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const count = this.#openIntents.get(id) ?? 0;
+      if (count <= 1) this.#openIntents.delete(id);
+      else this.#openIntents.set(id, count - 1);
+    };
+  }
   async handleExternalChange(id: string, source: Origin): Promise<ExternalChangeResult> {
     const session = this.#sessions.get(id);
     if (!session) return { kind: "untracked" };
@@ -804,6 +898,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       await pending;
       return { kind: "ignored" };
     }
+    this.#deletionVersions.set(id, this.#deletionVersion(id) + 1);
     this.#invalidate(id);
     let settle!: (outcome: DeletionResult) => void;
     const reservation = new Promise<DeletionResult>((resolve) => {
@@ -853,14 +948,55 @@ export class DocumentSessionCollection implements DraftBufferStore {
     void session.discardDraftAfterClose();
     return { kind: "removed", dirty };
   }
-
   async release(id: string): Promise<CloseResult> {
+    if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
+
+    const deletionVersion = this.#deletionVersion(id);
+    const pendingDeletion = this.#deletions.get(id);
+    if (pendingDeletion) {
+      const outcome = await pendingDeletion;
+      if (outcome.kind === "deleted") return { kind: "missing" };
+      // A failed deletion reopened the exact old owner. Re-run the release
+      // decision against that owner instead of leaving it unwatched.
+      return this.release(id);
+    }
+
     const session = this.#sessions.get(id);
-    if (!session) return { kind: "missing" };
+    if (!session) {
+      // A panel can finish its last render after its tab has gone away. Bump
+      // identity even without an owner so that the in-flight read cannot
+      // create an orphan session when it resolves.
+      this.#invalidate(id);
+      return { kind: "missing" };
+    }
+
     const activity = session.activityGeneration();
     await session.flush();
     if (session.dirty) await session.flushDraft();
-    if (this.#sessions.get(id) !== session) return { kind: "missing" };
+
+    if (this.#sessions.get(id) !== session) {
+      const pending = this.#deletions.get(id);
+      if (pending) {
+        const outcome = await pending;
+        if (outcome.kind === "deleted") return { kind: "missing" };
+        return this.release(id);
+      }
+      // A rename can move this owner while it is being flushed. If no newer
+      // owner replaced it, continue the same close decision under its key.
+      if (session.id !== id && this.#sessions.get(session.id) === session) {
+        return this.release(session.id);
+      }
+      return { kind: "missing" };
+    }
+    if ((this.#openIntents.get(id) ?? 0) > 0) return { kind: "active" };
+    if (this.#deletionVersion(id) !== deletionVersion) {
+      // The deletion failed after this release started; its reopen activity is
+      // internal, so retry once rather than treating it as a user reopen.
+      if (this.#sessions.get(id) === session && session.snapshot().lifecycle === "open") {
+        return this.release(id);
+      }
+      return { kind: "missing" };
+    }
     if (session.activityGeneration() !== activity) return { kind: "active" };
     return this.close(id);
   }
@@ -923,6 +1059,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
 
   #identityVersion(id: string): number {
     return this.#identityVersions.get(id) ?? 0;
+  }
+
+  #deletionVersion(id: string): number {
+    return this.#deletionVersions.get(id) ?? 0;
   }
 
   #invalidate(id: string): void {
