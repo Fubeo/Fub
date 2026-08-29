@@ -32,7 +32,7 @@ describe("bootstrap del registro delle superfici", () => {
       const markdown = surfaces.registry.mount(
         { formatKey: "md" },
         mountContext(parent),
-      ) as MarkdownEditorSurface;
+      ).surface as MarkdownEditorSurface;
       const view = EditorView.findFromDOM(parent);
       if (!view) throw new Error("la superficie Markdown non è montata");
 

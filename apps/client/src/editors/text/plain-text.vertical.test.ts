@@ -102,7 +102,7 @@ describe("vertical slice plain text dal registro alla sessione", () => {
             if (outcome.kind === "realigned") surface.syncDoc(outcome.text);
           },
         };
-        surface = bootstrap!.registry.mount(request, context) as PlainTextSurface;
+        surface = bootstrap!.registry.mount(request, context).surface as PlainTextSurface;
         return surface;
       };
 

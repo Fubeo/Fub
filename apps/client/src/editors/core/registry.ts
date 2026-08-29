@@ -87,6 +87,7 @@ export function isModefulSurface(
 
 export interface SurfaceMountContext {
   readonly paneId: string;
+  /// Il documento per cui è stata montata questa specifica istanza.
   readonly documentId: string;
   readonly parent: HTMLElement;
 }
@@ -141,6 +142,11 @@ export type SurfaceSelectionKey = string & {
 
 export interface ResolvedSurface {
   readonly key: SurfaceSelectionKey;
+}
+
+export interface MountedSurface {
+  readonly key: SurfaceSelectionKey;
+  readonly surface: EditorSurface;
 }
 
 export interface SurfaceRegistration {
@@ -634,7 +640,7 @@ export class DocumentSurfaceRegistry {
     return { key: selection.key };
   }
 
-  mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {
+  mount(request: SurfaceRequest, context: SurfaceMountContext): MountedSurface {
     const selection = this.selectSelection(request);
     const inner = selection.factory.mount(request, context);
     if (inner.family !== selection.factory.family) {
@@ -657,7 +663,7 @@ export class DocumentSurfaceRegistry {
     }
     const surface = manageSurface(inner, selection.entry);
     if (selection.entry?.active) selection.entry.instances.add(surface);
-    return surface;
+    return { key: selection.key, surface };
   }
 
   private selectSelection(request: SurfaceRequest): Selection {

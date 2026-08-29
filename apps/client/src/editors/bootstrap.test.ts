@@ -27,7 +27,7 @@ describe("bootstrap del registro delle superfici", () => {
     const surface = surfaces.registry.mount(
       { formatKey: "md", species: "text/markdown" },
       context,
-    );
+    ).surface;
 
     expect(surface.family).toBe("text");
     expect(context.parent.querySelector(".cm-editor")).not.toBeNull();
@@ -65,7 +65,7 @@ describe("bootstrap del registro delle superfici", () => {
     const surface = surfaces.registry.mount(
       { formatKey: "txt", species: "text/plain" },
       context,
-    );
+    ).surface;
 
     expect(surface.family).toBe("text");
     expect(surface).toMatchObject({ profile: "plain-text" });
@@ -143,8 +143,8 @@ describe("bootstrap del registro delle superfici", () => {
     const surfaces = bootstrapSurfaceRegistry();
     const markdownContext = mountContext();
     const plainContext = mountContext();
-    surfaces.registry.mount({ formatKey: "md" }, markdownContext);
-    surfaces.registry.mount({ formatKey: "txt" }, plainContext);
+    surfaces.registry.mount({ formatKey: "md" }, markdownContext).surface;
+    surfaces.registry.mount({ formatKey: "txt" }, plainContext).surface;
     const markdownKey = surfaces.registry.select({ formatKey: "md" }).key;
     const plainTextKey = surfaces.registry.select({ formatKey: "txt" }).key;
 

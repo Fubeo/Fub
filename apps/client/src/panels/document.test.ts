@@ -459,12 +459,24 @@ describe("il pannello monta le superfici dal registro", () => {
     const text = functionBody("function buildStructure(");
     expect(text.indexOf("detachSurface(r)")).toBeLessThan(text.indexOf("destroySurface(r)"));
   });
-  it("riusa solo la selectionKey restituita dal registro", () => {
+  it("riusa solo il documento e la key della superficie effettivamente montata", () => {
     const text = functionBody("function ensureSurface(");
     expect(text).toContain("deps.surfaceRegistry.select(request)");
     expect(text).toContain("r.selectionKey === selected.key");
+    expect(text).toContain("r.surfaceDocumentId === doc");
+    expect(text).toContain("const mounted = deps.surfaceRegistry.mount(");
+    expect(text).toContain("r.surface = mounted.surface");
+    expect(text).toContain("r.selectionKey = mounted.key");
+    expect(text).not.toContain("r.selectionKey = selected.key");
     expect(text).not.toContain("surfaceFamily");
     expect(text).not.toContain("surfaceProfile");
+  });
+  it("cancella insieme le identità della superficie prima del suo destroy", () => {
+    const text = functionBody("function destroySurface(");
+    const destroy = text.indexOf("surface?.destroy()");
+    expect(text.indexOf("r.surface = null")).toBeLessThan(destroy);
+    expect(text.indexOf("r.selectionKey = null")).toBeLessThan(destroy);
+    expect(text.indexOf("r.surfaceDocumentId = null")).toBeLessThan(destroy);
   });
   it("riconosce una superficie testuale generica senza API Markdown", () => {
     const text = functionBody("function isTextSurface(");
@@ -577,6 +589,61 @@ function panelDom(): void {
     '<main id="panes"></main>' +
     '<span id="mode-switch" class="segmented segmented--titlebar" role="group" ' +
     'data-i18n-label="mode.group" aria-label="Modalità del pannello"></span>';
+}
+
+type DestroyHook = {
+  current: (() => void) | undefined;
+};
+
+type GenericSurfaceMount = {
+  readonly documentId: string;
+  readonly surface: EditorSurface;
+};
+
+type GenericSurfaceFixture = {
+  readonly factory: SurfaceFactory;
+  readonly mounts: GenericSurfaceMount[];
+  readonly destroys: { calls: number };
+};
+
+function genericSurfaceFixture(
+  label: string,
+  hook: DestroyHook = { current: undefined },
+  destroyError?: Error,
+): GenericSurfaceFixture {
+  const mounts: GenericSurfaceMount[] = [];
+  const destroys = { calls: 0 };
+  const factory: SurfaceFactory = {
+    family: "grid",
+    profile: "generic",
+    mount(_request, context) {
+      const element = context.parent.ownerDocument.createElement("div");
+      element.className = `generic-surface-${label}`;
+      context.parent.append(element);
+      const surface: EditorSurface = {
+        family: "grid",
+        surfaceId: `${label}-${mounts.length + 1}`,
+        focus() {},
+        setReadOnly() {},
+        setTheme() {},
+        captureViewState() {
+          return { version: 1, value: null };
+        },
+        restoreViewState() {},
+        suspend() {},
+        resume() {},
+        destroy() {
+          destroys.calls += 1;
+          element.remove();
+          hook.current?.();
+          if (destroyError) throw destroyError;
+        },
+      };
+      mounts.push({ documentId: context.documentId, surface });
+      return surface;
+    },
+  };
+  return { factory, mounts, destroys };
 }
 
 describe("modalità della superficie nel percorso reale del pannello", () => {
@@ -1091,5 +1158,150 @@ describe("identità della selezione nel percorso reale del pannello", () => {
     await synchronize();
     expect(a.destroys()).toBe(2);
     expect(b.mounts).toHaveLength(2);
+  });
+});
+
+describe("identità del mount nel percorso reale del pannello", () => {
+  it("rimonta una superficie generica sul nuovo documento e riusa la stessa istanza", async () => {
+    vi.resetModules();
+    const genericRequest = { formatKey: "generic-format" };
+    const request: RequestBox = {
+      value: genericRequest,
+      byDocument: {
+        "first.grid": genericRequest,
+        "second.grid": genericRequest,
+      },
+    };
+    mockPanelModules(request);
+    const registry = new DocumentSurfaceRegistry();
+    const a = genericSurfaceFixture("a");
+    const dispose = registry.register({
+      owner: "generic-a",
+      family: "grid",
+      profile: "generic",
+      formatKey: genericRequest.formatKey,
+      factory: a.factory,
+    });
+
+    panelDom();
+    const { mountDocument, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ surfaceRegistry: registry });
+    openIn("main", "first.grid", layout);
+    await synchronize();
+    const first = a.mounts[0]?.surface;
+
+    openIn("main", "second.grid", layout);
+    await synchronize();
+    expect(a.destroys.calls).toBe(1);
+    expect(a.mounts.map((mount) => mount.documentId)).toEqual([
+      "first.grid",
+      "second.grid",
+    ]);
+    expect(a.mounts[1]?.surface).not.toBe(first);
+
+    await synchronize();
+    expect(a.mounts).toHaveLength(2);
+    expect(a.destroys.calls).toBe(1);
+    dispose();
+  });
+
+  it("mantiene la key della superficie montata dopo una sostituzione rientrante", async () => {
+    vi.resetModules();
+    const request: RequestBox = { value: { formatKey: "format-a" } };
+    mockPanelModules(request);
+    const registry = new DocumentSurfaceRegistry();
+    const aHook: DestroyHook = { current: undefined };
+    const a = genericSurfaceFixture("a", aHook);
+    const b = genericSurfaceFixture("b");
+    const c = genericSurfaceFixture("c");
+    const disposeA = registry.register({
+      owner: "generic-a",
+      family: "grid",
+      profile: "generic",
+      formatKey: "format-a",
+      factory: a.factory,
+    });
+    const disposeB = registry.register({
+      owner: "generic-b",
+      family: "grid",
+      profile: "generic",
+      formatKey: "format-b",
+      factory: b.factory,
+    });
+    let disposeC: (() => void) | undefined;
+    aHook.current = () => {
+      disposeB();
+      disposeC = registry.register({
+        owner: "generic-c",
+        family: "grid",
+        profile: "generic",
+        formatKey: "format-b",
+        factory: c.factory,
+      });
+    };
+
+    panelDom();
+    const { mountDocument, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ surfaceRegistry: registry });
+    openIn("main", "note.grid", layout);
+    await synchronize();
+    expect(a.mounts).toHaveLength(1);
+
+    request.value = { formatKey: "format-b" };
+    await synchronize();
+    expect(a.destroys.calls).toBe(1);
+    expect(b.mounts).toHaveLength(0);
+    expect(c.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
+
+    await synchronize();
+    expect(c.mounts).toHaveLength(1);
+    expect(c.destroys.calls).toBe(0);
+    disposeA();
+    disposeC?.();
+  });
+
+  it("recovers from a throwing generic teardown without retaining stale mount identity", async () => {
+    vi.resetModules();
+    const request: RequestBox = { value: { formatKey: "format-a" } };
+    mockPanelModules(request);
+    const registry = new DocumentSurfaceRegistry();
+    const destroyError = new Error("generic teardown failed");
+    const a = genericSurfaceFixture("a", { current: undefined }, destroyError);
+    const b = genericSurfaceFixture("b");
+    const disposeA = registry.register({
+      owner: "generic-a",
+      family: "grid",
+      profile: "generic",
+      formatKey: "format-a",
+      factory: a.factory,
+    });
+    const disposeB = registry.register({
+      owner: "generic-b",
+      family: "grid",
+      profile: "generic",
+      formatKey: "format-b",
+      factory: b.factory,
+    });
+
+    panelDom();
+    const { mountDocument, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ surfaceRegistry: registry });
+    openIn("main", "note.grid", layout);
+    await synchronize();
+
+    request.value = { formatKey: "format-b" };
+    await expect(synchronize()).rejects.toThrow(destroyError);
+    expect(a.destroys.calls).toBe(1);
+    expect(b.mounts).toHaveLength(0);
+
+    await synchronize();
+    expect(b.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
+    await synchronize();
+    expect(b.mounts).toHaveLength(1);
+    disposeA();
+    disposeB();
   });
 });

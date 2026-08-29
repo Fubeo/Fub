@@ -107,6 +107,7 @@ interface Pane {
   /// La chiave è opaca: family e profile descrivono capability, non identità.
   surface: EditorSurface | null;
   selectionKey: SurfaceSelectionKey | null;
+  surfaceDocumentId: string | null;
   /// Cosa c'è **adesso** in questo riquadro. Una linguetta e non un path: dalla §3.3
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
   shown: Tab | null;
@@ -550,13 +551,18 @@ function destroySurface(r: Pane): void {
   const surface = r.surface;
   r.surface = null;
   r.selectionKey = null;
+  r.surfaceDocumentId = null;
   surface?.destroy();
   r.editorEl.replaceChildren();
 }
 
 function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
   const selected = deps.surfaceRegistry.select(request);
-  if (r.surface !== null && r.selectionKey === selected.key) {
+  if (
+    r.surface !== null &&
+    r.selectionKey === selected.key &&
+    r.surfaceDocumentId === doc
+  ) {
     return false;
   }
 
@@ -564,8 +570,10 @@ function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
     detachSurface(r);
     destroySurface(r);
   }
-  r.surface = deps.surfaceRegistry.mount(request, surfaceMountContext(r, doc));
-  r.selectionKey = selected.key;
+  const mounted = deps.surfaceRegistry.mount(request, surfaceMountContext(r, doc));
+  r.surface = mounted.surface;
+  r.selectionKey = mounted.key;
+  r.surfaceDocumentId = doc;
   if (theme) r.surface.setTheme(theme);
   return true;
 }
@@ -623,6 +631,7 @@ function renderPane(id: string): Pane {
     viewEl,
     surface: null,
     selectionKey: null,
+    surfaceDocumentId: null,
     shown: null,
     loadGeneration: 0,
     disposeSurface: null,
