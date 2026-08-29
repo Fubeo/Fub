@@ -129,26 +129,30 @@ ogni documento. Il registro appartiene alla shell (`apps/client/src`), mentre
 ogni factory appartiene all'owner della registrazione che la espone; la shell
 registra le factory Markdown e plain text.
 
-L'API pubblica del registro è `register` (con disposer), `resolve`, `select` e
-`mount`. Non esiste `releaseSurface`. Un override è una registrazione posseduta
-o il suo id stringa, non una `SurfaceFactory` nuda: `override.factory` e ogni
-override non registrato producono una superficie di errore esplicita, senza
-fallback silenzioso.
+L'API pubblica del registro è `register` (con disposer), `select` e `mount`.
+`select` espone soltanto la chiave opaca della selezione; la factory resta
+interna e `mount` è l'unico costruttore pubblico della superficie.
 
-Il `destroy()` pubblico di una superficie montata è idempotente: rimuove prima
-la superficie dall'insieme delle istanze vive del registro e poi invoca il
-`destroy()` interno. Il disposer della registrazione è idempotente; `unregister`
-fotografa le istanze vive, svuota l'insieme, le distrugge tutte e continua dopo
-un errore, senza cercare istanze già distrutte.
+Un override sceglie una sola registrazione: per `registrationId`, per
+`owner` più `formatKey`, oppure per `owner` più `family` e `profile`.
+Stringhe, factory nude, bag opzionali e forme malformate non sono override
+validi. Se l'input è malformato o la registrazione indicata è stata rimossa, la
+superficie mostra un errore esplicito e non applica un fallback silenzioso.
+
+Il `destroy()` pubblico di una superficie montata e il disposer della
+registrazione sono idempotenti. La disinstallazione rimuove i binding e
+distrugge le superfici gestite; una superficie creata mentre la factory
+disinstalla rientrantemente la propria registrazione viene pulita e il mount
+fallisce, senza restituire una superficie non gestita.
 
 Il pannello riusa la superficie soltanto quando coincide la chiave opaca di
 selezione (`r.selectionKey === selected.key`). `family` e `profile` non sono
 l'identità di riuso: più registrazioni con la stessa coppia restano
-distinguibili. La risoluzione passa da override, `formatKey` esatto, `species`,
-fallback testuale, viewer a byte e superficie di errore. Le collisioni sui
-binding esatti nominano entrambi gli owner e non applicano “vince l'ultimo”; più
-corrispondenze `family`-`profile` mostrano un errore visibile con entrambi gli
-owner.
+distinguibili. La selezione passa da override, `formatKey` esatto, `species`,
+coppia `family`-`profile` non ambigua, viewer a byte, fallback testuale e
+superficie di errore. Le collisioni sui binding esatti nominano entrambi gli
+owner e non applicano “vince l'ultimo”; più corrispondenze `family`-`profile`
+mostrano un errore visibile con entrambi gli owner.
 
 Il fallback testuale è una superficie DOM con `family: "text"` e
 `profile: "fallback"`, non un `TextEditorSurface`. Il viewer ha famiglia

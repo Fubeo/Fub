@@ -139,59 +139,77 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece la superficie restituita dal
-`DocumentSurfaceRegistry`. `renderPane()` costruisce soltanto il **chrome** del
-riquadro: contenitori, tab, preview e view. Quando il riquadro mostra un
-documento, `panels/document.ts` ricava la richiesta da
-`surfaceRequestForDocument(id)` e delega a `surfaceRegistry.mount`; non
-costruisce factory in loco.
+Ogni `Pane` possiede la superficie restituita dal `DocumentSurfaceRegistry`;
+`renderPane()` costruisce soltanto il **chrome** del riquadro. Per un documento,
+`panels/document.ts` ricava `surfaceRequestForDocument(id)` e chiama
+`surfaceRegistry.mount`, senza costruire factory in loco.
 
 Il registro è posseduto dalla shell (`apps/client/src`), non da `fub-abi`.
-`bootstrapSurfaceRegistry()` in `apps/client/src/editors/bootstrap.ts` crea il
-registro e registra le factory della shell per Markdown e plain text. In
-generale, ogni factory appartiene all'owner della registrazione che la espone.
-`desktop-shell.ts` crea il registro prima di `mountDocument()` e lo inietta in
-`DocumentDeps`. `createEditor()` in `apps/client/src/editor/editor.ts` resta un
-adapter di compatibilità. Il pannello monta sempre la superficie scelta dal
-registro.
+`bootstrapSurfaceRegistry()` crea il registro e registra Markdown e plain text;
+`desktop-shell.ts` lo inietta in `DocumentDeps` prima di `mountDocument()`.
+Ogni factory appartiene all'owner della registrazione che la espone.
 
-L'API pubblica del registro espone `register`, che restituisce un disposer,
-`resolve`, `select` e `mount`. Non esiste `releaseSurface`. Un `SurfaceOverride`
-è soltanto un riferimento a una registrazione posseduta oppure la stringa del
-suo id di registrazione. Una `SurfaceFactory` nuda, compreso
-`override.factory`, viene rifiutata con una superficie di errore esplicita per
-override non registrato; non attiva un fallback silenzioso.
+L'API pubblica espone `register` (con disposer), `select` e `mount`. `select`
+restituisce soltanto `ResolvedSurface.key`, una `SurfaceSelectionKey` opaca,
+senza esporre la factory; `mount` è l'unico costruttore pubblico di superfici.
+
+Un `SurfaceOverride` esprime una sola intenzione:
+`{ kind: "registration", registrationId }`,
+`{ kind: "format", owner, formatKey }` oppure
+`{ kind: "profile", owner, family, profile }`; le ultime due forme sono
+qualificate dall'owner. Stringhe, factory nude, bag opzionali, campi di più
+varianti e dati parziali sono malformati. Un input malformato, oppure una
+registrazione, un binding o un owner non disponibile, seleziona un errore
+esplicito; `mount` ne costruisce la superficie senza applicare fallback.
+
+La famiglia della registrazione deve coincidere con quella della factory. Se
+entrambe dichiarano un profilo, devono coincidere; quello della registrazione
+prevale, altrimenti vale quello della factory. Dopo `factory.mount()`, il
+registro controlla la famiglia della superficie restituita: se differisce,
+la distrugge e lancia un errore.
 
 Per la versione, factory e registrazioni espongono soltanto
 `supportedVersions?: readonly number[]`; se il campo manca, la versione
 supportata è implicitamente `[1]`. La richiesta conserva `version?: number`.
 Non esiste un campo `version` sovrapposto su factory o registrazione.
 
-Il lifecycle mantiene l'ownership esplicita. Il `destroy()` pubblico di una
-superficie montata è idempotente: prima la rimuove dall'insieme delle istanze
-vive della registrazione, poi invoca `inner.destroy()`. Il disposer restituito
-da `register()` e `unregister` sono idempotenti. `unregister` fotografa le
-istanze vive, svuota il `Set`, distrugge ogni istanza fotografata e continua
-anche se una distruzione lancia; rilancia infine il primo errore. Non cerca né
-ridistrugge istanze già distrutte.
+Il lifecycle mantiene l'ownership esplicita. Il wrapper managed intercetta
+soltanto `destroy()` e inoltra getter, setter e metodi sul target originale:
+una superficie class con stato `#private` resta utilizzabile. Il `destroy()`
+pubblico è idempotente: rimuove la superficie dalle istanze vive e poi invoca
+`inner.destroy()`.
 
-`DocumentPanel` conserva la chiave opaca restituita da `select`. Riusa una
+Il disposer di `register()` rende inattiva la registrazione, rimuove i binding
+e fotografa le istanze vive prima di distruggerle. La disinstallazione
+(`unregister`), anche rientrante, è idempotente; continua il teardown dopo un
+errore e rilancia il primo, senza ridistruggere istanze già distrutte. Se
+`factory.mount()` disinstalla rientrantemente la propria registrazione, la
+superficie appena creata viene distrutta e `mount` lancia un errore, oppure un
+`AggregateError` se fallisce anche la pulizia: non restituisce una superficie non
+gestita.
+
+`desktop-shell.ts` compone callback e sorgenti di completamento Markdown e le
+passa a `bootstrapSurfaceRegistry()`, che le consegna alla
+`MarkdownSurfaceFactory`. La factory costruisce `MarkdownProfile` con quei
+servizi. Il `SurfaceMountContext` generico contiene soltanto `paneId`,
+`documentId` e `parent`; `setSyntaxForms` resta capability post-mount.
+
+`DocumentPanel` conserva la chiave opaca restituita da `select` e riusa una
 superficie soltanto quando `r.selectionKey === selected.key`. `family` e
-`profile` descrivono capability, non l'identità di riuso: due registrazioni con
-la stessa coppia restano distinguibili perché hanno chiavi di selezione diverse.
+`profile` descrivono capability, non identità: registrazioni con la stessa
+coppia restano distinguibili perché hanno chiavi diverse.
 
-La risoluzione segue quest'ordine:
+La selezione segue quest'ordine:
 
 1. override esplicito dell'utente;
 2. binding esatto `formatKey`;
 3. binding per `species`;
-4. fallback testuale;
+4. coppia `family`-`profile` non ambigua;
 5. viewer in sola lettura per una sorgente a byte;
-6. superficie di errore esplicita per famiglia, profilo o versione non
-   supportati.
+6. fallback testuale;
+7. superficie di errore esplicita quando nessun fallback incorporato serve la
+   famiglia richiesta.
 
-Per una richiesta che dichiara entrambe `family` e `profile`, il registro
-considera anche le registrazioni della coppia prima di applicare i fallback.
 La coppia `family`-`profile` non è un binding singleton esclusivo. Le collisioni
 su `formatKey` o sul nome di `species` coinvolgono entrambi gli owner e
 impediscono la registrazione: non vale mai “vince l'ultimo”. Se più
