@@ -554,6 +554,8 @@ const IT = {
   // una notizia su un file, la seconda è ciò che cambia cosa si può fare adesso.
   "draft.blind":
     "Il testo non salvato non arriva più sul disco: da adesso un crash lo perderebbe. Salva a mano ciò che non vuoi rischiare.",
+  "draft.discard_failed":
+    "Non sono riuscito a eliminare la bozza di sicurezza ormai obsoleta di {doc}: {reason}. Potrebbe ricomparire al prossimo avvio.",
 
   // --- lo stato del salvataggio (§20.4) ----------------------------------
   // Quattro parole nella barra di stato, e non un'icona: «salvato» e «non
@@ -968,6 +970,8 @@ const EN: Record<Key, string> = {
     "It is not known which version of the file this text started from: look at both before choosing.",
   "draft.blind":
     "Unsaved text no longer reaches the disk: from now on a crash would lose it. Save by hand whatever you do not want to risk.",
+  "draft.discard_failed":
+    "I could not remove the obsolete safety draft for {doc}: {reason}. It may reappear the next time you start Fub.",
 
   "save.saved": "Saved",
   "save.saving": "Saving…",

@@ -371,6 +371,33 @@ function functionBody(signature: string): string {
   const closes = source.indexOf("\n}\n", opens);
   return source.slice(opens, closes === -1 ? source.length : closes);
 }
+describe("la bozza di sicurezza obsoleta", () => {
+  it("avvisa con documento e causa senza scambiarla per un salvataggio fallito", async () => {
+    vi.resetModules();
+    const harness = mockPanelModules({ value: { formatKey: "test" } });
+    panelDom();
+    const { mountDocument } = await import("./document");
+    mountDocument({ surfaceRegistry: new DocumentSurfaceRegistry() });
+
+    await harness.emitSessionEvent({
+      kind: "draft-discard-failed",
+      id: "nota-obsoleta.md",
+      error: new Error("permesso negato"),
+    });
+
+    expect(harness.translations).toHaveBeenCalledWith("draft.discard_failed", {
+      doc: "nota-obsoleta.md",
+      reason: "permesso negato",
+    });
+    expect(harness.notifications).toHaveBeenCalledWith(
+      "initial:draft.discard_failed:nota-obsoleta.md:permesso negato",
+      "guasto",
+    );
+    expect(harness.translations).not.toHaveBeenCalledWith("document.save_failed", expect.anything());
+    expect(harness.contexts).toEqual([]);
+  });
+});
+
 
 // **La validazione e la sincronia fra superfici appartengono alla sessione.**
 //
@@ -509,14 +536,25 @@ function mockPanelModules(request: RequestBox) {
   const contexts: ViewContext[] = [];
   let languageListener: (() => void) | undefined;
   let language = "initial";
+  let sessionEvent: ((event: unknown) => void | Promise<void>) | undefined;
   const flush = vi.fn(async (_doc: string) => {});
   const previews = vi.fn(async (_preview: HTMLElement, _doc: string) => {});
+  const notifications = vi.fn();
+  const translations = vi.fn(
+    (key: string, values?: Record<string, unknown>) =>
+      `${language}:${key}:${Object.values(values ?? {}).join(":")}`,
+  );
   const setActiveContext = vi.fn(async (context: ViewContext) => {
     contexts.push(context);
     return [];
   });
   const session = {
-    subscribe: () => () => {},
+    subscribe(listener: (event: unknown) => void | Promise<void>) {
+      sessionEvent = listener;
+      return () => {
+        if (sessionEvent === listener) sessionEvent = undefined;
+      };
+    },
     isDirty: () => false,
     isDeletionPending: () => false,
     saveState: () => null,
@@ -564,7 +602,7 @@ function mockPanelModules(request: RequestBox) {
     ],
     registerShellCommand: () => {},
   }));
-  vi.doMock("../ui/notify", () => ({ notify: () => {} }));
+  vi.doMock("../ui/notify", () => ({ notify: notifications }));
   vi.doMock("./preview", () => ({
     clearPreview: () => {},
     updatePreview: previews,
@@ -574,12 +612,14 @@ function mockPanelModules(request: RequestBox) {
     primaryView: () => undefined,
     unmountViewFromPane: () => {},
   }));
-  vi.doMock("../host/errors", () => ({ errorText: () => "errore" }));
+  vi.doMock("../host/errors", () => ({
+    errorText: (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  }));
   vi.doMock("../i18n/strings", () => ({
     onLanguage: (listener: () => void) => {
       languageListener = listener;
     },
-    t: (key: string) => `${language}:${key}`,
+    t: translations,
   }));
   vi.doMock("../ui/tooltip", () => ({ setTooltip: () => {} }));
 
@@ -587,6 +627,11 @@ function mockPanelModules(request: RequestBox) {
     contexts,
     flush,
     previews,
+    notifications,
+    translations,
+    emitSessionEvent(event: unknown) {
+      return sessionEvent?.(event);
+    },
     refreshLanguage() {
       language = "updated";
       languageListener?.();

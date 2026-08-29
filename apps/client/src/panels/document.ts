@@ -744,6 +744,13 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     notify(t("draft.blind"), "guasto");
     return;
   }
+  if (event.kind === "draft-discard-failed") {
+    notify(
+      t("draft.discard_failed", { doc: event.id, reason: errorText(event.error) }),
+      "guasto",
+    );
+    return;
+  }
   if (event.kind === "save-failed") {
     if (event.outcome === "conflitto") {
       notify(t("document.save_conflict", { doc: event.id }), "guasto");
