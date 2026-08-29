@@ -1288,7 +1288,7 @@ describe("identità del mount nel percorso reale del pannello", () => {
     await synchronize();
     const first = a.mounts[0]?.surface;
     const editor = document.querySelector<HTMLElement>(".pane-editor")!;
-    expect(editor).toHaveAttribute("data-document-surface", "");
+    expect(editor.getAttribute("data-document-surface")).toBe("");
 
     openIn("main", "second.grid", layout);
     await synchronize();
@@ -1399,13 +1399,13 @@ describe("identità del mount nel percorso reale del pannello", () => {
     expect(b.mounts).toHaveLength(0);
     expect(editor.querySelector(".generic-surface-a")).toBeNull();
     expect(editor.children).toHaveLength(0);
-    expect(editor).not.toHaveAttribute("data-document-surface");
+    expect(editor.hasAttribute("data-document-surface")).toBe(false);
 
     await synchronize();
     expect(b.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
     expect(editor.children).toHaveLength(1);
     expect(editor.firstElementChild?.className).toBe("generic-surface-b");
-    expect(editor).toHaveAttribute("data-document-surface", "");
+    expect(editor.getAttribute("data-document-surface")).toBe("");
 
     await synchronize();
     expect(b.mounts).toHaveLength(1);
@@ -1449,7 +1449,7 @@ describe("identità del mount nel percorso reale del pannello", () => {
     expect(failedMounts.calls).toBe(1);
     expect(editor.children).toHaveLength(0);
     expect(editor.querySelector(".generic-surface-failed")).toBeNull();
-    expect(editor).not.toHaveAttribute("data-document-surface");
+    expect(editor.hasAttribute("data-document-surface")).toBe(false);
 
     disposeFailed();
     const fixed = genericSurfaceFixture("fixed");
@@ -1465,7 +1465,7 @@ describe("identità del mount nel percorso reale del pannello", () => {
     expect(fixed.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
     expect(editor.children).toHaveLength(1);
     expect(editor.firstElementChild?.className).toBe("generic-surface-fixed");
-    expect(editor).toHaveAttribute("data-document-surface", "");
+    expect(editor.getAttribute("data-document-surface")).toBe("");
 
     await synchronize();
     expect(fixed.mounts).toHaveLength(1);
