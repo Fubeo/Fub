@@ -20,6 +20,7 @@ import {
   documents,
   layout,
   defaultLayout,
+  DEFAULT_MODE,
   panesWithDoc,
   panes,
   parseLayout,
@@ -56,6 +57,12 @@ describe("l'albero dei riquadri", () => {
     const l = newItem();
     expect(panes(l)).toEqual(["main"]);
     expect(l.focus).toBe("main");
+  });
+
+  it("usa live_preview come modalità predefinita del layout", () => {
+    const l = newItem();
+    expect(DEFAULT_MODE).toBe("live_preview");
+    expect(l.panes.main.mode).toBe(DEFAULT_MODE);
   });
 
   // `main` resta il primo per sempre: è l'id che finisce nel `ViewContext`
