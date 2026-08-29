@@ -6,6 +6,8 @@ import {
   textualFallbackFactory,
   type EditorSurface,
   type SurfaceFactory,
+  type SurfaceOverride,
+  type SurfaceRegistration,
 } from "./registry";
 
 type DestroySpy = {
@@ -266,17 +268,28 @@ describe("DocumentSurfaceRegistry", () => {
       species: "text/source",
       factory: species.factory,
     });
+    registry.register({
+      owner: "override-owner",
+      family: "text",
+      profile: "override",
+      formatKey: "override-format",
+      factory: override.factory,
+    });
+    const overrideReference = {
+      owner: "override-owner",
+      formatKey: "override-format",
+    };
 
     expect(
       registry.resolve({
         formatKey: "format-key",
         species: "text/source",
-        override: override.factory,
+        override: overrideReference,
       }),
     ).toBe(override.factory);
     const overrideContext = mountContext();
     const mountedOverride = registry.mount(
-      { formatKey: "format-key", override: override.factory },
+      { formatKey: "format-key", override: overrideReference },
       overrideContext,
     );
     expect(mountedOverride).not.toBe(override.mounts[0]);
@@ -299,6 +312,85 @@ describe("DocumentSurfaceRegistry", () => {
     );
     byteSurface.destroy();
     expect(registry.resolve({ family: "family-futura" }).family).toBe("error");
+  });
+
+  it("lega l'override alla registrazione e segnala quando viene disinstallata", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const fallback = surfaceFixture("fallback");
+    const registeredB: SurfaceRegistration = {
+      owner: "owner-b",
+      family: "text",
+      profile: "profile-b",
+      formatKey: "format-b",
+      factory: surfaceFixture("b").factory,
+    };
+    const disposeFallback = registry.register({
+      owner: "fallback-owner",
+      family: "text",
+      profile: "profile-fallback",
+      formatKey: "format-fallback",
+      factory: fallback.factory,
+    });
+    const disposeB = registry.register(registeredB);
+    expect(registeredB.registrationId).toEqual(expect.any(String));
+    const registrationId = registeredB.registrationId as string;
+    const request = {
+      formatKey: "format-fallback",
+      override: { registrationId },
+    };
+
+    expect(registry.resolve(request)).toBe(registeredB.factory);
+    expect(registry.resolve({ override: registrationId })).toBe(registeredB.factory);
+    expect(registry.resolve({ override: "format-b" })).toBe(registeredB.factory);
+    expect(
+      registry.resolve({
+        override: { owner: "owner-b", formatKey: "format-b" },
+      }),
+    ).toBe(registeredB.factory);
+    expect(
+      registry.resolve({
+        override: { owner: "owner-b", family: "text", profile: "profile-b" },
+      }),
+    ).toBe(registeredB.factory);
+    expect(
+      registry.resolve({
+        override: { owner: "owner-incorrect", formatKey: "format-b" },
+      }).family,
+    ).toBe("error");
+
+    disposeB();
+    expect(registry.resolve(request)).not.toBe(registeredB.factory);
+    expect(registry.resolve(request).family).toBe("error");
+    const context = mountContext();
+    const surface = registry.mount(request, context);
+    expect(context.parent.textContent).toContain("override utente non registrato");
+    surface.destroy();
+
+    disposeFallback();
+  });
+
+  it("non monta una factory nuda passata come override", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const naked = surfaceFixture("naked");
+    const overrides: readonly SurfaceOverride[] = [
+      naked.factory as unknown as SurfaceOverride,
+      { factory: naked.factory } as unknown as SurfaceOverride,
+    ];
+
+    for (const override of overrides) {
+      const request = {
+        family: "text",
+        formatKey: "format-key",
+        override,
+      };
+      expect(registry.resolve(request)).not.toBe(naked.factory);
+      expect(registry.resolve(request).family).toBe("error");
+      const context = mountContext();
+      const surface = registry.mount(request, context);
+      expect(naked.mounts).toHaveLength(0);
+      expect(context.parent.textContent).toContain("override utente non registrato");
+      surface.destroy();
+    }
   });
 
   it("consente profili text distinti senza collisione sulla sola famiglia", () => {
@@ -325,6 +417,7 @@ describe("DocumentSurfaceRegistry", () => {
     expect(registry.resolve({ formatKey: "markdown" })).toBe(markdown.factory);
     expect(registry.resolve({ formatKey: "plain-text" })).toBe(plainText.factory);
   });
+
   describe("lifecycle", () => {
     it("rimuove l'istanza dal registry prima di distruggere l'inner", () => {
       const registry = new DocumentSurfaceRegistry();

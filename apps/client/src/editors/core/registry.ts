@@ -43,17 +43,16 @@ export interface SurfaceRequest {
   readonly version?: number;
   readonly override?: SurfaceOverride;
   readonly userOverride?: SurfaceOverride;
-  readonly overrideFactory?: SurfaceFactory;
 }
 
-export type SurfaceOverride = SurfaceFactory | SurfaceOverrideReference | string;
+export type SurfaceOverride = SurfaceOverrideReference | string;
 
 export interface SurfaceOverrideReference {
+  readonly registrationId?: string;
   readonly owner?: string;
   readonly formatKey?: string;
   readonly family?: string;
   readonly profile?: string;
-  readonly factory?: SurfaceFactory;
 }
 
 export interface SurfaceFactory {
@@ -65,6 +64,7 @@ export interface SurfaceFactory {
 }
 
 export interface SurfaceRegistration {
+  readonly registrationId?: string;
   readonly owner: string;
   readonly family: string;
   readonly profile?: string;
@@ -113,6 +113,7 @@ const BYTE_SPECIES: Record<string, true> = {
 };
 
 let nextSurfaceId = 1;
+let nextRegistrationId = 1;
 
 function hasText(value: string | undefined): value is string {
   return value !== undefined && value.length > 0;
@@ -156,6 +157,22 @@ function isFactory(value: unknown): value is SurfaceFactory {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<SurfaceFactory>;
   return typeof candidate.family === "string" && typeof candidate.mount === "function";
+}
+function exposeRegistrationId(
+  registration: SurfaceRegistration,
+  registrationId: string,
+): void {
+  if (registration.registrationId === registrationId) return;
+  try {
+    Object.defineProperty(registration, "registrationId", {
+      configurable: true,
+      enumerable: true,
+      value: registrationId,
+      writable: false,
+    });
+  } catch {
+    // A frozen input still has the normalized id in the registry entry.
+  }
 }
 
 function normaliseSpecies(species: string | undefined): string {
@@ -377,6 +394,7 @@ function manageSurface(inner: EditorSurface, entry: Entry | undefined): EditorSu
 
 export class DocumentSurfaceRegistry {
   private readonly entries = new Set<Entry>();
+  private readonly registrationBindings = new Map<string, Entry>();
   private readonly formatBindings = new Map<string, Entry>();
   private readonly speciesBindings = new Map<string, Entry>();
   private readonly familyProfileBindings = new Map<string, Entry>();
@@ -392,7 +410,18 @@ export class DocumentSurfaceRegistry {
       throw new Error(`L'owner ${registration.owner} deve dichiarare una factory.`);
     }
 
-    const normalized: SurfaceRegistration = { ...registration };
+    const registrationId = hasText(registration.registrationId)
+      ? registration.registrationId
+      : `surface-registration-${nextRegistrationId++}`;
+    const normalized: SurfaceRegistration = { ...registration, registrationId };
+    const existingById = this.registrationBindings.get(registrationId);
+    if (existingById !== undefined) {
+      throw new Error(
+        `Collisione della registrationId "${registrationId}": owner coinvolti ` +
+          `"${existingById.registration.owner}" e "${normalized.owner}".`,
+      );
+    }
+
     const bindings = bindingDescriptors(normalized);
     const collisions = new Map<Entry, Binding[]>();
     for (const binding of bindings) {
@@ -426,7 +455,9 @@ export class DocumentSurfaceRegistry {
       active: true,
     };
     this.entries.add(entry);
+    this.registrationBindings.set(registrationId, entry);
     for (const binding of bindings) this.setBinding(binding, entry);
+    exposeRegistrationId(registration, registrationId);
 
     let disposed = false;
     return () => {
@@ -449,7 +480,7 @@ export class DocumentSurfaceRegistry {
   }
 
   private select(request: SurfaceRequest): Selection {
-    const override = request.overrideFactory ?? request.override ?? request.userOverride;
+    const override = request.override ?? request.userOverride;
     if (override !== undefined) {
       const selected = this.selectionForOverride(override);
       if (selected === undefined) {
@@ -523,42 +554,55 @@ export class DocumentSurfaceRegistry {
   }
 
   private selectionForOverride(override: SurfaceOverride): Selection | undefined {
-    if (isFactory(override)) return this.selectionForFactory(override);
     if (typeof override === "string") {
-      return this.selectionForReference({ formatKey: override, owner: override });
+      const byRegistrationId = this.registrationBindings.get(override);
+      if (byRegistrationId !== undefined) {
+        return {
+          factory: byRegistrationId.registration.factory,
+          entry: byRegistrationId,
+        };
+      }
+      const byFormatKey = this.formatBindings.get(override);
+      if (byFormatKey !== undefined) {
+        return { factory: byFormatKey.registration.factory, entry: byFormatKey };
+      }
+      return undefined;
     }
-    if (override.factory !== undefined) {
-      if (!isFactory(override.factory)) return undefined;
-      return this.selectionForFactory(override.factory);
-    }
+    if (typeof override !== "object" || override === null) return undefined;
+    if (isFactory(override) || "factory" in override) return undefined;
     return this.selectionForReference(override);
   }
 
-  private selectionForFactory(factory: SurfaceFactory): Selection {
-    for (const entry of this.entries) {
-      if (entry.registration.factory === factory) return { factory, entry };
-    }
-    return { factory };
-  }
-
   private selectionForReference(reference: SurfaceOverrideReference): Selection | undefined {
+    if (hasText(reference.registrationId)) {
+      const entry = this.registrationBindings.get(reference.registrationId);
+      if (entry === undefined) return undefined;
+      return { factory: entry.registration.factory, entry };
+    }
+
     if (hasText(reference.formatKey)) {
       const entry = this.formatBindings.get(reference.formatKey);
-      if (entry !== undefined) return { factory: entry.registration.factory, entry };
-    }
-    if (hasText(reference.owner)) {
-      for (const entry of this.entries) {
-        if (entry.registration.owner === reference.owner) {
-          return { factory: entry.registration.factory, entry };
-        }
+      if (entry === undefined) return undefined;
+      if (hasText(reference.owner) && entry.registration.owner !== reference.owner) {
+        return undefined;
       }
+      return { factory: entry.registration.factory, entry };
     }
-    if (hasText(reference.family) && reference.profile !== undefined) {
+
+    if (
+      hasText(reference.owner) &&
+      hasText(reference.family) &&
+      reference.profile !== undefined
+    ) {
       const entry = this.familyProfileBindings.get(
         familyProfileKey(reference.family, reference.profile),
       );
-      if (entry !== undefined) return { factory: entry.registration.factory, entry };
+      if (entry === undefined || entry.registration.owner !== reference.owner) {
+        return undefined;
+      }
+      return { factory: entry.registration.factory, entry };
     }
+
     return undefined;
   }
 
@@ -612,6 +656,13 @@ export class DocumentSurfaceRegistry {
     if (!entry.active) return;
     entry.active = false;
     this.entries.delete(entry);
+    const registrationId = entry.registration.registrationId;
+    if (
+      registrationId !== undefined &&
+      this.registrationBindings.get(registrationId) === entry
+    ) {
+      this.registrationBindings.delete(registrationId);
+    }
     for (const binding of entry.bindings) this.deleteBinding(binding, entry);
 
     const instances = [...entry.instances];
