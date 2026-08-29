@@ -45,49 +45,14 @@
         </div>
         <!-- #titlebar-right: mode switch, palette, impostazioni, controlli. -->
         <div id="titlebar-right" class="titlebar-side">
-          <!-- Le tre modalità esclusive del pannello (FEATURES 4.1). Non sono
-               decorazione della shell: la modalità attraversa il confine dentro
-               `ViewContext`, e le view che la seguono cambiano di conseguenza.
-               `role="group"` + `aria-pressed` e non tre pulsanti sciolti: sono
-               esclusive, e chi le ascolta deve sentire *quale* è accesa, non tre
-               comandi che si somigliano. -->
+          <!-- Il commutatore viene popolato dal catalogo della superficie attiva. -->
           <span
             id="mode-switch"
             class="segmented segmented--titlebar"
             role="group"
             data-i18n-label="mode.group"
             aria-label="Modalità del pannello"
-          >
-            <button
-              data-mode="source"
-              class="segmented-option"
-              data-i18n="mode.source"
-              data-i18n-title="mode.source.hint"
-              aria-pressed="false"
-            >
-              Sorgente
-            </button>
-            <button
-              data-mode="live_preview"
-              class="segmented-option"
-              data-i18n="mode.live"
-              data-i18n-title="mode.live.hint"
-              aria-pressed="true"
-            >
-              Live
-            </button>
-            <kbd id="mode-live-key" class="titlebar-shortcut" aria-hidden="true">Mod-Shift-L</kbd>
-            <button
-              data-mode="reading"
-              class="segmented-option"
-              data-i18n="mode.reading"
-              data-i18n-title="mode.reading.hint"
-              aria-pressed="false"
-            >
-              Lettura
-            </button>
-            <kbd id="mode-reading-key" class="titlebar-shortcut" aria-hidden="true">Mod-E</kbd>
-          </span>
+          ></span>
           <button
             id="open-palette"
             type="button"

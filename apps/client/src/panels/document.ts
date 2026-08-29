@@ -74,7 +74,7 @@ import {
 } from "../state/layout";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
-import { registerShellCommand } from "../ui/commands";
+import { allCommands, registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { clearPreview, updatePreview } from "./preview";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
@@ -148,9 +148,14 @@ export function mountDocument(d: DocumentDeps): void {
   sessionEventsStop?.();
   sessionEventsStop = documentSessions.subscribe(handleSessionEvent);
 
-  for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
-    b.addEventListener("click", () => void setMode(b.dataset.mode as PaneMode));
-  }
+  const modeSwitch = $("#mode-switch");
+  modeSwitch.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement) || target.tagName !== "BUTTON") return;
+    const mode = target.dataset.mode;
+    if (!mode) return;
+    void setMode(mode as PaneMode);
+  });
 
   // Il layout è cambiato — qualcuno ha diviso, chiuso, cambiato linguetta — e il DOM
   // lo insegue. Il verso passa dal bus e non da una chiamata perché chi muta il
@@ -199,7 +204,10 @@ export function mountDocument(d: DocumentDeps): void {
   // Il testo dello stato di salvataggio non passa da `applicaStringhe` — non ha
   // un `data-i18n`, perché lo scrive chi conosce lo stato — quindi si rifà da sé
   // al cambio di lingua, come fanno i due pulsanti della barra.
-  onLanguage(drawSave);
+  onLanguage(() => {
+    drawSave();
+    updateToggle();
+  });
 
   registerCommands();
 }
@@ -881,16 +889,45 @@ async function redrawReading(doc: string): Promise<void> {
 /// Il commutatore in testata riflette il riquadro col **fuoco**: è di lui che si
 /// sta parlando, ed è di lui che si cambia la modalità.
 function updateToggle(): void {
+  const switcher = $("#mode-switch");
   const pane = activePane();
-  const mode = effectiveMode(panes.get(layout.focus)?.surface, pane.mode);
-  for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
-    const choice = b.dataset.mode === mode;
-    // Quale modalità è accesa lo diceva solo lo sfondo. `aria-pressed` lo dice
-    // a chi non lo vede — ed è l'informazione che serve *prima* di premere, non
-    // dopo: senza, i tre pulsanti sono tre comandi indistinguibili. Da quando
-    // la pelle lo legge, è anche l'unico posto in cui la scelta sta scritta.
-    b.setAttribute("aria-pressed", String(choice));
+  const surface = panes.get(layout.focus)?.surface;
+  const modes = isModefulSurface(surface) ? surface.modes : [];
+  const mode = effectiveMode(surface, pane.mode);
+  const bindings = new Map(
+    allCommands().map((entry) => [entry.id, entry.binding] as const),
+  );
+  const shortcuts: Record<string, readonly [string, string]> = {
+    live_preview: ["shell.mode.live", "mode-live-key"],
+    reading: ["shell.mode.reading", "mode-reading-key"],
+  };
+  const children: HTMLElement[] = [];
+
+  for (const spec of modes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "segmented-option";
+    button.dataset.mode = spec.id;
+    button.dataset.i18n = spec.labelKey;
+    if (spec.hintKey) button.dataset.i18nTitle = spec.hintKey;
+    button.setAttribute("aria-pressed", String(spec.id === mode));
+    button.textContent = t(spec.labelKey as never);
+    if (spec.hintKey) setTooltip(button, t(spec.hintKey as never));
+    children.push(button);
+
+    const shortcut = shortcuts[spec.id];
+    if (!shortcut) continue;
+    const key = document.createElement("kbd");
+    key.id = shortcut[1];
+    key.className = "titlebar-shortcut";
+    key.setAttribute("aria-hidden", "true");
+    const binding = bindings.get(shortcut[0]) ?? null;
+    key.textContent = binding ?? "";
+    key.hidden = binding === null;
+    children.push(key);
   }
+
+  switcher.replaceChildren(...children);
 }
 
 /// **Ritrova ciò che era rimasto non salvato** (§15.2), all'apertura del vault.
@@ -1236,6 +1273,7 @@ export async function setMode(next: PaneMode): Promise<void> {
   const surface = r?.surface;
   const effective = effectiveMode(surface, next);
   if (isModefulSurface(surface)) surface.setMode(effective);
+  updateToggle();
   if (effective === "reading") {
     if (doc) {
       await documentSessions.flush(doc);

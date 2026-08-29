@@ -521,7 +521,13 @@ function mockPanelModules(request: RequestBox) {
     isDocumentDeletedDuringRead: () => false,
   }));
   vi.doMock("../state/vault", () => ({ createNote: () => Promise.resolve() }));
-  vi.doMock("../ui/commands", () => ({ registerShellCommand: () => {} }));
+  vi.doMock("../ui/commands", () => ({
+    allCommands: () => [
+      { id: "shell.mode.live", binding: "Mod-Shift-L" },
+      { id: "shell.mode.reading", binding: "Mod-E" },
+    ],
+    registerShellCommand: () => {},
+  }));
   vi.doMock("../ui/notify", () => ({ notify: () => {} }));
   vi.doMock("./preview", () => ({
     clearPreview: () => {},
@@ -544,11 +550,9 @@ function mockPanelModules(request: RequestBox) {
 
 function panelDom(): void {
   document.body.innerHTML =
-    '<main id="panes"></main><div id="mode-switch">' +
-    '<button data-mode="source"></button>' +
-    '<button data-mode="live_preview"></button>' +
-    '<button data-mode="reading"></button>' +
-    "</div>";
+    '<main id="panes"></main>' +
+    '<span id="mode-switch" class="segmented segmented--titlebar" role="group" ' +
+    'data-i18n-label="mode.group" aria-label="Modalità del pannello"></span>';
 }
 
 describe("modalità della superficie nel percorso reale del pannello", () => {
@@ -576,9 +580,33 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
     openIn("main", "note.md", layout);
     await synchronize();
-
     const surface = mount.mock.results[0]?.value as MarkdownEditorSurface;
     expect(surface.mode()).toBe("live_preview");
+    const switcher = document.querySelector<HTMLElement>("#mode-switch");
+    const buttons = [...(switcher?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    expect(buttons.map((button) => button.dataset.mode)).toEqual([
+      "source",
+      "live_preview",
+      "reading",
+    ]);
+    expect(buttons.map((button) => button.dataset.i18n)).toEqual([
+      "mode.source",
+      "mode.live",
+      "mode.reading",
+    ]);
+    expect(buttons.map((button) => button.dataset.i18nTitle)).toEqual([
+      "mode.source.hint",
+      "mode.live.hint",
+      "mode.reading.hint",
+    ]);
+    expect(switcher?.querySelector("#mode-live-key")?.textContent).toBe("Mod-Shift-L");
+    expect(switcher?.querySelector("#mode-reading-key")?.textContent).toBe("Mod-E");
+    expect(
+      switcher?.querySelector<HTMLButtonElement>('button[data-mode="live_preview"]')?.getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+
     const setSurfaceMode = vi.spyOn(surface, "setMode");
 
     await setMode("source");
@@ -599,6 +627,19 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     const root = document.querySelector<HTMLElement>(".pane");
     expect(root?.dataset.mode).toBe("reading");
     expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("reading");
+    const sourceButton = switcher?.querySelector<HTMLButtonElement>('button[data-mode="source"]');
+    sourceButton?.click();
+    expect(surface.mode()).toBe("source");
+    expect(
+      document.querySelector<HTMLButtonElement>('button[data-mode="source"]')?.getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    expect(
+      document.querySelector<HTMLButtonElement>('button[data-mode="live_preview"]')?.getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("false");
   });
 
   it("mantiene Plain in source quando il PaneMode non è nel catalogo", async () => {
@@ -625,14 +666,39 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
     openIn("main", "note.txt", layout);
     await synchronize();
-
     const surface = mount.mock.results[0]?.value as PlainTextSurface;
+    const switcher = document.querySelector<HTMLElement>("#mode-switch");
+    const buttons = [...(switcher?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    expect(buttons.map((button) => button.dataset.mode)).toEqual(["source"]);
+    expect(buttons[0]?.dataset.i18n).toBe("mode.source");
+    expect(buttons[0]?.dataset.i18nTitle).toBe("mode.source.hint");
+    expect(switcher?.querySelector("#mode-live-key")).toBeNull();
+    expect(switcher?.querySelector("#mode-reading-key")).toBeNull();
+    expect(buttons[0]?.getAttribute("aria-pressed")).toBe("true");
+
+    await setMode("live_preview");
+    expect(surface.mode()).toBe("source");
+    expect(
+      document.querySelector<HTMLButtonElement>('button[data-mode="source"]')?.getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    expect(document.querySelector('button[data-mode="live_preview"]')).toBeNull();
+    expect(document.querySelector('button[data-mode="reading"]')).toBeNull();
+
+    await setMode("reading");
+    expect(surface.mode()).toBe("source");
+    expect(
+      document.querySelector<HTMLButtonElement>('button[data-mode="source"]')?.getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    expect(document.querySelector('button[data-mode="live_preview"]')).toBeNull();
+    expect(document.querySelector('button[data-mode="reading"]')).toBeNull();
+
     expect(surface).not.toHaveProperty("setLivePreview");
     expect(surface.mode()).toBe("source");
 
-    await setMode("live_preview");
-    await setMode("reading");
-    expect(surface.mode()).toBe("source");
     expect(harness.flush).not.toHaveBeenCalled();
     expect(harness.previews).not.toHaveBeenCalled();
 
@@ -654,11 +720,14 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     const { mountDocument, setMode, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
     mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    await synchronize();
+    expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
     openIn("main", "note.bin", layout);
     await synchronize();
 
     await expect(setMode("live_preview")).resolves.toBeUndefined();
     await expect(setMode("reading")).resolves.toBeUndefined();
+    expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
     expect(harness.flush).toHaveBeenCalledWith("note.bin");
   });
 });
@@ -712,7 +781,10 @@ describe("identità della selezione nel percorso reale del pannello", () => {
       isDocumentDeletedDuringRead: () => false,
     }));
     vi.doMock("../state/vault", () => ({ createNote: () => Promise.resolve() }));
-    vi.doMock("../ui/commands", () => ({ registerShellCommand: () => {} }));
+    vi.doMock("../ui/commands", () => ({
+      allCommands: () => [],
+      registerShellCommand: () => {},
+    }));
     vi.doMock("../ui/notify", () => ({ notify: () => {} }));
     vi.doMock("./preview", () => ({
       clearPreview: () => {},

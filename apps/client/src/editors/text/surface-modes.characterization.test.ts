@@ -43,8 +43,12 @@ function passedToEditor(source: string): string[] {
 }
 
 describe("caratterizzazione delle modalità e della tastiera della shell", () => {
-  it("il commutatore dichiara una sola volta source, live_preview e reading", () => {
-    expect(modeButtons(html)).toEqual(["source", "live_preview", "reading"]);
+  it("il commutatore lascia il catalogo alla superficie attiva", () => {
+    expect(modeButtons(html)).toEqual([]);
+    const group = html.match(/<span\b[^>]*\bid=["']mode-switch["'][^>]*>/)?.[0] ?? "";
+    expect(group).not.toBe("");
+    expect(group).toContain('class="segmented segmented--titlebar"');
+    expect(group).toContain('role="group"');
   });
 
   it("gli editor testuali e l'anteprima non registrano keydown globali", () => {
