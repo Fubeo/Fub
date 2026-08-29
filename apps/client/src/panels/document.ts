@@ -18,13 +18,15 @@
 // La superficie pubblica di questo modulo continua a rispondere alle domande
 // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
 // lo stato mutabile della sessione ai suoi clienti.
-import type {
-  DocumentSurfaceRegistry,
-  EditorSurface,
-  SurfaceRequest,
-  SurfaceSelectionKey,
+import {
+  isModefulSurface,
+  surfaceModeId,
+  type DocumentSurfaceRegistry,
+  type EditorSurface,
+  type SurfaceModeId,
+  type SurfaceRequest,
+  type SurfaceSelectionKey,
 } from "../editors/core/registry";
-import { isModefulSurface } from "../editors/core/registry";
 import { surfaceRequestForDocument } from "../editors/bootstrap";
 import type {
   MarkdownEditorSurface,
@@ -118,6 +120,10 @@ interface Pane {
 }
 
 const panes = new Map<string, Pane>();
+
+const SOURCE_SURFACE_MODE = surfaceModeId("source");
+const LIVE_PREVIEW_SURFACE_MODE = surfaceModeId("live_preview");
+const READING_SURFACE_MODE = surfaceModeId("reading");
 
 let panesEl: HTMLElement;
 let sessionEventsStop: (() => void) | undefined;
@@ -250,13 +256,13 @@ function registerCommands(): void {
     id: "shell.mode.reading",
     title: "commands.mode.reading",
     description: "commands.mode.reading.desc",
-    run: () => void setMode("reading"),
+    run: () => void setMode(READING_SURFACE_MODE),
   });
   registerShellCommand({
     id: "shell.mode.live",
     title: "commands.mode.live",
     description: "commands.mode.live.desc",
-    run: () => void setMode("live_preview"),
+    run: () => void setMode(LIVE_PREVIEW_SURFACE_MODE),
   });
   registerShellCommand({
     id: "shell.pane.split.right",
@@ -435,7 +441,7 @@ async function render(): Promise<void> {
 
     r.root.classList.toggle("focus", id === layout.focus);
     await show(r, activeTab(id));
-    applyPaneMode(r, p.mode);
+    applyPaneMode(r);
   }
   updateToggle();
   drawSave();
@@ -509,26 +515,34 @@ function isMarkdownSurface(
   );
 }
 
-function effectiveMode(
-  surface: EditorSurface | null | undefined,
-  paneMode: PaneMode,
-): PaneMode {
-  if (!isModefulSurface(surface)) return "source";
-  if (surface.modes.some((mode) => mode.id === paneMode)) return paneMode;
-  return surface.defaultMode;
+function effectiveMode(surface: EditorSurface | null | undefined): SurfaceModeId {
+  if (!isModefulSurface(surface)) return SOURCE_SURFACE_MODE;
+  const mode = surface.mode();
+  return surface.modes.some((spec) => spec.id === mode) ? mode : surface.defaultMode;
+}
+
+function initialSurfaceMode(surface: EditorSurface, paneMode: PaneMode): SurfaceModeId {
+  if (!isModefulSurface(surface)) return SOURCE_SURFACE_MODE;
+  const persisted = surfaceModeId(paneMode);
+  return surface.modes.find((spec) => spec.id === persisted)?.id ?? surface.defaultMode;
+}
+
+function projectSurfaceMode(mode: SurfaceModeId): PaneMode {
+  if (mode === "live_preview") return "live_preview";
+  if (mode === "reading") return "reading";
+  return "source";
 }
 
 function isMarkdownReadingSurface(
   surface: EditorSurface | null | undefined,
-  paneMode: PaneMode,
 ): surface is MarkdownEditorSurface {
-  return isMarkdownSurface(surface) && effectiveMode(surface, paneMode) === "reading";
+  return isMarkdownSurface(surface) && effectiveMode(surface) === READING_SURFACE_MODE;
 }
 
-function applyPaneMode(r: Pane, paneMode: PaneMode): PaneMode {
-  const mode = effectiveMode(r.surface, paneMode);
+function applyPaneMode(r: Pane): SurfaceModeId {
+  const mode = effectiveMode(r.surface);
   r.root.dataset.mode = mode;
-  r.root.classList.toggle("markdown-reading", isMarkdownReadingSurface(r.surface, paneMode));
+  r.root.classList.toggle("markdown-reading", isMarkdownReadingSurface(r.surface));
   return mode;
 }
 
@@ -555,6 +569,7 @@ function destroySurface(r: Pane): void {
   try {
     surface?.destroy();
   } finally {
+    r.editorEl.removeAttribute("data-document-surface");
     r.editorEl.replaceChildren();
   }
 }
@@ -580,12 +595,14 @@ function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
     r.surface = null;
     r.selectionKey = null;
     r.surfaceDocumentId = null;
+    r.editorEl.removeAttribute("data-document-surface");
     r.editorEl.replaceChildren();
     throw error;
   }
   r.surface = mounted.surface;
   r.selectionKey = mounted.key;
   r.surfaceDocumentId = doc;
+  r.editorEl.dataset.documentSurface = "";
   if (theme) r.surface.setTheme(theme);
   return true;
 }
@@ -804,8 +821,8 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   const remounted = ensureSurface(r, tab.doc, request);
   r.surface?.setReadOnly(documentSessions.isDeletionPending(tab.doc));
   const pane = paneState(r.id);
-  if (pane && isModefulSurface(r.surface)) {
-    r.surface.setMode(effectiveMode(r.surface, pane.mode));
+  if (remounted && pane && isModefulSurface(r.surface)) {
+    r.surface.setMode(initialSurfaceMode(r.surface, pane.mode));
   }
   if (!changed && !remounted) return;
 
@@ -888,11 +905,9 @@ async function redrawReading(doc: string): Promise<void> {
   await Promise.all(
     panesWithDoc(doc).map(async (id) => {
       const r = panes.get(id);
-      const pane = paneState(id);
       if (
         !r ||
-        !pane ||
-        !isMarkdownReadingSurface(r.surface, pane.mode) ||
+        !isMarkdownReadingSurface(r.surface) ||
         activeDoc(id) !== doc
       )
         return;
@@ -905,10 +920,9 @@ async function redrawReading(doc: string): Promise<void> {
 /// sta parlando, ed è di lui che si cambia la modalità.
 function updateToggle(): void {
   const switcher = $("#mode-switch");
-  const pane = activePane();
   const surface = panes.get(layout.focus)?.surface;
   const modes = isModefulSurface(surface) ? surface.modes : [];
-  const mode = effectiveMode(surface, pane.mode);
+  const mode = effectiveMode(surface);
   const bindings = new Map(
     allCommands().map((entry) => [entry.id, entry.binding] as const),
   );
@@ -1024,7 +1038,7 @@ export async function openDocument(id: string): Promise<void> {
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (effectiveMode(panes.get(layout.focus)?.surface, activePane().mode) !== "reading")
+      if (effectiveMode(panes.get(layout.focus)?.surface) !== READING_SURFACE_MODE)
         focusEditor();
     });
   } finally {
@@ -1213,13 +1227,13 @@ export async function reloadCurrent(): Promise<void> {
 /// invece è sempre quello vero — ed è ciò che serve a contare le parole
 /// selezionate o a mandarle a un comando.
 function paneContext(): ViewContext {
-  const p = activePane();
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const surface = isTextSurface(r?.surface) ? r.surface : null;
-  const mode = effectiveMode(r?.surface, p.mode);
+  const surfaceMode = effectiveMode(r?.surface);
+  const mode = projectSurfaceMode(surfaceMode);
   const sel = surface?.selections();
-  const inEditing = doc !== null && mode !== "reading" && sel !== undefined;
+  const inEditing = doc !== null && surfaceMode !== READING_SURFACE_MODE && sel !== undefined;
   const dirty = doc ? documentSessions.isDirty(doc) : false;
   if (!inEditing || !sel) {
     return { pane: layout.focus, doc, selections: null, mode };
@@ -1271,7 +1285,8 @@ function scheduleContext(): void {
   contextTimer = window.setTimeout(() => void publishContext(), 150);
 }
 
-/// Cambia la modalità del riquadro col fuoco (FEATURES 4.1) e la pubblica.
+/// Cambia la modalità della superficie nel riquadro col fuoco (FEATURES 4.1) e
+/// pubblica la sua proiezione compatibile col contratto.
 ///
 /// In lettura l'editor lascia il posto al documento **reso**: è la stessa cosa
 /// che l'anteprima mostrava di lato, ma non è più un pannello sempre acceso
@@ -1281,7 +1296,7 @@ function scheduleContext(): void {
 /// Che sia **del riquadro** e non della finestra è la parte nuova, ed è ciò che
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
-export async function setMode(next: PaneMode): Promise<void> {
+export async function setMode(next: SurfaceModeId): Promise<void> {
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const surface = r?.surface;
@@ -1293,11 +1308,12 @@ export async function setMode(next: PaneMode): Promise<void> {
     return;
   }
 
-  setPaneMode(layout.focus, next);
   surface.setMode(next);
-  applyPaneMode(r, next);
+  const mode = effectiveMode(surface);
+  setPaneMode(layout.focus, projectSurfaceMode(mode));
+  applyPaneMode(r);
   updateToggle();
-  if (isMarkdownReadingSurface(surface, next)) {
+  if (isMarkdownReadingSurface(surface)) {
     if (doc) {
       await documentSessions.flush(doc);
       await updatePreview(r.previewEl, doc);
@@ -1312,7 +1328,7 @@ export async function setMode(next: PaneMode): Promise<void> {
 export function revealByteOffset(byteOffset: number): void {
   const pane = panes.get(layout.focus);
   if (!pane) return;
-  if (!isMarkdownReadingSurface(pane.surface, activePane().mode)) {
+  if (!isMarkdownReadingSurface(pane.surface)) {
     const surface = isTextSurface(pane.surface) ? pane.surface : null;
     surface?.revealByteOffset(byteOffset);
     return;

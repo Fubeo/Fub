@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { isModefulSurface } from "../core/registry";
+import { isModefulSurface, surfaceModeId } from "../core/registry";
 import { findTextEditor } from "./test-support";
 import {
   markdownSurfaceFactory,
@@ -59,7 +59,7 @@ describe("factory testuali del registro", () => {
 
     const callsBeforeUnknown = setLivePreview.mock.calls.length;
     // Una chiamata JavaScript può ancora portare un ID fuori catalogo.
-    surface.setMode("unknown" as never);
+    surface.setMode(surfaceModeId("unknown"));
     expect(surface.mode()).toBe("reading");
     expect(setLivePreview.mock.calls).toHaveLength(callsBeforeUnknown);
 
@@ -91,9 +91,9 @@ describe("factory testuali del registro", () => {
     expect(surface).not.toHaveProperty("live_preview");
     expect(surface).not.toHaveProperty("setSyntaxForms");
     expect(surface).not.toHaveProperty("setLivePreview");
-    surface.setMode("live_preview" as never);
+    surface.setMode(surfaceModeId("live_preview"));
     expect(surface.mode()).toBe("source");
-    surface.setMode("reading" as never);
+    surface.setMode(surfaceModeId("reading"));
     expect(surface.mode()).toBe("source");
     surface.setDoc("testo senza semantica");
     expect(surface.currentText()).toBe("testo senza semantica");

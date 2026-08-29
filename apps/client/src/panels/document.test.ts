@@ -41,6 +41,7 @@ import sessionSource from "../state/document-session.ts?raw";
 import explorer from "./explorer.ts?raw";
 import {
   DocumentSurfaceRegistry,
+  surfaceModeId,
   type EditorSurface,
   type SurfaceFactory,
   type SurfaceRegistration,
@@ -662,9 +663,10 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     const request: RequestBox = { value: { formatKey: "modeful-grid" } };
     const harness = mockPanelModules(request);
     const modes = [
-      { id: "navigate" as never, labelKey: "mode.navigate" },
-      { id: "edit" as never, labelKey: "mode.edit" },
+      { id: surfaceModeId("navigate"), labelKey: "mode.navigate" },
+      { id: surfaceModeId("edit"), labelKey: "mode.edit" },
     ] as const;
+    let current: (typeof modes)[number]["id"] = modes[0].id;
     let mounted:
       | (EditorSurface & {
           readonly modes: typeof modes;
@@ -680,8 +682,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
         const element = context.parent.ownerDocument.createElement("div");
         element.className = "modeful-grid";
         context.parent.append(element);
-        let current = modes[0].id;
-        mounted = {
+        const surface: NonNullable<typeof mounted> = {
           family: "grid",
           surfaceId: "modeful-grid-1",
           modes,
@@ -703,7 +704,8 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
             element.remove();
           },
         };
-        return mounted;
+        mounted = surface;
+        return surface;
       },
     };
     const registry = new DocumentSurfaceRegistry();
@@ -870,7 +872,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     const published = harness.contexts.length;
     const setSurfaceMode = vi.spyOn(surface, "setMode");
 
-    await setMode("live_preview" as never);
+    await setMode(surfaceModeId("live_preview"));
     expect(surface.mode()).toBe("source");
     expect(layout.panes.main?.mode).toBe("source");
     expect(setSurfaceMode).not.toHaveBeenCalled();
@@ -883,7 +885,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     expect(document.querySelector('button[data-mode="live_preview"]')).toBeNull();
     expect(document.querySelector('button[data-mode="reading"]')).toBeNull();
 
-    await setMode("reading" as never);
+    await setMode(surfaceModeId("reading"));
     expect(surface.mode()).toBe("source");
     expect(layout.panes.main?.mode).toBe("source");
     expect(setSurfaceMode).not.toHaveBeenCalled();
@@ -968,7 +970,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
 
       openIn("main", "note.md", layout);
       await synchronize();
-      await setMode("reading" as never);
+      await setMode(surfaceModeId("reading"));
       harness.previews.mockClear();
 
       request.value = nextRequest;
@@ -1029,7 +1031,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.md", layout);
     await synchronize();
-    await setMode("reading" as never);
+    await setMode(surfaceModeId("reading"));
 
     const plainPaneId = split("main", "col", layout);
     expect(plainPaneId).not.toBeNull();

@@ -1,14 +1,16 @@
 import type { Extension } from "@codemirror/state";
 import type { Theme } from "../../theme/theme";
-import type { PaneMode, SyntaxForm } from "../../host/contract";
-import type {
-  EditorSurface,
-  SurfaceFactory,
-  SurfaceModeful,
-  SurfaceModeSpec,
-  SurfaceMountContext,
-  SurfaceRequest,
-  SurfaceViewState,
+import type { SyntaxForm } from "../../host/contract";
+import {
+  surfaceModeId,
+  type EditorSurface,
+  type SurfaceFactory,
+  type SurfaceModeful,
+  type SurfaceModeId,
+  type SurfaceModeSpec,
+  type SurfaceMountContext,
+  type SurfaceRequest,
+  type SurfaceViewState,
 } from "../core/registry";
 import {
   createTextEngine,
@@ -103,14 +105,17 @@ const emptyChange: (change: EditorChange) => void = () => {};
 const emptySelectionChange: () => void = () => {};
 
 let nextTextSurfaceId = 1;
+const SOURCE_MODE = surfaceModeId("source");
+const LIVE_PREVIEW_MODE = surfaceModeId("live_preview");
+const READING_MODE = surfaceModeId("reading");
 const MARKDOWN_MODES = [
-  { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
-  { id: "live_preview", labelKey: "mode.live", hintKey: "mode.live.hint" },
-  { id: "reading", labelKey: "mode.reading", hintKey: "mode.reading.hint" },
+  { id: SOURCE_MODE, labelKey: "mode.source", hintKey: "mode.source.hint" },
+  { id: LIVE_PREVIEW_MODE, labelKey: "mode.live", hintKey: "mode.live.hint" },
+  { id: READING_MODE, labelKey: "mode.reading", hintKey: "mode.reading.hint" },
 ] as const satisfies readonly SurfaceModeSpec[];
 
 const PLAIN_TEXT_MODES = [
-  { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
+  { id: SOURCE_MODE, labelKey: "mode.source", hintKey: "mode.source.hint" },
 ] as const satisfies readonly SurfaceModeSpec[];
 
 
@@ -228,8 +233,8 @@ class TextSurface<Profile extends string> implements TextEditorSurface {
 
 class MarkdownSurface extends TextSurface<"markdown"> implements MarkdownEditorSurface {
   readonly modes = MARKDOWN_MODES;
-  readonly defaultMode = "live_preview" as const;
-  private currentMode: PaneMode = "live_preview";
+  readonly defaultMode = LIVE_PREVIEW_MODE;
+  private currentMode: SurfaceModeId = LIVE_PREVIEW_MODE;
   private readonly markdownProfile: MarkdownProfile;
 
   constructor(engine: TextEngine, theme: Theme | undefined, markdownProfile: MarkdownProfile) {
@@ -237,18 +242,18 @@ class MarkdownSurface extends TextSurface<"markdown"> implements MarkdownEditorS
     this.markdownProfile = markdownProfile;
   }
 
-  mode(): PaneMode {
+  mode(): SurfaceModeId {
     return this.currentMode;
   }
 
-  setMode(id: PaneMode): void {
+  setMode(id: SurfaceModeId): void {
     switch (id) {
-      case "live_preview":
+      case LIVE_PREVIEW_MODE:
         this.currentMode = id;
         this.setLivePreview(true);
         return;
-      case "source":
-      case "reading":
+      case SOURCE_MODE:
+      case READING_MODE:
         this.currentMode = id;
         this.setLivePreview(false);
         return;
@@ -270,19 +275,19 @@ class MarkdownSurface extends TextSurface<"markdown"> implements MarkdownEditorS
 
 class PlainTextSurfaceImpl extends TextSurface<"plain-text"> implements PlainTextSurface {
   readonly modes = PLAIN_TEXT_MODES;
-  readonly defaultMode = "source" as const;
-  private currentMode: PaneMode = "source";
+  readonly defaultMode = SOURCE_MODE;
+  private currentMode: SurfaceModeId = SOURCE_MODE;
 
   constructor(engine: TextEngine, theme: Theme | undefined) {
     super("plain-text", engine, theme);
   }
 
-  mode(): PaneMode {
+  mode(): SurfaceModeId {
     return this.currentMode;
   }
 
-  setMode(id: PaneMode): void {
-    if (id !== "source") return;
+  setMode(id: SurfaceModeId): void {
+    if (id !== SOURCE_MODE) return;
     this.currentMode = id;
   }
 }

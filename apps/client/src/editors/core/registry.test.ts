@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   DocumentSurfaceRegistry,
   isModefulSurface,
+  surfaceModeId,
   textualFallbackFactory,
   type EditorSurface,
   type MountedSurface,
@@ -220,15 +221,15 @@ afterEach(() => {
 describe("isModefulSurface", () => {
   it("accetta cataloghi propri della superficie e lascia commutare i loro ID", () => {
     const modes = [
-      { id: "navigate" as never, labelKey: "mode.navigate" },
-      { id: "edit" as never, labelKey: "mode.edit" },
+      { id: surfaceModeId("navigate"), labelKey: "mode.navigate" },
+      { id: surfaceModeId("edit"), labelKey: "mode.edit" },
     ] as const;
-    let current = modes[0].id;
+    let current: (typeof modes)[number]["id"] = modes[0].id;
     const surface = {
       modes,
       defaultMode: modes[0].id,
       mode: () => current,
-      setMode(id: never) {
+      setMode(id: (typeof modes)[number]["id"]) {
         if (modes.some((mode) => mode.id === id)) current = id;
       },
     };

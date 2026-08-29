@@ -1,4 +1,14 @@
-import type { PaneMode } from "../../host/contract";
+declare const SURFACE_MODE_ID: unique symbol;
+
+/// Un'identità di modalità della superficie, interna alla shell e distinta
+/// dalle modalità che il contratto host sa pubblicare.
+export type SurfaceModeId = string & {
+  readonly [SURFACE_MODE_ID]: true;
+};
+
+export function surfaceModeId<Id extends string>(id: Id): SurfaceModeId & Id {
+  return id as SurfaceModeId & Id;
+}
 
 export type SurfaceFamily =
   | "text"
@@ -29,27 +39,27 @@ export interface EditorSurface {
   destroy(): void;
 }
 export interface SurfaceModeSpec {
-  readonly id: PaneMode;
+  readonly id: SurfaceModeId;
   readonly labelKey: string;
   readonly hintKey?: string;
 }
 
 export interface SurfaceModeful {
   readonly modes: readonly SurfaceModeSpec[];
-  readonly defaultMode: PaneMode;
-  mode(): PaneMode;
-  setMode(id: PaneMode): void;
+  readonly defaultMode: SurfaceModeId;
+  mode(): SurfaceModeId;
+  setMode(id: SurfaceModeId): void;
 }
 
-function isPaneMode(value: unknown): value is PaneMode {
-  return value === "source" || value === "live_preview" || value === "reading";
+function isSurfaceModeId(value: unknown): value is SurfaceModeId {
+  return typeof value === "string" && value.length > 0;
 }
 
 function isSurfaceModeSpec(value: unknown): value is SurfaceModeSpec {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Partial<SurfaceModeSpec>;
   return (
-    isPaneMode(candidate.id) &&
+    isSurfaceModeId(candidate.id) &&
     typeof candidate.labelKey === "string" &&
     (candidate.hintKey === undefined || typeof candidate.hintKey === "string")
   );
@@ -62,14 +72,14 @@ export function isModefulSurface(
   const candidate = surface as Partial<SurfaceModeful>;
   if (
     !Array.isArray(candidate.modes) ||
-    !isPaneMode(candidate.defaultMode) ||
+    !isSurfaceModeId(candidate.defaultMode) ||
     typeof candidate.mode !== "function" ||
     typeof candidate.setMode !== "function"
   ) {
     return false;
   }
 
-  const ids = new Set<PaneMode>();
+  const ids = new Set<SurfaceModeId>();
   for (const mode of candidate.modes) {
     if (!isSurfaceModeSpec(mode) || ids.has(mode.id)) return false;
     ids.add(mode.id);
