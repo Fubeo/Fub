@@ -96,6 +96,23 @@ interface FocusTrap {
 }
 
 const trapStack: FocusTrap[] = [];
+
+type KeyboardOwnershipListener = (epoch: number) => void;
+
+const keyboardOwnershipListeners = new Set<KeyboardOwnershipListener>();
+let keyboardOwnershipEpoch = 0;
+
+/// Osserva i cambi di proprietario della tastiera. L'epoca rende ogni passaggio
+/// della pila distinguibile senza far conoscere la pila a chi riceve l'avviso.
+export function onKeyboardOwnershipChange(listener: KeyboardOwnershipListener): Teardown {
+  keyboardOwnershipListeners.add(listener);
+  return () => keyboardOwnershipListeners.delete(listener);
+}
+
+function notifyKeyboardOwnershipChange(): void {
+  keyboardOwnershipEpoch += 1;
+  for (const listener of keyboardOwnershipListeners) listener(keyboardOwnershipEpoch);
+}
 /// Vera quando almeno una trappola viva possiede l'input da tastiera dell'app.
 ///
 /// La pila resta privata: chi arbitra le scorciatoie ha bisogno soltanto di
@@ -152,6 +169,7 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
   const previous = document.activeElement as HTMLElement | null;
   const entry: FocusTrap = { root, previous };
   trapStack.push(entry);
+  notifyKeyboardOwnershipChange();
   lifetime.add(() => {
     // Chiudere una superficie sotto un'altra non deve spostare il fuoco fuori da
     // quella ancora viva. Il suo predecessore diventa però il predecessore di
@@ -161,6 +179,7 @@ export function trapFocus(root: HTMLElement, close: () => void): Teardown {
     if (where < 0) return;
     const wasTop = where === trapStack.length - 1;
     trapStack.splice(where, 1);
+    notifyKeyboardOwnershipChange();
     const predecessor = entry.previous?.isConnected ? entry.previous : null;
     for (let i = where; i < trapStack.length; i += 1) {
       const higher = trapStack[i]!;

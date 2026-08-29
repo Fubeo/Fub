@@ -20,7 +20,7 @@
 // in cui il fuoco si vede è l'evento che risale da chi lo tiene.
 import { t } from "../i18n/strings";
 import type { Lifetime } from "./lifetime";
-import { focusTrapOwnsKeyboard } from "./a11y";
+import { focusTrapOwnsKeyboard, onKeyboardOwnershipChange } from "./a11y";
 import { arbitrate } from "./arbitration";
 import {
   WAIT_MS,
@@ -40,29 +40,28 @@ let waiting: Waiting | null = null;
 /// Il timer della scadenza, per poterlo disdire quando il tasto arriva.
 let deadline: ReturnType<typeof setTimeout> | undefined;
 
-/// L'evento è nato dentro l'editor? Il fuoco si osserva qui, dove il DOM c'è, e
-/// non in `avanza`, che resta pura e non riceve il bersaglio.
-function inEditor(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(".cm-editor") !== null;
-}
-
 /// Monta l'ascoltatore. `execute` è cosa fare del comando trovato — l'avvio vero
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
 export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
+  // L'acquisizione di una trappola avviene anche senza un keydown: l'attesa non
+  // può restare viva fino al prossimo gesto o alla sua scadenza.
+  lifetime.add(onKeyboardOwnershipChange(stopWaiting));
   lifetime.listen(document, "keydown", (e) => {
     const overlayOpen = focusTrapOwnsKeyboard();
-    // CodeMirror gestisce il keydown sul suo DOM prima che raggiunga questo
+    // Una superficie locale gestisce il keydown prima che raggiunga questo
     // ascoltatore sul documento. Il suo `preventDefault` è il fatto causale:
-    // nessun id della shell o lista di accordi può sostituirlo.
-    const editorFocused = inEditor(e.target);
+    // senza il consumo, il gesto resta della shell anche dentro la superficie.
+    const editorFocused =
+      e.target instanceof Element && e.target.closest("[data-document-surface]") !== null;
     const localEditorConsumed = editorFocused && e.defaultPrevented;
     const result = advance(allCommands(), waiting, e);
     const decision = arbitrate(result, { overlayOpen, localEditorConsumed });
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
     if (decision.type === "passa") {
-      // Una trappola o un editor che ha consumato l'evento interrompono qualsiasi
-      // sequenza della shell: l'attesa non può sopravvivere al suo primo gesto.
+      // Una trappola o una superficie locale che ha consumato l'evento
+      // interrompono qualsiasi sequenza della shell: l'attesa non può
+      // sopravvivere al suo primo gesto.
       if ((overlayOpen && result.type !== "passa") || localEditorConsumed) stopWaiting();
       return;
     }
