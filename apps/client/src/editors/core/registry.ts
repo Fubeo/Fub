@@ -232,9 +232,6 @@ function isSurfaceOverride(value: unknown): value is SurfaceOverride {
 function familyProfileKey(family: string, profile: string | undefined): string {
   return `${family}${FAMILY_PROFILE_SEPARATOR}${profile ?? ""}`;
 }
-function registrationProfile(registration: SurfaceRegistration): string | undefined {
-  return registration.profile ?? registration.factory.profile;
-}
 
 // Collisioni solo sui binding esatti di formato e specie. La coppia
 // family+profile serve alla risoluzione, ma può avere più registrazioni.
@@ -519,11 +516,31 @@ export class DocumentSurfaceRegistry {
     if (!isFactory(registration.factory)) {
       throw new Error(`L'owner ${registration.owner} deve dichiarare una factory.`);
     }
+    if (registration.family !== registration.factory.family) {
+      throw new Error(
+        `Metadati incoerenti per l'owner "${registration.owner}": famiglia registrata ` +
+          `"${registration.family}" e factory "${registration.factory.family}".`,
+      );
+    }
+    if (
+      registration.profile !== undefined &&
+      registration.factory.profile !== undefined &&
+      registration.profile !== registration.factory.profile
+    ) {
+      throw new Error(
+        `Metadati incoerenti per l'owner "${registration.owner}": profilo registrato ` +
+          `"${registration.profile}" e factory "${registration.factory.profile}".`,
+      );
+    }
+
+    // Il profilo della registrazione è autorevole; quello della factory è il fallback.
+    const profile = registration.profile ?? registration.factory.profile;
+
 
     const registrationId = hasText(registration.registrationId)
       ? registration.registrationId
       : `surface-registration-${nextRegistrationId++}`;
-    const normalized: SurfaceRegistration = { ...registration, registrationId };
+    const normalized: SurfaceRegistration = { ...registration, registrationId, profile };
     const existingById = this.registrationBindings.get(registrationId);
     if (existingById !== undefined) {
       throw new Error(
@@ -561,10 +578,7 @@ export class DocumentSurfaceRegistry {
     const entry: Entry = {
       registration: normalized,
       selectionKey: `registration:${nextSelectionKey++}` as SurfaceSelectionKey,
-      familyProfileKey: familyProfileKey(
-        normalized.family,
-        registrationProfile(normalized),
-      ),
+      familyProfileKey: familyProfileKey(normalized.family, normalized.profile),
       bindings,
       instances: new Set(),
       active: true,
@@ -593,6 +607,13 @@ export class DocumentSurfaceRegistry {
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {
     const selection = this.selectSelection(request);
     const inner = selection.factory.mount(request, context);
+    if (inner.family !== selection.factory.family) {
+      inner.destroy();
+      throw new Error(
+        `La factory della famiglia "${selection.factory.family}" ha montato una superficie ` +
+          `della famiglia "${inner.family}".`,
+      );
+    }
     const surface = manageSurface(inner, selection.entry);
     if (selection.entry?.active) selection.entry.instances.add(surface);
     return surface;

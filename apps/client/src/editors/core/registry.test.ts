@@ -455,7 +455,7 @@ describe("DocumentSurfaceRegistry", () => {
       family: "text",
       profile: "markdown",
       formatKey: "shared-format",
-      factory: surfaceFixture("a").factory,
+      factory: surfaceFixture("a", "text", "markdown").factory,
     });
 
     expect(() =>
@@ -464,15 +464,85 @@ describe("DocumentSurfaceRegistry", () => {
         family: "text",
         profile: "plain-text",
         formatKey: "shared-format",
-        factory: surfaceFixture("b").factory,
+        factory: surfaceFixture("b", "text", "plain-text").factory,
       }),
     ).toThrow(/owner-a.*owner-b/);
   });
 
+  it("rifiuta famiglie incoerenti senza lasciare binding parziali", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const incompatible = surfaceFixture("incompatible", "grid", "shared-profile");
+
+    expect(() =>
+      registry.register({
+        registrationId: "reused-registration",
+        owner: "incompatible-owner",
+        family: "text",
+        profile: "shared-profile",
+        formatKey: "reused-format",
+        species: "text/reused",
+        factory: incompatible.factory,
+      }),
+    ).toThrow(/incompatible-owner.*text.*grid/);
+
+    const compatible = surfaceFixture("compatible", "text", "shared-profile");
+    const dispose = registry.register({
+      registrationId: "reused-registration",
+      owner: "compatible-owner",
+      family: "text",
+      profile: "shared-profile",
+      formatKey: "reused-format",
+      species: "text/reused",
+      factory: compatible.factory,
+    });
+
+    expect(registry.select({ formatKey: "reused-format" }).key).toMatch(
+      /^registration:/,
+    );
+    expect(registry.select({ species: "text/reused" }).key).toMatch(
+      /^registration:/,
+    );
+    dispose();
+  });
+
+  it("rifiuta profili dichiarati incoerenti tra registrazione e factory", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const factory = surfaceFixture("factory-profile", "text", "factory-profile");
+
+    expect(() =>
+      registry.register({
+        owner: "profile-owner",
+        family: "text",
+        profile: "registration-profile",
+        factory: factory.factory,
+      }),
+    ).toThrow(/profile-owner.*registration-profile.*factory-profile/);
+  });
+
+  it("distrugge una superficie montata con famiglia incoerente senza possederla", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const wrongInner = surfaceFixture("wrong-inner", "grid", "mismatch");
+    const dispose = registry.register({
+      owner: "wrong-inner-owner",
+      family: "text",
+      profile: "mismatch",
+      formatKey: "wrong-inner-format",
+      factory: { ...wrongInner.factory, family: "text" },
+    });
+
+    expect(() =>
+      registry.mount({ formatKey: "wrong-inner-format" }, mountContext()),
+    ).toThrow(/text.*grid/);
+    expect(wrongInner.destroys[0].calls).toBe(1);
+
+    dispose();
+    expect(wrongInner.destroys[0].calls).toBe(1);
+  });
+
   it("disinstalla A senza rimuovere i binding di B", () => {
     const registry = new DocumentSurfaceRegistry();
-    const a = surfaceFixture("a");
-    const b = surfaceFixture("b");
+    const a = surfaceFixture("a", "text", "profile-a");
+    const b = surfaceFixture("b", "text", "profile-b");
     const disposeA = registry.register({
       owner: "owner-a",
       family: "text",
@@ -497,8 +567,8 @@ describe("DocumentSurfaceRegistry", () => {
 
   it("unregister rimuove i binding e distrugge tutte le istanze possedute", () => {
     const registry = new DocumentSurfaceRegistry();
-    const a = surfaceFixture("a");
-    const b = surfaceFixture("b");
+    const a = surfaceFixture("a", "text", "profile-a");
+    const b = surfaceFixture("b", "text", "profile-b");
     const disposeA = registry.register({
       owner: "owner-a",
       family: "text",
@@ -711,13 +781,13 @@ describe("DocumentSurfaceRegistry", () => {
 
   it("risolve ogni override nella propria namespace e invalida le registrazioni rimosse", () => {
     const registry = new DocumentSurfaceRegistry();
-    const fallback = surfaceFixture("fallback");
+    const fallback = surfaceFixture("fallback", "text", "profile-fallback");
     const registeredB: SurfaceRegistration = {
       owner: "owner-b",
       family: "text",
       profile: "profile-b",
       formatKey: "format-b",
-      factory: surfaceFixture("b").factory,
+      factory: surfaceFixture("b", "text", "profile-b").factory,
     };
     const disposeFallback = registry.register({
       owner: "fallback-owner",
@@ -863,7 +933,7 @@ describe("DocumentSurfaceRegistry", () => {
   describe("lifecycle", () => {
     it("rimuove l'istanza dal registry prima di distruggere l'inner", () => {
       const registry = new DocumentSurfaceRegistry();
-      const a = surfaceFixture("a");
+      const a = surfaceFixture("a", "text", "profile-a");
       const dispose = registry.register({
         owner: "owner-a",
         family: "text",
@@ -883,7 +953,7 @@ describe("DocumentSurfaceRegistry", () => {
 
     it("non ridistrugge cento superfici già distrutte", () => {
       const registry = new DocumentSurfaceRegistry();
-      const a = surfaceFixture("a");
+      const a = surfaceFixture("a", "text", "profile-a");
       const dispose = registry.register({
         owner: "owner-a",
         family: "text",
@@ -906,7 +976,7 @@ describe("DocumentSurfaceRegistry", () => {
 
     it("unregister distrugge B ma non ridistrugge A già distrutta", () => {
       const registry = new DocumentSurfaceRegistry();
-      const a = surfaceFixture("a");
+      const a = surfaceFixture("a", "text", "profile-a");
       const dispose = registry.register({
         owner: "owner-a",
         family: "text",
@@ -1004,7 +1074,7 @@ describe("DocumentSurfaceRegistry", () => {
 
     it("rende il disposer idempotente senza doppio destroy", () => {
       const registry = new DocumentSurfaceRegistry();
-      const a = surfaceFixture("a");
+      const a = surfaceFixture("a", "text", "profile-a");
       const dispose = registry.register({
         owner: "owner-a",
         family: "text",
@@ -1021,7 +1091,7 @@ describe("DocumentSurfaceRegistry", () => {
 
     it("permette a un nuovo owner di riusare il binding senza stato fantasma", () => {
       const registry = new DocumentSurfaceRegistry();
-      const a = surfaceFixture("a");
+      const a = surfaceFixture("a", "text", "profile-a");
       const disposeA = registry.register({
         owner: "owner-a",
         family: "text",
@@ -1033,7 +1103,7 @@ describe("DocumentSurfaceRegistry", () => {
       disposeA();
       expect(a.destroys[0].calls).toBe(1);
 
-      const b = surfaceFixture("b");
+      const b = surfaceFixture("b", "text", "profile-b");
       const disposeB = registry.register({
         owner: "owner-b",
         family: "text",
@@ -1050,7 +1120,7 @@ describe("DocumentSurfaceRegistry", () => {
 
     it("inoltra i metodi extra della superficie inner", () => {
       const registry = new DocumentSurfaceRegistry();
-      const a = surfaceFixture("a");
+      const a = surfaceFixture("a", "text", "profile-a");
       const dispose = registry.register({
         owner: "owner-a",
         family: "text",
