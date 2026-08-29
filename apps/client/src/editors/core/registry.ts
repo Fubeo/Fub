@@ -66,18 +66,33 @@ export interface SurfaceRequest {
   readonly profile?: string;
   readonly version?: number;
   readonly override?: SurfaceOverride;
-  readonly userOverride?: SurfaceOverride;
 }
 
-export type SurfaceOverride = SurfaceOverrideReference | string;
-
-export interface SurfaceOverrideReference {
-  readonly registrationId?: string;
-  readonly owner?: string;
-  readonly formatKey?: string;
-  readonly family?: string;
-  readonly profile?: string;
-}
+export type SurfaceOverride =
+  | {
+      readonly kind: "registration";
+      readonly registrationId: string;
+      readonly owner?: never;
+      readonly formatKey?: never;
+      readonly family?: never;
+      readonly profile?: never;
+    }
+  | {
+      readonly kind: "format";
+      readonly owner: string;
+      readonly formatKey: string;
+      readonly registrationId?: never;
+      readonly family?: never;
+      readonly profile?: never;
+    }
+  | {
+      readonly kind: "profile";
+      readonly owner: string;
+      readonly family: string;
+      readonly profile: string;
+      readonly registrationId?: never;
+      readonly formatKey?: never;
+    };
 
 export interface SurfaceFactory {
   readonly family: string;
@@ -166,8 +181,52 @@ function errorSelection(reason: string): Selection {
   };
 }
 
-function hasText(value: string | undefined): value is string {
-  return value !== undefined && value.length > 0;
+function hasText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function hasOnlyOverrideFields(
+  value: Record<string, unknown>,
+  fields: readonly string[],
+): boolean {
+  const ownFields = Object.getOwnPropertyNames(value);
+  return (
+    Object.getOwnPropertySymbols(value).length === 0 &&
+    ownFields.length === fields.length &&
+    fields.every((field) =>
+      Object.prototype.hasOwnProperty.call(value, field),
+    ) &&
+    ownFields.every((field) => fields.includes(field))
+  );
+}
+
+function isSurfaceOverride(value: unknown): value is SurfaceOverride {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const candidate = value as Record<string, unknown>;
+  switch (candidate.kind) {
+    case "registration":
+      return (
+        hasOnlyOverrideFields(candidate, ["kind", "registrationId"]) &&
+        hasText(candidate.registrationId)
+      );
+    case "format":
+      return (
+        hasOnlyOverrideFields(candidate, ["kind", "owner", "formatKey"]) &&
+        hasText(candidate.owner) &&
+        hasText(candidate.formatKey)
+      );
+    case "profile":
+      return (
+        hasOnlyOverrideFields(candidate, ["kind", "owner", "family", "profile"]) &&
+        hasText(candidate.owner) &&
+        hasText(candidate.family) &&
+        hasText(candidate.profile)
+      );
+    default:
+      return false;
+  }
 }
 
 function familyProfileKey(family: string, profile: string | undefined): string {
@@ -540,7 +599,7 @@ export class DocumentSurfaceRegistry {
   }
 
   private selectSelection(request: SurfaceRequest): Selection {
-    const override = request.override ?? request.userOverride;
+    const override = request.override;
     if (override !== undefined) {
       const selected = this.selectionForOverride(override);
       if (selected === undefined) {
@@ -617,86 +676,54 @@ export class DocumentSurfaceRegistry {
     );
   }
 
-  private selectionForOverride(override: SurfaceOverride): Selection | undefined {
-    if (typeof override === "string") {
-      const byRegistrationId = this.registrationBindings.get(override);
-      if (byRegistrationId !== undefined) {
+  private selectionForOverride(override: unknown): Selection | undefined {
+    if (!isSurfaceOverride(override)) return undefined;
+
+    switch (override.kind) {
+      case "registration": {
+        const entry = this.registrationBindings.get(override.registrationId);
+        if (entry === undefined) return undefined;
         return {
-          key: byRegistrationId.selectionKey,
-          factory: byRegistrationId.registration.factory,
-          entry: byRegistrationId,
+          key: entry.selectionKey,
+          factory: entry.registration.factory,
+          entry,
         };
       }
-      const byFormatKey = this.formatBindings.get(override);
-      if (byFormatKey !== undefined) {
+      case "format": {
+        const entry = this.formatBindings.get(override.formatKey);
+        if (entry === undefined || entry.registration.owner !== override.owner) {
+          return undefined;
+        }
         return {
-          key: byFormatKey.selectionKey,
-          factory: byFormatKey.registration.factory,
-          entry: byFormatKey,
+          key: entry.selectionKey,
+          factory: entry.registration.factory,
+          entry,
         };
       }
-      return undefined;
-    }
-    if (typeof override !== "object" || override === null) return undefined;
-    if (isFactory(override) || "factory" in override) return undefined;
-    return this.selectionForReference(override);
-  }
-
-  private selectionForReference(reference: SurfaceOverrideReference): Selection | undefined {
-    if (hasText(reference.registrationId)) {
-      const entry = this.registrationBindings.get(reference.registrationId);
-      if (entry === undefined) return undefined;
-      return {
-        key: entry.selectionKey,
-        factory: entry.registration.factory,
-        entry,
-      };
-    }
-
-    if (hasText(reference.formatKey)) {
-      const entry = this.formatBindings.get(reference.formatKey);
-      if (entry === undefined) return undefined;
-      if (hasText(reference.owner) && entry.registration.owner !== reference.owner) {
-        return undefined;
+      case "profile": {
+        const entries =
+          this.familyProfileBindings.get(
+            familyProfileKey(override.family, override.profile),
+          ) ?? [];
+        let matching: Entry | undefined;
+        for (const entry of entries) {
+          if (entry.registration.owner !== override.owner) continue;
+          if (matching !== undefined) {
+            return errorSelection(
+              `override utente ambiguo per family=${override.family}, ` +
+                `profile=${override.profile}: owner coinvolto "${override.owner}"`,
+            );
+          }
+          matching = entry;
+        }
+        if (matching === undefined) return undefined;
+        return {
+          key: matching.selectionKey,
+          factory: matching.registration.factory,
+          entry: matching,
+        };
       }
-      return {
-        key: entry.selectionKey,
-        factory: entry.registration.factory,
-        entry,
-      };
     }
-
-    if (
-      hasText(reference.owner) &&
-      hasText(reference.family) &&
-      reference.profile !== undefined
-    ) {
-      const entries =
-        this.familyProfileBindings.get(
-          familyProfileKey(reference.family, reference.profile),
-        ) ?? [];
-      const matching = entries.filter(
-        (entry) => entry.registration.owner === reference.owner,
-      );
-      if (matching.length === 0) return undefined;
-      if (matching.length > 1) {
-        const owners = [...new Set(matching.map((entry) => entry.registration.owner))];
-        return errorSelection(
-          `override utente ambiguo per family=${reference.family}, ` +
-            `profile=${reference.profile}: owner coinvolti ${owners
-              .map((owner) => `"${owner}"`)
-              .join(" e ")}`,
-        );
-      }
-      const entry = matching[0];
-      return {
-        key: entry.selectionKey,
-        factory: entry.registration.factory,
-        entry,
-      };
-    }
-
-    return undefined;
   }
 
   private selectionForEntry(entry: Entry, request: SurfaceRequest): Selection {

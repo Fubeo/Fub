@@ -384,10 +384,16 @@ describe("DocumentSurfaceRegistry", () => {
     const exactA = registry.select({ formatKey: "format-a" });
     const exactB = registry.select({ formatKey: "format-b" });
     const overrideA = registry.select({
-      override: { registrationId: registrationA.registrationId as string },
+      override: {
+        kind: "registration",
+        registrationId: registrationA.registrationId as string,
+      },
     });
     const overrideB = registry.select({
-      override: { registrationId: registrationB.registrationId as string },
+      override: {
+        kind: "registration",
+        registrationId: registrationB.registrationId as string,
+      },
     });
 
     expect(overrideA.key).toBe(exactA.key);
@@ -660,6 +666,7 @@ describe("DocumentSurfaceRegistry", () => {
       factory: override.factory,
     });
     const overrideReference = {
+      kind: "format" as const,
       owner: "override-owner",
       formatKey: "override-format",
     };
@@ -702,7 +709,7 @@ describe("DocumentSurfaceRegistry", () => {
     expect(registry.select({ family: "family-futura" }).key).toMatch(/^builtin:error:/);
   });
 
-  it("lega l'override alla registrazione e segnala quando viene disinstallata", () => {
+  it("risolve ogni override nella propria namespace e invalida le registrazioni rimosse", () => {
     const registry = new DocumentSurfaceRegistry();
     const fallback = surfaceFixture("fallback");
     const registeredB: SurfaceRegistration = {
@@ -724,29 +731,42 @@ describe("DocumentSurfaceRegistry", () => {
     const registrationId = registeredB.registrationId as string;
     const request = {
       formatKey: "format-fallback",
-      override: { registrationId },
+      override: { kind: "registration" as const, registrationId },
     };
 
+    const fallbackSelection = registry.select({ formatKey: "format-fallback" });
     const registeredSelection = registry.select({ formatKey: "format-b" });
     expect(registeredSelection.key).toMatch(/^registration:/);
     expect(registry.select(request).key).toBe(registeredSelection.key);
-    expect(registry.select({ override: registrationId }).key).toBe(registeredSelection.key);
-    expect(registry.select({ override: "format-b" }).key).toBe(registeredSelection.key);
     expect(
       registry.select({
-        override: { owner: "owner-b", formatKey: "format-b" },
+        override: {
+          kind: "format",
+          owner: "owner-b",
+          formatKey: "format-b",
+        },
       }).key,
     ).toBe(registeredSelection.key);
     expect(
       registry.select({
-        override: { owner: "owner-b", family: "text", profile: "profile-b" },
+        override: {
+          kind: "profile",
+          owner: "owner-b",
+          family: "text",
+          profile: "profile-b",
+        },
       }).key,
     ).toBe(registeredSelection.key);
-    expect(
-      registry.select({
-        override: { owner: "owner-incorrect", formatKey: "format-b" },
-      }).key,
-    ).toMatch(/^builtin:error:/);
+    const mismatchedOwner = registry.select({
+      formatKey: "format-fallback",
+      override: {
+        kind: "format",
+        owner: "owner-incorrect",
+        formatKey: "format-b",
+      },
+    });
+    expect(mismatchedOwner.key).toMatch(/^builtin:error:/);
+    expect(mismatchedOwner.key).not.toBe(fallbackSelection.key);
 
     disposeB();
     expect(registry.select(request).key).not.toBe(registeredSelection.key);
@@ -759,23 +779,56 @@ describe("DocumentSurfaceRegistry", () => {
     disposeFallback();
   });
 
-  it("non monta una factory nuda passata come override", () => {
+  it("rifiuta override malformati senza tentare i binding della richiesta", () => {
     const registry = new DocumentSurfaceRegistry();
+    const bound = surfaceFixture("bound");
     const naked = surfaceFixture("naked");
-    const overrides: readonly SurfaceOverride[] = [
-      naked.factory as unknown as SurfaceOverride,
-      { factory: naked.factory } as unknown as SurfaceOverride,
+    registry.register({
+      owner: "bound-owner",
+      family: "text",
+      profile: "bound",
+      formatKey: "format-key",
+      factory: bound.factory,
+    });
+    const bindingSelection = registry.select({ formatKey: "format-key" });
+    const conflictingRegistrationOverride = {
+      kind: "registration" as const,
+      registrationId: "registration-id",
+      owner: "bound-owner",
+      formatKey: "format-key",
+    };
+    // @ts-expect-error A registration override cannot carry format intent.
+    void (conflictingRegistrationOverride satisfies SurfaceOverride);
+
+    const overrides: readonly unknown[] = [
+      naked.factory,
+      { factory: naked.factory },
+      "format-key",
+      { registrationId: "registration-id" },
+      conflictingRegistrationOverride,
+      {
+        kind: "format",
+        owner: "bound-owner",
+        formatKey: "format-key",
+        registrationId: "registration-id",
+      },
+      { kind: "registration", registrationId: "" },
+      { kind: "format", owner: "bound-owner" },
+      { kind: "unknown", registrationId: "registration-id" },
     ];
 
     for (const override of overrides) {
       const request = {
         family: "text",
         formatKey: "format-key",
-        override,
+        override: override as SurfaceOverride,
       };
-      expect(registry.select(request).key).toMatch(/^builtin:error:/);
+      const selection = registry.select(request);
+      expect(selection.key).toMatch(/^builtin:error:/);
+      expect(selection.key).not.toBe(bindingSelection.key);
       const context = mountContext();
       const surface = registry.mount(request, context);
+      expect(bound.mounts).toHaveLength(0);
       expect(naked.mounts).toHaveLength(0);
       expect(context.parent.textContent).toContain("override utente non registrato");
       surface.destroy();

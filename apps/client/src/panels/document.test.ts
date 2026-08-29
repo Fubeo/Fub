@@ -885,7 +885,10 @@ describe("identità della selezione nel percorso reale del pannello", () => {
     request = {
       family: "text",
       profile: "markdown",
-      override: { registrationId: registrationA.registrationId as string },
+      override: {
+        kind: "registration",
+        registrationId: registrationA.registrationId as string,
+      },
     };
 
     document.body.innerHTML = '<main id="panes"></main><div id="mode-switch"></div>';
@@ -903,7 +906,10 @@ describe("identità della selezione nel percorso reale del pannello", () => {
     request = {
       family: "text",
       profile: "markdown",
-      override: { registrationId: registrationB.registrationId as string },
+      override: {
+        kind: "registration",
+        registrationId: registrationB.registrationId as string,
+      },
     };
     await synchronize();
     expect(a.destroys()).toBe(1);
@@ -912,7 +918,10 @@ describe("identità della selezione nel percorso reale del pannello", () => {
     request = {
       family: "text",
       profile: "markdown",
-      override: { registrationId: registrationA.registrationId as string },
+      override: {
+        kind: "registration",
+        registrationId: registrationA.registrationId as string,
+      },
     };
     await synchronize();
     expect(b.destroys()).toBe(1);
