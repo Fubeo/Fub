@@ -304,6 +304,13 @@ superfici. Il pannello possiede il collegamento delle superfici e applica questi
 dati all'editor; non possiede la validazione, il buffer o il fan-out delle
 modifiche.
 
+Ogni diffusione è isolata per destinatario: la sessione tenta tutti gli
+ascoltatori e tutte le superfici indipendentemente, anche se un destinatario
+lancia o un ascoltatore restituisce una promessa rifiutata. Gli errori sono
+riportati attraverso un percorso esplicito e non ricorsivo; non modificano
+l'autorità della sessione né impediscono ai destinatari sani di convergere allo
+stato accettato.
+
 Force reload e la risoluzione del conflitto `theirs` cancellano subito il timer e bloccano i salvataggi mentre l'autorità su disco è sconosciuta.
 Una lettura fallita o stantia conserva testo dirty, conflitto e bozza, senza autosalvare; soltanto una lettura riuscita aggiorna testo, base, dirty e bozza,
 diffonde il testo intero e poi elimina la bozza precedente, il cui fallimento è osservabile come evento `draft-discard-failed` con id del documento ed errore.
