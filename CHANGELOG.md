@@ -18,6 +18,9 @@ ciò che formerà la prima versione.
 - editor CodeMirror, live preview e modalità di lettura;
 - motore testuale condiviso con profili Markdown, plain text e formula;
 - la shell sceglie Markdown o testo piano tramite un registro interno delle superfici;
+- il registro delle superfici applica ownership esplicita a `destroy()`, riusa
+  per chiave di selezione e inferisce temporaneamente il formato da path ed
+  estensione;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;

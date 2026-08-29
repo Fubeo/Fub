@@ -142,38 +142,88 @@ una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 Ogni `Pane` possiede invece la superficie restituita dal
 `DocumentSurfaceRegistry`. `renderPane()` costruisce soltanto il **chrome** del
 riquadro: contenitori, tab, preview e view. Quando il riquadro mostra un
-documento, `panels/document.ts` ricava la richiesta dal path e delega a
-`surfaceRegistry.mount`; non costruisce factory in loco.
+documento, `panels/document.ts` ricava la richiesta da
+`surfaceRequestForDocument(id)` e delega a `surfaceRegistry.mount`; non
+costruisce factory in loco.
 
 Il registro è posseduto dalla shell (`apps/client/src`), non da `fub-abi`.
 `bootstrapSurfaceRegistry()` in `apps/client/src/editors/bootstrap.ts` crea il
-registro e registra le factory della shell. `desktop-shell.ts` lo chiama prima
-di `mountDocument()` e inietta il registro in `DocumentDeps`. `createEditor()`
-in `apps/client/src/editor/editor.ts` resta un adapter di compatibilità.
-Il pannello monta sempre la superficie scelta dal registro.
+registro e registra le factory della shell per Markdown e plain text. In
+generale, ogni factory appartiene all'owner della registrazione che la espone.
+`desktop-shell.ts` crea il registro prima di `mountDocument()` e lo inietta in
+`DocumentDeps`. `createEditor()` in `apps/client/src/editor/editor.ts` resta un
+adapter di compatibilità. Il pannello monta sempre la superficie scelta dal
+registro.
+
+L'API pubblica del registro espone `register`, che restituisce un disposer,
+`resolve`, `select` e `mount`. Non esiste `releaseSurface`. Un `SurfaceOverride`
+è soltanto un riferimento a una registrazione posseduta oppure la stringa del
+suo id di registrazione. Una `SurfaceFactory` nuda, compreso
+`override.factory`, viene rifiutata con una superficie di errore esplicita per
+override non registrato; non attiva un fallback silenzioso.
+
+Per la versione, factory e registrazioni espongono soltanto
+`supportedVersions?: readonly number[]`; se il campo manca, la versione
+supportata è implicitamente `[1]`. La richiesta conserva `version?: number`.
+Non esiste un campo `version` sovrapposto su factory o registrazione.
+
+Il lifecycle mantiene l'ownership esplicita. Il `destroy()` pubblico di una
+superficie montata è idempotente: prima la rimuove dall'insieme delle istanze
+vive della registrazione, poi invoca `inner.destroy()`. Il disposer restituito
+da `register()` e `unregister` sono idempotenti. `unregister` fotografa le
+istanze vive, svuota il `Set`, distrugge ogni istanza fotografata e continua
+anche se una distruzione lancia; rilancia infine il primo errore. Non cerca né
+ridistrugge istanze già distrutte.
+
+`DocumentPanel` conserva la chiave opaca restituita da `select`. Riusa una
+superficie soltanto quando `r.selectionKey === selected.key`. `family` e
+`profile` descrivono capability, non l'identità di riuso: due registrazioni con
+la stessa coppia restano distinguibili perché hanno chiavi di selezione diverse.
 
 La risoluzione segue quest'ordine:
 
 1. override esplicito dell'utente;
 2. binding esatto `formatKey`;
-3. binding per specie della sorgente e, quando dichiarato, per coppia
-   famiglia-profilo;
-4. fallback testuale per una richiesta testuale;
-5. viewer read-only per una sorgente a byte;
+3. binding per `species`;
+4. fallback testuale;
+5. viewer in sola lettura per una sorgente a byte;
 6. superficie di errore esplicita per famiglia, profilo o versione non
    supportati.
 
-La chiave interna deriva dal path, dall'estensione e dalle estensioni gestite
-da `VaultInfo.extensions` (riflesse in `state.handledExtensions`), senza
-aggiungere `format_id` all'IPC. Una collisione nomina entrambi gli owner e non
-applica mai silenziosamente la regola “vince l'ultimo”. Il disposer di
-`unregister` rimuove i binding e distrugge tutte le istanze possedute, secondo
-le regole di ownership e teardown di [0191](../decisions/0191-ui-dichiarativa-e-renderer.md)
-e [0193](../decisions/0193-ownership-lifecycle-e-teardown.md).
+Per una richiesta che dichiara entrambe `family` e `profile`, il registro
+considera anche le registrazioni della coppia prima di applicare i fallback.
+La coppia `family`-`profile` non è un binding singleton esclusivo. Le collisioni
+su `formatKey` o sul nome di `species` coinvolgono entrambi gli owner e
+impediscono la registrazione: non vale mai “vince l'ultimo”. Se più
+registrazioni corrispondono alla stessa coppia `family`-`profile`, la selezione
+mostra un errore visibile che nomina entrambi gli owner.
 
 La superficie scelta dal registro condivide la sessione del documento ma
 conserva il proprio stato visuale, come stabilito da
 [0190](../decisions/0190-sessioni-documento-e-undo.md).
+
+I fallback incorporati sono superfici DOM, non editor testuali. Il fallback ha
+`family: "text"` e `profile: "fallback"` e non implementa
+`TextEditorSurface`; il viewer ha `family: "viewer"`; gli errori hanno
+`family: "error"`. `DomSurface` crea un elemento con `role="region"`, aggiorna
+`aria-readonly` e `dataset.surfaceTheme`, e rende `destroy()` idempotente.
+
+L'identità del formato è un'inferenza temporanea dal path e dall'estensione in
+`surfaceRequestForDocument(id)`. La funzione non riceve `handledExtensions`.
+Le allowlist sono:
+
+- Markdown: estensioni `md` e `markdown`, oppure id `text/markdown`;
+- testo piano: estensioni `plain`, `text` e `txt`, oppure id `text/plain`;
+- byte: estensioni `bin`, `blob`, `bytes`, `dat`, `opaque` e `binary` (anche
+  gli id `bytes` e `binary`).
+
+Ogni altro id produce `family: "text"` e `profile: "unknown"` e quindi il
+fallback testuale. Un'estensione gestita da un provider, come `note` o
+`fubsheet`, non viene classificata automaticamente come Markdown. Le
+`handledExtensions` e `VaultInfo.extensions` restano esclusivamente dati per
+esploratore e note di cartella: non sono l'identità del formato. Nessun
+`format_id` attraversa IPC; `FormatDescriptor.id` esiste in Rust ma non fa
+parte di `VaultInfo`.
 
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
@@ -265,11 +315,25 @@ dominio:
 | `PlainTextProfile` | `createPlainTextProfile()` monta estensioni vuote, senza sintassi o comandi di dominio. |
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
-`bootstrapSurfaceRegistry()` registra le factory possedute dalla shell. Per le
-estensioni in `state.handledExtensions` il registro sceglie `MarkdownProfile`;
-per `txt` e `text/plain` sceglie `PlainTextProfile`, entrambi sullo stesso
-`TextEngine`. La richiesta interna non introduce un canale IPC specifico per
-il formato.
+`TextEditorSurface` espone il contratto generico del testo: `setDoc`,
+`syncDoc`, `selections` e `revealByteOffset`, oltre alle operazioni comuni
+della superficie. Non conosce Markdown. `MarkdownEditorSurface`, con
+`profile: "markdown"`, aggiunge `setSyntaxForms` e `setLivePreview`.
+`PlainTextSurface`, con `profile: "plain-text"`, non implementa API Markdown
+vuote o fittizie.
+
+`bootstrapSurfaceRegistry()` registra le factory possedute dalla shell per
+Markdown e plain text. `handledExtensions` non decide il profilo della
+superficie: l'inferenza temporanea e le sue allowlist sono descritte sopra.
+Il plain text è un client architetturale della shell, non una funzionalità del
+vault per gli utenti; nel fake host soltanto `.md` è trattato come documento.
+
+`PaneMode` e `live_preview` restano proprietà del riquadro. Il pannello invoca
+`setLivePreview` soltanto su superfici Markdown; il registro non introduce un
+registro delle modalità.
+
+Un riquadro o una finestra vuoti contengono soltanto il chrome, senza una
+`EditorView` Markdown fittizia.
 
 `FormulaProfile` resta una superficie usata soltanto dai test e dalle fixture:
 non è una superficie esposta all'utente. Sono assenti la griglia (`GridEngine`),

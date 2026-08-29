@@ -118,24 +118,62 @@ tracciato nell'issue [#10](https://github.com/Fubeo/Fub/issues/10).
 
 `TextEngine` è il motore testuale della shell e
 `DocumentSurfaceRegistry` è il registro interno che sceglie la superficie per
-ogni documento. Le note del vault con un'estensione in
-`state.handledExtensions` restano Markdown: il registro monta `TextEngine` con
-`MarkdownProfile`. Un documento `txt` o `text/plain` usa `PlainTextProfile`
-sullo stesso motore.
+ogni documento. Il registro appartiene alla shell (`apps/client/src`), mentre
+ogni factory appartiene all'owner della registrazione che la espone; la shell
+registra le factory Markdown e plain text.
 
-Il registro appartiene alla shell e applica l'ordine di risoluzione descritto
-nell'architettura: override, binding, fallback testuale, viewer per byte o
-superficie di errore. Le collisioni sono esplicite e nominano gli owner.
+L'API pubblica del registro è `register` (con disposer), `resolve`, `select` e
+`mount`. Non esiste `releaseSurface`. Un override è una registrazione posseduta
+o il suo id stringa, non una `SurfaceFactory` nuda: `override.factory` e ogni
+override non registrato producono una superficie di errore esplicita, senza
+fallback silenzioso.
 
-`FormulaProfile` resta usato soltanto dai test e dalle fixture: non è una
-superficie utente. `createEditor()` non è un percorso utente; l'adapter di
-compatibilità resta nel modulo tecnico, mentre il pannello monta la superficie
-scelta dal registro.
+Il `destroy()` pubblico di una superficie montata è idempotente: rimuove prima
+la superficie dall'insieme delle istanze vive del registro e poi invoca il
+`destroy()` interno. Il disposer della registrazione è idempotente; `unregister`
+fotografa le istanze vive, svuota l'insieme, le distrugge tutte e continua dopo
+un errore, senza cercare istanze già distrutte.
 
-Un riquadro vuoto contiene il solo chrome e non conserva un editor Markdown
-finto. La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e
-lifecycle; il pannello collega le superfici e aggiorna la resa. Nessun profilo
-invia una chiamata IPC o WASM per ogni battuta.
+Il pannello riusa la superficie soltanto quando coincide la chiave opaca di
+selezione (`r.selectionKey === selected.key`). `family` e `profile` non sono
+l'identità di riuso: più registrazioni con la stessa coppia restano
+distinguibili. La risoluzione passa da override, `formatKey` esatto, `species`,
+fallback testuale, viewer a byte e superficie di errore. Le collisioni sui
+binding esatti nominano entrambi gli owner e non applicano “vince l'ultimo”; più
+corrispondenze `family`-`profile` mostrano un errore visibile con entrambi gli
+owner.
+
+Il fallback testuale è una superficie DOM con `family: "text"` e
+`profile: "fallback"`, non un `TextEditorSurface`. Il viewer ha famiglia
+`viewer`; gli errori hanno famiglia `error`. `DomSurface` espone
+`role="region"`, aggiorna `aria-readonly` e `dataset.surfaceTheme`, e ha un
+`destroy()` idempotente.
+
+`TextEditorSurface` è generico e offre `setDoc`, `syncDoc`, `selections` e
+`revealByteOffset`; non conosce Markdown. `MarkdownEditorSurface` con profilo
+`markdown` aggiunge `setSyntaxForms` e `setLivePreview`. `PlainTextSurface` con
+profilo `plain-text` non espone API Markdown vuote. Plain text è un client
+architetturale della shell, non una funzionalità del vault: questa distinzione
+non descrive un percorso in cui l'utente apre file `.txt` dal vault. Il fake
+host tratta come documento soltanto `.md`.
+
+L'identità del formato resta temporanea: `surfaceRequestForDocument(id)`
+inferisce path ed estensione senza ricevere `handledExtensions`. Markdown usa
+`md` e `markdown` o l'id `text/markdown`; testo piano usa `plain`, `text` e
+`txt` o l'id `text/plain`; byte usa `bin`, `blob`, `bytes`, `dat`, `opaque` e
+`binary`. Ogni altro id produce `family: "text"` e `profile: "unknown"` e
+raggiunge il fallback testuale. Un'estensione gestita da un provider, come
+`note` o `fubsheet`, non diventa automaticamente Markdown. `handledExtensions`
+e `VaultInfo.extensions` restano dati per esploratore e note di cartella, non
+identità del formato; non esiste un `format_id` IPC e `FormatDescriptor.id` in
+Rust non è un campo di `VaultInfo`.
+
+`PaneMode` e `live_preview` restano proprietà del riquadro. Il pannello invoca
+`setLivePreview` soltanto sulle superfici Markdown. Un riquadro o una finestra
+vuoti contengono il solo chrome, senza un `EditorView` Markdown finto. La
+`DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle; il
+pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
+chiamata IPC o WASM per ogni battuta.
 
 La griglia e il foglio sono assenti dal percorso utente.
 
