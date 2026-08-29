@@ -9,6 +9,7 @@ import {
   type SurfaceFactory,
   type SurfaceOverride,
   type SurfaceRegistration,
+  type SurfaceViewState,
 } from "./registry";
 
 type DestroySpy = {
@@ -82,6 +83,92 @@ function surfaceFixture(
         },
         destroy: destroy.destroy,
       };
+      mounts.push(surface);
+      destroys.push(destroy);
+      return surface;
+    },
+  };
+  return { factory, mounts, destroys };
+}
+
+type PrivateSurface = EditorSurface & {
+  label: string;
+  describe(value: string): string;
+};
+
+class PrivateSurfaceImpl implements EditorSurface {
+  readonly family: string;
+  readonly surfaceId: string;
+  #label: string;
+  #destroySpy: DestroySpy;
+
+  constructor(family: string, surfaceId: string, label: string, destroySpy: DestroySpy) {
+    this.family = family;
+    this.surfaceId = surfaceId;
+    this.#label = label;
+    this.#destroySpy = destroySpy;
+  }
+
+  #format(value: string): string {
+    return `${this.#label}:${value}`;
+  }
+
+  get label(): string {
+    return this.#label;
+  }
+
+  set label(value: string) {
+    this.#label = value;
+  }
+
+  focus(): void {}
+  setReadOnly(_readOnly: boolean): void {}
+  setTheme(_theme: unknown): void {}
+
+  captureViewState(): SurfaceViewState {
+    return { version: 1, value: null };
+  }
+
+  restoreViewState(_state: SurfaceViewState): void {}
+  suspend(): void {}
+  resume(): void {}
+
+  describe(value: string): string {
+    return this.#format(value);
+  }
+
+  destroy(): void {
+    this.#destroySpy.destroy();
+  }
+}
+
+type PrivateSurfaceFixture = {
+  factory: SurfaceFactory;
+  mounts: PrivateSurfaceImpl[];
+  destroys: DestroySpy[];
+};
+
+function privateSurfaceFixture(label: string): PrivateSurfaceFixture {
+  const mounts: PrivateSurfaceImpl[] = [];
+  const destroys: DestroySpy[] = [];
+  const factory: SurfaceFactory = {
+    family: "text",
+    profile: label,
+    supportedVersions: [1],
+    mount() {
+      const mountIndex = mounts.length;
+      const destroy: DestroySpy = {
+        calls: 0,
+        destroy() {
+          destroy.calls += 1;
+        },
+      };
+      const surface = new PrivateSurfaceImpl(
+        "text",
+        `${label}-${mountIndex + 1}`,
+        label,
+        destroy,
+      );
       mounts.push(surface);
       destroys.push(destroy);
       return surface;
@@ -869,6 +956,42 @@ describe("DocumentSurfaceRegistry", () => {
 
       surface.destroy();
       dispose();
+    });
+
+    it("preserva getter, setter, metodi e stato privato delle superfici class", () => {
+      const registry = new DocumentSurfaceRegistry();
+      const privateSurface = privateSurfaceFixture("private");
+      const dispose = registry.register({
+        owner: "private-owner",
+        family: "text",
+        profile: "private",
+        formatKey: "private-format",
+        factory: privateSurface.factory,
+      });
+      const mounted = registry.mount(
+        { formatKey: "private-format" },
+        mountContext(),
+      ) as PrivateSurface;
+      const inner = privateSurface.mounts[0];
+
+      expect(mounted).not.toBe(inner);
+      expect(mounted.label).toBe("private");
+      expect(mounted.describe("value")).toBe("private:value");
+      expect(mounted.describe).toBe(mounted.describe);
+
+      mounted.label = "updated";
+      expect(mounted.label).toBe("updated");
+      expect(inner.label).toBe("updated");
+      const describe = mounted.describe;
+      expect(describe("value")).toBe("updated:value");
+
+      mounted.destroy();
+      expect(privateSurface.destroys[0].calls).toBe(1);
+      mounted.destroy();
+      expect(privateSurface.destroys[0].calls).toBe(1);
+
+      dispose();
+      expect(privateSurface.destroys[0].calls).toBe(1);
     });
   });
 });

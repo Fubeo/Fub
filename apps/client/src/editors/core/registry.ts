@@ -412,6 +412,10 @@ export const byteViewerFactory: SurfaceFactory = createDomFactory({
 function manageSurface(inner: EditorSurface, entry: Entry | undefined): EditorSurface {
   let managed: EditorSurface;
   let destroyed = false;
+  const boundMethods = new Map<
+    PropertyKey,
+    { readonly source: unknown; readonly bound: unknown }
+  >();
 
   const destroy = (): void => {
     if (destroyed) return;
@@ -421,9 +425,18 @@ function manageSurface(inner: EditorSurface, entry: Entry | undefined): EditorSu
   };
 
   managed = new Proxy(inner, {
-    get(target, property, receiver) {
+    get(target, property) {
       if (property === "destroy") return destroy;
-      return Reflect.get(target, property, receiver);
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== "function") return value;
+      const cached = boundMethods.get(property);
+      if (cached !== undefined && cached.source === value) return cached.bound;
+      const bound = value.bind(target);
+      boundMethods.set(property, { source: value, bound });
+      return bound;
+    },
+    set(target, property, value) {
+      return Reflect.set(target, property, value, target);
     },
   });
   return managed;
