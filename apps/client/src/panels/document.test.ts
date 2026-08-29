@@ -431,6 +431,15 @@ describe("il pannello monta le superfici dal registro", () => {
     expect(source).not.toContain("createMarkdownSurfaceFactory(");
   });
 
+  it("passa al registro soltanto dati generici della superficie testuale", () => {
+    const context = functionBody("function surfaceMountContext(");
+    expect(context).not.toContain("markdownCallbacks");
+    expect(context).not.toContain("completions");
+    expect(context).not.toContain("searchTag");
+    expect(context).not.toContain("notesByName");
+    expect(context).not.toContain("vaultTags");
+  });
+
   it("deriva la richiesta dal documento, non dalle estensioni gestite", () => {
     const text = functionBody("async function show(");
     expect(text).toContain("surfaceRequestForDocument(tab.doc)");
@@ -577,7 +586,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     panelDom();
     const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
-    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.md", layout);
     await synchronize();
     await publishContext();
@@ -666,7 +675,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     panelDom();
     const { mountDocument, setMode, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
-    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.txt", layout);
     await synchronize();
     const surface = mount.mock.results[0]?.value as PlainTextSurface;
@@ -725,7 +734,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     panelDom();
     const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
-    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    mountDocument({ surfaceRegistry: registry });
     await synchronize();
     const emptyRoot = document.querySelector<HTMLElement>(".pane");
     expect(emptyRoot).not.toBeNull();
@@ -896,7 +905,7 @@ describe("identità della selezione nel percorso reale del pannello", () => {
     // e il pannello deve essere provato sul percorso reale di show.
     const { mountDocument, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
-    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.md", layout);
 
     await synchronize();

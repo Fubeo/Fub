@@ -35,13 +35,11 @@ import type { EditorChange } from "../editors/text/engine";
 import type { Theme } from "../theme/theme";
 import { Queue } from "../ui/race";
 import { api } from "../host/ipc";
-import { WITHOUT_PAGE, notesByName, resolvedReference, vaultTags } from "../host/query";
+import { resolvedReference, syntaxForms, unsavedDrafts } from "../host/query";
 import type { PaneMode, SelectionSet, SyntaxForm, ViewContext } from "../host/contract";
 import { onEvent } from "../state/kernel";
-import { existingRecentNotes } from "../state/recent";
 import { emit, on, state } from "../state/store";
 import { CASE_KEY, caseOf, toRecover } from "../state/drafts";
-import { syntaxForms, unsavedDrafts } from "../host/query";
 import type { DraftInfo } from "../host/contract";
 import {
   documentSessions,
@@ -83,10 +81,6 @@ import { onLanguage, t } from "../i18n/strings";
 import { setTooltip } from "../ui/tooltip";
 
 export interface DocumentDeps {
-  /// Click su un `#tag` nella vivi preview. Iniettato invece che importato:
-  /// il pannello della ricerca apre i documenti, e questo li possiede — se si
-  /// importassero a vicenda sarebbe un ciclo.
-  searchTag(tag: string): void;
   /// Registro delle superfici composto dalla shell. Il pannello monta qui la
   /// superficie scelta per ogni documento, senza conoscere le factory concrete.
   surfaceRegistry: DocumentSurfaceRegistry;
@@ -539,16 +533,6 @@ function surfaceMountContext(r: Pane, doc: string): TextSurfaceMountContext {
       // Solo il riquadro col fuoco pubblica: il contesto di sessione è «cosa
       // sta guardando l'utente adesso», e con N riquadri la risposta resta una.
       if (layout.focus === r.id) scheduleContext();
-    },
-    markdownCallbacks: {
-      openWikilink: (page, heading, block) =>
-        void openWikilink(page, heading ?? undefined, block ?? undefined),
-      searchTag: (tag) => deps.searchTag(tag),
-    },
-    completions: {
-      searchNotes: (prefix: string) =>
-        (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
-      listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
     },
     theme: theme ?? undefined,
   };

@@ -14,13 +14,14 @@
 import "./theme/structure.css";
 import { pickFolder } from "./host/dialog";
 import { onClose, api } from "./host/ipc";
-import { vaultStatus, vaultEntries } from "./host/query";
+import { vaultStatus, vaultEntries, WITHOUT_PAGE, notesByName, vaultTags } from "./host/query";
 import { forwardNotice, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
 import { emit, loadActiveSpace, loadExpanded, state } from "./state/store";
 import { loadLayout, activeDoc } from "./state/layout";
 import { loadCommandSpecs, beforeNote } from "./state/vault";
+import { existingRecentNotes } from "./state/recent";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
 import { listenForFailures, mountNotifications, notify } from "./ui/notify";
@@ -147,18 +148,24 @@ async function init(): Promise<void> {
   // contenuto.
   mountTitlebar(pageWindowLifetime);
 
-  // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
-  // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
-  // il pannello del documento manda a cercare un tag e la ricerca apre i
-  // documenti; il grafo apre la nota di un nodo. In tutti i casi importarsi a
-  // vicenda sarebbe un ciclo, e in un bundle ESM un ciclo è un `undefined`
-  // all'avvio che non dice da dove viene. È la stessa forma con cui i tre
-  // moduli dell'editor ricevono il mondo.
-  const surfaceRegistry = bootstrapSurfaceRegistry();
-  mountDocument({
-    searchTag: (tag) => searchFor(`tags:${tag}`),
-    surfaceRegistry: surfaceRegistry.registry,
+  // I collegamenti fra le funzioni Markdown e i pannelli restano qui: il
+  // profilo apre note e tag, mentre anteprima e grafo aprono documenti. Importarsi
+  // a vicenda produrrebbe un ciclo ESM con un `undefined` all'avvio.
+  const surfaceRegistry = bootstrapSurfaceRegistry({
+    markdown: {
+      callbacks: {
+        openWikilink: (page, heading, block) =>
+          void openWikilink(page, heading ?? undefined, block ?? undefined),
+        searchTag: (tag) => searchFor(`tags:${tag}`),
+      },
+      completions: {
+        searchNotes: (prefix) =>
+          (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
+        listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
+      },
+    },
   });
+  mountDocument({ surfaceRegistry: surfaceRegistry.registry });
   configurePreview({ openPage: openWikilink });
 
   // Subito dopo il pannello del documento, perché è il suo testo che protegge, e

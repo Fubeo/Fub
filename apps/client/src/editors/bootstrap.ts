@@ -4,13 +4,19 @@ import {
   type SurfaceRequest,
 } from "./core/registry";
 import {
-  markdownSurfaceFactory,
+  createMarkdownSurfaceFactory,
   plainTextSurfaceFactory,
+  type MarkdownSurfaceFactoryOptions,
 } from "./text/factories";
 
 export interface SurfaceRegistryBootstrap {
   readonly registry: DocumentSurfaceRegistry;
   readonly dispose: () => void;
+}
+
+export interface SurfaceRegistryBootstrapOptions {
+  /// Servizi Markdown posseduti dalla composizione della shell, non dal mount generico.
+  readonly markdown?: Pick<MarkdownSurfaceFactoryOptions, "callbacks" | "completions">;
 }
 
 const MARKDOWN_EXTENSIONS: Record<string, true> = {
@@ -74,7 +80,10 @@ export function surfaceRequestForDocument(id: string): SurfaceRequest {
 }
 
 /** Boots shell-owned text bindings and keeps one disposer for their lifecycle. */
-export function bootstrapSurfaceRegistry(): SurfaceRegistryBootstrap {
+export function bootstrapSurfaceRegistry(
+  options: SurfaceRegistryBootstrapOptions = {},
+): SurfaceRegistryBootstrap {
+  const markdownSurfaceFactory = createMarkdownSurfaceFactory(options.markdown);
   const registry = createDocumentSurfaceRegistry();
   const disposers = [
     registry.register({

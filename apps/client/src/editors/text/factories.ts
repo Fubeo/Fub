@@ -30,8 +30,6 @@ export interface TextSurfaceMountContext extends SurfaceMountContext {
   readonly onChange?: (change: EditorChange) => void;
   readonly onSelectionChange?: () => void;
   readonly theme?: Theme;
-  readonly markdownCallbacks?: LivePreviewCallbacks;
-  readonly completions?: CompletionSources;
 }
 
 export interface TextSurfaceFactoryOptions {
@@ -324,10 +322,9 @@ export function createMarkdownSurfaceFactory(
     modes: MARKDOWN_MODES,
     defaultMode: "live_preview",
     mount(_request: SurfaceRequest, context: SurfaceMountContext): MarkdownEditorSurface {
-      const textContext = context as TextSurfaceMountContext;
       const profile = createMarkdownProfile({
-        callbacks: textContext.markdownCallbacks ?? options.callbacks ?? emptyMarkdownCallbacks,
-        completions: textContext.completions ?? options.completions ?? emptyCompletions,
+        callbacks: options.callbacks ?? emptyMarkdownCallbacks,
+        completions: options.completions ?? emptyCompletions,
       });
       const mounted = mountTextEngine(profile, context, options);
       return new MarkdownSurface(mounted.engine, mounted.theme, profile);
