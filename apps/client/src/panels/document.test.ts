@@ -119,8 +119,8 @@ describe("la sola lettura della cancellazione", () => {
   it("propaga il pending a ogni superficie, anche a una montata dopo", () => {
     expect(sessionSource).toContain("pendingDeletion: boolean");
     expect(source).toContain("setReadOnlyForDocument(event.id, event.pending)");
-    expect(source).toContain("r.editor.setReadOnly(documentSessions.isDeletionPending(tab.doc))");
-    expect(source).toContain("r.editor.setReadOnly(documentSessions.isDeletionPending(doc))");
+    expect(source).toContain("r.surface?.setReadOnly(documentSessions.isDeletionPending(tab.doc))");
+    expect(source).toContain("r.surface?.setReadOnly(documentSessions.isDeletionPending(doc))");
   });
 });
 
@@ -398,8 +398,40 @@ describe("il pannello non possiede più la validazione né la sincronia fra supe
   it("chiudere un riquadro stacca la registrazione prima di buttare l'editor", () => {
     const text = functionBody("function buildStructure(");
     const detach = text.indexOf("detachSurface(r)");
-    const destroy = text.indexOf("r.editor.destroy()");
+    const destroy = text.indexOf("destroySurface(r)");
     expect(detach).toBeGreaterThan(-1);
     expect(destroy).toBeGreaterThan(detach);
+  });
+});
+
+describe("il pannello monta le superfici dal registro", () => {
+  it("non costruisce più editor locali", () => {
+    expect(source).not.toContain("createEditor(");
+  });
+
+  it("monta qualunque factory selezionata dal registro", () => {
+    const text = functionBody("async function show(");
+    expect(text).toContain("surfaceRequestForDocument(tab.doc, state.handledExtensions)");
+    expect(text).toContain("ensureSurface(r, tab.doc, request)");
+    expect(source).toContain("deps.surfaceRegistry.mount(request");
+    expect(source).not.toContain("createMarkdownSurfaceFactory(");
+  });
+
+  it("deriva Markdown e plain dal documento e dalle estensioni gestite", () => {
+    const text = functionBody("async function show(");
+    expect(text).toContain("state.handledExtensions");
+    expect(text).not.toContain('formatKey: "md"');
+  });
+
+  it("applica il riallineamento solo alle superfici testuali", () => {
+    const text = functionBody("function written(");
+    expect(text).toContain("documentSessions.acceptSurfaceChange(");
+    expect(text).toContain("isTextSurface(source.surface)");
+    expect(text).not.toContain("tryApplyOperation(");
+  });
+
+  it("stacca una sessione prima di distruggere la superficie", () => {
+    const text = functionBody("function buildStructure(");
+    expect(text.indexOf("detachSurface(r)")).toBeLessThan(text.indexOf("destroySurface(r)"));
   });
 });

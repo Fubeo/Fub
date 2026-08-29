@@ -1,4 +1,5 @@
 import type { Theme } from "../../theme/theme";
+import type { SyntaxForm } from "../../host/contract";
 import type {
   EditorSurface,
   SurfaceFactory,
@@ -55,6 +56,10 @@ export interface TextEditorSurface extends EditorSurface {
   redo(): boolean;
   selections(): EditorSelections;
   revealByteOffset(offset: number): void;
+  /// Replaces Markdown syntax declarations and reconfigures the profile.
+  setSyntaxForms(forms: readonly SyntaxForm[]): void;
+  /// Enables or disables Markdown live preview and reconfigures the profile.
+  setLivePreview(on: boolean): void;
   reconfigure(): void;
 }
 export interface TextSurfaceFactory extends SurfaceFactory {
@@ -85,6 +90,7 @@ class TextSurface implements TextEditorSurface {
   readonly surfaceId: string;
 
   private readonly engine: TextEngine;
+  private readonly markdownProfile: MarkdownProfile | undefined;
   private readOnly = false;
   private suspended = false;
   private currentTheme: Theme | undefined;
@@ -94,10 +100,12 @@ class TextSurface implements TextEditorSurface {
     profile: "markdown" | "plain-text",
     engine: TextEngine,
     theme: Theme | undefined,
+    markdownProfile?: MarkdownProfile,
   ) {
     this.profile = profile;
     this.engine = engine;
     this.currentTheme = theme;
+    this.markdownProfile = markdownProfile;
     this.surfaceId = `text-surface-${nextTextSurfaceId++}`;
   }
 
@@ -127,6 +135,16 @@ class TextSurface implements TextEditorSurface {
 
   revealByteOffset(offset: number): void {
     this.engine.revealByteOffset(offset);
+  }
+
+  setSyntaxForms(forms: readonly SyntaxForm[]): void {
+    this.markdownProfile?.setSyntaxForms(forms);
+    if (this.markdownProfile) this.engine.reconfigure();
+  }
+
+  setLivePreview(on: boolean): void {
+    this.markdownProfile?.setLivePreview(on);
+    if (this.markdownProfile) this.engine.reconfigure();
   }
 
   reconfigure(): void {
@@ -200,6 +218,7 @@ function mountTextSurface(
   profile: MarkdownProfile | PlainTextProfile,
   context: SurfaceMountContext,
   options: TextSurfaceFactoryOptions,
+  markdownProfile?: MarkdownProfile,
 ): TextEditorSurface {
   const textContext = context as TextSurfaceMountContext;
   const engine = createTextEngine(textContext.parent, {
@@ -210,7 +229,12 @@ function mountTextSurface(
     extensions: () => profile.extensions(),
   });
   if (textContext.initialText !== undefined) engine.setDoc(textContext.initialText);
-  return new TextSurface(profileName, engine, textContext.theme ?? options.theme);
+  return new TextSurface(
+    profileName,
+    engine,
+    textContext.theme ?? options.theme,
+    markdownProfile,
+  );
 }
 
 export function createMarkdownSurfaceFactory(
@@ -226,7 +250,7 @@ export function createMarkdownSurfaceFactory(
         callbacks: textContext.markdownCallbacks ?? options.callbacks ?? emptyMarkdownCallbacks,
         completions: textContext.completions ?? options.completions ?? emptyCompletions,
       });
-      return mountTextSurface("markdown", profile, context, options);
+      return mountTextSurface("markdown", profile, context, options, profile);
     },
   };
 }

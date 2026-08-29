@@ -17,6 +17,8 @@ describe("factory testuali del registro", () => {
     const surface = markdownSurfaceFactory.mount({ formatKey: "md" }, context);
 
     expect(findTextEditor(context.parent)).not.toBeNull();
+    surface.setSyntaxForms([]);
+    surface.setLivePreview(false);
     surface.setDoc("# Titolo");
     expect(surface.currentText()).toBe("# Titolo");
 
@@ -29,6 +31,8 @@ describe("factory testuali del registro", () => {
 
     expect(findTextEditor(context.parent)).not.toBeNull();
     expect(surface).toMatchObject({ family: "text", profile: "plain-text" });
+    surface.setSyntaxForms([]);
+    surface.setLivePreview(false);
     surface.setDoc("testo senza semantica");
     expect(surface.currentText()).toBe("testo senza semantica");
 
