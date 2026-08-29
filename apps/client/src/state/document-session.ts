@@ -210,6 +210,7 @@ export class DocumentSession implements DraftBuffer {
   #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
+  #deliveryGeneration = 0;
   #authorityGeneration = 0;
   #diskAuthorityUnknown = false;
   readonly #api: DocumentSessionApi;
@@ -290,11 +291,11 @@ export class DocumentSession implements DraftBuffer {
    * helper keeps the mutation itself private while programmatic replacement
    * paths continue to use `restoreDraft`/`syncDoc` without a fake operation.
    */
-  #acceptTextChange(text: string): void {
-    if (!this.#isOpen() || this.#state.pendingDeletion) return;
+  #acceptTextChange(text: string): number {
     this.#activityGeneration++;
     this.#externalGeneration++;
     this.#draftGeneration++;
+    const deliveryGeneration = ++this.#deliveryGeneration;
     this.#state.text = text;
     this.#state.dirty = true;
     // Persistence is armed before observers are notified. Their faults are
@@ -302,6 +303,7 @@ export class DocumentSession implements DraftBuffer {
     this.scheduleSave();
     this.scheduleDraft();
     this.#emit({ kind: "changed", id: this.#id });
+    return deliveryGeneration;
   }
 
   /**
@@ -325,8 +327,12 @@ export class DocumentSession implements DraftBuffer {
     if (applied.kind !== "applied" || applied.text !== expected) {
       return { kind: "realigned", text: this.#state.text };
     }
-    this.#acceptTextChange(edit.text);
-    this.#fanOut({ kind: "operation", text: edit.text, operation: edit.operation }, surfaceId);
+    const deliveryGeneration = this.#acceptTextChange(edit.text);
+    this.#fanOut(
+      { kind: "operation", text: edit.text, operation: edit.operation },
+      deliveryGeneration,
+      surfaceId,
+    );
     return { kind: "accepted" };
   }
 
@@ -352,28 +358,38 @@ export class DocumentSession implements DraftBuffer {
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#clearDiskAuthorityBlock();
+    const deliveryGeneration = ++this.#deliveryGeneration;
     this.#state.text = text;
     this.#state.base = copyBase(base);
     this.#state.dirty = true;
     this.#state.result = "ok";
     this.#state.echoes = 0;
     this.#emit({ kind: "changed", id: this.#id });
-    this.#fanOut({ kind: "text", text });
+    this.#fanOut({ kind: "text", text }, deliveryGeneration);
   }
 
   /// Diffonde un dato autorevole alle superfici sottoscritte, esclusa
-  /// l'eventuale sorgente. Una diffusione per dato accettato: chi riceve non
-  /// ri-entra nella sessione (il motore marca il cambio come remoto).
-  #fanOut(update: DocumentSurfaceUpdate, except?: string): void {
-    for (const surface of this.#surfaces.values()) {
-      if (surface.id === except) continue;
+  /// l'eventuale sorgente. Ogni giro fotografa registrazioni e generazione:
+  /// una nuova autorità nata durante una callback rende stale il giro, mentre
+  /// una registrazione rimontata sotto lo stesso id non riceve dati destinati
+  /// all'istanza precedente.
+  #fanOut(
+    update: DocumentSurfaceUpdate,
+    deliveryGeneration: number,
+    except?: string,
+  ): void {
+    const registrations = [...this.#surfaces.entries()];
+    for (const [surfaceId, surface] of registrations) {
+      if (this.#deliveryGeneration !== deliveryGeneration) break;
+      if (surfaceId === except) continue;
+      if (this.#surfaces.get(surfaceId) !== surface) continue;
       try {
         surface.sync(update);
       } catch (error) {
         this.#hooks.reportObserverFault({
           kind: "surface",
           documentId: this.#id,
-          surfaceId: surface.id,
+          surfaceId,
           update,
           error,
         });
@@ -490,6 +506,7 @@ export class DocumentSession implements DraftBuffer {
       this.#state.dirty ||
       this.#state.result !== "ok" ||
       this.#state.echoes !== 0;
+    const deliveryGeneration = ++this.#deliveryGeneration;
     this.#state.text = text;
     this.#state.base = { kind: "descends_from", value: revision };
     this.#state.dirty = false;
@@ -499,7 +516,7 @@ export class DocumentSession implements DraftBuffer {
     this.#clearDraftTimer();
     this.#clearDiskAuthorityBlock();
     if (stateChanged) this.#emit({ kind: "changed", id: this.#id });
-    this.#fanOut({ kind: "text", text });
+    this.#fanOut({ kind: "text", text }, deliveryGeneration);
     return changed;
   }
 
@@ -541,16 +558,22 @@ export class DocumentSession implements DraftBuffer {
     if (!this.#isOpen() || this.#state.dirty) return false;
     const changed = this.#state.text !== text;
     const resultChanged = this.#state.result !== "ok";
+    let deliveryGeneration: number | undefined;
     this.#state.base = { kind: "descends_from", value: revision };
     this.#state.result = "ok";
-    if (changed) this.#state.text = text;
-    if (changed) this.#draftGeneration++;
+    if (changed) {
+      deliveryGeneration = ++this.#deliveryGeneration;
+      this.#state.text = text;
+      this.#draftGeneration++;
+    }
     this.#clearDiskAuthorityBlock();
     if (changed || resultChanged) this.#emit({ kind: "changed", id: this.#id });
     // Ricarica pulita: il testo è stato sostituito dall'autorità, e tutte le
     // superfici lo ricevono una volta, per intero, senza una sorgente da
     // escludere.
-    if (changed) this.#fanOut({ kind: "text", text });
+    if (deliveryGeneration !== undefined) {
+      this.#fanOut({ kind: "text", text }, deliveryGeneration);
+    }
     return changed;
   }
 

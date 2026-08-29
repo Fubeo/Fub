@@ -407,17 +407,31 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(order).toEqual(["read", "surface-a", "surface-b", "discard-draft"]);
   });
 
-  it("preserva la nuova bozza se una superficie rientra durante l'applicazione di theirs", async () => {
+  it("preserva autorità e nuova bozza se una superficie rientra durante theirs", async () => {
     api.readDocument = vi
       .fn()
       .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
       .mockResolvedValueOnce({ text: "autorità disco", revision: "rev-2" });
     const sessions = await conflictedSession();
+    const deliveries: { surface: string; text: string }[] = [];
+    let reentrantText = "testo locale";
+    let healthyText = "testo locale";
     sessions.attachSurface("nota.md", {
       id: "superficie-rientrante",
       sync: (update) => {
-        if (update.kind !== "text") return;
-        acceptText(sessions, "nota.md", `${update.text} + modifica`, "superficie-rientrante");
+        deliveries.push({ surface: "superficie-rientrante", text: update.text });
+        reentrantText = update.text;
+        if (update.kind !== "text" || update.text !== "autorità disco") return;
+        const newerText = `${update.text} + modifica`;
+        acceptText(sessions, "nota.md", newerText, "superficie-rientrante");
+        reentrantText = newerText;
+      },
+    });
+    sessions.attachSurface("nota.md", {
+      id: "superficie-sana",
+      sync: (update) => {
+        deliveries.push({ surface: "superficie-sana", text: update.text });
+        healthyText = update.text;
       },
     });
 
@@ -433,6 +447,11 @@ describe("decisioni del ciclo di vita della sessione", () => {
       text: "autorità disco + modifica",
       dirty: true,
     });
+    expect(reentrantText).toBe("autorità disco + modifica");
+    expect(healthyText).toBe("autorità disco + modifica");
+    expect(deliveries.filter(({ surface }) => surface === "superficie-sana")).toEqual([
+      { surface: "superficie-sana", text: "autorità disco + modifica" },
+    ]);
     await sessions.flushDraft("nota.md");
     expect(api.saveDraft).toHaveBeenLastCalledWith(
       "nota.md",
@@ -1182,6 +1201,252 @@ describe("le superfici sottoscritte alla sessione", () => {
     expect(log[0]).toMatchObject({ surface: "riquadro-b", update: { kind: "operation" } });
     // Salvataggio e bozza: i due ritardi sono della sessione, armati una volta.
     expect(nextTimer).toBe(2);
+  });
+
+  it("interrompe un fan-out operation reso stale da un peer rientrante", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("rientranza.md");
+    const initial = "rientranza.md: disco";
+    const first = "modifica U1";
+    const newer = "modifica U2";
+    const deliveries: { surface: string; text: string }[] = [];
+    const surfaceText: Record<"riquadro-a" | "riquadro-b" | "riquadro-c", string> = {
+      "riquadro-a": first,
+      "riquadro-b": initial,
+      "riquadro-c": initial,
+    };
+    sessions.attachSurface("rientranza.md", {
+      id: "riquadro-a",
+      sync: (update) => {
+        deliveries.push({ surface: "riquadro-a", text: update.text });
+        surfaceText["riquadro-a"] = update.text;
+      },
+    });
+    sessions.attachSurface("rientranza.md", {
+      id: "riquadro-b",
+      sync: (update) => {
+        deliveries.push({ surface: "riquadro-b", text: update.text });
+        surfaceText["riquadro-b"] = update.text;
+        if (update.text !== first) return;
+        expect(
+          sessions.acceptSurfaceChange(
+            "rientranza.md",
+            "riquadro-b",
+            editFor(first, newer),
+          ),
+        ).toEqual({ kind: "accepted" });
+        surfaceText["riquadro-b"] = newer;
+      },
+    });
+    sessions.attachSurface("rientranza.md", {
+      id: "riquadro-c",
+      sync: (update) => {
+        deliveries.push({ surface: "riquadro-c", text: update.text });
+        surfaceText["riquadro-c"] = update.text;
+      },
+    });
+
+    expect(
+      sessions.acceptSurfaceChange(
+        "rientranza.md",
+        "riquadro-a",
+        editFor(initial, first),
+      ),
+    ).toEqual({ kind: "accepted" });
+
+    expect(sessions.text("rientranza.md")).toBe(newer);
+    expect(surfaceText).toEqual({
+      "riquadro-a": newer,
+      "riquadro-b": newer,
+      "riquadro-c": newer,
+    });
+    expect(deliveries.filter(({ surface }) => surface === "riquadro-c")).toEqual([
+      { surface: "riquadro-c", text: newer },
+    ]);
+    await sessions.flushDraft("rientranza.md");
+    await sessions.flush("rientranza.md");
+    expect(api.saveDraft).toHaveBeenLastCalledWith("rientranza.md", newer, "rev-1");
+    expect(api.writeDocument).toHaveBeenLastCalledWith(
+      "rientranza.md",
+      newer,
+      { kind: "descends_from", value: "rev-1" },
+    );
+  });
+
+  it("non consegna il giro corrente a una registrazione sostituita sotto lo stesso id", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("rimontaggio-rientrante.md");
+    const initial = "rimontaggio-rientrante.md: disco";
+    const first = "rimontaggio U1";
+    const newer = "rimontaggio U2";
+    const oldDeliveries: string[] = [];
+    const newDeliveries: string[] = [];
+    let remounted = false;
+    let detachOld = () => {};
+    sessions.attachSurface("rimontaggio-rientrante.md", {
+      id: "riquadro-b",
+      sync: () => {
+        if (remounted) return;
+        remounted = true;
+        detachOld();
+        sessions.attachSurface("rimontaggio-rientrante.md", {
+          id: "riquadro-c",
+          sync: (update) => newDeliveries.push(update.text),
+        });
+      },
+    });
+    detachOld = sessions.attachSurface("rimontaggio-rientrante.md", {
+      id: "riquadro-c",
+      sync: (update) => oldDeliveries.push(update.text),
+    });
+
+    expect(
+      sessions.acceptSurfaceChange(
+        "rimontaggio-rientrante.md",
+        "riquadro-a",
+        editFor(initial, first),
+      ),
+    ).toEqual({ kind: "accepted" });
+    expect(oldDeliveries).toEqual([]);
+    expect(newDeliveries).toEqual([]);
+
+    expect(
+      sessions.acceptSurfaceChange(
+        "rimontaggio-rientrante.md",
+        "riquadro-a",
+        editFor(first, newer),
+      ),
+    ).toEqual({ kind: "accepted" });
+    expect(oldDeliveries).toEqual([]);
+    expect(newDeliveries).toEqual([newer]);
+  });
+
+  it("non lascia che un observer rientrante ripristini U1 sui peer", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("observer-rientrante.md");
+    const initial = "observer-rientrante.md: disco";
+    const first = "observer U1";
+    const newer = "observer U2";
+    const deliveries: { surface: string; text: string }[] = [];
+    const surfaceIds = ["riquadro-a", "riquadro-b", "riquadro-c"] as const;
+    const surfaceText: Record<(typeof surfaceIds)[number], string> = {
+      "riquadro-a": first,
+      "riquadro-b": initial,
+      "riquadro-c": initial,
+    };
+    for (const surface of surfaceIds) {
+      sessions.attachSurface("observer-rientrante.md", {
+        id: surface,
+        sync: (update) => {
+          deliveries.push({ surface, text: update.text });
+          surfaceText[surface] = update.text;
+        },
+      });
+    }
+    let reentered = false;
+    sessions.subscribe((event) => {
+      if (
+        event.kind !== "changed" ||
+        event.id !== "observer-rientrante.md" ||
+        reentered ||
+        sessions.text(event.id) !== first
+      ) {
+        return;
+      }
+      reentered = true;
+      expect(
+        sessions.acceptSurfaceChange(
+          event.id,
+          "observer-rientrante",
+          editFor(first, newer),
+        ),
+      ).toEqual({ kind: "accepted" });
+    });
+
+    expect(
+      sessions.acceptSurfaceChange(
+        "observer-rientrante.md",
+        "riquadro-a",
+        editFor(initial, first),
+      ),
+    ).toEqual({ kind: "accepted" });
+
+    expect(reentered).toBe(true);
+    expect(sessions.text("observer-rientrante.md")).toBe(newer);
+    expect(surfaceText).toEqual({
+      "riquadro-a": newer,
+      "riquadro-b": newer,
+      "riquadro-c": newer,
+    });
+    expect(deliveries).toEqual([
+      { surface: "riquadro-a", text: newer },
+      { surface: "riquadro-b", text: newer },
+      { surface: "riquadro-c", text: newer },
+    ]);
+  });
+
+  it("isola un peer guasto nel fan-out rientrante e conserva U2 sul peer sano", async () => {
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const sessions = new DocumentSessionCollection(api);
+      await sessions.read("fault-rientrante.md");
+      const initial = "fault-rientrante.md: disco";
+      const first = "fault U1";
+      const newer = "fault U2";
+      const healthyDeliveries: string[] = [];
+      let reentrantText = initial;
+      sessions.attachSurface("fault-rientrante.md", recordingSurface("riquadro-a", []));
+      sessions.attachSurface("fault-rientrante.md", {
+        id: "riquadro-b",
+        sync: (update) => {
+          reentrantText = update.text;
+          if (update.text !== first) return;
+          expect(
+            sessions.acceptSurfaceChange(
+              "fault-rientrante.md",
+              "riquadro-b",
+              editFor(first, newer),
+            ),
+          ).toEqual({ kind: "accepted" });
+          reentrantText = newer;
+        },
+      });
+      sessions.attachSurface("fault-rientrante.md", {
+        id: "riquadro-guasto",
+        sync: () => {
+          throw new Error("peer guasto");
+        },
+      });
+      sessions.attachSurface("fault-rientrante.md", {
+        id: "riquadro-sano",
+        sync: (update) => healthyDeliveries.push(update.text),
+      });
+
+      expect(
+        sessions.acceptSurfaceChange(
+          "fault-rientrante.md",
+          "riquadro-a",
+          editFor(initial, first),
+        ),
+      ).toEqual({ kind: "accepted" });
+
+      expect(sessions.text("fault-rientrante.md")).toBe(newer);
+      expect(reentrantText).toBe(newer);
+      expect(healthyDeliveries).toEqual([newer]);
+      expect(faults).toHaveBeenCalledTimes(1);
+      expect(faults).toHaveBeenCalledWith(
+        "DocumentSession observer fault",
+        expect.objectContaining({
+          kind: "surface",
+          documentId: "fault-rientrante.md",
+          surfaceId: "riquadro-guasto",
+          update: expect.objectContaining({ text: newer }),
+          error: expect.objectContaining({ message: "peer guasto" }),
+        }),
+      );
+    } finally {
+      faults.mockRestore();
+    }
   });
 
   it("isola B nel fan-out A/B/C e consegna l'operazione a C", async () => {

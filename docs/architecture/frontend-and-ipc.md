@@ -296,13 +296,13 @@ preimmagine e testo obiettivo. Un'operazione stantia, malformata o incoerente
 lascia invariato il buffer e riallinea la superficie sorgente col testo
 autorevole.
 
-Quando la validazione riesce, la sessione aggiorna una volta testo e dirty,
-pianifica salvataggio e bozza e diffonde l'operazione alle superfici sottoscritte
-tranne la sorgente. Una sostituzione autorevole — ricarica pulita, conflitto
-scartato o bozza recuperata — diffonde invece il testo intero a tutte le
-superfici. Il pannello possiede il collegamento delle superfici e applica questi
-dati all'editor; non possiede validazione, buffer o fan-out. La sessione tenta ogni ascoltatore e superficie indipendentemente,
-anche dopo errori o reiezioni; un percorso esplicito e non ricorsivo li riporta senza cambiare l'autorità o impedire la convergenza dei destinatari sani.
+Quando la validazione riesce, la sessione aggiorna testo e dirty, pianifica salvataggio e bozza e diffonde l'operazione ai pari tranne la sorgente.
+Una sostituzione autorevole — ricarica pulita, conflitto scartato o bozza recuperata — diffonde invece il testo intero a tutte le superfici.
+Ogni nuova autorità riceve una generation di delivery monotona; il fan-out fotografa le registrazioni e verifica generation e identità prima di ogni destinatario.
+Un'autorità nata da una callback rientrante interrompe il giro stale; un rimontaggio non riceve dati destinati all'istanza sostituita.
+Il pannello collega le superfici e applica i dati all'editor, ma non possiede validazione, buffer o fan-out.
+Per ogni giro corrente la sessione tenta ascoltatori e superfici indipendentemente, anche dopo errori o reiezioni.
+Un percorso esplicito e non ricorsivo riporta i fault senza cambiare l'autorità o impedire la convergenza dei destinatari sani.
 
 Force reload e la risoluzione del conflitto `theirs` cancellano subito il timer e bloccano i salvataggi mentre l'autorità su disco è sconosciuta.
 Una lettura fallita o stantia conserva testo dirty, conflitto e bozza, senza autosalvare; soltanto una lettura riuscita aggiorna testo, base, dirty e bozza,
