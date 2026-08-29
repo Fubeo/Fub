@@ -96,9 +96,11 @@ describe("il testo fermo di index.html", () => {
     // mano nel file. Deve essere l'italiano del catalogo, o l'HTML è un secondo
     // catalogo che nessuno aggiorna, che è il difetto che questa voce è venuta
     // a togliere e non ad aggiungere.
+    // Le opzioni del commutatore di modalità si ricostruiscono a runtime:
+    // non fanno parte del markup fermo.
     const elements = [...document.querySelectorAll("[data-i18n]")];
     expect(elements.length, "l'HTML non nomina più nessuna chiave: il `?raw` legge ancora?").toBe(
-      20,
+      17,
     );
     for (const el of elements) {
       const key = el.getAttribute("data-i18n")!;
