@@ -268,7 +268,7 @@ export function createMarkdownSurfaceFactory(
   return {
     family: "text",
     profile: "markdown",
-    version: 1,
+    supportedVersions: [1],
     mount(_request: SurfaceRequest, context: SurfaceMountContext): MarkdownEditorSurface {
       const textContext = context as TextSurfaceMountContext;
       const profile = createMarkdownProfile({
@@ -287,7 +287,7 @@ export function createPlainTextSurfaceFactory(
   return {
     family: "text",
     profile: "plain-text",
-    version: 1,
+    supportedVersions: [1],
     mount(_request: SurfaceRequest, context: SurfaceMountContext): PlainTextSurface {
       const mounted = mountTextEngine(createPlainTextProfile(), context, options);
       return new PlainTextSurfaceImpl(mounted.engine, mounted.theme);

@@ -33,8 +33,6 @@ export interface SurfaceMountContext {
   readonly parent: HTMLElement;
 }
 
-export type SurfaceVersion = number | readonly number[];
-
 export interface SurfaceRequest {
   readonly formatKey?: string;
   readonly species?: string;
@@ -58,7 +56,6 @@ export interface SurfaceOverrideReference {
 export interface SurfaceFactory {
   readonly family: string;
   readonly profile?: string;
-  readonly version?: SurfaceVersion;
   readonly supportedVersions?: readonly number[];
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface;
 }
@@ -81,7 +78,6 @@ export interface SurfaceRegistration {
   readonly profile?: string;
   readonly formatKey?: string;
   readonly species?: string;
-  readonly version?: SurfaceVersion;
   readonly supportedVersions?: readonly number[];
   readonly factory: SurfaceFactory;
 }
@@ -106,6 +102,7 @@ interface Selection extends ResolvedSurface {
 }
 
 const INITIAL_SURFACE_VERSION = 1;
+const DEFAULT_SURFACE_VERSIONS = [INITIAL_SURFACE_VERSION] as const;
 const FAMILY_PROFILE_SEPARATOR = "\u0000";
 const TEXT_SPECIES: Record<string, true> = {
   text: true,
@@ -217,27 +214,17 @@ function isTextualRequest(request: SurfaceRequest): boolean {
   return TEXT_SPECIES[normaliseSpecies(request.species)] === true;
 }
 
-function declaredVersions(
-  registration: SurfaceRegistration | undefined,
-  factory: SurfaceFactory,
-): SurfaceVersion | readonly number[] | undefined {
-  return (
-    registration?.supportedVersions ??
-    registration?.version ??
-    factory.supportedVersions ??
-    factory.version
-  );
-}
-
 function supportsVersion(
   registration: SurfaceRegistration | undefined,
   factory: SurfaceFactory,
   requestedVersion: number | undefined,
 ): boolean {
   if (requestedVersion === undefined) return true;
-  const declared = declaredVersions(registration, factory) ?? INITIAL_SURFACE_VERSION;
-  if (Array.isArray(declared)) return declared.includes(requestedVersion);
-  return declared === requestedVersion;
+  const declared =
+    registration?.supportedVersions ??
+    factory.supportedVersions ??
+    DEFAULT_SURFACE_VERSIONS;
+  return declared.includes(requestedVersion);
 }
 
 function versionDescription(version: number | undefined): string {
@@ -264,7 +251,7 @@ function createDomFactory(options: {
   return {
     family: options.family,
     profile: options.profile,
-    version: INITIAL_SURFACE_VERSION,
+    supportedVersions: [INITIAL_SURFACE_VERSION],
     mount(_request, context) {
       return new DomSurface(options, context.parent);
     },
@@ -377,6 +364,8 @@ class DomSurface implements EditorSurface {
   }
 }
 
+// Questo fallback visualizza soltanto un messaggio DOM: resta nel family text
+// per servire le richieste testuali, ma non è un TextEditorSurface.
 export const textualFallbackFactory: SurfaceFactory = createDomFactory({
   family: "text",
   profile: "fallback",

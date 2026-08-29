@@ -74,7 +74,7 @@ describe("factory testuali del registro", () => {
     const formulaFactory: TextSurfaceFactory = {
       family: "text",
       profile: "formula",
-      version: 1,
+      supportedVersions: [1],
       mount: () => formulaSurface,
     };
 

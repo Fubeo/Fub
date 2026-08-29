@@ -42,7 +42,7 @@ function surfaceFixture(
   const factory: SurfaceFactory = {
     family,
     profile,
-    version: 1,
+    supportedVersions: [1],
     mount(_request, context) {
       const element = context.parent.ownerDocument.createElement("div");
       element.dataset.testFactory = label;
@@ -347,7 +347,7 @@ describe("DocumentSurfaceRegistry", () => {
     expect(a.destroys[0].calls).toBe(1);
   });
 
-  it("mostra un fallback testuale quando manca una factory di famiglia", () => {
+  it("mostra un fallback DOM testuale con lifecycle e accessibilità", () => {
     const registry = new DocumentSurfaceRegistry();
     const context = mountContext();
 
@@ -355,13 +355,75 @@ describe("DocumentSurfaceRegistry", () => {
       { family: "text", profile: "profilo-non-registrato" },
       context,
     );
+    const element = context.parent.firstElementChild as HTMLElement | null;
 
     expect(registry.resolve({ family: "text", profile: "profilo-non-registrato" })).toBe(
       textualFallbackFactory,
     );
+    expect(textualFallbackFactory).toMatchObject({
+      family: "text",
+      profile: "fallback",
+      supportedVersions: [1],
+    });
     expect(surface.family).toBe("text");
-    expect(context.parent.textContent).toContain("Fallback superficie testuale");
+    expect(surface).not.toHaveProperty("setDoc");
+    expect(surface).not.toHaveProperty("syncDoc");
+    expect(element).not.toBeNull();
+    expect(element?.textContent).toContain("Fallback superficie testuale");
+    expect(element?.getAttribute("role")).toBe("region");
+    expect(element?.getAttribute("aria-readonly")).toBe("false");
+
+    surface.setTheme("dark");
+    expect(element?.dataset.surfaceTheme).toBe("dark");
+    surface.setReadOnly(true);
+    expect(element?.dataset.surfaceReadOnly).toBe("true");
+    expect(element?.getAttribute("aria-readonly")).toBe("true");
+
     surface.destroy();
+    surface.destroy();
+    expect(context.parent.childElementCount).toBe(0);
+  });
+  it("usa supportedVersions e il default implicito alla versione 1", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const implicit = surfaceFixture("implicit");
+    const implicitFactory: SurfaceFactory = {
+      family: implicit.factory.family,
+      profile: implicit.factory.profile,
+      mount: implicit.factory.mount,
+    };
+    const implicitDispose = registry.register({
+      owner: "implicit-owner",
+      family: "text",
+      profile: "implicit",
+      formatKey: "implicit-format",
+      factory: implicitFactory,
+    });
+
+    expect(registry.resolve({ formatKey: "implicit-format", version: 1 })).toBe(
+      implicitFactory,
+    );
+    expect(registry.resolve({ formatKey: "implicit-format", version: 2 }).family).toBe("error");
+
+    const declared = surfaceFixture("declared");
+    const declaredDispose = registry.register({
+      owner: "declared-owner",
+      family: "text",
+      profile: "declared",
+      formatKey: "declared-format",
+      supportedVersions: [2, 4],
+      factory: declared.factory,
+    });
+
+    expect(registry.resolve({ formatKey: "declared-format", version: 2 })).toBe(
+      declared.factory,
+    );
+    expect(registry.resolve({ formatKey: "declared-format", version: 4 })).toBe(
+      declared.factory,
+    );
+    expect(registry.resolve({ formatKey: "declared-format", version: 1 }).family).toBe("error");
+
+    declaredDispose();
+    implicitDispose();
   });
 
   it("rende fallback o errore visibile per versione e famiglia sconosciute", () => {
@@ -622,7 +684,7 @@ describe("DocumentSurfaceRegistry", () => {
       const factory: SurfaceFactory = {
         family: "text",
         profile: "throws",
-        version: 1,
+        supportedVersions: [1],
         mount() {
           throw mountError;
         },
