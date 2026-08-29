@@ -515,7 +515,9 @@ function effectiveMode(
   surface: EditorSurface | null | undefined,
   paneMode: PaneMode,
 ): PaneMode {
-  if (!isModefulSurface(surface)) return paneMode;
+  if (!isModefulSurface(surface)) {
+    return paneMode === "live_preview" ? "source" : paneMode;
+  }
   if (surface.modes.some((mode) => mode.id === paneMode)) return paneMode;
   if (
     surface.defaultMode === "source" ||

@@ -575,11 +575,14 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     });
 
     panelDom();
-    const { mountDocument, setMode, synchronize } = await import("./document");
+    const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
     mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
     openIn("main", "note.md", layout);
     await synchronize();
+    await publishContext();
+    expect(document.querySelector<HTMLElement>(".pane")?.dataset.mode).toBe("live_preview");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("live_preview");
     const surface = mount.mock.results[0]?.value as MarkdownEditorSurface;
     expect(surface.mode()).toBe("live_preview");
     const switcher = document.querySelector<HTMLElement>("#mode-switch");
@@ -710,25 +713,43 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     expect(harness.contexts.every((context) => context.mode !== "live_preview")).toBe(true);
   });
 
-  it("non lancia eccezioni per il fallback senza modalità", async () => {
+  it.each([
+    ["fallback", { family: "text", profile: "unknown" }, "note.txt"],
+    ["unknown", { family: "unknown" }, "note.bin"],
+  ] as const)("non pubblica live_preview su %s e resta tollerante", async (_kind, requestValue, doc) => {
     vi.resetModules();
-    const request: RequestBox = { value: { family: "unknown" } };
+    const request: RequestBox = { value: requestValue };
     const harness = mockPanelModules(request);
     const registry = new DocumentSurfaceRegistry();
 
     panelDom();
-    const { mountDocument, setMode, synchronize } = await import("./document");
+    const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
     const { layout, openIn } = await import("../state/layout");
     mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
     await synchronize();
-    expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
-    openIn("main", "note.bin", layout);
+    const emptyRoot = document.querySelector<HTMLElement>(".pane");
+    expect(emptyRoot).not.toBeNull();
+    expect(emptyRoot?.dataset.mode).not.toBe("live_preview");
+    await publishContext();
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
+    openIn("main", doc, layout);
     await synchronize();
 
+    const root = document.querySelector<HTMLElement>(".pane");
+    expect(root?.dataset.mode).not.toBe("live_preview");
+    await publishContext();
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
+
     await expect(setMode("live_preview")).resolves.toBeUndefined();
+    expect(root?.dataset.mode).not.toBe("live_preview");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
+
     await expect(setMode("reading")).resolves.toBeUndefined();
+    expect(root?.dataset.mode).not.toBe("live_preview");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
+    expect(harness.flush).toHaveBeenCalledWith(doc);
+    expect(harness.previews).toHaveBeenCalled();
     expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
-    expect(harness.flush).toHaveBeenCalledWith("note.bin");
   });
 });
 
