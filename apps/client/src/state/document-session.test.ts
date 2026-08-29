@@ -935,44 +935,99 @@ describe("decisioni del ciclo di vita della sessione", () => {
     acceptText(sessions, "dopo.md", "testo dopo il rifiuto");
   });
 
-  it("arma la persistenza prima di un observer changed che lancia", async () => {
-    const timers: Array<() => void> = [];
-    vi.stubGlobal("window", {
-      setTimeout: vi.fn((callback: () => void) => {
-        timers.push(callback);
-        return ++nextTimer;
-      }),
-      clearTimeout: vi.fn(),
-    });
+  it("isola un listener sincrono e lascia stato, pari e persistenza completabili", async () => {
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("observer.md");
-    api.writeDocument = vi.fn(async () => {
-      throw new Error("scrittura rifiutata");
+    const healthyEvents: DocumentSessionEvent[] = [];
+    const peerUpdates: string[] = [];
+    sessions.subscribe(() => {
+      throw new Error("listener sincrono guasto");
     });
-    let throwOnce = true;
     sessions.subscribe((event) => {
-      if (event.kind === "changed" && throwOnce) {
-        throwOnce = false;
-        throw new Error("observer guasto");
-      }
+      healthyEvents.push(event);
+    });
+    sessions.attachSurface("observer.md", {
+      id: "pari-b",
+      sync: () => peerUpdates.push("pari-b"),
+    });
+    sessions.attachSurface("observer.md", {
+      id: "pari-c",
+      sync: () => peerUpdates.push("pari-c"),
     });
 
     const before = sessions.text("observer.md");
     if (before === undefined) throw new Error("sessione non costruita");
-    expect(() =>
-      sessions.acceptSurfaceChange("observer.md", "test-surface", {
+    expect(
+      sessions.acceptSurfaceChange("observer.md", "sorgente-a", {
         text: "testo osservato",
         operation: operationFromText(before, "testo osservato"),
       }),
-    ).toThrow("observer guasto");
-    expect(sessions.inspect("observer.md")).toMatchObject({ dirty: true, text: "testo osservato" });
-    expect(timers).toHaveLength(2);
+    ).toEqual({ kind: "accepted" });
+    expect(sessions.inspect("observer.md")).toMatchObject({
+      dirty: true,
+      text: "testo osservato",
+    });
+    expect(healthyEvents).toContainEqual({ kind: "changed", id: "observer.md" });
+    expect(peerUpdates).toEqual(["pari-b", "pari-c"]);
 
-    timers[0]!();
-    timers[1]!();
-    for (let i = 0; i < 8; i += 1) await Promise.resolve();
-    expect(vi.mocked(api.writeDocument)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(api.saveDraft)).toHaveBeenCalledTimes(1);
+    await sessions.flushDraft("observer.md");
+    await sessions.flush("observer.md");
+    expect(api.saveDraft).toHaveBeenCalledWith("observer.md", "testo osservato", "rev-1");
+    expect(api.writeDocument).toHaveBeenCalledWith(
+      "observer.md",
+      "testo osservato",
+      { kind: "descends_from", value: "rev-1" },
+    );
+    expect(faults).toHaveBeenCalledWith(
+      "DocumentSession observer fault",
+      expect.objectContaining({
+        kind: "listener",
+        event: { kind: "changed", id: "observer.md" },
+        error: expect.objectContaining({ message: "listener sincrono guasto" }),
+      }),
+    );
+    faults.mockRestore();
+  });
+
+  it("osserva il rigetto asincrono senza rejection globale e consegna al listener sano", async () => {
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const sessions = new DocumentSessionCollection(api);
+      await sessions.read("observer-async.md");
+      const healthyEvents: DocumentSessionEvent[] = [];
+      sessions.subscribe(async () => {
+        throw new Error("listener asincrono guasto");
+      });
+      sessions.subscribe((event) => {
+        healthyEvents.push(event);
+      });
+
+      acceptText(sessions, "observer-async.md", "testo asincrono");
+      for (let i = 0; i < 4; i += 1) await Promise.resolve();
+      const turn = Promise.withResolvers<void>();
+      const channel = new MessageChannel();
+      channel.port1.onmessage = () => turn.resolve();
+      channel.port2.postMessage(null);
+      await turn.promise;
+      channel.port1.close();
+      channel.port2.close();
+      expect(healthyEvents).toContainEqual({ kind: "changed", id: "observer-async.md" });
+      expect(faults).toHaveBeenCalledWith(
+        "DocumentSession observer fault",
+        expect.objectContaining({
+          kind: "listener",
+          event: { kind: "changed", id: "observer-async.md" },
+          error: expect.objectContaining({ message: "listener asincrono guasto" }),
+        }),
+      );
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+      faults.mockRestore();
+    }
   });
 });
 
@@ -1029,6 +1084,47 @@ describe("le superfici sottoscritte alla sessione", () => {
     expect(log[0]).toMatchObject({ surface: "riquadro-b", update: { kind: "operation" } });
     // Salvataggio e bozza: i due ritardi sono della sessione, armati una volta.
     expect(nextTimer).toBe(2);
+  });
+
+  it("isola B nel fan-out A/B/C e consegna l'operazione a C", async () => {
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
+    sessions.attachSurface("nota.md", {
+      id: "riquadro-b",
+      sync: () => {
+        throw new Error("superficie B guasta");
+      },
+    });
+    sessions.attachSurface("nota.md", recordingSurface("riquadro-c", log));
+
+    const outcome = sessions.acceptSurfaceChange(
+      "nota.md",
+      "riquadro-a",
+      editFor("nota.md: disco", "testo da A"),
+    );
+
+    expect(outcome).toEqual({ kind: "accepted" });
+    expect(sessions.inspect("nota.md")).toMatchObject({ text: "testo da A", dirty: true });
+    expect(log).toEqual([
+      {
+        surface: "riquadro-c",
+        update: expect.objectContaining({ kind: "operation", text: "testo da A" }),
+      },
+    ]);
+    expect(faults).toHaveBeenCalledWith(
+      "DocumentSession observer fault",
+      expect.objectContaining({
+        kind: "surface",
+        documentId: "nota.md",
+        surfaceId: "riquadro-b",
+        update: expect.objectContaining({ kind: "operation", text: "testo da A" }),
+        error: expect.objectContaining({ message: "superficie B guasta" }),
+      }),
+    );
+    faults.mockRestore();
   });
 
   it("ristabilizza la sorgente su una preimmagine stantia senza mutare la sessione", async () => {
@@ -1199,6 +1295,51 @@ describe("le superfici sottoscritte alla sessione", () => {
     ).toEqual({ kind: "untracked" });
     expect(sessions.attachSurface("a.md", recordingSurface("riquadro-a", log))()).toBeUndefined();
     expect(log).toHaveLength(0);
+  });
+
+  it("completa la ricarica autorevole malgrado una superficie guasta e scarta la bozza", async () => {
+    const faults = vi.spyOn(console, "error").mockImplementation(() => {});
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "testo iniziale", revision: "rev-1" })
+      .mockResolvedValueOnce({ text: "autorità disco", revision: "rev-2" });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "bozza locale");
+    await sessions.flushDraft("nota.md");
+    const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+    sessions.attachSurface("nota.md", {
+      id: "superficie-guasta",
+      sync: () => {
+        throw new Error("superficie non sincronizzabile");
+      },
+    });
+    sessions.attachSurface("nota.md", recordingSurface("superficie-sana", log));
+
+    const outcome = await sessions.forceReload("nota.md");
+
+    expect(outcome).toEqual({ kind: "reloaded", text: "autorità disco", changed: true });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "autorità disco",
+      base: { kind: "descends_from", value: "rev-2" },
+      dirty: false,
+      result: "ok",
+    });
+    expect(log).toEqual([
+      { surface: "superficie-sana", update: { kind: "text", text: "autorità disco" } },
+    ]);
+    expect(api.discardDraft).toHaveBeenCalledWith("nota.md");
+    expect(faults).toHaveBeenCalledWith(
+      "DocumentSession observer fault",
+      expect.objectContaining({
+        kind: "surface",
+        documentId: "nota.md",
+        surfaceId: "superficie-guasta",
+        update: { kind: "text", text: "autorità disco" },
+        error: expect.objectContaining({ message: "superficie non sincronizzabile" }),
+      }),
+    );
+    faults.mockRestore();
   });
 
   it("la sostituzione autorevole raggiunge ogni superficie una volta sola, in testo pieno", async () => {
