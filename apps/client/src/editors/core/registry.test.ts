@@ -218,18 +218,27 @@ afterEach(() => {
 });
 
 describe("isModefulSurface", () => {
-  it("accetta soltanto cataloghi PaneMode coerenti", () => {
-    expect(
-      isModefulSurface({
-        modes: [{ id: "source", labelKey: "mode.source" }],
-        defaultMode: "source",
-        mode: () => "source",
-        setMode: () => {},
-      }),
-    ).toBe(true);
+  it("accetta cataloghi propri della superficie e lascia commutare i loro ID", () => {
+    const modes = [
+      { id: "navigate" as never, labelKey: "mode.navigate" },
+      { id: "edit" as never, labelKey: "mode.edit" },
+    ] as const;
+    let current = modes[0].id;
+    const surface = {
+      modes,
+      defaultMode: modes[0].id,
+      mode: () => current,
+      setMode(id: never) {
+        if (modes.some((mode) => mode.id === id)) current = id;
+      },
+    };
+
+    expect(isModefulSurface(surface)).toBe(true);
+    surface.setMode(modes[1].id);
+    expect(surface.mode()).toBe("edit");
   });
 
-  it("rifiuta ID duplicati, estranei, default e corrente fuori catalogo", () => {
+  it("rifiuta ID duplicati o vuoti, default e corrente fuori catalogo", () => {
     expect(
       isModefulSurface({
         modes: [
@@ -243,9 +252,9 @@ describe("isModefulSurface", () => {
     ).toBe(false);
     expect(
       isModefulSurface({
-        modes: [{ id: "other", labelKey: "mode.other" }],
-        defaultMode: "other",
-        mode: () => "other",
+        modes: [{ id: "", labelKey: "mode.empty" }],
+        defaultMode: "",
+        mode: () => "",
         setMode: () => {},
       }),
     ).toBe(false);

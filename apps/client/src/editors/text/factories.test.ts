@@ -9,6 +9,15 @@ import {
   type TextSurfaceFactory,
 } from "./factories";
 
+function declaredMode<Id>(
+  surface: { readonly modes: readonly { readonly id: Id }[] },
+  id: string,
+): Id {
+  const mode = surface.modes.find((candidate) => candidate.id === (id as Id));
+  if (!mode) throw new Error(`modalità non dichiarata: ${id}`);
+  return mode.id;
+}
+
 function mountContext(parent: HTMLElement = document.createElement("section")) {
   return { paneId: "pane-1", documentId: "document-1", parent };
 }
@@ -38,23 +47,23 @@ describe("factory testuali del registro", () => {
     expect(surface).toHaveProperty("setSyntaxForms");
     expect(surface).toHaveProperty("setLivePreview");
 
-    surface.setMode("source");
+    surface.setMode(declaredMode(surface, "source"));
     expect(surface.mode()).toBe("source");
     expect(setLivePreview).toHaveBeenLastCalledWith(false);
     expect(findTextEditor(context.parent)).not.toBeNull();
 
-    surface.setMode("reading");
+    surface.setMode(declaredMode(surface, "reading"));
     expect(surface.mode()).toBe("reading");
     expect(setLivePreview).toHaveBeenLastCalledWith(false);
     expect(findTextEditor(context.parent)).not.toBeNull();
 
     const callsBeforeUnknown = setLivePreview.mock.calls.length;
-    // @ts-expect-error Surface mode IDs are restricted to the existing PaneMode.
-    surface.setMode("unknown");
+    // Una chiamata JavaScript può ancora portare un ID fuori catalogo.
+    surface.setMode("unknown" as never);
     expect(surface.mode()).toBe("reading");
     expect(setLivePreview.mock.calls).toHaveLength(callsBeforeUnknown);
 
-    surface.setMode("live_preview");
+    surface.setMode(declaredMode(surface, "live_preview"));
     expect(surface.mode()).toBe("live_preview");
     expect(setLivePreview).toHaveBeenLastCalledWith(true);
 
@@ -82,10 +91,9 @@ describe("factory testuali del registro", () => {
     expect(surface).not.toHaveProperty("live_preview");
     expect(surface).not.toHaveProperty("setSyntaxForms");
     expect(surface).not.toHaveProperty("setLivePreview");
-
-    surface.setMode("live_preview");
+    surface.setMode("live_preview" as never);
     expect(surface.mode()).toBe("source");
-    surface.setMode("reading");
+    surface.setMode("reading" as never);
     expect(surface.mode()).toBe("source");
     surface.setDoc("testo senza semantica");
     expect(surface.currentText()).toBe("testo senza semantica");

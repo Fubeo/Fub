@@ -58,6 +58,15 @@ import {
 import type { DraftInfo, ViewContext, WriteBase } from "../host/contract";
 import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
 
+
+function declaredMode<Id>(
+  surface: { readonly modes: readonly { readonly id: Id }[] },
+  id: string,
+): Id {
+  const mode = surface.modes.find((candidate) => candidate.id === (id as Id));
+  if (!mode) throw new Error(`modalità non dichiarata: ${id}`);
+  return mode.id;
+}
 /// Il corpo dell'ascoltatore di `document_changed`, dalla sua apertura al
 /// prossimo `onEvent(`.
 function body(): string {
@@ -646,7 +655,93 @@ function genericSurfaceFixture(
   return { factory, mounts, destroys };
 }
 
+
 describe("modalità della superficie nel percorso reale del pannello", () => {
+  it("usa il catalogo della superficie per modalità interne e proietta il contesto a source", async () => {
+    vi.resetModules();
+    const request: RequestBox = { value: { formatKey: "modeful-grid" } };
+    const harness = mockPanelModules(request);
+    const modes = [
+      { id: "navigate" as never, labelKey: "mode.navigate" },
+      { id: "edit" as never, labelKey: "mode.edit" },
+    ] as const;
+    let mounted:
+      | (EditorSurface & {
+          readonly modes: typeof modes;
+          readonly defaultMode: (typeof modes)[number]["id"];
+          mode(): (typeof modes)[number]["id"];
+          setMode(id: (typeof modes)[number]["id"]): void;
+        })
+      | undefined;
+    const factory: SurfaceFactory = {
+      family: "grid",
+      profile: "modeful-grid",
+      mount(_request, context) {
+        const element = context.parent.ownerDocument.createElement("div");
+        element.className = "modeful-grid";
+        context.parent.append(element);
+        let current = modes[0].id;
+        mounted = {
+          family: "grid",
+          surfaceId: "modeful-grid-1",
+          modes,
+          defaultMode: modes[0].id,
+          mode: () => current,
+          setMode(id) {
+            if (modes.some((mode) => mode.id === id)) current = id;
+          },
+          focus() {},
+          setReadOnly() {},
+          setTheme() {},
+          captureViewState() {
+            return { version: 1, value: null };
+          },
+          restoreViewState() {},
+          suspend() {},
+          resume() {},
+          destroy() {
+            element.remove();
+          },
+        };
+        return mounted;
+      },
+    };
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "test-modeful-grid",
+      family: "grid",
+      profile: "modeful-grid",
+      formatKey: "modeful-grid",
+      factory,
+    });
+
+    panelDom();
+    const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ surfaceRegistry: registry });
+    openIn("main", "note.grid", layout);
+    await synchronize();
+    await publishContext();
+
+    const switcher = document.querySelector<HTMLElement>("#mode-switch");
+    expect([...switcher?.querySelectorAll<HTMLButtonElement>("button") ?? []].map(
+      (button) => button.dataset.mode,
+    )).toEqual(["navigate", "edit"]);
+    expect(document.querySelector<HTMLElement>(".pane")?.dataset.mode).toBe("navigate");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("source");
+
+    const surface = mounted;
+    expect(surface).toBeDefined();
+    await setMode(surface!.modes[1].id);
+    expect(surface!.mode()).toBe("edit");
+    expect(
+      switcher?.querySelector<HTMLButtonElement>('button[data-mode="edit"]')?.getAttribute(
+        "aria-pressed",
+      ),
+    ).toBe("true");
+    expect(layout.panes.main?.mode).toBe("source");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("source");
+  });
   it("segue le tre modalità dichiarate da Markdown e aggiorna Lettura", async () => {
     vi.resetModules();
     const request: RequestBox = {
@@ -703,11 +798,11 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
 
     const setSurfaceMode = vi.spyOn(surface, "setMode");
 
-    await setMode("source");
+    await setMode(declaredMode(surface, "source"));
     expect(surface.mode()).toBe("source");
-    await setMode("live_preview");
+    await setMode(declaredMode(surface, "live_preview"));
     expect(surface.mode()).toBe("live_preview");
-    await setMode("reading");
+    await setMode(declaredMode(surface, "reading"));
     expect(surface.mode()).toBe("reading");
     expect(setSurfaceMode.mock.calls.map(([mode]) => mode)).toEqual([
       "source",
@@ -775,7 +870,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     const published = harness.contexts.length;
     const setSurfaceMode = vi.spyOn(surface, "setMode");
 
-    await setMode("live_preview");
+    await setMode("live_preview" as never);
     expect(surface.mode()).toBe("source");
     expect(layout.panes.main?.mode).toBe("source");
     expect(setSurfaceMode).not.toHaveBeenCalled();
@@ -788,7 +883,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     expect(document.querySelector('button[data-mode="live_preview"]')).toBeNull();
     expect(document.querySelector('button[data-mode="reading"]')).toBeNull();
 
-    await setMode("reading");
+    await setMode("reading" as never);
     expect(surface.mode()).toBe("source");
     expect(layout.panes.main?.mode).toBe("source");
     expect(setSurfaceMode).not.toHaveBeenCalled();
@@ -873,7 +968,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
 
       openIn("main", "note.md", layout);
       await synchronize();
-      await setMode("reading");
+      await setMode("reading" as never);
       harness.previews.mockClear();
 
       request.value = nextRequest;
@@ -934,7 +1029,7 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.md", layout);
     await synchronize();
-    await setMode("reading");
+    await setMode("reading" as never);
 
     const plainPaneId = split("main", "col", layout);
     expect(plainPaneId).not.toBeNull();
@@ -1190,6 +1285,8 @@ describe("identità del mount nel percorso reale del pannello", () => {
     openIn("main", "first.grid", layout);
     await synchronize();
     const first = a.mounts[0]?.surface;
+    const editor = document.querySelector<HTMLElement>(".pane-editor")!;
+    expect(editor).toHaveAttribute("data-document-surface", "");
 
     openIn("main", "second.grid", layout);
     await synchronize();
@@ -1300,11 +1397,13 @@ describe("identità del mount nel percorso reale del pannello", () => {
     expect(b.mounts).toHaveLength(0);
     expect(editor.querySelector(".generic-surface-a")).toBeNull();
     expect(editor.children).toHaveLength(0);
+    expect(editor).not.toHaveAttribute("data-document-surface");
 
     await synchronize();
     expect(b.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
     expect(editor.children).toHaveLength(1);
     expect(editor.firstElementChild?.className).toBe("generic-surface-b");
+    expect(editor).toHaveAttribute("data-document-surface", "");
 
     await synchronize();
     expect(b.mounts).toHaveLength(1);
@@ -1348,6 +1447,7 @@ describe("identità del mount nel percorso reale del pannello", () => {
     expect(failedMounts.calls).toBe(1);
     expect(editor.children).toHaveLength(0);
     expect(editor.querySelector(".generic-surface-failed")).toBeNull();
+    expect(editor).not.toHaveAttribute("data-document-surface");
 
     disposeFailed();
     const fixed = genericSurfaceFixture("fixed");
@@ -1363,6 +1463,7 @@ describe("identità del mount nel percorso reale del pannello", () => {
     expect(fixed.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
     expect(editor.children).toHaveLength(1);
     expect(editor.firstElementChild?.className).toBe("generic-surface-fixed");
+    expect(editor).toHaveAttribute("data-document-surface", "");
 
     await synchronize();
     expect(fixed.mounts).toHaveLength(1);
