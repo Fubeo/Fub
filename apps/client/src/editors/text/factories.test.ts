@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { isModefulSurface } from "../core/registry";
 import { findTextEditor } from "./test-support";
 import {
   markdownSurfaceFactory,
@@ -17,29 +18,72 @@ afterEach(() => {
 });
 
 describe("factory testuali del registro", () => {
-  it("monta Markdown con un TextEngine reale e le API Markdown", () => {
+  it("monta Markdown con catalogo e API Markdown", () => {
     const context = mountContext();
     const surface = markdownSurfaceFactory.mount({ formatKey: "md" }, context);
+    const setLivePreview = vi.spyOn(surface, "setLivePreview");
 
     expect(findTextEditor(context.parent)).not.toBeNull();
+    expect(isModefulSurface(surface)).toBe(true);
+    expect(markdownSurfaceFactory.modes).toEqual([
+      { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
+      { id: "live_preview", labelKey: "mode.live", hintKey: "mode.live.hint" },
+      { id: "reading", labelKey: "mode.reading", hintKey: "mode.reading.hint" },
+    ]);
+    expect(surface.modes).toBe(markdownSurfaceFactory.modes);
+    expect(surface.defaultMode).toBe("live_preview");
+    expect(surface.mode()).toBe("live_preview");
+    expect(surface).not.toHaveProperty("live_preview");
     expect(surface).toHaveProperty("setSyntaxForms");
     expect(surface).toHaveProperty("setLivePreview");
+
+    surface.setMode("source");
+    expect(surface.mode()).toBe("source");
+    expect(setLivePreview).toHaveBeenLastCalledWith(false);
+    expect(findTextEditor(context.parent)).not.toBeNull();
+
+    surface.setMode("reading");
+    expect(surface.mode()).toBe("reading");
+    expect(setLivePreview).toHaveBeenLastCalledWith(false);
+    expect(findTextEditor(context.parent)).not.toBeNull();
+
+    const callsBeforeUnknown = setLivePreview.mock.calls.length;
+    surface.setMode("unknown");
+    expect(surface.mode()).toBe("reading");
+    expect(setLivePreview.mock.calls).toHaveLength(callsBeforeUnknown);
+
+    surface.setMode("live_preview");
+    expect(surface.mode()).toBe("live_preview");
+    expect(setLivePreview).toHaveBeenLastCalledWith(true);
+
     surface.setSyntaxForms([]);
-    surface.setLivePreview(false);
     surface.setDoc("# Titolo");
     expect(surface.currentText()).toBe("# Titolo");
 
     surface.destroy();
   });
 
-  it("monta plain text senza esporre API Markdown", () => {
+  it("monta plain text con il solo catalogo source e senza API Markdown", () => {
     const context = mountContext();
     const surface = plainTextSurfaceFactory.mount({ formatKey: "txt" }, context);
 
     expect(findTextEditor(context.parent)).not.toBeNull();
+    expect(isModefulSurface(surface)).toBe(true);
+    expect(plainTextSurfaceFactory.modes).toEqual([
+      { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
+    ]);
+    expect(surface.modes).toBe(plainTextSurfaceFactory.modes);
+    expect(surface.defaultMode).toBe("source");
+    expect(surface.mode()).toBe("source");
     expect(surface).toMatchObject({ family: "text", profile: "plain-text" });
+    expect(surface).not.toHaveProperty("live_preview");
     expect(surface).not.toHaveProperty("setSyntaxForms");
     expect(surface).not.toHaveProperty("setLivePreview");
+
+    surface.setMode("live_preview");
+    expect(surface.mode()).toBe("source");
+    surface.setMode("unknown");
+    expect(surface.mode()).toBe("source");
     surface.setDoc("testo senza semantica");
     expect(surface.currentText()).toBe("testo senza semantica");
 
@@ -81,5 +125,10 @@ describe("factory testuali del registro", () => {
     expect(formulaFactory.profile).toBe("formula");
     expect(formulaSurface).not.toHaveProperty("setSyntaxForms");
     expect(formulaSurface).not.toHaveProperty("setLivePreview");
-  });
+    expect(formulaSurface).not.toHaveProperty("modes");
+    expect(formulaSurface).not.toHaveProperty("defaultMode");
+    expect(formulaSurface).not.toHaveProperty("mode");
+    expect(formulaSurface).not.toHaveProperty("setMode");
+    expect(formulaSurface).not.toHaveProperty("live_preview");
+});
 });

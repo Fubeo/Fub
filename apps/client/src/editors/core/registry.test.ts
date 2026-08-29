@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   byteViewerFactory,
   DocumentSurfaceRegistry,
+  isModefulSurface,
   textualFallbackFactory,
   type EditorSurface,
   type SurfaceFactory,
@@ -185,6 +186,53 @@ describe("DocumentSurfaceRegistry", () => {
     expect(unknown.key).toMatch(/^builtin:error:/);
     expect(otherUnknown.key).toMatch(/^builtin:error:/);
     expect(unknown.key).not.toBe(otherUnknown.key);
+  });
+
+  it("riconosce le superfici modeful senza allargare EditorSurface", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const plain = surfaceFixture("plain");
+    registry.register({
+      owner: "plain",
+      family: "text",
+      profile: "plain",
+      factory: plain.factory,
+    });
+    const mounted = registry.mount({ family: "text", profile: "plain" }, mountContext());
+    expect(isModefulSurface(mounted)).toBe(false);
+    expect(mounted).not.toHaveProperty("modes");
+    expect(mounted).not.toHaveProperty("defaultMode");
+    expect(mounted).not.toHaveProperty("mode");
+    expect(mounted).not.toHaveProperty("setMode");
+    expect(mounted).not.toHaveProperty("live_preview");
+
+    const modeful = {
+      ...mounted,
+      modes: [{ id: "source", labelKey: "mode.source" }],
+      defaultMode: "source",
+      mode: () => "source",
+      setMode: () => {},
+    };
+    expect(isModefulSurface(modeful)).toBe(true);
+    mounted.destroy();
+  });
+
+  it("non rende modeful fallback, viewer ed errori", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const fallback = registry.mount({ family: "text", profile: "missing" }, mountContext());
+    const viewer = registry.mount({ species: "bytes" }, mountContext());
+    const error = registry.mount({ family: "unknown" }, mountContext());
+
+    for (const surface of [fallback, viewer, error]) {
+      expect(isModefulSurface(surface)).toBe(false);
+      expect(surface).not.toHaveProperty("modes");
+      expect(surface).not.toHaveProperty("defaultMode");
+      expect(surface).not.toHaveProperty("mode");
+      expect(surface).not.toHaveProperty("setMode");
+    }
+
+    fallback.destroy();
+    viewer.destroy();
+    error.destroy();
   });
 
   it("mantiene la stessa key tra binding esatto e override della registrazione", () => {

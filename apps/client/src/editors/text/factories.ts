@@ -4,6 +4,8 @@ import type { SyntaxForm } from "../../host/contract";
 import type {
   EditorSurface,
   SurfaceFactory,
+  SurfaceModeful,
+  SurfaceModeSpec,
   SurfaceMountContext,
   SurfaceRequest,
   SurfaceViewState,
@@ -57,7 +59,7 @@ export interface TextEditorSurface extends EditorSurface {
   reconfigure(): void;
 }
 
-export interface MarkdownEditorSurface extends TextEditorSurface {
+export interface MarkdownEditorSurface extends TextEditorSurface, SurfaceModeful {
   readonly profile: "markdown";
 
   /// Replaces Markdown syntax declarations and reconfigures the profile.
@@ -66,7 +68,7 @@ export interface MarkdownEditorSurface extends TextEditorSurface {
   setLivePreview(on: boolean): void;
 }
 
-export interface PlainTextSurface extends TextEditorSurface {
+export interface PlainTextSurface extends TextEditorSurface, SurfaceModeful {
   readonly profile: "plain-text";
 }
 
@@ -79,12 +81,16 @@ export interface TextSurfaceFactory extends SurfaceFactory {
 
 export interface MarkdownSurfaceFactory extends TextSurfaceFactory {
   readonly profile: "markdown";
+  readonly modes: readonly SurfaceModeSpec[];
+  readonly defaultMode: "live_preview";
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): MarkdownEditorSurface;
 }
 
 export interface PlainTextSurfaceFactory extends TextSurfaceFactory {
   readonly profile: "plain-text";
+  readonly modes: readonly SurfaceModeSpec[];
+  readonly defaultMode: "source";
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): PlainTextSurface;
 }
@@ -103,6 +109,16 @@ const emptyChange: (change: EditorChange) => void = () => {};
 const emptySelectionChange: () => void = () => {};
 
 let nextTextSurfaceId = 1;
+const MARKDOWN_MODES = [
+  { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
+  { id: "live_preview", labelKey: "mode.live", hintKey: "mode.live.hint" },
+  { id: "reading", labelKey: "mode.reading", hintKey: "mode.reading.hint" },
+] as const satisfies readonly SurfaceModeSpec[];
+
+const PLAIN_TEXT_MODES = [
+  { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
+] as const satisfies readonly SurfaceModeSpec[];
+
 
 class TextSurface<Profile extends string> implements TextEditorSurface {
   readonly family = "text" as const;
@@ -217,11 +233,34 @@ class TextSurface<Profile extends string> implements TextEditorSurface {
 }
 
 class MarkdownSurface extends TextSurface<"markdown"> implements MarkdownEditorSurface {
+  readonly modes = MARKDOWN_MODES;
+  readonly defaultMode = "live_preview" as const;
+  private currentMode: string = "live_preview";
   private readonly markdownProfile: MarkdownProfile;
 
   constructor(engine: TextEngine, theme: Theme | undefined, markdownProfile: MarkdownProfile) {
     super("markdown", engine, theme);
     this.markdownProfile = markdownProfile;
+  }
+
+  mode(): string {
+    return this.currentMode;
+  }
+
+  setMode(id: string): void {
+    switch (id) {
+      case "live_preview":
+        this.currentMode = id;
+        this.setLivePreview(true);
+        return;
+      case "source":
+      case "reading":
+        this.currentMode = id;
+        this.setLivePreview(false);
+        return;
+      default:
+        return;
+    }
   }
 
   setSyntaxForms(forms: readonly SyntaxForm[]): void {
@@ -236,8 +275,21 @@ class MarkdownSurface extends TextSurface<"markdown"> implements MarkdownEditorS
 }
 
 class PlainTextSurfaceImpl extends TextSurface<"plain-text"> implements PlainTextSurface {
+  readonly modes = PLAIN_TEXT_MODES;
+  readonly defaultMode = "source" as const;
+  private currentMode: string = "source";
+
   constructor(engine: TextEngine, theme: Theme | undefined) {
     super("plain-text", engine, theme);
+  }
+
+  mode(): string {
+    return this.currentMode;
+  }
+
+  setMode(id: string): void {
+    if (id !== "source") return;
+    this.currentMode = id;
   }
 }
 
@@ -269,6 +321,8 @@ export function createMarkdownSurfaceFactory(
     family: "text",
     profile: "markdown",
     supportedVersions: [1],
+    modes: MARKDOWN_MODES,
+    defaultMode: "live_preview",
     mount(_request: SurfaceRequest, context: SurfaceMountContext): MarkdownEditorSurface {
       const textContext = context as TextSurfaceMountContext;
       const profile = createMarkdownProfile({
@@ -288,6 +342,8 @@ export function createPlainTextSurfaceFactory(
     family: "text",
     profile: "plain-text",
     supportedVersions: [1],
+    modes: PLAIN_TEXT_MODES,
+    defaultMode: "source",
     mount(_request: SurfaceRequest, context: SurfaceMountContext): PlainTextSurface {
       const mounted = mountTextEngine(createPlainTextProfile(), context, options);
       return new PlainTextSurfaceImpl(mounted.engine, mounted.theme);

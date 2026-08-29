@@ -26,6 +26,32 @@ export interface EditorSurface {
   resume(): void;
   destroy(): void;
 }
+export interface SurfaceModeSpec {
+  readonly id: string;
+  readonly labelKey: string;
+  readonly hintKey?: string;
+}
+
+export interface SurfaceModeful {
+  readonly modes: readonly SurfaceModeSpec[];
+  readonly defaultMode: string;
+  mode(): string;
+  setMode(id: string): void;
+}
+
+export function isModefulSurface(
+  surface: unknown,
+): surface is EditorSurface & SurfaceModeful {
+  if (typeof surface !== "object" || surface === null) return false;
+  const candidate = surface as Partial<SurfaceModeful>;
+  return (
+    Array.isArray(candidate.modes) &&
+    typeof candidate.defaultMode === "string" &&
+    typeof candidate.mode === "function" &&
+    typeof candidate.setMode === "function"
+  );
+}
+
 
 export interface SurfaceMountContext {
   readonly paneId: string;
@@ -57,6 +83,8 @@ export interface SurfaceFactory {
   readonly family: string;
   readonly profile?: string;
   readonly supportedVersions?: readonly number[];
+  readonly modes?: readonly SurfaceModeSpec[];
+  readonly defaultMode?: string;
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface;
 }
 
