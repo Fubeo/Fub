@@ -1,3 +1,4 @@
+import type { Extension } from "@codemirror/state";
 import type { Theme } from "../../theme/theme";
 import type { SyntaxForm } from "../../host/contract";
 import type {
@@ -20,10 +21,7 @@ import {
 } from "./profiles/markdown/profile";
 import type { CompletionSources } from "./profiles/markdown/completions";
 import type { LivePreviewCallbacks } from "./profiles/markdown/livepreview";
-import {
-  createPlainTextProfile,
-  type PlainTextProfile,
-} from "./profiles/plain-text";
+import { createPlainTextProfile } from "./profiles/plain-text";
 
 export interface TextSurfaceMountContext extends SurfaceMountContext {
   readonly initialText?: string;
@@ -47,7 +45,7 @@ export interface MarkdownSurfaceFactoryOptions extends TextSurfaceFactoryOptions
 
 export interface TextEditorSurface extends EditorSurface {
   readonly family: "text";
-  readonly profile: "markdown" | "plain-text";
+  readonly profile: string;
 
   setDoc(text: string): void;
   syncDoc(update: DocumentUpdate | string): void;
@@ -56,17 +54,39 @@ export interface TextEditorSurface extends EditorSurface {
   redo(): boolean;
   selections(): EditorSelections;
   revealByteOffset(offset: number): void;
+  reconfigure(): void;
+}
+
+export interface MarkdownEditorSurface extends TextEditorSurface {
+  readonly profile: "markdown";
+
   /// Replaces Markdown syntax declarations and reconfigures the profile.
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
   /// Enables or disables Markdown live preview and reconfigures the profile.
   setLivePreview(on: boolean): void;
-  reconfigure(): void;
 }
+
+export interface PlainTextSurface extends TextEditorSurface {
+  readonly profile: "plain-text";
+}
+
 export interface TextSurfaceFactory extends SurfaceFactory {
   readonly family: "text";
-  readonly profile: "markdown" | "plain-text";
+  readonly profile: string;
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): TextEditorSurface;
+}
+
+export interface MarkdownSurfaceFactory extends TextSurfaceFactory {
+  readonly profile: "markdown";
+
+  mount(request: SurfaceRequest, context: SurfaceMountContext): MarkdownEditorSurface;
+}
+
+export interface PlainTextSurfaceFactory extends TextSurfaceFactory {
+  readonly profile: "plain-text";
+
+  mount(request: SurfaceRequest, context: SurfaceMountContext): PlainTextSurface;
 }
 
 const emptyMarkdownCallbacks: LivePreviewCallbacks = {
@@ -84,28 +104,21 @@ const emptySelectionChange: () => void = () => {};
 
 let nextTextSurfaceId = 1;
 
-class TextSurface implements TextEditorSurface {
+class TextSurface<Profile extends string> implements TextEditorSurface {
   readonly family = "text" as const;
-  readonly profile: "markdown" | "plain-text";
+  readonly profile: Profile;
   readonly surfaceId: string;
 
   private readonly engine: TextEngine;
-  private readonly markdownProfile: MarkdownProfile | undefined;
   private readOnly = false;
   private suspended = false;
   private currentTheme: Theme | undefined;
   private destroyed = false;
 
-  constructor(
-    profile: "markdown" | "plain-text",
-    engine: TextEngine,
-    theme: Theme | undefined,
-    markdownProfile?: MarkdownProfile,
-  ) {
+  constructor(profile: Profile, engine: TextEngine, theme: Theme | undefined) {
     this.profile = profile;
     this.engine = engine;
     this.currentTheme = theme;
-    this.markdownProfile = markdownProfile;
     this.surfaceId = `text-surface-${nextTextSurfaceId++}`;
   }
 
@@ -135,16 +148,6 @@ class TextSurface implements TextEditorSurface {
 
   revealByteOffset(offset: number): void {
     this.engine.revealByteOffset(offset);
-  }
-
-  setSyntaxForms(forms: readonly SyntaxForm[]): void {
-    this.markdownProfile?.setSyntaxForms(forms);
-    if (this.markdownProfile) this.engine.reconfigure();
-  }
-
-  setLivePreview(on: boolean): void {
-    this.markdownProfile?.setLivePreview(on);
-    if (this.markdownProfile) this.engine.reconfigure();
   }
 
   reconfigure(): void {
@@ -213,13 +216,40 @@ class TextSurface implements TextEditorSurface {
   }
 }
 
-function mountTextSurface(
-  profileName: "markdown" | "plain-text",
-  profile: MarkdownProfile | PlainTextProfile,
+class MarkdownSurface extends TextSurface<"markdown"> implements MarkdownEditorSurface {
+  private readonly markdownProfile: MarkdownProfile;
+
+  constructor(engine: TextEngine, theme: Theme | undefined, markdownProfile: MarkdownProfile) {
+    super("markdown", engine, theme);
+    this.markdownProfile = markdownProfile;
+  }
+
+  setSyntaxForms(forms: readonly SyntaxForm[]): void {
+    this.markdownProfile.setSyntaxForms(forms);
+    this.reconfigure();
+  }
+
+  setLivePreview(on: boolean): void {
+    this.markdownProfile.setLivePreview(on);
+    this.reconfigure();
+  }
+}
+
+class PlainTextSurfaceImpl extends TextSurface<"plain-text"> implements PlainTextSurface {
+  constructor(engine: TextEngine, theme: Theme | undefined) {
+    super("plain-text", engine, theme);
+  }
+}
+
+interface TextProfile {
+  extensions(): Extension;
+}
+
+function mountTextEngine(
+  profile: TextProfile,
   context: SurfaceMountContext,
   options: TextSurfaceFactoryOptions,
-  markdownProfile?: MarkdownProfile,
-): TextEditorSurface {
+): { engine: TextEngine; theme: Theme | undefined } {
   const textContext = context as TextSurfaceMountContext;
   const engine = createTextEngine(textContext.parent, {
     onChange: textContext.onChange ?? options.onChange ?? emptyChange,
@@ -229,41 +259,38 @@ function mountTextSurface(
     extensions: () => profile.extensions(),
   });
   if (textContext.initialText !== undefined) engine.setDoc(textContext.initialText);
-  return new TextSurface(
-    profileName,
-    engine,
-    textContext.theme ?? options.theme,
-    markdownProfile,
-  );
+  return { engine, theme: textContext.theme ?? options.theme };
 }
 
 export function createMarkdownSurfaceFactory(
   options: MarkdownSurfaceFactoryOptions = {},
-): TextSurfaceFactory {
+): MarkdownSurfaceFactory {
   return {
     family: "text",
     profile: "markdown",
     version: 1,
-    mount(_request: SurfaceRequest, context: SurfaceMountContext): TextEditorSurface {
+    mount(_request: SurfaceRequest, context: SurfaceMountContext): MarkdownEditorSurface {
       const textContext = context as TextSurfaceMountContext;
       const profile = createMarkdownProfile({
         callbacks: textContext.markdownCallbacks ?? options.callbacks ?? emptyMarkdownCallbacks,
         completions: textContext.completions ?? options.completions ?? emptyCompletions,
       });
-      return mountTextSurface("markdown", profile, context, options, profile);
+      const mounted = mountTextEngine(profile, context, options);
+      return new MarkdownSurface(mounted.engine, mounted.theme, profile);
     },
   };
 }
 
 export function createPlainTextSurfaceFactory(
   options: TextSurfaceFactoryOptions = {},
-): TextSurfaceFactory {
+): PlainTextSurfaceFactory {
   return {
     family: "text",
     profile: "plain-text",
     version: 1,
-    mount(_request: SurfaceRequest, context: SurfaceMountContext): TextEditorSurface {
-      return mountTextSurface("plain-text", createPlainTextProfile(), context, options);
+    mount(_request: SurfaceRequest, context: SurfaceMountContext): PlainTextSurface {
+      const mounted = mountTextEngine(createPlainTextProfile(), context, options);
+      return new PlainTextSurfaceImpl(mounted.engine, mounted.theme);
     },
   };
 }

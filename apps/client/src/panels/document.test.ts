@@ -449,6 +449,25 @@ describe("il pannello monta le superfici dal registro", () => {
     expect(text).not.toContain("surfaceFamily");
     expect(text).not.toContain("surfaceProfile");
   });
+  it("riconosce una superficie testuale generica senza API Markdown", () => {
+    const text = functionBody("function isTextSurface(");
+    expect(text).toContain('"setDoc"');
+    expect(text).toContain('"syncDoc"');
+    expect(text).toContain('"selections"');
+    expect(text).toContain('"revealByteOffset"');
+    expect(text).not.toContain("setSyntaxForms");
+    expect(text).not.toContain("setLivePreview");
+  });
+
+  it("riserva syntax forms e live preview alla superficie Markdown", () => {
+    const show = functionBody("async function show(");
+    expect(show).toContain("isMarkdownSurface(r.surface)");
+    expect(show).toContain("markdownSurface?.setSyntaxForms(forms)");
+
+    const mode = functionBody("export async function setMode(");
+    expect(mode).toContain("isMarkdownSurface(r.surface)");
+    expect(mode).toContain("markdownSurface?.setLivePreview");
+  });
 });
 
 describe("identità della selezione nel percorso reale del pannello", () => {

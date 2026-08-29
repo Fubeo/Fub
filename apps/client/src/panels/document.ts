@@ -25,7 +25,11 @@ import type {
   SurfaceSelectionKey,
 } from "../editors/core/registry";
 import { surfaceRequestForDocument } from "../editors/bootstrap";
-import type { TextEditorSurface, TextSurfaceMountContext } from "../editors/text/factories";
+import type {
+  MarkdownEditorSurface,
+  TextEditorSurface,
+  TextSurfaceMountContext,
+} from "../editors/text/factories";
 import type { EditorChange } from "../editors/text/engine";
 import type { Theme } from "../theme/theme";
 import { Queue } from "../ui/race";
@@ -481,7 +485,15 @@ function isTextSurface(
     "selections" in surface &&
     typeof surface.selections === "function" &&
     "revealByteOffset" in surface &&
-    typeof surface.revealByteOffset === "function" &&
+    typeof surface.revealByteOffset === "function"
+  );
+}
+
+function isMarkdownSurface(
+  surface: EditorSurface | null | undefined,
+): surface is MarkdownEditorSurface {
+  if (!isTextSurface(surface) || surface.profile !== "markdown") return false;
+  return (
     "setSyntaxForms" in surface &&
     typeof surface.setSyntaxForms === "function" &&
     "setLivePreview" in surface &&
@@ -753,6 +765,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (!changed && !remounted) return;
 
   const textSurface = isTextSurface(r.surface) ? r.surface : null;
+  const markdownSurface = isMarkdownSurface(r.surface) ? r.surface : null;
   if (!textSurface) {
     // Fallback, viewer and error surfaces render their own visible state and
     // deliberately do not pretend to be text editors.
@@ -765,16 +778,16 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   let text: string;
   let forms: SyntaxForm[];
   try {
-    [text, forms] = await Promise.all([
-      readBuffer(tab.doc),
-      textSurface.profile === "markdown" ? syntaxForms(tab.doc) : Promise.resolve([]),
-    ]);
+    const formsPromise: Promise<SyntaxForm[]> = markdownSurface
+      ? syntaxForms(tab.doc)
+      : Promise.resolve([]);
+    [text, forms] = await Promise.all([readBuffer(tab.doc), formsPromise]);
   } catch (error) {
     if (isDocumentDeletedDuringRead(error)) return;
     throw error;
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
-  textSurface.setSyntaxForms(forms);
+  markdownSurface?.setSyntaxForms(forms);
   textSurface.setDoc(text);
   textSurface.setReadOnly(documentSessions.isDeletionPending(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
@@ -1194,8 +1207,8 @@ export async function setMode(next: PaneMode): Promise<void> {
   const r = panes.get(layout.focus);
   if (r) {
     // Sorgente = la stessa configurazione senza la resa inline.
-    const surface = isTextSurface(r.surface) ? r.surface : null;
-    surface?.setLivePreview(next === "live_preview");
+    const markdownSurface = isMarkdownSurface(r.surface) ? r.surface : null;
+    markdownSurface?.setLivePreview(next === "live_preview");
     if (next === "reading") {
       if (doc) await updatePreview(r.previewEl, doc);
     } else {
