@@ -121,10 +121,23 @@ export type DocumentSessionEvent =
   | { kind: "deletion-changed"; id: string; pending: boolean };
 
 type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
-
+type DocumentSessionObserverFault =
+  | {
+      readonly kind: "listener";
+      readonly event: DocumentSessionEvent;
+      readonly error: unknown;
+    }
+  | {
+      readonly kind: "surface";
+      readonly documentId: string;
+      readonly surfaceId: string;
+      readonly update: DocumentSurfaceUpdate;
+      readonly error: unknown;
+    };
 
 type SessionHooks = {
   emit(event: DocumentSessionEvent): void | Promise<void>;
+  reportObserverFault(fault: DocumentSessionObserverFault): void;
   draftSucceeded(): void;
   draftFailed(id: string): void;
 };
@@ -283,8 +296,8 @@ export class DocumentSession implements DraftBuffer {
     this.#draftGeneration++;
     this.#state.text = text;
     this.#state.dirty = true;
-    // Persistence is armed before observers can throw. A synchronous UI
-    // observer may still reject the call, but it cannot lose the edit.
+    // Persistence is armed before observers are notified. Their faults are
+    // isolated per recipient and cannot reject or undo the accepted edit.
     this.scheduleSave();
     this.scheduleDraft();
     this.#emit({ kind: "changed", id: this.#id });
@@ -353,7 +366,17 @@ export class DocumentSession implements DraftBuffer {
   #fanOut(update: DocumentSurfaceUpdate, except?: string): void {
     for (const surface of this.#surfaces.values()) {
       if (surface.id === except) continue;
-      surface.sync(update);
+      try {
+        surface.sync(update);
+      } catch (error) {
+        this.#hooks.reportObserverFault({
+          kind: "surface",
+          documentId: this.#id,
+          surfaceId: surface.id,
+          update,
+          error,
+        });
+      }
     }
   }
 
@@ -1344,6 +1367,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     if (existing) this.#sessions.delete(id);
     const session = new DocumentSession(OWNER_TOKEN, id, text, base, this.#api, {
       emit: (event) => this.#emit(event),
+      reportObserverFault: (fault) => this.#reportObserverFault(fault),
       draftSucceeded: () => {
         this.#blindDraft = false;
       },
@@ -1360,10 +1384,26 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #emit(event: DocumentSessionEvent): void | Promise<void> {
     const pending: Promise<void>[] = [];
     for (const listener of this.#listeners) {
-      const result = listener(event);
-      if (result) pending.push(result);
+      try {
+        const result = listener(event);
+        if (result) {
+          pending.push(
+            result.then(undefined, (error) => {
+              this.#reportObserverFault({ kind: "listener", event, error });
+            }),
+          );
+        }
+      } catch (error) {
+        this.#reportObserverFault({ kind: "listener", event, error });
+      }
     }
     return pending.length === 0 ? undefined : Promise.all(pending).then(() => undefined);
+  }
+
+  #reportObserverFault(fault: DocumentSessionObserverFault): void {
+    // Questo lavello non emette un evento di sessione: anche un listener
+    // guasto durante la segnalazione non può richiamare ricorsivamente #emit.
+    console.error("DocumentSession observer fault", fault);
   }
 
 }
