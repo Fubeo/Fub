@@ -1,0 +1,295 @@
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  byteViewerFactory,
+  DocumentSurfaceRegistry,
+  textualFallbackFactory,
+  type EditorSurface,
+  type SurfaceFactory,
+} from "./registry";
+
+type DestroySpy = {
+  calls: number;
+  destroy(): void;
+};
+
+type SurfaceFixture = {
+  factory: SurfaceFactory;
+  mounts: EditorSurface[];
+  destroys: DestroySpy[];
+};
+
+function surfaceFixture(label: string, family = "text", profile = label): SurfaceFixture {
+  const mounts: EditorSurface[] = [];
+  const destroys: DestroySpy[] = [];
+  const factory: SurfaceFactory = {
+    family,
+    profile,
+    version: 1,
+    mount(_request, context) {
+      const element = context.parent.ownerDocument.createElement("div");
+      element.dataset.testFactory = label;
+      element.textContent = label;
+      context.parent.appendChild(element);
+      const destroy: DestroySpy = {
+        calls: 0,
+        destroy() {
+          destroy.calls += 1;
+          element.remove();
+        },
+      };
+      const surface: EditorSurface = {
+        family,
+        surfaceId: `${label}-${mounts.length + 1}`,
+        focus() {},
+        setReadOnly() {},
+        setTheme() {},
+        captureViewState() {
+          return { version: 1, value: null };
+        },
+        restoreViewState() {},
+        suspend() {},
+        resume() {},
+        destroy: destroy.destroy,
+      };
+      mounts.push(surface);
+      destroys.push(destroy);
+      return surface;
+    },
+  };
+  return { factory, mounts, destroys };
+}
+
+function mountContext(): { paneId: string; documentId: string; parent: HTMLElement } {
+  return {
+    paneId: "pane-1",
+    documentId: "document-1",
+    parent: document.createElement("section"),
+  };
+}
+
+afterEach(() => {
+  document.body.replaceChildren();
+});
+
+describe("DocumentSurfaceRegistry", () => {
+  it("registra, risolve e monta la factory del binding", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const markdown = surfaceFixture("markdown");
+    const dispose = registry.register({
+      owner: "markdown-bundle",
+      family: "text",
+      profile: "markdown",
+      formatKey: "markdown",
+      species: "text/markdown",
+      factory: markdown.factory,
+    });
+    const request = {
+      family: "text",
+      profile: "markdown",
+      formatKey: "markdown",
+      species: "text/markdown",
+    };
+    const context = mountContext();
+
+    expect(dispose).toEqual(expect.any(Function));
+    expect(registry.resolve(request)).toBe(markdown.factory);
+    expect(registry.mount(request, context)).toBe(markdown.mounts[0]);
+    expect(context.parent.querySelector('[data-test-factory="markdown"]')).not.toBeNull();
+
+    dispose();
+  });
+
+  it("rifiuta le collisioni nominando entrambi gli owner", () => {
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "owner-a",
+      family: "text",
+      profile: "markdown",
+      formatKey: "shared-format",
+      factory: surfaceFixture("a").factory,
+    });
+
+    expect(() =>
+      registry.register({
+        owner: "owner-b",
+        family: "text",
+        profile: "plain-text",
+        formatKey: "shared-format",
+        factory: surfaceFixture("b").factory,
+      }),
+    ).toThrow(/owner-a.*owner-b/);
+  });
+
+  it("disinstalla A senza rimuovere i binding di B", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const a = surfaceFixture("a");
+    const b = surfaceFixture("b");
+    const disposeA = registry.register({
+      owner: "owner-a",
+      family: "text",
+      profile: "profile-a",
+      formatKey: "format-a",
+      factory: a.factory,
+    });
+    registry.register({
+      owner: "owner-b",
+      family: "text",
+      profile: "profile-b",
+      formatKey: "format-b",
+      factory: b.factory,
+    });
+
+    expect(registry.resolve({ formatKey: "format-b" })).toBe(b.factory);
+    disposeA();
+    expect(registry.resolve({ formatKey: "format-a" })).not.toBe(a.factory);
+    expect(registry.resolve({ formatKey: "format-b" })).toBe(b.factory);
+  });
+
+  it("unregister rimuove i binding e distrugge tutte le istanze possedute", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const a = surfaceFixture("a");
+    const b = surfaceFixture("b");
+    const disposeA = registry.register({
+      owner: "owner-a",
+      family: "text",
+      profile: "profile-a",
+      formatKey: "format-a",
+      factory: a.factory,
+    });
+    registry.register({
+      owner: "owner-b",
+      family: "text",
+      profile: "profile-b",
+      formatKey: "format-b",
+      factory: b.factory,
+    });
+    const context = mountContext();
+
+    registry.mount({ formatKey: "format-a" }, context);
+    registry.mount({ formatKey: "format-a" }, context);
+    registry.mount({ formatKey: "format-b" }, context);
+
+    disposeA();
+    expect(a.destroys).toHaveLength(2);
+    expect(a.destroys[0].calls).toBe(1);
+    expect(a.destroys[1].calls).toBe(1);
+    expect(b.destroys[0].calls).toBe(0);
+    expect(registry.resolve({ formatKey: "format-a" })).not.toBe(a.factory);
+    expect(registry.resolve({ formatKey: "format-b" })).toBe(b.factory);
+
+    disposeA();
+    expect(a.destroys[0].calls).toBe(1);
+  });
+
+  it("mostra un fallback testuale quando manca una factory di famiglia", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const context = mountContext();
+
+    const surface = registry.mount(
+      { family: "text", profile: "profilo-non-registrato" },
+      context,
+    );
+
+    expect(registry.resolve({ family: "text", profile: "profilo-non-registrato" })).toBe(
+      textualFallbackFactory,
+    );
+    expect(surface.family).toBe("text");
+    expect(context.parent.textContent).toContain("Fallback superficie testuale");
+    surface.destroy();
+  });
+
+  it("rende fallback o errore visibile per versione e famiglia sconosciute", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const versionContext = mountContext();
+    const familyContext = mountContext();
+
+    const versionSurface = registry.mount(
+      { family: "text", version: 999 },
+      versionContext,
+    );
+    const familySurface = registry.mount({ family: "family-futura" }, familyContext);
+
+    expect(versionContext.parent.textContent).toMatch(/Errore superficie|Fallback/);
+    expect(familyContext.parent.textContent).toMatch(/Errore superficie|Fallback/);
+    versionSurface.destroy();
+    familySurface.destroy();
+  });
+
+  it("applica override, formatKey, specie, fallback testuale, byte viewer ed errore in ordine", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const exact = surfaceFixture("exact");
+    const species = surfaceFixture("species");
+    const override = surfaceFixture("override");
+    registry.register({
+      owner: "exact-owner",
+      family: "text",
+      profile: "exact",
+      formatKey: "format-key",
+      factory: exact.factory,
+    });
+    registry.register({
+      owner: "species-owner",
+      family: "text",
+      profile: "species",
+      species: "text/source",
+      factory: species.factory,
+    });
+
+    expect(
+      registry.resolve({
+        formatKey: "format-key",
+        species: "text/source",
+        override: override.factory,
+      }),
+    ).toBe(override.factory);
+    const overrideContext = mountContext();
+    const mountedOverride = registry.mount(
+      { formatKey: "format-key", override: override.factory },
+      overrideContext,
+    );
+    expect(mountedOverride).toBe(override.mounts[0]);
+    mountedOverride.destroy();
+    expect(registry.resolve({ formatKey: "format-key", species: "text/source" })).toBe(
+      exact.factory,
+    );
+    expect(registry.resolve({ species: "text/source" })).toBe(species.factory);
+    expect(registry.resolve({ family: "text", profile: "missing" })).toBe(
+      textualFallbackFactory,
+    );
+    expect(registry.resolve({ species: "bytes" })).toBe(byteViewerFactory);
+    const byteContext = mountContext();
+    const byteSurface = registry.mount({ species: "bytes" }, byteContext);
+    expect(byteSurface.family).toBe("viewer");
+    expect(byteContext.parent.textContent).toContain(
+      "Visualizzatore read-only per sorgenti a byte",
+    );
+    byteSurface.destroy();
+    expect(registry.resolve({ family: "family-futura" }).family).toBe("error");
+  });
+
+  it("consente profili text distinti senza collisione sulla sola famiglia", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const markdown = surfaceFixture("markdown");
+    const plainText = surfaceFixture("plain-text");
+    registry.register({
+      owner: "markdown-owner",
+      family: "text",
+      formatKey: "markdown",
+      factory: markdown.factory,
+    });
+    registry.register({
+      owner: "plain-text-owner",
+      family: "text",
+      formatKey: "plain-text",
+      factory: plainText.factory,
+    });
+    expect(registry.resolve({ family: "text", profile: "markdown" })).toBe(markdown.factory);
+    expect(registry.resolve({ family: "text", profile: "plain-text" })).toBe(
+      plainText.factory,
+    );
+
+    expect(registry.resolve({ formatKey: "markdown" })).toBe(markdown.factory);
+    expect(registry.resolve({ formatKey: "plain-text" })).toBe(plainText.factory);
+  });
+});
