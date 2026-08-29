@@ -20,6 +20,7 @@ import { tryApplyOperation, type TextOperation } from "../editor/text-operation"
 
 const SAVE_MS = 400;
 const DRAFT_MS = 1_000;
+const deferObserverFaultReport = queueMicrotask;
 
 /// La porta con cui una superficie si sottoscrive a una sessione. Soltanto
 /// dati: niente DOM, niente editor, niente cursore, selezione o history —
@@ -1403,7 +1404,25 @@ export class DocumentSessionCollection implements DraftBufferStore {
   #reportObserverFault(fault: DocumentSessionObserverFault): void {
     // Questo lavello non emette un evento di sessione: anche un listener
     // guasto durante la segnalazione non può richiamare ricorsivamente #emit.
-    console.error("DocumentSession observer fault", fault);
+    try {
+      console.error("DocumentSession observer fault", fault);
+    } catch (reportingError) {
+      const report = new AggregateError(
+        [fault.error, reportingError],
+        "DocumentSession observer fault reporting failed",
+        { cause: fault },
+      );
+      // Il canale globale osserva entrambi i guasti fuori dalla consegna: se
+      // manca reportError, il throw resta un errore globale, mai una rejection.
+      deferObserverFaultReport(() => {
+        const reportError: unknown = Reflect.get(globalThis, "reportError");
+        if (typeof reportError === "function") {
+          Reflect.apply(reportError, globalThis, [report]);
+          return;
+        }
+        throw report;
+      });
+    }
   }
 
 }
