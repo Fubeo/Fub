@@ -154,6 +154,19 @@ describe("decisioni del ciclo di vita della sessione", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
+
+  async function conflictedSession(text = "testo locale"): Promise<DocumentSessionCollection> {
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "conflict", message: "revisione superata" };
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", text);
+    await sessions.flush("nota.md");
+    expect(sessions.inspect("nota.md")?.result).toBe("conflitto");
+    await sessions.flushDraft("nota.md");
+    return sessions;
+  }
   it("consuma l'eco prima di qualunque ricarica", async () => {
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
@@ -227,20 +240,204 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
   });
 
-  it("sposta keep/discard nel proprietario autorevole", async () => {
-    api.writeDocument = vi.fn(async () => {
-      throw { kind: "conflict", message: "revisione superata" };
-    });
+  it("conserva buffer sporco e bozza se una ricarica forzata non può leggere", async () => {
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockRejectedValueOnce(new Error("disco non disponibile"));
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
-    acceptText(sessions, "nota.md", "testo locale");
+    acceptText(sessions, "nota.md", "lavoro non salvato");
+    await sessions.flushDraft("nota.md");
+
+    const outcome = await sessions.forceReload("nota.md");
+
+    expect(outcome).toEqual({ kind: "unavailable" });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "lavoro non salvato",
+      dirty: true,
+      result: "fallito",
+      saveState: "fallito",
+    });
+    expect(api.discardDraft).not.toHaveBeenCalled();
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "lavoro non salvato", "rev-1");
+  });
+
+  it("non mostra come salvato un buffer pulito dopo una ricarica forzata fallita", async () => {
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione precedente", revision: "rev-1" })
+      .mockRejectedValueOnce(new Error("disco non disponibile"));
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+
+    const outcome = await sessions.forceReload("nota.md");
+
+    expect(outcome).toEqual({ kind: "unavailable" });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "versione precedente",
+      dirty: false,
+      result: "fallito",
+      saveState: "fallito",
+    });
+  });
+
+  it("rende stale una ricarica forzata lenta senza salvare sopra l'autorità ignota", async () => {
+    let releaseRead!: (source: { text: string; revision: string }) => void;
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ text: string; revision: string }>((resolve) => {
+            releaseRead = resolve;
+          }),
+      );
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "lavoro precedente");
+
+    const reloading = sessions.forceReload("nota.md");
+    acceptText(sessions, "nota.md", "attività più nuova");
+    await sessions.flushDraft("nota.md");
+    releaseRead({ text: "risposta vecchia", revision: "rev-2" });
+
+    expect(await reloading).toEqual({ kind: "stale" });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "attività più nuova",
+      dirty: true,
+      result: "fallito",
+      saveState: "fallito",
+    });
     await sessions.flush("nota.md");
-    expect(sessions.inspect("nota.md")?.result).toBe("conflitto");
+    expect(api.writeDocument).not.toHaveBeenCalled();
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "attività più nuova", "rev-1");
+  });
+
+  it("mantiene conflitto, testo e bozza quando theirs non può leggere il disco", async () => {
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockRejectedValueOnce(new Error("disco non disponibile"));
+    const sessions = await conflictedSession();
 
     const outcome = await sessions.resolveConflict("nota.md", "theirs");
 
-    expect(outcome.kind).toBe("discarded");
-    expect(sessions.inspect("nota.md")).toMatchObject({ dirty: false, result: "ok" });
+    expect(outcome).toEqual({
+      kind: "discarded",
+      reload: { kind: "unavailable" },
+      draft: "preserved",
+    });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "testo locale",
+      dirty: true,
+      result: "conflitto",
+      saveState: "conflitto",
+    });
+    expect(api.discardDraft).not.toHaveBeenCalled();
+    expect(api.saveDraft).toHaveBeenCalledWith("nota.md", "testo locale", "rev-1");
+  });
+
+  it("non elimina safety né applica una risposta theirs resa stale da nuova attività", async () => {
+    let releaseRead!: (source: { text: string; revision: string }) => void;
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ text: string; revision: string }>((resolve) => {
+            releaseRead = resolve;
+          }),
+      );
+    const sessions = await conflictedSession();
+
+    const resolving = sessions.resolveConflict("nota.md", "theirs");
+    acceptText(sessions, "nota.md", "attività più nuova");
+    await sessions.flushDraft("nota.md");
+    releaseRead({ text: "risposta vecchia", revision: "rev-2" });
+
+    expect(await resolving).toEqual({
+      kind: "discarded",
+      reload: { kind: "stale" },
+      draft: "preserved",
+    });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "attività più nuova",
+      dirty: true,
+      result: "conflitto",
+    });
+    expect(api.discardDraft).not.toHaveBeenCalled();
+  });
+
+  it("committa theirs su tutte le superfici prima di eliminare la vecchia bozza", async () => {
+    const order: string[] = [];
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockImplementationOnce(async () => {
+        order.push("read");
+        return { text: "autorità disco", revision: "rev-2" };
+      });
+    api.discardDraft = vi.fn(async () => {
+      order.push("discard-draft");
+    });
+    const sessions = await conflictedSession();
+    sessions.attachSurface("nota.md", {
+      id: "superficie-a",
+      sync: () => order.push("surface-a"),
+    });
+    sessions.attachSurface("nota.md", {
+      id: "superficie-b",
+      sync: () => order.push("surface-b"),
+    });
+
+    const outcome = await sessions.resolveConflict("nota.md", "theirs");
+
+    expect(outcome).toEqual({
+      kind: "discarded",
+      reload: { kind: "reloaded", text: "autorità disco", changed: true },
+      draft: "discarded",
+    });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "autorità disco",
+      base: { kind: "descends_from", value: "rev-2" },
+      dirty: false,
+      result: "ok",
+    });
+    expect(order).toEqual(["read", "surface-a", "surface-b", "discard-draft"]);
+  });
+
+  it("rende osservabile una bozza rimasta dopo il successo di theirs", async () => {
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockResolvedValueOnce({ text: "autorità disco", revision: "rev-2" });
+    api.discardDraft = vi.fn(async () => {
+      throw new Error("bozza non eliminabile");
+    });
+    const sessions = await conflictedSession();
+    const events: DocumentSessionEvent[] = [];
+    sessions.subscribe((event) => {
+      events.push(event);
+    });
+
+    const outcome = await sessions.resolveConflict("nota.md", "theirs");
+
+    expect(outcome).toEqual({
+      kind: "discarded",
+      reload: { kind: "reloaded", text: "autorità disco", changed: true },
+      draft: "preserved",
+    });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "autorità disco",
+      dirty: false,
+      result: "ok",
+    });
+    expect(events).toContainEqual({
+      kind: "draft-discard-failed",
+      id: "nota.md",
+      error: expect.any(Error),
+    });
   });
 
   it("rinomina senza duplicare l'owner e rifiuta una destinazione occupata", async () => {
