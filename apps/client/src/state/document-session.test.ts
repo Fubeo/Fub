@@ -990,6 +990,89 @@ describe("decisioni del ciclo di vita della sessione", () => {
     faults.mockRestore();
   });
 
+  it("un lavello guasto non interrompe listener e superfici successive", async () => {
+    const reportingError = new Error("console guasta");
+    const primary = vi.spyOn(console, "error").mockImplementation(() => {
+      throw reportingError;
+    });
+    const fallback = vi.fn();
+    vi.stubGlobal("reportError", fallback);
+    try {
+      const sessions = new DocumentSessionCollection(api);
+      await sessions.read("lavello.md");
+      const healthyEvents: DocumentSessionEvent[] = [];
+      const peerUpdates: string[] = [];
+      sessions.subscribe(() => {
+        throw new Error("listener guasto");
+      });
+      sessions.subscribe((event) => {
+        healthyEvents.push(event);
+      });
+      sessions.attachSurface("lavello.md", {
+        id: "riquadro-a",
+        sync: () => {
+          throw new Error("la sorgente non deve ricevere");
+        },
+      });
+      sessions.attachSurface("lavello.md", {
+        id: "riquadro-b",
+        sync: () => {
+          throw new Error("superficie B guasta");
+        },
+      });
+      sessions.attachSurface("lavello.md", {
+        id: "riquadro-c",
+        sync: () => peerUpdates.push("riquadro-c"),
+      });
+
+      const before = sessions.text("lavello.md");
+      if (before === undefined) throw new Error("sessione non costruita");
+      const outcome = sessions.acceptSurfaceChange("lavello.md", "riquadro-a", {
+        text: "testo convergente",
+        operation: operationFromText(before, "testo convergente"),
+      });
+
+      expect(outcome).toEqual({ kind: "accepted" });
+      expect(healthyEvents).toContainEqual({ kind: "changed", id: "lavello.md" });
+      expect(peerUpdates).toEqual(["riquadro-c"]);
+      expect(sessions.inspect("lavello.md")).toMatchObject({
+        dirty: true,
+        text: "testo convergente",
+      });
+      await Promise.resolve();
+      expect(fallback).toHaveBeenCalledTimes(2);
+      const listenerReport = fallback.mock.calls[0]?.[0];
+      const surfaceReport = fallback.mock.calls[1]?.[0];
+      expect(listenerReport).toBeInstanceOf(AggregateError);
+      expect(listenerReport).toMatchObject({
+        message: "DocumentSession observer fault reporting failed",
+        cause: expect.objectContaining({
+          kind: "listener",
+          error: expect.objectContaining({ message: "listener guasto" }),
+        }),
+        errors: [
+          expect.objectContaining({ message: "listener guasto" }),
+          reportingError,
+        ],
+      });
+      expect(surfaceReport).toBeInstanceOf(AggregateError);
+      expect(surfaceReport).toMatchObject({
+        message: "DocumentSession observer fault reporting failed",
+        cause: expect.objectContaining({
+          kind: "surface",
+          surfaceId: "riquadro-b",
+          error: expect.objectContaining({ message: "superficie B guasta" }),
+        }),
+        errors: [
+          expect.objectContaining({ message: "superficie B guasta" }),
+          reportingError,
+        ],
+      });
+    } finally {
+      primary.mockRestore();
+    }
+  });
+
   it("osserva il rigetto asincrono senza rejection globale e consegna al listener sano", async () => {
     const faults = vi.spyOn(console, "error").mockImplementation(() => {});
     const unhandled = vi.fn();
@@ -1340,6 +1423,61 @@ describe("le superfici sottoscritte alla sessione", () => {
       }),
     );
     faults.mockRestore();
+  });
+
+  it("un lavello guasto non blocca ricarica autorevole e scarto della bozza", async () => {
+    const reportingError = new Error("console guasta");
+    const primary = vi.spyOn(console, "error").mockImplementation(() => {
+      throw reportingError;
+    });
+    const fallback = vi.fn();
+    vi.stubGlobal("reportError", fallback);
+    try {
+      api.readDocument = vi
+        .fn()
+        .mockResolvedValueOnce({ text: "testo iniziale", revision: "rev-1" })
+        .mockResolvedValueOnce({ text: "autorità disco", revision: "rev-2" });
+      const sessions = new DocumentSessionCollection(api);
+      await sessions.read("lavello-reload.md");
+      acceptText(sessions, "lavello-reload.md", "bozza locale");
+      await sessions.flushDraft("lavello-reload.md");
+      const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
+      sessions.attachSurface("lavello-reload.md", {
+        id: "superficie-guasta",
+        sync: () => {
+          throw new Error("superficie non sincronizzabile");
+        },
+      });
+      sessions.attachSurface(
+        "lavello-reload.md",
+        recordingSurface("superficie-sana", log),
+      );
+
+      const outcome = await sessions.forceReload("lavello-reload.md");
+
+      expect(outcome).toEqual({ kind: "reloaded", text: "autorità disco", changed: true });
+      expect(log).toEqual([
+        { surface: "superficie-sana", update: { kind: "text", text: "autorità disco" } },
+      ]);
+      expect(api.discardDraft).toHaveBeenCalledWith("lavello-reload.md");
+      await Promise.resolve();
+      expect(fallback).toHaveBeenCalledTimes(1);
+      expect(fallback.mock.calls[0]?.[0]).toMatchObject({
+        message: "DocumentSession observer fault reporting failed",
+        cause: expect.objectContaining({
+          kind: "surface",
+          documentId: "lavello-reload.md",
+          surfaceId: "superficie-guasta",
+          error: expect.objectContaining({ message: "superficie non sincronizzabile" }),
+        }),
+        errors: [
+          expect.objectContaining({ message: "superficie non sincronizzabile" }),
+          reportingError,
+        ],
+      });
+    } finally {
+      primary.mockRestore();
+    }
   });
 
   it("la sostituzione autorevole raggiunge ogni superficie una volta sola, in testo pieno", async () => {
