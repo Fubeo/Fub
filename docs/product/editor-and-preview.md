@@ -148,9 +148,12 @@ distrugge le superfici gestite; una superficie creata mentre la factory
 disinstalla rientrantemente la propria registrazione viene pulita e il mount
 fallisce, senza restituire una superficie non gestita.
 
-Il pannello riusa la superficie soltanto quando coincide la chiave opaca di
-selezione (`r.selectionKey === selected.key`). `family` e `profile` non sono
-l'identità di riuso: più registrazioni con la stessa coppia restano
+Il pannello riusa la superficie soltanto quando coincidono sia la
+`SurfaceSelectionKey` restituita da `mount` sia il `documentId` dell'istanza
+montata; se cambia documento, esegue un nuovo `mount`. Dopo la costruzione, la
+chiave restituita da `mount`, non quella prevista da `select`, è autorevole.
+`family` e `profile` non sono l'identità di riuso: più registrazioni con la
+stessa coppia restano
 distinguibili. La selezione passa da override, `formatKey` esatto, `species`,
 coppia `family`-`profile` non ambigua, viewer a byte, fallback testuale e
 superficie di errore. Le collisioni sui binding esatti nominano entrambi gli

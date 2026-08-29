@@ -149,9 +149,12 @@ Il registro è posseduto dalla shell (`apps/client/src`), non da `fub-abi`.
 `desktop-shell.ts` lo inietta in `DocumentDeps` prima di `mountDocument()`.
 Ogni factory appartiene all'owner della registrazione che la espone.
 
-L'API pubblica espone `register` (con disposer), `select` e `mount`. `select`
-restituisce soltanto una `SurfaceSelectionKey` opaca, senza esporre la factory;
-`mount` è l'unico costruttore pubblico di superfici.
+L'API pubblica espone `register` (con disposer), `select` e `mount`. Una
+`SurfaceSelectionKey` identifica la selezione corrente del registro; `select`
+ne fa una previsione in sola lettura solo nel percorso rapido, per evitare
+lavoro, e restituisce la chiave opaca senza esporre la factory. `mount` è
+l'unico costruttore pubblico: risolve, costruisce e gestisce la superficie,
+restituendola con la chiave della stessa risoluzione effettiva.
 
 Un `SurfaceOverride` esprime una sola intenzione come unione discriminata:
 `{ kind: "registration", registrationId }`,
@@ -191,12 +194,15 @@ gestita.
 passa a `bootstrapSurfaceRegistry()`, che le consegna alla
 `MarkdownSurfaceFactory`. La factory costruisce `MarkdownProfile` con quei
 servizi. Il `SurfaceMountContext` generico contiene soltanto `paneId`,
-`documentId` e `parent`; `setSyntaxForms` resta capability post-mount.
-
-`DocumentPanel` conserva la chiave opaca restituita da `select` e riusa una
-superficie soltanto quando `r.selectionKey === selected.key`. `family` e
-`profile` descrivono capability, non identità: registrazioni con la stessa
-coppia restano distinguibili perché hanno chiavi diverse.
+`documentId` e `parent`; per un'istanza montata, `documentId` identifica il
+documento per cui è montata; `setSyntaxForms` resta capability post-mount.
+`DocumentPanel` conserva la chiave effettiva restituita da `mount`, non la
+previsione di `select`, e riusa la superficie solo se coincidono
+`SurfaceSelectionKey` e `documentId` dell'istanza; se cambia documento esegue
+un nuovo `mount`. La chiave post-mount proviene da `mount`: un teardown che
+modifica il registro durante il mount non può creare divergenza tra chiave B e
+superficie C. `family` e `profile` descrivono capability, non identità:
+registrazioni con la stessa coppia restano distinguibili perché hanno chiavi diverse.
 
 La selezione segue quest'ordine:
 
