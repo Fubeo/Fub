@@ -216,6 +216,77 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+describe("isModefulSurface", () => {
+  it("accetta soltanto cataloghi PaneMode coerenti", () => {
+    expect(
+      isModefulSurface({
+        modes: [{ id: "source", labelKey: "mode.source" }],
+        defaultMode: "source",
+        mode: () => "source",
+        setMode: () => {},
+      }),
+    ).toBe(true);
+  });
+
+  it("rifiuta ID duplicati, estranei, default e corrente fuori catalogo", () => {
+    expect(
+      isModefulSurface({
+        modes: [
+          { id: "source", labelKey: "mode.source" },
+          { id: "source", labelKey: "mode.source-again" },
+        ],
+        defaultMode: "source",
+        mode: () => "source",
+        setMode: () => {},
+      }),
+    ).toBe(false);
+    expect(
+      isModefulSurface({
+        modes: [{ id: "other", labelKey: "mode.other" }],
+        defaultMode: "other",
+        mode: () => "other",
+        setMode: () => {},
+      }),
+    ).toBe(false);
+    expect(
+      isModefulSurface({
+        modes: [{ id: "source", labelKey: "mode.source" }],
+        defaultMode: "live_preview",
+        mode: () => "source",
+        setMode: () => {},
+      }),
+    ).toBe(false);
+    expect(
+      isModefulSurface({
+        modes: [{ id: "source", labelKey: "mode.source" }],
+        defaultMode: "source",
+        mode: () => "reading",
+        setMode: () => {},
+      }),
+    ).toBe(false);
+  });
+
+  it("rifiuta metodi mancanti o un current mode che fallisce", () => {
+    expect(
+      isModefulSurface({
+        modes: [{ id: "source", labelKey: "mode.source" }],
+        defaultMode: "source",
+        mode: () => "source",
+      }),
+    ).toBe(false);
+    expect(
+      isModefulSurface({
+        modes: [{ id: "source", labelKey: "mode.source" }],
+        defaultMode: "source",
+        mode: () => {
+          throw new Error("surface unavailable");
+        },
+        setMode: () => {},
+      }),
+    ).toBe(false);
+  });
+});
+
 describe("DocumentSurfaceRegistry", () => {
   it("registra, seleziona e monta la factory del binding", () => {
     const registry = new DocumentSurfaceRegistry();

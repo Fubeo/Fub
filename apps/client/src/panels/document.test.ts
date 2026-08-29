@@ -477,11 +477,16 @@ describe("il pannello monta le superfici dal registro", () => {
   });
 
 });
-type RequestBox = { value: SurfaceRequest };
+type RequestBox = {
+  value: SurfaceRequest;
+  byDocument?: Readonly<Record<string, SurfaceRequest>>;
+};
 
 function mockPanelModules(request: RequestBox) {
   const shellState = { currentDoc: null as string | null, handledExtensions: [] as string[] };
   const contexts: ViewContext[] = [];
+  let languageListener: (() => void) | undefined;
+  let language = "initial";
   const flush = vi.fn(async (_doc: string) => {});
   const previews = vi.fn(async (_preview: HTMLElement, _doc: string) => {});
   const setActiveContext = vi.fn(async (context: ViewContext) => {
@@ -500,7 +505,7 @@ function mockPanelModules(request: RequestBox) {
   };
 
   vi.doMock("../editors/bootstrap", () => ({
-    surfaceRequestForDocument: () => request.value,
+    surfaceRequestForDocument: (doc: string) => request.byDocument?.[doc] ?? request.value,
   }));
   vi.doMock("../host/ipc", () => ({ api: { setActiveContext } }));
   vi.doMock("../host/query", () => ({
@@ -549,12 +554,22 @@ function mockPanelModules(request: RequestBox) {
   }));
   vi.doMock("../host/errors", () => ({ errorText: () => "errore" }));
   vi.doMock("../i18n/strings", () => ({
-    onLanguage: () => {},
-    t: (key: string) => key,
+    onLanguage: (listener: () => void) => {
+      languageListener = listener;
+    },
+    t: (key: string) => `${language}:${key}`,
   }));
   vi.doMock("../ui/tooltip", () => ({ setTooltip: () => {} }));
 
-  return { contexts, flush, previews };
+  return {
+    contexts,
+    flush,
+    previews,
+    refreshLanguage() {
+      language = "updated";
+      languageListener?.();
+    },
+  };
 }
 
 function panelDom(): void {
@@ -673,8 +688,9 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     });
 
     panelDom();
-    const { mountDocument, setMode, synchronize } = await import("./document");
-    const { layout, openIn } = await import("../state/layout");
+    const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
+    const { layout, openIn, setMode: setPaneMode } = await import("../state/layout");
+    setPaneMode("main", "source", layout);
     mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.txt", layout);
     await synchronize();
@@ -688,8 +704,15 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     expect(switcher?.querySelector("#mode-reading-key")).toBeNull();
     expect(buttons[0]?.getAttribute("aria-pressed")).toBe("true");
 
+    await publishContext();
+    const published = harness.contexts.length;
+    const setSurfaceMode = vi.spyOn(surface, "setMode");
+
     await setMode("live_preview");
     expect(surface.mode()).toBe("source");
+    expect(layout.panes.main?.mode).toBe("source");
+    expect(setSurfaceMode).not.toHaveBeenCalled();
+    expect(harness.contexts).toHaveLength(published);
     expect(
       document.querySelector<HTMLButtonElement>('button[data-mode="source"]')?.getAttribute(
         "aria-pressed",
@@ -700,6 +723,9 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
 
     await setMode("reading");
     expect(surface.mode()).toBe("source");
+    expect(layout.panes.main?.mode).toBe("source");
+    expect(setSurfaceMode).not.toHaveBeenCalled();
+    expect(harness.contexts).toHaveLength(published);
     expect(
       document.querySelector<HTMLButtonElement>('button[data-mode="source"]')?.getAttribute(
         "aria-pressed",
@@ -722,43 +748,164 @@ describe("modalità della superficie nel percorso reale del pannello", () => {
     expect(harness.contexts.every((context) => context.mode !== "live_preview")).toBe(true);
   });
 
-  it.each([
-    ["fallback", { family: "text", profile: "unknown" }, "note.txt"],
-    ["unknown", { family: "unknown" }, "note.bin"],
-  ] as const)("non pubblica live_preview su %s e resta tollerante", async (_kind, requestValue, doc) => {
+  it.each(
+    [
+      {
+        name: "byte viewer",
+        nextRequest: { species: "application/octet-stream" },
+        doc: "note.bin",
+        surfaceClass: "document-surface-byte-viewer",
+      },
+      {
+        name: "fallback testuale",
+        nextRequest: { family: "text", profile: "unknown" },
+        doc: "note.txt",
+        surfaceClass: "document-surface-text-fallback",
+      },
+      {
+        name: "errore esplicito",
+        nextRequest: { family: "unknown" },
+        doc: "note.unknown",
+        surfaceClass: "document-surface-error",
+      },
+    ] satisfies readonly {
+      readonly name: string;
+      readonly nextRequest: SurfaceRequest;
+      readonly doc: string;
+      readonly surfaceClass: string;
+    }[],
+  )(
+    "da Markdown in Lettura a $name lascia visibile la propria superficie senza anteprima",
+    async ({ nextRequest, doc, surfaceClass }) => {
+      vi.resetModules();
+      const request: RequestBox = {
+        value: {
+          family: "text",
+          profile: "markdown",
+          formatKey: "md",
+          species: "text/markdown",
+        },
+      };
+      const harness = mockPanelModules(request);
+      const registry = new DocumentSurfaceRegistry();
+      registry.register({
+        owner: "test-markdown",
+        family: "text",
+        profile: "markdown",
+        formatKey: "md",
+        species: "text/markdown",
+        factory: createMarkdownSurfaceFactory(),
+      });
+
+      panelDom();
+      const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
+      const { layout, openIn } = await import("../state/layout");
+      mountDocument({ surfaceRegistry: registry });
+      await synchronize();
+      expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
+
+      openIn("main", "note.md", layout);
+      await synchronize();
+      await setMode("reading");
+      harness.previews.mockClear();
+
+      request.value = nextRequest;
+      openIn("main", doc, layout);
+      await synchronize();
+      await publishContext();
+
+      const root = document.querySelector<HTMLElement>(".pane");
+      expect(layout.panes.main?.mode).toBe("reading");
+      expect(root?.dataset.mode).toBe("source");
+      expect(root?.classList.contains("markdown-reading")).toBe(false);
+      expect(root?.querySelector(`.pane-editor .${surfaceClass}`)).not.toBeNull();
+      expect(harness.previews).not.toHaveBeenCalled();
+      expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("source");
+      expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
+    },
+  );
+  it("isola catalogo, rendering e contesto dal riquadro che ha il fuoco", async () => {
     vi.resetModules();
-    const request: RequestBox = { value: requestValue };
+    const markdownRequest: SurfaceRequest = {
+      family: "text",
+      profile: "markdown",
+      formatKey: "md",
+      species: "text/markdown",
+    };
+    const plainRequest: SurfaceRequest = {
+      family: "text",
+      profile: "plain-text",
+      formatKey: "txt",
+      species: "text/plain",
+    };
+    const request: RequestBox = {
+      value: markdownRequest,
+      byDocument: { "note.md": markdownRequest, "note.txt": plainRequest },
+    };
     const harness = mockPanelModules(request);
     const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "test-markdown",
+      family: "text",
+      profile: "markdown",
+      formatKey: "md",
+      species: "text/markdown",
+      factory: createMarkdownSurfaceFactory(),
+    });
+    registry.register({
+      owner: "test-plain",
+      family: "text",
+      profile: "plain-text",
+      formatKey: "txt",
+      species: "text/plain",
+      factory: createPlainTextSurfaceFactory(),
+    });
 
     panelDom();
     const { mountDocument, publishContext, setMode, synchronize } = await import("./document");
-    const { layout, openIn } = await import("../state/layout");
+    const { focusPane, layout, openIn, split } = await import("../state/layout");
     mountDocument({ surfaceRegistry: registry });
+    openIn("main", "note.md", layout);
     await synchronize();
-    const emptyRoot = document.querySelector<HTMLElement>(".pane");
-    expect(emptyRoot).not.toBeNull();
-    expect(emptyRoot?.dataset.mode).not.toBe("live_preview");
-    await publishContext();
-    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
-    openIn("main", doc, layout);
+    await setMode("reading");
+
+    const plainPaneId = split("main", "col", layout);
+    expect(plainPaneId).not.toBeNull();
+    openIn(plainPaneId!, "note.txt", layout);
     await synchronize();
 
-    const root = document.querySelector<HTMLElement>(".pane");
-    expect(root?.dataset.mode).not.toBe("live_preview");
+    const markdownPane = document.querySelector<HTMLElement>('[data-pane="main"]');
+    const plainPane = document.querySelector<HTMLElement>(`[data-pane="${plainPaneId}"]`);
+    expect(markdownPane?.dataset.mode).toBe("reading");
+    expect(markdownPane?.classList.contains("markdown-reading")).toBe(true);
+    expect(plainPane?.dataset.mode).toBe("source");
+    expect(plainPane?.classList.contains("markdown-reading")).toBe(false);
+    expect([...document.querySelectorAll<HTMLButtonElement>("#mode-switch button")].map(
+      (button) => button.dataset.mode,
+    )).toEqual(["source"]);
+    expect(
+      document
+        .querySelector<HTMLButtonElement>('#mode-switch button[data-mode="source"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
     await publishContext();
-    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("source");
 
-    await expect(setMode("live_preview")).resolves.toBeUndefined();
-    expect(root?.dataset.mode).not.toBe("live_preview");
-    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
+    focusPane("main", layout);
+    await synchronize();
+    expect([...document.querySelectorAll<HTMLButtonElement>("#mode-switch button")].map(
+      (button) => button.dataset.mode,
+    )).toEqual(["source", "live_preview", "reading"]);
+    expect(
+      document
+        .querySelector<HTMLButtonElement>('#mode-switch button[data-mode="reading"]')
+        ?.getAttribute("aria-pressed"),
+    ).toBe("true");
 
-    await expect(setMode("reading")).resolves.toBeUndefined();
-    expect(root?.dataset.mode).not.toBe("live_preview");
-    expect(harness.contexts[harness.contexts.length - 1]?.mode).not.toBe("live_preview");
-    expect(harness.flush).toHaveBeenCalledWith(doc);
-    expect(harness.previews).toHaveBeenCalled();
-    expect(document.querySelectorAll("#mode-switch button")).toHaveLength(0);
+    harness.refreshLanguage();
+    expect(
+      document.querySelector<HTMLButtonElement>('#mode-switch button[data-mode="reading"]')?.textContent,
+    ).toBe("updated:mode.reading");
   });
 });
 

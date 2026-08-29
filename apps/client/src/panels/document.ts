@@ -146,9 +146,12 @@ export function mountDocument(d: DocumentDeps): void {
   modeSwitch.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement) || target.tagName !== "BUTTON") return;
-    const mode = target.dataset.mode;
-    if (!mode) return;
-    void setMode(mode as PaneMode);
+    const surface = panes.get(layout.focus)?.surface;
+    const spec = isModefulSurface(surface)
+      ? surface.modes.find((candidate) => candidate.id === target.dataset.mode)
+      : undefined;
+    if (!spec) return;
+    void setMode(spec.id);
   });
 
   // Il layout è cambiato — qualcuno ha diviso, chiuso, cambiato linguetta — e il DOM
@@ -431,7 +434,7 @@ async function render(): Promise<void> {
 
     r.root.classList.toggle("focus", id === layout.focus);
     await show(r, activeTab(id));
-    r.root.dataset.mode = effectiveMode(r.surface, p.mode);
+    applyPaneMode(r, p.mode);
   }
   updateToggle();
   drawSave();
@@ -509,18 +512,23 @@ function effectiveMode(
   surface: EditorSurface | null | undefined,
   paneMode: PaneMode,
 ): PaneMode {
-  if (!isModefulSurface(surface)) {
-    return paneMode === "live_preview" ? "source" : paneMode;
-  }
+  if (!isModefulSurface(surface)) return "source";
   if (surface.modes.some((mode) => mode.id === paneMode)) return paneMode;
-  if (
-    surface.defaultMode === "source" ||
-    surface.defaultMode === "live_preview" ||
-    surface.defaultMode === "reading"
-  ) {
-    return surface.defaultMode;
-  }
-  return surface.family === "text" ? "source" : paneMode;
+  return surface.defaultMode;
+}
+
+function isMarkdownReadingSurface(
+  surface: EditorSurface | null | undefined,
+  paneMode: PaneMode,
+): surface is MarkdownEditorSurface {
+  return isMarkdownSurface(surface) && effectiveMode(surface, paneMode) === "reading";
+}
+
+function applyPaneMode(r: Pane, paneMode: PaneMode): PaneMode {
+  const mode = effectiveMode(r.surface, paneMode);
+  r.root.dataset.mode = mode;
+  r.root.classList.toggle("markdown-reading", isMarkdownReadingSurface(r.surface, paneMode));
+  return mode;
 }
 
 function surfaceMountContext(r: Pane, doc: string): TextSurfaceMountContext {
@@ -863,7 +871,7 @@ async function redrawReading(doc: string): Promise<void> {
       if (
         !r ||
         !pane ||
-        effectiveMode(r.surface, pane.mode) !== "reading" ||
+        !isMarkdownReadingSurface(r.surface, pane.mode) ||
         activeDoc(id) !== doc
       )
         return;
@@ -1253,20 +1261,28 @@ function scheduleContext(): void {
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
 export async function setMode(next: PaneMode): Promise<void> {
-  setPaneMode(layout.focus, next);
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const surface = r?.surface;
-  const effective = effectiveMode(surface, next);
-  if (isModefulSurface(surface)) surface.setMode(effective);
+  if (
+    !r ||
+    !isModefulSurface(surface) ||
+    !surface.modes.some((spec) => spec.id === next)
+  ) {
+    return;
+  }
+
+  setPaneMode(layout.focus, next);
+  surface.setMode(next);
+  applyPaneMode(r, next);
   updateToggle();
-  if (effective === "reading") {
+  if (isMarkdownReadingSurface(surface, next)) {
     if (doc) {
       await documentSessions.flush(doc);
-      if (r) await updatePreview(r.previewEl, doc);
+      await updatePreview(r.previewEl, doc);
     }
   } else {
-    surface?.focus();
+    surface.focus();
   }
   await publishContext();
 }
@@ -1275,7 +1291,7 @@ export async function setMode(next: PaneMode): Promise<void> {
 export function revealByteOffset(byteOffset: number): void {
   const pane = panes.get(layout.focus);
   if (!pane) return;
-  if (effectiveMode(pane.surface, activePane().mode) !== "reading") {
+  if (!isMarkdownReadingSurface(pane.surface, activePane().mode)) {
     const surface = isTextSurface(pane.surface) ? pane.surface : null;
     surface?.revealByteOffset(byteOffset);
     return;

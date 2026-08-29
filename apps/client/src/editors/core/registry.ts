@@ -1,3 +1,5 @@
+import type { PaneMode } from "../../host/contract";
+
 export type SurfaceFamily =
   | "text"
   | "grid"
@@ -27,16 +29,30 @@ export interface EditorSurface {
   destroy(): void;
 }
 export interface SurfaceModeSpec {
-  readonly id: string;
+  readonly id: PaneMode;
   readonly labelKey: string;
   readonly hintKey?: string;
 }
 
 export interface SurfaceModeful {
   readonly modes: readonly SurfaceModeSpec[];
-  readonly defaultMode: string;
-  mode(): string;
-  setMode(id: string): void;
+  readonly defaultMode: PaneMode;
+  mode(): PaneMode;
+  setMode(id: PaneMode): void;
+}
+
+function isPaneMode(value: unknown): value is PaneMode {
+  return value === "source" || value === "live_preview" || value === "reading";
+}
+
+function isSurfaceModeSpec(value: unknown): value is SurfaceModeSpec {
+  if (typeof value !== "object" || value === null) return false;
+  const candidate = value as Partial<SurfaceModeSpec>;
+  return (
+    isPaneMode(candidate.id) &&
+    typeof candidate.labelKey === "string" &&
+    (candidate.hintKey === undefined || typeof candidate.hintKey === "string")
+  );
 }
 
 export function isModefulSurface(
@@ -44,13 +60,29 @@ export function isModefulSurface(
 ): surface is EditorSurface & SurfaceModeful {
   if (typeof surface !== "object" || surface === null) return false;
   const candidate = surface as Partial<SurfaceModeful>;
-  return (
-    Array.isArray(candidate.modes) &&
-    typeof candidate.defaultMode === "string" &&
-    typeof candidate.mode === "function" &&
-    typeof candidate.setMode === "function"
-  );
+  if (
+    !Array.isArray(candidate.modes) ||
+    !isPaneMode(candidate.defaultMode) ||
+    typeof candidate.mode !== "function" ||
+    typeof candidate.setMode !== "function"
+  ) {
+    return false;
+  }
+
+  const ids = new Set<PaneMode>();
+  for (const mode of candidate.modes) {
+    if (!isSurfaceModeSpec(mode) || ids.has(mode.id)) return false;
+    ids.add(mode.id);
+  }
+  if (!ids.has(candidate.defaultMode)) return false;
+
+  try {
+    return ids.has(candidate.mode());
+  } catch {
+    return false;
+  }
 }
+
 
 
 export interface SurfaceMountContext {
@@ -98,8 +130,6 @@ export interface SurfaceFactory {
   readonly family: string;
   readonly profile?: string;
   readonly supportedVersions?: readonly number[];
-  readonly modes?: readonly SurfaceModeSpec[];
-  readonly defaultMode?: string;
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface;
 }
 

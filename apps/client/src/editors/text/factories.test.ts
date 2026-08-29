@@ -25,12 +25,13 @@ describe("factory testuali del registro", () => {
 
     expect(findTextEditor(context.parent)).not.toBeNull();
     expect(isModefulSurface(surface)).toBe(true);
-    expect(markdownSurfaceFactory.modes).toEqual([
+    expect(markdownSurfaceFactory).not.toHaveProperty("modes");
+    expect(markdownSurfaceFactory).not.toHaveProperty("defaultMode");
+    expect(surface.modes).toEqual([
       { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
       { id: "live_preview", labelKey: "mode.live", hintKey: "mode.live.hint" },
       { id: "reading", labelKey: "mode.reading", hintKey: "mode.reading.hint" },
     ]);
-    expect(surface.modes).toBe(markdownSurfaceFactory.modes);
     expect(surface.defaultMode).toBe("live_preview");
     expect(surface.mode()).toBe("live_preview");
     expect(surface).not.toHaveProperty("live_preview");
@@ -48,6 +49,7 @@ describe("factory testuali del registro", () => {
     expect(findTextEditor(context.parent)).not.toBeNull();
 
     const callsBeforeUnknown = setLivePreview.mock.calls.length;
+    // @ts-expect-error Surface mode IDs are restricted to the existing PaneMode.
     surface.setMode("unknown");
     expect(surface.mode()).toBe("reading");
     expect(setLivePreview.mock.calls).toHaveLength(callsBeforeUnknown);
@@ -69,10 +71,11 @@ describe("factory testuali del registro", () => {
 
     expect(findTextEditor(context.parent)).not.toBeNull();
     expect(isModefulSurface(surface)).toBe(true);
-    expect(plainTextSurfaceFactory.modes).toEqual([
+    expect(plainTextSurfaceFactory).not.toHaveProperty("modes");
+    expect(plainTextSurfaceFactory).not.toHaveProperty("defaultMode");
+    expect(surface.modes).toEqual([
       { id: "source", labelKey: "mode.source", hintKey: "mode.source.hint" },
     ]);
-    expect(surface.modes).toBe(plainTextSurfaceFactory.modes);
     expect(surface.defaultMode).toBe("source");
     expect(surface.mode()).toBe("source");
     expect(surface).toMatchObject({ family: "text", profile: "plain-text" });
@@ -82,7 +85,7 @@ describe("factory testuali del registro", () => {
 
     surface.setMode("live_preview");
     expect(surface.mode()).toBe("source");
-    surface.setMode("unknown");
+    surface.setMode("reading");
     expect(surface.mode()).toBe("source");
     surface.setDoc("testo senza semantica");
     expect(surface.currentText()).toBe("testo senza semantica");

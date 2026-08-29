@@ -440,15 +440,13 @@ html, body, #app {
   overflow: hidden;
 }
 
-/* Le tre modalità sono esclusive (4.1), ed è **del riquadro**: era
-   `body[data-mode]`, cioè una modalità per tutta la finestra, e con N
-   riquadri sarebbe la cosa sbagliata proprio nel caso per cui si divide (la
-   nota di lato in Lettura mentre si scrive). Sta nella struttura perché è
-   il modo in cui le tre superfici si alternano, non come sono fatte. */
-.pane[data-mode="reading"] .pane-editor {
+/* La lettura resa è una capability Markdown, non un valore persistito del
+   riquadro: viewer, fallback ed errori devono restare visibili anche se il
+   riquadro ricordava "reading". */
+.pane.markdown-reading .pane-editor {
   display: none;
 }
-.pane:not([data-mode="reading"]) .pane-preview {
+.pane:not(.markdown-reading) .pane-preview {
   display: none;
 }
 
