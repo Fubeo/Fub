@@ -6,11 +6,18 @@
 
 ## Modalità
 
-Il documento Markdown può essere mostrato come:
+Il catalogo delle modalità vive sulla superficie (`SurfaceModeful`) e nelle
+factory che la montano, non nei contratti generici `EditorSurface` e
+`TextEditorSurface`. La superficie Markdown dichiara:
 
-- **sorgente**, con la sintassi esplicita;
-- **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
-- **lettura**, che mostra la resa senza cursore di testo.
+- **sorgente** (`source`), con la sintassi esplicita;
+- **live preview** (`live_preview`), che mantiene l'editing e riduce il rumore
+  della sintassi;
+- **lettura** (`reading`), che mostra la resa senza cursore di testo.
+
+Il `defaultMode` di Markdown è `live_preview`. Plain text dichiara soltanto
+`source`, con `defaultMode: "source"`. Fallback, viewer ed error non sono
+modeful e non espongono un catalogo.
 
 Il provider Markdown interpreta la sorgente. La shell possiede CodeMirror,
 focus, selezione, scroll, tema e lifecycle.
@@ -168,14 +175,35 @@ e `VaultInfo.extensions` restano dati per esploratore e note di cartella, non
 identità del formato; non esiste un `format_id` IPC e `FormatDescriptor.id` in
 Rust non è un campo di `VaultInfo`.
 
-`PaneMode` e `live_preview` restano proprietà del riquadro. Il pannello invoca
-`setLivePreview` soltanto sulle superfici Markdown. Un riquadro o una finestra
-vuoti contengono il solo chrome, senza un `EditorView` Markdown finto. La
-`DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle; il
-pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
-chiamata IPC o WASM per ogni battuta.
+`PaneMode` resta l'ABI `source | live_preview | reading` di
+`ViewContext.mode`. Il pannello conserva la modalità persistita del riquadro e
+calcola `effectiveMode` rispetto al catalogo della superficie: il valore
+persistito può restare `live_preview` anche per plain text, mentre chrome e
+contesto seguono `effectiveMode`; il contesto pubblica `live_preview` solo se
+la superficie attiva lo dichiara.
 
-La griglia e il foglio sono assenti dal percorso utente.
+Il pannello applica `surface.setMode(effectiveMode)` e non invoca
+`setLivePreview`: su Markdown `setMode` mappa già `live_preview`, `source` e
+`reading`. Il commutatore `#mode-switch` si ricostruisce dal catalogo della
+superficie con il focus. Senza documento o con fallback, viewer o error non
+modeful il commutatore non crea bottoni; Markdown conserva Sorgente, Live e
+Lettura con le chiavi i18n esistenti. Non esiste un `DocumentModeRegistry`
+parallelo.
+
+L'arbitrato della tastiera è centralizzato nella shell e segue l'ordine
+overlay transitorio, editor locale in modifica, superficie attiva, profilo
+attivo, comandi del documento, comandi del riquadro e comandi globali. I livelli
+di superficie e profilo sono punti di estensione no-op. Il percorso non
+intercetta undo/redo nativi: i tre accordi di `PASSED_TO_EDITOR` restano
+dell'editor quando il focus è dentro `.cm-editor`.
+
+Un riquadro o una finestra vuoti contengono il solo chrome, senza un
+`EditorView` Markdown finto. La `DocumentSession` coordina buffer, salvataggio,
+bozza, conflitti e lifecycle; il pannello collega le superfici e aggiorna la
+resa. Nessun profilo invia una chiamata IPC o WASM per ogni battuta.
+
+Non esiste una griglia (`GridEngine`) né un percorso utente `.fubsheet`; il
+contratto generico non consegna `live_preview` a questi percorsi.
 
 ## Dove si trova
 
@@ -185,6 +213,8 @@ La griglia e il foglio sono assenti dal percorso utente.
 - `apps/client/src/editor/`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/state/`
+- `apps/client/src/ui/arbitration.ts`
+- `apps/client/src/ui/keyboard.ts`
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`

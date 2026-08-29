@@ -21,6 +21,10 @@ ciò che formerà la prima versione.
 - il registro delle superfici applica ownership esplicita a `destroy()`, riusa
   per chiave di selezione e inferisce temporaneamente il formato da path ed
   estensione;
+- cataloghi di modalità dichiarati dalle superfici modeful, distinti per
+  Markdown e plain text;
+- arbitrato centralizzato della tastiera con priorità per overlay, editor e
+  comandi della shell;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;

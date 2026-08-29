@@ -328,16 +328,53 @@ superficie: l'inferenza temporanea e le sue allowlist sono descritte sopra.
 Il plain text è un client architetturale della shell, non una funzionalità del
 vault per gli utenti; nel fake host soltanto `.md` è trattato come documento.
 
-`PaneMode` e `live_preview` restano proprietà del riquadro. Il pannello invoca
-`setLivePreview` soltanto su superfici Markdown; il registro non introduce un
-registro delle modalità.
+Il catalogo delle modalità vive sulla superficie che lo dichiara, non sul
+contratto generico `EditorSurface` o `TextEditorSurface`. `SurfaceModeful`
+espone `modes`, `defaultMode`, `mode()` e `setMode()`; le factory modeful
+dichiarano lo stesso catalogo tramite `modes` e `defaultMode`, e la superficie
+montata lo espone. Markdown dichiara `source`, `live_preview` e `reading`, con
+`defaultMode: "live_preview"`; plain text dichiara soltanto `source`, con
+`defaultMode: "source"`. Fallback, viewer ed error sono superfici non
+modeful. Non esiste un `DocumentModeRegistry` parallelo.
+
+`PaneMode` resta l'ABI `source | live_preview | reading` di
+`ViewContext.mode`. Il pannello conserva la modalità persistita del riquadro e
+calcola `effectiveMode` confrontandola con il catalogo della superficie:
+`live_preview` può quindi restare persistita passando a plain text, mentre
+chrome e contesto seguono `effectiveMode` e pubblicano `source`. Il contesto
+pubblica `live_preview` soltanto quando la superficie attiva la dichiara.
+Il pannello applica `surface.setMode(effectiveMode)` e non invoca
+`setLivePreview`; su Markdown `setMode` mappa già `live_preview`, `source` e
+`reading` sulla configurazione del profilo.
+
+Il commutatore `#mode-switch` si ricostruisce dal catalogo della superficie
+con il focus. Senza documento o con una superficie non modeful non crea
+bottoni; Markdown mostra ancora Sorgente, Live e Lettura con le chiavi i18n
+esistenti.
+
+L'arbitrato della tastiera segue sette livelli, implementati in
+`apps/client/src/ui/arbitration.ts` e consumati da `ui/keyboard.ts`, in questo
+ordine: 1) overlay transitorio, 2) editor locale in modifica, 3) comandi della
+superficie attiva, 4) profilo attivo, 5) comandi del documento, 6) comandi del
+riquadro, 7) comandi globali. I livelli 3 e 4 sono punti di estensione no-op:
+Markdown e plain text affidano i comandi locali alla keymap di
+CodeMirror.
+
+La tastiera applicativa ha un solo `document` `keydown` di produzione, in
+`ui/keyboard.ts` e montato tramite `Lifetime`. In produzione non ci sono
+`window` o `document` `keydown` sotto `editors/**` né in `panels/preview.ts`.
+L'arbitrato non sottrae undo/redo nativi: i tre accordi dell'insieme
+`PASSED_TO_EDITOR` (`shell.doc.search`, `shell.pane.split.down`,
+`shell.mode.live`) restano dell'editor quando il focus è dentro `.cm-editor`.
 
 Un riquadro o una finestra vuoti contengono soltanto il chrome, senza una
 `EditorView` Markdown fittizia.
 
 `FormulaProfile` resta una superficie usata soltanto dai test e dalle fixture:
 non è una superficie esposta all'utente. Sono assenti la griglia (`GridEngine`),
-la famiglia `structured` e le superfici WASM.
+il percorso utente `.fubsheet`, la famiglia `structured` e le superfici WASM.
+Il contratto generico non consegna `live_preview` a una griglia né al percorso
+`.fubsheet`.
 
 I moduli dei profili sono rispettivamente
 `apps/client/src/editors/text/profiles/markdown/profile.ts`,
@@ -388,5 +425,7 @@ Gli altri guard del frontend impediscono:
 - `apps/client/src/host/dialog.ts`
 - `apps/client/src/panels/`
 - `apps/client/src/state/`
+- `apps/client/src/ui/arbitration.ts`
+- `apps/client/src/ui/keyboard.ts`
 - `apps/client/src/ui/`
 - `crates/fub-app/src/lib.rs`
