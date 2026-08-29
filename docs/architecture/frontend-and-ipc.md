@@ -304,9 +304,9 @@ superfici. Il pannello possiede il collegamento delle superfici e applica questi
 dati all'editor; non possiede la validazione, il buffer o il fan-out delle
 modifiche.
 
-Force reload e la risoluzione del conflitto `theirs` sono transazionali: timer e stato pulito cambiano soltanto dopo una lettura riuscita; una lettura fallita o stantia conserva testo dirty, conflitto e bozza, senza autosalvare sopra un'autorità sconosciuta.
-Al successo, il testo raggiunge tutte le superfici prima dell'eliminazione della bozza precedente, il cui fallimento è osservabile come evento
-`draft-discard-failed` con id del documento ed errore.
+Force reload e la risoluzione del conflitto `theirs` cancellano subito il timer e bloccano i salvataggi mentre l'autorità su disco è sconosciuta.
+Una lettura fallita o stantia conserva testo dirty, conflitto e bozza, senza autosalvare; soltanto una lettura riuscita aggiorna testo, base, dirty e bozza,
+diffonde il testo intero e poi elimina la bozza precedente, il cui fallimento è osservabile come evento `draft-discard-failed` con id del documento ed errore.
 
 La superficie destinataria esegue una seconda guardia:
 `TextEngine.syncDoc()` valida l'operazione ricevuta contro il proprio testo

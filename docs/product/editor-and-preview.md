@@ -117,13 +117,14 @@ La `DocumentSession` accoda le scritture per documento. Il core applica la
 revisione di base. Un contenuto esterno più recente produce un conflitto
 esplicito.
 
-Force reload e la scelta `theirs` ricaricano transazionalmente: timer e stato
-pulito cambiano soltanto dopo una lettura riuscita. Se la lettura fallisce o
+Force reload e la scelta `theirs` cancellano subito il timer e bloccano i
+salvataggi mentre l'autorità su disco è sconosciuta. Se la lettura fallisce o
 diventa stantia per attività più recente, testo dirty, conflitto e bozza
 restano invariati e nessun autosalvataggio sovrascrive un'autorità sconosciuta.
-Al successo il testo da disco raggiunge tutte le superfici prima che la bozza
-precedente sia eliminata; il fallimento dell'eliminazione è osservabile come
-evento `draft-discard-failed` con id del documento ed errore.
+Solo una lettura riuscita aggiorna testo, base, dirty e bozza, diffonde il testo
+da disco a tutte le superfici e poi elimina la bozza precedente; il fallimento
+dell'eliminazione è osservabile come evento `draft-discard-failed` con id del
+documento ed errore.
 
 Il rilascio dell'ultima tab esegue il flush della scrittura e, se necessario,
 della bozza prima di chiudere la sessione; il lifecycle del riquadro e
