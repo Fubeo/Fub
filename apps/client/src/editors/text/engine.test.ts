@@ -225,36 +225,47 @@ describe("syncDoc", () => {
     expect(ed.getDoc()).toBe("abcB");
   });
 
-  it("controlla le modifiche effettive dopo un transactionFilter", () => {
-    let seen = 0;
+  it("non permette a un transactionFilter di alterare un sync autoritativo", () => {
+    let syncFilterRuns = 0;
+    let localFilterRuns = 0;
+    const observedSyncs: Array<{ remote: boolean; addToHistory: boolean }> = [];
     const filter = EditorState.transactionFilter.of((transaction) => {
-      if (!transaction.isUserEvent("sync")) return transaction;
-      seen += 1;
+      if (!transaction.docChanged) return transaction;
+      if (!transaction.isUserEvent("sync")) {
+        localFilterRuns += 1;
+        return transaction;
+      }
+      syncFilterRuns += 1;
       return {
         changes: {
           from: 0,
           to: transaction.startState.doc.length,
-          insert: transaction.newDoc.toString(),
+          insert: "testo contaminato dal profilo",
         },
-        annotations: [
-          Transaction.userEvent.of("sync"),
-          Transaction.addToHistory.of(false),
-          Transaction.remote.of(true),
-        ],
         filter: false,
       };
     });
-    const { ed, view } = editor(() => {}, () => filter);
-    ed.setDoc("abc");
-    const initialView = view();
-    view().dispatch({ changes: { from: 1, insert: "L" }, userEvent: "input.type" });
-    ed.syncDoc("aLbc?");
+    const observer = EditorView.updateListener.of((update) => {
+      for (const transaction of update.transactions) {
+        if (!transaction.isUserEvent("sync")) continue;
+        observedSyncs.push({
+          remote: transaction.annotation(Transaction.remote),
+          addToHistory: transaction.annotation(Transaction.addToHistory),
+        });
+      }
+    });
+    const { ed, view } = editor(() => {}, () => [filter, observer]);
+    ed.setDoc("base");
+    view().dispatch({ changes: { from: 0, insert: "X" }, userEvent: "input.type" });
+    expect(localFilterRuns).toBe(1);
 
-    expect(seen).toBe(2);
-    expect(ed.getDoc()).toBe("aLbc?");
-    expect(view()).toBe(initialView);
-    expect(undoDepth(view().state)).toBe(0);
-    expect(ed.undo()).toBe(false);
+    ed.syncDoc("Xbase?\ninvariata");
+
+    expect(syncFilterRuns).toBe(0);
+    expect(ed.getDoc()).toBe("Xbase?\ninvariata");
+    expect(observedSyncs).toEqual([{ remote: true, addToHistory: false }]);
+    expect(ed.undo()).toBe(true);
+    expect(ed.getDoc()).toBe("base?\ninvariata");
   });
 });
 

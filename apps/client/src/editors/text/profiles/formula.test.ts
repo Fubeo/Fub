@@ -160,6 +160,18 @@ describe("FormulaProfile", () => {
     engine.destroy();
   });
 
+  it("non applica la politica single-line a un sync autoritativo", () => {
+    const profile = createFormulaProfile({ singleLine: true });
+    const { engine } = mounted(profile);
+    engine.setDoc("=A1");
+
+    engine.syncDoc("=A1\n+B2");
+
+    expect(engine.getDoc()).toBe("=A1\n+B2");
+    expect(engine.undo()).toBe(false);
+    engine.destroy();
+  });
+
   it("può disabilitare la politica single-line senza cambiare il completamento o le decisioni", () => {
     const commit = vi.fn();
     const profile = createFormulaProfile({ singleLine: false, onCommit: commit });
