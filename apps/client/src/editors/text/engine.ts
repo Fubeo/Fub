@@ -160,6 +160,7 @@ export class TextEngine {
         Transaction.remote.of(true),
       ],
       userEvent: "sync",
+      filter: false,
     };
     let transaction: Transaction;
     try {
@@ -168,8 +169,8 @@ export class TextEngine {
       this.footprints.markUnknown();
       return;
     }
-    if (!transaction.docChanged) {
-      this.clearFootprintsWithoutHistory();
+    if (!this.isAuthoritativeSync(transaction, normalizedText)) {
+      this.footprints.markUnknown();
       return;
     }
 
@@ -182,8 +183,8 @@ export class TextEngine {
         this.footprints.markUnknown();
         return;
       }
-      if (!transaction.docChanged) {
-        this.clearFootprintsWithoutHistory();
+      if (!this.isAuthoritativeSync(transaction, normalizedText)) {
+        this.footprints.markUnknown();
         return;
       }
     }
@@ -330,6 +331,17 @@ export class TextEngine {
         transaction.docChanged &&
         transaction.annotation(Transaction.addToHistory) !== false &&
         transaction.annotation(Transaction.remote) !== true,
+    );
+  }
+
+  private isAuthoritativeSync(transaction: Transaction, expectedText: string): boolean {
+    return (
+      transaction.docChanged &&
+      transaction.newDoc.toString() === expectedText &&
+      transaction.annotation(this.originAnnotation) === "sync" &&
+      transaction.isUserEvent("sync") &&
+      transaction.annotation(Transaction.remote) === true &&
+      transaction.annotation(Transaction.addToHistory) === false
     );
   }
 
