@@ -101,7 +101,9 @@ esplicito.
 
 Il rilascio dell'ultima tab esegue il flush della scrittura e, se necessario,
 della bozza prima di chiudere la sessione; il lifecycle del riquadro e
-dell'editor resta separato da quello del documento.
+dell'editor resta separato da quello del documento. Durante la conferma di una
+cancellazione gli editor del documento restano aperti ma in sola lettura finché
+la decisione non risolve.
 
 ## Preview e contenuto non fidato
 

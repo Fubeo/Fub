@@ -16,6 +16,7 @@ ciò che formerà la prima versione.
 - parsing, modello comune, rendering e serializzazione tramite provider;
 - wikilink, tag, backlink, ricerca full-text e Graph View;
 - editor CodeMirror, live preview e modalità di lettura;
+- motore testuale condiviso con profili Markdown, plain text e formula;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;
@@ -31,7 +32,7 @@ ciò che formerà la prima versione.
 
 - completamento di M5: provider WASM aggiuntivi, UI non fidata e percorso
   installazione-esecuzione end-to-end;
-- consolidamento delle superfici di editing dopo un secondo cliente reale;
+- estensione delle superfici condivise a griglia e contratto pubblico;
 - modularizzazione e prova di scala della Graph View;
 - definizione del contratto pubblico dei temi.
 

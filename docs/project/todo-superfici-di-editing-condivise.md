@@ -1,8 +1,8 @@
 # TODO — modularità delle superfici di editing
 
-> **Stato:** prossimo passo approvato, non ancora avviato.
+> **Stato:** in esecuzione — fasi 0–4 concluse su main, fasi 5–10 aperte.
 > **Tracker:** [issue #11](https://github.com/Fubeo/Fub/issues/11).
-> **Aggiornato:** 25 agosto 2026.
+> **Aggiornato:** 29 agosto 2026.
 > **Origine:** recupero e revisione del piano storico sulle superfici
 > condivise, conservato nella cronologia Git al commit
 > `5d8af02050700c738e73461a7a0a98059d91dfc2`.
@@ -280,12 +280,12 @@ apps/client/src/editors/
 
 Lavoro:
 
-- [ ] inventariare tutti gli import `@codemirror/*`;
-- [ ] classificare ogni responsabilità come generica o Markdown;
-- [ ] elencare le assunzioni Markdown nel pannello documenti;
-- [ ] conservare baseline visuali nelle due luci;
-- [ ] aggiungere test per history, sincronizzazione, UTF-8, CRLF e teardown;
-- [ ] verificare due riquadri sullo stesso documento e undo locali distinti.
+- [x] inventariare tutti gli import `@codemirror/*`;
+- [x] classificare ogni responsabilità come generica o Markdown;
+- [x] elencare le assunzioni Markdown nel pannello documenti;
+- [x] conservare baseline visuali nelle due luci;
+- [x] aggiungere test per history, sincronizzazione, UTF-8, CRLF e teardown;
+- [x] verificare due riquadri sullo stesso documento e undo locali distinti.
 
 Criterio di uscita: nessuna differenza visiva e nessuna modifica a Rust, IPC o
 WIT.
@@ -301,20 +301,20 @@ Lasciare fuori parser Markdown, live preview, wikilink, tag, completamenti,
 
 Criteri di uscita:
 
-- [ ] i test preesistenti restano verdi;
-- [ ] il motore non importa codice Markdown;
-- [ ] la vecchia factory funziona tramite adapter;
-- [ ] tema e resa restano identici;
-- [ ] non nasce un nuovo canale IPC.
+- [x] i test preesistenti restano verdi;
+- [x] il motore non importa codice Markdown;
+- [x] la vecchia factory funziona tramite adapter;
+- [x] tema e resa restano identici;
+- [x] non nasce un nuovo canale IPC.
 
 ### Fase 2 — rendere Markdown un profilo
 
-- [ ] spostare language support e live preview;
-- [ ] spostare wikilink, tag e completamenti;
-- [ ] spostare la configurazione di `SyntaxForm`;
-- [ ] classificare uno per uno i comandi dell'editor;
-- [ ] mantenere nel core soltanto comandi con semantica condivisa;
-- [ ] riconfigurare il profilo senza perdere la history.
+- [x] spostare language support e live preview;
+- [x] spostare wikilink, tag e completamenti;
+- [x] spostare la configurazione di `SyntaxForm`;
+- [x] classificare uno per uno i comandi dell'editor;
+- [x] mantenere nel core soltanto comandi con semantica condivisa;
+- [x] riconfigurare il profilo senza perdere la history.
 
 Criterio di uscita: tutte le funzioni dell'editor corrente passano da
 `MarkdownProfile` e nel motore non compare la parola `markdown`.
@@ -333,12 +333,12 @@ coperti end-to-end.
 
 ### Fase 4 — estrarre `DocumentSession`
 
-- [ ] estrarre mappa dei buffer, queue, timer, revisione e dirty;
-- [ ] centralizzare modifiche esterne, rename, delete e close;
-- [ ] notificare la sessione con operazioni tipizzate;
-- [ ] sincronizzare le altre superfici dalla sessione;
-- [ ] lasciare nel pannello layout, tab, DOM, focus e mount;
-- [ ] escludere cursore, scroll, cella attiva e undo locale dalla sessione.
+- [x] estrarre mappa dei buffer, queue, timer, revisione e dirty;
+- [x] centralizzare modifiche esterne, rename, delete e close;
+- [x] notificare la sessione con operazioni tipizzate;
+- [x] sincronizzare le altre superfici dalla sessione;
+- [x] lasciare nel pannello layout, tab, DOM, focus e mount;
+- [x] escludere cursore, scroll, cella attiva e undo locale dalla sessione.
 
 Criterio di uscita: il pannello non implementa più il protocollo di salvataggio
 e la sessione muore correttamente dopo l'ultima tab.
@@ -482,7 +482,7 @@ rich text.
 
 ### Guard da aggiungere
 
-- [ ] nessun import `@codemirror/*` fuori da `apps/client/src/editors/text/`;
+- [x] nessun import `@codemirror/*` fuori da `apps/client/src/editors/text/`;
 - [ ] ogni binding usa famiglia, profilo e fallback registrati;
 - [ ] ogni famiglia pubblica ha implementazione shell, fallback, mirror,
   conformità nativa e conformità WASM.
@@ -524,12 +524,12 @@ ABI, WIT, SDK, proxy WASM, esempio e rimozione degli adapter.
 
 ## Definition of Done
 
-- [ ] Markdown usa `TextEngine` attraverso `MarkdownProfile`.
-- [ ] Il core testuale non conosce Markdown.
+- [x] Markdown usa `TextEngine` attraverso `MarkdownProfile`.
+- [x] Il core testuale non conosce Markdown.
 - [ ] Plain text, formula bar e cell editor usano lo stesso motore.
-- [ ] Una correzione al core raggiunge tutti i profili.
+- [x] Una correzione al core raggiunge tutti i profili.
 - [ ] Il pannello documenti monta le superfici attraverso il registro.
-- [ ] Il buffer appartiene alla sessione; cursore, scroll e undo alla superficie.
+- [x] Il buffer appartiene alla sessione; cursore, scroll e undo alla superficie.
 - [ ] La griglia usa un solo CodeMirror in-cell riusabile.
 - [ ] Nessuna battuta genera IPC o WASM.
 - [ ] Undo testuale e undo del foglio restano separati.

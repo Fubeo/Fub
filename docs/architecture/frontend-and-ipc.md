@@ -133,6 +133,12 @@ chiudere l'owner. Una rinomina mantiene lo stesso owner e il suo buffer; una
 cancellazione riuscita o una rimozione esterna lo chiudono. La riapertura crea o
 riusa l'owner a partire dalla sorgente.
 
+Durante una cancellazione in attesa di conferma la sessione sospende i timer e
+segnala lo stato di cancellazione pendente; il pannello congela con
+`setReadOnly` gli editor di ogni riquadro che mostra il documento finché la
+conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
+una modifica accettata da un altro riquadro resta visibile ma non modificabile.
+
 Ogni `Pane` possiede invece un `Editor`. `renderPane()` crea l'editor chiamando
 `createEditor()` da `apps/client/src/editor/editor.ts`, che costruisce un
 `TextEngine` per quel riquadro e inoltra l'API del profilo Markdown. Questo
