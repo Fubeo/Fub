@@ -1076,7 +1076,19 @@ describe("decisioni del ciclo di vita della sessione", () => {
   it("osserva il rigetto asincrono senza rejection globale e consegna al listener sano", async () => {
     const faults = vi.spyOn(console, "error").mockImplementation(() => {});
     const unhandled = vi.fn();
-    process.on("unhandledRejection", unhandled);
+    const runtimeProcess: unknown = Reflect.get(globalThis, "process");
+    if (typeof runtimeProcess !== "object" || runtimeProcess === null) {
+      throw new Error("This test requires the runtime process event emitter");
+    }
+    const onUnhandledRejection: unknown = Reflect.get(runtimeProcess, "on");
+    const offUnhandledRejection: unknown = Reflect.get(runtimeProcess, "off");
+    if (
+      typeof onUnhandledRejection !== "function" ||
+      typeof offUnhandledRejection !== "function"
+    ) {
+      throw new Error("This test requires process.on and process.off");
+    }
+    Reflect.apply(onUnhandledRejection, runtimeProcess, ["unhandledRejection", unhandled]);
     try {
       const sessions = new DocumentSessionCollection(api);
       await sessions.read("observer-async.md");
@@ -1090,11 +1102,14 @@ describe("decisioni del ciclo di vita della sessione", () => {
 
       acceptText(sessions, "observer-async.md", "testo asincrono");
       for (let i = 0; i < 4; i += 1) await Promise.resolve();
-      const turn = Promise.withResolvers<void>();
+      let resolveTurn!: () => void;
+      const turn = new Promise<void>((resolve) => {
+        resolveTurn = resolve;
+      });
       const channel = new MessageChannel();
-      channel.port1.onmessage = () => turn.resolve();
+      channel.port1.onmessage = resolveTurn;
       channel.port2.postMessage(null);
-      await turn.promise;
+      await turn;
       channel.port1.close();
       channel.port2.close();
       expect(healthyEvents).toContainEqual({ kind: "changed", id: "observer-async.md" });
@@ -1108,7 +1123,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
       );
       expect(unhandled).not.toHaveBeenCalled();
     } finally {
-      process.off("unhandledRejection", unhandled);
+      Reflect.apply(offUnhandledRejection, runtimeProcess, ["unhandledRejection", unhandled]);
       faults.mockRestore();
     }
   });

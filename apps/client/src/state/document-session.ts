@@ -1410,8 +1410,12 @@ export class DocumentSessionCollection implements DraftBufferStore {
       const report = new AggregateError(
         [fault.error, reportingError],
         "DocumentSession observer fault reporting failed",
-        { cause: fault },
       );
+      Object.defineProperty(report, "cause", {
+        configurable: true,
+        value: fault,
+        writable: true,
+      });
       // Il canale globale osserva entrambi i guasti fuori dalla consegna: se
       // manca reportError, il throw resta un errore globale, mai una rejection.
       deferObserverFaultReport(() => {
