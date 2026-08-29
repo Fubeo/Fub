@@ -228,7 +228,10 @@ describe("syncDoc", () => {
   it("non permette a un transactionFilter di alterare un sync autoritativo", () => {
     let syncFilterRuns = 0;
     let localFilterRuns = 0;
-    const observedSyncs: Array<{ remote: boolean; addToHistory: boolean }> = [];
+    const observedSyncs: Array<{
+      remote: boolean | undefined;
+      addToHistory: boolean | undefined;
+    }> = [];
     const filter = EditorState.transactionFilter.of((transaction) => {
       if (!transaction.docChanged) return transaction;
       if (!transaction.isUserEvent("sync")) {
