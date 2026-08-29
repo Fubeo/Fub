@@ -355,6 +355,26 @@ export const byteViewerFactory: SurfaceFactory = createDomFactory({
   className: "document-surface-byte-viewer",
 });
 
+function manageSurface(inner: EditorSurface, entry: Entry | undefined): EditorSurface {
+  let managed: EditorSurface;
+  let destroyed = false;
+
+  const destroy = (): void => {
+    if (destroyed) return;
+    destroyed = true;
+    if (entry !== undefined) entry.instances.delete(managed);
+    inner.destroy();
+  };
+
+  managed = new Proxy(inner, {
+    get(target, property, receiver) {
+      if (property === "destroy") return destroy;
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  return managed;
+}
+
 export class DocumentSurfaceRegistry {
   private readonly entries = new Set<Entry>();
   private readonly formatBindings = new Map<string, Entry>();
@@ -422,7 +442,8 @@ export class DocumentSurfaceRegistry {
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {
     const selection = this.select(request);
-    const surface = selection.factory.mount(request, context);
+    const inner = selection.factory.mount(request, context);
+    const surface = manageSurface(inner, selection.entry);
     if (selection.entry?.active) selection.entry.instances.add(surface);
     return surface;
   }
