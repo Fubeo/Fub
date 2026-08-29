@@ -90,7 +90,12 @@ export function notActivatable(el: HTMLElement): void {
 /// «comanda l'ultima» non si può scrivere in una superficie che le altre non le
 /// vede. Si svuota da sé — ogni trappola si toglie quando la si scioglie — e a
 /// shell ferma è vuota.
-const trapStack: object[] = [];
+interface FocusTrap {
+  readonly root: HTMLElement;
+  previous: HTMLElement | null;
+}
+
+const trapStack: FocusTrap[] = [];
 /// Vera quando almeno una trappola viva possiede l'input da tastiera dell'app.
 ///
 /// La pila resta privata: chi arbitra le scorciatoie ha bisogno soltanto di
@@ -144,31 +149,31 @@ export function focusableElements(root: HTMLElement): HTMLElement[] {
 /// in `theme/structure.css` accanto ai piani.
 export function trapFocus(root: HTMLElement, close: () => void): Teardown {
   const lifetime = openLifetime();
-  // Il segnaposto di *questa* trappola nella pila. Un oggetto vuoto basta: serve
-  // solo la sua identità, e due trappole sulla stessa `root` sono due.
-  const io = {};
-  trapStack.push(io);
-  lifetime.add(() => {
-    // `filter`, non `pop`: chi apre e chi chiude non sono obbligati a farlo in
-    // ordine — una superficie sotto può chiudersi per conto suo (un comando, un
-    // documento che sparisce) mentre sopra ce n'è un'altra, e togliere la cima
-    // lascerebbe a comandare una trappola che non c'è più.
-    const where = trapStack.lastIndexOf(io);
-    if (where >= 0) trapStack.splice(where, 1);
-  });
   const previous = document.activeElement as HTMLElement | null;
-  // Il fuoco torna da dove era partito. È la metà che si dimentica: senza,
-  // chiudere una modale rimanda chi naviga da tastiera all'inizio del
-  // documento, e deve rifare tutta la strada per tornare dov'era. Sta *prima*
-  // dell'ascoltatore perché `chiudi()` disfa in ordine inverso: così a spostare
-  // il fuoco è l'ultimo passo, quando la trappola non è più attaccata.
+  const entry: FocusTrap = { root, previous };
+  trapStack.push(entry);
   lifetime.add(() => {
-    if (previous?.isConnected) previous.focus();
+    // Chiudere una superficie sotto un'altra non deve spostare il fuoco fuori da
+    // quella ancora viva. Il suo predecessore diventa però il predecessore di
+    // ogni trappola superiore che puntava dentro la radice rimossa: quando queste
+    // si chiuderanno, il ritorno salta la superficie che non esiste più.
+    const where = trapStack.lastIndexOf(entry);
+    if (where < 0) return;
+    const wasTop = where === trapStack.length - 1;
+    trapStack.splice(where, 1);
+    const predecessor = entry.previous?.isConnected ? entry.previous : null;
+    for (let i = where; i < trapStack.length; i += 1) {
+      const higher = trapStack[i]!;
+      if (entry.root.contains(higher.previous)) higher.previous = predecessor;
+    }
+    // Il fuoco torna da dove era partito soltanto dopo aver tolto listener e
+    // ownership dalla pila, e mai attraverso una trappola ancora sopra.
+    if (wasTop) predecessor?.focus();
   });
 
   const onKey = (e: KeyboardEvent) => {
     // Aperta ma non in cima: c'è una superficie sopra questa, e il tasto è suo.
-    if (trapStack[trapStack.length - 1] !== io) return;
+    if (trapStack[trapStack.length - 1] !== entry) return;
     if (e.key === "Escape") {
       e.preventDefault();
       close();

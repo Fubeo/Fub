@@ -72,6 +72,20 @@ describe("il menu contestuale", () => {
     closeContextMenu();
     expect(tab().defaultPrevented).toBe(false);
   });
+
+  it("notifica ogni vita una sola volta, anche con sostituzione e chiusura ripetuta", () => {
+    const firstClosed = vi.fn();
+    const secondClosed = vi.fn();
+
+    showContextMenu(clickEvent(), [{ label: "Primo", run: () => {} }], firstClosed);
+    showContextMenu(clickEvent(), [{ label: "Secondo", run: () => {} }], secondClosed);
+    expect(firstClosed, "sostituire il menu chiude la vita precedente").toHaveBeenCalledTimes(1);
+
+    closeContextMenu();
+    closeContextMenu();
+    vi.runAllTimers();
+    expect(secondClosed, "la stessa vita non notifica due volte").toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("il selettore di icona", () => {

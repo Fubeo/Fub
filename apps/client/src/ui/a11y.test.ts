@@ -26,7 +26,7 @@
 // del checker sono strutturali (il ragionamento lungo sta in `a11y-check.ts`).
 // Il contrasto, che senza layout non si potrebbe decidere, ha il presidio suo
 // in `theme/contrast.test.ts`.
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
@@ -272,6 +272,7 @@ describe("due modali aperte: comanda l'ultima", () => {
       <button id="fuori">Apri</button>
       <div id="sotto" tabindex="-1"><button id="s1">S1</button><button id="s2">S2</button></div>
       <div id="sopra" tabindex="-1"><button id="p1">P1</button><button id="p2">P2</button></div>`;
+    document.querySelector<HTMLElement>("#fuori")!.focus();
     const counts = { below: 0, above: 0 };
     const releaseBelow = trapFocus(document.querySelector<HTMLElement>("#sotto")!, () => {
       counts.below += 1;
@@ -338,18 +339,25 @@ describe("due modali aperte: comanda l'ultima", () => {
     releaseBelow();
   });
 
-  it("una che si chiude fuori ordine non lascia a comandare un fantasma", () => {
+  it("una che si chiude fuori ordine conserva il ritorno della trappola sopra", () => {
     // Le superfici non si chiudono per forza in ordine: quella di sotto può
     // andarsene per conto suo — un comando, un documento che sparisce — mentre
     // sopra ce n'è ancora una.
     const { counts, releaseBelow, releaseAbove } = openTwo();
+    expect(document.activeElement?.id, "il fuoco parte nella trappola in cima").toBe("p1");
     expect(focusTrapOwnsKeyboard(), "almeno la trappola in cima possiede ancora la tastiera").toBe(
       true,
     );
+
+    releaseBelow();
+    expect(
+      document.activeElement?.id,
+      "chiudere quella sotto non trascina il fuoco fuori dalla superficie sopra",
+    ).toBe("p1");
     releaseBelow();
     expect(
       focusTrapOwnsKeyboard(),
-      "chiudere fuori ordine una trappola sotto non deve lasciare la shell riattivata",
+      "uno smontaggio ripetuto della trappola rimossa non cambia quella ancora viva",
     ).toBe(true);
 
     document.querySelector<HTMLElement>("#p2")!.focus();
@@ -359,11 +367,37 @@ describe("due modali aperte: comanda l'ultima", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(counts.above).toBe(1);
     releaseAbove();
-    expect(focusTrapOwnsKeyboard(), "tolta l'ultima trappola non resta ownership stantia").toBe(false);
+    expect(
+      document.activeElement?.id,
+      "chiusa quella sopra il ritorno salta la radice inferiore ormai rimossa",
+    ).toBe("fuori");
+    expect(focusTrapOwnsKeyboard(), "tolta l'ultima trappola non resta ownership stantia").toBe(
+      false,
+    );
     releaseAbove();
     expect(focusTrapOwnsKeyboard(), "uno smontaggio ripetuto non ricrea ownership").toBe(false);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(counts.above, "una trappola già sciolta non conserva il suo listener").toBe(1);
+  });
+
+  it("non restaura un predecessore disconnesso", () => {
+    document.body.innerHTML = `
+      <button id="fuori">Apri</button>
+      <div id="sotto" tabindex="-1"><button>Sotto</button></div>
+      <div id="sopra" tabindex="-1"><button id="dentro">Sopra</button></div>`;
+    const outside = document.querySelector<HTMLElement>("#fuori")!;
+    outside.focus();
+    const releaseBelow = trapFocus(document.querySelector<HTMLElement>("#sotto")!, () => {});
+    const releaseAbove = trapFocus(document.querySelector<HTMLElement>("#sopra")!, () => {});
+    const focus = vi.spyOn(outside, "focus");
+
+    outside.remove();
+    releaseBelow();
+    expect(document.activeElement?.id).toBe("dentro");
+    releaseAbove();
+
+    expect(focus, "un'origine rimossa non è un bersaglio valido per il ripristino").not.toHaveBeenCalled();
+    expect(document.activeElement?.id).toBe("dentro");
   });
 });
 

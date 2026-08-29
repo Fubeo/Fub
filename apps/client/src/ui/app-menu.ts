@@ -25,7 +25,7 @@ import { $ } from "./dom";
 import { showContextMenu, closeContextMenu, type MenuItem } from "./menu";
 import { t } from "../i18n/strings";
 import type { ShellCommandId } from "./shell-keys.generated";
-import { openLifetime, type Teardown } from "./lifetime";
+import type { Teardown } from "./lifetime";
 
 /// L'unica cosa che il menu chiede alla shell: esegui questo comando.
 ///
@@ -79,22 +79,11 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
   { title: "menu.tools", entries: [{ label: "menu.tools.settings", click: "#open-settings" }] },
 ];
 
-/// Monta la menubar. Torna gli smontaggi, perché gli ascoltatori che attacca
-/// sul `document` (chiusura con click/Escape) vivono quanto la menubar, non
-/// quanto la finestra: se un domani la menubar si smontasse, non restano.
-///
-/// La menubar apre una **`Lifetime` sua** invece di ricevere quella della finestra,
-/// ed è la riga precedente detta in un tipo: una vita ricevuta durerebbe quanto
-/// chi la presta, e questi due ascoltatori devono morire prima. La coppia
-/// `addEventListener`/`removeEventListener` scritto a mano diceva la stessa
-/// cosa e la diceva **a memoria** — la seconda metà si può dimenticare, e
-/// `check-ascoltatori.mjs` esiste perché è già successo (0133).
+/// Monta la menubar. Il menu contestuale condiviso possiede i suoi ascoltatori
+/// globali, compresi Escape e click fuori: questa superficie riflette soltanto
+/// la vita del menu che ha aperto.
 export function mountAppMenu(host: MenuHost): Teardown {
   const menubar = $("#app-menu");
-  const teardowns: Teardown[] = [];
-  // La vita degli ascoltatori globali di questa menubar: si chiude nello
-  // smontaggio qui sotto, ed è l'unica cosa che li tiene.
-  const lifetime = openLifetime();
   let menuOpen: number | null = null;
 
   MENU.forEach((menu, i) => {
@@ -120,25 +109,9 @@ export function mountAppMenu(host: MenuHost): Teardown {
     menubar.append(button);
   });
 
-  // Click fuori o Escape chiude il menu aperto. Sono sul `document` e non
-  // sulla menubar perché il menu è un overlay che vive fuori dalla menubar
-  // (`showContextMenu` lo appende a `body`), e chiude chi ci clicca dentro.
   const close = () => {
-    if (menuOpen !== null) {
-      setExpanded(menuOpen, false);
-      closeContextMenu();
-      menuOpen = null;
-    }
+    if (menuOpen !== null) closeContextMenu();
   };
-  const onDocClick = (e: MouseEvent) => {
-    if (!menubar.contains(e.target as Node)) close();
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") close();
-  };
-  lifetime.listen(document, "click", onDocClick);
-  lifetime.listen(document, "keydown", onKey);
-  teardowns.push(() => lifetime.close());
 
   function setExpanded(index: number, open: boolean): void {
     const btn = menubar.children[index] as HTMLElement | undefined;
@@ -158,7 +131,6 @@ export function mountAppMenu(host: MenuHost): Teardown {
       close();
       return;
     }
-    if (menuOpen !== null) setExpanded(menuOpen, false);
     closeContextMenu();
     menuOpen = index;
     setExpanded(index, true);
@@ -183,8 +155,12 @@ export function mountAppMenu(host: MenuHost): Teardown {
       clientX: rect.left,
       clientY: rect.bottom,
     });
-    showContextMenu(fake, items);
+    showContextMenu(fake, items, () => {
+      if (menuOpen !== index) return;
+      setExpanded(index, false);
+      menuOpen = null;
+    });
   }
 
-  return () => teardowns.forEach((s) => s());
+  return close;
 }

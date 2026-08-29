@@ -26,12 +26,20 @@ export interface MenuItem {
 /// dimenticata. Adesso il posto è uno, e chiudere il menu è chiuderlo.
 let menuLifetime: Lifetime | null = null;
 
-export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
+export function showContextMenu(
+  at: MouseEvent,
+  items: MenuItem[],
+  onClose?: () => void,
+): void {
   closeContextMenu();
   const previous = document.getElementById("context-menu");
   if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   menuLifetime = lifetime;
+  // Chi apre può riflettere lo stato solo quando questa vita termina, qualunque
+  // sia il gesto che l'ha chiusa. È uno smontaggio della vita, quindi una vita
+  // già chiusa non notifica una seconda volta.
+  if (onClose) lifetime.add(onClose);
   const menu = document.createElement("div");
   menu.id = "context-menu";
   menu.className = "context-menu";
