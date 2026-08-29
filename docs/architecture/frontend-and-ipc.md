@@ -301,15 +301,8 @@ pianifica salvataggio e bozza e diffonde l'operazione alle superfici sottoscritt
 tranne la sorgente. Una sostituzione autorevole — ricarica pulita, conflitto
 scartato o bozza recuperata — diffonde invece il testo intero a tutte le
 superfici. Il pannello possiede il collegamento delle superfici e applica questi
-dati all'editor; non possiede la validazione, il buffer o il fan-out delle
-modifiche.
-
-Ogni diffusione è isolata per destinatario: la sessione tenta tutti gli
-ascoltatori e tutte le superfici indipendentemente, anche se un destinatario
-lancia o un ascoltatore restituisce una promessa rifiutata. Gli errori sono
-riportati attraverso un percorso esplicito e non ricorsivo; non modificano
-l'autorità della sessione né impediscono ai destinatari sani di convergere allo
-stato accettato.
+dati all'editor; non possiede validazione, buffer o fan-out. La sessione tenta ogni ascoltatore e superficie indipendentemente,
+anche dopo errori o reiezioni; un percorso esplicito e non ricorsivo li riporta senza cambiare l'autorità o impedire la convergenza dei destinatari sani.
 
 Force reload e la risoluzione del conflitto `theirs` cancellano subito il timer e bloccano i salvataggi mentre l'autorità su disco è sconosciuta.
 Una lettura fallita o stantia conserva testo dirty, conflitto e bozza, senza autosalvare; soltanto una lettura riuscita aggiorna testo, base, dirty e bozza,
