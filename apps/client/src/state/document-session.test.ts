@@ -407,6 +407,40 @@ describe("decisioni del ciclo di vita della sessione", () => {
     expect(order).toEqual(["read", "surface-a", "surface-b", "discard-draft"]);
   });
 
+  it("preserva la nuova bozza se una superficie rientra durante l'applicazione di theirs", async () => {
+    api.readDocument = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "versione iniziale", revision: "rev-1" })
+      .mockResolvedValueOnce({ text: "autorità disco", revision: "rev-2" });
+    const sessions = await conflictedSession();
+    sessions.attachSurface("nota.md", {
+      id: "superficie-rientrante",
+      sync: (update) => {
+        if (update.kind !== "text") return;
+        acceptText(sessions, "nota.md", `${update.text} + modifica`, "superficie-rientrante");
+      },
+    });
+
+    const outcome = await sessions.resolveConflict("nota.md", "theirs");
+
+    expect(outcome).toEqual({
+      kind: "discarded",
+      reload: { kind: "reloaded", text: "autorità disco", changed: true },
+      draft: "preserved",
+    });
+    expect(api.discardDraft).not.toHaveBeenCalled();
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "autorità disco + modifica",
+      dirty: true,
+    });
+    await sessions.flushDraft("nota.md");
+    expect(api.saveDraft).toHaveBeenLastCalledWith(
+      "nota.md",
+      "autorità disco + modifica",
+      "rev-2",
+    );
+  });
+
   it("rende osservabile una bozza rimasta dopo il successo di theirs", async () => {
     api.readDocument = vi
       .fn()
