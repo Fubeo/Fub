@@ -8,7 +8,8 @@
 
 Il catalogo delle modalità vive soltanto sulla superficie modeful montata
 (`SurfaceModeful`), non nei contratti generici `EditorSurface` e
-`TextEditorSurface`. La superficie Markdown dichiara:
+`TextEditorSurface`. I suoi id sono `SurfaceModeId`, un tipo locale della shell
+indipendente da `PaneMode`. La superficie Markdown dichiara:
 
 - **sorgente** (`source`), con la sintassi esplicita;
 - **live preview** (`live_preview`), che mantiene l'editing e riduce il rumore
@@ -19,9 +20,15 @@ Il `defaultMode` di Markdown è `live_preview`. Plain text dichiara soltanto
 `source`, con `defaultMode: "source"`; fallback, viewer ed error non espongono
 un catalogo. Il commutatore segue la superficie montata nel riquadro con il
 focus: Markdown mostra Sorgente, Live e Lettura, plain text soltanto Sorgente.
-Una richiesta `PaneMode` non nel catalogo non cambia il riquadro, il contesto o
-la superficie. La resa di Lettura richiede anche la capability
-`MarkdownEditorSurface`: il solo valore `reading` non la abilita.
+La superficie possiede il catalogo e la modalità corrente nativi.
+
+`PaneMode` resta l'ABI di `ViewContext.mode` e del layout legacy. Soltanto
+pubblicando layout o `ViewContext`, `source`, `live_preview` e `reading`
+conservano il rispettivo valore `PaneMode`; ogni altro `SurfaceModeId` si
+proietta deterministicamente a `source`. Una richiesta di `SurfaceModeId` non
+nel catalogo non cambia il riquadro, il contesto o la superficie. La resa di
+Lettura richiede anche la capability `MarkdownEditorSurface`: il solo valore
+`reading` non la abilita.
 
 Il provider Markdown interpreta la sorgente. La shell possiede CodeMirror,
 focus, selezione, scroll, tema e lifecycle.
@@ -110,6 +117,14 @@ La `DocumentSession` accoda le scritture per documento. Il core applica la
 revisione di base. Un contenuto esterno più recente produce un conflitto
 esplicito.
 
+Force reload e la scelta `theirs` ricaricano transazionalmente: timer e stato
+pulito cambiano soltanto dopo una lettura riuscita. Se la lettura fallisce o
+diventa stantia per attività più recente, testo dirty, conflitto e bozza
+restano invariati e nessun autosalvataggio sovrascrive un'autorità sconosciuta.
+Al successo il testo da disco raggiunge tutte le superfici prima che la bozza
+precedente sia eliminata; il fallimento dell'eliminazione è osservabile come
+evento `draft-discard-failed` con id del documento ed errore.
+
 Il rilascio dell'ultima tab esegue il flush della scrittura e, se necessario,
 della bozza prima di chiudere la sessione; il lifecycle del riquadro e
 dell'editor resta separato da quello del documento. Durante la conferma di una
@@ -185,20 +200,26 @@ e `VaultInfo.extensions` restano dati per esploratore e note di cartella, non
 identità del formato; non esiste un `format_id` IPC e `FormatDescriptor.id` in
 Rust non è un campo di `VaultInfo`.
 
-`PaneMode` resta l'ABI `source | live_preview | reading` di
-`ViewContext.mode`. Il pannello confronta ogni richiesta tipizzata con il
-catalogo della superficie montata nel riquadro con il focus prima di aggiornare
-layout, contesto o superficie. Una richiesta non supportata non cambia nulla;
-una richiesta valida applica la modalità alla superficie e al riquadro. La resa
-di Lettura richiede `MarkdownEditorSurface` oltre alla modalità effettiva.
+`SurfaceModeId` è locale alla shell e il pannello confronta ogni richiesta con
+il catalogo della superficie montata nel riquadro con il focus prima di
+aggiornare la sua modalità nativa. `PaneMode` resta l'ABI
+`source | live_preview | reading` di `ViewContext.mode` e del layout legacy:
+solo alla loro pubblicazione `source`, `live_preview` e `reading` conservano
+quel valore, mentre ogni altro `SurfaceModeId` si proietta
+deterministicamente a `source`. Una richiesta non supportata non cambia nulla;
+la resa di Lettura richiede `MarkdownEditorSurface` oltre alla modalità
+effettiva.
 
 Una focus trap aperta possiede Escape e Tab e impedisce alle scorciatoie della
-shell di agire. Nell'editor, un gesto che la keymap reale ha già consumato resta
-all'editor; il listener della shell lo osserva con `defaultPrevented`. Tutti gli
-altri gesti passano all'unico dispatcher della shell, che tratta documento,
-riquadro e globale come namespace di comandi, non come livelli di listener.
-Una modifica di scorciatoia diventa attiva a runtime dopo il gesto che la cambia,
-senza un percorso speciale legato all'ID del comando.
+shell di agire. La sua acquisizione annulla immediatamente, tramite
+`onKeyboardOwnershipChange(stopWaiting)`, ogni sequenza shell pendente, anche
+senza un `keydown`. Il listener della shell osserva `defaultPrevented` dopo il
+gesto gestito dalla superficie montata: un gesto consumato resta locale e
+interrompe una sequenza pendente al suo primo gesto. Tutti gli altri gesti
+passano all'unico dispatcher della shell, che tratta documento, riquadro e
+globale come namespace di comandi, non come livelli di listener. Una modifica
+di scorciatoia diventa attiva a runtime dopo il gesto che la cambia, senza un
+percorso speciale legato all'ID del comando.
 
 Un riquadro o una finestra vuoti contengono il solo chrome, senza un
 `EditorView` Markdown finto. La `DocumentSession` coordina buffer, salvataggio,

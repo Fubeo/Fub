@@ -267,11 +267,13 @@ eventi DOM `beforeinput` `historyUndo` e `historyRedo`. `TextEngine.undo()` e
 di CodeMirror.
 
 Una modifica locale diventa un evento della history nativa della superficie.
-`TextEngine.syncDoc()` costruisce la transazione dal risultato effettivo di
-`EditorState.update()`, dopo i filtri del profilo, con
-`Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`. Il cambio
-esterno viene così applicato e mappato sui due rami senza aggiungere un evento
-locale.
+`TextEngine.syncDoc()` costruisce con `filter: false` una transazione non
+contaminabile dai filtri di transazione del profilo, con
+`Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`.
+Prima dell'invio, `isAuthoritativeSync()` verifica il cambio del documento, il
+testo normalizzato obiettivo e i metadati `sync`, `remote` e
+`addToHistory`; se fallisce, il sync si interrompe e la metadata di sicurezza
+diventa sconosciuta.
 
 Prima di inviare un cambio esterno, `HistoryFootprints` conserva al massimo 512
 intervalli non vuoti e anchor di cancellazione, soltanto come coordinate UTF-16:
@@ -306,6 +308,14 @@ scartato o bozza recuperata — diffonde invece il testo intero a tutte le
 superfici. Il pannello possiede il collegamento delle superfici e applica questi
 dati all'editor; non possiede la validazione, il buffer o il fan-out delle
 modifiche.
+
+Force reload e la risoluzione del conflitto `theirs` sono transazionali: timer
+e stato pulito cambiano soltanto dopo una lettura riuscita. Una lettura fallita
+o resa stantia da attività più recente conserva testo dirty, conflitto e bozza,
+senza autosalvare sopra un'autorità sconosciuta. Al successo, il testo intero
+raggiunge prima tutte le superfici e solo poi viene eliminata la bozza
+precedente; un fallimento di questa eliminazione è osservabile come evento
+`draft-discard-failed` con id del documento ed errore.
 
 La superficie destinataria esegue una seconda guardia:
 `TextEngine.syncDoc()` valida l'operazione ricevuta contro il proprio testo
@@ -352,18 +362,22 @@ Il plain text è un client architetturale della shell, non una funzionalità del
 vault per gli utenti; nel fake host soltanto `.md` è trattato come documento.
 
 Il catalogo delle modalità vive soltanto sulla superficie modeful montata.
-`SurfaceModeful` espone `modes`, `defaultMode`, `mode()` e `setMode()`.
-Markdown dichiara `source`, `live_preview` e `reading`, con
+`SurfaceModeId` è un tipo locale della shell, indipendente da `PaneMode`;
+`SurfaceModeful` espone `modes`, `defaultMode`, `mode()` e `setMode()` con
+questo id. Markdown dichiara `source`, `live_preview` e `reading`, con
 `defaultMode: "live_preview"`; plain text dichiara soltanto `source`, con
 `defaultMode: "source"`. Fallback, viewer ed error non sono modeful.
 
-`PaneMode` resta l'ABI `source | live_preview | reading` di
-`ViewContext.mode`. Il pannello valida ogni `PaneMode` richiesto contro il
-catalogo della superficie montata nel riquadro con il focus, prima di mutare
-alcunché. Una superficie non modeful o una modalità non dichiarata non muta
-layout, contesto o superficie; una modalità accettata aggiorna tutti e tre.
-La resa di lettura richiede la capability `MarkdownEditorSurface` oltre alla
-modalità effettiva: il solo valore `reading` non la attiva.
+`PaneMode` resta l'ABI `source | live_preview | reading` di `ViewContext.mode`
+e del layout legacy. Soltanto quando pubblica layout o `ViewContext`, la shell
+conserva `source`, `live_preview` e `reading`; ogni altro `SurfaceModeId` si
+proietta deterministicamente a `source`. Il pannello valida ogni
+`SurfaceModeId` richiesto contro il catalogo della superficie montata nel
+riquadro con il focus: la superficie mantiene catalogo e modalità corrente
+nativi, poi la shell pubblica la proiezione legacy. Una superficie non modeful
+o una modalità non dichiarata non muta layout, contesto o superficie. La resa
+di lettura richiede la capability `MarkdownEditorSurface` oltre alla modalità
+effettiva: il solo valore `reading` non la attiva.
 
 Il commutatore `#mode-switch` deriva dal catalogo della superficie montata con
 il focus e convalida la richiesta tipizzata prima di inoltrarla. Senza documento
@@ -374,10 +388,15 @@ L'ownership della tastiera ha tre stadi:
 
 1. la focus trap in cattura possiede Escape e Tab; ogni trap viva sopprime le
    scorciatoie della shell;
-2. il listener su `document` in bubble osserva `defaultPrevented` dopo la keymap
-   reale di CodeMirror o del profilo: un gesto già consumato resta all'editor;
+2. il listener su `document` in bubble osserva `defaultPrevented` dopo il gesto
+   gestito dalla superficie montata: un gesto già consumato resta locale;
 3. un solo dispatcher della shell, posseduto da `Lifetime`, riconosce binding e
    sequenze rimanenti.
+
+L'acquisizione di una focus trap annulla immediatamente, tramite
+`onKeyboardOwnershipChange(stopWaiting)`, ogni sequenza della shell pendente,
+anche senza un `keydown`. Una trap attiva o un gesto consumato localmente
+interrompono una sequenza pendente al suo primo gesto.
 
 Documento, riquadro e globale sono namespace di comandi dello stesso dispatcher,
 non listener di precedenza distinti. Il menu contestuale riunisce nodo, trap e
