@@ -24,6 +24,7 @@ import type {
   SurfaceRequest,
   SurfaceSelectionKey,
 } from "../editors/core/registry";
+import { isModefulSurface } from "../editors/core/registry";
 import { surfaceRequestForDocument } from "../editors/bootstrap";
 import type {
   MarkdownEditorSurface,
@@ -425,9 +426,10 @@ async function render(): Promise<void> {
     const p = paneState(id);
     if (!r || !p) continue;
     drawTab(r, p.tabs, p.active);
-    r.root.dataset.mode = p.mode;
+
     r.root.classList.toggle("focus", id === layout.focus);
     await show(r, activeTab(id));
+    r.root.dataset.mode = effectiveMode(r.surface, p.mode);
   }
   updateToggle();
   drawSave();
@@ -499,6 +501,22 @@ function isMarkdownSurface(
     "setLivePreview" in surface &&
     typeof surface.setLivePreview === "function"
   );
+}
+
+function effectiveMode(
+  surface: EditorSurface | null | undefined,
+  paneMode: PaneMode,
+): PaneMode {
+  if (!isModefulSurface(surface)) return paneMode;
+  if (surface.modes.some((mode) => mode.id === paneMode)) return paneMode;
+  if (
+    surface.defaultMode === "source" ||
+    surface.defaultMode === "live_preview" ||
+    surface.defaultMode === "reading"
+  ) {
+    return surface.defaultMode;
+  }
+  return surface.family === "text" ? "source" : paneMode;
 }
 
 function surfaceMountContext(r: Pane, doc: string): TextSurfaceMountContext {
@@ -762,6 +780,10 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   const request = surfaceRequestForDocument(tab.doc);
   const remounted = ensureSurface(r, tab.doc, request);
   r.surface?.setReadOnly(documentSessions.isDeletionPending(tab.doc));
+  const pane = paneState(r.id);
+  if (pane && isModefulSurface(r.surface)) {
+    r.surface.setMode(effectiveMode(r.surface, pane.mode));
+  }
   if (!changed && !remounted) return;
 
   const textSurface = isTextSurface(r.surface) ? r.surface : null;
@@ -843,7 +865,14 @@ async function redrawReading(doc: string): Promise<void> {
   await Promise.all(
     panesWithDoc(doc).map(async (id) => {
       const r = panes.get(id);
-      if (!r || paneState(id)?.mode !== "reading" || activeDoc(id) !== doc) return;
+      const pane = paneState(id);
+      if (
+        !r ||
+        !pane ||
+        effectiveMode(r.surface, pane.mode) !== "reading" ||
+        activeDoc(id) !== doc
+      )
+        return;
       await updatePreview(r.previewEl, doc);
     }),
   );
@@ -852,7 +881,8 @@ async function redrawReading(doc: string): Promise<void> {
 /// Il commutatore in testata riflette il riquadro col **fuoco**: è di lui che si
 /// sta parlando, ed è di lui che si cambia la modalità.
 function updateToggle(): void {
-  const mode = activePane().mode;
+  const pane = activePane();
+  const mode = effectiveMode(panes.get(layout.focus)?.surface, pane.mode);
   for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
     const choice = b.dataset.mode === mode;
     // Quale modalità è accesa lo diceva solo lo sfondo. `aria-pressed` lo dice
@@ -942,7 +972,8 @@ export async function openDocument(id: string): Promise<void> {
       // Il contesto si pubblica DOPO aver caricato il buffer: prima, lo span della
       // selezione sarebbe quello del documento precedente.
       await publishContext();
-      if (activePane().mode !== "reading") focusEditor();
+      if (effectiveMode(panes.get(layout.focus)?.surface, activePane().mode) !== "reading")
+        focusEditor();
     });
   } finally {
     releaseIntent();
@@ -1134,11 +1165,12 @@ function paneContext(): ViewContext {
   const doc = activeDoc();
   const r = panes.get(layout.focus);
   const surface = isTextSurface(r?.surface) ? r.surface : null;
+  const mode = effectiveMode(r?.surface, p.mode);
   const sel = surface?.selections();
-  const inEditing = doc !== null && p.mode !== "reading" && sel !== undefined;
+  const inEditing = doc !== null && mode !== "reading" && sel !== undefined;
   const dirty = doc ? documentSessions.isDirty(doc) : false;
   if (!inEditing || !sel) {
-    return { pane: layout.focus, doc, selections: null, mode: p.mode };
+    return { pane: layout.focus, doc, selections: null, mode };
   }
   // Il buffer è UNO, e il suo stato decide per tutte le selezioni insieme: è
   // la ragione per cui il caso si sceglie qui, una volta, e non dentro ogni
@@ -1163,7 +1195,7 @@ function paneContext(): ViewContext {
           })),
         },
       };
-  return { pane: layout.focus, doc, selections, mode: p.mode };
+  return { pane: layout.focus, doc, selections, mode };
 }
 
 /// Pubblica il contesto e annuncia **quali** view il kernel ha dichiarato
@@ -1198,22 +1230,19 @@ function scheduleContext(): void {
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
 export async function setMode(next: PaneMode): Promise<void> {
-  const doc = activeDoc();
-  // Il documento reso lo produce il kernel dal **sorgente salvato**: entrare in
-  // lettura con del testo appeso al debounce mostrerebbe la nota di un minuto
-  // fa. Si salva prima, e la lettura è sempre di ciò che si è scritto.
-  if (next === "reading" && doc) await documentSessions.flush(doc);
   setPaneMode(layout.focus, next);
+  const doc = activeDoc();
   const r = panes.get(layout.focus);
-  if (r) {
-    // Sorgente = la stessa configurazione senza la resa inline.
-    const markdownSurface = isMarkdownSurface(r.surface) ? r.surface : null;
-    markdownSurface?.setLivePreview(next === "live_preview");
-    if (next === "reading") {
-      if (doc) await updatePreview(r.previewEl, doc);
-    } else {
-      r.surface?.focus();
+  const surface = r?.surface;
+  const effective = effectiveMode(surface, next);
+  if (isModefulSurface(surface)) surface.setMode(effective);
+  if (effective === "reading") {
+    if (doc) {
+      await documentSessions.flush(doc);
+      if (r) await updatePreview(r.previewEl, doc);
     }
+  } else {
+    surface?.focus();
   }
   await publishContext();
 }
@@ -1222,7 +1251,7 @@ export async function setMode(next: PaneMode): Promise<void> {
 export function revealByteOffset(byteOffset: number): void {
   const pane = panes.get(layout.focus);
   if (!pane) return;
-  if (activePane().mode !== "reading") {
+  if (effectiveMode(pane.surface, activePane().mode) !== "reading") {
     const surface = isTextSurface(pane.surface) ? pane.surface : null;
     surface?.revealByteOffset(byteOffset);
     return;

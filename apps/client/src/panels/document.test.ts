@@ -46,10 +46,16 @@ import {
   type SurfaceRegistration,
   type SurfaceRequest,
 } from "../editors/core/registry";
+import {
+  createMarkdownSurfaceFactory,
+  createPlainTextSurfaceFactory,
+  type MarkdownEditorSurface,
+  type PlainTextSurface,
+} from "../editors/text/factories";
 
 // Il presidio del ricongiungimento importa la decisione dal modulo puro
 // `state/drafts.ts`, mentre l'owner costruisce e conserva le sessioni.
-import type { DraftInfo, WriteBase } from "../host/contract";
+import type { DraftInfo, ViewContext, WriteBase } from "../host/contract";
 import { rejoinDrafts, type DraftBufferStore } from "../state/drafts";
 
 /// Il corpo dell'ascoltatore di `document_changed`, dalla sua apertura al
@@ -461,14 +467,199 @@ describe("il pannello monta le superfici dal registro", () => {
     expect(text).not.toContain("setLivePreview");
   });
 
-  it("riserva syntax forms e live preview alla superficie Markdown", () => {
-    const show = functionBody("async function show(");
-    expect(show).toContain("isMarkdownSurface(r.surface)");
-    expect(show).toContain("markdownSurface?.setSyntaxForms(forms)");
+});
+type RequestBox = { value: SurfaceRequest };
 
-    const mode = functionBody("export async function setMode(");
-    expect(mode).toContain("isMarkdownSurface(r.surface)");
-    expect(mode).toContain("markdownSurface?.setLivePreview");
+function mockPanelModules(request: RequestBox) {
+  const shellState = { currentDoc: null as string | null, handledExtensions: [] as string[] };
+  const contexts: ViewContext[] = [];
+  const flush = vi.fn(async (_doc: string) => {});
+  const previews = vi.fn(async (_preview: HTMLElement, _doc: string) => {});
+  const setActiveContext = vi.fn(async (context: ViewContext) => {
+    contexts.push(context);
+    return [];
+  });
+  const session = {
+    subscribe: () => () => {},
+    isDirty: () => false,
+    isDeletionPending: () => false,
+    saveState: () => null,
+    attachSurface: () => () => {},
+    read: async () => "# Titolo",
+    flush,
+    flushPendingSave: async () => {},
+  };
+
+  vi.doMock("../editors/bootstrap", () => ({
+    surfaceRequestForDocument: () => request.value,
+  }));
+  vi.doMock("../host/ipc", () => ({ api: { setActiveContext } }));
+  vi.doMock("../host/query", () => ({
+    WITHOUT_PAGE: undefined,
+    notesByName: () => Promise.resolve([]),
+    resolvedReference: () => Promise.resolve(null),
+    syntaxForms: () => Promise.resolve([]),
+    unsavedDrafts: () => Promise.resolve([]),
+    vaultTags: () => Promise.resolve([]),
+  }));
+  vi.doMock("../state/kernel", () => ({ onEvent: () => {} }));
+  vi.doMock("../state/recent", () => ({ existingRecentNotes: () => [] }));
+  vi.doMock("../state/store", () => ({
+    emit: () => {},
+    on: () => {},
+    readState: () => null,
+    state: shellState,
+    writeState: () => {},
+  }));
+  vi.doMock("../state/drafts", () => ({
+    CASE_KEY: {},
+    caseOf: () => null,
+    toRecover: () => [],
+  }));
+  vi.doMock("../state/document-session", () => ({
+    documentSessions: session,
+    isDocumentDeletedDuringRead: () => false,
+  }));
+  vi.doMock("../state/vault", () => ({ createNote: () => Promise.resolve() }));
+  vi.doMock("../ui/commands", () => ({ registerShellCommand: () => {} }));
+  vi.doMock("../ui/notify", () => ({ notify: () => {} }));
+  vi.doMock("./preview", () => ({
+    clearPreview: () => {},
+    updatePreview: previews,
+  }));
+  vi.doMock("../ui/views", () => ({
+    mountViewInPane: () => Promise.resolve(),
+    primaryView: () => undefined,
+    unmountViewFromPane: () => {},
+  }));
+  vi.doMock("../host/errors", () => ({ errorText: () => "errore" }));
+  vi.doMock("../i18n/strings", () => ({
+    onLanguage: () => {},
+    t: (key: string) => key,
+  }));
+  vi.doMock("../ui/tooltip", () => ({ setTooltip: () => {} }));
+
+  return { contexts, flush, previews };
+}
+
+function panelDom(): void {
+  document.body.innerHTML =
+    '<main id="panes"></main><div id="mode-switch">' +
+    '<button data-mode="source"></button>' +
+    '<button data-mode="live_preview"></button>' +
+    '<button data-mode="reading"></button>' +
+    "</div>";
+}
+
+describe("modalità della superficie nel percorso reale del pannello", () => {
+  it("segue le tre modalità dichiarate da Markdown e aggiorna Lettura", async () => {
+    vi.resetModules();
+    const request: RequestBox = {
+      value: { family: "text", profile: "markdown", formatKey: "md", species: "text/markdown" },
+    };
+    const harness = mockPanelModules(request);
+    const factory = createMarkdownSurfaceFactory();
+    const mount = vi.spyOn(factory, "mount");
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "test-markdown",
+      family: "text",
+      profile: "markdown",
+      formatKey: "md",
+      species: "text/markdown",
+      factory,
+    });
+
+    panelDom();
+    const { mountDocument, setMode, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    openIn("main", "note.md", layout);
+    await synchronize();
+
+    const surface = mount.mock.results[0]?.value as MarkdownEditorSurface;
+    expect(surface.mode()).toBe("live_preview");
+    const setSurfaceMode = vi.spyOn(surface, "setMode");
+
+    await setMode("source");
+    expect(surface.mode()).toBe("source");
+    await setMode("live_preview");
+    expect(surface.mode()).toBe("live_preview");
+    await setMode("reading");
+    expect(surface.mode()).toBe("reading");
+    expect(setSurfaceMode.mock.calls.map(([mode]) => mode)).toEqual([
+      "source",
+      "live_preview",
+      "reading",
+    ]);
+    expect(harness.flush).toHaveBeenCalledWith("note.md");
+    expect(harness.previews).toHaveBeenCalled();
+
+    await synchronize();
+    const root = document.querySelector<HTMLElement>(".pane");
+    expect(root?.dataset.mode).toBe("reading");
+    expect(harness.contexts[harness.contexts.length - 1]?.mode).toBe("reading");
+  });
+
+  it("mantiene Plain in source quando il PaneMode non è nel catalogo", async () => {
+    vi.resetModules();
+    const request: RequestBox = {
+      value: { family: "text", profile: "plain-text", formatKey: "txt", species: "text/plain" },
+    };
+    const harness = mockPanelModules(request);
+    const factory = createPlainTextSurfaceFactory();
+    const mount = vi.spyOn(factory, "mount");
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "test-plain",
+      family: "text",
+      profile: "plain-text",
+      formatKey: "txt",
+      species: "text/plain",
+      factory,
+    });
+
+    panelDom();
+    const { mountDocument, setMode, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    openIn("main", "note.txt", layout);
+    await synchronize();
+
+    const surface = mount.mock.results[0]?.value as PlainTextSurface;
+    expect(surface).not.toHaveProperty("setLivePreview");
+    expect(surface.mode()).toBe("source");
+
+    await setMode("live_preview");
+    await setMode("reading");
+    expect(surface.mode()).toBe("source");
+    expect(harness.flush).not.toHaveBeenCalled();
+    expect(harness.previews).not.toHaveBeenCalled();
+
+    await synchronize();
+    const root = document.querySelector<HTMLElement>(".pane");
+    expect(root?.dataset.mode).toBe("source");
+    expect(root?.dataset.mode).not.toBe("reading");
+    expect(root?.querySelector(".pane-editor")).not.toBeNull();
+    expect(harness.contexts.every((context) => context.mode !== "live_preview")).toBe(true);
+  });
+
+  it("non lancia eccezioni per il fallback senza modalità", async () => {
+    vi.resetModules();
+    const request: RequestBox = { value: { family: "unknown" } };
+    const harness = mockPanelModules(request);
+    const registry = new DocumentSurfaceRegistry();
+
+    panelDom();
+    const { mountDocument, setMode, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    openIn("main", "note.bin", layout);
+    await synchronize();
+
+    await expect(setMode("live_preview")).resolves.toBeUndefined();
+    await expect(setMode("reading")).resolves.toBeUndefined();
+    expect(harness.flush).toHaveBeenCalledWith("note.bin");
   });
 });
 
