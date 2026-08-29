@@ -759,7 +759,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     return;
   }
 
-  const request = surfaceRequestForDocument(tab.doc, state.handledExtensions);
+  const request = surfaceRequestForDocument(tab.doc);
   const remounted = ensureSurface(r, tab.doc, request);
   r.surface?.setReadOnly(documentSessions.isDeletionPending(tab.doc));
   if (!changed && !remounted) return;

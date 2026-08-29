@@ -8,6 +8,7 @@ import {
   markdownSurfaceFactory,
   plainTextSurfaceFactory,
 } from "./text/factories";
+import { textualFallbackFactory } from "./core/registry";
 
 function mountContext(parent: HTMLElement = document.createElement("section")) {
   return { paneId: "pane-1", documentId: "document-1", parent };
@@ -54,35 +55,71 @@ describe("bootstrap del registro delle superfici", () => {
     surfaces.dispose();
   });
 
-  it("mappa una nota con estensione gestita al binding Markdown", () => {
-    expect(surfaceRequestForDocument("notes/README.md", ["md"])).toEqual({
+  it("mappa solo le estensioni Markdown esplicite", () => {
+    expect(surfaceRequestForDocument("notes/README.md")).toEqual({
       family: "text",
       profile: "markdown",
       formatKey: "md",
       species: "text/markdown",
     });
-    expect(surfaceRequestForDocument("notes/custom.note", ["note"])).toEqual({
+    expect(surfaceRequestForDocument("notes/README.markdown")).toEqual({
       family: "text",
       profile: "markdown",
       formatKey: "md",
       species: "text/markdown",
+    });
+    expect(surfaceRequestForDocument("notes/custom.note")).toEqual({
+      family: "text",
+      profile: "unknown",
     });
   });
 
+  it("non interpreta fubsheet gestita da un provider come Markdown", () => {
+    // `handledExtensions` appartiene al registro dei provider, non alla
+    // richiesta derivata dal path: anche con `fubsheet` dichiarata resta
+    // sconosciuta e il registry sceglie il proprio fallback testuale.
+    const handledExtensions = ["fubsheet"];
+    expect(handledExtensions).toContain("fubsheet");
+    const request = surfaceRequestForDocument("notes/sheet.fubsheet");
+
+    expect(request).toEqual({ family: "text", profile: "unknown" });
+    expect(request).not.toEqual({
+      family: "text",
+      profile: "markdown",
+      formatKey: "md",
+      species: "text/markdown",
+    });
+    const surfaces = bootstrapSurfaceRegistry();
+    expect(surfaces.registry.resolve(request)).toBe(textualFallbackFactory);
+    surfaces.dispose();
+  });
+
   it("mappa txt e text/plain al profilo plain text", () => {
-    expect(surfaceRequestForDocument("notes/readme.txt", ["md"])).toEqual({
+    expect(surfaceRequestForDocument("notes/readme.txt")).toEqual({
       family: "text",
       profile: "plain-text",
       formatKey: "txt",
       species: "text/plain",
     });
-    expect(surfaceRequestForDocument("text/plain", [])).toEqual({
+    expect(surfaceRequestForDocument("notes/readme.text")).toEqual({
       family: "text",
       profile: "plain-text",
       formatKey: "txt",
       species: "text/plain",
     });
-    expect(surfaceRequestForDocument("archive.bin", [])).toEqual({ species: "bytes" });
+    expect(surfaceRequestForDocument("notes/readme.plain")).toEqual({
+      family: "text",
+      profile: "plain-text",
+      formatKey: "txt",
+      species: "text/plain",
+    });
+    expect(surfaceRequestForDocument("text/plain")).toEqual({
+      family: "text",
+      profile: "plain-text",
+      formatKey: "txt",
+      species: "text/plain",
+    });
+    expect(surfaceRequestForDocument("archive.bin")).toEqual({ species: "bytes" });
   });
 
   it("dispose rimuove entrambi i binding e distrugge le istanze possedute", () => {

@@ -13,6 +13,10 @@ export interface SurfaceRegistryBootstrap {
   readonly dispose: () => void;
 }
 
+const MARKDOWN_EXTENSIONS: Record<string, true> = {
+  md: true,
+  markdown: true,
+};
 const PLAIN_TEXT_EXTENSIONS: Record<string, true> = {
   plain: true,
   text: true,
@@ -39,19 +43,13 @@ const PLAIN_TEXT_REQUEST: SurfaceRequest = {
   species: "text/plain",
 };
 
-/** Derives the initial shell surface without adding a format-specific IPC call. */
-export function surfaceRequestForDocument(
-  id: string,
-  handledExtensions: readonly string[],
-): SurfaceRequest {
+// temporary format inference: provider extensions are not format identities.
+export function surfaceRequestForDocument(id: string): SurfaceRequest {
   const normalizedId = id.trim().toLowerCase();
   const name = id.slice(Math.max(id.lastIndexOf("/"), id.lastIndexOf("\\")) + 1);
   const dot = name.lastIndexOf(".");
   const extension =
     dot > 0 ? name.slice(dot + 1).trim().toLowerCase().replace(/^\.+/, "") : "";
-  const handled = new Set(
-    handledExtensions.map((value) => value.trim().toLowerCase().replace(/^\.+/, "")),
-  );
 
   if (
     normalizedId === "bytes" ||
@@ -61,15 +59,14 @@ export function surfaceRequestForDocument(
     return { species: "bytes" };
   }
 
-  if (
-    normalizedId === "text/plain" ||
-    PLAIN_TEXT_EXTENSIONS[extension] === true ||
-    extension === "text/plain"
-  ) {
+  if (normalizedId === "text/plain" || PLAIN_TEXT_EXTENSIONS[extension] === true) {
     return PLAIN_TEXT_REQUEST;
   }
 
-  if (normalizedId === "text/markdown" || handled.has(extension)) {
+  if (
+    normalizedId === "text/markdown" ||
+    MARKDOWN_EXTENSIONS[extension] === true
+  ) {
     return MARKDOWN_REQUEST;
   }
 

@@ -419,15 +419,17 @@ describe("il pannello monta le superfici dal registro", () => {
 
   it("monta qualunque factory selezionata dal registro", () => {
     const text = functionBody("async function show(");
-    expect(text).toContain("surfaceRequestForDocument(tab.doc, state.handledExtensions)");
+    expect(text).toContain("surfaceRequestForDocument(tab.doc)");
     expect(text).toContain("ensureSurface(r, tab.doc, request)");
     expect(source).toContain("deps.surfaceRegistry.mount(request");
     expect(source).not.toContain("createMarkdownSurfaceFactory(");
   });
 
-  it("deriva Markdown e plain dal documento e dalle estensioni gestite", () => {
+  it("deriva la richiesta dal documento, non dalle estensioni gestite", () => {
     const text = functionBody("async function show(");
-    expect(text).toContain("state.handledExtensions");
+    expect(text).toContain("surfaceRequestForDocument(tab.doc)");
+    expect(text).not.toContain("state.handledExtensions");
+    expect(text).not.toContain("handledExtensions");
     expect(text).not.toContain('formatKey: "md"');
   });
 
