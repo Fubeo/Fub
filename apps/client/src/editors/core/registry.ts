@@ -614,6 +614,17 @@ export class DocumentSurfaceRegistry {
           `della famiglia "${inner.family}".`,
       );
     }
+    if (selection.entry !== undefined && !selection.entry.active) {
+      const unavailable = new Error(
+        `La registrazione dell'owner "${selection.entry.registration.owner}" non è più disponibile durante il mount.`,
+      );
+      try {
+        inner.destroy();
+      } catch (error) {
+        throw new AggregateError([unavailable, error], unavailable.message);
+      }
+      throw unavailable;
+    }
     const surface = manageSurface(inner, selection.entry);
     if (selection.entry?.active) selection.entry.instances.add(surface);
     return surface;

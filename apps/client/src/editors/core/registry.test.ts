@@ -91,6 +91,33 @@ function surfaceFixture(
   return { factory, mounts, destroys };
 }
 
+type ReentrantUnregisterFixture = SurfaceFixture & {
+  captureDisposer(disposer: () => void): void;
+};
+
+function reentrantUnregisterFixture(
+  label: string,
+  options: SurfaceFixtureOptions = {},
+): ReentrantUnregisterFixture {
+  const fixture = surfaceFixture(label, "text", label, options);
+  let disposer: (() => void) | undefined;
+  const factory: SurfaceFactory = {
+    ...fixture.factory,
+    mount(request, context) {
+      const surface = fixture.factory.mount(request, context);
+      disposer?.();
+      return surface;
+    },
+  };
+  return {
+    ...fixture,
+    factory,
+    captureDisposer(value) {
+      disposer = value;
+    },
+  };
+}
+
 type PrivateSurface = EditorSurface & {
   label: string;
   describe(value: string): string;
@@ -1022,6 +1049,99 @@ describe("DocumentSurfaceRegistry", () => {
 
       expect(() => dispose()).not.toThrow();
       expect(registry.select(request).key).toBe("builtin:text-fallback");
+    });
+
+    it("rifiuta una superficie creata da una registrazione disinstallata rientrante", () => {
+      const registry = new DocumentSurfaceRegistry();
+      const reentrant = reentrantUnregisterFixture("reentrant");
+      const request = { formatKey: "reentrant-format" };
+      const context = mountContext();
+      const dispose = registry.register({
+        owner: "reentrant-owner",
+        family: "text",
+        profile: "reentrant",
+        formatKey: request.formatKey,
+        factory: reentrant.factory,
+      });
+      reentrant.captureDisposer(dispose);
+
+      let returned: EditorSurface | undefined;
+      expect(() => {
+        returned = registry.mount(request, context);
+      }).toThrow(/registrazione.*non.*disponibile.*mount/i);
+
+      expect(returned).toBeUndefined();
+      expect(reentrant.mounts).toHaveLength(1);
+      expect(reentrant.destroys[0].calls).toBe(1);
+      expect(context.parent.childElementCount).toBe(0);
+      expect(registry.select(request).key).toBe("builtin:text-fallback");
+
+      expect(() => dispose()).not.toThrow();
+      expect(reentrant.destroys[0].calls).toBe(1);
+
+      const replacement = surfaceFixture("replacement", "text", "replacement");
+      const disposeReplacement = registry.register({
+        owner: "replacement-owner",
+        family: "text",
+        profile: "replacement",
+        formatKey: request.formatKey,
+        factory: replacement.factory,
+      });
+      const replacementSelection = registry.select(request);
+      expect(replacementSelection.key).toMatch(/^registration:/);
+      dispose();
+      expect(registry.select(request).key).toBe(replacementSelection.key);
+
+      const replacementContext = mountContext();
+      const replacementSurface = registry.mount(request, replacementContext);
+
+      expect(replacementSurface).not.toBe(replacement.mounts[0]);
+      expect(
+        replacementContext.parent.querySelector('[data-test-factory="replacement"]'),
+      ).not.toBeNull();
+      disposeReplacement();
+      expect(replacement.destroys[0].calls).toBe(1);
+      expect(replacementContext.parent.childElementCount).toBe(0);
+    });
+
+    it("conserva l'indisponibilità della registrazione se la pulizia rientrante fallisce", () => {
+      const registry = new DocumentSurfaceRegistry();
+      const destroyError = new Error("destroy rientrante fallito");
+      const reentrant = reentrantUnregisterFixture("reentrant-error", {
+        destroyErrors: [destroyError],
+      });
+      const request = { formatKey: "reentrant-error-format" };
+      const context = mountContext();
+      const dispose = registry.register({
+        owner: "reentrant-error-owner",
+        family: "text",
+        profile: "reentrant-error",
+        formatKey: request.formatKey,
+        factory: reentrant.factory,
+      });
+      reentrant.captureDisposer(dispose);
+
+      let caught: unknown;
+      try {
+        registry.mount(request, context);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(AggregateError);
+      const aggregate = caught as AggregateError;
+      expect(aggregate.message).toMatch(/registrazione.*non.*disponibile.*mount/i);
+      expect(aggregate.errors).toContain(destroyError);
+      expect(aggregate.errors).toContainEqual(
+        expect.objectContaining({
+          message: expect.stringMatching(/registrazione.*non.*disponibile.*mount/i),
+        }),
+      );
+      expect(reentrant.destroys[0].calls).toBe(1);
+      expect(context.parent.childElementCount).toBe(0);
+      expect(registry.select(request).key).toBe("builtin:text-fallback");
+      expect(() => dispose()).not.toThrow();
+      expect(reentrant.destroys[0].calls).toBe(1);
     });
 
     it("mantiene l'ownership coerente quando il destroy di A lancia", () => {
