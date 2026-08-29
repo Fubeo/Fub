@@ -6,8 +6,8 @@
 
 ## Modalità
 
-Il catalogo delle modalità vive sulla superficie (`SurfaceModeful`) e nelle
-factory che la montano, non nei contratti generici `EditorSurface` e
+Il catalogo delle modalità vive soltanto sulla superficie modeful montata
+(`SurfaceModeful`), non nei contratti generici `EditorSurface` e
 `TextEditorSurface`. La superficie Markdown dichiara:
 
 - **sorgente** (`source`), con la sintassi esplicita;
@@ -16,8 +16,12 @@ factory che la montano, non nei contratti generici `EditorSurface` e
 - **lettura** (`reading`), che mostra la resa senza cursore di testo.
 
 Il `defaultMode` di Markdown è `live_preview`. Plain text dichiara soltanto
-`source`, con `defaultMode: "source"`. Fallback, viewer ed error non sono
-modeful e non espongono un catalogo.
+`source`, con `defaultMode: "source"`; fallback, viewer ed error non espongono
+un catalogo. Il commutatore segue la superficie montata nel riquadro con il
+focus: Markdown mostra Sorgente, Live e Lettura, plain text soltanto Sorgente.
+Una richiesta `PaneMode` non nel catalogo non cambia il riquadro, il contesto o
+la superficie. La resa di Lettura richiede anche la capability
+`MarkdownEditorSurface`: il solo valore `reading` non la abilita.
 
 Il provider Markdown interpreta la sorgente. La shell possiede CodeMirror,
 focus, selezione, scroll, tema e lifecycle.
@@ -134,10 +138,9 @@ L'API pubblica del registro è `register` (con disposer), `select` e `mount`.
 interna e `mount` è l'unico costruttore pubblico della superficie.
 
 Un override sceglie una sola registrazione: per `registrationId`, per
-`owner` più `formatKey`, oppure per `owner` più `family` e `profile`.
-Stringhe, factory nude, bag opzionali e forme malformate non sono override
-validi. Se l'input è malformato o la registrazione indicata è stata rimossa, la
-superficie mostra un errore esplicito e non applica un fallback silenzioso.
+`owner` più `formatKey`, oppure per `owner` più `family` e `profile`. Se
+l'input è malformato o la registrazione indicata è stata rimossa, la superficie
+mostra un errore esplicito e non applica un fallback silenzioso.
 
 Il `destroy()` pubblico di una superficie montata e il disposer della
 registrazione sono idempotenti. La disinstallazione rimuove i binding e
@@ -180,26 +183,19 @@ identità del formato; non esiste un `format_id` IPC e `FormatDescriptor.id` in
 Rust non è un campo di `VaultInfo`.
 
 `PaneMode` resta l'ABI `source | live_preview | reading` di
-`ViewContext.mode`. Il pannello conserva la modalità persistita del riquadro e
-calcola `effectiveMode` rispetto al catalogo della superficie: il valore
-persistito può restare `live_preview` anche per plain text, mentre chrome e
-contesto seguono `effectiveMode`; il contesto pubblica `live_preview` solo se
-la superficie attiva lo dichiara.
+`ViewContext.mode`. Il pannello confronta ogni richiesta tipizzata con il
+catalogo della superficie montata nel riquadro con il focus prima di aggiornare
+layout, contesto o superficie. Una richiesta non supportata non cambia nulla;
+una richiesta valida applica la modalità alla superficie e al riquadro. La resa
+di Lettura richiede `MarkdownEditorSurface` oltre alla modalità effettiva.
 
-Il pannello applica `surface.setMode(effectiveMode)` e non invoca
-`setLivePreview`: su Markdown `setMode` mappa già `live_preview`, `source` e
-`reading`. Il commutatore `#mode-switch` si ricostruisce dal catalogo della
-superficie con il focus. Senza documento o con fallback, viewer o error non
-modeful il commutatore non crea bottoni; Markdown conserva Sorgente, Live e
-Lettura con le chiavi i18n esistenti. Non esiste un `DocumentModeRegistry`
-parallelo.
-
-L'arbitrato della tastiera è centralizzato nella shell e segue l'ordine
-overlay transitorio, editor locale in modifica, superficie attiva, profilo
-attivo, comandi del documento, comandi del riquadro e comandi globali. I livelli
-di superficie e profilo sono punti di estensione no-op. Il percorso non
-intercetta undo/redo nativi: i tre accordi di `PASSED_TO_EDITOR` restano
-dell'editor quando il focus è dentro `.cm-editor`.
+Una focus trap aperta possiede Escape e Tab e impedisce alle scorciatoie della
+shell di agire. Nell'editor, un gesto che la keymap reale ha già consumato resta
+all'editor; il listener della shell lo osserva con `defaultPrevented`. Tutti gli
+altri gesti passano all'unico dispatcher della shell, che tratta documento,
+riquadro e globale come namespace di comandi, non come livelli di listener.
+Una modifica di scorciatoia diventa attiva a runtime dopo il gesto che la cambia,
+senza un percorso speciale legato all'ID del comando.
 
 Un riquadro o una finestra vuoti contengono il solo chrome, senza un
 `EditorView` Markdown finto. La `DocumentSession` coordina buffer, salvataggio,

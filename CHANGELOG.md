@@ -17,14 +17,14 @@ ciò che formerà la prima versione.
 - wikilink, tag, backlink, ricerca full-text e Graph View;
 - editor CodeMirror, live preview e modalità di lettura;
 - motore testuale condiviso con profili Markdown, plain text e formula;
-- la shell sceglie Markdown o testo piano tramite un registro interno delle superfici;
-- il registro delle superfici applica ownership esplicita a `destroy()`, riusa
-  per chiave di selezione e inferisce temporaneamente il formato da path ed
-  estensione;
-- cataloghi di modalità dichiarati dalle superfici modeful, distinti per
-  Markdown e plain text;
-- arbitrato centralizzato della tastiera con priorità per overlay, editor e
-  comandi della shell;
+- la shell registra, seleziona e monta Markdown o testo piano tramite un registro
+  interno delle superfici;
+- il registro applica ownership esplicita a `destroy()`, riusa per chiave di
+  selezione opaca e inferisce temporaneamente il formato da path ed estensione;
+- i cataloghi `PaneMode` sono esposti soltanto dalle superfici modeful montate:
+  Markdown dichiara sorgente, live preview e lettura; plain text sorgente;
+- la tastiera distingue trap di focus, gesto realmente consumato dall'editor e
+  dispatcher della shell per le scorciatoie e le sequenze rimanenti;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;

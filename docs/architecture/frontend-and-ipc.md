@@ -150,17 +150,16 @@ Il registro è posseduto dalla shell (`apps/client/src`), non da `fub-abi`.
 Ogni factory appartiene all'owner della registrazione che la espone.
 
 L'API pubblica espone `register` (con disposer), `select` e `mount`. `select`
-restituisce soltanto `ResolvedSurface.key`, una `SurfaceSelectionKey` opaca,
-senza esporre la factory; `mount` è l'unico costruttore pubblico di superfici.
+restituisce soltanto una `SurfaceSelectionKey` opaca, senza esporre la factory;
+`mount` è l'unico costruttore pubblico di superfici.
 
-Un `SurfaceOverride` esprime una sola intenzione:
+Un `SurfaceOverride` esprime una sola intenzione come unione discriminata:
 `{ kind: "registration", registrationId }`,
 `{ kind: "format", owner, formatKey }` oppure
 `{ kind: "profile", owner, family, profile }`; le ultime due forme sono
-qualificate dall'owner. Stringhe, factory nude, bag opzionali, campi di più
-varianti e dati parziali sono malformati. Un input malformato, oppure una
-registrazione, un binding o un owner non disponibile, seleziona un errore
-esplicito; `mount` ne costruisce la superficie senza applicare fallback.
+qualificate dall'owner. Un input malformato, oppure una registrazione, un
+binding o un owner non disponibile, seleziona un errore esplicito; `mount` ne
+costruisce la superficie senza applicare fallback.
 
 La famiglia della registrazione deve coincidere con quella della factory. Se
 entrambe dichiarano un profilo, devono coincidere; quello della registrazione
@@ -346,44 +345,39 @@ superficie: l'inferenza temporanea e le sue allowlist sono descritte sopra.
 Il plain text è un client architetturale della shell, non una funzionalità del
 vault per gli utenti; nel fake host soltanto `.md` è trattato come documento.
 
-Il catalogo delle modalità vive sulla superficie che lo dichiara, non sul
-contratto generico `EditorSurface` o `TextEditorSurface`. `SurfaceModeful`
-espone `modes`, `defaultMode`, `mode()` e `setMode()`; le factory modeful
-dichiarano lo stesso catalogo tramite `modes` e `defaultMode`, e la superficie
-montata lo espone. Markdown dichiara `source`, `live_preview` e `reading`, con
+Il catalogo delle modalità vive soltanto sulla superficie modeful montata.
+`SurfaceModeful` espone `modes`, `defaultMode`, `mode()` e `setMode()`.
+Markdown dichiara `source`, `live_preview` e `reading`, con
 `defaultMode: "live_preview"`; plain text dichiara soltanto `source`, con
-`defaultMode: "source"`. Fallback, viewer ed error sono superfici non
-modeful. Non esiste un `DocumentModeRegistry` parallelo.
+`defaultMode: "source"`. Fallback, viewer ed error non sono modeful.
 
 `PaneMode` resta l'ABI `source | live_preview | reading` di
-`ViewContext.mode`. Il pannello conserva la modalità persistita del riquadro e
-calcola `effectiveMode` confrontandola con il catalogo della superficie:
-`live_preview` può quindi restare persistita passando a plain text, mentre
-chrome e contesto seguono `effectiveMode` e pubblicano `source`. Il contesto
-pubblica `live_preview` soltanto quando la superficie attiva la dichiara.
-Il pannello applica `surface.setMode(effectiveMode)` e non invoca
-`setLivePreview`; su Markdown `setMode` mappa già `live_preview`, `source` e
-`reading` sulla configurazione del profilo.
+`ViewContext.mode`. Il pannello valida ogni `PaneMode` richiesto contro il
+catalogo della superficie montata nel riquadro con il focus, prima di mutare
+alcunché. Una superficie non modeful o una modalità non dichiarata non muta
+layout, contesto o superficie; una modalità accettata aggiorna tutti e tre.
+La resa di lettura richiede la capability `MarkdownEditorSurface` oltre alla
+modalità effettiva: il solo valore `reading` non la attiva.
 
-Il commutatore `#mode-switch` si ricostruisce dal catalogo della superficie
-con il focus. Senza documento o con una superficie non modeful non crea
-bottoni; Markdown mostra ancora Sorgente, Live e Lettura con le chiavi i18n
-esistenti.
+Il commutatore `#mode-switch` deriva dal catalogo della superficie montata con
+il focus e convalida la richiesta tipizzata prima di inoltrarla. Senza documento
+o con una superficie non modeful non crea bottoni; Markdown mostra Sorgente,
+Live e Lettura con le chiavi i18n esistenti.
 
-L'arbitrato della tastiera segue sette livelli, implementati in
-`apps/client/src/ui/arbitration.ts` e consumati da `ui/keyboard.ts`, in questo
-ordine: 1) overlay transitorio, 2) editor locale in modifica, 3) comandi della
-superficie attiva, 4) profilo attivo, 5) comandi del documento, 6) comandi del
-riquadro, 7) comandi globali. I livelli 3 e 4 sono punti di estensione no-op:
-Markdown e plain text affidano i comandi locali alla keymap di
-CodeMirror.
+L'ownership della tastiera ha tre stadi:
 
-La tastiera applicativa ha un solo `document` `keydown` di produzione, in
-`ui/keyboard.ts` e montato tramite `Lifetime`. In produzione non ci sono
-`window` o `document` `keydown` sotto `editors/**` né in `panels/preview.ts`.
-L'arbitrato non sottrae undo/redo nativi: i tre accordi dell'insieme
-`PASSED_TO_EDITOR` (`shell.doc.search`, `shell.pane.split.down`,
-`shell.mode.live`) restano dell'editor quando il focus è dentro `.cm-editor`.
+1. la focus trap in cattura possiede Escape e Tab; ogni trap viva sopprime le
+   scorciatoie della shell;
+2. il listener su `document` in bubble osserva `defaultPrevented` dopo la keymap
+   reale di CodeMirror o del profilo: un gesto già consumato resta all'editor;
+3. un solo dispatcher della shell, posseduto da `Lifetime`, riconosce binding e
+   sequenze rimanenti.
+
+Documento, riquadro e globale sono namespace di comandi dello stesso dispatcher,
+non listener di precedenza distinti. Il menu contestuale riunisce nodo, trap e
+click esterno nella propria `Lifetime`; ogni chiusura sincronizza lo stato
+dell'app-menu. La pila delle trap conserva ownership e ritorno del focus
+deterministici anche con teardown annidato o non LIFO.
 
 Un riquadro o una finestra vuoti contengono soltanto il chrome, senza una
 `EditorView` Markdown fittizia.
