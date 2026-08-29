@@ -85,6 +85,7 @@ describe("la precedenza causale fra TextEngine e scorciatoie shell", () => {
 
   function mountTextEditor(markdown = false): EditorView {
     const parent = document.createElement("div");
+    parent.setAttribute("data-document-surface", "");
     root.append(parent);
     const profile = markdown
       ? createMarkdownProfile({
