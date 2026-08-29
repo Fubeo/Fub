@@ -542,7 +542,7 @@ function mockPanelModules(request: RequestBox) {
   const notifications = vi.fn();
   const translations = vi.fn(
     (key: string, values?: Record<string, unknown>) =>
-      `${language}:${key}:${Object.values(values ?? {}).join(":")}`,
+      `${language}:${key}${values === undefined ? "" : `:${Object.values(values).join(":")}`}`,
   );
   const setActiveContext = vi.fn(async (context: ViewContext) => {
     contexts.push(context);
