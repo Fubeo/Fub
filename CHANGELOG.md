@@ -17,6 +17,7 @@ ciò che formerà la prima versione.
 - wikilink, tag, backlink, ricerca full-text e Graph View;
 - editor CodeMirror, live preview e modalità di lettura;
 - motore testuale condiviso con profili Markdown, plain text e formula;
+- la shell sceglie Markdown o testo piano tramite un registro interno delle superfici;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;

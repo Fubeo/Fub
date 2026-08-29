@@ -116,26 +116,34 @@ tracciato nell'issue [#10](https://github.com/Fubeo/Fub/issues/10).
 
 ## Superfici condivise
 
-`TextEngine` è il motore testuale corrente della shell e fornisce la meccanica
-condivisa. L'unico percorso montato dall'utente è l'editor Markdown, che passa
-da `createEditor()` e `MarkdownProfile`.
+`TextEngine` è il motore testuale della shell e
+`DocumentSurfaceRegistry` è il registro interno che sceglie la superficie per
+ogni documento. Le note del vault con un'estensione in
+`state.handledExtensions` restano Markdown: il registro monta `TextEngine` con
+`MarkdownProfile`. Un documento `txt` o `text/plain` usa `PlainTextProfile`
+sullo stesso motore.
 
-`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
-stesso `TextEngine`: vengono esercitati soltanto dai test dedicati e dalla
-fixture a tre profili, ma non sono superfici esposte all'utente. La loro
-presenza dimostra il seam interno; non introduce una nuova modalità del
-prodotto.
+Il registro appartiene alla shell e applica l'ordine di risoluzione descritto
+nell'architettura: override, binding, fallback testuale, viewer per byte o
+superficie di errore. Le collisioni sono esplicite e nominano gli owner.
 
-La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle;
-il pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
-chiamata IPC o WASM per ogni battuta.
+`FormulaProfile` resta usato soltanto dai test e dalle fixture: non è una
+superficie utente. `createEditor()` non è un percorso utente; l'adapter di
+compatibilità resta nel modulo tecnico, mentre il pannello monta la superficie
+scelta dal registro.
 
-Il percorso corrente non include un `DocumentSurfaceRegistry`, una griglia di
-superfici o la `Phase 5`: restano assenti e l'esperienza utente rimane quella
-del percorso Markdown esistente.
+Un riquadro vuoto contiene il solo chrome e non conserva un editor Markdown
+finto. La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e
+lifecycle; il pannello collega le superfici e aggiorna la resa. Nessun profilo
+invia una chiamata IPC o WASM per ogni battuta.
+
+La griglia e il foglio sono assenti dal percorso utente.
 
 ## Dove si trova
 
+- `apps/client/src/editors/core/registry.ts`
+- `apps/client/src/editors/bootstrap.ts`
+- `apps/client/src/editors/text/factories.ts`
 - `apps/client/src/editor/`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/state/`

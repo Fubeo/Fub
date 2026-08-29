@@ -139,11 +139,41 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece un `Editor`. `renderPane()` crea l'editor chiamando
-`createEditor()` da `apps/client/src/editor/editor.ts`, che costruisce un
-`TextEngine` per quel riquadro e inoltra l'API del profilo Markdown. Questo
-`createEditor()` è un adapter temporaneo di compatibilità, non un secondo
-motore.
+Ogni `Pane` possiede invece la superficie restituita dal
+`DocumentSurfaceRegistry`. `renderPane()` costruisce soltanto il **chrome** del
+riquadro: contenitori, tab, preview e view. Quando il riquadro mostra un
+documento, `panels/document.ts` ricava la richiesta dal path e delega a
+`surfaceRegistry.mount`; non costruisce factory in loco.
+
+Il registro è posseduto dalla shell (`apps/client/src`), non da `fub-abi`.
+`bootstrapSurfaceRegistry()` in `apps/client/src/editors/bootstrap.ts` crea il
+registro e registra le factory della shell. `desktop-shell.ts` lo chiama prima
+di `mountDocument()` e inietta il registro in `DocumentDeps`. `createEditor()`
+in `apps/client/src/editor/editor.ts` resta un adapter di compatibilità.
+Il pannello monta sempre la superficie scelta dal registro.
+
+La risoluzione segue quest'ordine:
+
+1. override esplicito dell'utente;
+2. binding esatto `formatKey`;
+3. binding per specie della sorgente e, quando dichiarato, per coppia
+   famiglia-profilo;
+4. fallback testuale per una richiesta testuale;
+5. viewer read-only per una sorgente a byte;
+6. superficie di errore esplicita per famiglia, profilo o versione non
+   supportati.
+
+La chiave interna deriva dal path, dall'estensione e dalle estensioni gestite
+da `VaultInfo.extensions` (riflesse in `state.handledExtensions`), senza
+aggiungere `format_id` all'IPC. Una collisione nomina entrambi gli owner e non
+applica mai silenziosamente la regola “vince l'ultimo”. Il disposer di
+`unregister` rimuove i binding e distrugge tutte le istanze possedute, secondo
+le regole di ownership e teardown di [0191](../decisions/0191-ui-dichiarativa-e-renderer.md)
+e [0193](../decisions/0193-ownership-lifecycle-e-teardown.md).
+
+La superficie scelta dal registro condivide la sessione del documento ma
+conserva il proprio stato visuale, come stabilito da
+[0190](../decisions/0190-sessioni-documento-e-undo.md).
 
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
@@ -235,28 +265,31 @@ dominio:
 | `PlainTextProfile` | `createPlainTextProfile()` monta estensioni vuote, senza sintassi o comandi di dominio. |
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
-Questi profili sono un'architettura interna della shell. `MarkdownProfile` è
-l'unico profilo montato dal percorso utente; `PlainTextProfile` e
-`FormulaProfile` sono esercitati dai test e dalla fixture a tre profili, ma non
-sono superfici esposte all'utente.
+`bootstrapSurfaceRegistry()` registra le factory possedute dalla shell. Per le
+estensioni in `state.handledExtensions` il registro sceglie `MarkdownProfile`;
+per `txt` e `text/plain` sceglie `PlainTextProfile`, entrambi sullo stesso
+`TextEngine`. La richiesta interna non introduce un canale IPC specifico per
+il formato.
 
-I moduli sono rispettivamente
+`FormulaProfile` resta una superficie usata soltanto dai test e dalle fixture:
+non è una superficie esposta all'utente. Sono assenti la griglia (`GridEngine`),
+la famiglia `structured` e le superfici WASM.
+
+I moduli dei profili sono rispettivamente
 `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `apps/client/src/editors/text/profiles/plain-text.ts` e
 `apps/client/src/editors/text/profiles/formula.ts`. Le callback
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
-Non fanno parte dell'architettura corrente un `DocumentSurfaceRegistry`, una
-griglia condivisa di superfici o la `Phase 5`: il pannello collega direttamente
-le superfici alla sessione e il percorso attuale resta quello testuale.
-
 ## Confine CodeMirror
 
 Gli import `@codemirror/*` della shell sono confinati a
-`apps/client/src/editors/text/`. `TextEngine`, i tre profili, le loro estensioni
-e i test del seam vivono sotto questo percorso; `editor/editor.ts` e
-`panels/document.ts` usano l'adapter e i tipi senza importare CodeMirror.
+`apps/client/src/editors/text/`. `editors/core` non importa CodeMirror:
+`TextEngine`, i tre profili, le loro estensioni e i test del seam vivono sotto
+questo percorso. `editor/editor.ts` conserva l'adapter di compatibilità;
+`panels/document.ts` usa il registro e i tipi, ma non usa più l'adapter e non
+importa CodeMirror.
 
 `node .github/scripts/check-codemirror-boundary.mjs` percorre
 `apps/client/src` e segnala ogni import CodeMirror fuori da
@@ -272,6 +305,9 @@ Gli altri guard del frontend impediscono:
 
 ## Dove si trova
 
+- `apps/client/src/editors/core/registry.ts`
+- `apps/client/src/editors/bootstrap.ts`
+- `apps/client/src/editors/text/factories.ts`
 - `apps/client/src/editors/text/engine.ts`
 - `apps/client/src/editors/text/history-footprints.ts`
 - `apps/client/src/editors/text/profiles/markdown/profile.ts`
