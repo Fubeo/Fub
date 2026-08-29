@@ -54,17 +54,6 @@ let waiting: Waiting | null = null;
 /// Il timer della scadenza, per poterlo disdire quando il tasto arriva.
 let deadline: ReturnType<typeof setTimeout> | undefined;
 
-/// I tre accordi che l'editor monta anche lui, e che dentro l'editor vince
-/// l'editor (0156). È la stessa lista di `SCONTRI_NOTI` in
-/// `keybindings.test.ts`: là è un lucchetto sugli elenchi dichiarati — i due
-/// registri continuano a dichiararli entrambi — qui è la regola che a runtime
-/// decide chi li tiene, e lo decide il fuoco.
-const PASSED_TO_EDITOR: ReadonlySet<string> = new Set([
-  "shell.doc.search",
-  "shell.pane.split.down",
-  "shell.mode.live",
-]);
-
 /// L'evento è nato dentro l'editor? Il fuoco si osserva qui, dove il DOM c'è, e
 /// non in `avanza`, che resta pura e non riceve il bersaglio.
 function inEditor(target: EventTarget | null): boolean {
@@ -76,19 +65,19 @@ function inEditor(target: EventTarget | null): boolean {
 export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
   lifetime.listen(document, "keydown", (e) => {
     const overlayOpen = transientOverlayOpen();
+    // CodeMirror gestisce il keydown sul suo DOM prima che raggiunga questo
+    // ascoltatore sul documento. Il suo `preventDefault` è il fatto causale:
+    // nessun id della shell o lista di accordi può sostituirlo.
+    const editorFocused = inEditor(e.target);
+    const localEditorConsumed = editorFocused && e.defaultPrevented;
     const result = advance(allCommands(), waiting, e);
-    const decision = arbitrate(result, e, {
-      overlayOpen,
-      editorFocused: inEditor(e.target),
-      waiting,
-      passedToEditor: PASSED_TO_EDITOR,
-    });
+    const decision = arbitrate(result, { overlayOpen, localEditorConsumed });
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
     if (decision.type === "passa") {
-      // Se un overlay interrompe una sequenza, l'attesa della shell non deve
-      // sopravvivere sotto la superficie che ora possiede il fuoco.
-      if (overlayOpen && result.type !== "passa") stopWaiting();
+      // Un overlay o un editor che ha consumato l'evento interrompono qualsiasi
+      // sequenza della shell: l'attesa non può sopravvivere al suo primo gesto.
+      if ((overlayOpen && result.type !== "passa") || localEditorConsumed) stopWaiting();
       return;
     }
     e.preventDefault();

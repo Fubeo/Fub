@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import html from "../../../index.html?raw";
 import previewSource from "../../panels/preview.ts?raw";
 import keyboardSource from "../../ui/keyboard.ts?raw";
+import arbitrationSource from "../../ui/arbitration.ts?raw";
 
 const textSources = import.meta.glob("./**/*.ts", {
   query: "?raw",
@@ -34,14 +35,6 @@ function modeButtons(source: string): string[] {
   );
 }
 
-function passedToEditor(source: string): string[] {
-  const declaration = source.match(
-    /const\s+PASSED_TO_EDITOR\b[\s\S]*?new Set\(\s*\[([\s\S]*?)\]\s*\)/,
-  );
-  expect(declaration, "PASSED_TO_EDITOR non è più una lista leggibile").not.toBeNull();
-  return [...declaration![1]!.matchAll(/["']([^"']+)["']/g)].map((match) => match[1]!);
-}
-
 describe("caratterizzazione delle modalità e della tastiera della shell", () => {
   it("il commutatore lascia il catalogo alla superficie attiva", () => {
     expect(modeButtons(html)).toEqual([]);
@@ -67,12 +60,17 @@ describe("caratterizzazione delle modalità e della tastiera della shell", () =>
     expect(keyboardSource).toMatch(/\blifetime\s*\.\s*listen\(\s*document\s*,\s*["']keydown["']/);
   });
 
-  it("conserva esattamente i tre comandi passati all'editor", () => {
-    expect(passedToEditor(keyboardSource)).toEqual([
-      "shell.doc.search",
-      "shell.pane.split.down",
-      "shell.mode.live",
-    ]);
+  it("passa all'arbitrato il consumo causale, senza una lista statica", () => {
+    expect(keyboardSource).not.toMatch(/\bPASSED_TO_EDITOR\b/);
+    expect(keyboardSource).not.toMatch(/\b(?:passedToEditor|editorBindings|editorKeybindings)\b/);
+    expect(keyboardSource).not.toMatch(/["']shell\./);
+    expect(keyboardSource).toMatch(
+      /const\s+localEditorConsumed\s*=\s*editorFocused\s*&&\s*e\.defaultPrevented/,
+    );
+    expect(arbitrationSource).not.toMatch(
+      /\b(?:ARBITRATION_LAYERS|GestureConsumer|localEditorConsumes|profileConsumes|shellCommandLayer|surfaceConsumes)\b/,
+    );
+    expect(arbitrationSource).not.toMatch(/["']shell\./);
   });
 
   it("il guard riconosce sia l'ascolto DOM sia quello Lifetime", () => {
