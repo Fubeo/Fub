@@ -132,6 +132,138 @@ describe("DocumentSurfaceRegistry", () => {
 
     dispose();
   });
+  it("assegna una key distinta a ogni registrazione e rende ambigua la sola coppia family/profile", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const markdownA = surfaceFixture("markdown-a", "text", "markdown");
+    const markdownB = surfaceFixture("markdown-b", "text", "markdown");
+    registry.register({
+      owner: "owner-a",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-a",
+      species: "text/markdown-a",
+      factory: markdownA.factory,
+    });
+    registry.register({
+      owner: "owner-b",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-b",
+      species: "text/markdown-b",
+      factory: markdownB.factory,
+    });
+
+    const selectedA = registry.select({ formatKey: "format-a" });
+    const selectedB = registry.select({ formatKey: "format-b" });
+    expect(selectedA.factory).toBe(markdownA.factory);
+    expect(selectedB.factory).toBe(markdownB.factory);
+    expect(selectedA.key).not.toBe(selectedB.key);
+
+    const ambiguous = registry.select({ family: "text", profile: "markdown" });
+    expect(ambiguous.key).toMatch(/^builtin:error:/);
+    const context = mountContext();
+    const surface = registry.mount({ family: "text", profile: "markdown" }, context);
+    expect(context.parent.textContent).toContain("owner-a");
+    expect(context.parent.textContent).toContain("owner-b");
+    surface.destroy();
+  });
+
+  it("mantiene key stabili e distinte per fallback, viewer ed errori", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const fallback = registry.select({ family: "text", profile: "missing" });
+    expect(fallback.key).toBe("builtin:text-fallback");
+    expect(registry.select({ family: "text", profile: "missing" }).key).toBe(
+      fallback.key,
+    );
+
+    const viewer = registry.select({ species: "bytes" });
+    expect(viewer.key).toBe("builtin:byte-viewer");
+    expect(viewer.key).not.toBe(fallback.key);
+
+    const unknown = registry.select({ family: "future" });
+    const otherUnknown = registry.select({ family: "other-future" });
+    expect(unknown.key).toMatch(/^builtin:error:/);
+    expect(otherUnknown.key).toMatch(/^builtin:error:/);
+    expect(unknown.key).not.toBe(otherUnknown.key);
+  });
+
+  it("mantiene la stessa key tra binding esatto e override della registrazione", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const registrationA: SurfaceRegistration = {
+      owner: "owner-a",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-a",
+      species: "text/markdown-a",
+      factory: surfaceFixture("a", "text", "markdown").factory,
+    };
+    const registrationB: SurfaceRegistration = {
+      owner: "owner-b",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-b",
+      species: "text/markdown-b",
+      factory: surfaceFixture("b", "text", "markdown").factory,
+    };
+    registry.register(registrationA);
+    registry.register(registrationB);
+
+    const exactA = registry.select({ formatKey: "format-a" });
+    const exactB = registry.select({ formatKey: "format-b" });
+    const overrideA = registry.select({
+      override: { registrationId: registrationA.registrationId as string },
+    });
+    const overrideB = registry.select({
+      override: { registrationId: registrationB.registrationId as string },
+    });
+
+    expect(overrideA.key).toBe(exactA.key);
+    expect(overrideB.key).toBe(exactB.key);
+    expect(exactA.key).not.toBe(exactB.key);
+  });
+
+  it("passa da registrazione a fallback e ritorna alla registrazione con key nuove", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const first = surfaceFixture("first", "text", "markdown");
+    const request = {
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-reused",
+    };
+    const registration: SurfaceRegistration = {
+      owner: "owner-first",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-reused",
+      factory: first.factory,
+    };
+    const dispose = registry.register(registration);
+    const registered = registry.select(request);
+    registry.mount(request, mountContext());
+
+    dispose();
+    expect(first.destroys[0].calls).toBe(1);
+    const fallback = registry.select(request);
+    expect(fallback.factory).toBe(textualFallbackFactory);
+    expect(fallback.key).toBe("builtin:text-fallback");
+    expect(fallback.key).not.toBe(registered.key);
+    registry.mount(request, mountContext()).destroy();
+
+    const second = surfaceFixture("second", "text", "markdown");
+    const disposeAgain = registry.register({
+      owner: "owner-second",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-reused",
+      factory: second.factory,
+    });
+    const registeredAgain = registry.select(request);
+    expect(registeredAgain.factory).toBe(second.factory);
+    expect(registeredAgain.key).not.toBe(fallback.key);
+    registry.mount(request, mountContext()).destroy();
+    disposeAgain();
+    expect(second.destroys[0].calls).toBe(1);
+  });
 
   it("rifiuta le collisioni nominando entrambi gli owner", () => {
     const registry = new DocumentSurfaceRegistry();

@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Il presidio di **un ordine**, dentro l'ascoltatore di `document_changed`.
 //
 // Il conto degli echoes (`state/salvataggio.ts`) ha due metà: una scrittura ne
@@ -33,11 +34,18 @@
 // fra la sua apertura e la successiva `onEvent(`. Una guardia scritto dentro una
 // funzione chiamata da qui, invece che qui, non la vedrebbe — ed è il verso
 // giusto in cui sbagliare, perché quella guardia dovrebbe essere scritto apposta.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import source from "./document.ts?raw";
 import sessionSource from "../state/document-session.ts?raw";
 import explorer from "./explorer.ts?raw";
+import {
+  DocumentSurfaceRegistry,
+  type EditorSurface,
+  type SurfaceFactory,
+  type SurfaceRegistration,
+  type SurfaceRequest,
+} from "../editors/core/registry";
 
 // Il presidio del ricongiungimento importa la decisione dal modulo puro
 // `state/drafts.ts`, mentre l'owner costruisce e conserva le sessioni.
@@ -433,5 +441,185 @@ describe("il pannello monta le superfici dal registro", () => {
   it("stacca una sessione prima di distruggere la superficie", () => {
     const text = functionBody("function buildStructure(");
     expect(text.indexOf("detachSurface(r)")).toBeLessThan(text.indexOf("destroySurface(r)"));
+  });
+  it("riusa solo la selectionKey restituita dal registro", () => {
+    const text = functionBody("function ensureSurface(");
+    expect(text).toContain("deps.surfaceRegistry.select(request)");
+    expect(text).toContain("r.selectionKey === selected.key");
+    expect(text).not.toContain("surfaceFamily");
+    expect(text).not.toContain("surfaceProfile");
+  });
+});
+
+describe("identità della selezione nel percorso reale del pannello", () => {
+  it("distrugge A e monta B, poi distrugge B e rimonta A", async () => {
+    vi.resetModules();
+    let request: SurfaceRequest = {
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-a",
+      species: "text/markdown-a",
+    };
+    const shellState = { currentDoc: null as string | null, handledExtensions: [] as string[] };
+    const session = {
+      subscribe: () => () => {},
+      isDirty: () => false,
+      isDeletionPending: () => false,
+      saveState: () => null,
+      attachSurface: () => () => {},
+    };
+
+    vi.doMock("../editors/bootstrap", () => ({
+      surfaceRequestForDocument: () => request,
+    }));
+    vi.doMock("../host/ipc", () => ({ api: {} }));
+    vi.doMock("../host/query", () => ({
+      WITHOUT_PAGE: undefined,
+      notesByName: () => Promise.resolve([]),
+      resolvedReference: () => Promise.resolve(null),
+      syntaxForms: () => Promise.resolve([]),
+      unsavedDrafts: () => Promise.resolve([]),
+      vaultTags: () => Promise.resolve([]),
+    }));
+    vi.doMock("../state/kernel", () => ({ onEvent: () => {} }));
+    vi.doMock("../state/recent", () => ({ existingRecentNotes: () => [] }));
+    vi.doMock("../state/store", () => ({
+      emit: () => {},
+      on: () => {},
+      readState: () => null,
+      state: shellState,
+      writeState: () => {},
+    }));
+    vi.doMock("../state/drafts", () => ({
+      CASE_KEY: {},
+      caseOf: () => null,
+      toRecover: () => [],
+    }));
+    vi.doMock("../state/document-session", () => ({
+      documentSessions: session,
+      isDocumentDeletedDuringRead: () => false,
+    }));
+    vi.doMock("../state/vault", () => ({ createNote: () => Promise.resolve() }));
+    vi.doMock("../ui/commands", () => ({ registerShellCommand: () => {} }));
+    vi.doMock("../ui/notify", () => ({ notify: () => {} }));
+    vi.doMock("./preview", () => ({
+      clearPreview: () => {},
+      updatePreview: () => Promise.resolve(),
+    }));
+    vi.doMock("../ui/views", () => ({
+      mountViewInPane: () => Promise.resolve(),
+      primaryView: () => undefined,
+      unmountViewFromPane: () => {},
+    }));
+    vi.doMock("../host/errors", () => ({ errorText: () => "errore" }));
+    vi.doMock("../i18n/strings", () => ({
+      onLanguage: () => {},
+      t: (key: string) => key,
+    }));
+    vi.doMock("../ui/tooltip", () => ({ setTooltip: () => {} }));
+
+    const makeSurfaceFactory = (label: string) => {
+      const mounts: EditorSurface[] = [];
+      let destroys = 0;
+      const factory: SurfaceFactory = {
+        family: "text",
+        profile: "markdown",
+        mount(_request, context) {
+          const element = context.parent.ownerDocument.createElement("div");
+          element.dataset.testFactory = label;
+          context.parent.appendChild(element);
+          const surface: EditorSurface = {
+            family: "text",
+            surfaceId: `${label}-${mounts.length + 1}`,
+            focus() {},
+            setReadOnly() {},
+            setTheme() {},
+            captureViewState() {
+              return { version: 1, value: null };
+            },
+            restoreViewState() {},
+            suspend() {},
+            resume() {},
+            destroy() {
+              destroys += 1;
+              element.remove();
+            },
+          };
+          mounts.push(surface);
+          return surface;
+        },
+      };
+      return {
+        factory,
+        mounts,
+        destroys: () => destroys,
+      };
+    };
+
+    const registry = new DocumentSurfaceRegistry();
+    const a = makeSurfaceFactory("a");
+    const b = makeSurfaceFactory("b");
+    const registrationA: SurfaceRegistration = {
+      owner: "owner-a",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-a",
+      species: "text/markdown-a",
+      factory: a.factory,
+    };
+    const registrationB: SurfaceRegistration = {
+      owner: "owner-b",
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-b",
+      species: "text/markdown-b",
+      factory: b.factory,
+    };
+    registry.register(registrationA);
+    registry.register(registrationB);
+    request = {
+      family: "text",
+      profile: "markdown",
+      override: { registrationId: registrationA.registrationId as string },
+    };
+
+    document.body.innerHTML = '<main id="panes"></main><div id="mode-switch"></div>';
+    // Questi moduli vanno caricati dopo i mock: document.ts li usa come singleton
+    // e il pannello deve essere provato sul percorso reale di show.
+    const { mountDocument, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ searchTag: () => {}, surfaceRegistry: registry });
+    openIn("main", "note.md", layout);
+
+    await synchronize();
+    expect(a.mounts).toHaveLength(1);
+    expect(b.mounts).toHaveLength(0);
+
+    request = {
+      family: "text",
+      profile: "markdown",
+      override: { registrationId: registrationB.registrationId as string },
+    };
+    await synchronize();
+    expect(a.destroys()).toBe(1);
+    expect(b.mounts).toHaveLength(1);
+
+    request = {
+      family: "text",
+      profile: "markdown",
+      override: { registrationId: registrationA.registrationId as string },
+    };
+    await synchronize();
+    expect(b.destroys()).toBe(1);
+    expect(a.mounts).toHaveLength(2);
+    request = {
+      family: "text",
+      profile: "markdown",
+      formatKey: "format-b",
+      species: "text/markdown-b",
+    };
+    await synchronize();
+    expect(a.destroys()).toBe(2);
+    expect(b.mounts).toHaveLength(2);
   });
 });

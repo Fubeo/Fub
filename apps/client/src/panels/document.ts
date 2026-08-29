@@ -22,6 +22,7 @@ import type {
   DocumentSurfaceRegistry,
   EditorSurface,
   SurfaceRequest,
+  SurfaceSelectionKey,
 } from "../editors/core/registry";
 import { surfaceRequestForDocument } from "../editors/bootstrap";
 import type { TextEditorSurface, TextSurfaceMountContext } from "../editors/text/factories";
@@ -104,9 +105,9 @@ interface Pane {
   /// all'editor e alla lettura, e come loro c'è anche quando non si vede.
   viewEl: HTMLElement;
   /// La superficie selezionata dal registro per il documento mostrato.
+  /// La chiave è opaca: family e profile descrivono capability, non identità.
   surface: EditorSurface | null;
-  surfaceFamily: string | null;
-  surfaceProfile: string | undefined;
+  selectionKey: SurfaceSelectionKey | null;
   /// Cosa c'è **adesso** in questo riquadro. Una linguetta e non un path: dalla §3.3
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
   shown: Tab | null;
@@ -516,19 +517,14 @@ function surfaceMountContext(r: Pane, doc: string): TextSurfaceMountContext {
 function destroySurface(r: Pane): void {
   const surface = r.surface;
   r.surface = null;
-  r.surfaceFamily = null;
-  r.surfaceProfile = undefined;
+  r.selectionKey = null;
   surface?.destroy();
   r.editorEl.replaceChildren();
 }
 
 function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
-  const selected = deps.surfaceRegistry.resolve(request);
-  if (
-    r.surface !== null &&
-    r.surfaceFamily === selected.family &&
-    r.surfaceProfile === selected.profile
-  ) {
+  const selected = deps.surfaceRegistry.select(request);
+  if (r.surface !== null && r.selectionKey === selected.key) {
     return false;
   }
 
@@ -537,11 +533,11 @@ function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
     destroySurface(r);
   }
   r.surface = deps.surfaceRegistry.mount(request, surfaceMountContext(r, doc));
-  r.surfaceFamily = selected.family;
-  r.surfaceProfile = selected.profile;
+  r.selectionKey = selected.key;
   if (theme) r.surface.setTheme(theme);
   return true;
 }
+
 
 
 /// Il riquadro con questo id, creandolo se è nuovo.
@@ -594,8 +590,7 @@ function renderPane(id: string): Pane {
     previewEl,
     viewEl,
     surface: null,
-    surfaceFamily: null,
-    surfaceProfile: undefined,
+    selectionKey: null,
     shown: null,
     loadGeneration: 0,
     disposeSurface: null,

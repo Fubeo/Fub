@@ -63,6 +63,17 @@ export interface SurfaceFactory {
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface;
 }
 
+declare const SURFACE_SELECTION_KEY: unique symbol;
+
+export type SurfaceSelectionKey = string & {
+  readonly [SURFACE_SELECTION_KEY]: true;
+};
+
+export interface ResolvedSurface {
+  readonly key: SurfaceSelectionKey;
+  readonly factory: SurfaceFactory;
+}
+
 export interface SurfaceRegistration {
   readonly registrationId?: string;
   readonly owner: string;
@@ -76,20 +87,21 @@ export interface SurfaceRegistration {
 }
 
 interface Binding {
-  readonly kind: "formatKey" | "species" | "familyProfile";
+  readonly kind: "formatKey" | "species";
   readonly key: string;
   readonly label: string;
 }
 
 interface Entry {
   readonly registration: SurfaceRegistration;
+  readonly selectionKey: SurfaceSelectionKey;
+  readonly familyProfileKey: string;
   readonly bindings: readonly Binding[];
   readonly instances: Set<EditorSurface>;
   active: boolean;
 }
 
-interface Selection {
-  readonly factory: SurfaceFactory;
+interface Selection extends ResolvedSurface {
   readonly entry?: Entry;
 }
 
@@ -112,8 +124,21 @@ const BYTE_SPECIES: Record<string, true> = {
   "application/octet-stream": true,
 };
 
+const TEXTUAL_FALLBACK_SELECTION_KEY =
+  "builtin:text-fallback" as SurfaceSelectionKey;
+const BYTE_VIEWER_SELECTION_KEY = "builtin:byte-viewer" as SurfaceSelectionKey;
+
 let nextSurfaceId = 1;
 let nextRegistrationId = 1;
+let nextSelectionKey = 1;
+
+
+function errorSelection(reason: string): Selection {
+  return {
+    key: `builtin:error:${reason}` as SurfaceSelectionKey,
+    factory: errorFactory(reason),
+  };
+}
 
 function hasText(value: string | undefined): value is string {
   return value !== undefined && value.length > 0;
@@ -126,11 +151,10 @@ function registrationProfile(registration: SurfaceRegistration): string | undefi
   return registration.profile ?? registration.factory.profile;
 }
 
-// Collision means claiming the same exact formatKey, source species, or
-// family+profile binding. A family alone is never a singleton for all profiles.
+// Collisioni solo sui binding esatti di formato e specie. La coppia
+// family+profile serve alla risoluzione, ma può avere più registrazioni.
 function bindingDescriptors(registration: SurfaceRegistration): Binding[] {
   const bindings: Binding[] = [];
-  const profile = registrationProfile(registration);
   if (hasText(registration.formatKey)) {
     bindings.push({
       kind: "formatKey",
@@ -145,11 +169,6 @@ function bindingDescriptors(registration: SurfaceRegistration): Binding[] {
       label: `species=${registration.species}`,
     });
   }
-  bindings.push({
-    kind: "familyProfile",
-    key: familyProfileKey(registration.family, profile),
-    label: `family=${registration.family}, profile=${profile ?? ""}`,
-  });
   return bindings;
 }
 
@@ -174,6 +193,7 @@ function exposeRegistrationId(
     // A frozen input still has the normalized id in the registry entry.
   }
 }
+
 
 function normaliseSpecies(species: string | undefined): string {
   return species?.trim().toLowerCase() ?? "";
@@ -397,7 +417,7 @@ export class DocumentSurfaceRegistry {
   private readonly registrationBindings = new Map<string, Entry>();
   private readonly formatBindings = new Map<string, Entry>();
   private readonly speciesBindings = new Map<string, Entry>();
-  private readonly familyProfileBindings = new Map<string, Entry>();
+  private readonly familyProfileBindings = new Map<string, Entry[]>();
 
   register(registration: SurfaceRegistration): () => void {
     if (!hasText(registration.owner)) {
@@ -450,6 +470,11 @@ export class DocumentSurfaceRegistry {
 
     const entry: Entry = {
       registration: normalized,
+      selectionKey: `registration:${nextSelectionKey++}` as SurfaceSelectionKey,
+      familyProfileKey: familyProfileKey(
+        normalized.family,
+        registrationProfile(normalized),
+      ),
       bindings,
       instances: new Set(),
       active: true,
@@ -457,6 +482,9 @@ export class DocumentSurfaceRegistry {
     this.entries.add(entry);
     this.registrationBindings.set(registrationId, entry);
     for (const binding of bindings) this.setBinding(binding, entry);
+    const familyEntries = this.familyProfileBindings.get(entry.familyProfileKey) ?? [];
+    familyEntries.push(entry);
+    this.familyProfileBindings.set(entry.familyProfileKey, familyEntries);
     exposeRegistrationId(registration, registrationId);
 
     let disposed = false;
@@ -471,35 +499,37 @@ export class DocumentSurfaceRegistry {
     return this.select(request).factory;
   }
 
+  select(request: SurfaceRequest): ResolvedSurface {
+    const selection = this.selectSelection(request);
+    return { key: selection.key, factory: selection.factory };
+  }
+
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {
-    const selection = this.select(request);
+    const selection = this.selectSelection(request);
     const inner = selection.factory.mount(request, context);
     const surface = manageSurface(inner, selection.entry);
     if (selection.entry?.active) selection.entry.instances.add(surface);
     return surface;
   }
 
-  private select(request: SurfaceRequest): Selection {
+  private selectSelection(request: SurfaceRequest): Selection {
     const override = request.override ?? request.userOverride;
     if (override !== undefined) {
       const selected = this.selectionForOverride(override);
       if (selected === undefined) {
-        return {
-          factory: errorFactory("override utente non registrato"),
-        };
+        return errorSelection("override utente non registrato");
       }
       if (
+        selected.entry !== undefined &&
         !supportsVersion(
-          selected.entry?.registration,
+          selected.entry.registration,
           selected.factory,
           request.version,
         )
       ) {
-        return {
-          factory: errorFactory(
-            `${versionDescription(request.version)} non supportata dall'override utente`,
-          ),
-        };
+        return errorSelection(
+          `${versionDescription(request.version)} non supportata dall'override utente`,
+        );
       }
       return selected;
     }
@@ -514,43 +544,50 @@ export class DocumentSurfaceRegistry {
       if (entry !== undefined) return this.selectionForEntry(entry, request);
     }
 
-    // A family/profile binding lets two text profiles coexist without making
-    // the family itself a process-wide singleton. It is considered only after
-    // the required format and source-species bindings.
+    // La coppia family/profile è considerata dopo i binding esatti. Più
+    // registrazioni possono dichiararla: in quel caso non si sceglie l'ultima.
     if (hasText(request.family) && request.profile !== undefined) {
-      const entry = this.familyProfileBindings.get(
+      const entries = this.familyProfileBindings.get(
         familyProfileKey(request.family, request.profile),
       );
-      if (entry !== undefined) return this.selectionForEntry(entry, request);
+      if (entries !== undefined) {
+        if (entries.length === 1) {
+          return this.selectionForEntry(entries[0], request);
+        }
+        if (entries.length > 1) {
+          const owners = [...new Set(entries.map((entry) => entry.registration.owner))];
+          return errorSelection(
+            `selezione ambigua per family=${request.family}, profile=${request.profile}: ` +
+              `owner coinvolti ${owners.map((owner) => `"${owner}"`).join(" e ")}`,
+          );
+        }
+      }
     }
 
     if (isByteRequest(request)) {
       if (!supportsVersion(undefined, byteViewerFactory, request.version)) {
-        return {
-          factory: errorFactory(
-            `${versionDescription(request.version)} non supportata dal viewer a byte`,
-          ),
-        };
+        return errorSelection(
+          `${versionDescription(request.version)} non supportata dal viewer a byte`,
+        );
       }
-      return { factory: byteViewerFactory };
+      return { key: BYTE_VIEWER_SELECTION_KEY, factory: byteViewerFactory };
     }
 
     if (isTextualRequest(request)) {
       if (!supportsVersion(undefined, textualFallbackFactory, request.version)) {
-        return {
-          factory: errorFactory(
-            `${versionDescription(request.version)} non supportata dal fallback testuale`,
-          ),
-        };
+        return errorSelection(
+          `${versionDescription(request.version)} non supportata dal fallback testuale`,
+        );
       }
-      return { factory: textualFallbackFactory };
+      return {
+        key: TEXTUAL_FALLBACK_SELECTION_KEY,
+        factory: textualFallbackFactory,
+      };
     }
 
-    return {
-      factory: errorFactory(
-        `famiglia superficie sconosciuta: ${request.family ?? "assente"}`,
-      ),
-    };
+    return errorSelection(
+      `famiglia superficie sconosciuta: ${request.family ?? "assente"}`,
+    );
   }
 
   private selectionForOverride(override: SurfaceOverride): Selection | undefined {
@@ -558,13 +595,18 @@ export class DocumentSurfaceRegistry {
       const byRegistrationId = this.registrationBindings.get(override);
       if (byRegistrationId !== undefined) {
         return {
+          key: byRegistrationId.selectionKey,
           factory: byRegistrationId.registration.factory,
           entry: byRegistrationId,
         };
       }
       const byFormatKey = this.formatBindings.get(override);
       if (byFormatKey !== undefined) {
-        return { factory: byFormatKey.registration.factory, entry: byFormatKey };
+        return {
+          key: byFormatKey.selectionKey,
+          factory: byFormatKey.registration.factory,
+          entry: byFormatKey,
+        };
       }
       return undefined;
     }
@@ -577,7 +619,11 @@ export class DocumentSurfaceRegistry {
     if (hasText(reference.registrationId)) {
       const entry = this.registrationBindings.get(reference.registrationId);
       if (entry === undefined) return undefined;
-      return { factory: entry.registration.factory, entry };
+      return {
+        key: entry.selectionKey,
+        factory: entry.registration.factory,
+        entry,
+      };
     }
 
     if (hasText(reference.formatKey)) {
@@ -586,7 +632,11 @@ export class DocumentSurfaceRegistry {
       if (hasText(reference.owner) && entry.registration.owner !== reference.owner) {
         return undefined;
       }
-      return { factory: entry.registration.factory, entry };
+      return {
+        key: entry.selectionKey,
+        factory: entry.registration.factory,
+        entry,
+      };
     }
 
     if (
@@ -594,13 +644,29 @@ export class DocumentSurfaceRegistry {
       hasText(reference.family) &&
       reference.profile !== undefined
     ) {
-      const entry = this.familyProfileBindings.get(
-        familyProfileKey(reference.family, reference.profile),
+      const entries =
+        this.familyProfileBindings.get(
+          familyProfileKey(reference.family, reference.profile),
+        ) ?? [];
+      const matching = entries.filter(
+        (entry) => entry.registration.owner === reference.owner,
       );
-      if (entry === undefined || entry.registration.owner !== reference.owner) {
-        return undefined;
+      if (matching.length === 0) return undefined;
+      if (matching.length > 1) {
+        const owners = [...new Set(matching.map((entry) => entry.registration.owner))];
+        return errorSelection(
+          `override utente ambiguo per family=${reference.family}, ` +
+            `profile=${reference.profile}: owner coinvolti ${owners
+              .map((owner) => `"${owner}"`)
+              .join(" e ")}`,
+        );
       }
-      return { factory: entry.registration.factory, entry };
+      const entry = matching[0];
+      return {
+        key: entry.selectionKey,
+        factory: entry.registration.factory,
+        entry,
+      };
     }
 
     return undefined;
@@ -608,13 +674,15 @@ export class DocumentSurfaceRegistry {
 
   private selectionForEntry(entry: Entry, request: SurfaceRequest): Selection {
     if (!supportsVersion(entry.registration, entry.registration.factory, request.version)) {
-      return {
-        factory: errorFactory(
-          `${versionDescription(request.version)} non supportata dall'owner ${entry.registration.owner}`,
-        ),
-      };
+      return errorSelection(
+        `${versionDescription(request.version)} non supportata dall'owner ${entry.registration.owner}`,
+      );
     }
-    return { factory: entry.registration.factory, entry };
+    return {
+      key: entry.selectionKey,
+      factory: entry.registration.factory,
+      entry,
+    };
   }
 
   private bindingFor(binding: Binding): Entry | undefined {
@@ -623,8 +691,6 @@ export class DocumentSurfaceRegistry {
         return this.formatBindings.get(binding.key);
       case "species":
         return this.speciesBindings.get(binding.key);
-      case "familyProfile":
-        return this.familyProfileBindings.get(binding.key);
     }
   }
 
@@ -636,20 +702,20 @@ export class DocumentSurfaceRegistry {
       case "species":
         this.speciesBindings.set(binding.key, entry);
         break;
-      case "familyProfile":
-        this.familyProfileBindings.set(binding.key, entry);
-        break;
     }
   }
 
   private deleteBinding(binding: Binding, entry: Entry): void {
-    const map =
-      binding.kind === "formatKey"
-        ? this.formatBindings
-        : binding.kind === "species"
-          ? this.speciesBindings
-          : this.familyProfileBindings;
+    const map = binding.kind === "formatKey" ? this.formatBindings : this.speciesBindings;
     if (map.get(binding.key) === entry) map.delete(binding.key);
+  }
+
+  private deleteFamilyProfileBinding(entry: Entry): void {
+    const entries = this.familyProfileBindings.get(entry.familyProfileKey);
+    if (entries === undefined) return;
+    const remaining = entries.filter((candidate) => candidate !== entry);
+    if (remaining.length === 0) this.familyProfileBindings.delete(entry.familyProfileKey);
+    else this.familyProfileBindings.set(entry.familyProfileKey, remaining);
   }
 
   private unregister(entry: Entry): void {
@@ -664,6 +730,7 @@ export class DocumentSurfaceRegistry {
       this.registrationBindings.delete(registrationId);
     }
     for (const binding of entry.bindings) this.deleteBinding(binding, entry);
+    this.deleteFamilyProfileBinding(entry);
 
     const instances = [...entry.instances];
     entry.instances.clear();
