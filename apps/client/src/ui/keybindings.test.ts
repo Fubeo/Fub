@@ -247,8 +247,8 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
 
   beforeEach(() => {
     resetShellCommands();
-    // I tre che l'editor monta anche lui, più uno che l'editor non ha, per
-    // presidiare la metà che resta attiva.
+    // I tre che l'editor monta anche lui, più i due comandi che l'editor non
+    // ha, per presidiare la metà che resta attiva e il caso dell'overlay.
     registerShellCommand({
       id: "shell.doc.search",
       title: "commands.doc.search",
@@ -268,6 +268,12 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
       run: () => {},
     });
     registerShellCommand({
+      id: "shell.mode.reading",
+      title: "commands.mode.reading",
+      description: "commands.mode.reading.desc",
+      run: () => {},
+    });
+    registerShellCommand({
       id: "shell.palette",
       title: "commands.palette",
       description: "commands.palette.desc",
@@ -279,6 +285,9 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
     for (const v of lifetimes) v.close();
     lifetimes.length = 0;
     document.querySelectorAll(".cm-editor").forEach((el) => el.remove());
+    document
+      .querySelectorAll("#command-palette, #quick-switcher, #context-menu, #icon-picker")
+      .forEach((el) => el.remove());
   });
 
   function mount(): string[] {
@@ -300,16 +309,16 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
     return child;
   }
 
-  function keydown(target: Element, key: string, modifiers: { shift?: boolean } = {}): void {
-    target.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key,
-        ctrlKey: true,
-        shiftKey: modifiers.shift ?? false,
-        bubbles: true,
-        cancelable: true,
-      }),
-    );
+  function keydown(target: Element, key: string, modifiers: { shift?: boolean } = {}): KeyboardEvent {
+    const event = new KeyboardEvent("keydown", {
+      key,
+      ctrlKey: true,
+      shiftKey: modifiers.shift ?? false,
+      bubbles: true,
+      cancelable: true,
+    });
+    target.dispatchEvent(event);
+    return event;
   }
 
   it("`Mod-f` nato dentro l'editor non esegue la ricerca della shell", () => {
@@ -328,5 +337,25 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
     const executed = mount();
     keydown(editorAFocus(), "p", { shift: true }); // Mod-Shift-p = shell.palette
     expect(executed).toEqual(["shell.palette"]);
+  });
+
+  it("un overlay aperto non lascia passare `Mod-e` alla shell", () => {
+    const executed = mount();
+    const palette = document.createElement("div");
+    palette.id = "command-palette";
+    document.body.appendChild(palette);
+
+    const event = keydown(document.body, "e");
+
+    expect(executed).toEqual([]);
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("lo stesso `Mod-e` senza overlay esegue il comando della shell", () => {
+    const executed = mount();
+    const event = keydown(document.body, "e");
+
+    expect(executed).toEqual(["shell.mode.reading"]);
+    expect(event.defaultPrevented).toBe(true);
   });
 });

@@ -8,20 +8,18 @@
 // guarda. Sono tre responsabilità che in `main.ts` sarebbero tre righe di
 // monolite in più, ed è la §1.2 a dire dove vanno invece.
 //
-// Ciò che **non** sta qui è il riconoscimento: chi decide cosa fa un tasto è
-// `avanza` in `ui/commands.ts`, che è pura e non sa cosa sia un `document`.
-// Questo modulo è il pezzo che tocca il DOM — l'ascoltatore, il timer, la riga
-// nella barra di stato — e non contiene nessuna regola. È la stessa divisione
-// che `ui/notify.ts` fa fra un avviso e il suo disegno.
+// Ciò che **non** sta qui è il riconoscimento né l'ordine di consumo: chi
+// decide cosa fa un tasto è `avanza` in `ui/commands.ts`, mentre chi arbitra
+// l'esito è `ui/arbitration.ts`; entrambi sono puri e non sanno cosa sia un
+// `document`. Questo modulo osserva il DOM — ascoltatore, fuoco, overlay, timer
+// e riga nella barra di stato — e passa fatti all'arbitrato.
 //
-// C'è un'eccezione, ed è la conseguenza della 0156: il **fuoco** si osserva
-// qui, dove il DOM c'è, e non in `avanza`. Un accordo non dichiara un ambito —
-// dove vale lo dice il fuoco — e l'unico posto in cui il fuoco si vede è
-// l'evento che risale da chi lo tiene. La regola che ne esce sta sotto, accanto
-// all'ascoltatore, e non è un riconoscimento di tasti: è la rinuncia a tre
-// accordi quando l'editor li ha già presi.
+// Il fuoco e la presenza di un overlay si osservano qui, dove il DOM c'è, e non
+// in `avanza`. Un accordo non dichiara un ambito — dove vale lo dice il fuoco —
+// e l'unico posto in cui il fuoco si vede è l'evento che risale da chi lo tiene.
 import { t } from "../i18n/strings";
 import type { Lifetime } from "./lifetime";
+import { arbitrate } from "./arbitration";
 import {
   WAIT_MS,
   allCommands,
@@ -29,6 +27,22 @@ import {
   type Waiting,
   type CommandEntry,
 } from "./commands";
+
+/// Gli overlay che, quando sono montati e visibili, hanno precedenza sulla
+/// tastiera della shell. Il menu dell'app usa lo stesso `context-menu`.
+const TRANSITORY_OVERLAY_IDS = [
+  "command-palette",
+  "quick-switcher",
+  "context-menu",
+  "icon-picker",
+] as const;
+
+function transientOverlayOpen(): boolean {
+  return TRANSITORY_OVERLAY_IDS.some((id) => {
+    const element = document.getElementById(id);
+    return element !== null && !element.hidden && element.getAttribute("aria-hidden") !== "true";
+  });
+}
 
 /// Gli accordi già premuti, se una sequenza è cominciata.
 ///
@@ -61,31 +75,29 @@ function inEditor(target: EventTarget | null): boolean {
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
 export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
   lifetime.listen(document, "keydown", (e) => {
+    const overlayOpen = transientOverlayOpen();
     const result = advance(allCommands(), waiting, e);
+    const decision = arbitrate(result, e, {
+      overlayOpen,
+      editorFocused: inEditor(e.target),
+      waiting,
+      passedToEditor: PASSED_TO_EDITOR,
+    });
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
-    if (result.type === "passa") return;
-    // I tre accordi che l'editor monta anche lui: quando il tasto nasce
-    // dentro l'editor e non c'è una sequenza in corso, l'editor lo ha già
-    // preso in bubbling e la shell si ritira. La sequenza continua sempre
-    // (0090), e ogni altro comando della shell resta attivo anche con
-    // l'editor a fuoco: il fuoco decide solo i tre che nessuno ha
-    // dichiarato insieme.
-    if (
-      result.type === "esegue" &&
-      waiting === null &&
-      inEditor(e.target) &&
-      PASSED_TO_EDITOR.has(result.entry.id)
-    ) {
+    if (decision.type === "passa") {
+      // Se un overlay interrompe una sequenza, l'attesa della shell non deve
+      // sopravvivere sotto la superficie che ora possiede il fuoco.
+      if (overlayOpen && result.type !== "passa") stopWaiting();
       return;
     }
     e.preventDefault();
-    if (result.type === "attende") {
-      waitFor(result.waiting);
+    if (decision.type === "attende") {
+      waitFor(decision.waiting);
       return;
     }
     stopWaiting();
-    if (result.type === "esegue") execute(result.entry);
+    if (decision.type === "esegue") execute(decision.entry);
   });
 }
 
