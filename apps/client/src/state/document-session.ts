@@ -412,7 +412,8 @@ export class DocumentSession implements DraftBuffer {
       return { reload: { kind: "stale" }, draft: "preserved" };
     }
     const changed = this.#commitAuthoritativeReload(source.text, source.revision);
-    const draft = await this.#dropDraft(reload.id);
+    const draftGeneration = this.#draftGeneration;
+    const draft = await this.#dropDraft(reload.id, draftGeneration);
     return {
       reload: { kind: "reloaded", text: source.text, changed },
       draft,
@@ -876,10 +877,22 @@ export class DocumentSession implements DraftBuffer {
     return promise;
   }
 
-  #dropDraft(id: string): Promise<DraftDropResult> {
-    if (this.#id !== id) return Promise.resolve("preserved");
+  #dropDraft(id: string, expectedGeneration?: number): Promise<DraftDropResult> {
+    if (
+      this.#id !== id ||
+      (expectedGeneration !== undefined &&
+        (this.#draftGeneration !== expectedGeneration || this.#state.dirty))
+    ) {
+      return Promise.resolve("preserved");
+    }
     return this.#queue.enqueue(async () => {
-      if (this.#id !== id) return "preserved";
+      if (
+        this.#id !== id ||
+        (expectedGeneration !== undefined &&
+          (this.#draftGeneration !== expectedGeneration || this.#state.dirty))
+      ) {
+        return "preserved";
+      }
       try {
         await this.#api.discardDraft(id);
         return "discarded";
