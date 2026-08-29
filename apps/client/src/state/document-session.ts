@@ -93,7 +93,7 @@ type DiskReloadResult = Exclude<ReloadResult, { kind: "missing" } | { kind: "dir
 export type ConflictResolutionResult =
   | { kind: "none" }
   | { kind: "kept" }
-  | { kind: "discarded"; reload: ReloadResult };
+  | { kind: "discarded"; reload: ReloadResult; draft: "discarded" | "preserved" };
 
 export type RenameResult =
   | { kind: "renamed"; from: string; to: string }
@@ -117,6 +117,7 @@ export type DocumentSessionEvent =
   | { kind: "saved"; id: string }
   | { kind: "save-failed"; id: string; error: unknown; outcome: "conflitto" | "fallito" }
   | { kind: "draft-blind"; id: string }
+  | { kind: "draft-discard-failed"; id: string; error: unknown }
   | { kind: "deletion-changed"; id: string; pending: boolean };
 
 type SessionListener = (event: DocumentSessionEvent) => void | Promise<void>;
@@ -149,6 +150,15 @@ interface DraftOutcome {
   readonly generation: number;
   readonly succeeded: boolean;
 }
+
+interface AuthoritativeReload {
+  readonly id: string;
+  readonly externalGeneration: number;
+  readonly activityGeneration: number;
+  readonly authorityGeneration: number;
+}
+
+type DraftDropResult = "discarded" | "preserved";
 
 const OWNER_TOKEN = Symbol("DocumentSession owner");
 type OwnerToken = typeof OWNER_TOKEN;
@@ -186,6 +196,8 @@ export class DocumentSession implements DraftBuffer {
   #draftOutcome: DraftOutcome | undefined;
   #externalGeneration = 0;
   #activityGeneration = 0;
+  #authorityGeneration = 0;
+  #diskAuthorityUnknown = false;
   readonly #api: DocumentSessionApi;
   readonly #hooks: SessionHooks;
   /// Le superfici sottoscritte, per identità di registrazione. È ownership di
@@ -325,6 +337,7 @@ export class DocumentSession implements DraftBuffer {
     this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
+    this.#clearDiskAuthorityBlock();
     this.#state.text = text;
     this.#state.base = copyBase(base);
     this.#state.dirty = true;
@@ -346,34 +359,27 @@ export class DocumentSession implements DraftBuffer {
 
   /** Consume an external event before applying the clean/dirty policy. */
   async handleExternalChange(source: Origin): Promise<ExternalChangeResult> {
-    const generation = ++this.#externalGeneration;
+    const externalGeneration = ++this.#externalGeneration;
+    const activityGeneration = this.#activityGeneration;
     const underChange = consumeUnderChange(this.#state, source);
     if (underChange === "eco") return { kind: "echo" };
     if (underChange === "altra_app" || underChange === "riscrittura") {
       return { kind: "warning", cause: underChange };
     }
-    return this.#reloadFromDisk(generation);
+    return this.#reloadFromDisk(externalGeneration, activityGeneration);
   }
 
   /** Reread a clean document during event reconciliation. */
   async reloadIfClean(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
     if (this.#state.dirty) return { kind: "dirty" };
-    return this.#reloadFromDisk(++this.#externalGeneration);
+    return this.#reloadFromDisk(++this.#externalGeneration, this.#activityGeneration);
   }
+
   /** Reread a document after an explicit command invalidated the buffer. */
   async forceReload(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
-    this.#activityGeneration++;
-    const generation = ++this.#externalGeneration;
-    this.#draftGeneration++;
-    this.#clearSaveTimer();
-    this.#clearDraftTimer();
-    this.#state.dirty = false;
-    this.#state.result = "ok";
-    this.#state.echoes = 0;
-    this.#emit({ kind: "changed", id: this.#id });
-    return this.#reloadFromDisk(generation);
+    return (await this.#reloadAuthoritatively("force")).reload;
   }
 
   async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
@@ -382,19 +388,108 @@ export class DocumentSession implements DraftBuffer {
       await this.saveKeepingMine();
       return { kind: "kept" };
     }
-    this.discardChanges();
-    await this.discardDraft();
-    return { kind: "discarded", reload: await this.#reloadFromDisk(++this.#externalGeneration) };
+    const outcome = await this.#reloadAuthoritatively("theirs");
+    return { kind: "discarded", ...outcome };
   }
 
-  #reloadFromDisk(generation: number): Promise<DiskReloadResult> {
+  async #reloadAuthoritatively(
+    kind: "force" | "theirs",
+  ): Promise<{ reload: DiskReloadResult; draft: DraftDropResult }> {
+    const reload = this.#beginAuthoritativeReload();
+    let source: { text: string; revision: string };
+    try {
+      source = await this.#api.readDocument(reload.id);
+    } catch {
+      if (!this.#isCurrentAuthoritativeReload(reload)) {
+        this.#markAuthoritativeReloadUnavailable(kind, reload);
+        return { reload: { kind: "stale" }, draft: "preserved" };
+      }
+      this.#markAuthoritativeReloadUnavailable(kind, reload);
+      return { reload: { kind: "unavailable" }, draft: "preserved" };
+    }
+    if (!this.#isCurrentAuthoritativeReload(reload)) {
+      this.#markAuthoritativeReloadUnavailable(kind, reload);
+      return { reload: { kind: "stale" }, draft: "preserved" };
+    }
+    const changed = this.#commitAuthoritativeReload(source.text, source.revision);
+    const draft = await this.#dropDraft(reload.id);
+    return {
+      reload: { kind: "reloaded", text: source.text, changed },
+      draft,
+    };
+  }
+
+  #beginAuthoritativeReload(): AuthoritativeReload {
+    const id = this.#id;
+    const externalGeneration = ++this.#externalGeneration;
+    const activityGeneration = ++this.#activityGeneration;
+    const authorityGeneration = ++this.#authorityGeneration;
+    this.#diskAuthorityUnknown = true;
+    this.#clearSaveTimer();
+    return { id, externalGeneration, activityGeneration, authorityGeneration };
+  }
+
+  #isCurrentAuthoritativeReload(reload: AuthoritativeReload): boolean {
+    return (
+      this.#isOpen() &&
+      this.#id === reload.id &&
+      this.#externalGeneration === reload.externalGeneration &&
+      this.#activityGeneration === reload.activityGeneration &&
+      this.#authorityGeneration === reload.authorityGeneration
+    );
+  }
+
+  #markAuthoritativeReloadUnavailable(kind: "force" | "theirs", reload: AuthoritativeReload): void {
+    if (
+      !this.#isOpen() ||
+      this.#id !== reload.id ||
+      this.#authorityGeneration !== reload.authorityGeneration ||
+      !this.#diskAuthorityUnknown
+    ) {
+      return;
+    }
+    if (
+      kind === "force" &&
+      this.#state.result !== "conflitto" &&
+      this.#state.result !== "fallito"
+    ) {
+      this.#state.result = "fallito";
+      this.#emit({ kind: "changed", id: this.#id });
+    }
+  }
+
+  #commitAuthoritativeReload(text: string, revision: string): boolean {
+    const changed = this.#state.text !== text;
+    const stateChanged =
+      changed ||
+      this.#state.dirty ||
+      this.#state.result !== "ok" ||
+      this.#state.echoes !== 0;
+    this.#state.text = text;
+    this.#state.base = { kind: "descends_from", value: revision };
+    this.#state.dirty = false;
+    this.#state.result = "ok";
+    this.#state.echoes = 0;
+    this.#draftGeneration++;
+    this.#clearDraftTimer();
+    this.#clearDiskAuthorityBlock();
+    if (stateChanged) this.#emit({ kind: "changed", id: this.#id });
+    this.#fanOut({ kind: "text", text });
+    return changed;
+  }
+
+  #reloadFromDisk(
+    externalGeneration: number,
+    activityGeneration: number,
+  ): Promise<DiskReloadResult> {
     const id = this.#id;
     return this.#api.readDocument(id).then(
       (source) => {
         if (
           !this.#isOpen() ||
           this.#id !== id ||
-          this.#externalGeneration !== generation ||
+          this.#externalGeneration !== externalGeneration ||
+          this.#activityGeneration !== activityGeneration ||
           this.#state.dirty
         ) {
           return { kind: "stale" as const };
@@ -406,7 +501,8 @@ export class DocumentSession implements DraftBuffer {
         if (
           !this.#isOpen() ||
           this.#id !== id ||
-          this.#externalGeneration !== generation ||
+          this.#externalGeneration !== externalGeneration ||
+          this.#activityGeneration !== activityGeneration ||
           this.#state.dirty
         ) {
           return { kind: "stale" as const };
@@ -424,27 +520,29 @@ export class DocumentSession implements DraftBuffer {
     this.#state.result = "ok";
     if (changed) this.#state.text = text;
     if (changed) this.#draftGeneration++;
+    this.#clearDiskAuthorityBlock();
     if (changed || resultChanged) this.#emit({ kind: "changed", id: this.#id });
-    // Ricarica pulita, conflitto scartato, comando esplicito: il testo è
-    // stato **sostituito** dall'autorità, e tutte le superfici lo ricevono —
-    // una volta, e per intero: non c'è una sorgente da escludere.
+    // Ricarica pulita: il testo è stato sostituito dall'autorità, e tutte le
+    // superfici lo ricevono una volta, per intero, senza una sorgente da
+    // escludere.
     if (changed) this.#fanOut({ kind: "text", text });
     return changed;
   }
 
-  discardChanges(): void {
-    if (!this.#isOpen()) return;
-    this.#activityGeneration++;
-    this.#externalGeneration++;
-    this.#draftGeneration++;
-    this.#clearDraftTimer();
-    this.#state.dirty = false;
-    this.#state.result = "ok";
-    this.#state.echoes = 0;
-    this.#emit({ kind: "changed", id: this.#id });
+  #clearDiskAuthorityBlock(): void {
+    if (!this.#diskAuthorityUnknown) return;
+    this.#diskAuthorityUnknown = false;
+    this.#authorityGeneration++;
   }
   scheduleSave(): void {
-    if (!this.#isOpen() || this.#state.suspended || this.#state.pendingDeletion) return;
+    if (
+      !this.#isOpen() ||
+      this.#state.suspended ||
+      this.#state.pendingDeletion ||
+      this.#diskAuthorityUnknown
+    ) {
+      return;
+    }
     if (this.#state.result === "conflitto") return;
     this.#clearSaveTimer();
     const id = this.#id;
@@ -526,12 +624,6 @@ export class DocumentSession implements DraftBuffer {
     this.scheduleDraft();
   }
 
-  async discardDraft(): Promise<void> {
-    if (!this.#isOpen()) return;
-    if (!this.#state.pendingDeletion) this.#state.suspended = false;
-    this.#clearDraftTimer();
-    await this.#dropDraft(this.#id);
-  }
 
   /**
    * Close before running a destructive command, then discard its draft in the
@@ -564,15 +656,16 @@ export class DocumentSession implements DraftBuffer {
   }
 
   /** Drop a draft after an external deletion already closed this session. */
-  discardDraftAfterClose(): Promise<void> {
+  async discardDraftAfterClose(): Promise<void> {
     this.#clearDraftTimer();
-    return this.#dropDraft(this.#id);
+    await this.#dropDraft(this.#id);
   }
 
   async saveKeepingMine(): Promise<void> {
     if (!this.#isOpen() || this.#state.result !== "conflitto") return;
     this.#activityGeneration++;
     this.#clearSaveTimer();
+    this.#clearDiskAuthorityBlock();
     this.#draftGeneration++;
     this.#state.base = { kind: "dictated" };
     this.#state.result = "in_corso";
@@ -586,6 +679,7 @@ export class DocumentSession implements DraftBuffer {
     this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
+    this.#clearDiskAuthorityBlock();
     this.#id = id;
     if (!this.#state.pendingDeletion) this.#state.suspended = false;
     if (this.#state.dirty) {
@@ -611,6 +705,7 @@ export class DocumentSession implements DraftBuffer {
     this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
+    this.#clearDiskAuthorityBlock();
     this.#state.suspended = false;
     this.#state.pendingDeletion = false;
     this.#state.lifecycle = "closed";
@@ -635,8 +730,8 @@ export class DocumentSession implements DraftBuffer {
     return this.#state.lifecycle === "open";
   }
 
-  #emit(event: DocumentSessionEvent): void {
-    this.#hooks.emit(event);
+  #emit(event: DocumentSessionEvent): void | Promise<void> {
+    return this.#hooks.emit(event);
   }
 
   #clearSaveTimer(): void {
@@ -652,7 +747,9 @@ export class DocumentSession implements DraftBuffer {
   }
 
   #saveNow(id: string): Promise<void> {
-    if (!this.#isOpen() || this.#state.pendingDeletion) return Promise.resolve();
+    if (!this.#isOpen() || this.#state.pendingDeletion || this.#diskAuthorityUnknown) {
+      return Promise.resolve();
+    }
     return this.#queue.enqueue(() => this.#writeBuffer(id));
   }
 
@@ -661,9 +758,11 @@ export class DocumentSession implements DraftBuffer {
       !this.#isOpen() ||
       this.#state.suspended ||
       this.#state.pendingDeletion ||
+      this.#diskAuthorityUnknown ||
       this.#id !== id ||
       !this.#state.dirty
     ) return;
+    const authorityGeneration = this.#authorityGeneration;
     const text = this.#state.text;
     const base = copyBase(this.#state.base);
     this.#state.result = "in_corso";
@@ -673,7 +772,14 @@ export class DocumentSession implements DraftBuffer {
     try {
       produced = await writeCountingEcho(this.#state, () => this.#api.writeDocument(id, text, base));
     } catch (error) {
-      if (!this.#isOpen() || this.#id !== id) return;
+      if (
+        !this.#isOpen() ||
+        this.#id !== id ||
+        this.#diskAuthorityUnknown ||
+        this.#authorityGeneration !== authorityGeneration
+      ) {
+        return;
+      }
       const outcome = failureOutcome(error);
       this.#state.result = outcome;
       this.#clearDraftTimer();
@@ -682,7 +788,14 @@ export class DocumentSession implements DraftBuffer {
       return;
     }
 
-    if (!this.#isOpen() || this.#id !== id) return;
+    if (
+      !this.#isOpen() ||
+      this.#id !== id ||
+      this.#diskAuthorityUnknown ||
+      this.#authorityGeneration !== authorityGeneration
+    ) {
+      return;
+    }
     const changed = this.#state.text !== text;
     this.#state.result = "ok";
     this.#state.base = { kind: "descends_from", value: produced };
@@ -763,14 +876,16 @@ export class DocumentSession implements DraftBuffer {
     return promise;
   }
 
-  #dropDraft(id: string): Promise<void> {
-    if (this.#id !== id) return Promise.resolve();
+  #dropDraft(id: string): Promise<DraftDropResult> {
+    if (this.#id !== id) return Promise.resolve("preserved");
     return this.#queue.enqueue(async () => {
-      if (this.#id !== id) return;
+      if (this.#id !== id) return "preserved";
       try {
         await this.#api.discardDraft(id);
-      } catch {
-        // A draft is a safety net; its cleanup is deliberately best effort.
+        return "discarded";
+      } catch (error) {
+        await this.#emit({ kind: "draft-discard-failed", id, error });
+        return "preserved";
       }
     });
   }
@@ -1010,8 +1125,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
         await run(id);
         try {
           await this.#api.discardDraft(id);
-        } catch {
-          // Keep the same best-effort cleanup as a live session.
+        } catch (error) {
+          await this.#emit({ kind: "draft-discard-failed", id, error });
         }
         outcome = { kind: "deleted", dirty: false };
         return outcome;
