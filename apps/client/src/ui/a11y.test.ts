@@ -33,7 +33,7 @@ import samples from "../__fixtures__/mirror-samples.json";
 import type { UiNode } from "../host/contract";
 import css from "../theme/serie/skin.css?raw";
 import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
-import { activatable, trapFocus, notActivatable } from "./a11y";
+import { activatable, focusTrapOwnsKeyboard, trapFocus, notActivatable } from "./a11y";
 import { mountTree } from "./node";
 
 const nodes = samples.UiNode as unknown as UiNode[];
@@ -343,7 +343,14 @@ describe("due modali aperte: comanda l'ultima", () => {
     // andarsene per conto suo — un comando, un documento che sparisce — mentre
     // sopra ce n'è ancora una.
     const { counts, releaseBelow, releaseAbove } = openTwo();
+    expect(focusTrapOwnsKeyboard(), "almeno la trappola in cima possiede ancora la tastiera").toBe(
+      true,
+    );
     releaseBelow();
+    expect(
+      focusTrapOwnsKeyboard(),
+      "chiudere fuori ordine una trappola sotto non deve lasciare la shell riattivata",
+    ).toBe(true);
 
     document.querySelector<HTMLElement>("#p2")!.focus();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
@@ -352,6 +359,11 @@ describe("due modali aperte: comanda l'ultima", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(counts.above).toBe(1);
     releaseAbove();
+    expect(focusTrapOwnsKeyboard(), "tolta l'ultima trappola non resta ownership stantia").toBe(false);
+    releaseAbove();
+    expect(focusTrapOwnsKeyboard(), "uno smontaggio ripetuto non ricrea ownership").toBe(false);
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(counts.above, "una trappola già sciolta non conserva il suo listener").toBe(1);
   });
 });
 

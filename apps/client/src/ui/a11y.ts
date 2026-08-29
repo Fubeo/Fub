@@ -91,6 +91,13 @@ export function notActivatable(el: HTMLElement): void {
 /// vede. Si svuota da sé — ogni trappola si toglie quando la si scioglie — e a
 /// shell ferma è vuota.
 const trapStack: object[] = [];
+/// Vera quando almeno una trappola viva possiede l'input da tastiera dell'app.
+///
+/// La pila resta privata: chi arbitra le scorciatoie ha bisogno soltanto di
+/// questa risposta, non di vedere o modificare le superfici che la compongono.
+export function focusTrapOwnsKeyboard(): boolean {
+  return trapStack.length > 0;
+}
 
 export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =

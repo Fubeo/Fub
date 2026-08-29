@@ -11,14 +11,16 @@
 // Ciò che **non** sta qui è il riconoscimento né l'ordine di consumo: chi
 // decide cosa fa un tasto è `avanza` in `ui/commands.ts`, mentre chi arbitra
 // l'esito è `ui/arbitration.ts`; entrambi sono puri e non sanno cosa sia un
-// `document`. Questo modulo osserva il DOM — ascoltatore, fuoco, overlay, timer
-// e riga nella barra di stato — e passa fatti all'arbitrato.
+// `document`.
 //
-// Il fuoco e la presenza di un overlay si osservano qui, dove il DOM c'è, e non
-// in `avanza`. Un accordo non dichiara un ambito — dove vale lo dice il fuoco —
-// e l'unico posto in cui il fuoco si vede è l'evento che risale da chi lo tiene.
+// Questo modulo osserva il DOM — ascoltatore, fuoco, timer e riga nella barra
+// di stato — e passa fatti all'arbitrato. La pila delle superfici che possiedono
+// la tastiera vive in `ui/a11y.ts`; qui se ne legge soltanto il verdetto. Un
+// accordo non dichiara un ambito — dove vale lo dice il fuoco — e l'unico posto
+// in cui il fuoco si vede è l'evento che risale da chi lo tiene.
 import { t } from "../i18n/strings";
 import type { Lifetime } from "./lifetime";
+import { focusTrapOwnsKeyboard } from "./a11y";
 import { arbitrate } from "./arbitration";
 import {
   WAIT_MS,
@@ -27,22 +29,6 @@ import {
   type Waiting,
   type CommandEntry,
 } from "./commands";
-
-/// Gli overlay che, quando sono montati e visibili, hanno precedenza sulla
-/// tastiera della shell. Il menu dell'app usa lo stesso `context-menu`.
-const TRANSITORY_OVERLAY_IDS = [
-  "command-palette",
-  "quick-switcher",
-  "context-menu",
-  "icon-picker",
-] as const;
-
-function transientOverlayOpen(): boolean {
-  return TRANSITORY_OVERLAY_IDS.some((id) => {
-    const element = document.getElementById(id);
-    return element !== null && !element.hidden && element.getAttribute("aria-hidden") !== "true";
-  });
-}
 
 /// Gli accordi già premuti, se una sequenza è cominciata.
 ///
@@ -64,7 +50,7 @@ function inEditor(target: EventTarget | null): boolean {
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
 export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
   lifetime.listen(document, "keydown", (e) => {
-    const overlayOpen = transientOverlayOpen();
+    const overlayOpen = focusTrapOwnsKeyboard();
     // CodeMirror gestisce il keydown sul suo DOM prima che raggiunga questo
     // ascoltatore sul documento. Il suo `preventDefault` è il fatto causale:
     // nessun id della shell o lista di accordi può sostituirlo.
@@ -75,7 +61,7 @@ export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry)
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
     if (decision.type === "passa") {
-      // Un overlay o un editor che ha consumato l'evento interrompono qualsiasi
+      // Una trappola o un editor che ha consumato l'evento interrompono qualsiasi
       // sequenza della shell: l'attesa non può sopravvivere al suo primo gesto.
       if ((overlayOpen && result.type !== "passa") || localEditorConsumed) stopWaiting();
       return;
