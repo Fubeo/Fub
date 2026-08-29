@@ -54,6 +54,7 @@ import {
   setEditorTheme,
   synchronize,
 } from "./panels/document";
+import { bootstrapSurfaceRegistry } from "./editors/bootstrap";
 import { flushPendingSave, flushBeforeClose } from "./state/document-session";
 import { mountExplorer } from "./panels/explorer";
 import { mountDocSearch } from "./panels/doc-search";
@@ -153,7 +154,11 @@ async function init(): Promise<void> {
   // vicenda sarebbe un ciclo, e in un bundle ESM un ciclo è un `undefined`
   // all'avvio che non dice da dove viene. È la stessa forma con cui i tre
   // moduli dell'editor ricevono il mondo.
-  mountDocument({ searchTag: (tag) => searchFor(`tags:${tag}`) });
+  const surfaceRegistry = bootstrapSurfaceRegistry();
+  mountDocument({
+    searchTag: (tag) => searchFor(`tags:${tag}`),
+    surfaceRegistry: surfaceRegistry.registry,
+  });
   configurePreview({ openPage: openWikilink });
 
   // Subito dopo il pannello del documento, perché è il suo testo che protegge, e

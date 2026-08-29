@@ -18,6 +18,7 @@
 // La superficie pubblica di questo modulo continua a rispondere alle domande
 // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
 // lo stato mutabile della sessione ai suoi clienti.
+import type { DocumentSurfaceRegistry } from "../editors/core/registry";
 import { createEditor, type Editor, type EditorChange } from "../editor/editor";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
@@ -74,6 +75,9 @@ export interface DocumentDeps {
   /// il pannello della ricerca apre i documenti, e questo li possiede — se si
   /// importassero a vicenda sarebbe un ciclo.
   searchTag(tag: string): void;
+  /// Registro delle superfici composto dalla shell. Questo slice conserva
+  /// l'iniezione senza ancora cambiare il renderer del pannello.
+  surfaceRegistry: DocumentSurfaceRegistry;
 }
 
 /// Un riquadro **a schermo**: la sua parte di DOM, il suo editor, e quale
