@@ -4,11 +4,6 @@ import {
   bootstrapSurfaceRegistry,
   surfaceRequestForDocument,
 } from "./bootstrap";
-import {
-  markdownSurfaceFactory,
-  plainTextSurfaceFactory,
-} from "./text/factories";
-import { textualFallbackFactory } from "./core/registry";
 
 function mountContext(parent: HTMLElement = document.createElement("section")) {
   return { paneId: "pane-1", documentId: "document-1", parent };
@@ -22,10 +17,10 @@ describe("bootstrap del registro delle superfici", () => {
   it("registra Markdown sui binding formatKey e species", () => {
     const surfaces = bootstrapSurfaceRegistry();
 
-    expect(surfaces.registry.resolve({ formatKey: "md" })).toBe(markdownSurfaceFactory);
-    expect(surfaces.registry.resolve({ species: "text/markdown" })).toBe(
-      markdownSurfaceFactory,
-    );
+    const markdownByFormat = surfaces.registry.select({ formatKey: "md" });
+    const markdownBySpecies = surfaces.registry.select({ species: "text/markdown" });
+    expect(markdownByFormat.key).toMatch(/^registration:/);
+    expect(markdownBySpecies.key).toBe(markdownByFormat.key);
     const context = mountContext();
     const surface = surfaces.registry.mount(
       { formatKey: "md", species: "text/markdown" },
@@ -40,10 +35,10 @@ describe("bootstrap del registro delle superfici", () => {
   it("registra plain text senza selezionare il profilo Markdown", () => {
     const surfaces = bootstrapSurfaceRegistry();
 
-    expect(surfaces.registry.resolve({ formatKey: "txt" })).toBe(plainTextSurfaceFactory);
-    expect(surfaces.registry.resolve({ species: "text/plain" })).toBe(
-      plainTextSurfaceFactory,
-    );
+    const plainTextByFormat = surfaces.registry.select({ formatKey: "txt" });
+    const plainTextBySpecies = surfaces.registry.select({ species: "text/plain" });
+    expect(plainTextByFormat.key).toMatch(/^registration:/);
+    expect(plainTextBySpecies.key).toBe(plainTextByFormat.key);
     const context = mountContext();
     const surface = surfaces.registry.mount(
       { formatKey: "txt", species: "text/plain" },
@@ -90,7 +85,7 @@ describe("bootstrap del registro delle superfici", () => {
       species: "text/markdown",
     });
     const surfaces = bootstrapSurfaceRegistry();
-    expect(surfaces.registry.resolve(request)).toBe(textualFallbackFactory);
+    expect(surfaces.registry.select(request).key).toBe("builtin:text-fallback");
     surfaces.dispose();
   });
 
@@ -128,13 +123,17 @@ describe("bootstrap del registro delle superfici", () => {
     const plainContext = mountContext();
     surfaces.registry.mount({ formatKey: "md" }, markdownContext);
     surfaces.registry.mount({ formatKey: "txt" }, plainContext);
+    const markdownKey = surfaces.registry.select({ formatKey: "md" }).key;
+    const plainTextKey = surfaces.registry.select({ formatKey: "txt" }).key;
 
     surfaces.dispose();
 
     expect(markdownContext.parent.querySelector(".cm-editor")).toBeNull();
     expect(plainContext.parent.querySelector(".cm-editor")).toBeNull();
-    expect(surfaces.registry.resolve({ formatKey: "md" })).not.toBe(markdownSurfaceFactory);
-    expect(surfaces.registry.resolve({ formatKey: "txt" })).not.toBe(plainTextSurfaceFactory);
+    expect(surfaces.registry.select({ formatKey: "md" }).key).toBe("builtin:text-fallback");
+    expect(surfaces.registry.select({ formatKey: "txt" }).key).toBe("builtin:text-fallback");
+    expect(surfaces.registry.select({ formatKey: "md" }).key).not.toBe(markdownKey);
+    expect(surfaces.registry.select({ formatKey: "txt" }).key).not.toBe(plainTextKey);
     surfaces.dispose();
   });
 });

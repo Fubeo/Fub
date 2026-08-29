@@ -1,11 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  byteViewerFactory,
   DocumentSurfaceRegistry,
   isModefulSurface,
   textualFallbackFactory,
   type EditorSurface,
+  type ResolvedSurface,
   type SurfaceFactory,
   type SurfaceOverride,
   type SurfaceRegistration,
@@ -190,7 +190,7 @@ afterEach(() => {
 });
 
 describe("DocumentSurfaceRegistry", () => {
-  it("registra, risolve e monta la factory del binding", () => {
+  it("registra, seleziona e monta la factory del binding", () => {
     const registry = new DocumentSurfaceRegistry();
     const markdown = surfaceFixture("markdown");
     const dispose = registry.register({
@@ -210,7 +210,7 @@ describe("DocumentSurfaceRegistry", () => {
     const context = mountContext();
 
     expect(dispose).toEqual(expect.any(Function));
-    expect(registry.resolve(request)).toBe(markdown.factory);
+    expect(registry.select(request).key).toMatch(/^registration:/);
     const mounted = registry.mount(request, context);
     expect(mounted).not.toBe(markdown.mounts[0]);
     expect(mounted.family).toBe(markdown.mounts[0].family);
@@ -219,6 +219,35 @@ describe("DocumentSurfaceRegistry", () => {
     expect(markdown.destroys[0].calls).toBe(1);
 
     dispose();
+  });
+  it("espone dalla selezione solo la key e monta soltanto tramite registry.mount", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const fixture = surfaceFixture("contract");
+    registry.register({
+      owner: "contract-owner",
+      family: "text",
+      profile: "contract",
+      formatKey: "contract-format",
+      factory: fixture.factory,
+    });
+
+    const selected: ResolvedSurface = registry.select({ formatKey: "contract-format" });
+    type SelectionHasOnlyKey = Exclude<keyof ResolvedSurface, "key"> extends never
+      ? true
+      : false;
+    const selectionHasOnlyKey: SelectionHasOnlyKey = true;
+    expect(selectionHasOnlyKey).toBe(true);
+    expect(Object.getOwnPropertyNames(selected)).toEqual(["key"]);
+    expect(selected).not.toHaveProperty("factory");
+    expect(selected).not.toHaveProperty("mount");
+    expect("factory" in selected).toBe(false);
+    expect("mount" in selected).toBe(false);
+
+    const context = mountContext();
+    const mounted = registry.mount({ formatKey: "contract-format" }, context);
+    expect(fixture.mounts).toHaveLength(1);
+    expect(context.parent.querySelector('[data-test-factory="contract"]')).not.toBeNull();
+    mounted.destroy();
   });
   it("assegna una key distinta a ogni registrazione e rende ambigua la sola coppia family/profile", () => {
     const registry = new DocumentSurfaceRegistry();
@@ -243,9 +272,18 @@ describe("DocumentSurfaceRegistry", () => {
 
     const selectedA = registry.select({ formatKey: "format-a" });
     const selectedB = registry.select({ formatKey: "format-b" });
-    expect(selectedA.factory).toBe(markdownA.factory);
-    expect(selectedB.factory).toBe(markdownB.factory);
+    expect(selectedA.key).toMatch(/^registration:/);
+    expect(selectedB.key).toMatch(/^registration:/);
     expect(selectedA.key).not.toBe(selectedB.key);
+
+    const contextA = mountContext();
+    const mountedA = registry.mount({ formatKey: "format-a" }, contextA);
+    expect(contextA.parent.querySelector('[data-test-factory="markdown-a"]')).not.toBeNull();
+    mountedA.destroy();
+    const contextB = mountContext();
+    const mountedB = registry.mount({ formatKey: "format-b" }, contextB);
+    expect(contextB.parent.querySelector('[data-test-factory="markdown-b"]')).not.toBeNull();
+    mountedB.destroy();
 
     const ambiguous = registry.select({ family: "text", profile: "markdown" });
     expect(ambiguous.key).toMatch(/^builtin:error:/);
@@ -379,10 +417,12 @@ describe("DocumentSurfaceRegistry", () => {
     dispose();
     expect(first.destroys[0].calls).toBe(1);
     const fallback = registry.select(request);
-    expect(fallback.factory).toBe(textualFallbackFactory);
     expect(fallback.key).toBe("builtin:text-fallback");
     expect(fallback.key).not.toBe(registered.key);
-    registry.mount(request, mountContext()).destroy();
+    const fallbackContext = mountContext();
+    const fallbackSurface = registry.mount(request, fallbackContext);
+    expect(fallbackContext.parent.textContent).toContain("Fallback superficie testuale");
+    fallbackSurface.destroy();
 
     const second = surfaceFixture("second", "text", "markdown");
     const disposeAgain = registry.register({
@@ -393,9 +433,11 @@ describe("DocumentSurfaceRegistry", () => {
       factory: second.factory,
     });
     const registeredAgain = registry.select(request);
-    expect(registeredAgain.factory).toBe(second.factory);
     expect(registeredAgain.key).not.toBe(fallback.key);
-    registry.mount(request, mountContext()).destroy();
+    const secondContext = mountContext();
+    const secondSurface = registry.mount(request, secondContext);
+    expect(secondContext.parent.querySelector('[data-test-factory="second"]')).not.toBeNull();
+    secondSurface.destroy();
     disposeAgain();
     expect(second.destroys[0].calls).toBe(1);
   });
@@ -440,10 +482,11 @@ describe("DocumentSurfaceRegistry", () => {
       factory: b.factory,
     });
 
-    expect(registry.resolve({ formatKey: "format-b" })).toBe(b.factory);
+    const selectedB = registry.select({ formatKey: "format-b" });
+    expect(selectedB.key).toMatch(/^registration:/);
     disposeA();
-    expect(registry.resolve({ formatKey: "format-a" })).not.toBe(a.factory);
-    expect(registry.resolve({ formatKey: "format-b" })).toBe(b.factory);
+    expect(registry.select({ formatKey: "format-a" }).key).toBe("builtin:text-fallback");
+    expect(registry.select({ formatKey: "format-b" }).key).toBe(selectedB.key);
   });
 
   it("unregister rimuove i binding e distrugge tutte le istanze possedute", () => {
@@ -470,13 +513,15 @@ describe("DocumentSurfaceRegistry", () => {
     registry.mount({ formatKey: "format-a" }, context);
     registry.mount({ formatKey: "format-b" }, context);
 
+    const selectedB = registry.select({ formatKey: "format-b" });
+    expect(selectedB.key).toMatch(/^registration:/);
     disposeA();
     expect(a.destroys).toHaveLength(2);
     expect(a.destroys[0].calls).toBe(1);
     expect(a.destroys[1].calls).toBe(1);
     expect(b.destroys[0].calls).toBe(0);
-    expect(registry.resolve({ formatKey: "format-a" })).not.toBe(a.factory);
-    expect(registry.resolve({ formatKey: "format-b" })).toBe(b.factory);
+    expect(registry.select({ formatKey: "format-a" }).key).toBe("builtin:text-fallback");
+    expect(registry.select({ formatKey: "format-b" }).key).toBe(selectedB.key);
 
     disposeA();
     expect(a.destroys[0].calls).toBe(1);
@@ -492,9 +537,9 @@ describe("DocumentSurfaceRegistry", () => {
     );
     const element = context.parent.firstElementChild as HTMLElement | null;
 
-    expect(registry.resolve({ family: "text", profile: "profilo-non-registrato" })).toBe(
-      textualFallbackFactory,
-    );
+    expect(
+      registry.select({ family: "text", profile: "profilo-non-registrato" }).key,
+    ).toBe("builtin:text-fallback");
     expect(textualFallbackFactory).toMatchObject({
       family: "text",
       profile: "fallback",
@@ -534,10 +579,14 @@ describe("DocumentSurfaceRegistry", () => {
       factory: implicitFactory,
     });
 
-    expect(registry.resolve({ formatKey: "implicit-format", version: 1 })).toBe(
-      implicitFactory,
+    const implicitSelection = registry.select({
+      formatKey: "implicit-format",
+      version: 1,
+    });
+    expect(implicitSelection.key).toMatch(/^registration:/);
+    expect(registry.select({ formatKey: "implicit-format", version: 2 }).key).toMatch(
+      /^builtin:error:/,
     );
-    expect(registry.resolve({ formatKey: "implicit-format", version: 2 }).family).toBe("error");
 
     const declared = surfaceFixture("declared");
     const declaredDispose = registry.register({
@@ -549,13 +598,19 @@ describe("DocumentSurfaceRegistry", () => {
       factory: declared.factory,
     });
 
-    expect(registry.resolve({ formatKey: "declared-format", version: 2 })).toBe(
-      declared.factory,
+    const declaredVersion2 = registry.select({
+      formatKey: "declared-format",
+      version: 2,
+    });
+    const declaredVersion4 = registry.select({
+      formatKey: "declared-format",
+      version: 4,
+    });
+    expect(declaredVersion2.key).toMatch(/^registration:/);
+    expect(declaredVersion4.key).toBe(declaredVersion2.key);
+    expect(registry.select({ formatKey: "declared-format", version: 1 }).key).toMatch(
+      /^builtin:error:/,
     );
-    expect(registry.resolve({ formatKey: "declared-format", version: 4 })).toBe(
-      declared.factory,
-    );
-    expect(registry.resolve({ formatKey: "declared-format", version: 1 }).family).toBe("error");
 
     declaredDispose();
     implicitDispose();
@@ -609,13 +664,14 @@ describe("DocumentSurfaceRegistry", () => {
       formatKey: "override-format",
     };
 
-    expect(
-      registry.resolve({
-        formatKey: "format-key",
-        species: "text/source",
-        override: overrideReference,
-      }),
-    ).toBe(override.factory);
+    const exactSelection = registry.select({ formatKey: "format-key" });
+    const overrideSelection = registry.select({
+      formatKey: "format-key",
+      species: "text/source",
+      override: overrideReference,
+    });
+    expect(overrideSelection.key).toMatch(/^registration:/);
+    expect(overrideSelection.key).not.toBe(exactSelection.key);
     const overrideContext = mountContext();
     const mountedOverride = registry.mount(
       { formatKey: "format-key", override: overrideReference },
@@ -625,14 +681,17 @@ describe("DocumentSurfaceRegistry", () => {
     expect(mountedOverride.family).toBe(override.mounts[0].family);
     mountedOverride.destroy();
     expect(override.destroys[0].calls).toBe(1);
-    expect(registry.resolve({ formatKey: "format-key", species: "text/source" })).toBe(
-      exact.factory,
-    );
-    expect(registry.resolve({ species: "text/source" })).toBe(species.factory);
-    expect(registry.resolve({ family: "text", profile: "missing" })).toBe(
-      textualFallbackFactory,
-    );
-    expect(registry.resolve({ species: "bytes" })).toBe(byteViewerFactory);
+    const exactBindingSelection = registry.select({
+      formatKey: "format-key",
+      species: "text/source",
+    });
+    const speciesSelection = registry.select({ species: "text/source" });
+    const fallbackSelection = registry.select({ family: "text", profile: "missing" });
+    const viewerSelection = registry.select({ species: "bytes" });
+    expect(exactBindingSelection.key).toBe(exactSelection.key);
+    expect(speciesSelection.key).not.toBe(exactSelection.key);
+    expect(fallbackSelection.key).toBe("builtin:text-fallback");
+    expect(viewerSelection.key).toBe("builtin:byte-viewer");
     const byteContext = mountContext();
     const byteSurface = registry.mount({ species: "bytes" }, byteContext);
     expect(byteSurface.family).toBe("viewer");
@@ -640,7 +699,7 @@ describe("DocumentSurfaceRegistry", () => {
       "Visualizzatore read-only per sorgenti a byte",
     );
     byteSurface.destroy();
-    expect(registry.resolve({ family: "family-futura" }).family).toBe("error");
+    expect(registry.select({ family: "family-futura" }).key).toMatch(/^builtin:error:/);
   });
 
   it("lega l'override alla registrazione e segnala quando viene disinstallata", () => {
@@ -668,28 +727,30 @@ describe("DocumentSurfaceRegistry", () => {
       override: { registrationId },
     };
 
-    expect(registry.resolve(request)).toBe(registeredB.factory);
-    expect(registry.resolve({ override: registrationId })).toBe(registeredB.factory);
-    expect(registry.resolve({ override: "format-b" })).toBe(registeredB.factory);
+    const registeredSelection = registry.select({ formatKey: "format-b" });
+    expect(registeredSelection.key).toMatch(/^registration:/);
+    expect(registry.select(request).key).toBe(registeredSelection.key);
+    expect(registry.select({ override: registrationId }).key).toBe(registeredSelection.key);
+    expect(registry.select({ override: "format-b" }).key).toBe(registeredSelection.key);
     expect(
-      registry.resolve({
+      registry.select({
         override: { owner: "owner-b", formatKey: "format-b" },
-      }),
-    ).toBe(registeredB.factory);
+      }).key,
+    ).toBe(registeredSelection.key);
     expect(
-      registry.resolve({
+      registry.select({
         override: { owner: "owner-b", family: "text", profile: "profile-b" },
-      }),
-    ).toBe(registeredB.factory);
+      }).key,
+    ).toBe(registeredSelection.key);
     expect(
-      registry.resolve({
+      registry.select({
         override: { owner: "owner-incorrect", formatKey: "format-b" },
-      }).family,
-    ).toBe("error");
+      }).key,
+    ).toMatch(/^builtin:error:/);
 
     disposeB();
-    expect(registry.resolve(request)).not.toBe(registeredB.factory);
-    expect(registry.resolve(request).family).toBe("error");
+    expect(registry.select(request).key).not.toBe(registeredSelection.key);
+    expect(registry.select(request).key).toMatch(/^builtin:error:/);
     const context = mountContext();
     const surface = registry.mount(request, context);
     expect(context.parent.textContent).toContain("override utente non registrato");
@@ -712,8 +773,7 @@ describe("DocumentSurfaceRegistry", () => {
         formatKey: "format-key",
         override,
       };
-      expect(registry.resolve(request)).not.toBe(naked.factory);
-      expect(registry.resolve(request).family).toBe("error");
+      expect(registry.select(request).key).toMatch(/^builtin:error:/);
       const context = mountContext();
       const surface = registry.mount(request, context);
       expect(naked.mounts).toHaveLength(0);
@@ -738,13 +798,13 @@ describe("DocumentSurfaceRegistry", () => {
       formatKey: "plain-text",
       factory: plainText.factory,
     });
-    expect(registry.resolve({ family: "text", profile: "markdown" })).toBe(markdown.factory);
-    expect(registry.resolve({ family: "text", profile: "plain-text" })).toBe(
-      plainText.factory,
-    );
-
-    expect(registry.resolve({ formatKey: "markdown" })).toBe(markdown.factory);
-    expect(registry.resolve({ formatKey: "plain-text" })).toBe(plainText.factory);
+    const markdownSelection = registry.select({ family: "text", profile: "markdown" });
+    const plainTextSelection = registry.select({ family: "text", profile: "plain-text" });
+    expect(markdownSelection.key).toMatch(/^registration:/);
+    expect(plainTextSelection.key).toMatch(/^registration:/);
+    expect(markdownSelection.key).not.toBe(plainTextSelection.key);
+    expect(registry.select({ formatKey: "markdown" }).key).toBe(markdownSelection.key);
+    expect(registry.select({ formatKey: "plain-text" }).key).toBe(plainTextSelection.key);
   });
 
   describe("lifecycle", () => {
@@ -834,10 +894,11 @@ describe("DocumentSurfaceRegistry", () => {
       });
 
       expect(() => registry.mount(request, mountContext())).toThrow(mountError);
-      expect(registry.resolve(request)).toBe(factory);
+      const selected = registry.select(request);
+      expect(selected.key).toMatch(/^registration:/);
 
       expect(() => dispose()).not.toThrow();
-      expect(registry.resolve(request)).not.toBe(factory);
+      expect(registry.select(request).key).toBe("builtin:text-fallback");
     });
 
     it("mantiene l'ownership coerente quando il destroy di A lancia", () => {
@@ -927,7 +988,7 @@ describe("DocumentSurfaceRegistry", () => {
         formatKey: "shared-format",
         factory: b.factory,
       });
-      expect(registry.resolve({ formatKey: "shared-format" })).toBe(b.factory);
+      expect(registry.select({ formatKey: "shared-format" }).key).toMatch(/^registration:/);
       registry.mount({ formatKey: "shared-format" }, mountContext());
 
       disposeB();

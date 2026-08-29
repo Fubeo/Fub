@@ -96,7 +96,6 @@ export type SurfaceSelectionKey = string & {
 
 export interface ResolvedSurface {
   readonly key: SurfaceSelectionKey;
-  readonly factory: SurfaceFactory;
 }
 
 export interface SurfaceRegistration {
@@ -125,7 +124,9 @@ interface Entry {
   active: boolean;
 }
 
-interface Selection extends ResolvedSurface {
+interface Selection {
+  readonly key: SurfaceSelectionKey;
+  readonly factory: SurfaceFactory;
   readonly entry?: Entry;
 }
 
@@ -525,13 +526,9 @@ export class DocumentSurfaceRegistry {
     };
   }
 
-  resolve(request: SurfaceRequest): SurfaceFactory {
-    return this.select(request).factory;
-  }
-
   select(request: SurfaceRequest): ResolvedSurface {
     const selection = this.selectSelection(request);
-    return { key: selection.key, factory: selection.factory };
+    return { key: selection.key };
   }
 
   mount(request: SurfaceRequest, context: SurfaceMountContext): EditorSurface {

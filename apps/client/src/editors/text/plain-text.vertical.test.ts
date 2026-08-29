@@ -8,7 +8,6 @@ import {
 } from "../bootstrap";
 import type { SurfaceRegistryBootstrap } from "../bootstrap";
 import {
-  plainTextSurfaceFactory,
   type PlainTextSurface,
   type TextSurfaceMountContext,
 } from "./factories";
@@ -81,7 +80,7 @@ describe("vertical slice plain text dal registro alla sessione", () => {
       });
 
       bootstrap = bootstrapSurfaceRegistry();
-      expect(bootstrap.registry.resolve(request)).toBe(plainTextSurfaceFactory);
+      expect(bootstrap.registry.select(request).key).toMatch(/^registration:/);
 
       const parentA = document.createElement("section");
       const parentB = document.createElement("section");
