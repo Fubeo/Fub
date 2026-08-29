@@ -552,8 +552,11 @@ function destroySurface(r: Pane): void {
   r.surface = null;
   r.selectionKey = null;
   r.surfaceDocumentId = null;
-  surface?.destroy();
-  r.editorEl.replaceChildren();
+  try {
+    surface?.destroy();
+  } finally {
+    r.editorEl.replaceChildren();
+  }
 }
 
 function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
@@ -570,7 +573,16 @@ function ensureSurface(r: Pane, doc: string, request: SurfaceRequest): boolean {
     detachSurface(r);
     destroySurface(r);
   }
-  const mounted = deps.surfaceRegistry.mount(request, surfaceMountContext(r, doc));
+  let mounted: { key: SurfaceSelectionKey; surface: EditorSurface };
+  try {
+    mounted = deps.surfaceRegistry.mount(request, surfaceMountContext(r, doc));
+  } catch (error) {
+    r.surface = null;
+    r.selectionKey = null;
+    r.surfaceDocumentId = null;
+    r.editorEl.replaceChildren();
+    throw error;
+  }
   r.surface = mounted.surface;
   r.selectionKey = mounted.key;
   r.surfaceDocumentId = doc;

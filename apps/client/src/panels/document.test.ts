@@ -464,7 +464,7 @@ describe("il pannello monta le superfici dal registro", () => {
     expect(text).toContain("deps.surfaceRegistry.select(request)");
     expect(text).toContain("r.selectionKey === selected.key");
     expect(text).toContain("r.surfaceDocumentId === doc");
-    expect(text).toContain("const mounted = deps.surfaceRegistry.mount(");
+    expect(text).toContain("mounted = deps.surfaceRegistry.mount(");
     expect(text).toContain("r.surface = mounted.surface");
     expect(text).toContain("r.selectionKey = mounted.key");
     expect(text).not.toContain("r.selectionKey = selected.key");
@@ -634,9 +634,9 @@ function genericSurfaceFixture(
         resume() {},
         destroy() {
           destroys.calls += 1;
+          if (destroyError) throw destroyError;
           element.remove();
           hook.current?.();
-          if (destroyError) throw destroyError;
         },
       };
       mounts.push({ documentId: context.documentId, surface });
@@ -1262,7 +1262,7 @@ describe("identità del mount nel percorso reale del pannello", () => {
     disposeC?.();
   });
 
-  it("recovers from a throwing generic teardown without retaining stale mount identity", async () => {
+  it("cleans a throwing generic teardown before retrying the next surface", async () => {
     vi.resetModules();
     const request: RequestBox = { value: { formatKey: "format-a" } };
     mockPanelModules(request);
@@ -1291,17 +1291,81 @@ describe("identità del mount nel percorso reale del pannello", () => {
     mountDocument({ surfaceRegistry: registry });
     openIn("main", "note.grid", layout);
     await synchronize();
+    const editor = document.querySelector<HTMLElement>(".pane-editor")!;
+    expect(editor.querySelector(".generic-surface-a")).not.toBeNull();
 
     request.value = { formatKey: "format-b" };
     await expect(synchronize()).rejects.toThrow(destroyError);
     expect(a.destroys.calls).toBe(1);
     expect(b.mounts).toHaveLength(0);
+    expect(editor.querySelector(".generic-surface-a")).toBeNull();
+    expect(editor.children).toHaveLength(0);
 
     await synchronize();
     expect(b.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
+    expect(editor.children).toHaveLength(1);
+    expect(editor.firstElementChild?.className).toBe("generic-surface-b");
+
     await synchronize();
     expect(b.mounts).toHaveLength(1);
     disposeA();
     disposeB();
+  });
+
+  it("cleans a parent dirtied by a throwing factory before its registration is fixed", async () => {
+    vi.resetModules();
+    const request: RequestBox = { value: { formatKey: "format-a" } };
+    mockPanelModules(request);
+    const registry = new DocumentSurfaceRegistry();
+    const mountError = new Error("generic mount failed");
+    const failedMounts = { calls: 0 };
+    const failingFactory: SurfaceFactory = {
+      family: "grid",
+      profile: "generic",
+      mount(_request, context) {
+        failedMounts.calls += 1;
+        const marker = context.parent.ownerDocument.createElement("div");
+        marker.className = "generic-surface-failed";
+        context.parent.append(marker);
+        throw mountError;
+      },
+    };
+    const disposeFailed = registry.register({
+      owner: "generic-failed",
+      family: "grid",
+      profile: "generic",
+      formatKey: "format-a",
+      factory: failingFactory,
+    });
+
+    panelDom();
+    const { mountDocument, synchronize } = await import("./document");
+    const { layout, openIn } = await import("../state/layout");
+    mountDocument({ surfaceRegistry: registry });
+    openIn("main", "note.grid", layout);
+    await expect(synchronize()).rejects.toThrow(mountError);
+    const editor = document.querySelector<HTMLElement>(".pane-editor")!;
+    expect(failedMounts.calls).toBe(1);
+    expect(editor.children).toHaveLength(0);
+    expect(editor.querySelector(".generic-surface-failed")).toBeNull();
+
+    disposeFailed();
+    const fixed = genericSurfaceFixture("fixed");
+    const disposeFixed = registry.register({
+      owner: "generic-fixed",
+      family: "grid",
+      profile: "generic",
+      formatKey: "format-a",
+      factory: fixed.factory,
+    });
+
+    await synchronize();
+    expect(fixed.mounts.map((mount) => mount.documentId)).toEqual(["note.grid"]);
+    expect(editor.children).toHaveLength(1);
+    expect(editor.firstElementChild?.className).toBe("generic-surface-fixed");
+
+    await synchronize();
+    expect(fixed.mounts).toHaveLength(1);
+    disposeFixed();
   });
 });
