@@ -17,8 +17,8 @@ ciò che formerà la prima versione.
 - wikilink, tag, backlink, ricerca full-text e Graph View;
 - editor CodeMirror, live preview e modalità di lettura;
 - motore testuale condiviso con profili Markdown, plain text e formula;
-- la shell registra, seleziona e monta Markdown o testo piano tramite un registro
-  interno delle superfici;
+- la shell registra, seleziona e monta Markdown, testo piano o griglia
+  `.fubsheet` tramite un registro interno delle superfici;
 - il registro applica ownership esplicita a `destroy()`, riusa per chiave di
   selezione opaca e inferisce temporaneamente il formato da path ed estensione;
 - i cataloghi `PaneMode` sono esposti soltanto dalle superfici modeful montate:
@@ -27,6 +27,9 @@ ciò che formerà la prima versione.
   dispatcher della shell per le scorciatoie e le sequenze rimanenti;
 - formato `.fubsheet` testuale e versionato con identità stabili, proiezioni
   comuni per outline, ricerca e proprietà e limite simmetrico in lettura e scrittura;
+- `GridEngine` con viewport virtualizzata, selezione rettangolare, navigazione
+  da tastiera, editor in-cell e formula bar condivisi, paste TSV atomico,
+  formule derivate, undo del workbook e accessibilità `role="grid"`;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;
@@ -42,7 +45,7 @@ ciò che formerà la prima versione.
 
 - completamento di M5: provider WASM aggiuntivi, UI non fidata e percorso
   installazione-esecuzione end-to-end;
-- estensione delle superfici condivise a griglia e contratto pubblico;
+- estensione delle superfici condivise al contratto pubblico e a famiglie future;
 - modularizzazione e prova di scala della Graph View;
 - definizione del contratto pubblico dei temi.
 

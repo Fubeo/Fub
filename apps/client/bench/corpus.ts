@@ -223,6 +223,54 @@ function longNote(): string {
 }
 
 CORPUS["Guida/Nota lunga.md"] = longNote();
+CORPUS["Risorse/Bilancio.fubsheet"] =
+  `${JSON.stringify(
+    {
+      schema: 1,
+      workbook: {
+        id: "bilancio",
+        metadata: { owner: "Banco visuale", periodo: "Agosto 2026" },
+        sheets: [
+          {
+            id: "riepilogo",
+            name: "Riepilogo",
+            metadata: {},
+            rows: Array.from({ length: 18 }, (_, index) => ({ id: `riga-${index + 1}` })),
+            columns: Array.from({ length: 8 }, (_, index) => ({ id: `colonna-${index + 1}` })),
+            cells: [
+              ["riga-1", "colonna-1", "Voce"],
+              ["riga-1", "colonna-2", "Preventivo"],
+              ["riga-1", "colonna-3", "Consuntivo"],
+              ["riga-2", "colonna-1", "Ricavi"],
+              ["riga-2", "colonna-2", "12500"],
+              ["riga-2", "colonna-3", "13240"],
+              ["riga-3", "colonna-1", "Costi"],
+              ["riga-3", "colonna-2", "7800"],
+              ["riga-3", "colonna-3", "8150"],
+              ["riga-4", "colonna-1", "Margine"],
+              ["riga-4", "colonna-2", "=B2-B3"],
+              ["riga-4", "colonna-3", "=C2-C3"],
+              ["riga-6", "colonna-1", "Totale"],
+              ["riga-6", "colonna-2", "=SUM(B2:B4)"],
+              ["riga-6", "colonna-3", "=SUM(C2:C4)"],
+            ].map(([row, column, input]) => ({
+              row,
+              column,
+              input,
+              style: {
+                format: "general",
+                alignment: column === "colonna-1" ? "start" : "end",
+                bold: row === "riga-1" || row === "riga-6",
+                italic: false,
+              },
+            })),
+          },
+        ],
+      },
+    },
+    null,
+    2,
+  )}\n`;
 
 // ---------------------------------------------------------------------------
 // La resa: l'HTML che il kernel emetterebbe.

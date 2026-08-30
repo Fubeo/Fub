@@ -610,6 +610,7 @@ const TREES: Record<string, UiNode> = {
 
 const options: Options = {
   file: CORPUS,
+  extensions: ["md", "fubsheet"],
   root: ROOT,
   view: VIEWS,
   commands: BENCH_COMMANDS,

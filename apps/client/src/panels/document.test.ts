@@ -485,10 +485,10 @@ describe("il pannello monta le superfici dal registro", () => {
     expect(text).not.toContain('formatKey: "md"');
   });
 
-  it("applica il riallineamento solo alle superfici testuali", () => {
+  it("applica il riallineamento soltanto alle superfici documento editabili", () => {
     const text = functionBody("function written(");
     expect(text).toContain("documentSessions.acceptSurfaceChange(");
-    expect(text).toContain("isTextSurface(source.surface)");
+    expect(text).toContain("isEditableDocumentSurface(source.surface)");
     expect(text).not.toContain("tryApplyOperation(");
   });
 

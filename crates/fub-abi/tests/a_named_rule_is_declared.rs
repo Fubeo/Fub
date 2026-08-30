@@ -476,6 +476,25 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  altro posto.",
             ),
         ),
+        (
+            "crates/fub-format-sheet/src/evaluation.rs::parse_reference",
+            (
+                Family::AsciiCase,
+                "le colonne A1 hanno per grammatica soltanto lettere ASCII e cifre: la \
+                 conversione in maiuscolo calcola l'indice base 26, non normalizza un nome \
+                 utente. Accettare lettere Unicode produrrebbe riferimenti che il formato non \
+                 sa indirizzare.",
+            ),
+        ),
+        (
+            "crates/fub-format-sheet/src/evaluation.rs::word",
+            (
+                Family::AsciiCase,
+                "il lexer ammette identificatori formula ASCII e li confronta con i built-in \
+                 `SUM`, `AVERAGE`, `MIN`, `MAX` e `IF`: piegare qui rende `sum` e `SUM` la \
+                 stessa funzione senza inventare nomi Unicode fuori dalla grammatica.",
+            ),
+        ),
         // -- NfcOnly: stessi caratteri, byte diversi ------------------------
         (
             "crates/fub-abi/src/rules/composition.rs::composed",

@@ -179,6 +179,19 @@
     "pane",
     "focus",
     "pane-preview",
+    "grid-surface",
+    "grid-sheet-tabs",
+    "grid-formula-bar",
+    "grid-sheet-tab",
+    "grid-address",
+    "grid-row-header",
+    "grid-column-header",
+    "grid-corner",
+    "grid-viewport",
+    "grid-cell",
+    "grid-cell-active",
+    "grid-cell-editor",
+    "grid-read-only",
     "markdown-preview",
     "wikilink",
     "unresolved",
@@ -640,6 +653,32 @@
         "dirty",
         "tab-close",
         "tab-view"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "grid",
+      "hooks": [
+        "grid-surface",
+        "grid-sheet-tabs",
+        "grid-formula-bar",
+        "grid-sheet-tab",
+        "grid-address",
+        "grid-row-header",
+        "grid-column-header",
+        "grid-corner",
+        "grid-viewport",
+        "grid-cell",
+        "grid-cell-active",
+        "grid-cell-editor",
+        "grid-read-only"
       ],
       "states": [
         "rest",
@@ -1291,10 +1330,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 194,
+    "hooks": 207,
     "state_names": 7,
-    "assigned_states": 111,
-    "components": 39,
+    "assigned_states": 117,
+    "components": 40,
     "unassigned_hooks": 0
   }
 }

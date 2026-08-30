@@ -262,6 +262,18 @@ export const SCENE = [
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');
     },
   },
+  {
+    id: "fubsheet",
+    title: "Il foglio dati con formule e selezione",
+    query: "",
+    prepare: async (page) => {
+      await openFolder(page, "Risorse");
+      await page.click('#file-list .tree-row.note[data-path="Risorse/Bilancio.fubsheet"]');
+      await page.waitForSelector('.grid-surface [role="gridcell"]');
+      await page.click('.grid-surface [role="gridcell"][aria-rowindex="3"][aria-colindex="2"]');
+    },
+  },
+
 
   // -------------------------------------------------------------------------
   // I tre cataloghi (`bench/catalog.html`).

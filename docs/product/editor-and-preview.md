@@ -185,21 +185,23 @@ Il fallback testuale è una superficie DOM con `family: "text"` e
 `TextEditorSurface` è generico e offre `setDoc`, `syncDoc`, `selections` e
 `revealByteOffset`; non conosce Markdown. `MarkdownEditorSurface` con profilo
 `markdown` aggiunge `setSyntaxForms` e `setLivePreview`. `PlainTextSurface` con
-profilo `plain-text` non espone API Markdown vuote. Plain text è un client
-architetturale della shell, non una funzionalità del vault: questa distinzione
-non descrive un percorso in cui l'utente apre file `.txt` dal vault. Il fake
-host tratta come documento soltanto `.md`.
+profilo `plain-text` non espone API Markdown vuote.
+
+`GridEditorSurface` serve `.fubsheet`: mostra fogli, righe, colonne, intestazioni
+e valori derivati; mantiene selezione rettangolare, scroll, focus e undo del
+workbook per superficie. Un solo editor in-cell viene spostato sulla cella
+attiva; la formula bar usa lo stesso `TextEngine` con `FormulaProfile`. Frecce,
+Tab, Enter, Escape, Home/End, PageUp/PageDown, Shift-selezione, copy/paste TSV e
+commit su blur restano gesti locali.
 
 L'identità del formato resta temporanea: `surfaceRequestForDocument(id)`
 inferisce path ed estensione senza ricevere `handledExtensions`. Markdown usa
-`md` e `markdown` o l'id `text/markdown`; testo piano usa `plain`, `text` e
-`txt` o l'id `text/plain`; byte usa `bin`, `blob`, `bytes`, `dat`, `opaque` e
-`binary`. Ogni altro id produce `family: "text"` e `profile: "unknown"` e
-raggiunge il fallback testuale. Un'estensione gestita da un provider, come
-`note` o `fubsheet`, non diventa automaticamente Markdown. `handledExtensions`
-e `VaultInfo.extensions` restano dati per esploratore e note di cartella, non
-identità del formato; non esiste un `format_id` IPC e `FormatDescriptor.id` in
-Rust non è un campo di `VaultInfo`.
+`md` e `markdown`; testo piano usa `plain`, `text` e `txt`; `.fubsheet` seleziona
+esplicitamente `family: "grid"` e `profile: "sheet"`; byte usa `bin`, `blob`,
+`bytes`, `dat`, `opaque` e `binary`. Ogni altro id raggiunge il fallback
+testuale. `handledExtensions` e `VaultInfo.extensions` restano dati per
+esploratore e note di cartella, non identità del formato; non esiste un
+`format_id` IPC.
 
 `SurfaceModeId` è locale alla shell e il pannello confronta ogni richiesta con
 il catalogo della superficie montata nel riquadro con il focus prima di
@@ -225,17 +227,20 @@ percorso speciale legato all'ID del comando.
 Un riquadro o una finestra vuoti contengono il solo chrome, senza un
 `EditorView` Markdown finto. La `DocumentSession` coordina buffer, salvataggio,
 bozza, conflitti e lifecycle; il pannello collega le superfici e aggiorna la
-resa. Nessun profilo invia una chiamata IPC o WASM per ogni battuta.
+resa. Nessun carattere della formula bar o dell'editor in-cell attraversa IPC o
+WASM. Il commit serializza il workbook e passa alla sessione come una sola
+modifica autorevole.
 
 Il backend riconosce `.fubsheet` come workbook testuale versionato e ne espone
-outline, testo ricercabile e proprietà. Non esiste ancora `GridEngine`: la shell
-apre la sorgente con il fallback testuale e non le consegna `live_preview`.
+outline, testo ricercabile e proprietà. La shell lo apre con `GridEngine`, non
+con il fallback testuale, e non gli consegna le modalità Markdown.
 
 ## Dove si trova
 
 - `apps/client/src/editors/core/registry.ts`
 - `apps/client/src/editors/bootstrap.ts`
 - `apps/client/src/editors/text/factories.ts`
+- `apps/client/src/editors/grid/`
 - `apps/client/src/editor/`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/state/`

@@ -34,6 +34,11 @@ import type {
   TextSurfaceMountContext,
 } from "../editors/text/factories";
 import type { EditorChange } from "../editors/text/engine";
+import type {
+  GridEditorSurface,
+  GridSurfaceMountContext,
+} from "../editors/grid/factory";
+import type { GridDocumentChange } from "../editors/grid/engine";
 import type { Theme } from "../theme/theme";
 import { Queue } from "../ui/race";
 import { api } from "../host/ipc";
@@ -502,6 +507,23 @@ function isTextSurface(
     typeof surface.revealByteOffset === "function"
   );
 }
+function isGridSurface(
+  surface: EditorSurface | null | undefined,
+): surface is GridEditorSurface {
+  if (!surface || surface.family !== "grid") return false;
+  return (
+    "setDoc" in surface &&
+    typeof surface.setDoc === "function" &&
+    "syncDoc" in surface &&
+    typeof surface.syncDoc === "function"
+  );
+}
+
+function isEditableDocumentSurface(
+  surface: EditorSurface | null | undefined,
+): surface is TextEditorSurface | GridEditorSurface {
+  return isTextSurface(surface) || isGridSurface(surface);
+}
 
 function isMarkdownSurface(
   surface: EditorSurface | null | undefined,
@@ -546,12 +568,16 @@ function applyPaneMode(r: Pane): SurfaceModeId {
   return mode;
 }
 
-function surfaceMountContext(r: Pane, doc: string): TextSurfaceMountContext {
+function surfaceMountContext(
+  r: Pane,
+  doc: string,
+): TextSurfaceMountContext & GridSurfaceMountContext {
   return {
     paneId: r.id,
     documentId: doc,
     parent: r.editorEl,
-    onChange: (change) => written(r.id, change),
+    onChange: (change: EditorChange | GridDocumentChange) =>
+      written(r.id, "edit" in change ? change.edit : change),
     onSelectionChange: () => {
       // Solo il riquadro col fuoco pubblica: il contesto di sessione è «cosa
       // sta guardando l'utente adesso», e con N riquadri la risposta resta una.
@@ -833,11 +859,11 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   }
   if (!changed && !remounted) return;
 
-  const textSurface = isTextSurface(r.surface) ? r.surface : null;
+  const documentSurface = isEditableDocumentSurface(r.surface) ? r.surface : null;
   const markdownSurface = isMarkdownSurface(r.surface) ? r.surface : null;
-  if (!textSurface) {
+  if (!documentSurface) {
     // Fallback, viewer and error surfaces render their own visible state and
-    // deliberately do not pretend to be text editors.
+    // deliberately do not pretend to edit the document.
     clearPreview(r.previewEl);
     attachSurface(r, tab.doc);
     await redrawReading(tab.doc);
@@ -857,8 +883,8 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
   markdownSurface?.setSyntaxForms(forms);
-  textSurface.setDoc(text);
-  textSurface.setReadOnly(documentSessions.isDeletionPending(tab.doc));
+  documentSurface.setDoc(text);
+  documentSurface.setReadOnly(documentSessions.isDeletionPending(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
@@ -887,10 +913,14 @@ function detachSurface(r: Pane): void {
 /// il testo sotto — e chi lo sta guardando non perde il punto in cui era.
 function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate): void {
   if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
-  const surface = isTextSurface(r.surface) ? r.surface : null;
-  surface?.syncDoc(
-    update.kind === "operation" ? { text: update.text, operation: update.operation } : update.text,
-  );
+  const surface = isEditableDocumentSurface(r.surface) ? r.surface : null;
+  if (isGridSurface(surface)) {
+    surface.syncDoc(update.text);
+  } else {
+    surface?.syncDoc(
+      update.kind === "operation" ? { text: update.text, operation: update.operation } : update.text,
+    );
+  }
 }
 
 
@@ -1142,7 +1172,7 @@ function written(paneId: string, change: EditorChange): void {
   if (outcome.kind !== "realigned") return;
   const source = panes.get(paneId);
   if (source?.shown?.k === "doc" && source.shown.doc === doc) {
-    const surface = isTextSurface(source.surface) ? source.surface : null;
+    const surface = isEditableDocumentSurface(source.surface) ? source.surface : null;
     surface?.syncDoc(outcome.text);
   }
 }

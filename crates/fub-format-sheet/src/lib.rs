@@ -6,10 +6,14 @@
 //! in una seconda autorità serializzabile.
 
 mod codec;
+mod evaluation;
 mod model;
 mod provider;
 
 pub use codec::{parse, serialize, SheetError, MAX_SOURCE_BYTES, SCHEMA_VERSION};
+pub use evaluation::{
+    evaluate_workbook, CellValue, EvaluatedCell, FormulaError, SheetEvaluation, WorkbookEvaluation,
+};
 pub use model::{
     Axis, Cell, CellAlignment, CellFormat, CellKey, CellStyle, Column, ColumnId, Row, RowId, Sheet,
     SheetId, ValidationError, Workbook, WorkbookId, MAX_CELLS, MAX_CELL_INPUT_BYTES, MAX_COLUMNS,

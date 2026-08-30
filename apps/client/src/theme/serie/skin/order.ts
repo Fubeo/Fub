@@ -41,6 +41,7 @@ export const ORDER = [
   "search",
   "segmented",
   "panes",
+  "grid",
   "preview",
   "context-menu",
   "graph",

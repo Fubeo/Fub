@@ -237,16 +237,17 @@ Le allowlist sono:
 
 - Markdown: estensioni `md` e `markdown`, oppure id `text/markdown`;
 - testo piano: estensioni `plain`, `text` e `txt`, oppure id `text/plain`;
+- foglio: estensione `fubsheet`, oppure id `text/fubsheet`;
 - byte: estensioni `bin`, `blob`, `bytes`, `dat`, `opaque` e `binary` (anche
   gli id `bytes` e `binary`).
 
 Ogni altro id produce `family: "text"` e `profile: "unknown"` e quindi il
-fallback testuale. Un'estensione gestita da un provider, come `note` o
-`fubsheet`, non viene classificata automaticamente come Markdown. Le
-`handledExtensions` e `VaultInfo.extensions` restano esclusivamente dati per
-esploratore e note di cartella: non sono l'identità del formato. Nessun
-`format_id` attraversa IPC; `FormatDescriptor.id` esiste in Rust ma non fa
-parte di `VaultInfo`.
+fallback testuale. Un'estensione gestita da un provider non viene classificata
+automaticamente come Markdown: `.fubsheet` è una allowlist esplicita della
+shell, non una conseguenza di `handledExtensions`. `handledExtensions` e
+`VaultInfo.extensions` restano dati per esploratore e note di cartella, non
+l'identità del formato. Nessun `format_id` attraversa IPC;
+`FormatDescriptor.id` esiste in Rust ma non fa parte di `VaultInfo`.
 
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
@@ -346,17 +347,24 @@ della superficie. Non conosce Markdown. `MarkdownEditorSurface`, con
 `PlainTextSurface`, con `profile: "plain-text"`, non implementa API Markdown
 vuote o fittizie.
 
-`bootstrapSurfaceRegistry()` registra le factory possedute dalla shell per
-Markdown e plain text. `handledExtensions` non decide il profilo della
-superficie: l'inferenza temporanea e le sue allowlist sono descritte sopra.
-Il plain text è un client architetturale della shell, non una funzionalità del
-vault per gli utenti; nel fake host soltanto `.md` è trattato come documento.
+`GridEditorSurface` (`family: "grid"`, `profile: "sheet"`) espone sorgente,
+sync, undo/redo e view state. `GridEngine` valida `.fubsheet`, virtualizza celle
+e intestazioni con overscan, e possiede selezione, foglio, scroll e focus.
+Due `TextEngine` montano `FormulaProfile` per editor in-cell e formula bar; ogni
+commit o paste TSV crea una `GridOperation` invertibile. La resa formula locale
+è derivata; `fub-format-sheet` resta l'autorità backend e persistente.
 
-Il catalogo delle modalità vive soltanto sulla superficie modeful montata; `SurfaceModeId` è un tipo locale della shell, indipendente da `PaneMode`.
+`bootstrapSurfaceRegistry()` registra le factory possedute dalla shell per
+Markdown, plain text e grid `.fubsheet`. `handledExtensions` non decide il
+profilo della superficie: l'inferenza temporanea e le sue allowlist sono
+descritte sopra. Il fake host può dichiarare le estensioni documento della
+fixture; il default resta soltanto `.md`.
+
+Il catalogo delle modalità vive soltanto sulla superficie modeful montata;
+`SurfaceModeId` è un tipo locale della shell, indipendente da `PaneMode`.
 `SurfaceModeful` espone `modes`, `defaultMode`, `mode()` e `setMode()` con
-questo id. Markdown dichiara `source`, `live_preview` e `reading`, con
-`defaultMode: "live_preview"`; plain text dichiara soltanto `source`, con
-`defaultMode: "source"`. Fallback, viewer ed error non sono modeful.
+questo id. Markdown dichiara `source`, `live_preview` e `reading`; plain text
+dichiara soltanto `source`. Grid, fallback, viewer ed error non sono modeful.
 
 `PaneMode` resta l'ABI `source | live_preview | reading` di `ViewContext.mode`
 e del layout legacy. Pubblicando layout o `ViewContext`, la shell conserva
@@ -388,18 +396,10 @@ deterministici anche con teardown annidato o non LIFO.
 Un riquadro o una finestra vuoti contengono soltanto il chrome, senza una
 `EditorView` Markdown fittizia.
 
-`FormulaProfile` resta una superficie usata soltanto dai test e dalle fixture,
-non esposta all'utente. `fub-format-sheet` fornisce al backend sorgente
-versionata e proiezioni `.fubsheet`, ma `GridEngine` e il percorso griglia sono
-assenti: la shell tratta ancora l'estensione come sconosciuta e usa il fallback
-testuale. Restano assenti la famiglia `structured` e le superfici WASM.
-
-I moduli dei profili sono rispettivamente
-`apps/client/src/editors/text/profiles/markdown/profile.ts`,
-`apps/client/src/editors/text/profiles/plain-text.ts` e
-`apps/client/src/editors/text/profiles/formula.ts`. Le callback
-`FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
-TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
+`FormulaProfile` serve editor in-cell e formula bar di `GridEngine`.
+`fub-format-sheet` possiede sorgente, validazione e proiezioni `.fubsheet`; la
+griglia non riceve modalità Markdown. Restano assenti `structured` e superfici
+WASM. Profili, griglia e callback commit/cancel restano TypeScript interni e non attraversano IPC, WIT o ABI.
 
 ## Confine CodeMirror
 

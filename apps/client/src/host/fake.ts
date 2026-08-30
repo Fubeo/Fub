@@ -88,6 +88,8 @@ export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
   file?: Record<string, string>;
+  /// Estensioni che il vault considera documenti; il default resta Markdown.
+  extensions?: readonly string[];
   /// La radice da aprire all'avvio, o `null` per una finestra vuota.
   root?: string | null;
   /// L'avviso di sessione (§25.5) che il pull risponde, o `null` (default)
@@ -163,6 +165,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const viewStates = new Map<string, unknown>();
   const calls: Call[] = [];
   const view = options.view ?? [];
+  const extensions = options.extensions ?? ["md"];
   let listener: ((n: KernelNotice) => void) | null = null;
   let onClose: (() => Promise<void>) | null = null;
   let revision = 0;
@@ -213,7 +216,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
   /// legge dalla risposta e non dalla propria testa.
   function entryKind(id: string): VaultEntry["kind"] {
-    return id.endsWith(".md") ? "document" : "asset";
+    return extensions.some((extension) => id.endsWith(`.${extension}`)) ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -455,7 +458,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       sessionNotice: () =>
         gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md"], plugins: [], unread: [] };
+        const info: VaultInfo = { root: path, extensions: [...extensions], plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id) => {

@@ -8,6 +8,7 @@ import {
   plainTextSurfaceFactory,
   type MarkdownSurfaceFactoryOptions,
 } from "./text/factories";
+import { gridSurfaceFactory } from "./grid/factory";
 
 export interface SurfaceRegistryBootstrap {
   readonly registry: DocumentSurfaceRegistry;
@@ -48,6 +49,13 @@ const PLAIN_TEXT_REQUEST: SurfaceRequest = {
   formatKey: "txt",
   species: "text/plain",
 };
+const FUBSHEET_REQUEST: SurfaceRequest = {
+  family: "grid",
+  profile: "sheet",
+  formatKey: "fubsheet",
+  species: "text/fubsheet",
+  version: 1,
+};
 
 // temporary format inference: provider extensions are not format identities.
 export function surfaceRequestForDocument(id: string): SurfaceRequest {
@@ -65,6 +73,9 @@ export function surfaceRequestForDocument(id: string): SurfaceRequest {
     return { species: "bytes" };
   }
 
+  if (normalizedId === "text/fubsheet" || extension === "fubsheet") {
+    return FUBSHEET_REQUEST;
+  }
   if (normalizedId === "text/plain" || PLAIN_TEXT_EXTENSIONS[extension] === true) {
     return PLAIN_TEXT_REQUEST;
   }
@@ -79,7 +90,7 @@ export function surfaceRequestForDocument(id: string): SurfaceRequest {
   return { family: "text", profile: "unknown" };
 }
 
-/** Boots shell-owned text bindings and keeps one disposer for their lifecycle. */
+/** Boots shell-owned surface bindings and keeps one disposer for their lifecycle. */
 export function bootstrapSurfaceRegistry(
   options: SurfaceRegistryBootstrapOptions = {},
 ): SurfaceRegistryBootstrap {
@@ -101,6 +112,15 @@ export function bootstrapSurfaceRegistry(
       formatKey: "txt",
       species: "text/plain",
       factory: plainTextSurfaceFactory,
+    }),
+    registry.register({
+      owner: "shell",
+      family: "grid",
+      profile: "sheet",
+      formatKey: "fubsheet",
+      species: "text/fubsheet",
+      supportedVersions: [1],
+      factory: gridSurfaceFactory,
     }),
   ];
 

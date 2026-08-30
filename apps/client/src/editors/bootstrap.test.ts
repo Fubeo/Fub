@@ -91,23 +91,19 @@ describe("bootstrap del registro delle superfici", () => {
     });
   });
 
-  it("non interpreta fubsheet gestita da un provider come Markdown", () => {
-    // `handledExtensions` appartiene al registro dei provider, non alla
-    // richiesta derivata dal path: anche con `fubsheet` dichiarata resta
-    // sconosciuta e il registry sceglie il proprio fallback testuale.
-    const handledExtensions = ["fubsheet"];
-    expect(handledExtensions).toContain("fubsheet");
+  it("seleziona GridEngine per il formato fubsheet senza passare da Markdown", () => {
     const request = surfaceRequestForDocument("notes/sheet.fubsheet");
-
-    expect(request).toEqual({ family: "text", profile: "unknown" });
-    expect(request).not.toEqual({
-      family: "text",
-      profile: "markdown",
-      formatKey: "md",
-      species: "text/markdown",
+    expect(request).toEqual({
+      family: "grid",
+      profile: "sheet",
+      formatKey: "fubsheet",
+      species: "text/fubsheet",
+      version: 1,
     });
     const surfaces = bootstrapSurfaceRegistry();
-    expect(surfaces.registry.select(request).key).toBe("builtin:text-fallback");
+    const selected = surfaces.registry.select(request);
+    expect(selected.key).toMatch(/^registration:/);
+    expect(selected.key).not.toBe(surfaces.registry.select({ formatKey: "md" }).key);
     surfaces.dispose();
   });
 
@@ -139,23 +135,29 @@ describe("bootstrap del registro delle superfici", () => {
     expect(surfaceRequestForDocument("archive.bin")).toEqual({ species: "bytes" });
   });
 
-  it("dispose rimuove entrambi i binding e distrugge le istanze possedute", () => {
+  it("dispose rimuove tutti i binding e distrugge le istanze possedute", () => {
     const surfaces = bootstrapSurfaceRegistry();
     const markdownContext = mountContext();
     const plainContext = mountContext();
+    const gridContext = mountContext();
     surfaces.registry.mount({ formatKey: "md" }, markdownContext).surface;
     surfaces.registry.mount({ formatKey: "txt" }, plainContext).surface;
+    surfaces.registry.mount({ formatKey: "fubsheet" }, gridContext).surface;
     const markdownKey = surfaces.registry.select({ formatKey: "md" }).key;
     const plainTextKey = surfaces.registry.select({ formatKey: "txt" }).key;
+    const gridKey = surfaces.registry.select({ formatKey: "fubsheet" }).key;
 
     surfaces.dispose();
 
     expect(markdownContext.parent.querySelector(".cm-editor")).toBeNull();
     expect(plainContext.parent.querySelector(".cm-editor")).toBeNull();
+    expect(gridContext.parent.querySelector(".grid-surface")).toBeNull();
     expect(surfaces.registry.select({ formatKey: "md" }).key).toBe("builtin:text-fallback");
     expect(surfaces.registry.select({ formatKey: "txt" }).key).toBe("builtin:text-fallback");
+    expect(surfaces.registry.select({ formatKey: "fubsheet" }).key).toBe("builtin:text-fallback");
     expect(surfaces.registry.select({ formatKey: "md" }).key).not.toBe(markdownKey);
     expect(surfaces.registry.select({ formatKey: "txt" }).key).not.toBe(plainTextKey);
+    expect(surfaces.registry.select({ formatKey: "fubsheet" }).key).not.toBe(gridKey);
     surfaces.dispose();
   });
 });
