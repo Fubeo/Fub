@@ -25,27 +25,35 @@ fn render_blocks(blocks: &[Block], opts: &RenderOptions, out: &mut String) {
     }
 }
 
-/// L'attributo con cui un blocco diventa **indirizzabile** nella pagina: è la
-/// resa dell'ancora del modello, e senza di essa un link a blocco arriverebbe
-/// al documento giusto senza avere dove atterrare.
-fn anchor_attr(block: &Block) -> String {
-    match block.anchor() {
+/// Gli attributi comuni della radice HTML di un blocco. L'ancora la rende
+/// indirizzabile; lo span conserva il collegamento con i byte UTF-8 della
+/// sorgente anche quando il markup Markdown non ha una controparte visibile.
+fn block_attrs(block: &Block) -> String {
+    let mut attrs = match block.anchor() {
         Some(id) => attr("id", id),
         None => String::new(),
-    }
+    };
+    let span = block.span();
+    write!(
+        attrs,
+        " data-fub-source-start=\"{}\" data-fub-source-end=\"{}\"",
+        span.start, span.end
+    )
+    .unwrap();
+    attrs
 }
 
 fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
-    let id = anchor_attr(block);
+    let attrs = block_attrs(block);
     match block {
         Block::Heading { level, inlines, .. } => {
             let the = (*level).clamp(1, 6);
-            write!(out, "<h{the}{id}>").unwrap();
+            write!(out, "<h{the}{attrs}>").unwrap();
             render_inlines(inlines, opts, out);
             write!(out, "</h{the}>").unwrap();
         }
         Block::Paragraph { inlines, .. } => {
-            write!(out, "<p{id}>").unwrap();
+            write!(out, "<p{attrs}>").unwrap();
             render_inlines(inlines, opts, out);
             out.push_str("</p>");
         }
@@ -63,7 +71,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 Some(n) if *ordered && *n != 1 => format!(" start=\"{n}\""),
                 _ => String::new(),
             };
-            write!(out, "<{tag}{id}{from}>").unwrap();
+            write!(out, "<{tag}{attrs}{from}>").unwrap();
             for item in items {
                 match &item.task {
                     Some(t) => {
@@ -89,7 +97,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         Block::Table {
             head, rows, align, ..
         } => {
-            write!(out, "<table{id}>").unwrap();
+            write!(out, "<table{attrs}>").unwrap();
             if let Some(h) = head {
                 out.push_str("<thead>");
                 render_row(h, align, true, opts, out);
@@ -105,21 +113,21 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             match lang {
                 Some(the) => write!(
                     out,
-                    "<pre{id}><code{}>",
+                    "<pre{attrs}><code{}>",
                     attr("class", &format!("language-{the}"))
                 )
                 .unwrap(),
-                None => write!(out, "<pre{id}><code>").unwrap(),
+                None => write!(out, "<pre{attrs}><code>").unwrap(),
             }
             out.push_str(&escape(code));
             out.push_str("</code></pre>");
         }
         Block::Quote { blocks, .. } => {
-            write!(out, "<blockquote{id}>").unwrap();
+            write!(out, "<blockquote{attrs}>").unwrap();
             render_blocks(blocks, opts, out);
             out.push_str("</blockquote>");
         }
-        Block::ThematicBreak { .. } => write!(out, "<hr{id}>").unwrap(),
+        Block::ThematicBreak { .. } => write!(out, "<hr{attrs}>").unwrap(),
         Block::ReferenceDefinition {
             label, url, title, ..
         } => {
@@ -135,7 +143,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 .unwrap_or_default();
             write!(
                 out,
-                "<div{id} class=\"reference-definition\"{}>{}{}</div>",
+                "<div{attrs} class=\"reference-definition\"{}>{}{}</div>",
                 attr("data-label", label),
                 escape(url),
                 title
@@ -152,7 +160,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
                 write!(
                     out,
-                    "<div{id} class=\"callout\"{}>",
+                    "<div{attrs} class=\"callout\"{}>",
                     attr("data-callout", ty)
                 )
                 .unwrap();
@@ -174,7 +182,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 write!(
                     out,
-                    "<div{id} class=\"block-frontmatter-unparsed\">\
+                    "<div{attrs} class=\"block-frontmatter-unparsed\">\
                      <div class=\"frontmatter-error\">{}</div><pre>{}</pre></div>",
                     escape(reason),
                     escape(text)
@@ -193,7 +201,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                     .unwrap_or_default();
                 write!(
                     out,
-                    "<div{id}{}{label}>",
+                    "<div{attrs}{}{label}>",
                     attr("class", &css_class("block", custom_kind))
                 )
                 .unwrap();

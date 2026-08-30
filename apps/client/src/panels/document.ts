@@ -63,7 +63,7 @@ import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
 import { registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
-import { clearPreview, updatePreview } from "./preview";
+import { clearPreview, sourceBlockAt, updatePreview } from "./preview";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
@@ -1154,23 +1154,7 @@ export function revealByteOffset(byteOffset: number): void {
     return;
   }
 
-  const encoder = new TextEncoder();
-  const walker = document.createTreeWalker(pane.previewEl, NodeFilter.SHOW_TEXT);
-  let offset = 0;
-  let current: Node | null;
-  while ((current = walker.nextNode())) {
-    const text = current.textContent ?? "";
-    const end = offset + encoder.encode(text).length;
-    if (byteOffset <= end) {
-      const element = current.parentElement?.closest<HTMLElement>(
-        "h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,table,section,div",
-      );
-      element?.scrollIntoView({ block: "start" });
-      return;
-    }
-    offset = end;
-  }
-  pane.previewEl.lastElementChild?.scrollIntoView({ block: "start" });
+  sourceBlockAt(pane.previewEl, byteOffset)?.scrollIntoView({ block: "start" });
 }
 
 export function focusEditor(): void {

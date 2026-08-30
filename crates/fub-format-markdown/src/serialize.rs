@@ -553,13 +553,12 @@ fn write_custom_block(
         return Ok(());
     }
     if kind == custom_kind::DEFINITION_DESCRIPTION {
-        // `: ` è la sintassi che la rende una descrizione. Senza, la riga
-        // tornava un paragrafo qualunque e la definition list si scioglieva.
+        // `: ` è la sintassi che la rende una descrizione. Le righe dopo la
+        // prima sono continuazioni rientrate; quelle vuote restano davvero
+        // vuote, così il separatore prodotto da `blocks_to_string` non acquista
+        // trailing whitespace.
         let inner = blocks_to_string(blocks)?;
-        for (n, line) in inner.trim_end().lines().enumerate() {
-            if n > 0 {
-                out.push('\n');
-            }
+        for (n, line) in inner.trim_end_matches('\n').split('\n').enumerate() {
             if n == 0 {
                 out.push(':');
                 if !line.is_empty() {
@@ -868,22 +867,25 @@ fn bare_dest(url: &str) -> bool {
     depth == 0
 }
 
-/// Riporta gli escape dell'etichetta al testo letto, ma conserva quelli dei
-/// delimitatori `]` e `|`, necessari per non chiudere o separare il wikilink.
-fn unescape_wikilink_alias(s: &str) -> String {
+/// Converte la sorgente prodotta da [`write_inlines`] nella sua forma interna
+/// a un wikilink. Gli escape aggiunti dal normale testo vengono tolti, ma `]`,
+/// `|` e `\` vengono sempre ricodificati: i primi due non possono diventare
+/// delimitatori dopo che il parser li ha già decodificati.
+fn encode_wikilink_alias(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut chars = s.chars();
+    let mut chars = s.chars().peekable();
     while let Some(c) = chars.next() {
         if c == '\\' {
-            let mut next = chars.clone();
-            if let Some(n) = next
-                .next()
-                .filter(|n| n.is_ascii_punctuation() && !matches!(n, ']' | '|'))
-            {
+            if let Some(n) = chars.next_if(|n| n.is_ascii_punctuation()) {
+                if matches!(n, '\\' | ']' | '|') {
+                    out.push('\\');
+                }
                 out.push(n);
-                chars = next;
                 continue;
             }
+        }
+        if matches!(c, ']' | '|') {
+            out.push('\\');
         }
         out.push(c);
     }
@@ -923,9 +925,10 @@ fn write_link(
             if let Some(inlines) = label {
                 let mut lbl = String::new();
                 write_inlines(inlines, &mut lbl)?;
-                // Dentro le due parentesi non c'è escape: l'alias è testo nudo
-                // fino a `]]` (vedi [`disescapa`]).
-                let lbl = unescape_wikilink_alias(&lbl);
+                // Il writer generale parte dal testo decodificato. Dentro un
+                // wikilink `]` e `|` vanno quindi ricodificati anche quando nel
+                // modello non portano più la barra rovescia della sorgente.
+                let lbl = encode_wikilink_alias(&lbl);
                 // **L'alias si scrive perché c'è.** Il confronto col bersaglio
                 // stava qui — «se dice la stessa cosa non serve» — e toglieva
                 // dal file il `|Nota` di un `[[Nota|Nota]]` che l'utente aveva

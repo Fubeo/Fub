@@ -457,9 +457,9 @@ mod tests {
         let html = MarkdownProvider::new()
             .render_html(&doc, &RenderOptions::preview())
             .unwrap();
-        assert!(html.contains("<h2 id=\"note\">"), "html: {html}");
-        assert!(html.contains("<h2 id=\"note-1\">"), "html: {html}");
-        assert!(html.contains("<h2 id=\"note-2\">"), "html: {html}");
+        assert!(html.contains("<h2 id=\"note\" "), "html: {html}");
+        assert!(html.contains("<h2 id=\"note-1\" "), "html: {html}");
+        assert!(html.contains("<h2 id=\"note-2\" "), "html: {html}");
 
         // E il verso che protegge i link già scritti: senza omonimi, gli id
         // sono quelli di sempre.
@@ -517,7 +517,7 @@ mod tests {
         let html = MarkdownProvider::new()
             .render_html(&doc, &RenderOptions::preview())
             .unwrap();
-        assert!(html.contains("<h2 id=\"Mio-ID\">"), "html: {html}");
+        assert!(html.contains("<h2 id=\"Mio-ID\" "), "html: {html}");
     }
 
     /// **Le opzioni del chiamante valgono anche dentro l'etichetta di un link.**
@@ -943,7 +943,14 @@ mod tests {
         let html = MarkdownProvider::new()
             .render_html(&doc, &RenderOptions::default())
             .unwrap();
-        assert_eq!(html, "<p id=\"blocco-1\">Un paragrafo ancorato.</p>");
+        let span = doc.body[0].span();
+        assert_eq!(
+            html,
+            format!(
+                "<p id=\"blocco-1\" data-fub-source-start=\"{}\" data-fub-source-end=\"{}\">Un paragrafo ancorato.</p>",
+                span.start, span.end
+            )
+        );
     }
 
     #[test]
@@ -988,8 +995,40 @@ mod tests {
             .render_html(&doc, &RenderOptions::default())
             .unwrap();
         assert!(
-            html.contains("<h2 id=\"una-sezione-lunga\">"),
+            html.contains("<h2 id=\"una-sezione-lunga\" "),
             "html: {html}"
+        );
+    }
+
+    #[test]
+    fn every_rendered_block_root_carries_its_utf8_source_span() {
+        let src = "# È\n\n> testo\n";
+        let doc = parse(src);
+        let html = MarkdownProvider::new()
+            .render_html(&doc, &RenderOptions::preview())
+            .unwrap();
+
+        let Block::Quote { blocks, .. } = &doc.body[1] else {
+            panic!("atteso un blocco citazione");
+        };
+        let rendered_blocks = [&doc.body[0], &doc.body[1], &blocks[0]];
+        for block in rendered_blocks {
+            let span = block.span();
+            let attrs = format!(
+                "data-fub-source-start=\"{}\" data-fub-source-end=\"{}\"",
+                span.start, span.end
+            );
+            assert!(html.contains(&attrs), "manca lo span {span:?}: {html}");
+        }
+        assert_eq!(
+            html.matches("data-fub-source-start=").count(),
+            3,
+            "ogni chiamata a render_block deve annotare una sola radice: {html}"
+        );
+        assert_eq!(
+            doc.body[1].span().start,
+            src.find('>').unwrap(),
+            "gli offset sono byte UTF-8, non caratteri"
         );
     }
 

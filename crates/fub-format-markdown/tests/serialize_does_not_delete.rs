@@ -61,7 +61,7 @@
 mod corpus;
 
 use fub_abi::format::{FormatProvider, ParseContext};
-use fub_abi::model::{custom_kind, Block, DocId, DocumentModel, Inline, Span};
+use fub_abi::model::{custom_kind, Block, DocId, DocumentModel, Inline, LinkTarget, Span};
 use fub_format_markdown::MarkdownProvider;
 
 fn parse(src: &str) -> DocumentModel {
@@ -88,6 +88,48 @@ fn paragraph(inlines: Vec<Inline>) -> Block {
         inlines,
         anchor: None,
         span: Span::new(0, 0),
+    }
+}
+
+fn definition_description(model: &DocumentModel) -> &[Block] {
+    match &model.body[..] {
+        [Block::Custom {
+            custom_kind: list_kind,
+            blocks,
+            ..
+        }] if list_kind == custom_kind::DEFINITION_LIST => match &blocks[..] {
+            [Block::Custom {
+                custom_kind: term_kind,
+                blocks: term,
+                ..
+            }, Block::Custom {
+                custom_kind: description_kind,
+                blocks: description,
+                ..
+            }] if term_kind == custom_kind::DEFINITION_TERM
+                && description_kind == custom_kind::DEFINITION_DESCRIPTION
+                && matches!(term.as_slice(), [Block::Paragraph { .. }]) =>
+            {
+                description
+            }
+            other => panic!("figli inattesi della definition list: {other:#?}"),
+        },
+        other => panic!("definition list attesa, trovata: {other:#?}"),
+    }
+}
+
+fn sole_wikilink(model: &DocumentModel) -> (&LinkTarget, &[Inline]) {
+    match &model.body[..] {
+        [Block::Paragraph { inlines, .. }] => match &inlines[..] {
+            [Inline::Link {
+                target,
+                label: Some(label),
+                embed: false,
+                ..
+            }] => (target, label),
+            other => panic!("wikilink con alias atteso, trovati: {other:#?}"),
+        },
+        other => panic!("paragrafo singolo atteso, trovati: {other:#?}"),
     }
 }
 
@@ -280,6 +322,82 @@ fn a_reference_is_rewrites_com_was() {
     // sarebbe indistinguibile da un file che si allunga di un `|…` a ogni
     // riscrittura, che è com'era.
     assert_eq!(serialize(&parse(&rewritten)), rewritten);
+}
+
+#[test]
+fn a_definition_description_preserves_continuations_and_block_separators() {
+    let source = "Termine\n: primo\n    secondo\n\n    terzo\n";
+    let first = parse(source);
+    assert_eq!(
+        definition_description(&first)
+            .iter()
+            .map(shape)
+            .collect::<Vec<_>>(),
+        ["P", "P"],
+        "la continuazione appartiene al primo paragrafo e il blocco dopo la \
+         riga vuota resta un secondo paragrafo"
+    );
+
+    let rewritten = serialize(&first);
+    assert_eq!(rewritten, "Termine\n\n: primo\n    secondo\n\n    terzo\n");
+    assert!(
+        rewritten.lines().all(|line| !line.ends_with(' ')),
+        "le righe vuote e non vuote non acquistano trailing whitespace: {rewritten:?}"
+    );
+
+    let second = parse(&rewritten);
+    assert_eq!(
+        definition_description(&second)
+            .iter()
+            .map(shape)
+            .collect::<Vec<_>>(),
+        ["P", "P"],
+        "la descrizione riscritta deve rileggersi con gli stessi due blocchi"
+    );
+    assert_eq!(
+        serialize(&second),
+        rewritten,
+        "il secondo giro deve essere fermo"
+    );
+}
+
+#[test]
+fn wikilink_alias_delimiters_are_reescaped_after_decoding() {
+    for (source, alias) in [("[[Nota|a\\|b]]\n", "a|b"), ("[[Nota|a\\]\\]b]]\n", "a]]b")] {
+        let first = parse(source);
+        let (target, label) = sole_wikilink(&first);
+        assert!(matches!(
+            target,
+            LinkTarget::Wiki {
+                page,
+                heading: None,
+                block: None,
+            } if page == "Nota"
+        ));
+        assert!(
+            matches!(label, [Inline::Text(text)] if text == alias),
+            "l'alias deve essere testo decodificato nel modello: {label:#?}"
+        );
+
+        let rewritten = serialize(&first);
+        assert_eq!(
+            rewritten, source,
+            "il delimitatore decodificato deve essere ri-escapato"
+        );
+
+        let second = parse(&rewritten);
+        let (second_target, second_label) = sole_wikilink(&second);
+        assert_eq!(second_target, target);
+        assert!(
+            matches!(second_label, [Inline::Text(text)] if text == alias),
+            "il secondo parse deve conservare alias e struttura: {second_label:#?}"
+        );
+        assert_eq!(
+            serialize(&second),
+            rewritten,
+            "il secondo giro non deve degradare il wikilink in testo né cambiare alias"
+        );
+    }
 }
 
 /// **Il comportamento.** Un inline di una sintassi che il provider non conosce

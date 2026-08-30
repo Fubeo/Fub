@@ -22,7 +22,7 @@ vi.mock("../host/ipc", () => ({
   },
 }));
 
-import { configurePreview, updatePreview } from "./preview";
+import { configurePreview, sourceBlockAt, updatePreview } from "./preview";
 
 describe("un wikilink cliccato in Lettura", () => {
   const calls: [string, string | undefined, string | undefined][] = [];
@@ -62,5 +62,48 @@ describe("un wikilink cliccato in Lettura", () => {
     );
     el.querySelector<HTMLElement>("a.wikilink")!.click();
     expect(calls).toEqual([["", undefined, "blocco"]]);
+  });
+});
+
+describe("mappatura dagli offset sorgente ai blocchi dell'anteprima", () => {
+  function preview(html: string): HTMLElement {
+    const element = document.createElement("div");
+    element.innerHTML = html;
+    return element;
+  }
+
+  it("trova il secondo heading dai byte sorgente senza contare i marker Markdown nascosti", () => {
+    const element = preview(`
+      <h2 data-fub-source-start="0" data-fub-source-end="11">Primo</h2>
+      <p data-fub-source-start="13" data-fub-source-end="28">testo <strong>reso</strong></p>
+      <h2 data-fub-source-start="30" data-fub-source-end="43">Secondo</h2>
+    `);
+
+    const selected = sourceBlockAt(element, 30);
+    expect(selected?.textContent).toBe("Secondo");
+    expect(element.textContent).not.toContain("##");
+  });
+
+  it("preferisce lo span annidato più stretto al contenitore", () => {
+    const element = preview(`
+      <blockquote data-fub-source-start="0" data-fub-source-end="80">
+        <p data-fub-source-start="12" data-fub-source-end="31">testo annidato</p>
+      </blockquote>
+    `);
+
+    expect(sourceBlockAt(element, 20)?.tagName).toBe("P");
+  });
+
+  it("ignora attributi malformati e applica fallback deterministici", () => {
+    const element = preview(`
+      <p data-fub-source-start="no" data-fub-source-end="9">rotto</p>
+      <p id="primo" data-fub-source-start="10" data-fub-source-end="20">primo</p>
+      <p data-fub-source-start="25">incompleto</p>
+      <p id="secondo" data-fub-source-start="30" data-fub-source-end="40">secondo</p>
+    `);
+
+    expect(sourceBlockAt(element, 2)?.id).toBe("primo");
+    expect(sourceBlockAt(element, 25)?.id).toBe("secondo");
+    expect(sourceBlockAt(element, 99)?.id).toBe("secondo");
   });
 });

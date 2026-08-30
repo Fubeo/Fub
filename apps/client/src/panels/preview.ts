@@ -66,6 +66,53 @@ function unmountSlots(container: HTMLElement): void {
   }
 }
 
+interface SourceMappedElement {
+  element: HTMLElement;
+  start: number;
+  end: number;
+}
+
+function sourceMappedElements(container: HTMLElement): SourceMappedElement[] {
+  const mapped: SourceMappedElement[] = [];
+  for (const element of container.querySelectorAll<HTMLElement>(
+    "[data-fub-source-start][data-fub-source-end]",
+  )) {
+    const rawStart = element.dataset.fubSourceStart;
+    const rawEnd = element.dataset.fubSourceEnd;
+    if (!rawStart || !rawEnd || !/^\d+$/.test(rawStart) || !/^\d+$/.test(rawEnd)) continue;
+    const start = Number(rawStart);
+    const end = Number(rawEnd);
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || end < start) continue;
+    mapped.push({ element, start, end });
+  }
+  return mapped;
+}
+
+/// Trova il blocco reso che rappresenta un offset in byte UTF-8.
+///
+/// Fra span annidati vince il più stretto. Nei buchi si sceglie il primo blocco
+/// successivo; oltre la fine, l'ultimo precedente. L'ordine DOM spezza in modo
+/// stabile ogni parità.
+export function sourceBlockAt(container: HTMLElement, byteOffset: number): HTMLElement | null {
+  if (!Number.isSafeInteger(byteOffset) || byteOffset < 0) return null;
+
+  let containing: SourceMappedElement | undefined;
+  let next: SourceMappedElement | undefined;
+  let previous: SourceMappedElement | undefined;
+  for (const candidate of sourceMappedElements(container)) {
+    if (candidate.start <= byteOffset && byteOffset < candidate.end) {
+      if (!containing || candidate.end - candidate.start < containing.end - containing.start) {
+        containing = candidate;
+      }
+    } else if (candidate.start > byteOffset) {
+      if (!next || candidate.start < next.start) next = candidate;
+    } else if (!previous || candidate.start > previous.start) {
+      previous = candidate;
+    }
+  }
+  return (containing ?? next ?? previous)?.element ?? null;
+}
+
 /// Svuota una superficie di lettura.
 export function clearPreview(previewEl: HTMLElement): void {
   // **Questa riga è il difetto 0031.** Svuotare non basta: la resa chiesta un
