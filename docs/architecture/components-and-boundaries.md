@@ -14,11 +14,13 @@ flowchart LR
     TESTKIT["fub-testkit"] --> KERNEL
     TESTKIT --> ABI
     MARKDOWN["fub-format-markdown"] --> ABI
+    SHEET["fub-format-sheet"] --> ABI
     FEATURES["fub-features"] --> ABI
     HOST["fub-host"] --> KERNEL
     HOST --> ABI
     HOST --> FEATURES
     HOST --> MARKDOWN
+    HOST --> SHEET
     WASM["fub-wasm-host"] --> ABI
     WASM --> HOST
     APP["fub-app"] --> HOST
@@ -40,6 +42,7 @@ del repository verificano le eccezioni.
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
+| `fub-format-sheet` | schema e workbook autorevole `.fubsheet`, proiezioni comuni | griglia frontend, ABI/WIT per superfici, stato visuale |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `fub-wasm-host` | Wasmtime, binding e traduzione | policy duplicata |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
@@ -103,6 +106,7 @@ indipendenti.
 | composizione | `crates/fub-host/src/mount.rs`, `session.rs`, `registry.rs` |
 | desktop | `crates/fub-app/src/lib.rs` |
 | Markdown | `crates/fub-format-markdown/src/` |
+| foglio Fub | `crates/fub-format-sheet/src/` |
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |

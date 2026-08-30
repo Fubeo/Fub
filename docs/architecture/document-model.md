@@ -138,6 +138,14 @@ albero malformato.
 - un nuovo campo pubblico rispetta l'additività del WIT;
 - una regola comune vive nel contratto, non in due provider.
 
+## Workbook e proiezione comune
+
+`fub-format-sheet` mantiene il `Workbook` autorevole separato dal
+`DocumentModel`. Il provider proietta nomi dei fogli nell'outline, input e
+metadati nel testo ricercabile e metadati del workbook nelle proprietà. Id di
+righe e colonne, celle, dimensioni e stile restano nel workbook; il modello
+comune non diventa una seconda forma serializzabile del foglio.
+
 ## Dove si trova
 
 - `crates/fub-abi/src/model.rs`
@@ -145,4 +153,5 @@ albero malformato.
 - `crates/fub-abi/src/format.rs`
 - `crates/fub-format-markdown/src/parse.rs`
 - `crates/fub-format-markdown/src/render.rs`
+- `crates/fub-format-sheet/src/`
 - `crates/fub-format-markdown/src/serialize.rs`

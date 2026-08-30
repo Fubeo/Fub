@@ -1431,6 +1431,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "fub-format-sheet"
+version = "0.1.0"
+dependencies = [
+ "camino",
+ "fub-abi",
+ "fub-kernel",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.19",
+]
+
+[[package]]
 name = "fub-host"
 version = "0.1.0"
 dependencies = [
@@ -1438,6 +1451,7 @@ dependencies = [
  "fub-abi",
  "fub-features",
  "fub-format-markdown",
+ "fub-format-sheet",
  "fub-kernel",
  "fub-testkit",
  "jiff",

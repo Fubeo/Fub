@@ -85,6 +85,10 @@ const SOURCES: &[(&str, &str)] = &[
         "crates/fub-kernel/src/vault.rs",
         include_str!("../../fub-kernel/src/vault.rs"),
     ),
+    (
+        "crates/fub-format-sheet/src/codec.rs",
+        include_str!("../../fub-format-sheet/src/codec.rs"),
+    ),
 ];
 
 /// Una riga della tabella: lo schema, dove sta dichiarato, e a che numero è.

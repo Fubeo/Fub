@@ -1,0 +1,18 @@
+[package]
+name = "fub-format-sheet"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Native provider and authoritative versioned text format for Fub workbooks."
+
+[dependencies]
+fub-abi = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+camino = { workspace = true }
+fub-kernel = { workspace = true }
+tempfile = { workspace = true }

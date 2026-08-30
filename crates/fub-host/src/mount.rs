@@ -45,6 +45,7 @@ use fub_features::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
+use fub_format_sheet::SheetProvider;
 use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
 // L'unico posto che distingue i modi di fallire di una registrazione è l'indice
 // di ricerca: gli altri hanno un esito solo.
@@ -193,12 +194,14 @@ pub fn mount(
     levels: &fub_kernel::log::Levels,
 ) -> Result<Mounted, String> {
     let mut formats = FormatRegistry::new();
-    // Il primo registrato è anche quello che dà l'estensione alle note nuove
-    // (`FormatRegistry::default_extension`). Un conflitto qui è impossibile con
-    // un provider solo, e resta gestito lo stesso: il giorno che ce ne sono due,
-    // il silenzio sarebbe un file che si apre col parser sbagliato.
-    if let Err(and) = formats.register(MarkdownProvider::boxed()) {
-        return Err(format!("format provider conflict: {and}"));
+    // Markdown resta il primo: la sua prima estensione è il default per i
+    // documenti nuovi senza estensione. Ogni provider successivo deve comunque
+    // registrarsi senza conflitti: una collisione non sceglie un parser in
+    // silenzio.
+    for provider in [MarkdownProvider::boxed(), SheetProvider::boxed()] {
+        if let Err(and) = formats.register(provider) {
+            return Err(format!("format provider conflict: {and}"));
+        }
     }
 
     let mut ws = Workspace::with_machine_settings(root, formats, machine)

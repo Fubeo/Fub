@@ -25,6 +25,8 @@ ciò che formerà la prima versione.
   Markdown dichiara sorgente, live preview e lettura; plain text sorgente;
 - la tastiera distingue trap di focus, gesto realmente consumato dall'editor e
   dispatcher della shell per le scorciatoie e le sequenze rimanenti;
+- formato `.fubsheet` testuale e versionato con identità stabili e proiezioni
+  comuni per outline, ricerca e proprietà;
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;

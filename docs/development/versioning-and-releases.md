@@ -69,6 +69,7 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../../crates/fub-kernel/src/maintenance.rs) | 1 | copia dei fatti raccolti per la diagnostica |
 | sidecar del cestino | [`crates/fub-kernel/src/vault.rs:149`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
+| workbook `.fubsheet` | [`crates/fub-format-sheet/src/codec.rs:7`](../../crates/fub-format-sheet/src/codec.rs) | 1 | identità, input, ordine, dimensioni, stile e metadati del foglio |
 
 ### Derivato
 

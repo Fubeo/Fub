@@ -227,8 +227,9 @@ Un riquadro o una finestra vuoti contengono il solo chrome, senza un
 bozza, conflitti e lifecycle; il pannello collega le superfici e aggiorna la
 resa. Nessun profilo invia una chiamata IPC o WASM per ogni battuta.
 
-Non esiste una griglia (`GridEngine`) né un percorso utente `.fubsheet`; il
-contratto generico non consegna `live_preview` a questi percorsi.
+Il backend riconosce `.fubsheet` come workbook testuale versionato e ne espone
+outline, testo ricercabile e proprietà. Non esiste ancora `GridEngine`: la shell
+apre la sorgente con il fallback testuale e non le consegna `live_preview`.
 
 ## Dove si trova
 

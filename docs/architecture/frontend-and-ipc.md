@@ -388,11 +388,11 @@ deterministici anche con teardown annidato o non LIFO.
 Un riquadro o una finestra vuoti contengono soltanto il chrome, senza una
 `EditorView` Markdown fittizia.
 
-`FormulaProfile` resta una superficie usata soltanto dai test e dalle fixture:
-non è una superficie esposta all'utente. Sono assenti la griglia (`GridEngine`),
-il percorso utente `.fubsheet`, la famiglia `structured` e le superfici WASM.
-Il contratto generico non consegna `live_preview` a una griglia né al percorso
-`.fubsheet`.
+`FormulaProfile` resta una superficie usata soltanto dai test e dalle fixture,
+non esposta all'utente. `fub-format-sheet` fornisce al backend sorgente
+versionata e proiezioni `.fubsheet`, ma `GridEngine` e il percorso griglia sono
+assenti: la shell tratta ancora l'estensione come sconosciuta e usa il fallback
+testuale. Restano assenti la famiglia `structured` e le superfici WASM.
 
 I moduli dei profili sono rispettivamente
 `apps/client/src/editors/text/profiles/markdown/profile.ts`,

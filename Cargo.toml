@@ -11,6 +11,7 @@ members = [
     "crates/fub-sdk",
     "crates/fub-testkit",
     "crates/fub-format-markdown",
+    "crates/fub-format-sheet",
     "crates/fub-features",
     "crates/fub-host",
     "crates/fub-app",
@@ -110,6 +111,7 @@ fub-sdk = { path = "crates/fub-sdk", version = "0.1.0" }
 # porterebbe dentro la libreria.
 fub-testkit = { path = "crates/fub-testkit", version = "0.1.0" }
 fub-format-markdown = { path = "crates/fub-format-markdown", version = "0.1.0" }
+fub-format-sheet = { path = "crates/fub-format-sheet", version = "0.1.0" }
 # Il YAML del frontmatter. Era scritta a mano in due crate con la stessa
 # versione, ed è la coppia che `check-cargo-versioni.mjs` esiste per
 # prendere: due `Cargo.toml` da toccare per un `cargo update` sono uno di

@@ -34,6 +34,7 @@ flowchart TD
     host["fub-host"]
     features["fub-features"]
     markdown["fub-format-markdown"]
+    sheet["fub-format-sheet"]
     wasmhost["fub-wasm-host"]
     sdk["fub-sdk"]
     testkit["fub-testkit"]
@@ -46,10 +47,12 @@ flowchart TD
     host --> abi
     host --> features
     host --> markdown
+    host --> sheet
     host --> kernel
     features --> abi
     markdown --> abi
     markdown --> sdk
+    sheet --> abi
     wasmhost --> abi
     wasmhost --> host
     wasmhost --> kernel
@@ -63,6 +66,7 @@ flowchart TD
     features -.-> sdk
     features -.-> testkit
     markdown -.-> kernel
+    sheet -.-> kernel
     kernel -.-> testkit
     host -.-> testkit
     wasmhost -.-> testkit

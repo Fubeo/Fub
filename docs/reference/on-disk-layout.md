@@ -40,12 +40,29 @@ memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
 | Percorso | Classe | Contenuto |
 |---|---|---|
 | `**/*.md` e altri formati registrati | utente | documenti |
+| `**/*.fubsheet` | utente autorevole | workbook testuale, schema 1 |
 | allegati e file sconosciuti | utente | contenuto da preservare |
 | `.trash/` | utente | file cestinati |
 | `.fub/` | servizio | stato, cache e storage namespaced |
 
 Un file sconosciuto esiste anche se nessun provider lo riconosce. Non viene
 eliminato né escluso da un backup senza una scelta esplicita.
+
+### Workbook `.fubsheet`
+
+`fub-format-sheet` possiede lo schema. Il record esterno porta `schema` e
+`workbook`; la versione 1 persiste:
+
+- id del workbook e dei fogli;
+- ordine e id stabili di righe e colonne;
+- input delle celle identificati da `RowId + ColumnId`;
+- dimensioni esplicite, stile semantico e metadati.
+
+Indirizzi A1, AST, valori calcolati, dipendenze, cache, errori, viewport e
+selezione sono derivati e non entrano nel file. Una versione assente o futura,
+un campo sconosciuto, un'identità duplicata o una cella con riferimenti
+inesistenti rendono la lettura un errore: Fub non riscrive una forma che non ha
+interpretato integralmente.
 
 ## Stato del vault
 

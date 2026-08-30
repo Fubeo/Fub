@@ -85,8 +85,8 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
     assert_eq!(
         info.extensions,
-        vec!["markdown", "md"],
-        "the markdown provider declares the extensions, not the UI"
+        vec!["fubsheet", "markdown", "md"],
+        "format providers declare their extensions, not the UI"
     );
 
     // Le feature ufficiali si sono **dichiarate**: è la proprietà che una
