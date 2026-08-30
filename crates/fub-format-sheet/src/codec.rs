@@ -69,6 +69,13 @@ pub fn parse(source: &str) -> Result<Workbook, SheetError> {
 }
 
 pub fn serialize(workbook: &Workbook) -> Result<String, SheetError> {
+    serialize_with_limit(workbook, MAX_SOURCE_BYTES)
+}
+
+fn serialize_with_limit(
+    workbook: &Workbook,
+    max_source_bytes: usize,
+) -> Result<String, SheetError> {
     workbook.validate()?;
     let envelope = EnvelopeRef {
         schema: SCHEMA_VERSION,
@@ -77,5 +84,59 @@ pub fn serialize(workbook: &Workbook) -> Result<String, SheetError> {
     let mut source = serde_json::to_string_pretty(&envelope)
         .map_err(|error| SheetError::Serialize(error.to_string()))?;
     source.push('\n');
+    if source.len() > max_source_bytes {
+        return Err(SheetError::SourceTooLarge {
+            actual: source.len(),
+        });
+    }
     Ok(source)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Map;
+
+    use super::*;
+    use crate::model::{Column, ColumnId, Row, RowId, Sheet, SheetId, WorkbookId};
+
+    fn minimal_workbook() -> Workbook {
+        Workbook {
+            id: WorkbookId::from("workbook"),
+            metadata: Map::new(),
+            sheets: vec![Sheet {
+                id: SheetId::from("sheet"),
+                name: "Foglio".into(),
+                metadata: Map::new(),
+                rows: vec![Row {
+                    id: RowId::from("row"),
+                    height: None,
+                }],
+                columns: vec![Column {
+                    id: ColumnId::from("column"),
+                    width: None,
+                }],
+                cells: Vec::new(),
+            }],
+        }
+    }
+
+    #[test]
+    fn serialization_limit_counts_the_final_newline_and_preserves_round_trip() {
+        let workbook = minimal_workbook();
+        let source = serialize_with_limit(&workbook, usize::MAX).expect("fixture serializes");
+        assert!(source.ends_with('\n'));
+
+        assert_eq!(
+            serialize_with_limit(&workbook, source.len() - 1),
+            Err(SheetError::SourceTooLarge {
+                actual: source.len(),
+            }),
+            "the final newline must count toward the source limit"
+        );
+
+        let bounded = serialize_with_limit(&workbook, source.len())
+            .expect("source exactly at the limit serializes");
+        assert_eq!(bounded.len(), source.len());
+        assert_eq!(parse(&bounded), Ok(workbook));
+    }
 }

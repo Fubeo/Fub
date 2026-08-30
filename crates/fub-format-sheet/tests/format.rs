@@ -4,7 +4,7 @@ use fub_abi::{FormatError, FormatProvider};
 use fub_format_sheet::{
     parse, serialize, Cell, CellAlignment, CellFormat, CellKey, CellStyle, Column, ColumnId, Row,
     RowId, Sheet, SheetError, SheetId, SheetProvider, ValidationError, Workbook, WorkbookId,
-    SCHEMA_VERSION,
+    MAX_SOURCE_BYTES, SCHEMA_VERSION,
 };
 use serde_json::{json, Map};
 
@@ -68,6 +68,7 @@ fn authoritative_fields_round_trip_without_derived_state() {
     let workbook = workbook();
 
     let source = serialize(&workbook).expect("valid workbook serializes");
+    assert!(source.len() <= MAX_SOURCE_BYTES);
     let decoded = parse(&source).expect("serialized workbook parses");
 
     assert_eq!(decoded, workbook);
