@@ -1,0 +1,51 @@
+name: NPM supply chain
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "20 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  npm-supply-chain:
+    name: npm (audit + SBOM)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/client
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - name: Installa esattamente il lockfile
+        run: npm ci
+      - name: Nessuna vulnerabilità alta o critica
+        run: npm audit --audit-level=high
+      - name: Genera SBOM npm SPDX
+        run: npm sbom --sbom-format=spdx > fub-client-sbom.spdx.json
+      - name: Valida il documento SPDX
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const sbom = JSON.parse(fs.readFileSync("fub-client-sbom.spdx.json", "utf8"));
+            if (sbom.spdxVersion !== "SPDX-2.3") {
+              throw new Error(`versione SPDX inattesa: ${sbom.spdxVersion}`);
+            }
+            if (!Array.isArray(sbom.packages) || sbom.packages.length === 0) {
+              throw new Error("SBOM npm senza pacchetti");
+            }
+            console.log(`SBOM npm valido: ${sbom.packages.length} pacchetti`);
+          '
+      - name: Pubblica SBOM npm
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: npm-sbom-spdx
+          path: apps/client/fub-client-sbom.spdx.json
