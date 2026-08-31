@@ -34,7 +34,7 @@
  /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
 --- a/apps/client/src/ui/node.test.ts
 +++ b/apps/client/src/ui/node.test.ts
-@@ -241,6 +241,29 @@
+@@ -241,6 +241,28 @@
      expect(old).toEqual([]);
    });
  
