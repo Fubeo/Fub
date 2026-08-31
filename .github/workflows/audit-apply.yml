@@ -25,18 +25,21 @@ jobs:
           python .audit-data-integrity-scriptfix.py
           python .audit-data-integrity-rejoinfix.py
           python .audit-data-integrity.py
+          python .audit-data-rejoin-tests.py
           cargo fmt --all
           if ! (cargo test -p fub-kernel --test entry_store && cargo test -p fub-kernel --test rejoin && cargo test -p fub-kernel --test the_storage && cargo check -p fub-kernel --all-targets && cargo clippy -p fub-kernel --all-targets -- -D warnings) > /tmp/audit-check.log 2>&1; then
             tail -n 300 /tmp/audit-check.log > .audit-error.txt
             git add .audit-error.txt
-            git commit -m "ci(temp): cattura errore integrità anagrafe"
-            git push origin HEAD:fix/audit-integration
+            if ! git diff --cached --quiet; then
+              git commit -m "ci(temp): cattura errore integrità anagrafe"
+              git push origin HEAD:fix/audit-integration
+            fi
             cat .audit-error.txt
             exit 1
           fi
-          git rm .audit-data-integrity.py .audit-data-integrity-scriptfix.py .audit-data-integrity-rejoinfix.py
+          git rm .audit-data-integrity.py .audit-data-integrity-scriptfix.py .audit-data-integrity-rejoinfix.py .audit-data-rejoin-tests.py
           git rm -f .audit-error.txt || true
           git add crates/fub-kernel/src/storage.rs crates/fub-kernel/src/storage/rooted.rs crates/fub-kernel/src/lib.rs crates/fub-kernel/src/vault.rs crates/fub-kernel/src/entries.rs crates/fub-kernel/src/workspace.rs crates/fub-kernel/tests/entry_store.rs crates/fub-kernel/tests/rejoin.rs
           git commit -m "fix(data): verifica digest e identità nei rejoin"
           git push origin HEAD:fix/audit-integration
-# retry: current rejoin snapshot shape
+# retry: file identity makes equal-content real renames unambiguous
