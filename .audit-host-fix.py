@@ -38,3 +38,11 @@ s = s.replace('''        let source = self.read_version(vault, id, ts)?;
 if 'self.workspace(vault)?' in s:
     raise SystemExit('restano callsite interni Host::workspace')
 p.write_text(s)
+
+# La sostituzione ampia dei banchi distingue Host::workspace(Some/None) da
+# VaultSession::workspace(), che è un accessor interno senza argomenti.
+for root in [Path('crates/fub-host/tests'), Path('crates/fub-host/examples')]:
+    for file in root.rglob('*.rs'):
+        text = file.read_text()
+        if '.debug_workspace()' in text:
+            file.write_text(text.replace('.debug_workspace()', '.workspace()'))
