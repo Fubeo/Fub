@@ -193,6 +193,7 @@ impl DocumentStore {
             fub_abi::error::FormatError::Parse,
             || provider.parse(&source, &ctx),
         )?;
+        ensure_model_identity(id, &model.id)?;
         // L'innesto del §3.1: le regole sintattiche registrate girano DOPO il
         // provider, sul modello. È ciò che le rende innestabili su un provider
         // che non le conosce — vedi `syntax::apply_rules`.
@@ -338,9 +339,49 @@ impl DocumentStore {
     }
 }
 
+fn ensure_model_identity(requested: &DocId, returned: &DocId) -> Result<()> {
+    if requested == returned {
+        return Ok(());
+    }
+
+    Err(KernelError::Format(fub_abi::error::FormatError::Parse(
+        format!(
+            "format provider returned document id {returned} while parsing requested document {requested}"
+        ),
+    )))
+}
+
 /// L'estensione di un `DocId`, in minuscolo e senza il punto.
 pub(crate) fn extension_of(id: &DocId) -> Option<String> {
     id.as_str()
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_lowercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_rejects_a_model_for_a_different_document() {
+        let requested = DocId::new("notes/requested.md");
+        let returned = DocId::new("notes/other.md");
+
+        let error = ensure_model_identity(&requested, &returned)
+            .expect_err("a provider must not replace the requested document identity");
+
+        match error {
+            KernelError::Format(fub_abi::error::FormatError::Parse(message)) => {
+                assert!(message.contains(requested.as_str()));
+                assert!(message.contains(returned.as_str()));
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn parse_accepts_the_requested_document_identity() {
+        let requested = DocId::new("notes/requested.md");
+        ensure_model_identity(&requested, &requested).unwrap();
+    }
 }
