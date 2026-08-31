@@ -272,11 +272,9 @@ fn who_stops_has_again_the_host_and_the_own_provider() {
     let bundle = BundleSpy::new("test.one", &journal);
     registry.mount(&bundle, &mut ws).expect("mounts");
     assert_eq!(registry.ids(), vec!["test.one"]);
-    assert!(
-        registry
-            .body("test.one")
-            .is_some_and(|plugin| plugin.manifest().id == "test.one")
-    );
+    assert!(registry
+        .body("test.one")
+        .is_some_and(|plugin| plugin.manifest().id == "test.one"));
 
     let errors = registry.unmount(&mut ws, "test.one");
     assert!(errors.is_empty(), "nothing went wrong: {errors:?}");
@@ -378,9 +376,15 @@ fn a_bundle_that_loses_a_piece_is_rolled_back_entirely() {
         matches!(error, BundleError::Registration { .. }),
         "the fourth mount phase must report a registration failure: {error}"
     );
-    assert!(registry.ids().is_empty(), "registry must own no partial bundle");
+    assert!(
+        registry.ids().is_empty(),
+        "registry must own no partial bundle"
+    );
     assert!(ws.plugins().is_empty(), "declaration must be withdrawn");
-    assert!(ws.commands().is_empty(), "registered providers must be withdrawn");
+    assert!(
+        ws.commands().is_empty(),
+        "registered providers must be withdrawn"
+    );
     assert_eq!(
         lines(&journal),
         vec![
@@ -405,12 +409,13 @@ fn dependency_order_does_not_depend_on_inventory_order() {
         DependencyBundle::new("test.provider").providing(SERVICE),
     ));
 
-    let failures = registry.enable_in_dependency_order(
-        &mut ws,
-        ["test.consumer", "test.provider"],
-    );
+    let failures =
+        registry.enable_in_dependency_order(&mut ws, ["test.consumer", "test.provider"]);
 
-    assert!(failures.is_empty(), "dependencies should resolve: {failures:?}");
+    assert!(
+        failures.is_empty(),
+        "dependencies should resolve: {failures:?}"
+    );
     assert_eq!(
         registry.ids(),
         vec!["test.provider", "test.consumer"],
