@@ -11,6 +11,7 @@ fub-abi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
+cap-std = { workspace = true }
 thiserror = { workspace = true }
 # Solo la facciata: il collettore è `crate::log`, e non ha dipendenze.
 tracing = { workspace = true }

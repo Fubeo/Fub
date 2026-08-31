@@ -62,6 +62,9 @@ camino = { version = "1", features = ["serde1"] }
 # diventa una seconda versione di `tempfile` nell'albero senza che nessuno lo
 # scelga. Presidiata da `.github/scripts/check-cargo-versioni.mjs`.
 tempfile = "3.27.0"
+# Accesso filesystem ancorato a handle: il vault di produzione non risolve
+# nuovamente path ambientali dopo il mount.
+cap-std = "4.0.3"
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece

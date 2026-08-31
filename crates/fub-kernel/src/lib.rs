@@ -102,7 +102,10 @@ pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererReg
 pub use session::Session;
 pub use settings::{MachineSettings, SettingsStore, SharedSettings};
 pub use storage::{update_atomic, write_atomic, Durable};
-pub use storage::{DirEntry, EntryKind, FsStorage, MemStorage, Stat, VaultStorage};
+pub use storage::{
+    ConditionalWrite, DirEntry, EntryKind, FsStorage, MemStorage, RootedFsStorage, Stat,
+    VaultStorage,
+};
 pub use syntax::{SyntaxConflict, SyntaxRegistry, SyntaxSnapshot};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;

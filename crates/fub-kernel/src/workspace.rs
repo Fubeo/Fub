@@ -709,7 +709,14 @@ impl Workspace {
         // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
         // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
         // Come [`with_machine_settings`](Workspace::with_machine_settings), col
-        Workspace::on(root, registry, Arc::new(crate::storage::FsStorage), machine)
+        let root = crate::vault::root_absolute(root.as_ref());
+        let storage = crate::storage::RootedFsStorage::open(&root).map_err(|source| {
+            KernelError::InvalidRoot {
+                path: root.clone(),
+                source,
+            }
+        })?;
+        Workspace::on(root, registry, Arc::new(storage), machine)
     }
 
     /// **supporto passato** invece del disco (§15.1).
@@ -728,9 +735,18 @@ impl Workspace {
         storage: Arc<dyn crate::storage::VaultStorage>,
         machine: Arc<MachineSettings>,
     ) -> Result<Self> {
+        // **La radice si fissa e si verifica prima di aprire qualunque store**.
+        // Un supporto capability controlla qui l'handle già aperto: nessun
+        // sidecar viene letto o creato prima che il recinto sia valido.
+        let root_buf = crate::vault::root_absolute(root.as_ref());
+        storage
+            .mount_fence(&root_buf)
+            .map_err(|source| KernelError::InvalidRoot {
+                path: root_buf.clone(),
+                source,
+            })?;
         // "quali estensioni sono documenti" è una domanda sola (vedi
         // `CoreIndex::registry`).
-        // **La radice si fissa qui, una volta sola.** Tutto ciò che segue ci
         let registry = Arc::new(registry);
         // appende il proprio nome — le impostazioni, l'organizzazione, le
         // bozze, i documenti, l'anagrafe, il registro: sei store, e cinque il
@@ -741,7 +757,7 @@ impl Workspace {
         // stile: chi aggiungerà il settimo store non ha in mano nessun'altra
         // `root` da passargli.
         // L'organizzazione è **del vault**, quindi si apre col root e non si
-        let root = &crate::vault::root_absolute(root.as_ref());
+        let root = &root_buf;
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(
             root,
             Arc::clone(&storage),
@@ -2661,7 +2677,7 @@ impl Workspace {
         // «un salvataggio non torna a chiedere al disco cosa ha appena
         // scritto», che ha un banco che conta gli `stat` e li vuole zero.
         // Un file che **non c'è** non è un errore da propagare: è una
-        let (id, esisteva, from) = match base {
+        let (id, esisteva, from, expected_source) = match base {
             WriteBase::DescendsFrom(expected) => {
                 // base che non combacia — chi scrive credeva di riscrivere
                 // qualcosa che nel frattempo è stato cestinato, e ha diritto
@@ -2673,12 +2689,12 @@ impl Workspace {
                 // fatto del vault che non era avvenuto, e un conflitto vero non
                 // si distingueva da un supporto rotto.
                 // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
-                let now =
-                    crate::error::optional(self.docs.vault.read(id))?.map(|s| Revision::of(&s));
+                let current = crate::error::optional(self.docs.vault.read(id))?;
+                let now = current.as_ref().map(|s| Revision::of(s));
                 if now.as_ref() != Some(&expected) {
                     return Err(KernelError::Stale(id.to_string()));
                 }
-                (id.clone(), true, now)
+                (id.clone(), true, now, current)
             }
             WriteBase::Dictated => {
                 let in_store = self.indexes.core.entries.get(id);
@@ -2724,7 +2740,7 @@ impl Workspace {
                     };
                     let in_store = self.indexes.core.entries.get(&id);
                     let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
-                    (id, true, fingerprint)
+                    (id, true, fingerprint, None)
                 } else {
                     let id = candidate?;
                     // `new_doc_id` may normalize the name (NFC and trimmed
@@ -2734,11 +2750,16 @@ impl Workspace {
                     let in_store = self.indexes.core.entries.get(&id);
                     let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
                     let esisteva = self.docs.vault.stat(&id).is_some();
-                    (id, esisteva, esisteva.then_some(fingerprint).flatten())
+                    (
+                        id,
+                        esisteva,
+                        esisteva.then_some(fingerprint).flatten(),
+                        None,
+                    )
                 }
             }
         };
-        let to = self.write_source(&id, source)?;
+        let to = self.write_source(&id, source, expected_source.as_deref())?;
         self.record(if esisteva {
             JournalOp::Written {
                 doc: id.clone(),
@@ -2762,7 +2783,12 @@ impl Workspace {
     /// quella di `write_document`, cioè una mutazione contata due volte in una
     /// lista che esiste per essere ripercorsa.
     // Il parse è puro: farlo PRIMA di scrivere tiene la mutazione atomica.
-    fn write_source(&mut self, id: &DocId, source: &str) -> Result<Revision> {
+    fn write_source(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        expected_source: Option<&str>,
+    ) -> Result<Revision> {
         // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
         // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
         // pur avendo scritto.
@@ -2796,7 +2822,14 @@ impl Workspace {
         // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
         // difetto 0179.
         // Scrive una riga nel registro delle mutazioni (§15.2).
-        let placed = self.docs.vault.write(id, source)?;
+        let placed = if let Some(expected) = expected_source {
+            self.docs
+                .vault
+                .write_if_unchanged(id, expected, source)?
+                .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else {
+            self.docs.vault.write(id, source)?
+        };
         let revision = Revision::of(source);
         self.ingest_model(id, model, revision.clone(), Some(placed));
         self.dispatch_pending();
@@ -2956,7 +2989,7 @@ impl Workspace {
             return Ok(report);
         }
         let from = request.base.clone();
-        let to = self.write_source(id, &next)?;
+        let to = self.write_source(id, &next, Some(&source))?;
         // toccato e quanto ha sostituito, mai con cosa (0103). Non è
         // `report.inverse()` a cui si toglie il testo — quella funzione qui non
         // si chiama affatto, così i byte dell'utente non passano nemmeno per una

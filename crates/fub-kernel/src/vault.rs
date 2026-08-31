@@ -275,7 +275,14 @@ impl Vault {
     /// interfaccia — se la radice non esiste, non è una cartella o non si ha
     /// permesso di scriverci (0160).
     pub fn open(root: impl AsRef<Utf8Path>) -> Result<Self> {
-        Vault::on(root, Arc::new(FsStorage))
+        let root = root_absolute(root.as_ref());
+        let storage = crate::storage::RootedFsStorage::open(&root).map_err(|source| {
+            KernelError::InvalidRoot {
+                path: root.clone(),
+                source,
+            }
+        })?;
+        Vault::on(root, Arc::new(storage))
     }
 
     /// Un vault su un supporto qualunque (§15.1).
@@ -293,7 +300,7 @@ impl Vault {
     pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Result<Self> {
         let root = root_absolute(root.as_ref());
         storage
-            .root_validates(&root)
+            .mount_fence(&root)
             .map_err(|source| KernelError::InvalidRoot {
                 path: root.clone(),
                 source,
@@ -588,6 +595,28 @@ impl Vault {
             .write(&path, source.as_bytes())
             .map(|stat| (stat.size, stat.mtime))
             .map_err(|and| KernelError::Io { path, source: and })
+    }
+
+    /// Come [`write`](Vault::write), ma posa i byte soltanto se il contenuto
+    /// letto dal chiamante è ancora quello corrente. `Ok(None)` è un conflitto,
+    /// non un errore del supporto.
+    pub fn write_if_unchanged(
+        &self,
+        id: &DocId,
+        expected: &str,
+        source: &str,
+    ) -> Result<Option<(u64, u64)>> {
+        let path = self.path_for(id)?;
+        match self
+            .storage
+            .write_if_unchanged(&path, Some(expected.as_bytes()), source.as_bytes())
+            .map_err(|and| KernelError::Io {
+                path: path.clone(),
+                source: and,
+            })? {
+            crate::storage::ConditionalWrite::Written(stat) => Ok(Some((stat.size, stat.mtime))),
+            crate::storage::ConditionalWrite::Changed => Ok(None),
+        }
     }
 
     /// Un id fuori dal recinto **non esiste**, e non è una tolleranza: non
