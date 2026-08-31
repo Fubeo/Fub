@@ -244,7 +244,7 @@ p.write_text(s)
 for root in [Path('crates/fub-host/tests'), Path('crates/fub-host/examples')]:
     for file in root.rglob('*.rs'):
         text=file.read_text()
-        if 'host.workspace(' in text:
-            file.write_text(text.replace('host.workspace(', 'host.debug_workspace('))
+        if '.workspace(' in text:
+            file.write_text(text.replace('.workspace(', '.debug_workspace('))
 
 Path('.github/scripts/check-host-workspace-boundary.mjs').write_text('''import fs from "node:fs";\nimport path from "node:path";\n\nconst bad = [];\nfor (const name of fs.readdirSync("crates/fub-app/src", { recursive: true })) {\n  const file = path.join("crates/fub-app/src", String(name));\n  if (!file.endsWith(".rs") || !fs.statSync(file).isFile()) continue;\n  if (/\\.workspace\\s*\\(/.test(fs.readFileSync(file, "utf8"))) bad.push(file);\n}\nif (bad.length) {\n  console.error(`Accesso generico Host::workspace vietato nella shell: ${bad.join(", ")}`);\n  process.exit(1);\n}\nconsole.log("confine Host/Workspace: shell su porte strette");\n''')
