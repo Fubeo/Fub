@@ -1,37 +1,14 @@
-//! La tabella di montaggio: quali **bundle** esistono, e in che ordine si
-//! montano.
+//! Composition root del workspace: qui esiste una sola tabella di bundle per
+//! app, CLI ed headless.
 //!
-//! È **una** funzione, e questo è il punto: prima stava dentro
-//! `#[tauri::command] open_vault`, quindi esisteva solo per chi aveva un
-//! webview. Le cose che decide — chi si dichiara, chi prende quale spazio dati,
-//! cosa succede quando due si contendono un nome — sono le stesse per una CLI,
-//! per un e2e headless e per l'app, e adesso sono scritte una volta.
-//!
-//! # Cosa è cambiato col §9.3
-//!
-//! Le righe erano **registrazioni cablate**: otto `register_core_feature`, poi
-//! l'indice, poi l'handler del versioning, poi le view, i comandi, le sintassi,
-//! i renderer. Adesso ogni riga è un [`Bundle`], e la strada che porta un bundle
-//! dentro il workspace è una sola per tutti — la versione del contratto, la
-//! dichiarazione, `Plugin::activate`, i provider — perché la scrive il
-//! [`BundleRegistry`] e non questo file
-//! ([decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)).
-//!
-//! Ne segue che una regola che era **un ordine da rispettare** è diventata la
-//! forma del montaggio: «le feature si dichiarano prima di registrare
-//! qualcosa» (§7.3) non è più una cosa da ricordarsi scrivendo il ciclo, è
-//! l'ordine dei passi dentro [`BundleRegistry::mount`], uguale per la feature
-//! ufficiale e per il plugin di terzi che a M5 arriverà da un file.
-//!
-//! L'ordine delle righe **non** è alfabetico e non è casuale: l'indice va
-//! registrato prima di `reindex`, che è del chiamante (vedi
-//! [`Host::open`](crate::Host::open)).
+//! Ogni provider ha lo stesso proprietario dichiarato dal registry. Core,
+//! manutenzione e trasferimento Markdown sono quindi bundle distinti; le
+//! dipendenze fra feature sono manifest, non ordine accidentale dell'inventario.
 
 use std::sync::Arc;
-// Solo lo store delle versioni ha bisogno di un lock qui dentro.
+
 #[cfg(feature = "versioning")]
 use crate::custody::Custody;
-
 use camino::Utf8Path;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
@@ -46,8 +23,6 @@ use fub_features::{SearchIndex, SEARCH_ID};
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
 use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
-// L'unico posto che distingue i modi di fallire di una registrazione è l'indice
-// di ricerca: gli altri hanno un esito solo.
 #[cfg(feature = "search")]
 use fub_kernel::RegistryError;
 
@@ -58,59 +33,26 @@ use crate::settings::{
 #[cfg(feature = "versioning")]
 use crate::settings::{versioning_enabled, versioning_settings};
 
-/// Ciò che esce dal montaggio: il workspace con tutto registrato, chi possiede i
-/// bundle, e la metà dello store delle versioni che resta in mano a chi ha
-/// montato.
-///
-/// Le due metà del versioning esistono perché il kernel non sa che il
-/// versioning esiste: una vive dentro l'`EventHandler` registrato nel
-/// workspace, l'altra serve a chi vuole *leggere* la storia di una nota. È chi
-/// monta a comporle, ed è esattamente ciò che dovrà fare per un plugin di terzi.
+const MARKDOWN_ID: &str = "fub.markdown";
+const COMMANDS_SERVICE: &str = "fub.commands";
+const TRASH_ID: &str = "fub.trash";
+
 pub struct Mounted {
     pub workspace: Workspace,
-    /// I bundle montati, con i loro plugin. Va tenuto vivo quanto il workspace:
-    /// è chi chiamerà `Plugin::deactivate` alla chiusura, ed è dove il runner
-    /// dei job troverà il corpo di un job.
     pub registry: BundleRegistry,
-    /// Copia dello store delle versioni, se il versioning è acceso.
-    ///
-    /// Due gradi di «acceso», e non è una ripetizione: il campo esiste se la
-    /// cargo feature `versioning` è compilata (§16.3), e vale `Some` se
-    /// l'impostazione omonima è vera per questo vault (§11.1). Il primo è una
-    /// scelta di chi compila, il secondo di chi usa l'app.
     #[cfg(feature = "versioning")]
     pub versions: Option<VersionStore>,
 }
 
-/// Una riga della tabella: una feature ufficiale di questo repo.
-///
-/// Le righe hanno in comune tutto tranne cosa registrano — manifest di
-/// core (`PluginManifest::core`), [`Trust::Core`], e nessuna risorsa propria da
-/// attivare — quindi sono **valori** e non un'implementazione del trait per
-/// ciascuna. Il
-/// trait resta quello generale: un bundle che a M5 arriva da un file porterà un
-/// manifest letto, un grado di fiducia deciso dall'host e un plugin che è un
-/// componente istanziato.
-///
-/// Quante siano non è scritto qui e non è più un numero fisso: le enumera
-/// [`fub_features::ogni_feature_ufficiale`] — che dipende da quali cargo feature
-/// sono compilate (§16.3) — e questo tipo è ciò in cui una riga dell'inventario
-/// si trasforma. Una non viene da lì ed è sempre presente: il core, che è
-/// dell'host e per questo non si spegne.
+/// Bundle nativo ufficiale: manifest core, provider posseduti dal kernel.
 struct CoreBundle {
     id: &'static str,
     name: &'static str,
-    /// Le impostazioni che questa feature dichiara (§11.1). Vuoto per quasi
-    /// tutte, ed è giusto: una feature che non ha niente da configurare non
-    /// dichiara niente, e il pannello non le trova una riga vuota.
     settings: Vec<SettingSpec>,
-    /// Le stringhe che questa feature dichiara (§12.1), con la lingua in cui è
-    /// scritta. Vuoto per quasi tutte, ed è il **degrado garbato** del §12.1 in
-    /// azione: chi non dichiara continua a restituire prosa italiana cablata, e
-    /// si vede in italiano. Non è una svista che aspetta un fix — è la ragione
-    /// per cui `Text::Literal` è il default.
     default_locale: &'static str,
     strings: Vec<StringCatalog>,
+    provides: Vec<&'static str>,
+    requires: Vec<&'static str>,
     #[allow(clippy::type_complexity)]
     register: Box<dyn Fn(&mut Workspace) -> Vec<String> + Send + Sync>,
 }
@@ -121,26 +63,36 @@ impl CoreBundle {
         name: &'static str,
         register: impl Fn(&mut Workspace) -> Vec<String> + Send + Sync + 'static,
     ) -> Self {
-        CoreBundle {
+        Self {
             id,
             name,
             settings: Vec::new(),
             default_locale: "",
             strings: Vec::new(),
+            provides: Vec::new(),
+            requires: Vec::new(),
             register: Box::new(register),
         }
     }
 
-    /// Le impostazioni che questa riga della tabella dichiara.
     fn configuring(mut self, settings: Vec<SettingSpec>) -> Self {
         self.settings = settings;
         self
     }
 
-    /// Le stringhe che questa riga dichiara, e la lingua in cui sono scritte.
     fn speaking(mut self, default_locale: &'static str, strings: Vec<StringCatalog>) -> Self {
         self.default_locale = default_locale;
         self.strings = strings;
+        self
+    }
+
+    fn providing(mut self, service: &'static str) -> Self {
+        self.provides.push(service);
+        self
+    }
+
+    fn requiring(mut self, service: &'static str) -> Self {
+        self.requires.push(service);
         self
     }
 }
@@ -150,17 +102,14 @@ impl Bundle for CoreBundle {
         PluginManifest::core(self.id, self.name)
             .configuring(self.settings.clone())
             .speaking(self.default_locale, self.strings.clone())
+            .providing(&self.provides)
+            .requiring(&self.requires)
     }
 
-    /// Le feature ufficiali sono core, e lo dicono qui: il grado di fiducia è
-    /// ciò che l'host pensa di loro, non ciò che il loro manifest declare.
     fn trust(&self) -> Trust {
         Trust::Core
     }
 
-    /// Nessuna di loro possiede qualcosa che il kernel non sappia già
-    /// chiudere: ciò che tengono sono provider, e un provider il kernel lo
-    /// attiva, lo interroga e lo chiude da sé (decisione 0028).
     fn plugin(&self) -> Box<dyn Plugin> {
         OnlyProviders::boxed(self.manifest())
     }
@@ -170,21 +119,6 @@ impl Bundle for CoreBundle {
     }
 }
 
-/// Monta un workspace sulla radice data: registro dei formati, e poi i bundle
-/// ufficiali che questa build ha — ricerca, versioning, backlink, struttura,
-/// tag, statistiche, comandi, blocchi, ognuno dietro la propria cargo feature
-/// (§16.3) e tutti accesi di default.
-///
-/// **Non** fa la scansione: `reindex` è del chiamante, perché è lì in mezzo che
-/// chi ha un ponte eventi decide se abbonarsi prima o dopo (vedi
-/// [`Host::open`](crate::Host::open)). E non fallisce per un bundle che non si
-/// monta: un id doppio o un provider in conflitto è un errore di montaggio **di
-/// questo repo**, non una condizione che l'utente possa produrre — si dice su
-/// stderr e si tira dritto, che è ciò che faceva prima. Il canale giusto per
-/// dirlo adesso esiste
-/// ([decisione 0052](../../../docs/decisions/0184-eventi-accodati-e-job.md)):
-/// questi punti sono fra i ventisette da convertire, ed è la casella che il
-/// §20.2 lascia dietro di sé.
 pub fn mount(
     root: &Utf8Path,
     machine: Arc<MachineSettings>,
@@ -193,272 +127,165 @@ pub fn mount(
     levels: &fub_kernel::log::Levels,
 ) -> Result<Mounted, String> {
     let mut formats = FormatRegistry::new();
-    // Il primo registrato è anche quello che dà l'estensione alle note nuove
-    // (`FormatRegistry::default_extension`). Un conflitto qui è impossibile con
-    // un provider solo, e resta gestito lo stesso: il giorno che ce ne sono due,
-    // il silenzio sarebbe un file che si apre col parser sbagliato.
-    if let Err(and) = formats.register(MarkdownProvider::boxed()) {
-        return Err(format!("format provider conflict: {and}"));
-    }
+    formats
+        .register(MarkdownProvider::boxed())
+        .map_err(|error| format!("format provider conflict: {error}"))?;
 
     let mut ws = Workspace::with_machine_settings(root, formats, machine)
-        // L'apertura verifica la radice (0160): un posto che non esiste, che
-        // non è una cartella o su cui non si può scrivere arriva qui come
-        // rifiuto, non come primo errore di scrittura a vault già mostrato.
-        .map_err(|and| and.to_string())?
+        .map_err(|error| error.to_string())?
         .with_view_states(view_states)
         .with_system_locale(system_locale);
 
-    // **Il filo verso fuori** (§23.3), e sta qui per la ragione del watcher: il
-    // kernel non sa cosa sia una connessione, e chi monta decide se questo
-    // montaggio ne ha una. Con la cargo feature spenta questa riga non c'è, e
-    // ogni `fetch` risponde `unserved` — che è la verità e non un rifiuto.
     #[cfg(feature = "http-client")]
     ws.set_network(Arc::new(crate::net::UreqNetwork::new()));
 
-    // Lo store delle versioni nasce dentro il bundle e serve fuori: è la
-    // composizione delle due metà, e il contenitore è il modo in cui chi monta
-    // la riceve senza che il kernel debba sapere che il versioning esiste.
     #[cfg(feature = "versioning")]
     let store: Custody<Option<VersionStore>> = Custody::empty("the version store");
-    // **Il core, e poi l'inventario.** Chi siano le feature ufficiali e in che
-    // ordine si montino non è più scritto qui: è
-    // [`fub_features::ogni_feature_ufficiale`], e la differenza è tutto il
-    // §16.7. Finché quelle righe stavano in questo file, l'inventario delle
-    // feature ufficiali *era* questo file, e ogni presidio che volesse iterarle
-    // ne teneva una copia che nessuno confrontava con l'originale — quattro
-    // copie per le view, una per i cataloghi. Adesso l'elenco sta nel crate che
-    // possiede quei tipi e questa è la sua unica lettura in produzione: una
-    // feature che non è nell'elenco non viene montata, il che è la sola forma di
-    // «esaustivo» che non dipenda da chi si ricorda di aggiornare cosa.
-    //
-    // Ciò che resta di questo file è **cosa** registra ognuna, e resta perché è
-    // davvero irregolare: l'indice può non aprirsi, il versioning ha bisogno
-    // dello `store` che vive qui e di un interruttore che è dell'host, i blocchi
-    // registrano cinque cose in due famiglie. Id, nome e catalogo vengono
-    // dall'inventario anche per loro.
+
+    // I primi tre sono infrastruttura dell'host e non sono spegnibili. Prima
+    // erano provider di maintenance/markdown registrati dall'interno di
+    // `fub.core`: il kernel vedeva un owner diverso da quello che il registry
+    // poteva smontare, quindi rollback e unmount non potevano essere atomici.
     let mut bundles: Vec<Arc<dyn Bundle>> = vec![
-        // Per **primo**, e non per gusto dell'ordine: è lui a dichiarare
-        // `plugins.disabled`, cioè la chiave che dice quali degli altri non
-        // vanno montati. Un bundle che non registra niente e che esiste per
-        // dare un proprietario a una chiave è una riga strana da leggere, ed è
-        // meno strana dell'alternativa — appendere la configurazione dell'app a
-        // una feature che si può spegnere.
         Arc::new(
-            CoreBundle::new(CORE_ID, "Fub", |ws| {
-                let mut w = register_maintenance(ws);
-                w.extend(register_markdown_transfer(ws));
-                w
-            })
-            .configuring(core_settings())
-            // La somma dei due cataloghi — quello dell'host e quelli
-            // delle famiglie del kernel — è una sola chiamata, e la
-            // chiama anche il banco che la giudica: qui c'era un elenco
-            // a mano, e il banco ne teneva una seconda copia.
-            .speaking(
-                crate::settings::CORE_DEFAULT_LOCALE,
-                core_catalog_assembled(),
-            ),
+            CoreBundle::new(CORE_ID, "Fub", |_| Vec::new())
+                .configuring(core_settings())
+                .speaking(
+                    crate::settings::CORE_DEFAULT_LOCALE,
+                    core_catalog_assembled(),
+                ),
         ),
-        // **Il tema di serie** (§29.4), dopo il core e prima delle feature.
-        // Non è nell'inventario di `fub-features` e non può esserci: è
-        // dell'host, come il core — la pelle che la shell disegna per default
-        // non si installa e non si disinstalla (vedi
-        // [`install_theme`](crate::theme::install_theme)). È un bundle senza
-        // provider né permessi, e passa dalla stessa porta dei temi installati
-        // in `config/themes/`: una riga della tabella, come tutte le altre.
+        Arc::new(CoreBundle::new(
+            fub_kernel::maintenance::MAINTENANCE_ID,
+            "Maintenance",
+            register_maintenance,
+        )),
+        Arc::new(CoreBundle::new(
+            MARKDOWN_ID,
+            "Markdown",
+            register_markdown_transfer,
+        )),
         Arc::new(crate::theme::ThemeBundle::series()),
     ];
+
     for feature in fub_features::every_official_feature() {
-        // **Le tre irregolari, e perché stanno in un `Option` invece che in un
-        // ramo `else if`.** Da quando ognuna ha la propria cargo feature
-        // (§16.3), il ramo che le riconosce va compilato solo se la feature
-        // c'è — e un `else if` non si può spegnere con un `#[cfg]`, mentre una
-        // istruzione sì. Il risultato è lo stesso di prima: se nessuno dei tre
-        // riconosce la riga, si cade nell'`else` finale, che è il presidio
-        // contro l'inventario che dichiara ciò che nessuno monta.
-        //
-        // Che una riga arrivi qui con la sua cargo feature spenta non è uno
-        // stato possibile: l'inventario e questa tabella leggono lo stesso
-        // nome, quindi la riga sparisce insieme al ramo.
         #[allow(unused_mut)]
         let mut irregular: Option<CoreBundle> = None;
+
         #[cfg(feature = "search")]
         if feature.id == SEARCH_ID {
             irregular = Some(
                 CoreBundle::new(feature.id, feature.name, register_search)
-                    // I pesi dei campi (§21.6). A differenza dell'interruttore
-                    // del versioning, lo schema è **della feature** e non di chi
-                    // monta — un motore di ricerca sa di avere dei pesi — e per
-                    // la stessa ragione le sue etichette stanno già dentro il
-                    // catalogo della feature, senza un secondo da sommare.
                     .configuring(fub_features::search::settings()),
             );
         }
+
         #[cfg(feature = "versioning")]
         if feature.id == VERSIONING_ID {
             let store = store.clone();
-            // Le due costruzioni vengono **dall'inventario**, come per ogni
-            // altra feature: qui si aggiunge soltanto la cosa che l'inventario
-            // non può dire, cioè che si registrano insieme all'handler e sotto
-            // lo stesso interruttore.
             let view = feature.view;
             let commands = feature.commands;
             irregular = Some(
-                CoreBundle::new(feature.id, feature.name, move |ws: &mut Workspace| {
+                CoreBundle::new(feature.id, feature.name, move |ws| {
                     register_versioning(ws, &store, view, commands)
                 })
-                // L'interruttore è **dell'host** e non della feature (§11.1): il
-                // versioning non sa di poter essere spento, e le sue chiavi stanno
-                // qui accanto allo schema che le descrive. Il catalogo che le
-                // traduce si somma al suo in `catalogo_montato`, qui sotto — non
-                // in questo ramo, o sarebbe di nuovo l'unica scrittura di una
-                // somma che nessuno riconfronta.
                 .configuring(versioning_settings()),
             );
         }
+
         #[cfg(feature = "blocks")]
         if feature.id == BLOCKS_ID {
             irregular = Some(CoreBundle::new(feature.id, feature.name, register_blocks));
         }
-        // **Prima l'irregolare.** Era in fondo, e andava bene finché una riga
-        // irregolare non offriva anche una view: dal §1.2 il versioning ne offre
-        // una (la cronologia) e dichiara un comando, e presa dal ramo generico
-        // avrebbe registrato il pannello **senza** il suo handler — cioè una
-        // cronologia che disegna versioni che nessuno salva più.
+
         let bundle = if let Some(bundle) = irregular {
             bundle
         } else if feature.view.is_some() || feature.commands.is_some() {
-            // View e comandi della stessa riga si registrano insieme. Prima
-            // l'`else if view` droppava i comandi di chi offriva entrambi —
-            // versioning non ci cade perché è irregolare, una feature regolare
-            // con pannello *e* registro sì.
             let view = feature.view;
             let commands = feature.commands;
             let id = feature.id;
             CoreBundle::new(id, feature.name, move |ws| {
-                let mut w = Vec::new();
-                if let Some(c) = view {
-                    w.extend(register_view(ws, id, c()));
+                let mut failures = Vec::new();
+                if let Some(build) = view {
+                    failures.extend(register_view(ws, id, build()));
                 }
-                if let Some(c) = commands {
-                    w.extend(register_commands(ws, id, c()));
+                if let Some(build) = commands {
+                    failures.extend(register_commands(ws, id, build()));
                 }
-                w
+                failures
             })
         } else {
-            // Una feature nell'inventario che qui nessuno sa registrare. Non è
-            // uno stato che l'utente possa produrre: è qualcuno che ha aggiunto
-            // una riga all'elenco e non ha detto cosa registra, e il momento
-            // giusto per accorgersene è il primo montaggio — cioè ogni test di
-            // questo repo — e non il giorno in cui si nota che un pannello non
-            // c'è. Le view e i comandi non passano mai di qui: per loro
-            // l'inventario dice già tutto.
             return Err(format!(
-                "feature '{}' is in the inventory but the mount table \
-                 does not know what it registers",
+                "feature '{}' is in the inventory but the mount table does not know what it registers",
                 feature.id
             ));
         };
-        // **Le stringhe si dichiarano qui, una volta, per tutti e cinque i
-        // rami.** Erano scritte in ognuno — `.speaking("it", (feature.catalog)())`
-        // quattro volte identiche, e la quinta con una somma dentro — e cinque
-        // scritture della stessa cosa sono cinque posti in cui una può restare
-        // indietro: un ramo nuovo che si dimentichi la riga monta un bundle
-        // **muto**, e un bundle muto non è rosso da nessuna parte — le sue
-        // chiavi restano nude a schermo solo per chi legge in un'altra lingua.
-        // Qui la riga non si può dimenticare, perché non è in nessun ramo.
-        //
-        // Cosa una feature monta davvero lo dice `catalogo_montato`, e lo dice
-        // **anche al banco che lo giudica**: è la forma di `core_catalog_montato`.
-        // **Due passi, e in questo ordine.** Prima si dichiara al registry cosa
-        let bundle = bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
+
+        let mut bundle =
+            bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
+        // `fub.trash` invoca `trash.restore`/`trash.empty`, che appartengono al
+        // bundle dei comandi. Il service marker è una dipendenza di montaggio:
+        // il provider vero resta il registro comandi e l'atomicità garantisce
+        // che il marker non sopravviva a una registrazione fallita.
+        if feature.id == COMMANDS_SERVICE {
+            bundle = bundle.providing(COMMANDS_SERVICE);
+        }
+        if feature.id == TRASH_ID {
+            bundle = bundle.requiring(COMMANDS_SERVICE);
+        }
         bundles.push(Arc::new(bundle));
     }
 
-    // esiste — anche ciò che resterà spento, o «spento» diventerebbe
-    // indistinguibile da «non installato» e non ci sarebbe niente da
-    // riaccendere — e poi si accende.
-    // Il core per primo e da solo: è lui che dichiara `plugins.disabled`, quindi
     let mut registry = BundleRegistry::new();
     for bundle in &bundles {
         registry.remember(Arc::clone(bundle));
     }
-    // finché non è montato la domanda «chi è spento?» non ha nemmeno uno schema
-    // a cui rivolgersi. Ed è anche la ragione per cui il core non è spegnibile:
-    // l'elenco degli spenti vive dentro di lui.
-    // **Il livello del log si applica qui** (§17.3), ed è il primo momento in
-    if let Err(and) = registry.enable(&mut ws, CORE_ID) {
-        return Err(format!("core bundle won't mount: {and}"));
-    }
-    // cui si può: è il bundle di core a dichiarare `log.level` e `log.verbose`,
-    // e prima di lui quei nomi non sono nemmeno impostazioni. Da qui in poi ogni
-    // riga di `tracing` rispetta ciò che la tendina dice — comprese quelle dei
-    // bundle che si montano subito dopo.
-    // Non è un avviso da stderr: è una scelta dell'utente, e la si vede
+
+    // Il core deve esistere prima di leggere `plugins.disabled` e i livelli.
+    registry
+        .enable(&mut ws, CORE_ID)
+        .map_err(|error| format!("core bundle won't mount: {error}"))?;
     crate::settings::apply_log_levels(&ws, levels);
-    let disabled = disabled_plugins(&ws);
-    for bundle in &bundles {
-        let id = bundle.manifest().id;
-        if id == CORE_ID {
-            continue;
-        }
-        if disabled.contains(&id) {
-            // dall'inventario dei bundle (`BundleRegistry::inventory`).
-            // Gli avvisi dei provider che non sono entrati li scrive `mount`, che
-            continue;
-        }
-        // è il punto che anche il core e `Host::set_plugin_enabled`
-        // attraversano; qui resta il solo caso che quel punto non raggiunge —
-        // il bundle che non si monta affatto.
-        // Cosa è andato storto **leggendo** la configurazione: un file malformato,
-        if let Err(and) = registry.enable(&mut ws, &id) {
-            tracing::error!(target: "fub.host", "bundle not mounted: {and}");
-        }
+
+    // Questi provider sono infrastruttura sempre disponibile: in particolare i
+    // comandi di manutenzione non possono sparire proprio nel vault da riparare.
+    for id in [fub_kernel::maintenance::MAINTENANCE_ID, MARKDOWN_ID] {
+        registry
+            .enable(&mut ws, id)
+            .map_err(|error| format!("mandatory bundle `{id}` won't mount: {error}"))?;
     }
 
-    // una chiave di macchina scritta dentro un vault, un valore che non regge la
-    // specie dichiarata. Vanno lette dopo il montaggio, perché è il montaggio a
-    // dichiarare gli schemi contro cui quei valori si misurano.
-    // Cosa è andato storto con l'**organizzazione** — icone, appuntate, spazi,
+    let disabled = disabled_plugins(&ws);
+    let selected = bundles
+        .iter()
+        .map(|bundle| bundle.manifest().id)
+        .filter(|id| {
+            id != CORE_ID
+                && id != fub_kernel::maintenance::MAINTENANCE_ID
+                && id != MARKDOWN_ID
+                && !disabled.contains(id)
+        })
+        .collect::<Vec<_>>();
+
+    for (id, error) in registry.enable_in_dependency_order(&mut ws, selected) {
+        tracing::error!(target: "fub.host", "bundle `{id}` not mounted: {error}");
+    }
+
     for warning in ws.settings_warnings() {
         tracing::warn!(target: "fub.host", "settings: {warning}");
     }
-
-    // ordinamenti: il sidecar illeggibile all'apertura, o una migrazione che non
-    // si è potuta scrivere dietro a una rinomina. La 0038 aveva già scritto
-    // questa riga in prosa — «la rinomina vale, l'icona resta indietro, e
-    // qualcuno lo dice (`organization_warnings`)» — e il metodo la ripete sul
-    // proprio doc: *chi monta le mostra, e svuotandole se ne fa carico*. Chi
-    // monta era l'unico a poterlo fare e non lo faceva, quindi non se ne faceva
-    // carico nessuno: gli avvisi restavano nel workspace finché qualcuno non li
-    // chiedeva, e a chiederli era solo un banco del kernel.
-    //
-    // Sta qui e non altrove per la ragione dei due vicini: sono l'unico punto in
-    // cui c'è un workspace intero e nessuno lo sta ancora guardando, e questi
-    // avvisi **si svuotano leggendoli** — chi non li legge qui non li legge più.
-    // Cosa non ha potuto seguire una rinomina (§13.2). Vale la pena leggerlo
     for warning in ws.organization_warnings() {
         tracing::warn!(target: "fub.host", "organization: {warning}");
     }
-
-    // insieme al montaggio e non altrove: se qui c'è una riga, un plugin ha una
-    // chiave morta e non lo sa — è il difetto che questa voce esiste per non
-    // lasciare più crescere in silenzio.
-    // Ciò che qualcuno produce e nessuno disegna: il conto che il §3.2 chiedeva
     for warning in ws.doc_data_warnings() {
         tracing::warn!(target: "fub.host", "per-document state: {warning}");
     }
-
-    // di poter fare. Oggi è vuoto; il giorno che non lo è, è un blocco che
-    // l'utente legge crudo.
-    // L'indice di ricerca. Va registrato **prima** di `reindex`: è lì che riceve il
     for kind in ws.undrawn_kinds() {
         tracing::warn!(target: "fub.host", "`{kind}` has no renderer: will degrade to generic rendering");
     }
 
     #[cfg(feature = "versioning")]
-    let versions = store.read().map_err(|and| and.to_string())?.clone();
+    let versions = store.read().map_err(|error| error.to_string())?.clone();
     Ok(Mounted {
         workspace: ws,
         registry,
@@ -467,134 +294,83 @@ pub fn mount(
     })
 }
 
-/// contenuto del vault e riconcilia ciò che è cambiato mentre non era vivo. Se
-/// non si apre, il vault si apre lo stesso senza ricerca: la verità è il vault,
-/// l'indice è stato derivato e non deve mai impedire di leggere le note.
-///
-/// Vive nel proprio spazio autorevole (`.fub/plugins/fub.search/`), che è il
-/// kernel ad assegnargli: la registrazione lo attiva, e l'attivazione è il
-/// momento in cui ritrova da `data_*` le impronte di ciò che ha già visto.
-// I due esiti sono diversi e vanno detti diversi (decisione 0019): un
 #[cfg(feature = "search")]
 fn register_search(ws: &mut Workspace) -> Vec<String> {
-    match ws
+    let index = match ws
         .plugin_data_dir(SEARCH_ID)
         .and_then(|dir| SearchIndex::open(&dir))
     {
-        // conflitto di rotte vuol dire che l'indice **non c'è** e la ricerca non
-        // risponderà; un'attivazione fallita che c'è ma reindicizza tutto, che è
-        // lento e non sbagliato.
-        // **Il capo dell'`Arc` si prende prima di consegnare l'indice**:
-        Ok(index) => {
-            // dopo `register_index_provider` il provider è nel workspace e non
-            // lo si tocca più. È l'handler che tiene i pesi allineati alle
-            // impostazioni (§21.6) — senza di lui i pesi si leggerebbero una
-            // volta in `activate` e resterebbero fermi fino alla riapertura del
-            // vault.
-            // L'indice c'è e cerca: quello che manca è che si accorga
-            let settings = index.settings_handler();
-            match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
-                Ok(()) => match ws.register_event_handler(SEARCH_ID, Box::new(settings)) {
-                    Ok(()) => Vec::new(),
-                    // di un peso cambiato. Va detto, e non è lo stesso avviso
-                    // di una ricerca che non risponde.
-                    // Il versioning è una feature ufficiale scritta come la scriverebbe un plugin:
-                    Err(and) => vec![format!(
-                        "search index: field weights will not update while vault \
-                         is open: {and}"
-                    )],
-                },
-                Err(RegistryError::Activate(and)) => {
-                    vec![format!(
-                        "search index: footprints not found, reindexing: {and}"
-                    )]
-                }
-                Err(and) => vec![format!("search index NOT registered: {and}")],
-            }
+        Ok(index) => index,
+        Err(error) => return vec![format!("search index unavailable: {error}")],
+    };
+    let settings = index.settings_handler();
+    match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
+        Ok(()) => match ws.register_event_handler(SEARCH_ID, Box::new(settings)) {
+            Ok(()) => Vec::new(),
+            Err(error) => vec![format!(
+                "search index: field weights will not update while vault is open: {error}"
+            )],
+        },
+        // L'indice è registrato ma ha perso le impronte: reindex lo ricostruisce.
+        // È l'unico degrado esplicitamente recuperabile del mount nativo.
+        Err(RegistryError::Activate(error)) => {
+            tracing::warn!(target: "fub.host", "{SEARCH_ID}: footprints not found, reindexing: {error}");
+            Vec::new()
         }
-        Err(and) => vec![format!("search index unavailable: {and}")],
+        Err(error) => vec![format!("search index NOT registered: {error}")],
     }
 }
 
-/// un `EventHandler` e nient'altro. Spento (D7) **si dichiara lo stesso** e non
-/// registra niente, e nel vault non compare nemmeno la cartella: «dichiarato con
-/// zero registrazioni» è uno stato vero e diverso da «non c'è», ed è quello che
-/// l'inventario del §7.6 deve poter mostrare.
-///
-/// Lo store si apre con le stesse capacità che avrà l'handler — un `HostApi`
-/// intestato a `VERSIONING_ID` — e non con `std::fs`: chi monta non ha un canale
-/// privilegiato che un plugin non avrebbe. La prima fotografia del vault non è
-/// più una passata all'apertura (0154): è **copy-on-first-write**, e il
-/// montaggio la registra come gancio prima della scrittura — la chiusura che
-/// il workspace chiama fra il parse e il disco, un istante prima che
-/// l'originale sparisca. L'handler resta per gli eventi (la versione di ogni
-/// scrittura successiva) e per la riconciliazione dopo un `Overflow`.
-// La prima fotografia, come gancio **prima della scrittura** (0154): la
 #[cfg(feature = "versioning")]
 fn register_versioning(
     ws: &mut Workspace,
-    store: &Custody<Option<VersionStore>>,
+    external_store: &Custody<Option<VersionStore>>,
     view: Option<fn() -> Box<dyn fub_abi::ViewProvider>>,
     commands: Option<fn() -> Box<dyn fub_abi::traits::CommandProvider>>,
 ) -> Vec<String> {
     if !versioning_enabled(ws) {
         return Vec::new();
     }
+
     let opened = match ws.with_host(VERSIONING_ID, VersionStore::open) {
         Ok(opened) => opened,
-        Err(and) => return vec![format!("versioning unavailable: {and}")],
+        Err(error) => return vec![format!("versioning unavailable: {error}")],
     };
-    match store.write() {
-        Ok(mut slot) => *slot = Some(opened.clone()),
-        Err(and) => return vec![format!("versioning not composed: {and}")],
-    }
-    let mut warnings = Vec::new();
-    // chiusura fotografa l'originale un istante prima che venga sovrascritto,
-    // e solo se non ha ancora una storia. Lo store è clonato (un `Arc` interno,
-    // clone economico) perché l'handler qui sotto se ne porta via `opened`; il
-    // gancio è generico — il kernel non sa cosa sia una fotografia, sa solo
-    // che c'è un istante in cui l'originale è ancora leggibile.
-    // Il pannello cronologia e `version.restore` (§1.2). Stanno **dentro
-    let store = opened.clone();
-    if let Err(and) =
-        ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened)))
+    let hook_store = opened.clone();
+    if let Err(error) =
+        ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened.clone())))
     {
-        warnings.push(format!("versioning not registered: {and}"));
+        return vec![format!("versioning not registered: {error}")];
     }
     ws.set_before_write_hook(Some((
         VERSIONING_ID.to_string(),
         Arc::new(move |host, id| {
-            VersioningHandler::new(store.clone()).photograph_if_unversioned(host, id)
+            VersioningHandler::new(hook_store.clone()).photograph_if_unversioned(host, id)
         }),
     )));
-    // l'interruttore**: versioning spento significa pannello assente e comando
-    // assente, non un pannello vuoto e un comando che risponde «disattivato».
-    // È la spegnibilità totale (D7) ottenuta togliendo la registrazione, che è
-    // l'unico modo in cui è vera anche per chi guarda la palette.
-    // Un pannello che passa per il protocollo di view come dovrà fare un plugin:
+
+    let mut failures = Vec::new();
     if let Some(build) = view {
-        warnings.extend(register_view(ws, VERSIONING_ID, build()));
+        failures.extend(register_view(ws, VERSIONING_ID, build()));
     }
     if let Some(build) = commands {
-        warnings.extend(register_commands(ws, VERSIONING_ID, build()));
+        failures.extend(register_commands(ws, VERSIONING_ID, build()));
     }
-    warnings
+    if !failures.is_empty() {
+        return failures;
+    }
+
+    // La metà esterna viene pubblicata solo quando tutti i provider sono
+    // entrati: un rollback non lascia un `VersionStore` che finga un bundle vivo.
+    match external_store.write() {
+        Ok(mut slot) => {
+            *slot = Some(opened);
+            Vec::new()
+        }
+        Err(error) => vec![format!("versioning not composed: {error}")],
+    }
 }
 
-/// registrato come `ViewProvider` fidato (produce solo UI dichiarativa, niente
-/// `Html`/`WebView`), si prende ciò che gli serve dall'`HostApi`. Chi monta non
-/// gli fa da tramite — il giro render/azione passa dai comandi generici della
-/// shell.
-///
-/// Quali siano non lo decide questo file: le enumera
-/// [`fub_features::ogni_view_ufficiale`], e la firma di questa funzione lo
-/// rispecchia — prende un id e un provider già costruito invece di sapere quale
-/// tipo istanziare. Oggi sono quattro: backlink (riferimenti dall'`HostApi`), struttura (la prima a
-/// usare il canale metadata, `IndexQuery::Outline`), tag (aggrega via
-/// `IndexQuery::Tags`, click → ricerca) e statistiche (la prima a leggere il
-/// **contesto di sessione** per intero — selezione e modalità, non solo quale
-/// nota è aperta, decisione 0007).
-/// I comandi ufficiali: la prima feature sul giro del **registro** (decisione
 fn register_view(
     ws: &mut Workspace,
     id: &str,
@@ -602,27 +378,10 @@ fn register_view(
 ) -> Vec<String> {
     match ws.register_view_provider(id, provider) {
         Ok(()) => Vec::new(),
-        Err(and) => vec![format!("view not registered: {and}")],
+        Err(error) => vec![format!("view not registered: {error}")],
     }
 }
 
-/// 0009). Da qui in poi un'azione nuova non è un comando Tauri in più — è una
-/// riga in un `CommandProvider`, e la palette la trova da sola.
-///
-/// Come [`register_view`], prende un provider già costruito: quale sia lo dice
-/// l'inventario, e oggi ce n'è uno solo — che è appunto la premessa che il §16.7
-/// dice di non voler più cablare da nessuna parte.
-/// I **comandi di manutenzione** (§15.2), e perché stanno nel bundle del core
-/// invece che in uno loro.
-///
-/// Perché il bundle del core è l'unico che non si può spegnere: è quello che
-/// dichiara `plugins.disabled`. Un comando che ripara il vault dietro un
-/// interruttore sarebbe assente esattamente nel caso in cui serve — chi ha un
-/// vault messo male è anche chi può avere una configurazione messa male.
-///
-/// Il provider li **dichiara** soltanto: a eseguirli è il kernel, per la ragione
-/// scritta in testa a `fub_kernel::maintenance`.
-/// Import/export markdown: i provider vivono nel crate del formato, chi monta
 fn register_maintenance(ws: &mut Workspace) -> Vec<String> {
     register_commands(
         ws,
@@ -631,23 +390,15 @@ fn register_maintenance(ws: &mut Workspace) -> Vec<String> {
     )
 }
 
-/// li registra. Senza questa riga il kernel ha le firme e nessun cliente, che
-/// è esattamente lo stato che la roadmap marca aperto.
-/// Le sintassi ufficiali e chi le disegna (decisione 0017). Nessuna di loro
 fn register_markdown_transfer(ws: &mut Workspace) -> Vec<String> {
-    const ID: &str = "fub.markdown";
-    let mut warnings = Vec::new();
-    if let Err(and) = ws.register_core_feature(ID, "Markdown") {
-        warnings.push(format!("markdown: {and}"));
-        return warnings;
+    let mut failures = Vec::new();
+    if let Err(error) = ws.register_import_provider(MARKDOWN_ID, MarkdownImport::boxed()) {
+        failures.push(format!("markdown import not registered: {error}"));
     }
-    if let Err(and) = ws.register_import_provider(ID, MarkdownImport::boxed()) {
-        warnings.push(format!("markdown import not registered: {and}"));
+    if let Err(error) = ws.register_export_provider(MARKDOWN_ID, MarkdownExport::boxed()) {
+        failures.push(format!("markdown export not registered: {error}"));
     }
-    if let Err(and) = ws.register_export_provider(ID, MarkdownExport::boxed()) {
-        warnings.push(format!("markdown export not registered: {and}"));
-    }
-    warnings
+    failures
 }
 
 fn register_commands(
@@ -657,42 +408,29 @@ fn register_commands(
 ) -> Vec<String> {
     match ws.register_command_provider(id, provider) {
         Ok(()) => Vec::new(),
-        Err(and) => vec![format!("commands not registered: {and}")],
+        Err(error) => vec![format!("commands not registered: {error}")],
     }
 }
 
-/// tocca il provider markdown: si **innestano** su di lui, che è la strada che
-/// il §3.1 ha aperto e che prima non esisteva — l'unica alternativa era forkare
-/// `fub-format-markdown`.
-///
-/// Un conflitto qui non è fatale ma non è nemmeno silenzioso: la sintassi che
-/// perde non si registra, e chi monta l'app lo legge. È tutta la differenza con
-/// «l'ultimo registrato vince», che è ciò che il registro faceva prima.
-///
-/// Il diagramma esce come albero `UiNode` e arriva alla shell; la formula esce
-/// come HTML. `Trust::Core` perché sono feature ufficiali — un renderer di terzi
-/// passerebbe dalla stessa porta con un grado più basso, e il suo albero
-/// verrebbe validato.
-/// verrebbe validato.
 #[cfg(feature = "blocks")]
 fn register_blocks(ws: &mut Workspace) -> Vec<String> {
-    let mut warnings = Vec::new();
+    let mut failures = Vec::new();
     for rule in [
         Box::new(DiagramRule) as Box<dyn fub_abi::custom::SyntaxRule>,
         Box::new(MathRule),
         Box::new(HighlightRule),
     ] {
-        if let Err(and) = ws.register_syntax_rule(BLOCKS_ID, rule) {
-            warnings.push(format!("syntax rule not grafted: {and}"));
+        if let Err(error) = ws.register_syntax_rule(BLOCKS_ID, rule) {
+            failures.push(format!("syntax rule not grafted: {error}"));
         }
     }
     for renderer in [
         Box::new(DiagramRenderer) as Box<dyn fub_abi::custom::CustomRenderer>,
         Box::new(MathRenderer),
     ] {
-        if let Err(and) = ws.register_custom_renderer(BLOCKS_ID, renderer) {
-            warnings.push(format!("renderer not registered: {and}"));
+        if let Err(error) = ws.register_custom_renderer(BLOCKS_ID, renderer) {
+            failures.push(format!("renderer not registered: {error}"));
         }
     }
-    warnings
+    failures
 }
