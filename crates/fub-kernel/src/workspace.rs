@@ -2691,7 +2691,10 @@ impl Workspace {
                 // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
                 let current = crate::error::optional(self.docs.vault.read(id))?;
                 let now = current.as_ref().map(|s| Revision::of(s));
-                if now.as_ref() != Some(&expected) {
+                if !current
+                    .as_deref()
+                    .is_some_and(|source| expected.matches(source))
+                {
                     return Err(KernelError::Stale(id.to_string()));
                 }
                 (id.clone(), true, now, current)

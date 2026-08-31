@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{KernelError, Result};
 use crate::ignore::{parse_gitignore, GitignoreRules, IgnorePolicy, Kind, GITIGNORE_FILE};
 use crate::settings::SharedSettings;
-use crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};
+use crate::storage::{EntryKind, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
 use fub_abi::schema::SchemaVersion;
 
