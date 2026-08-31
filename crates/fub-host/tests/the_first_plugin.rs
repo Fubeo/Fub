@@ -42,6 +42,7 @@ use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::event::{Actor, Event};
 use fub_abi::model::DocId;
 use fub_abi::options::permission;
+use fub_abi::settings::{permission_key, SettingValue};
 use fub_abi::traits::{
     CommandProvider, HostApi, JobProgress, JobSpec, Plugin, PluginManifest, PluginPermissions,
 };
@@ -50,13 +51,8 @@ use fub_host::registry::Bundle;
 use fub_host::{Host, NoWatcher};
 use fub_kernel::{Subscription, Trust, Workspace};
 
-/// L'id del plugin e del suo comando. Un plugin non-core nomina dentro il
-/// proprio id (§7.4): `ping.ping:ping` è il ping di `ping.ping`, e nessun altro
-/// plugin può rivendicarlo.
 const ID: &str = "demo.ping";
 const COMMAND: &str = "demo.ping:ping";
-
-// --- il banco ---------------------------------------------------------------
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -80,17 +76,14 @@ fn lines(journal: &Journal) -> Vec<String> {
 
 /// Un host headless con un vault aperto e il bundle di prova montato.
 ///
-/// `permessi` sceglie il manifest: con o senza `read-vault`. È la stessa spia
-/// montata in due modi, perché ciò che cambia fra le due prove è **solo** il
-/// permesso dichiarato.
+/// `permissions` sceglie il manifest: con o senza `read-vault`. Nel caso
+/// positivo il test simula anche l'**approvazione esplicita dell'utente** dopo
+/// il mount: dichiarare una capacità non equivale più a concederla.
 fn bench(v: &Vault, permissions: bool) -> (Host, Subscription, Journal) {
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1);
     host.open(&v.root).expect("the vault opens");
-    // Si aspetta che l'apertura abbia finito di indicizzare (§15.7) prima di
-    // guardare qualunque cosa: la seconda fase dell'apertura è un job come gli
-    // altri, e su un banco a un thread solo occuperebbe l'unico turno.
     host.wait_indexed(None).expect("the opener finished");
     let events = host
         .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
@@ -109,12 +102,18 @@ fn bench(v: &Vault, permissions: bool) -> (Host, Subscription, Journal) {
                 &mut ws,
             )
             .expect("the bundle mounts");
+        if permissions {
+            ws.set_setting(
+                &permission_key(ID, permission::READ_VAULT),
+                SettingValue::Toggle(true),
+            )
+            .expect("the user explicitly approves read-vault");
+        }
     })
     .expect("open");
     (host, events, journal)
 }
 
-/// Accoda un job come lo accoderebbe una feature: dall'`HostApi`, e basta.
 fn ask(host: &Host, job: &str) -> fub_abi::traits::JobId {
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
@@ -129,7 +128,6 @@ fn ask(host: &Host, job: &str) -> fub_abi::traits::JobId {
     .expect("open")
 }
 
-/// Il primo `JobDone` che arriva, o il fallimento del test.
 fn outcome(events: &Subscription) -> (String, Result<serde_json::Value, PluginError>) {
     let deadline = std::time::Instant::now() + Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
@@ -145,11 +143,6 @@ fn outcome(events: &Subscription) -> (String, Result<serde_json::Value, PluginEr
     panic!("no job ever returned: nobody drains the queue");
 }
 
-// --- il plugin --------------------------------------------------------------
-
-/// Il comando del plugin: legge una nota e risponde. È di sola lettura, come
-/// si conviene a un ping — e la lettura è ciò che il permesso `read-vault`
-/// governa, cioè la capacità che la seconda prova toglie.
 struct PingProvider;
 
 impl CommandProvider for PingProvider {
@@ -172,7 +165,6 @@ impl CommandProvider for PingProvider {
     }
 }
 
-/// Il plugin: manifest, attivazione, commiato e il corpo dei suoi job.
 struct DemoPing {
     journal: Journal,
 }
@@ -184,11 +176,6 @@ impl Plugin for DemoPing {
     }
 
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        // Il lavoro dell'attivazione che non ha bisogno di permessi: l'orologio
-        // è una capacità senza permesso (§7.3), e un ping che non sapesse che
-        // ore sono non sarebbe un ping. È anche ciò che tiene la seconda prova
-        // in piedi: un `activate` che leggesse il vault fallirebbe **prima**
-        // del cancello che si vuole provare.
         let now = host.now_unix_millis();
         self.journal
             .lock()
@@ -226,8 +213,6 @@ impl Plugin for DemoPing {
     }
 }
 
-/// Il bundle: manifest (con o senza permesso), fiducia, il corpo dei job e la
-/// registrazione dei provider — il quarto passo del montaggio.
 struct BundleDemoPing {
     journal: Journal,
     permissions: bool,
@@ -261,17 +246,11 @@ impl Bundle for BundleDemoPing {
     }
 }
 
-// --- le prove ---------------------------------------------------------------
-
-/// Il giro intero del criterio M4: montare, vedere il comando, invocarlo,
-/// fargli girare un job, smontare, e trovare `UnknownCommand` al posto del
 #[test]
 fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
     let v = Vault::new();
     let (host, events, journal) = bench(&v, true);
 
-    // Mounted: il comando è nel registro, il plugin è nell'inventario del §7.6
-    // con il permesso dichiarato, e il registry lo possiede.
     host.with_session(None, |s| {
         let ws = s.workspace().read().unwrap();
         assert!(
@@ -294,7 +273,6 @@ fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
     })
     .expect("open");
 
-    // Il comando si invoca e risponde leggendo il vault.
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         let outcome = ws
@@ -313,8 +291,6 @@ fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
     })
     .expect("open");
 
-    // Il job gira sul pool vero e torna con l'esito: ha letto la nota.
-    // Il job gira sul pool vero e torna con l'esito: ha letto la nota.
     ask(&host, "ping");
     let (job, result) = outcome(&events);
     assert_eq!(job, "ping");
@@ -325,8 +301,6 @@ fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
         "the job really read: {value}"
     );
 
-    // Smontato: il commiato è stato chiamato, il comando non c'è più, e
-    // invocarlo è `UnknownCommand`.
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         let errors = s.bundles().write().unwrap().unmount(&mut ws, ID);
@@ -361,16 +335,11 @@ fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
     host.close();
 }
 
-/// Il cancello del §7.3 dal lato di chi lo attraversa: lo stesso plugin, senza
-/// `read-vault` nel manifest, si monta lo stesso — ma la prima lettura, dal
-/// comando e dal job, riceve `PermissionDenied`.
 #[test]
 fn a_plugin_without_the_permission_sees_close_the_gate() {
     let v = Vault::new();
     let (host, events, _journal) = bench(&v, false);
 
-    // Il comando c'è — il montaggio non dipende dal permesso — ma la lettura
-    // che fa è negata: il cancello è davanti all'host, non alla registrazione.
     host.with_session(None, |s| {
         let mut ws = s.workspace().write().unwrap();
         let error = ws
@@ -389,8 +358,6 @@ fn a_plugin_without_the_permission_sees_close_the_gate() {
     })
     .expect("open");
 
-    // Lo stesso cancello vale dentro un job: il job parte (gli eventi non hanno
-    // permesso), ma la sua lettura riceve lo stesso rifiuto.
     ask(&host, "ping");
     let (job, result) = outcome(&events);
     assert_eq!(job, "ping");
