@@ -1,151 +1,3 @@
-[1m[32m   Compiling[0m memchr v2.8.3
-[1m[32m   Compiling[0m id-arena v2.3.0
-[1m[32m   Compiling[0m semver v1.0.28
-[1m[32m   Compiling[0m wit-parser v0.254.0
-[1m[32m   Compiling[0m syn v2.0.119
-[1m[32m   Compiling[0m serde_derive v1.0.229
-[1m[32m   Compiling[0m thiserror-impl v2.0.19
-[1m[32m   Compiling[0m unicode-normalization v0.1.25
-[1m[32m   Compiling[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
-[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 16.70s
-[1m[32m     Running[0m unittests src/lib.rs (target/debug/deps/fub_abi-2de1be2cb9d04409)
-
-running 229 tests
-test arena::tests::an_empty_body_is_an_empty_arena ... ok
-test arena::tests::a_cycle_is_an_error_not_a_hang ... ok
-test arena::tests::span_crosses_and_comes_back_unchanged ... ok
-test arena::tests::every_child_is_interned_before_its_parent ... ok
-test arena::tests::document_tree_round_trip_is_the_identity ... ok
-test arena::tests::an_index_out_of_range_is_an_error_not_a_panic ... ok
-test arena::tests::spans_survive_the_whole_round_trip ... ok
-test arena::tests::tasks_anchors_and_tables_survive_the_boundary ... ok
-test arena::tests::the_same_subtree_twice_is_not_a_cycle ... ok
-test arena::tests::ui_tree_round_trip_is_the_identity ... ok
-test command::tests::a_choice_only_accepts_declared_values ... ok
-test command::tests::a_missing_required_argument_is_named ... ok
-test command::tests::a_plan_names_every_document_it_would_touch ... ok
-test command::tests::an_undeclared_argument_is_refused_not_ignored ... ok
-test command::tests::null_counts_as_absent_in_both_directions ... ok
-test command::tests::the_kind_of_an_argument_is_checked ... ok
-test command::tests::no_arguments_is_null_or_empty_object ... ok
-test command::tests::the_reach_of_a_command_is_ordered ... ok
-test edit::tests::a_request_survives_the_json_boundary ... ok
-test edit::tests::a_revision_is_content_not_time ... ok
-test edit::tests::a_span_in_the_middle_of_a_character_is_refused ... ok
-test edit::tests::a_span_in_the_middle_of_a_line_ending_is_refused ... ok
-test edit::tests::a_stale_base_is_a_conflict_and_produces_nothing ... ok
-test edit::tests::an_edit_on_a_crlf_file_does_not_normalize_other_lines ... ok
-test edit::tests::no_edits_is_not_an_error_and_changes_nothing ... ok
-test edit::tests::insert_and_delete_are_replace_seen_from_two_sides ... ok
-test edit::tests::revision_uses_sha256_and_reads_legacy_fnv_during_migration ... ok
-test edit::tests::the_edits_are_a_set_and_the_result_does_not_depend_on_their_order ... ok
-test edit::tests::the_discipline_of_the_spans_is_checked_before_anything_is_produced ... ok
-test edit::tests::the_fingerprint_not_is_moves ... FAILED
-test edit::tests::the_inverse_of_an_edit_is_an_edit_that_puts_it_back ... ok
-test error::tests::display_is_still_for_logs ... ok
-test error::tests::the_payload_is_reachable_whatever_the_variant ... ok
-test error::tests::the_wire_shape_is_discriminable ... ok
-test edit::tests::the_inverse_survives_edits_that_collapse_onto_the_same_point ... ok
-test event::tests::a_mask_that_watches_the_index_must_watch_batches_too ... ok
-test event::tests::a_mask_survives_the_json_boundary_whole ... ok
-test event::tests::a_rename_names_the_new_path_as_the_touched_one ... ok
-test event::tests::the_actor_answers_the_only_question_it_exists_for ... ok
-test event::tests::a_notice_survives_the_json_boundary_with_its_origin ... ok
-test event::tests::the_full_mask_is_full ... ok
-test event::tests::a_subscription_can_name_a_topic_and_a_place ... ok
-test event::tests::what_an_overflow_replaces_is_exactly_what_it_covers ... ok
-test html::tests::the_five_characters_and_no_others ... ok
-test html::tests::an_attribute_brings_its_own_quotes_and_escape ... ok
-test ipc::tests::a_full_width_u64_survives_the_json_boundary_as_a_string ... ok
-test ipc::tests::data_written_before_the_rule_is_still_readable ... ok
-test ipc::tests::garbage_is_an_error_not_a_zero ... ok
-test locale::tests::a_regional_tag_falls_back_to_its_language ... ok
-test locale::tests::half_hour_zones_are_expressible ... ok
-test locale::tests::iso_weekdays_round_trip ... ok
-test locale::tests::the_day_before_the_epoch_is_the_day_before ... ok
-test locale::tests::the_default_names_no_country ... ok
-test locale::tests::the_same_instant_reads_differently_to_different_people ... ok
-test locale::tests::the_wire_shape_is_the_declared_one ... ok
-test locale::tests::twelve_hour_clocks_have_no_hour_zero ... ok
-test model::tests::a_declared_format_only_adds_readings ... ok
-test model::tests::a_task_marker_carries_the_symbol_not_just_a_flag ... ok
-test model::tests::an_anchor_is_a_key_and_a_heading_slug_is_generated ... ok
-test model::tests::classify_tells_a_vault_resource_from_the_outside_world ... ok
-test model::tests::a_fragment_finds_the_heading_the_allocator_named ... ok
-test model::tests::docid_page_name_strips_dir_and_ext ... ok
-test model::tests::declaring_a_format_is_not_a_tolerant_parser ... ok
-test model::tests::frontmatter_aliases_accepts_string_or_list ... ok
-test model::tests::nfd_and_nfc_is_meet_on_the_text_and_not_on_the_slug ... ok
-test model::tests::only_iso_8601_is_a_date ... ok
-test model::tests::every_variant_survives_the_json_boundary ... ok
-test model::tests::properties_are_normalized_by_shape_not_by_guessing ... ok
-test model::tests::the_word_of_the_setting_is_the_word_of_the_wire ... ok
-test model::tests::what_a_wikilink_writes_is_what_a_wikilink_reads ... ok
-test model::tests::two_headings_with_the_same_text_cannot_share_an_id ... ok
-test model::tests::what_looks_like_a_date_is_what_a_declaration_would_read ... ok
-test model::tests::wikilink_inner_splits_page_heading_block_and_alias ... ok
-test net::tests::a_redirect_is_read_not_followed ... ok
-test net::tests::an_error_status_remains_a_response ... ok
-test net::tests::headers_are_compared_case_insensitively ... ok
-test net::tests::the_same_header_can_repeat ... ok
-test options::tests::active_is_iter_minus_the_off_entries ... ok
-test options::tests::overlay_by_key_not_map ... ok
-test model::tests::every_kind_declares_what_carries ... ok
-test options::tests::presence_and_value ... ok
-test options::tests::serializes_as_object_and_in_order_stable ... ok
-test options::tests::the_namespace_separates_who_defines_the_entry ... ok
-test options::tests::the_permission_list_is_closed ... ok
-test options::tests::the_states_of_an_entry_are_three_not_two ... ok
-test query::tests::an_already_empty_and_does_not_query_the_rest ... ok
-test query::tests::a_query_crosses_the_json_as_the_sends_the_shell ... ok
-test model::tests::the_extractor_of_the_kind_skips_the_prose ... ok
-test query::tests::empty_means_everything_and_is_the_intersection_identity ... ok
-test query::tests::and_or_and_negation_are_written_a_time_single ... ok
-test rules::composition::tests::a_cluster_and_a_letter_with_the_its_combining ... ok
-test rules::doc_data::tests::nemmeno_the_name_is_annida ... ok
-test rules::composition::tests::the_two_writes_of_a_letter_accented_become_a ... ok
-test rules::doc_data::tests::outbound_and_return_on_hostile_names ... ok
-test rules::doc_data::tests::that_that_the_plugin_holds_for_if_not_and_of_no_document ... ok
-test rules::doc_data::tests::the_document_remains_a_component_only ... ok
-test rules::doc_data::tests::the_space_and_the_prefix_of_that_that_there_is_inside ... ok
-test rules::doc_data::tests::remains_readable_to_the_eye ... ok
-test rules::events::tests::a_batch_arrives_if_it_touched_the_subject ... ok
-test rules::events::tests::a_folder_holds_what_is_under_it_and_not_what_looks_like_it ... ok
-test rules::events::tests::a_rename_out_of_a_folder_is_news_for_that_folder ... ok
-test rules::events::tests::a_topic_prefix_stops_at_a_separator ... ok
-test rules::events::tests::an_empty_filter_is_not_a_filter ... ok
-test rules::events::tests::an_overflow_in_the_burst_adds_up_instead_of_doubling ... ok
-test rules::events::tests::not_knowing_passes_and_knowing_nothing_does_not ... ok
-test rules::events::tests::nothing_to_drop_is_no_invitation ... ok
-test rules::events::tests::what_cannot_be_rediscovered_passes_any_subject ... ok
-test rules::events::tests::what_cannot_be_rediscovered_survives_a_ceiling ... ok
-test rules::folders::tests::the_boundary_is_segment_level_not_prefix ... ok
-test rules::folders::tests::the_parent_of_something_at_root_is_root ... ok
-test rules::folders::tests::the_root_is_the_entire_vault_and_has_three_written_forms ... ok
-test rules::folders::tests::the_three_ways_to_write_the_same_folder_filter_alike ... ok
-test rules::health::tests::an_extension_nobody_claims_is_an_attachment ... ok
-test rules::ids::tests::a_colon_with_an_empty_half_is_malformed_for_everyone ... ok
-test rules::ids::tests::a_plugin_may_only_name_inside_its_own_id ... ok
-test rules::ids::tests::the_core_may_name_bare_and_in_its_own_namespace ... ok
-test rules::ids::tests::the_message_says_what_to_write_instead ... ok
-test rules::ids::tests::the_split_is_on_the_first_colon_so_reverse_domain_ids_work ... ok
-test rules::keys::tests::a_sequence_stays_a_sequence ... ok
-test rules::keys::tests::what_this_app_cannot_press_does_not_normalize ... ok
-test rules::keys::tests::two_orders_of_modifiers_are_the_same_gesture ... ok
-test rules::media::tests::the_mime_becomes_from_the_name_and_the_says_the_signature ... ok
-test rules::keys::tests::obscures_respects_chord_boundaries ... ok
-test rules::media::tests::unknown_and_a_response_not_a_hole ... ok
-test rules::media::tests::who_claims_extension_wins_always ... ok
-test rules::path::tests::a_folder_named_like_the_file_is_not_a_common_prefix ... ok
-test rules::path::tests::escaping_the_vault_resolves_to_nothing ... ok
-test rules::path::tests::fragments_and_empty_targets ... ok
-test rules::path::tests::leading_slash_is_the_vault_root ... ok
-test rules::path::tests::percent_encoding_round_trip ... ok
-test rules::path::tests::relative_ref_walks_up_and_down ... ok
-test rules::path::tests::relative_to_the_folder_of_the_source ... ok
-test rules::path::tests::strip_ext_only_looks_at_the_last_segment ... ok
-test rules::path::tests::the_resolution_key_folds_case_and_composition ... ok
-test rules::path_policy::tests::a_name_new_is_writes_in_nfc ... ok
 test rules::path_policy::tests::normalized_removes_the_spaces_of_every_segment_and_not_the_points ... ok
 test rules::path_policy::tests::a_name_that_exists_already_is_reads_also_if_not_and_portable ... ok
 test rules::path_policy::tests::the_chars_that_a_filesystem_is_riserva ... ok
@@ -154,11 +6,11 @@ test rules::path_policy::tests::the_fence_equals_in_the_two_directions ... ok
 test rules::path_policy::tests::the_point_in_queue_and_that_in_head_are_two_faults_different ... ok
 test rules::path_policy::tests::the_judgment_on_a_name_new_and_that_on_the_form_that_is_writes ... ok
 test rules::path_policy::tests::the_order_of_the_checks_and_that_declared ... ok
-test rules::path_policy::tests::the_space_machine_not_and_a_document ... ok
 test rules::properties::tests::a_facet_counts_every_element_of_a_list ... ok
-test rules::properties::tests::a_missing_key_sorts_last_in_both_directions ... ok
+test rules::path_policy::tests::the_space_machine_not_and_a_document ... ok
 test rules::path_policy::tests::the_length_is_counts_in_byte_and_not_in_chars ... ok
 test rules::properties::tests::a_number_in_a_text_column_sorts_first_not_last ... ok
+test rules::properties::tests::a_missing_key_sorts_last_in_both_directions ... ok
 test rules::properties::tests::a_mixed_vault_answers_wrong_and_says_nothing_until_the_format_is_declared ... ok
 test rules::properties::tests::a_text_in_a_number_column_sorts_last_in_both_directions ... ok
 test rules::properties::tests::comparing_different_species_is_false_not_an_error ... ok
@@ -167,23 +19,23 @@ test rules::properties::tests::contains_looks_inside_a_list_and_inside_a_text ..
 test rules::properties::tests::facets_count_on_the_already_selected_subset ... ok
 test rules::properties::tests::order_of_is_antisymmetric_for_every_pair ... ok
 test rules::properties::tests::filters_are_in_and_and_a_missing_key_never_matches ... ok
-test rules::properties::tests::select_narrows_the_columns_and_absence_stays_absence ... ok
-test rules::properties::tests::the_same_instant_written_in_two_time_zones_is_the_same_instant ... ok
 test rules::properties::tests::sorting_is_total_so_a_page_never_repeats_itself ... ok
-test rules::snippet::tests::a_cut_on_both_sides_wears_two_ellipses ... ok
+test rules::properties::tests::the_same_instant_written_in_two_time_zones_is_the_same_instant ... ok
 test rules::snippet::tests::a_cut_on_the_left_wears_a_leading_ellipsis ... ok
-test rules::snippet::tests::a_label_longer_than_the_cap_is_kept_whole ... ok
+test rules::snippet::tests::a_cut_on_both_sides_wears_two_ellipses ... ok
 test rules::snippet::tests::a_cut_on_the_right_wears_a_trailing_ellipsis ... ok
+test rules::properties::tests::select_narrows_the_columns_and_absence_stays_absence ... ok
+test rules::snippet::tests::a_label_longer_than_the_cap_is_kept_whole ... ok
 test rules::snippet::tests::short_text_comes_back_trimmed_untouched ... ok
+test rules::snippet::tests::an_all_whitespace_window_is_empty ... ok
 test rules::snippet::tests::the_cap_is_exact ... ok
 test rules::tag::tests::extracts_simple_and_nested_tags ... ok
 test rules::snippet::tests::the_window_never_splits_a_char ... ok
 test rules::tag::tests::ignores_numeric_and_mid_word_hash ... ok
-test rules::snippet::tests::an_all_whitespace_window_is_empty ... ok
-test rules::tag::tests::tag_span_includes_hash ... ok
-test rules::tag::tests::the_separator_is_what_makes_a_child ... ok
 test rules::tag::tests::the_three_boundaries_that_a_second_implementation_fails ... ok
 test rules::text_policy::tests::a_bom_a_metadata_file_not_and_a_bom ... ok
+test rules::tag::tests::tag_span_includes_hash ... ok
+test rules::tag::tests::the_separator_is_what_makes_a_child ... ok
 test rules::text_policy::tests::that_that_not_and_utf8_says_where_stops_of_being_it ... ok
 test rules::text_policy::tests::the_bom_is_measures_and_is_skips_without_touch_the_source ... ok
 test rules::text_policy::tests::the_boundary_of_a_crlf_not_a_character ... ok
@@ -197,37 +49,37 @@ test schema::tests::it_compares_like_a_number ... ok
 test schema::tests::on_disk_it_remains_a_number ... ok
 test session::tests::a_mask_intersects_only_what_it_declares ... ok
 test session::tests::another_pane_changes_everything ... ok
-test session::tests::a_context_survives_the_json_boundary_with_every_field ... ok
 test session::tests::reading_mode_has_no_caret ... ok
+test session::tests::a_context_survives_the_json_boundary_with_every_field ... ok
 test session::tests::what_changed_is_computed_field_by_field ... ok
-test settings::tests::a_number_outside_range_not_is_rounds ... ok
 test settings::tests::a_choice_outside_list_and_a_refusal_that_lists ... ok
+test settings::tests::a_number_outside_range_not_is_rounds ... ok
 test settings::tests::arbitrary_key_is_not_a_keybinding ... ok
 test settings::tests::arbitrary_key_is_not_a_permission ... ok
 test settings::tests::keybinding_key_recognizes_and_returns_to_command ... ok
-test settings::tests::permission_toggles_are_machine_scoped ... ok
 test settings::tests::permission_key_composes_and_reverse_reads ... ok
+test settings::tests::permission_toggles_are_machine_scoped ... ok
 test settings::tests::the_default_exits_from_the_kind ... ok
-test text::tests::a_literal_is_a_bare_json_string ... ok
 test settings::tests::value_writes_as_a_human_would ... ok
-test text::tests::an_undetermined_language_goes_straight_to_the_default ... ok
+test text::tests::a_literal_is_a_bare_json_string ... ok
 test text::tests::a_typed_timestamp_is_formatted_by_whoever_knows_the_locale ... ok
+test text::tests::an_undetermined_language_goes_straight_to_the_default ... ok
+test text::tests::display_is_for_logs ... ok
 test text::tests::a_message_is_an_object_and_travels_both_ways ... ok
 test text::tests::no_catalog_is_not_an_error ... ok
-test text::tests::display_is_for_logs ... ok
-test text::tests::resolving_is_idempotent ... ok
-test text::tests::substitution_puts_the_arguments_where_the_braces_are ... ok
 test text::tests::the_ladder_descends_by_specificity ... ok
 test text::tests::the_template_language_has_exactly_one_construct ... ok
+test text::tests::resolving_is_idempotent ... ok
+test text::tests::substitution_puts_the_arguments_where_the_braces_are ... ok
 test theme::tests::manifest_names_every_theme_boundary_value ... ok
 test theme::tests::theme_1_has_a_stable_wire_name ... ok
-test traits::tests::a_window_keeps_the_total_of_what_it_did_not_return ... ok
 test traits::tests::a_job_id_crosses_the_json_boundary_as_a_string ... ok
-test traits::tests::the_discriminants_cover_every_surface ... ok
+test traits::tests::a_window_keeps_the_total_of_what_it_did_not_return ... ok
 test traits::tests::the_abi_version_rule_rejects_other_majors_and_newer_minors ... ok
+test traits::tests::the_discriminants_cover_every_check_of_health ... ok
+test traits::tests::the_discriminants_cover_every_surface ... ok
 test transfer::tests::a_destination_lives_under_the_folder_that_was_asked_for ... ok
 test transfer::tests::a_folder_selection_takes_the_descendants_and_not_the_namesakes ... ok
-test traits::tests::the_discriminants_cover_every_check_of_health ... ok
 test transfer::tests::a_not_utf8_source_is_an_error_and_not_a_log_line ... ok
 test transfer::tests::a_receipt_and_bytes_agree_on_length ... ok
 test transfer::tests::a_report_names_what_a_rollback_would_need ... ok
@@ -236,25 +88,173 @@ test transfer::tests::an_in_memory_source_answers_the_same_questions ... ok
 test transfer::tests::dispatch_looks_at_the_prologue_and_needs_no_host ... ok
 test ui::tests::an_action_carries_both_halves_without_mixing_them ... ok
 test transfer::tests::reading_all_does_not_stop_at_the_first_short_chunk ... ok
-test ui::tests::untrusted_html_is_rejected_even_if_nested ... ok
-test ui::tests::the_key_travels_beside_the_kind ... ok
 test ui::tests::untrusted_html_is_rejected_inside_the_new_containers ... ok
+test ui::tests::the_key_travels_beside_the_kind ... ok
+test ui::tests::untrusted_html_is_rejected_even_if_nested ... ok
 test ui::tests::untrusted_tree_without_html_is_valid ... ok
 
-failures:
+test result: ok. 229 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
----- edit::tests::the_fingerprint_not_is_moves stdout ----
+[1m[32m Downloading[0m crates ...
+[1m[32m  Downloaded[0m errno v0.3.14
+[1m[32m  Downloaded[0m cap-std v4.0.3
+[1m[32m  Downloaded[0m ambient-authority v0.0.2
+[1m[32m  Downloaded[0m camino v1.2.4
+[1m[32m  Downloaded[0m fs-set-times v0.20.3
+[1m[32m  Downloaded[0m cfg-if v1.0.4
+[1m[32m  Downloaded[0m fastrand v2.5.0
+[1m[32m  Downloaded[0m io-lifetimes v2.0.4
+[1m[32m  Downloaded[0m maybe-owned v0.3.4
+[1m[32m  Downloaded[0m ipnet v2.12.0
+[1m[32m  Downloaded[0m bitflags v2.13.1
+[1m[32m  Downloaded[0m rustix-linux-procfs v0.1.1
+[1m[32m  Downloaded[0m tempfile v3.27.0
+[1m[32m  Downloaded[0m getrandom v0.4.3
+[1m[32m  Downloaded[0m once_cell v1.21.4
+[1m[32m  Downloaded[0m tracing-core v0.1.36
+[1m[32m  Downloaded[0m io-lifetimes v3.0.1
+[1m[32m  Downloaded[0m io-extras v0.19.0
+[1m[32m  Downloaded[0m cap-primitives v4.0.3
+[1m[32m  Downloaded[0m pin-project-lite v0.2.17
+[1m[32m  Downloaded[0m rustix v1.1.4
+[1m[32m  Downloaded[0m tracing v0.1.44
+[1m[32m  Downloaded[0m libc v0.2.189
+[1m[32m  Downloaded[0m linux-raw-sys v0.12.1
+[1m[32m   Compiling[0m unicode-ident v1.0.24
+[1m[32m   Compiling[0m rustix v1.1.4
+[1m[32m   Compiling[0m bitflags v2.13.1
+[1m[32m   Compiling[0m once_cell v1.21.4
+[1m[32m   Compiling[0m proc-macro2 v1.0.107
+[1m[32m   Compiling[0m serde_core v1.0.229
+[1m[32m   Compiling[0m linux-raw-sys v0.12.1
+[1m[32m   Compiling[0m io-lifetimes v2.0.4
+[1m[32m   Compiling[0m quote v1.0.47
+[1m[32m   Compiling[0m syn v3.0.3
+[1m[32m   Compiling[0m io-lifetimes v3.0.1
+[1m[32m   Compiling[0m libc v0.2.189
+[1m[32m   Compiling[0m io-extras v0.19.0
+[1m[32m   Compiling[0m cap-primitives v4.0.3
+[1m[32m   Compiling[0m hashbrown v0.17.1
+[1m[32m   Compiling[0m indexmap v2.14.0
+[1m[32m   Compiling[0m camino v1.2.4
+[1m[32m   Compiling[0m serde_derive v1.0.229
+[1m[32m   Compiling[0m thiserror-impl v2.0.19
+[1m[32m   Compiling[0m fs-set-times v0.20.3
+[1m[32m   Compiling[0m rustix-linux-procfs v0.1.1
+[1m[32m   Compiling[0m getrandom v0.4.3
+[1m[32m   Compiling[0m maybe-owned v0.3.4
+[1m[32m   Compiling[0m ambient-authority v0.0.2
+[1m[32m   Compiling[0m ipnet v2.12.0
+[1m[32m   Compiling[0m cap-std v4.0.3
+[1m[32m   Compiling[0m thiserror v2.0.19
+[1m[32m   Compiling[0m serde_json v1.0.151
+[1m[32m   Compiling[0m tracing-core v0.1.36
+[1m[32m   Compiling[0m cfg-if v1.0.4
+[1m[32m   Compiling[0m pin-project-lite v0.2.17
+[1m[32m   Compiling[0m tracing v0.1.44
+[1m[32m   Compiling[0m fastrand v2.5.0
+[1m[32m   Compiling[0m tempfile v3.27.0
+[1m[32m   Compiling[0m serde v1.0.229
+[1m[32m   Compiling[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
+[1m[32m   Compiling[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
+[0m[1m[33mwarning[0m[0m[1m: unused import: `FsStorage`[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0mcrates/fub-kernel/src/vault.rs:17:33[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m17[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0muse crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};[0m
+[0m   [0m[0m[1m[38;5;12m|[0m[0m                                 [0m[0m[1m[33m^^^^^^^^^[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m   [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: `#[warn(unused_imports)]` on by default[0m
 
-thread 'edit::tests::the_fingerprint_not_is_moves' panicked at crates/fub-abi/src/edit.rs:961:9:
-assertion `left == right` failed
-  left: "sha256:c3ab8ff13720e8ad9047dd39466b3c8974e592c2fa383d4a3960714caef0c4f2"
- right: "85944171f73967e8"
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+[1m[32m   Compiling[0m fub-testkit v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-testkit)
+[1m[33mwarning[0m[1m:[0m `fub-kernel` (lib) generated 1 warning (run `cargo fix --lib -p fub-kernel` to apply 1 suggestion)
+[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 20.09s
+[1m[32m     Running[0m tests/guarded_write.rs (target/debug/deps/guarded_write-9e08a0daa6d2b5f4)
 
+running 10 tests
+test a_base_invented_not_passes ... ok
+test a_write_foreign_not_view_not_becomes_more_covered ... ok
+test a_base_on_a_document_vanished_and_a_conflict ... ok
+test a_legacy_fnv_base_still_guards_the_same_source_during_migration ... ok
+test the_guard_does_not_trust_the_registry ... ok
+test the_base_that_matches_writes ... ok
+test the_two_cases_are_two_responses_and_not_a_and_the_its_absence ... ok
+test the_revision_resa_chains_the_write_after ... ok
+test where_the_reader_does_not_cover_the_guard_and_the_single_network ... ok
+test without_base_is_writes_as_first ... ok
 
-failures:
-    edit::tests::the_fingerprint_not_is_moves
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
-test result: FAILED. 228 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+[1m[32m    Checking[0m bitflags v2.13.1
+[1m[32m    Checking[0m once_cell v1.21.4
+[1m[32m    Checking[0m linux-raw-sys v0.12.1
+[1m[32m    Checking[0m serde_core v1.0.229
+[1m[32m    Checking[0m io-lifetimes v3.0.1
+[1m[32m    Checking[0m io-lifetimes v2.0.4
+[1m[32m    Checking[0m tinyvec_macros v0.1.1
+[1m[32m    Checking[0m hashbrown v0.17.1
+[1m[32m    Checking[0m equivalent v1.0.2
+[1m[32m    Checking[0m tinyvec v1.12.0
+[1m[32m    Checking[0m rustix v1.1.4
+[1m[32m    Checking[0m io-extras v0.19.0
+[1m[32m    Checking[0m zmij v1.0.23
+[1m[32m    Checking[0m indexmap v2.14.0
+[1m[32m    Checking[0m libc v0.2.189
+[1m[32m    Checking[0m ipnet v2.12.0
+[1m[32m    Checking[0m memchr v2.8.3
+[1m[32m    Checking[0m ambient-authority v0.0.2
+[1m[32m    Checking[0m maybe-owned v0.3.4
+[1m[32m    Checking[0m itoa v1.0.18
+[1m[32m    Checking[0m serde v1.0.229
+[1m[32m    Checking[0m serde_json v1.0.151
+[1m[32m    Checking[0m thiserror v2.0.19
+[1m[32m    Checking[0m unicode-normalization v0.1.25
+[1m[32m    Checking[0m tracing-core v0.1.36
+[1m[32m    Checking[0m pin-project-lite v0.2.17
+[1m[32m    Checking[0m cfg-if v1.0.4
+[1m[32m    Checking[0m getrandom v0.4.3
+[1m[32m    Checking[0m camino v1.2.4
+[1m[32m    Checking[0m tracing v0.1.44
+[1m[32m    Checking[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
+[1m[32m    Checking[0m fastrand v2.5.0
+[1m[32m    Checking[0m rustix-linux-procfs v0.1.1
+[1m[32m    Checking[0m fs-set-times v0.20.3
+[1m[32m    Checking[0m tempfile v3.27.0
+[1m[32m    Checking[0m cap-primitives v4.0.3
+[1m[32m    Checking[0m cap-std v4.0.3
+[1m[32m    Checking[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
+[0m[1m[33mwarning[0m[0m[1m: unused import: `FsStorage`[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0mcrates/fub-kernel/src/vault.rs:17:33[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m17[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0muse crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};[0m
+[0m   [0m[0m[1m[38;5;12m|[0m[0m                                 [0m[0m[1m[33m^^^^^^^^^[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m   [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: `#[warn(unused_imports)]` on by default[0m
 
-[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-abi --lib`
+[1m[33mwarning[0m[1m:[0m `fub-kernel` (lib) generated 1 warning (run `cargo fix --lib -p fub-kernel` to apply 1 suggestion)
+[1m[32m    Checking[0m fub-testkit v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-testkit)
+[1m[33mwarning[0m[1m:[0m `fub-kernel` (lib test) generated 1 warning (1 duplicate)
+[1m[32m    Finished[0m `dev` profile [unoptimized + debuginfo] target(s) in 12.95s
+[1m[32m    Checking[0m foldhash v0.2.0
+[1m[32m    Checking[0m unicode-ident v1.0.24
+[1m[32m    Checking[0m anyhow v1.0.104
+[1m[32m    Checking[0m id-arena v2.3.0
+[1m[32m    Checking[0m proc-macro2 v1.0.107
+[1m[32m    Checking[0m semver v1.0.28
+[1m[32m    Checking[0m hashbrown v0.17.1
+[1m[32m    Checking[0m log v0.4.33
+[1m[32m    Checking[0m syn v2.0.119
+[1m[32m    Checking[0m indexmap v2.14.0
+[1m[32m    Checking[0m serde_json v1.0.151
+[1m[32m    Checking[0m wit-parser v0.254.0
+[1m[32m    Checking[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
+[1m[32m    Checking[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
+[0m[1m[38;5;9merror[0m[0m[1m: unused import: `FsStorage`[0m
+[0m  [0m[0m[1m[38;5;12m--> [0m[0mcrates/fub-kernel/src/vault.rs:17:33[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m17[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0muse crate::storage::{EntryKind, FsStorage, Stat, VaultStorage};[0m
+[0m   [0m[0m[1m[38;5;12m|[0m[0m                                 [0m[0m[1m[38;5;9m^^^^^^^^^[0m
+[0m   [0m[0m[1m[38;5;12m|[0m
+[0m   [0m[0m[1m[38;5;12m= [0m[0m[1mnote[0m[0m: `-D unused-imports` implied by `-D warnings`[0m
+[0m   [0m[0m[1m[38;5;12m= [0m[0m[1mhelp[0m[0m: to override `-D warnings` add `#[allow(unused_imports)]`[0m
+
+[1m[31merror[0m[1m:[0m could not compile `fub-kernel` (lib) due to 1 previous error
