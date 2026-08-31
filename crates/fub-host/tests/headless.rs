@@ -79,7 +79,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
     // `l_apertura_a_fasi.rs`; qui la domanda è un'altra, e chiederla presto
     // farebbe fallire questo test per il disco invece che per il montaggio.
     host.wait_indexed(None).expect("indexing finishes");
-    let open = host.workspace(None).expect("a vault is open");
+    let open = host.debug_workspace(None).expect("a vault is open");
     let mut docs = open.read().unwrap().documents();
     docs.sort();
     assert_eq!(docs, vec![DocId::new("Cucina.md"), DocId::new("Rust.md")]);
@@ -154,7 +154,7 @@ fn the_data_channel_and_the_view_channel_answer_on_the_same_vault() {
     // chiede «cosa risponde l'indice» deve chiederlo quando l'indice ha una
     // risposta, o presidierebbe la velocità del disco.
     host.wait_indexed(None).expect("waits for indexing");
-    let ws = host.workspace(None).expect("a vault is open");
+    let ws = host.debug_workspace(None).expect("a vault is open");
 
     // Il canale dati: l'indice di ricerca è stato registrato PRIMA della
     // scansione, quindi ha già visto il vault.
@@ -213,7 +213,7 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
     assert_eq!(before.len(), 0, "the open no longer photographs");
 
     {
-        let ws = host.workspace(None).unwrap();
+        let ws = host.debug_workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(&id, "# Nota\n\ndopo\n", WriteBase::Dictated)
             .expect("writes");
@@ -232,7 +232,7 @@ fn versioning_is_mounted_and_its_two_halves_are_composed() {
         "# Nota\n\nprima\n"
     );
     host.restore_version(None, &id, ts).expect("ripristina");
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
     let ws = ws.read().unwrap();
     assert_eq!(ws.read_source(&id).unwrap(), "# Nota\n\nprima\n");
 }
@@ -295,7 +295,7 @@ fn the_first_write_photographs_the_original() {
     // La prima scrittura fotografa l'originale: la storia nasce qui, e ha
     // due voci — quella di prima e quella di adesso.
     {
-        let ws = host.workspace(None).unwrap();
+        let ws = host.debug_workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(
             &DocId::new("Nota00.md"),
@@ -404,7 +404,7 @@ fn the_event_bridge_starts_after_the_scan_and_before_anything_else() {
     );
 
     {
-        let ws = host.workspace(None).unwrap();
+        let ws = host.debug_workspace(None).unwrap();
         let mut ws = ws.write().unwrap();
         ws.write_document(&DocId::new("Nota.md"), "# Nota\n\nx\n", WriteBase::Dictated)
             .expect("writes");
@@ -442,7 +442,7 @@ fn two_vault_are_open_together_and_the_current_and_a_convenience() {
     host.wait_indexed(None).expect("il current ha indicizzato");
     host.wait_indexed(Some(a.root.as_str()))
         .expect("and also the first");
-    let current = host.workspace(None).expect("there is a current");
+    let current = host.debug_workspace(None).expect("there is a current");
     assert_eq!(
         current.read().unwrap().documents(),
         vec![DocId::new("B.md")],
@@ -450,7 +450,7 @@ fn two_vault_are_open_together_and_the_current_and_a_convenience() {
     );
     // E il primo si raggiunge nominandolo, senza toccare il corrente.
     let first = host
-        .workspace(Some(a.root.as_str()))
+        .debug_workspace(Some(a.root.as_str()))
         .expect("the first is still open");
     assert_eq!(first.read().unwrap().documents(), vec![DocId::new("A.md")]);
 
@@ -458,7 +458,7 @@ fn two_vault_are_open_together_and_the_current_and_a_convenience() {
     host.close_vault(&b.root).expect("chiude il secondo");
     assert_eq!(host.vaults().len(), 1);
     assert_eq!(
-        host.workspace(None)
+        host.debug_workspace(None)
             .expect("the current moved to who remains")
             .read()
             .unwrap()
@@ -468,7 +468,7 @@ fn two_vault_are_open_together_and_the_current_and_a_convenience() {
 
     host.close();
     assert!(
-        host.workspace(None).is_err(),
+        host.debug_workspace(None).is_err(),
         "after `close` no vault is open"
     );
     assert!(!host.is_watching(None));
@@ -487,7 +487,7 @@ fn reopen_the_same_vault_not_the_remounts() {
 
     let host = headless();
     host.open(&v.root).expect("prima apertura");
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
 
     // Una scrittura che il disco non ha: se la seconda apertura rimontasse e
     // riscansionasse, sparirebbe.
@@ -496,7 +496,7 @@ fn reopen_the_same_vault_not_the_remounts() {
         .set_active_document(Some(DocId::new("A.md")));
 
     host.open(&v.root).expect("seconda apertura");
-    let still = host.workspace(None).unwrap();
+    let still = host.debug_workspace(None).unwrap();
     assert!(
         fub_host::Custody::ptr_eq(&ws, &still),
         "it is the same session, not a new one"
@@ -516,7 +516,7 @@ fn reopen_the_same_vault_not_the_remounts() {
         .join("..")
         .join(v.root.file_name().expect("basename"));
     let by_name = host
-        .workspace(Some(wrong.as_str()))
+        .debug_workspace(Some(wrong.as_str()))
         .expect("the vault is found even when named wrong");
     assert!(
         fub_host::Custody::ptr_eq(&ws, &by_name),
@@ -546,7 +546,7 @@ fn close_a_vault_and_latest_round_in_which_and_again_open() {
     // `flush_indexes`: è il caso di ogni host che un watcher non ce l'ha — CLI,
     // e2e, PWA, mobile — e prima di questa voce l'indice non diventava durevole
     // mai.
-    host.workspace(None)
+    host.debug_workspace(None)
         .unwrap()
         .write()
         .unwrap()
@@ -669,7 +669,7 @@ fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bi
 
     // proprio valore — legge la bandiera del kernel.
     // E chi smette lo dice: chiudere il vault lascia andare il rilevatore, e la
-    let ws = with.workspace(None).unwrap();
+    let ws = with.debug_workspace(None).unwrap();
     with.close_vault(&v.root).expect("closes");
     assert!(
         !matches!(
@@ -681,7 +681,7 @@ fn the_detection_is_asks_from_the_channel_data_and_from_host_and_and_the_same_bi
 }
 
 fn state(host: &Host) -> VaultStatus {
-    let ws = host.workspace(None).expect("a vault is open");
+    let ws = host.debug_workspace(None).expect("a vault is open");
     let ws = ws.read().unwrap();
     match ws.query_index(IndexQuery::VaultStatus) {
         Ok(IndexResult::VaultStatus(s)) => s,
@@ -695,7 +695,7 @@ fn a_path_that_is_not_a_directory_is_refused_before_anything_is_mounted() {
     v.put("Nota.md", "# Nota\n");
     let host = headless();
     assert!(host.open(&v.root.join("Nota.md")).is_err());
-    assert!(host.workspace(None).is_err());
+    assert!(host.debug_workspace(None).is_err());
 }
 
 // risposta cambia senza che nessuno la aggiorni a mano.

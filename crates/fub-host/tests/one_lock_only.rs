@@ -313,7 +313,7 @@ fn poison(ws: &Custody<fub_kernel::Workspace>) {
 #[test]
 fn a_vault_poisoned_responds_of_no_a_every_call() {
     let (_dir, host, _root) = vault();
-    let ws = host.workspace(None).expect("the current vault");
+    let ws = host.debug_workspace(None).expect("the current vault");
     poison(&ws);
 
     // Dieci chiamate, come dieci IPC di fila: nessuna pania, tutte rispondono.
@@ -352,7 +352,7 @@ fn a_vault_poisoned_responds_of_no_a_every_call() {
 #[test]
 fn close_a_vault_poisoned_the_says_instead_of_panic() {
     let (_dir, host, root) = vault();
-    let ws = host.workspace(None).expect("the current vault");
+    let ws = host.debug_workspace(None).expect("the current vault");
     poison(&ws);
 
     let issues = host.close_vault(&root).expect("the session still exists");
@@ -381,8 +381,12 @@ fn the_poison_of_a_vault_not_touches_the_other() {
 
     // Nominati, e non presi per posizione: `vaults()` ordina per path, e un
     // banco che si fidasse dell'ordine proverebbe una volta su due l'opposto di
-    let ws_a = host.workspace(Some(root_a.as_str())).expect("il primo");
-    let ws_b = host.workspace(Some(root_b.as_str())).expect("il secondo");
+    let ws_a = host
+        .debug_workspace(Some(root_a.as_str()))
+        .expect("il primo");
+    let ws_b = host
+        .debug_workspace(Some(root_b.as_str()))
+        .expect("il secondo");
     poison(&ws_a);
 
     assert!(ws_a.read().is_err(), "the first is dead");

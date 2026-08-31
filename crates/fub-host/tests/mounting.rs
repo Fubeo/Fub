@@ -439,7 +439,7 @@ fn warnings_from_organization_are_forwarded_to_the_mount() {
         .with_config_dir(&config);
     host.open(&root)
         .expect("a broken sidecar does not prevent opening");
-    let ws = host.workspace(None).expect("a vault is open");
+    let ws = host.debug_workspace(None).expect("a vault is open");
 
     assert!(
         ws.read()

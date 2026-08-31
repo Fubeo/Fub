@@ -40,11 +40,13 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
-#[cfg(feature = "versioning")]
-use fub_abi::edit::WriteBase;
+use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::model::DocId;
-use fub_abi::traits::JobId;
-use fub_abi::{Notice, PluginError};
+use fub_abi::session::ViewContext;
+use fub_abi::traits::{JobId, ViewInstance, ViewSpec};
+use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
+use fub_abi::{Actor, Notice, PluginError};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
 use fub_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
@@ -381,7 +383,7 @@ fn with_the_schema(machine: Arc<MachineSettings>) -> Arc<MachineSettings> {
 ///
 /// È un seam privato, così il percorso lock-sensitive di [`Host::read_version`]
 /// resta verificabile senza esporre un'API solo ai test.
-#[cfg(feature = "versioning")]
+#[cfg(all(feature = "versioning", test))]
 fn with_read_version_host<R>(
     workspace: &Custody<Workspace>,
     f: impl FnOnce(&dyn fub_abi::traits::ReadApi) -> R,
@@ -1285,9 +1287,7 @@ impl Host {
                 self.machine_settings(),
             ));
         }
-        let ws = self.workspace(vault)?;
-        let ws = ws.read()?;
-        ws.query_index(query)
+        self.read_workspace(vault, |workspace| workspace.query_index(query))
     }
 
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
@@ -1558,10 +1558,161 @@ impl Host {
         self.with_session(vault, f)?
     }
 
-    /// Un handle clonato al workspace di un vault (o del corrente), o l'errore
-    /// se non è aperto.
-    pub fn workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
-        self.with_session(vault, |s| s.workspace.clone())
+    /// Esegue una lettura breve sul workspace selezionato. La custodia non
+    /// attraversa questa porta: i consumer dell'host ricevono operazioni, non
+    /// l'oggetto monolitico che le implementa.
+    fn read_workspace<R>(
+        &self,
+        vault: Option<&str>,
+        f: impl FnOnce(&Workspace) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        self.in_session(vault, |session| {
+            let workspace = session.workspace.read()?;
+            f(&workspace)
+        })
+    }
+
+    /// Gemello esclusivo di [`read_workspace`](Self::read_workspace). Resta
+    /// privato proprio per impedire che il vecchio `Host::workspace` rinasca
+    /// come una closure generica esposta ai consumer.
+    fn write_workspace<R>(
+        &self,
+        vault: Option<&str>,
+        f: impl FnOnce(&mut Workspace) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        self.in_session(vault, |session| {
+            let mut workspace = session.workspace.write()?;
+            f(&mut workspace)
+        })
+    }
+
+    /// Sorgente e revisione dalla stessa lettura.
+    pub fn read_document(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<(String, Revision), PluginError> {
+        self.read_workspace(vault, |workspace| {
+            let source = workspace.read_source(id).map_err(PluginError::from)?;
+            let revision = Revision::of(&source);
+            Ok((source, revision))
+        })
+    }
+
+    pub fn write_document(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision, PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace
+                .write_document(id, source, base)
+                .map_err(PluginError::from)
+        })
+    }
+
+    pub fn save_draft(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+        text: &str,
+        base: Option<Revision>,
+    ) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace.save_draft(id, text, base).map_err(|error| {
+                PluginError::Internal(format!("draft not written: {error}").into())
+            })
+        })
+    }
+
+    pub fn discard_draft(&self, vault: Option<&str>, id: &DocId) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace.discard_draft(id).map_err(|error| {
+                PluginError::Internal(format!("draft not discarded: {error}").into())
+            })
+        })
+    }
+
+    pub fn set_active_context(
+        &self,
+        vault: Option<&str>,
+        context: Option<ViewContext>,
+    ) -> Result<Vec<String>, PluginError> {
+        self.read_workspace(vault, |workspace| Ok(workspace.set_active_context(context)))
+    }
+
+    pub fn views(&self, vault: Option<&str>) -> Result<Vec<ViewSpec>, PluginError> {
+        self.read_workspace(vault, |workspace| Ok(workspace.views()))
+    }
+
+    pub fn render_view(
+        &self,
+        vault: Option<&str>,
+        instance: &ViewInstance,
+    ) -> Result<UiNode, PluginError> {
+        self.read_workspace(vault, |workspace| workspace.render_view(instance))
+    }
+
+    pub fn view_action(
+        &self,
+        vault: Option<&str>,
+        instance: &ViewInstance,
+        action: UiAction,
+    ) -> Result<ViewUpdate, PluginError> {
+        self.write_workspace(vault, |workspace| workspace.view_action(instance, action))
+    }
+
+    pub fn commands(&self, vault: Option<&str>) -> Result<Vec<CommandSpec>, PluginError> {
+        self.read_workspace(vault, |workspace| Ok(workspace.commands()))
+    }
+
+    pub fn invoke_user_command(
+        &self,
+        vault: Option<&str>,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> Result<CommandOutcome, PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace.invoke_command(command, args, mode, Actor::User)
+        })
+    }
+
+    pub fn view_state(
+        &self,
+        vault: Option<&str>,
+        owner: &str,
+        instance: &str,
+        key: &str,
+    ) -> Result<Option<serde_json::Value>, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            Ok(workspace.view_state(owner, instance, key))
+        })
+    }
+
+    pub fn set_view_state(
+        &self,
+        vault: Option<&str>,
+        owner: &str,
+        instance: &str,
+        key: &str,
+        value: Option<serde_json::Value>,
+    ) -> Result<(), PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace
+                .set_view_state(owner, instance, key, value)
+                .map_err(|error| PluginError::Io(error.into()))
+        })
+    }
+
+    /// Accesso al workspace soltanto nei build di debug, per i banchi interni.
+    /// La shell e i consumer di produzione non ricevono più questa capacità.
+    #[cfg(debug_assertions)]
+    #[doc(hidden)]
+    pub fn debug_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
+        self.with_session(vault, |session| session.workspace.clone())
     }
 
     /// La radice del vault (o del corrente).
@@ -1633,8 +1784,9 @@ impl Host {
         ts: u64,
     ) -> Result<String, PluginError> {
         let store = self.versions(vault)?;
-        let ws = self.workspace(vault)?;
-        with_read_version_host(&ws, |host| store.read(id, ts, host))?
+        self.read_workspace(vault, |workspace| {
+            workspace.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
+        })
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
@@ -1648,16 +1800,10 @@ impl Host {
         ts: u64,
     ) -> Result<(), PluginError> {
         let source = self.read_version(vault, id, ts)?;
-        let ws = self.workspace(vault)?;
-        let mut ws = ws.write()?;
         // **Detta**, come l'importer (§18.1): un ripristino non discende dal
-        // testo che c'è adesso — lo sostituisce **apposta**, ed è il gesto con
-        // cui l'utente dice che quello di adesso non gli va bene. È l'altra
-        // metà del ripristino che il comando `version.restore` dichiara allo
-        // stesso modo, e le due righe dicono adesso la stessa parola.
-        ws.write_document(id, &source, WriteBase::Dictated)
+        // testo che c'è adesso — lo sostituisce **apposta**.
+        self.write_document(vault, id, &source, WriteBase::Dictated)
             .map(|_| ())
-            .map_err(PluginError::from)
     }
 
     // --- organizzazione del vault (§11.3) ----------------------------------

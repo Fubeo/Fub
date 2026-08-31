@@ -211,11 +211,11 @@ fn read_document(
     id: String,
     vault: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    let text = ws.read_source(&doc_id(&id)?).map_err(PluginError::from)?;
-    let revision = Revision::of(&text).0;
-    Ok(DocumentSource { text, revision })
+    let (text, revision) = host.read_document(vault.as_deref(), &doc_id(&id)?)?;
+    Ok(DocumentSource {
+        text,
+        revision: revision.0,
+    })
 }
 
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
@@ -234,11 +234,8 @@ fn write_document(
     base: WriteBase,
     vault: Option<String>,
 ) -> Result<String, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write()?;
-    ws.write_document(&doc_id(&id)?, &source, base)
-        .map(|r| r.0)
-        .map_err(PluginError::from)
+    host.write_document(vault.as_deref(), &doc_id(&id)?, &source, base)
+        .map(|revision| revision.0)
 }
 
 /// **Scrive la bozza di un documento** (§15.2): ciò che c'è nel buffer adesso.
@@ -260,20 +257,19 @@ fn save_draft(
     base: Option<String>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write()?;
-    ws.save_draft(&doc_id(&id)?, &text, base.map(Revision::new))
-        .map_err(|and| PluginError::Internal(format!("draft not written: {and}").into()))
+    host.save_draft(
+        vault.as_deref(),
+        &doc_id(&id)?,
+        &text,
+        base.map(Revision::new),
+    )
 }
 
 /// **Butta la bozza di un documento**: il buffer è tornato pulito, o l'utente ha
 /// scelto di scartare ciò che aveva recuperato.
 #[tauri::command]
 fn discard_draft(host: State<Host>, id: String, vault: Option<String>) -> Result<(), PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write()?;
-    ws.discard_draft(&doc_id(&id)?)
-        .map_err(|and| PluginError::Internal(format!("draft not discarded: {and}").into()))
+    host.discard_draft(vault.as_deref(), &doc_id(&id)?)
 }
 
 // Le cinque azioni STRUTTURALI — crea, rinomina, cestina, ripristina, svuota —
@@ -324,9 +320,7 @@ fn set_active_context(
     context: Option<ViewContext>,
     vault: Option<String>,
 ) -> Result<Vec<String>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    Ok(ws.set_active_context(context))
+    host.set_active_context(vault.as_deref(), context)
 }
 
 /// La shell riporta cosa il **sistema** dice: lingua, fuso, calendario (§12.3).
@@ -351,9 +345,7 @@ fn set_system_locale(host: State<Host>, locale: Locale) -> bool {
 /// un evento della sua maschera `refresh`. Una view di plugin compare da sola.
 #[tauri::command]
 fn list_views(host: State<Host>, vault: Option<String>) -> Result<Vec<ViewSpec>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    Ok(ws.views())
+    host.views(vault.as_deref())
 }
 
 /// Rende l'albero `UiNode` di **un'istanza** di view. Il render è una lettura:
@@ -372,9 +364,7 @@ fn render_view(
     params: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<UiNode, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    ws.render_view(&view_instance(view, instance, params))
+    host.render_view(vault.as_deref(), &view_instance(view, instance, params))
 }
 
 /// Consegna un'azione della UI al provider della view e restituisce il suo
@@ -397,9 +387,8 @@ fn view_action(
     fields: Option<Vec<FieldValue>>,
     vault: Option<String>,
 ) -> Result<ViewUpdate, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write()?;
-    ws.view_action(
+    host.view_action(
+        vault.as_deref(),
         &view_instance(view, instance, params),
         UiAction {
             action: ActionId(action),
@@ -440,9 +429,7 @@ fn list_commands(
     host: State<Host>,
     vault: Option<String>,
 ) -> Result<Vec<CommandSpec>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    Ok(ws.commands())
+    host.commands(vault.as_deref())
 }
 
 /// Esegue — o simula — un comando.
@@ -467,13 +454,11 @@ fn invoke_command(
     mode: Option<InvokeMode>,
     vault: Option<String>,
 ) -> Result<CommandOutcome, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let mut ws = ws.write()?;
-    ws.invoke_command(
+    host.invoke_user_command(
+        vault.as_deref(),
         &command,
         args.unwrap_or(serde_json::Value::Null),
         mode.unwrap_or(InvokeMode::Apply),
-        Actor::User,
     )
 }
 
@@ -680,9 +665,7 @@ fn view_state(
     key: String,
     vault: Option<String>,
 ) -> Result<Option<serde_json::Value>, PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    let ws = ws.read()?;
-    Ok(ws.view_state(SHELL_OWNER, SHELL_INSTANCE, &key))
+    host.view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key)
 }
 
 /// Salva (`Some`) o dimentica (`None`) lo stato di vista della shell.
@@ -693,13 +676,7 @@ fn set_view_state(
     value: Option<serde_json::Value>,
     vault: Option<String>,
 ) -> Result<(), PluginError> {
-    let ws = host.workspace(vault.as_deref())?;
-    // Prestito **condiviso**: lo store ha il suo lucchetto dentro, e prendere
-    // qui quello esclusivo del workspace bloccherebbe chi legge per il tempo di
-    // una scrittura su disco — per salvare uno scroll.
-    let ws = ws.read()?;
-    ws.set_view_state(SHELL_OWNER, SHELL_INSTANCE, &key, value)
-        .map_err(|and| PluginError::Io(and.into()))
+    host.set_view_state(vault.as_deref(), SHELL_OWNER, SHELL_INSTANCE, &key, value)
 }
 
 /// Chi questo host sa montare, e chi è acceso in questo vault. Non è

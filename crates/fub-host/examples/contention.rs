@@ -241,7 +241,7 @@ fn main() {
         std::thread::available_parallelism().map_or(0, |n| n.get())
     );
 
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
     ws.write()
         .unwrap()
         .set_active_document(Some(DocId::new("Nota 7.md")));

@@ -57,7 +57,7 @@ impl EventSink for Collected {
 }
 
 fn state(host: &Host) -> IndexingState {
-    let ws = host.workspace(None).expect("a vault is open");
+    let ws = host.debug_workspace(None).expect("a vault is open");
     let ws = ws.read().unwrap();
     match ws.query_index(IndexQuery::VaultStatus) {
         Ok(IndexResult::VaultStatus(s)) => s.indexing,
@@ -81,7 +81,7 @@ fn open_returns_first_that_the_index_is_full() {
     // Il vault è **utilizzabile adesso**: l'anagrafe è intera, e una nota si
     // legge. È ciò che rende onesto non aver aspettato.
     let entries = {
-        let ws = host.workspace(None).expect("open");
+        let ws = host.debug_workspace(None).expect("open");
         let ws = ws.read().unwrap();
         match ws.query_index(IndexQuery::Entries {
             of_kind: None,
@@ -101,7 +101,7 @@ fn open_returns_first_that_the_index_is_full() {
         "indexing finished, the index responds for everything there is"
     );
     let indexed = {
-        let ws = host.workspace(None).expect("open");
+        let ws = host.debug_workspace(None).expect("open");
         let n = ws.read().unwrap().documents().len();
         n
     };

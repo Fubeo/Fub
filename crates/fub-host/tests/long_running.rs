@@ -113,7 +113,7 @@ fn open(v: &Vault) -> Host {
     // non è il job che sta guardando — e non c'è nessun modo di distinguere le
     // due cose da fuori.
     host.wait_indexed(None).expect("l'indicizzazione finisce");
-    host.workspace(None)
+    host.debug_workspace(None)
         .unwrap()
         .write()
         .unwrap()
@@ -131,7 +131,7 @@ fn open(v: &Vault) -> Host {
 fn a_job_walks_the_vault_and_there_writes() {
     let v = vault(30);
     let host = open(&v);
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
 
     let outcome = {
         let ws = ws.clone();
@@ -166,7 +166,7 @@ fn a_job_walks_the_vault_and_there_writes() {
 fn a_job_that_not_touches_the_host_remains_a_calculation_pure() {
     let v = vault(2);
     let host = open(&v);
-    let mut job_host = JobHost::new(host.workspace(None).unwrap(), INVENTORY);
+    let mut job_host = JobHost::new(host.debug_workspace(None).unwrap(), INVENTORY);
     assert!(matches!(
         Inventory.run_job("altro", serde_json::json!({}), &mut job_host),
         Err(PluginError::UnknownJob(j)) if j == "altro"
@@ -274,7 +274,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     const NOTE: usize = 150;
     let v = vault(NOTE);
     let host = open(&v);
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
 
     // --- la colonna del job: il prestito è **per chiamata** -----------------
     let job = {
@@ -390,7 +390,7 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
 fn a_job_that_writes_on_a_base_old_receives_conflict() {
     let v = vault(3);
     let host = open(&v);
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
     let id = DocId::new("Note 1.md");
 
     let mut job_host = JobHost::new(ws.clone(), INVENTORY);

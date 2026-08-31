@@ -601,7 +601,7 @@ fn outside_from_a_job_the_progress_not_has_of_who_be() {
     let (steps, _regia) = steps();
     let (host, _events) = bench(&v, &steps);
 
-    let ws = host.workspace(None).expect("aperto");
+    let ws = host.debug_workspace(None).expect("aperto");
     let mut outside = fub_host::JobHost::new(ws, SPY);
     outside.report_progress(JobProgress {
         done: 1,

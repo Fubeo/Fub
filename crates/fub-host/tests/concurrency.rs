@@ -212,7 +212,7 @@ fn writer_does_not_block_readers_for_more_than_one_tick() {
     let _turn = bench_turn();
     let v = vault(120);
     let host = open(&v);
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
 
     let stop = Arc::new(AtomicBool::new(false));
     let handles: Vec<_> = (0..readers())
@@ -452,7 +452,7 @@ fn a_view_that_panics_while_drawing_does_not_poison_the_vault() {
     let _turn = bench_turn();
     let v = vault(4);
     let host = open(&v);
-    let ws = host.workspace(None).unwrap();
+    let ws = host.debug_workspace(None).unwrap();
     {
         // Prima si dichiara, poi si registra: il kernel non presta capacità a
         // una stringa (§7.3, decisione 0021).
