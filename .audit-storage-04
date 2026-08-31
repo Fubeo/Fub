@@ -1,0 +1,138 @@
++        std::fs::create_dir_all(&root).unwrap();
++        std::fs::create_dir_all(&outside).unwrap();
++        let storage = RootedFsStorage::open(&root).unwrap();
++        std::fs::rename(&root, &moved).unwrap();
++        symlink(&outside, &root).unwrap();
++
++        storage.write(&root.join("prova.txt"), b"dentro").unwrap();
++        assert_eq!(std::fs::read(moved.join("prova.txt")).unwrap(), b"dentro");
++        assert!(!outside.join("prova.txt").exists());
++    }
++}
+diff --git a/crates/fub-kernel/src/vault.rs b/crates/fub-kernel/src/vault.rs
+index 259da35..b68de1f 100644
+--- a/crates/fub-kernel/src/vault.rs
++++ b/crates/fub-kernel/src/vault.rs
+@@ -275,7 +275,14 @@ impl Vault {
+     /// interfaccia — se la radice non esiste, non è una cartella o non si ha
+     /// permesso di scriverci (0160).
+     pub fn open(root: impl AsRef<Utf8Path>) -> Result<Self> {
+-        Vault::on(root, Arc::new(FsStorage))
++        let root = root_absolute(root.as_ref());
++        let storage = crate::storage::RootedFsStorage::open(&root).map_err(|source| {
++            KernelError::InvalidRoot {
++                path: root.clone(),
++                source,
++            }
++        })?;
++        Vault::on(root, Arc::new(storage))
+     }
+ 
+     /// Un vault su un supporto qualunque (§15.1).
+@@ -293,7 +300,7 @@ impl Vault {
+     pub fn on(root: impl AsRef<Utf8Path>, storage: Arc<dyn VaultStorage>) -> Result<Self> {
+         let root = root_absolute(root.as_ref());
+         storage
+-            .root_validates(&root)
++            .mount_fence(&root)
+             .map_err(|source| KernelError::InvalidRoot {
+                 path: root.clone(),
+                 source,
+@@ -590,6 +597,31 @@ impl Vault {
+             .map_err(|and| KernelError::Io { path, source: and })
+     }
+ 
++    /// Come [`write`](Vault::write), ma posa i byte soltanto se il contenuto
++    /// letto dal chiamante è ancora quello corrente. `Ok(None)` è un conflitto,
++    /// non un errore del supporto.
++    pub fn write_if_unchanged(
++        &self,
++        id: &DocId,
++        expected: &str,
++        source: &str,
++    ) -> Result<Option<(u64, u64)>> {
++        let path = self.path_for(id)?;
++        match self
++            .storage
++            .write_if_unchanged(&path, Some(expected.as_bytes()), source.as_bytes())
++            .map_err(|and| KernelError::Io {
++                path: path.clone(),
++                source: and,
++            })?
++        {
++            crate::storage::ConditionalWrite::Written(stat) => {
++                Ok(Some((stat.size, stat.mtime)))
++            }
++            crate::storage::ConditionalWrite::Changed => Ok(None),
++        }
++    }
++
+     /// Un id fuori dal recinto **non esiste**, e non è una tolleranza: non
+     /// nomina un posto di questo vault, quindi non c'è niente che possa
+     /// esistere.
+diff --git a/crates/fub-kernel/src/workspace.rs b/crates/fub-kernel/src/workspace.rs
+index 7d53c82..999c27f 100644
+--- a/crates/fub-kernel/src/workspace.rs
++++ b/crates/fub-kernel/src/workspace.rs
+@@ -709,7 +709,14 @@ impl Workspace {
+         // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
+         // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
+         // Come [`with_machine_settings`](Workspace::with_machine_settings), col
+-        Workspace::on(root, registry, Arc::new(crate::storage::FsStorage), machine)
++        let root = crate::vault::root_absolute(root.as_ref());
++        let storage = crate::storage::RootedFsStorage::open(&root).map_err(|source| {
++            KernelError::InvalidRoot {
++                path: root.clone(),
++                source,
++            }
++        })?;
++        Workspace::on(root, registry, Arc::new(storage), machine)
+     }
+ 
+     /// **supporto passato** invece del disco (§15.1).
+@@ -728,9 +735,18 @@ impl Workspace {
+         storage: Arc<dyn crate::storage::VaultStorage>,
+         machine: Arc<MachineSettings>,
+     ) -> Result<Self> {
++        // **La radice si fissa e si verifica prima di aprire qualunque store**.
++        // Un supporto capability controlla qui l'handle già aperto: nessun
++        // sidecar viene letto o creato prima che il recinto sia valido.
++        let root_buf = crate::vault::root_absolute(root.as_ref());
++        storage
++            .mount_fence(&root_buf)
++            .map_err(|source| KernelError::InvalidRoot {
++                path: root_buf.clone(),
++                source,
++            })?;
+         // "quali estensioni sono documenti" è una domanda sola (vedi
+         // `CoreIndex::registry`).
+-        // **La radice si fissa qui, una volta sola.** Tutto ciò che segue ci
+         let registry = Arc::new(registry);
+         // appende il proprio nome — le impostazioni, l'organizzazione, le
+         // bozze, i documenti, l'anagrafe, il registro: sei store, e cinque il
+@@ -741,7 +757,7 @@ impl Workspace {
+         // stile: chi aggiungerà il settimo store non ha in mano nessun'altra
+         // `root` da passargli.
+         // L'organizzazione è **del vault**, quindi si apre col root e non si
+-        let root = &crate::vault::root_absolute(root.as_ref());
++        let root = &root_buf;
+         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(
+             root,
+             Arc::clone(&storage),
+@@ -2661,7 +2677,7 @@ impl Workspace {
+         // «un salvataggio non torna a chiedere al disco cosa ha appena
+         // scritto», che ha un banco che conta gli `stat` e li vuole zero.
+         // Un file che **non c'è** non è un errore da propagare: è una
+-        let (id, esisteva, from) = match base {
++        let (id, esisteva, from, expected_source) = match base {
+             WriteBase::DescendsFrom(expected) => {
+                 // base che non combacia — chi scrive credeva di riscrivere
+                 // qualcosa che nel frattempo è stato cestinato, e ha diritto
+@@ -2673,12 +2689,12 @@ impl Workspace {
+                 // fatto del vault che non era avvenuto, e un conflitto vero non
+                 // si distingueva da un supporto rotto.
+                 // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
+-                let now =
+-                    crate::error::optional(self.docs.vault.read(id))?.map(|s| Revision::of(&s));
++                let current = crate::error::optional(self.docs.vault.read(id))?;
++                let now = current.as_ref().map(|s| Revision::of(s));
