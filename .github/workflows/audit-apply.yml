@@ -15,15 +15,12 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: fix/audit-integration
-      - name: Applica e chiude la patch audit
+      - name: Applica la patch sorgente audit
         run: |
           git apply --check .audit-patch
           git apply .audit-patch
           git config user.name "Fubeo audit bot"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
-          git rm .audit-patch .github/workflows/audit-apply.yml
-          git add -A
-          git commit -m "fix(audit): isola WASM e rende univoche le patch UI"
+          git add apps/client/src/ui/node.ts apps/client/src/ui/node.test.ts
+          git commit -m "fix(frontend): rifiuta patch UI ambigue"
           git push origin HEAD:fix/audit-integration
-
-# trigger: workflow già registrata sulla branch
