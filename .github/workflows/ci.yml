@@ -25,6 +25,8 @@ jobs:
         with:
           toolchain: 1.89
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: le action esterne sono pin a commit
+        run: node .github/scripts/check-actions-pinned.mjs
       - name: Conformità abi ↔ crates/fub-abi/wit/fub/abi.wit
         run: cargo test -p fub-abi --test wit_conformance
       - name: Additività del contratto (crates/fub-abi/wit/frozen/)
