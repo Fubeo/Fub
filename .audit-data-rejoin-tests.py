@@ -115,4 +115,11 @@ fn repair_keeps_side_data_after_two_equal_content_files_are_renamed() {
 }'''
 )
 
+# Clippy: il test generato da .audit-data-integrity.py deve usare la query
+# booleana diretta sulla mappa invece di get(...).is_none().
+s = s.replace(
+    'ws.organization().icons.get("b.txt").is_none()',
+    '!ws.organization().icons.contains_key("b.txt")',
+)
+
 p.write_text(s)
