@@ -44,3 +44,4 @@ jobs:
           git add crates/fub-host crates/fub-app .github/scripts/check-host-workspace-boundary.mjs
           git commit -m "refactor(host): espone porte strette alla shell"
           git push origin HEAD:fix/audit-integration
+# retry 3: preserve the concurrency seam
