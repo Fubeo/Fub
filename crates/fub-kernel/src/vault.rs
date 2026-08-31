@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{KernelError, Result};
 use crate::ignore::{parse_gitignore, GitignoreRules, IgnorePolicy, Kind, GITIGNORE_FILE};
 use crate::settings::SharedSettings;
-use crate::storage::{EntryKind, Stat, VaultStorage};
+use crate::storage::{EntryKind, FileIdentity, Stat, VaultStorage};
 use crate::time::{now_unix, stamp_from_unix};
 use fub_abi::schema::SchemaVersion;
 
@@ -518,6 +518,14 @@ impl Vault {
     pub fn stat(&self, id: &DocId) -> Option<(u64, u64)> {
         let stat = self.storage.stat(&self.path_for(id).ok()?).ok()?;
         stat.is_file().then_some((stat.size, stat.mtime))
+    }
+
+    /// Identità filesystem della voce, se il backend la conosce. Un errore o un
+    /// backend senza identità diventano `None`: il chiamante deve rinunciare a
+    /// inferire una rinomina, mai inventarne una.
+    pub fn file_identity(&self, id: &DocId) -> Option<FileIdentity> {
+        let path = self.path_for(id).ok()?;
+        self.storage.file_identity(&path).ok().flatten()
     }
 
     /// Il testo di un documento: i byte del file, decodificati e **niente

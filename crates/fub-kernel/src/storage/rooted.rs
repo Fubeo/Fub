@@ -6,8 +6,8 @@ use cap_std::fs::{Dir, Metadata, OpenOptions};
 use cap_std::{ambient_authority, AmbientAuthority};
 
 use super::{
-    same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry, EntryKind, Merge, Stat,
-    VaultStorage,
+    same_parent_resolution_name, temp_name, ConditionalWrite, DirEntry, EntryKind, FileIdentity,
+    Merge, Stat, VaultStorage,
 };
 
 /// Filesystem di produzione ancorato alla directory aperta al mount.
@@ -98,6 +98,40 @@ impl RootedFsStorage {
 
     fn rel_buf(&self, path: &Utf8Path) -> io::Result<std::path::PathBuf> {
         Ok(self.rel(path)?.to_owned())
+    }
+
+    fn identity(&self, path: &Utf8Path) -> io::Result<FileIdentity> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let metadata = self.dir.metadata(self.rel(path)?)?;
+            Ok(FileIdentity {
+                volume: metadata.dev(),
+                file: metadata.ino(),
+            })
+        }
+        #[cfg(windows)]
+        {
+            use std::mem::MaybeUninit;
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::{
+                GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
+            };
+            let file = self.dir.open(self.rel(path)?)?;
+            let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
+            // SAFETY: l'handle resta vivo e il puntatore indica storage valido.
+            let ok =
+                unsafe { GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr()) };
+            if ok == 0 {
+                return Err(io::Error::last_os_error());
+            }
+            // SAFETY: un ritorno non-zero inizializza la struttura.
+            let info = unsafe { info.assume_init() };
+            Ok(FileIdentity {
+                volume: info.dwVolumeSerialNumber as u64,
+                file: ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
+            })
+        }
     }
 
     fn create_parent(&self, path: &Utf8Path) -> io::Result<()> {
@@ -444,42 +478,15 @@ impl VaultStorage for RootedFsStorage {
         }
     }
 
+    fn file_identity(&self, path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
+        self.identity(path).map(Some)
+    }
+
     fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
         if a == b {
             return true;
         }
-        let identity = |path: &Utf8Path| -> io::Result<(u64, u64)> {
-            #[cfg(unix)]
-            {
-                use cap_std::fs::MetadataExt;
-                let metadata = self.dir.metadata(self.rel(path)?)?;
-                Ok((metadata.dev(), metadata.ino()))
-            }
-            #[cfg(windows)]
-            {
-                use std::mem::MaybeUninit;
-                use std::os::windows::io::AsRawHandle;
-                use windows_sys::Win32::Storage::FileSystem::{
-                    GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION,
-                };
-                let file = self.dir.open(self.rel(path)?)?;
-                let mut info = MaybeUninit::<BY_HANDLE_FILE_INFORMATION>::zeroed();
-                // SAFETY: vedi `link_count`.
-                let ok = unsafe {
-                    GetFileInformationByHandle(file.as_raw_handle() as _, info.as_mut_ptr())
-                };
-                if ok == 0 {
-                    return Err(io::Error::last_os_error());
-                }
-                // SAFETY: un ritorno non-zero inizializza la struttura.
-                let info = unsafe { info.assume_init() };
-                Ok((
-                    info.dwVolumeSerialNumber as u64,
-                    ((info.nFileIndexHigh as u64) << 32) | info.nFileIndexLow as u64,
-                ))
-            }
-        };
-        matches!((identity(a), identity(b)), (Ok(a), Ok(b)) if a == b)
+        matches!((self.identity(a), self.identity(b)), (Ok(a), Ok(b)) if a == b)
     }
 
     fn mount_fence(&self, root: &Utf8Path) -> io::Result<()> {

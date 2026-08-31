@@ -11,13 +11,14 @@
 //! perché tutte e quattro vogliono **due aperture** con un disco che cambia in
 //! mezzo:
 //!
-//! 1. **Si riconosce dal contenuto.** Un documento sparito e uno comparso con la
-//!    stessa impronta sono la stessa nota con un nome nuovo, e ciò che le stava
-//!    attaccato la segue.
-//! 2. **Uno a uno, o niente.** Una copia non è una rinomina, e con N spariti e N
-//!    comparsi l'accoppiamento non è unico.
-//! 3. **Nel dubbio non si accoppia e non si raccoglie.** Delle due mosse, quella
-//!    irreversibile si sospende.
+//! 1. **Identità filesystem + contenuto.** Un documento sparito e uno comparso
+//!    si ricongiungono soltanto quando l'identità del file è la stessa e anche
+//!    SHA-256 coincide: né inode/file-index né contenuto bastano da soli.
+//! 2. **Una copia non è una rinomina.** Copy+delete produce un file nuovo anche
+//!    con gli stessi byte e non eredita bozza o side-data.
+//! 3. **Identità prima dell'ambiguità di contenuto.** Più file con testo uguale
+//!    possono essere rinominati insieme: device/inode o volume/file-index rende
+//!    l'accoppiamento univoco senza indovinare dal digest.
 //! 4. **Una raccolta si fa su un'anagrafe completa, o non si fa.** È la regola
 //!    che `finish_index` applicava già al suo vicino di tre righe sopra.
 
@@ -392,7 +393,7 @@ fn a_file_empty_not_and_a_proof_of_identity() {
 // --- 3. nel dubbio non si accoppia e non si raccoglie -----------------------
 
 #[test]
-fn n_disappeared_and_n_appeared_not_is_pair_and_not_is_collecting() {
+fn equal_contents_do_not_make_two_real_renames_ambiguous() {
     let f = Fixture::new();
     f.write("a.txt", "due note con lo stesso identico testo");
     f.write("b.txt", "due note con lo stesso identico testo");
@@ -403,35 +404,28 @@ fn n_disappeared_and_n_appeared_not_is_pair_and_not_is_collecting() {
     f.attach_data("b.txt");
     drop(ws);
 
-    // Due spariti, due comparsi, una sola impronta: l'accoppiamento non è unico.
+    // Il digest è uguale, ma i due file hanno identità filesystem diverse e
+    // ciascun rename conserva la propria: non serve indovinare dal contenuto.
     f.rename("a.txt", "c.txt");
     f.rename("b.txt", "d.txt");
 
     let ws = f.open();
-    assert!(
-        draft_of(&ws, "c.txt").is_none() && draft_of(&ws, "d.txt").is_none(),
-        "nel dubbio non si accoppia: la bozza di a non va a indovinare una casa"
-    );
     assert_eq!(
-        draft_of(&ws, "a.txt").as_deref(),
+        draft_of(&ws, "c.txt").as_deref(),
         Some("la bozza di a"),
-        "e resta dov'era"
+        "la bozza segue l'identità di a, non una scelta fra due digest uguali"
     );
-    assert_eq!(
-        f.data_of("a.txt").as_deref(),
-        Some("i dati di a.txt"),
-        "e nel dubbio non si **raccoglie**: cancellare è irreversibile, \
-         aspettare costa qualche byte fermo"
+    assert!(
+        draft_of(&ws, "a.txt").is_none(),
+        "il vecchio nome non resta vivo"
     );
-    assert!(f.data_of("b.txt").is_some(), "vale per tutti e due");
+    assert_eq!(f.data_of("c.txt").as_deref(), Some("i dati di a.txt"));
+    assert_eq!(f.data_of("d.txt").as_deref(), Some("i dati di b.txt"));
+    assert!(f.data_of("a.txt").is_none() && f.data_of("b.txt").is_none());
 }
 
 #[test]
-fn the_doubt_sospende_also_the_collection_a_command() {
-    // `vault.repair` raccoglie a vault aperto da un pezzo, cioè quando il dubbio
-    // di quest'apertura non è più in vista di nessuno. Senza l'elenco tenuto dal
-    // workspace, un clic cancellerebbe ciò che l'apertura aveva deciso di
-    // risparmiare.
+fn repair_keeps_side_data_after_two_equal_content_files_are_renamed() {
     let f = Fixture::new();
     f.write("a.txt", "stesso testo");
     f.write("b.txt", "stesso testo");
@@ -441,8 +435,6 @@ fn the_doubt_sospende_also_the_collection_a_command() {
     f.rename("b.txt", "d.txt");
 
     let mut ws = f.mounted();
-    // I comandi di manutenzione stanno nel registro come tutti gli altri, e
-    // vanno registrati come tutti gli altri.
     ws.register_plugin(
         fub_abi::traits::PluginManifest::core(
             fub_kernel::maintenance::MAINTENANCE_ID,
@@ -458,6 +450,11 @@ fn the_doubt_sospende_also_the_collection_a_command() {
     )
     .expect("registrato");
     ws.reindex().expect("reindex");
+    assert_eq!(
+        f.data_of("c.txt").as_deref(),
+        Some("i dati di a.txt"),
+        "il rejoin forte ha già spostato i dati sulla vera destinazione"
+    );
     ws.invoke_command(
         "vault.repair",
         serde_json::Value::Null,
@@ -465,13 +462,12 @@ fn the_doubt_sospende_also_the_collection_a_command() {
         fub_abi::Actor::User,
     )
     .expect("riparazione");
-    assert!(
-        f.data_of("a.txt").is_some(),
-        "la riparazione non tocca ciò che l'apertura ha messo in dubbio"
+    assert_eq!(
+        f.data_of("c.txt").as_deref(),
+        Some("i dati di a.txt"),
+        "la manutenzione non raccoglie dati ormai associati a una nota viva"
     );
 }
-
-// --- 4. una raccolta si fa su un'anagrafe completa --------------------------
 
 #[test]
 fn deindexing_interrupted_not_collects_nothing() {
@@ -493,5 +489,30 @@ fn deindexing_interrupted_not_collects_nothing() {
         Some("i dati di a.txt"),
         "da un'anagrafe parziale «sparito» e «non ancora guardato» sono la \
          stessa cosa, e una delle due mosse è irreversibile"
+    );
+}
+
+#[test]
+fn copy_then_delete_with_the_same_bytes_is_not_a_rename() {
+    let f = Fixture::new();
+    f.write("a.txt", "gli stessi byte");
+    let mut ws = f.open();
+    ws.save_draft(&DocId::new("a.txt"), "bozza di a", None)
+        .expect("bozza");
+    ws.set_icon("a.txt", Some("📌".into())).expect("icona");
+    drop(ws);
+
+    let bytes = std::fs::read(f.root.join("a.txt")).unwrap();
+    std::fs::write(f.root.join("b.txt"), bytes).unwrap();
+    std::fs::remove_file(f.root.join("a.txt")).unwrap();
+
+    let ws = f.open();
+    assert!(
+        draft_of(&ws, "b.txt").is_none(),
+        "una copia con gli stessi byte ha un'identità filesystem diversa: non eredita la bozza"
+    );
+    assert!(
+        !ws.organization().icons.contains_key("b.txt"),
+        "e non eredita lo stato per-documento della sorgente"
     );
 }

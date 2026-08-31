@@ -1902,7 +1902,16 @@ impl Workspace {
                 let known = self
                     .entry_store
                     .known(&file.id)
-                    .filter(|known| known.describes(file.size, file.mtime));
+                    .filter(|known| known.describes(file.size, file.mtime))
+                    .filter(|known| {
+                        let Some(fingerprint) = known.fingerprint.as_ref() else {
+                            return false;
+                        };
+                        self.docs
+                            .vault
+                            .read_bytes(&file.id)
+                            .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
+                    });
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
                     kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),
@@ -2544,6 +2553,7 @@ impl Workspace {
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
+                        identity: self.docs.vault.file_identity(&entry.id),
                         fingerprint: entry.fingerprint.clone(),
                         metadata: self.indexes.core.stored_metadata(&entry.id),
                     },
@@ -3347,7 +3357,14 @@ impl Workspace {
                 .core
                 .entries
                 .get(&file.id)
-                .is_some_and(|and| and.size == file.size && and.mtime == file.mtime);
+                .filter(|entry| entry.size == file.size && entry.mtime == file.mtime)
+                .and_then(|entry| entry.fingerprint.as_ref())
+                .is_some_and(|fingerprint| {
+                    self.docs
+                        .vault
+                        .read_bytes(&file.id)
+                        .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
+                });
             on_the_disk.insert(file.id.clone());
             if !unchanged {
                 paths.insert(self.root().join(file.id.as_str()));
@@ -3465,7 +3482,14 @@ impl Workspace {
                     // un'impronta che qualcuno aveva calcolato vale ancora.
                     // Cambiato: l'impronta di prima descriveva un altro
                     (Some(and), Some((size, mtime))) if and.size == size && and.mtime == mtime => {
-                        and.fingerprint.clone()
+                        and.fingerprint.as_ref().and_then(|fingerprint| {
+                            ws.docs
+                                .vault
+                                .read_bytes(id)
+                                .ok()
+                                .filter(|bytes| fingerprint.matches_bytes(bytes))
+                                .map(|_| fingerprint.clone())
+                        })
                     }
                     // contenuto, e tenerla sarebbe scrivere una bugia in
                     // anagrafe. Chi la vorrà la calcolerà leggendo i byte.
@@ -7265,15 +7289,20 @@ impl Workspace {
     fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
         let trashed = self.trashed_originals();
         // Oggi c'è, ieri non c'era. Si guardano solo le impronte per cui
-        let mut disappeared: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
+        let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
+            BTreeMap::new();
         let snapshot = self.entry_store.snapshot();
         for (id, entry) in &snapshot {
             if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.contains(id)
             {
                 continue;
             }
-            if let Some(fingerprint) = entry.fingerprint.clone() {
-                disappeared.entry(fingerprint).or_default().push(id.clone());
+            if let (Some(identity), Some(fingerprint)) = (entry.identity, entry.fingerprint.clone())
+            {
+                disappeared
+                    .entry((identity, fingerprint))
+                    .or_default()
+                    .push(id.clone());
             }
         }
         if disappeared.is_empty() {
@@ -7284,24 +7313,28 @@ impl Workspace {
         // tutto «comparso» e niente «sparito», e non deve costare una mappa
         // grande quanto il vault per scoprirlo.
         // Nessun candidato: non è una rinomina, è una cancellazione. La
-        let mut appeared: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
+        let mut appeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
+            BTreeMap::new();
         for entry in self.indexes.core.entries.values() {
             if entry.size == 0 || self.entry_store.known(&entry.id).is_some() {
                 continue;
             }
-            match &entry.fingerprint {
-                Some(fingerprint) if disappeared.contains_key(fingerprint) => appeared
-                    .entry(fingerprint.clone())
-                    .or_default()
-                    .push(entry.id.clone()),
-                _ => continue,
+            let (Some(identity), Some(fingerprint)) = (
+                self.docs.vault.file_identity(&entry.id),
+                entry.fingerprint.clone(),
+            ) else {
+                continue;
+            };
+            let key = (identity, fingerprint);
+            if disappeared.contains_key(&key) {
+                appeared.entry(key).or_default().push(entry.id.clone());
             }
         }
 
         let mut suspended = BTreeSet::new();
         let mut pairs: Vec<(DocId, DocId)> = Vec::new();
-        for (fingerprint, mut from) in disappeared {
-            let Some(a) = appeared.get(&fingerprint) else {
+        for (identity_and_digest, mut from) in disappeared {
+            let Some(a) = appeared.get(&identity_and_digest) else {
                 // raccolta se ne occupa come si è sempre occupata.
                 // Il pavimento e la porta insieme (0062): una riga nel log per chi
                 continue;

@@ -111,6 +111,17 @@ pub struct Stat {
     pub mtime: u64,
 }
 
+/// Identità del file fornita dal filesystem: device/inode su Unix, volume/file
+/// index su Windows. Non è un'identità di contenuto e non viene mai usata da
+/// sola: il rejoin richiede anche il digest dei byte.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct FileIdentity {
+    pub volume: u64,
+    pub file: u64,
+}
+
 impl Stat {
     pub fn is_dir(&self) -> bool {
         self.kind == EntryKind::Dir
@@ -406,8 +417,21 @@ pub trait VaultStorage: Send + Sync {
     /// Non risale un errore: «non lo so» e «no» sono la stessa cosa per chi
     /// chiama, perché la guardia che ne segue è comunque quella prudente — si
     /// crede che siano due file, e la rinomina si ferma invece di sovrascrivere.
+    /// Identità del file, quando il supporto può dirla senza seguire il nome
+    /// ambientale oltre il capability montato. `None` vuol dire «non lo so» e
+    /// impedisce inferenze di rename, non le rende più permissive.
+    fn file_identity(&self, _path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
+        Ok(None)
+    }
+
     fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
-        a == b
+        if a == b {
+            return true;
+        }
+        matches!(
+            (self.file_identity(a), self.file_identity(b)),
+            (Ok(Some(a)), Ok(Some(b))) if a == b
+        )
     }
 
     /// Su questa radice può stare un vault?

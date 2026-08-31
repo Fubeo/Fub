@@ -107,7 +107,7 @@ use fub_abi::edit::Revision;
 use fub_abi::model::{Anchor, DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{Durable, VaultStorage};
+use crate::storage::{Durable, FileIdentity, VaultStorage};
 use crate::vault::data_root;
 use fub_abi::schema::SchemaVersion;
 
@@ -139,7 +139,12 @@ use fub_abi::schema::SchemaVersion;
 /// si converte: non comincia con `\n`, quindi [`decodifica`] risponde `None` e
 /// il primo [`EntryStore::store`] lo sostituisce con una fotografia — la regola
 /// di sempre, «un derivato di una versione che non si conosce si rifà».
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
+///
+/// v5: ogni voce può portare l'identità filesystem. Il ricongiungimento di una
+/// rinomina fatta ad app chiusa richiede identità **e** digest: una copia seguita
+/// da cancellazione ha gli stessi byte e un file diverso, quindi non eredita mai
+/// bozza, versioni o side-data della sorgente.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 
 /// Il nome del file dentro [`data_root`].
 const FILE: &str = "entries.json";
@@ -227,6 +232,8 @@ pub(crate) struct StoredMeta {
 pub(crate) struct StoredEntry {
     pub(crate) size: u64,
     pub(crate) mtime: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) identity: Option<FileIdentity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) fingerprint: Option<Revision>,
     /// Una voce come sta sul file.
@@ -432,11 +439,14 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
         let Some(previous) = old.get(id) else {
             continue;
         };
-        if !previous.describes(entry.size, entry.mtime) {
+        if !previous.describes(entry.size, entry.mtime)
+            || entry.fingerprint.is_none()
+            || entry.fingerprint != previous.fingerprint
+        {
             continue;
         }
-        if entry.fingerprint.is_none() {
-            entry.fingerprint = previous.fingerprint.clone();
+        if entry.identity.is_none() {
+            entry.identity = previous.identity;
         }
         if entry.metadata.is_none() {
             entry.metadata = previous.metadata.clone();
@@ -613,6 +623,7 @@ mod tests {
         StoredEntry {
             size,
             mtime,
+            identity: None,
             fingerprint: None,
             metadata: None,
         }
