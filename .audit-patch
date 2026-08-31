@@ -1,0 +1,65 @@
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -122,9 +122,12 @@
+           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+             librsvg2-dev patchelf libgtk-3-dev
+       - name: il bersaglio dei componenti, prima dei test che lo pretendono
++        shell: bash
+         run: |
+           rustup target add wasm32-wasip2
+-          cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
++          wasm_target_dir="${RUNNER_TEMP//\\//}/fub-ping-wasm-target"
++          CARGO_TARGET_DIR="$wasm_target_dir" \
++            cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+       - run: cargo test --workspace
+ 
+   docs:
+--- a/apps/client/src/ui/node.ts
++++ b/apps/client/src/ui/node.ts
+@@ -231,8 +231,13 @@
+ }
+ 
+ function findByKey(root: HTMLElement, key: string): HTMLElement | null {
+-  if (rendered.get(root)?.node.key === key) return root;
+-  return root.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
++  const matches: HTMLElement[] = [];
++  if (rendered.get(root)?.node.key === key) matches.push(root);
++  matches.push(...root.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`));
++  // Una patch identifica un nodo per chiave, quindi una chiave ambigua non è
++  // un bersaglio: scegliere il primo trasformerebbe un albero malformato in
++  // una mutazione deterministica ma sbagliata. Chi chiama farà il full render.
++  return matches.length === 1 ? matches[0] : null;
+ }
+ 
+ /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
+--- a/apps/client/src/ui/node.test.ts
++++ b/apps/client/src/ui/node.test.ts
+@@ -241,6 +241,29 @@
+     expect(old).toEqual([]);
+   });
+ 
++  it("una chiave ambigua non patcha il primo match: forza il full render", () => {
++    const host = document.createElement("div");
++    document.body.appendChild(host);
++    const duplicate = (value: string): UiNode =>
++      ({
++        node: "stack",
++        dir: "column",
++        gap: 0,
++        children: [
++          { ...field(value), key: "doppia" },
++          { ...field(value), key: "doppia" },
++        ],
++      }) as UiNode;
++
++    mountTree(host, duplicate("prima"), async () => {});
++    expect(patchTree(host, "doppia", { ...field("dopo"), key: "doppia" } as UiNode)).toBe(false);
++    expect([...host.querySelectorAll("input")].map((input) => input.value)).toEqual([
++      "prima",
++      "prima",
++    ]);
++  });
++
+   it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
+     const NS = "prova.porta";
+     const handlers: OnAction[] = [];
