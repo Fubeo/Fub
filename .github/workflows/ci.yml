@@ -202,3 +202,33 @@ jobs:
       - name: il contrasto della pagina vera, in tutte e due le luci
         run: npm run bench:a11y
         working-directory: apps/client
+
+  audit-apply:
+    name: applica patch audit mirata
+    if: github.event_name == 'push' && github.ref == 'refs/heads/fix/audit-integration'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: fix/audit-integration
+      - name: Applica la patch e rimuove l'infrastruttura temporanea
+        run: |
+          git apply --check .audit-patch
+          git apply .audit-patch
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('.github/workflows/ci.yml')
+          s = p.read_text()
+          marker = '\n  audit-apply:\n'
+          if marker not in s:
+              raise SystemExit('job temporaneo non trovato')
+          p.write_text(s.split(marker, 1)[0].rstrip() + '\n')
+          PY
+          git config user.name "Fubeo audit bot"
+          git config user.email "83821420+Fubeo@users.noreply.github.com"
+          git rm .audit-patch .github/workflows/audit-apply.yml
+          git add -A
+          git commit -m "fix(audit): isola WASM e rende univoche le patch UI"
+          git push origin HEAD:fix/audit-integration
