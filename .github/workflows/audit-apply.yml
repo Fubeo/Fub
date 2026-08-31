@@ -25,13 +25,19 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
       - name: Migra la shell sulle porte Host strette
         run: |
+          git config user.name "Fubeo audit bot"
+          git config user.email "83821420+Fubeo@users.noreply.github.com"
           python .audit-host.py
           cargo fmt --all
           node .github/scripts/check-host-workspace-boundary.mjs
-          cargo check -p fub-host --all-targets
-          cargo check -p fub-app --all-targets
-          git config user.name "Fubeo audit bot"
-          git config user.email "83821420+Fubeo@users.noreply.github.com"
+          if ! (cargo check -p fub-host --all-targets && cargo check -p fub-app --all-targets) > /tmp/audit-check.log 2>&1; then
+            tail -n 220 /tmp/audit-check.log > .audit-error.txt
+            git add .audit-error.txt
+            git commit -m "ci(temp): cattura errore compile porte Host"
+            git push origin HEAD:fix/audit-integration
+            cat .audit-error.txt
+            exit 1
+          fi
           git rm .audit-host.py
           git add crates/fub-host crates/fub-app .github/scripts/check-host-workspace-boundary.mjs
           git commit -m "refactor(host): espone porte strette alla shell"
