@@ -409,8 +409,7 @@ fn dependency_order_does_not_depend_on_inventory_order() {
         DependencyBundle::new("test.provider").providing(SERVICE),
     ));
 
-    let failures =
-        registry.enable_in_dependency_order(&mut ws, ["test.consumer", "test.provider"]);
+    let failures = registry.enable_in_dependency_order(&mut ws, ["test.consumer", "test.provider"]);
 
     assert!(
         failures.is_empty(),
