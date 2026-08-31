@@ -1,0 +1,27 @@
+name: Audit patch applier
+
+on:
+  push:
+    branches: ["fix/audit-integration"]
+    paths: [".github/workflows/audit-apply.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: fix/audit-integration
+      - name: Applica e chiude la patch audit
+        run: |
+          git apply --check .audit-patch
+          git apply .audit-patch
+          git config user.name "Fubeo audit bot"
+          git config user.email "83821420+Fubeo@users.noreply.github.com"
+          git rm .audit-patch .github/workflows/audit-apply.yml
+          git add -A
+          git commit -m "fix(audit): isola WASM e rende univoche le patch UI"
+          git push origin HEAD:fix/audit-integration
