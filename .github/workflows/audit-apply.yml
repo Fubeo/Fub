@@ -17,31 +17,23 @@ jobs:
           ref: fix/audit-integration
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
-          components: rustfmt
-      - name: Dipendenze di sistema di Tauri
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf libgtk-3-dev
-      - name: Migra la shell sulle porte Host strette
+          components: rustfmt, clippy
+      - name: Migra Revision a SHA-256 con lettura legacy
         run: |
           git config user.name "Fubeo audit bot"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
-          python .audit-host.py
-          python .audit-host-fix.py
+          python .audit-revision.py
           cargo fmt --all
-          node .github/scripts/check-host-workspace-boundary.mjs
-          if ! (cargo check -p fub-host --all-targets && cargo check -p fub-app --all-targets) > /tmp/audit-check.log 2>&1; then
-            tail -n 220 /tmp/audit-check.log > .audit-error.txt
+          if ! (cargo test -p fub-abi --lib && cargo test -p fub-kernel --test guarded_write && cargo check -p fub-kernel --all-targets && cargo clippy -p fub-abi -p fub-kernel --all-targets -- -D warnings) > /tmp/audit-check.log 2>&1; then
+            tail -n 260 /tmp/audit-check.log > .audit-error.txt
             git add .audit-error.txt
-            git commit -m "ci(temp): cattura errore compile porte Host"
+            git commit -m "ci(temp): cattura errore migrazione revisioni"
             git push origin HEAD:fix/audit-integration
             cat .audit-error.txt
             exit 1
           fi
-          git rm .audit-host.py .audit-host-fix.py
+          git rm .audit-revision.py
           git rm -f .audit-error.txt || true
-          git add crates/fub-host crates/fub-app .github/scripts/check-host-workspace-boundary.mjs
-          git commit -m "refactor(host): espone porte strette alla shell"
+          git add crates/fub-abi/src/edit.rs crates/fub-kernel/src/workspace.rs crates/fub-kernel/tests/guarded_write.rs
+          git commit -m "fix(data): usa SHA-256 per le revisioni"
           git push origin HEAD:fix/audit-integration
-# retry 5: preserve VaultSession accessors
