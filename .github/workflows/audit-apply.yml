@@ -31,18 +31,21 @@ jobs:
             grep -q "confronto Revision/expected non riconosciuto" /tmp/revision-script.log || exit "$script_status"
           fi
           python .audit-revision-workspace.py
+          python .audit-revision-tests.py
           cargo fmt --all
           if ! (cargo test -p fub-abi --lib && cargo test -p fub-kernel --test guarded_write && cargo check -p fub-kernel --all-targets && cargo clippy -p fub-abi -p fub-kernel --all-targets -- -D warnings) > /tmp/audit-check.log 2>&1; then
             tail -n 260 /tmp/audit-check.log > .audit-error.txt
             git add .audit-error.txt
-            git commit -m "ci(temp): cattura errore migrazione revisioni"
-            git push origin HEAD:fix/audit-integration
+            if ! git diff --cached --quiet; then
+              git commit -m "ci(temp): cattura errore migrazione revisioni"
+              git push origin HEAD:fix/audit-integration
+            fi
             cat .audit-error.txt
             exit 1
           fi
-          git rm .audit-revision.py .audit-revision-workspace.py
+          git rm .audit-revision.py .audit-revision-workspace.py .audit-revision-tests.py
           git rm -f .audit-error.txt || true
           git add crates/fub-abi/src/edit.rs crates/fub-kernel/src/workspace.rs crates/fub-kernel/tests/guarded_write.rs
           git commit -m "fix(data): usa SHA-256 per le revisioni"
           git push origin HEAD:fix/audit-integration
-# retry: exact DescendsFrom shape
+# retry: migrate legacy literal test
