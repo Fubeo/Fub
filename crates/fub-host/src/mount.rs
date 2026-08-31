@@ -22,9 +22,9 @@ use fub_features::{SearchIndex, SEARCH_ID};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
-use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
 #[cfg(feature = "search")]
 use fub_kernel::RegistryError;
+use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
 
 use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
 use crate::settings::{
@@ -221,8 +221,7 @@ pub fn mount(
             ));
         };
 
-        let mut bundle =
-            bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
+        let mut bundle = bundle.speaking("it", catalog_assembled(feature.id, (feature.catalog)()));
         // `fub.trash` invoca `trash.restore`/`trash.empty`, che appartengono al
         // bundle dei comandi. Il service marker è una dipendenza di montaggio:
         // il provider vero resta il registro comandi e l'atomicità garantisce
@@ -337,9 +336,10 @@ fn register_versioning(
         Err(error) => return vec![format!("versioning unavailable: {error}")],
     };
     let hook_store = opened.clone();
-    if let Err(error) =
-        ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(opened.clone())))
-    {
+    if let Err(error) = ws.register_event_handler(
+        VERSIONING_ID,
+        Box::new(VersioningHandler::new(opened.clone())),
+    ) {
         return vec![format!("versioning not registered: {error}")];
     }
     ws.set_before_write_hook(Some((
