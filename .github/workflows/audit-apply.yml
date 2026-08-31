@@ -15,12 +15,30 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           ref: fix/audit-integration
-      - name: Applica la patch sorgente audit
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+      - name: Installa il sanitizer AST e verifica il contratto
         run: |
-          git apply --check .audit-patch
-          git apply .audit-patch
+          python - <<'PY'
+          import base64, gzip, json
+          from pathlib import Path
+          payload = json.loads(Path('.audit-patch').read_text())
+          Path('apps/client/src/ui/sanitize-css.ts').write_bytes(gzip.decompress(base64.b64decode(payload['sanitize'])))
+          Path('apps/client/src/ui/sanitize-css.test.ts').write_bytes(gzip.decompress(base64.b64decode(payload['test'])))
+          p = Path('apps/client/package.json')
+          package = json.loads(p.read_text())
+          package['devDependencies']['postcss'] = '8.5.26'
+          p.write_text(json.dumps(package, ensure_ascii=False, indent=2) + '\n')
+          PY
+          cd apps/client
+          npm install --package-lock-only --ignore-scripts
+          npm ci
+          npm test -- src/ui/sanitize-css.test.ts
+          npm run typecheck
+          cd ../..
           git config user.name "Fubeo audit bot"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
-          git add apps/client/src/state/store.ts apps/client/src/state/store.test.ts apps/client/src/ui/node.ts apps/client/src/ui/node.test.ts
-          git commit -m "fix(frontend): rende sicuri bus e controlli dichiarativi"
+          git add apps/client/package.json apps/client/package-lock.json apps/client/src/ui/sanitize-css.ts apps/client/src/ui/sanitize-css.test.ts
+          git commit -m "fix(tema): usa un parser CSS AST resistente agli escape"
           git push origin HEAD:fix/audit-integration
