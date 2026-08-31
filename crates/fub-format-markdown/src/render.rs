@@ -152,19 +152,22 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         }
         Block::Custom {
             custom_kind,
-            attrs,
+            attrs: payload,
             blocks,
             ..
         } => {
             if custom_kind == custom_kind::CALLOUT {
-                let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
+                let ty = payload
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("note");
                 write!(
                     out,
                     "<div{attrs} class=\"callout\"{}>",
                     attr("data-callout", ty)
                 )
                 .unwrap();
-                if let Some(title) = attrs.get("title").and_then(|v| v.as_str()) {
+                if let Some(title) = payload.get("title").and_then(|v| v.as_str()) {
                     if !title.is_empty() {
                         write!(out, "<div class=\"callout-title\">{}</div>", escape(title))
                             .unwrap();
@@ -178,8 +181,14 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // l'utente ha sbagliato una virgola nelle proprietà e vedrebbe
                 // le proprietà svanire senza un avviso. Il testo resta **dato**
                 // (escapato), e il motivo si legge accanto.
-                let reason = attrs.get("error").and_then(|v| v.as_str()).unwrap_or("");
-                let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                let reason = payload
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                let text = payload
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
                 write!(
                     out,
                     "<div{attrs} class=\"block-frontmatter-unparsed\">\
@@ -194,7 +203,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // `custom_kind::HTML` resta **dato** e non torna markup: la
                 // decisione su cosa sia lecito eseguire è della sanitizzazione
                 // (5.3), non del provider che ha letto il file.
-                let label = attrs
+                let label = payload
                     .get("label")
                     .and_then(|v| v.as_str())
                     .map(|the| attr("data-label", the))
@@ -213,7 +222,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // quella che una `SyntaxRule` produce — quindi va letto di lì.
                 if blocks.is_empty() {
                     out.push_str(&escape(
-                        text_content(custom_kind, attrs).unwrap_or_default(),
+                        text_content(custom_kind, payload).unwrap_or_default(),
                     ));
                 } else {
                     render_blocks(blocks, opts, out);
