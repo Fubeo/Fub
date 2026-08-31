@@ -1,94 +1,94 @@
 [1m[32m    Updating[0m crates.io index
 [1m[32m Downloading[0m crates ...
-[1m[32m  Downloaded[0m cap-std v4.0.3
-[1m[32m  Downloaded[0m fastrand v2.5.0
 [1m[32m  Downloaded[0m errno v0.3.14
-[1m[32m  Downloaded[0m equivalent v1.0.2
 [1m[32m  Downloaded[0m cfg-if v1.0.4
-[1m[32m  Downloaded[0m camino v1.2.4
-[1m[32m  Downloaded[0m cap-primitives v4.0.3
-[1m[32m  Downloaded[0m quote v1.0.47
-[1m[32m  Downloaded[0m io-lifetimes v3.0.1
-[1m[32m  Downloaded[0m unicode-ident v1.0.24
-[1m[32m  Downloaded[0m bitflags v2.13.1
-[1m[32m  Downloaded[0m fs-set-times v0.20.3
-[1m[32m  Downloaded[0m pin-project-lite v0.2.17
-[1m[32m  Downloaded[0m tinyvec_macros v0.1.1
 [1m[32m  Downloaded[0m ambient-authority v0.0.2
-[1m[32m  Downloaded[0m serde_core v1.0.229
-[1m[32m  Downloaded[0m zmij v1.0.23
 [1m[32m  Downloaded[0m itoa v1.0.18
+[1m[32m  Downloaded[0m ipnet v2.12.0
+[1m[32m  Downloaded[0m unicode-ident v1.0.24
+[1m[32m  Downloaded[0m tinyvec_macros v0.1.1
+[1m[32m  Downloaded[0m io-lifetimes v2.0.4
 [1m[32m  Downloaded[0m thiserror-impl v2.0.19
+[1m[32m  Downloaded[0m zmij v1.0.23
+[1m[32m  Downloaded[0m rustix-linux-procfs v0.1.1
+[1m[32m  Downloaded[0m io-extras v0.19.0
+[1m[32m  Downloaded[0m fs-set-times v0.20.3
+[1m[32m  Downloaded[0m tempfile v3.27.0
+[1m[32m  Downloaded[0m serde_core v1.0.229
 [1m[32m  Downloaded[0m tracing-core v0.1.36
 [1m[32m  Downloaded[0m tinyvec v1.12.0
-[1m[32m  Downloaded[0m serde_derive v1.0.229
-[1m[32m  Downloaded[0m unicode-normalization v0.1.25
-[1m[32m  Downloaded[0m getrandom v0.4.3
-[1m[32m  Downloaded[0m serde v1.0.229
-[1m[32m  Downloaded[0m memchr v2.8.3
 [1m[32m  Downloaded[0m serde_json v1.0.151
-[1m[32m  Downloaded[0m proc-macro2 v1.0.107
-[1m[32m  Downloaded[0m hashbrown v0.17.1
-[1m[32m  Downloaded[0m once_cell v1.21.4
-[1m[32m  Downloaded[0m ipnet v2.12.0
-[1m[32m  Downloaded[0m io-extras v0.19.0
-[1m[32m  Downloaded[0m thiserror v2.0.19
-[1m[32m  Downloaded[0m syn v3.0.3
 [1m[32m  Downloaded[0m indexmap v2.14.0
-[1m[32m  Downloaded[0m tempfile v3.27.0
-[1m[32m  Downloaded[0m io-lifetimes v2.0.4
-[1m[32m  Downloaded[0m rustix-linux-procfs v0.1.1
+[1m[32m  Downloaded[0m unicode-normalization v0.1.25
+[1m[32m  Downloaded[0m hashbrown v0.17.1
+[1m[32m  Downloaded[0m memchr v2.8.3
+[1m[32m  Downloaded[0m serde_derive v1.0.229
+[1m[32m  Downloaded[0m getrandom v0.4.3
+[1m[32m  Downloaded[0m cap-primitives v4.0.3
+[1m[32m  Downloaded[0m serde v1.0.229
+[1m[32m  Downloaded[0m once_cell v1.21.4
+[1m[32m  Downloaded[0m proc-macro2 v1.0.107
+[1m[32m  Downloaded[0m syn v3.0.3
 [1m[32m  Downloaded[0m maybe-owned v0.3.4
+[1m[32m  Downloaded[0m thiserror v2.0.19
+[1m[32m  Downloaded[0m quote v1.0.47
+[1m[32m  Downloaded[0m pin-project-lite v0.2.17
+[1m[32m  Downloaded[0m io-lifetimes v3.0.1
+[1m[32m  Downloaded[0m bitflags v2.13.1
 [1m[32m  Downloaded[0m tracing v0.1.44
 [1m[32m  Downloaded[0m rustix v1.1.4
+[1m[32m  Downloaded[0m fastrand v2.5.0
+[1m[32m  Downloaded[0m cap-std v4.0.3
+[1m[32m  Downloaded[0m camino v1.2.4
+[1m[32m  Downloaded[0m equivalent v1.0.2
 [1m[32m  Downloaded[0m libc v0.2.189
 [1m[32m  Downloaded[0m linux-raw-sys v0.12.1
 [1m[32m   Compiling[0m proc-macro2 v1.0.107
 [1m[32m   Compiling[0m unicode-ident v1.0.24
 [1m[32m   Compiling[0m quote v1.0.47
 [1m[32m   Compiling[0m rustix v1.1.4
-[1m[32m   Compiling[0m once_cell v1.21.4
 [1m[32m   Compiling[0m linux-raw-sys v0.12.1
+[1m[32m   Compiling[0m once_cell v1.21.4
 [1m[32m   Compiling[0m bitflags v2.13.1
 [1m[32m   Compiling[0m serde_core v1.0.229
-[1m[32m   Compiling[0m io-lifetimes v3.0.1
 [1m[32m   Compiling[0m io-lifetimes v2.0.4
-[1m[32m   Compiling[0m io-extras v0.19.0
+[1m[32m   Compiling[0m io-lifetimes v3.0.1
 [1m[32m   Compiling[0m syn v3.0.3
-[1m[32m   Compiling[0m libc v0.2.189
 [1m[32m   Compiling[0m zmij v1.0.23
-[1m[32m   Compiling[0m serde v1.0.229
-[1m[32m   Compiling[0m hashbrown v0.17.1
-[1m[32m   Compiling[0m thiserror v2.0.19
-[1m[32m   Compiling[0m cap-primitives v4.0.3
-[1m[32m   Compiling[0m equivalent v1.0.2
-[1m[32m   Compiling[0m tinyvec_macros v0.1.1
+[1m[32m   Compiling[0m libc v0.2.189
+[1m[32m   Compiling[0m io-extras v0.19.0
 [1m[32m   Compiling[0m serde_json v1.0.151
+[1m[32m   Compiling[0m cap-primitives v4.0.3
+[1m[32m   Compiling[0m thiserror v2.0.19
+[1m[32m   Compiling[0m equivalent v1.0.2
+[1m[32m   Compiling[0m hashbrown v0.17.1
+[1m[32m   Compiling[0m serde v1.0.229
+[1m[32m   Compiling[0m tinyvec_macros v0.1.1
 [1m[32m   Compiling[0m tinyvec v1.12.0
-[1m[32m   Compiling[0m rustix-linux-procfs v0.1.1
-[1m[32m   Compiling[0m thiserror-impl v2.0.19
 [1m[32m   Compiling[0m serde_derive v1.0.229
+[1m[32m   Compiling[0m thiserror-impl v2.0.19
+[1m[32m   Compiling[0m rustix-linux-procfs v0.1.1
 [1m[32m   Compiling[0m fs-set-times v0.20.3
 [1m[32m   Compiling[0m indexmap v2.14.0
 [1m[32m   Compiling[0m memchr v2.8.3
-[1m[32m   Compiling[0m itoa v1.0.18
-[1m[32m   Compiling[0m getrandom v0.4.3
-[1m[32m   Compiling[0m ipnet v2.12.0
 [1m[32m   Compiling[0m cap-std v4.0.3
-[1m[32m   Compiling[0m maybe-owned v0.3.4
 [1m[32m   Compiling[0m camino v1.2.4
+[1m[32m   Compiling[0m getrandom v0.4.3
 [1m[32m   Compiling[0m ambient-authority v0.0.2
+[1m[32m   Compiling[0m maybe-owned v0.3.4
+[1m[32m   Compiling[0m itoa v1.0.18
+[1m[32m   Compiling[0m ipnet v2.12.0
 [1m[32m   Compiling[0m unicode-normalization v0.1.25
 [1m[32m   Compiling[0m tracing-core v0.1.36
-[1m[32m   Compiling[0m pin-project-lite v0.2.17
 [1m[32m   Compiling[0m cfg-if v1.0.4
+[1m[32m   Compiling[0m pin-project-lite v0.2.17
 [1m[32m   Compiling[0m tracing v0.1.44
+[1m[32m   Compiling[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
 [1m[32m   Compiling[0m fastrand v2.5.0
 [1m[32m   Compiling[0m tempfile v3.27.0
-[1m[32m   Compiling[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
 [1m[32m   Compiling[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
 [1m[32m   Compiling[0m fub-testkit v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-testkit)
-[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 22.34s
+[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 21.92s
 [1m[32m     Running[0m tests/entry_store.rs (target/debug/deps/entry_store-59b7668de8417e04)
 
 running 11 tests
@@ -107,39 +107,80 @@ test the_kind_depends_on_who_registered_now ... ok
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
 [1m[32m   Compiling[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
-[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 1.11s
+[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.98s
 [1m[32m     Running[0m tests/rejoin.rs (target/debug/deps/rejoin-1937ad0e97e7db39)
 
 running 10 tests
 test a_notes_deleted_remains_a_deletion ... ok
 test a_file_empty_not_and_a_proof_of_identity ... ok
-test a_rename_that_finds_a_draft_to_the_destination_not_buries_the_source ... ok
 test copy_then_delete_with_the_same_bytes_is_not_a_rename ... ok
+test a_rename_that_finds_a_draft_to_the_destination_not_buries_the_source ... ok
 test a_rename_made_ad_app_closed_is_recognizes_from_fingerprint ... ok
 test deindexing_interrupted_not_collects_nothing ... ok
 test the_rejoin_says_with_the_rename_event ... ok
-test the_doubt_sospende_also_the_collection_a_command ... FAILED
-test n_disappeared_and_n_appeared_not_is_pair_and_not_is_collecting ... FAILED
+test repair_keeps_side_data_after_two_equal_content_files_are_renamed ... ok
+test equal_contents_do_not_make_two_real_renames_ambiguous ... ok
 test two_file_identical_without_nothing_of_vanished_are_a_copy ... ok
 
-failures:
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
----- the_doubt_sospende_also_the_collection_a_command stdout ----
+[1m[32m   Compiling[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
+[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 0.81s
+[1m[32m     Running[0m tests/the_storage.rs (target/debug/deps/the_storage-ea63e6b56655ef85)
 
-thread 'the_doubt_sospende_also_the_collection_a_command' panicked at crates/fub-kernel/tests/rejoin.rs:468:5:
-la riparazione non tocca ciò che l'apertura ha messo in dubbio
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+running 5 tests
+test a_full_vault_on_a_storage_that_is_not_the_disk ... ok
+test a_symlink_is_not_the_thing_it_points_to ... ok
+test the_two_implementations_answer_alike ... ok
+test the_filesystem_gap_has_only_declared_callers ... ok
+test the_guard_hooks_the_declared_callers ... ok
 
----- n_disappeared_and_n_appeared_not_is_pair_and_not_is_collecting stdout ----
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
-thread 'n_disappeared_and_n_appeared_not_is_pair_and_not_is_collecting' panicked at crates/fub-kernel/tests/rejoin.rs:411:5:
-nel dubbio non si accoppia: la bozza di a non va a indovinare una casa
+[1m[32m    Checking[0m once_cell v1.21.4
+[1m[32m    Checking[0m bitflags v2.13.1
+[1m[32m    Checking[0m linux-raw-sys v0.12.1
+[1m[32m    Checking[0m serde_core v1.0.229
+[1m[32m    Checking[0m io-lifetimes v2.0.4
+[1m[32m    Checking[0m io-lifetimes v3.0.1
+[1m[32m    Checking[0m hashbrown v0.17.1
+[1m[32m    Checking[0m equivalent v1.0.2
+[1m[32m    Checking[0m tinyvec_macros v0.1.1
+[1m[32m    Checking[0m tinyvec v1.12.0
+[1m[32m    Checking[0m rustix v1.1.4
+[1m[32m    Checking[0m io-extras v0.19.0
+[1m[32m    Checking[0m libc v0.2.189
+[1m[32m    Checking[0m indexmap v2.14.0
+[1m[32m    Checking[0m zmij v1.0.23
+[1m[32m    Checking[0m itoa v1.0.18
+[1m[32m    Checking[0m memchr v2.8.3
+[1m[32m    Checking[0m ipnet v2.12.0
+[1m[32m    Checking[0m ambient-authority v0.0.2
+[1m[32m    Checking[0m maybe-owned v0.3.4
+[1m[32m    Checking[0m serde v1.0.229
+[1m[32m    Checking[0m serde_json v1.0.151
+[1m[32m    Checking[0m thiserror v2.0.19
+[1m[32m    Checking[0m unicode-normalization v0.1.25
+[1m[32m    Checking[0m tracing-core v0.1.36
+[1m[32m    Checking[0m cfg-if v1.0.4
+[1m[32m    Checking[0m pin-project-lite v0.2.17
+[1m[32m    Checking[0m getrandom v0.4.3
+[1m[32m    Checking[0m camino v1.2.4
+[1m[32m    Checking[0m fub-abi v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-abi)
+[1m[32m    Checking[0m tracing v0.1.44
+[1m[32m    Checking[0m fastrand v2.5.0
+[1m[32m    Checking[0m rustix-linux-procfs v0.1.1
+[1m[32m    Checking[0m fs-set-times v0.20.3
+[1m[32m    Checking[0m tempfile v3.27.0
+[1m[32m    Checking[0m cap-primitives v4.0.3
+[1m[32m    Checking[0m cap-std v4.0.3
+[1m[32m    Checking[0m fub-kernel v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-kernel)
+[1m[32m    Checking[0m fub-testkit v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-testkit)
+[0m[1m[38;5;9merror[E0063][0m[0m[1m: missing field `identity` in initializer of `entries::StoredEntry`[0m
+[0m   [0m[0m[1m[38;5;12m--> [0m[0mcrates/fub-kernel/src/entries.rs:623:9[0m
+[0m    [0m[0m[1m[38;5;12m|[0m
+[0m[1m[38;5;12m623[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m        StoredEntry {[0m
+[0m    [0m[0m[1m[38;5;12m|[0m[0m         [0m[0m[1m[38;5;9m^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mmissing `identity`[0m
 
-
-failures:
-    n_disappeared_and_n_appeared_not_is_pair_and_not_is_collecting
-    the_doubt_sospende_also_the_collection_a_command
-
-test result: FAILED. 8 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
-
-[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-kernel --test rejoin`
+[0m[1mFor more information about this error, try `rustc --explain E0063`.[0m
+[1m[31merror[0m[1m:[0m could not compile `fub-kernel` (lib test) due to 1 previous error
