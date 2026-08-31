@@ -231,8 +231,13 @@ function unmount(el: Element): void {
 }
 
 function findByKey(root: HTMLElement, key: string): HTMLElement | null {
-  if (rendered.get(root)?.node.key === key) return root;
-  return root.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
+  const matches: HTMLElement[] = [];
+  if (rendered.get(root)?.node.key === key) matches.push(root);
+  matches.push(...root.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`));
+  // Una patch identifica un nodo per chiave, quindi una chiave ambigua non è
+  // un bersaglio: scegliere il primo trasformerebbe un albero malformato in
+  // una mutazione deterministica ma sbagliata. Chi chiama farà il full render.
+  return matches.length === 1 ? matches[0] : null;
 }
 
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.

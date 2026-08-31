@@ -241,6 +241,28 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     expect(old).toEqual([]);
   });
 
+  it("una chiave ambigua non patcha il primo match: forza il full render", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const duplicate = (value: string): UiNode =>
+      ({
+        node: "stack",
+        dir: "column",
+        gap: 0,
+        children: [
+          { ...field(value), key: "doppia" },
+          { ...field(value), key: "doppia" },
+        ],
+      }) as UiNode;
+
+    mountTree(host, duplicate("prima"), async () => {});
+    expect(patchTree(host, "doppia", { ...field("dopo"), key: "doppia" } as UiNode)).toBe(false);
+    expect([...host.querySelectorAll("input")].map((input) => input.value)).toEqual([
+      "prima",
+      "prima",
+    ]);
+  });
+
   it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
     const NS = "prova.porta";
     const handlers: OnAction[] = [];
