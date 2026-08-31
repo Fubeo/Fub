@@ -1,0 +1,23 @@
+name: Source snapshot
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["fix/audit-integration"]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Crea snapshot sorgenti
+        run: git archive --format=tar --output=fub-source.tar HEAD
+      - name: Pubblica snapshot sorgenti
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fub-source-${{ github.sha }}
+          path: fub-source.tar
+          retention-days: 1
