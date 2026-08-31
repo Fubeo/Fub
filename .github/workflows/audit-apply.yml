@@ -17,11 +17,10 @@ jobs:
           ref: fix/audit-integration
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
-          toolchain: 1.89
           components: rustfmt
       - name: Applica e verifica il backend capability
         run: |
-          base64 -d .audit-patch | gzip -d > /tmp/storage-p0.patch
+          cat .audit-storage-00 .audit-storage-01 .audit-storage-02 .audit-storage-03 .audit-storage-04 .audit-storage-05 > /tmp/storage-p0.patch
           git apply --check /tmp/storage-p0.patch
           git apply /tmp/storage-p0.patch
           cargo fmt --all
