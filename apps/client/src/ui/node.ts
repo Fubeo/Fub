@@ -359,6 +359,7 @@ function update(
     case "row":
       if (prev.node !== "row") return false;
       children(el, next.cells, onAction);
+      ensureRowCell(el as HTMLTableRowElement);
       connect(el, next.action, onAction);
       return true;
     case "custom": {
@@ -509,6 +510,13 @@ function key(el: HTMLElement, node: UiNode): void {
   else delete el.dataset.key;
 }
 
+function ensureRowCell(row: HTMLTableRowElement): void {
+  if (row.cells.length > 0) return;
+  const td = document.createElement("td");
+  td.className = "ui-empty-cell";
+  row.appendChild(td);
+}
+
 function draw(node: UiNode, onAction: Port): HTMLElement {
   switch (node.node) {
     case "stack": {
@@ -636,6 +644,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
         td.appendChild(renderUiNode(cell, onAction));
         el.appendChild(td);
       }
+      ensureRowCell(el);
       return el;
     }
     case "tree": {
@@ -941,6 +950,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       attribute(input, "placeholder", node.node === "text_input" ? node.placeholder : null);
       writeValue(input, node.value ?? "");
       value(el, () => ({ type: "text", value: input.value }));
+      staticControl(input, node.action);
       actionsOfField(input, node.action, onAction);
       break;
     }
@@ -950,6 +960,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       area.rows = node.rows;
       writeValue(area, node.value);
       value(el, () => ({ type: "text", value: area.value }));
+      staticControl(area, node.action);
       actionsOfField(area, node.action, onAction);
       break;
     }
@@ -966,6 +977,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       attribute(input, "step", node.step === null ? null : String(node.step));
       writeValue(input, node.value === null ? "" : String(node.value));
       value(el, () => ({ type: "number", value: Number(input.value) }));
+      staticControl(input, node.action);
       actionsOfField(input, node.action, onAction);
       break;
     }
@@ -974,6 +986,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       if (!input) return false;
       if (document.activeElement !== input) input.checked = node.value;
       value(el, () => ({ type: "bool", value: input.checked }));
+      staticControl(input, node.action);
       actionsOfField(input, node.action, onAction);
       break;
     }
@@ -991,6 +1004,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
           ? { type: "choices", value: choices }
           : { type: "text", value: choices[0] ?? "" };
       });
+      staticControl(select, node.action);
       actionsOfField(select, node.action, onAction);
       break;
     }
@@ -1076,6 +1090,7 @@ function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction
     input.name = el.id;
     input.value = option.value;
     input.checked = option.value === node.value;
+    input.disabled = node.action === null;
     row.querySelector<HTMLElement>("span")!.textContent = option.label;
     actionsOfField(input, node.action, onAction);
   });
@@ -1278,6 +1293,16 @@ function connect(el: HTMLElement, action: ActionRef | null, onAction: Port): voi
 /// La chiamano il disegno e la riconciliazione, con le stesse due righe: chi
 /// aggiungerà un terzo ascoltatore a un campo lo scrive qui, e lo ha in
 /// entrambe le vite del campo senza ricordarsene.
+function staticControl(
+  control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  action: ActionRef | null,
+): void {
+  // Un campo senza azione è dato da leggere, non un editor senza salvataggio.
+  // Lasciarlo modificabile produce uno stato che sembra accettato e sparisce al
+  // primo ridisegno. Il browser espone già la semantica corretta: `disabled`.
+  control.disabled = action === null;
+}
+
 function actionsOfField(
   control: HTMLElement,
   action: ActionRef | null,

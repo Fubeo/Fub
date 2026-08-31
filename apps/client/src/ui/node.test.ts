@@ -697,3 +697,40 @@ describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () =>
     expect(notify).not.toHaveBeenCalled();
   });
 });
+
+
+describe("controlli statici e righe valide", () => {
+  const mount = (node: UiNode): HTMLElement => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, node, async () => {});
+    return host;
+  };
+
+  it.each([
+    [{ node: "text_input", field: "x", label: null, value: "a", placeholder: null, action: null }, "input"],
+    [{ node: "text_area", field: "x", label: null, value: "a", rows: 2, action: null }, "textarea"],
+    [{ node: "number", field: "x", label: null, value: 1, min: null, max: null, step: null, action: null }, "input"],
+    [{ node: "checkbox", field: "x", label: "X", value: true, action: null }, "input"],
+    [{ node: "select", field: "x", label: null, value: [], options: [], multiple: false, action: null }, "select"],
+    [{ node: "radio", field: "x", label: null, value: null, options: [{ label: "A", value: "a" }], action: null }, "input"],
+    [{ node: "slider", field: "x", label: null, value: 1, min: 0, max: 2, step: 1, action: null }, "input"],
+    [{ node: "date_picker", field: "x", label: null, value: null, action: null }, "input"],
+  ] as const)("un campo senza azione è disabilitato: %s", (node, selector) => {
+    const host = mount(node as UiNode);
+    expect((host.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).disabled).toBe(true);
+  });
+
+  it("un campo con azione resta attivo", () => {
+    const host = mount({
+      node: "text_input", field: "x", label: null, value: "", placeholder: null,
+      action: { action: "cambia", payload: null },
+    } as UiNode);
+    expect(host.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
+  });
+
+  it("una riga senza celle resta una riga HTML valida", () => {
+    const host = mount({ node: "row", cells: [], action: null } as UiNode);
+    expect(host.querySelectorAll("tr > td")).toHaveLength(1);
+  });
+});

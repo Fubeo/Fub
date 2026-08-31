@@ -3,10 +3,17 @@
 // ricordare. Sono decisioni, non cablaggio — e una decisione che si prova solo
 // aprendo l'app non la prova nessuno.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { loadActiveSpace, loadExpanded, saveExpanded, state } from "./store";
+import { emit, loadActiveSpace, loadExpanded, on, saveExpanded, state } from "./store";
 
 const viewState = vi.fn();
 const setViewState = vi.fn();
+
+
+const notify = vi.fn();
+
+vi.mock("../ui/notify", () => ({
+  notify: (...args: unknown[]) => notify(...args),
+}));
 
 vi.mock("../host/ipc", () => ({
   api: {
@@ -21,6 +28,7 @@ beforeEach(() => {
   setViewState.mockResolvedValue(undefined);
   state.expanded = new Set();
   state.activeSpace = null;
+  notify.mockReset();
 });
 
 describe("rileggere dove si era rimasti", () => {
@@ -81,5 +89,37 @@ describe("ricordare", () => {
     setViewState.mockRejectedValue(new Error("file illeggibile"));
     expect(() => saveExpanded()).not.toThrow();
     warn.mockRestore();
+  });
+});
+
+
+describe("il bus sincrono non perde gli errori asincroni", () => {
+  it("raccoglie una Promise rifiutata senza fermare gli altri listener", async () => {
+    const later = vi.fn();
+    on("layout", async () => {
+      throw new Error("ridisegno fallito");
+    });
+    on("layout", later);
+
+    emit("layout");
+    expect(later).toHaveBeenCalledTimes(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(String(notify.mock.calls[0]?.[0])).toContain("ridisegno fallito");
+  });
+
+  it("riconosce anche un thenable che non è una Promise", async () => {
+    on("organization", () => ({
+      then(_resolve: (value?: unknown) => void, reject: (reason: unknown) => void) {
+        reject(new Error("thenable fallito"));
+      },
+    }));
+
+    emit("organization");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(String(notify.mock.calls[0]?.[0])).toContain("thenable fallito");
   });
 });

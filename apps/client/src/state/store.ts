@@ -52,7 +52,7 @@ export interface Signals {
   "stale-views": [ids: string[]];
 }
 
-type Listener = (...args: never[]) => void;
+type Listener = (...args: never[]) => unknown;
 
 const listeners = new Map<keyof Signals, Listener[]>();
 
@@ -62,7 +62,7 @@ const listeners = new Map<keyof Signals, Listener[]>();
 /// questa la riga da cambiare, in un posto solo.
 export function on<K extends keyof Signals>(
   signal: K,
-  listener: (...args: Signals[K]) => void,
+  listener: (...args: Signals[K]) => unknown,
 ): void {
   const list = listeners.get(signal);
   if (list) list.push(listener as Listener);
@@ -76,12 +76,28 @@ export function on<K extends keyof Signals>(
 /// impedire agli altri di aggiornarsi — sarebbe un difetto che si manifesta
 /// come "metà finestra ferma", cioè nel modo più difficile da ricondurre alla
 /// sua causa (§20.3: gli esiti non si buttano via in silenzio).
+function isThenable(value: unknown): value is PromiseLike<unknown> {
+  return (typeof value === "object" && value !== null) || typeof value === "function"
+    ? typeof (value as { then?: unknown }).then === "function"
+    : false;
+}
+
+function listenerFailed(signal: keyof Signals, error: unknown): void {
+  notify(t("store.listener_failed", { signal, reason: errorText(error) }), "guasto");
+}
+
 export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): void {
   for (const listener of listeners.get(signal) ?? []) {
     try {
-      (listener as (...a: Signals[K]) => void)(...args);
+      const result = (listener as (...a: Signals[K]) => unknown)(...args);
+      // Il bus resta sincrono: `emit` non aspetta nessuno. Però TypeScript
+      // consente di passare una funzione async dove il ritorno è ignorato, e
+      // una rejection non attraversa il `try` qui sopra. Riconoscere qualunque
+      // thenable (non soltanto `instanceof Promise`) evita di trasformarla in
+      // una rejection globale senza proprietario.
+      if (isThenable(result)) void Promise.resolve(result).catch((e) => listenerFailed(signal, e));
     } catch (e) {
-      notify(t("store.listener_failed", { signal, reason: errorText(e) }), "guasto");
+      listenerFailed(signal, e);
     }
   }
 }
