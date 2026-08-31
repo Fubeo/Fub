@@ -29,6 +29,26 @@ describe("sanitizeThemeCss", () => {
     expect(sanitizeThemeCss(css, POLICY)).toBe(css);
   });
 
+  it("non si lascia aggirare da escape CSS, stringhe o commenti", () => {
+    const css = `
+      :root { --t\\65 xt: #fff; --bg: #000; content: "url(https://innocuo.test)"; }
+      /* @import url(https://innocuo.test); .cattiva {} */
+      .ui\\2d button { color: var(--text); background: url(\\68 ttps\\3a //evil.test/x); }
+      b\\6f dy { color: red; }
+    `;
+    const violations = themeCssViolations(css, POLICY);
+    expect(violations.map(({ code }) => code)).toEqual(["remote-url", "selector-token"]);
+    expect(violations[0]?.detail).toContain("https://evil.test/x");
+    expect(violations[1]?.detail).toContain("body");
+  });
+
+  it("un CSS sintatticamente rotto è un rifiuto strutturato", () => {
+    const violations = themeCssViolations(":root { --text: red;", POLICY);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.code).toBe("syntax-error");
+    expect(() => sanitizeThemeCss(":root { --text: red;", POLICY)).toThrow(ThemeCssError);
+  });
+
   it("nomina insieme tutte le violazioni in ordine deterministico", () => {
     const css = `
       @import url("https://example.test/spia.css");
