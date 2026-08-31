@@ -271,7 +271,10 @@ impl BundleRegistry {
     }
 
     pub fn ids(&self) -> Vec<&str> {
-        self.mounted.iter().map(|bundle| bundle.id.as_str()).collect()
+        self.mounted
+            .iter()
+            .map(|bundle| bundle.id.as_str())
+            .collect()
     }
 
     pub fn remember(&mut self, bundle: Arc<dyn Bundle>) {
