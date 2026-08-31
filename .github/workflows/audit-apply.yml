@@ -25,3 +25,5 @@ jobs:
           git add -A
           git commit -m "fix(audit): isola WASM e rende univoche le patch UI"
           git push origin HEAD:fix/audit-integration
+
+# trigger: workflow già registrata sulla branch
