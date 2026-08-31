@@ -42,4 +42,4 @@ jobs:
           git add crates/fub-kernel/src/storage.rs crates/fub-kernel/src/storage/rooted.rs crates/fub-kernel/src/lib.rs crates/fub-kernel/src/vault.rs crates/fub-kernel/src/entries.rs crates/fub-kernel/src/workspace.rs crates/fub-kernel/tests/entry_store.rs crates/fub-kernel/tests/rejoin.rs
           git commit -m "fix(data): verifica digest e identità nei rejoin"
           git push origin HEAD:fix/audit-integration
-# retry: file identity makes equal-content real renames unambiguous
+# retry 5: structural rejoin test migration
