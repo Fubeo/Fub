@@ -33,16 +33,26 @@ const FAMILIES_SERVED: &[&str] = &[
 ];
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
 
+/// Errori che possono verificarsi prima che un componente WASM diventi un
+/// bundle montabile.
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
+    /// Il file del componente non è leggibile.
     #[error("il componente non si legge: {0}")]
     Read(#[from] std::io::Error),
+    /// I byte non descrivono un componente valido o Wasmtime non riesce a
+    /// compilarlo/linkarlo.
     #[error("il componente non si compila: {0}")]
     Compilation(String),
+    /// Il componente importa una famiglia `host-*` del contratto che questo
+    /// host non implementa.
     #[error("il componente importa famiglie che questo host non serve: {0}")]
     UnservedFamilies(String),
+    /// Manca l'export obbligatorio `fub:abi/plugin`.
     #[error("il componente non esporta `fub:abi/plugin`: non è un plugin ({0})")]
     NotAPlugin(String),
+    /// L'istanza non nasce oppure il suo manifest non è traducibile nel
+    /// contratto dell'host.
     #[error("il componente non si istanzia: {0}")]
     Instantiation(String),
 }
@@ -55,10 +65,12 @@ pub struct Component {
 }
 
 impl Component {
+    /// Carica e compila un componente dal filesystem.
     pub fn from_file(path: &Utf8Path) -> Result<Self, LoadError> {
         Self::from_bytes(&std::fs::read(path)?)
     }
 
+    /// Carica e compila un componente dai suoi byte.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, LoadError> {
         let engine = crate::limits::engine();
         let component = WasmtimeComponent::new(&engine, bytes)
