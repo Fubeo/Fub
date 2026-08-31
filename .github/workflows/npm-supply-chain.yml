@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   npm-supply-chain:
-    name: npm (audit + SBOM)
+    name: npm (licenze + audit + SBOM)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -31,7 +31,7 @@ jobs:
         run: npm audit --audit-level=high
       - name: Genera SBOM npm SPDX
         run: npm sbom --sbom-format=spdx > fub-client-sbom.spdx.json
-      - name: Valida il documento SPDX
+      - name: Valida SPDX e licenze
         run: |
           node --input-type=module -e '
             import fs from "node:fs";
@@ -42,7 +42,29 @@ jobs:
             if (!Array.isArray(sbom.packages) || sbom.packages.length === 0) {
               throw new Error("SBOM npm senza pacchetti");
             }
-            console.log(`SBOM npm valido: ${sbom.packages.length} pacchetti`);
+            const allowed = new Set([
+              "MIT",
+              "ISC",
+              "BSD-2-Clause",
+              "BSD-3-Clause",
+              "Apache-2.0",
+              "MIT OR Apache-2.0",
+              "Apache-2.0 OR MIT",
+              "MPL-2.0",
+              "OFL-1.1",
+            ]);
+            const rejected = [];
+            for (const pkg of sbom.packages) {
+              if (pkg.name === "fub-frontend") continue;
+              const license = pkg.licenseConcluded ?? pkg.licenseDeclared ?? "NOASSERTION";
+              if (!allowed.has(license)) {
+                rejected.push(`${pkg.name}@${pkg.versionInfo ?? "?"}: ${license}`);
+              }
+            }
+            if (rejected.length > 0) {
+              throw new Error(`licenze npm non approvate:\n${rejected.join("\n")}`);
+            }
+            console.log(`SBOM npm valido: ${sbom.packages.length} pacchetti; licenze approvate`);
           '
       - name: Pubblica SBOM npm
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
