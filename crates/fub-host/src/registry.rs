@@ -8,7 +8,10 @@
 
 use std::sync::Arc;
 
-use fub_abi::traits::{abi_compatible, HostApi, Plugin, PluginManifest};
+use fub_abi::settings::{permission_of_key, SettingSource, SettingValue};
+use fub_abi::traits::{
+    abi_compatible, HostApi, IndexQuery, IndexResult, Plugin, PluginManifest,
+};
 use fub_abi::PluginError;
 use fub_kernel::{RegistryError, Trust, Workspace};
 
@@ -209,6 +212,72 @@ pub struct BundleInfo {
     pub permissions: fub_abi::options::OptionMap,
 }
 
+/// Materializza il **default-deny** dei permessi esterni prima che il plugin
+/// riceva il suo primo `HostApi`.
+///
+/// Il manifest dice ciò che il componente *chiede*, non ciò che la persona ha
+/// approvato. Per i bundle non-core una chiave ancora al default viene quindi
+/// scritta `false`; una decisione già presente nel livello macchina — `true` o
+/// `false` — resta invece intatta. Le chiavi dei permessi sono machine-scoped,
+/// quindi un `.fub/settings.json` arrivato con un vault non può portarsi dietro
+/// un proprio consenso.
+fn initialize_external_permissions(
+    ws: &mut Workspace,
+    id: &str,
+    trust: Trust,
+) -> Result<Vec<String>, String> {
+    if trust == Trust::Core {
+        return Ok(Vec::new());
+    }
+
+    let entries = match ws.query_index(IndexQuery::Settings {
+        plugin: Some(id.to_string()),
+    }) {
+        Ok(IndexResult::Settings(entries)) => entries,
+        Ok(other) => {
+            return Err(format!(
+                "permission settings query for `{id}` answered off-topic: {other:?}"
+            ));
+        }
+        Err(error) => {
+            return Err(format!(
+                "cannot read permission settings for `{id}` before activation: {error}"
+            ));
+        }
+    };
+
+    let mut initialized = Vec::new();
+    for entry in entries {
+        let Some((owner, _permission)) = permission_of_key(&entry.spec.key) else {
+            continue;
+        };
+        if owner != id || entry.source != SettingSource::Default {
+            continue;
+        }
+        if let Err(error) = ws.set_setting(&entry.spec.key, SettingValue::Toggle(false)) {
+            let mut reason = format!(
+                "cannot initialize external permission `{}` as denied: {error}",
+                entry.spec.key
+            );
+            append_permission_rollback(ws, &initialized, &mut reason);
+            return Err(reason);
+        }
+        initialized.push(entry.spec.key);
+    }
+    Ok(initialized)
+}
+
+/// Ritira le sole decisioni `false` create dal tentativo di mount corrente.
+/// Una scelta dell'utente già esistente non entra mai in `initialized`, quindi
+/// il rollback non può cancellarla.
+fn append_permission_rollback(ws: &mut Workspace, initialized: &[String], reason: &mut String) {
+    for key in initialized.iter().rev() {
+        if let Err(error) = ws.reset_setting(key) {
+            reason.push_str(&format!("; permission rollback for `{key}` failed: {error}"));
+        }
+    }
+}
+
 impl BundleRegistry {
     pub fn new() -> Self {
         Self::default()
@@ -219,6 +288,7 @@ impl BundleRegistry {
     pub fn mount(&mut self, bundle: &dyn Bundle, ws: &mut Workspace) -> Result<(), BundleError> {
         let manifest = bundle.manifest();
         let id = manifest.id.clone();
+        let trust = bundle.trust();
 
         if !abi_compatible(&manifest.abi_version) {
             return Err(BundleError::Abi {
@@ -227,14 +297,39 @@ impl BundleRegistry {
             });
         }
 
-        ws.register_plugin(manifest, bundle.trust())
+        ws.register_plugin(manifest, trust)
             .map_err(BundleError::Declaration)?;
+
+        // Prima di `activate`: un componente esterno non deve avere neppure una
+        // finestra di una chiamata in cui il permesso richiesto sia già attivo.
+        let initialized_permissions = match initialize_external_permissions(ws, &id, trust) {
+            Ok(keys) => keys,
+            Err(mut error) => {
+                match ws.deactivate_plugin(&id) {
+                    Ok(errors) => {
+                        for rollback in errors {
+                            error.push_str(&format!("; declaration rollback failed: {rollback}"));
+                        }
+                    }
+                    Err(rollback) => {
+                        error.push_str(&format!("; declaration rollback failed: {rollback}"));
+                    }
+                }
+                return Err(BundleError::Registration { id, error });
+            }
+        };
 
         // `prepare` viene dopo la dichiarazione come il vecchio `plugin()`: la
         // costruzione può essere specifica del backend, ma non ha ancora accesso
         // alle capacità del vault.
         let (mut plugin, register) = bundle.prepare().into_parts();
-        if let Err(error) = ws.with_host(&id, |host| plugin.activate(host)) {
+        if let Err(mut error) = ws.with_host(&id, |host| plugin.activate(host)) {
+            let mut rollback = String::new();
+            append_permission_rollback(ws, &initialized_permissions, &mut rollback);
+            if !rollback.is_empty() {
+                let message = error.message_mut();
+                *message = format!("{message};{rollback}").into();
+            }
             let _ = ws.deactivate_plugin(&id);
             return Err(BundleError::Activation { id, error });
         }
@@ -242,10 +337,12 @@ impl BundleRegistry {
         let (warnings, failure) = register(ws).into_parts();
         if let Some(mut error) = failure {
             // Il plugin vede ancora il proprio host e i provider già entrati;
-            // poi il kernel ritira provider e dichiarazione.
+            // poi si ritirano le sole decisioni create da questo tentativo e,
+            // infine, il kernel ritira provider e dichiarazione.
             if let Err(rollback) = ws.with_host(&id, |host| plugin.deactivate(host)) {
                 error.push_str(&format!("; rollback deactivate failed: {rollback}"));
             }
+            append_permission_rollback(ws, &initialized_permissions, &mut error);
             match ws.deactivate_plugin(&id) {
                 Ok(errors) => {
                     for rollback in errors {

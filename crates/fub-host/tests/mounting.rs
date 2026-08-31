@@ -1,11 +1,16 @@
 //! Presidi del lifecycle dei bundle: ABI, attivazione, registrazione atomica,
-//! dipendenze e teardown.
+//! dipendenze, permessi e teardown.
 
 use std::sync::{Arc, Mutex};
 
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
-use fub_abi::traits::{CommandProvider, EventHandler, HostApi, Plugin, PluginManifest};
+use fub_abi::options::permission;
+use fub_abi::settings::{permission_key, SettingScope, SettingSource, SettingValue};
+use fub_abi::traits::{
+    CommandProvider, EventHandler, HostApi, IndexQuery, IndexResult, Plugin, PluginManifest,
+    PluginPermissions,
+};
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
 use fub_host::registry::{Bundle, BundleError, BundleRegistry, OnlyProviders};
@@ -227,6 +232,33 @@ impl Bundle for DependencyBundle {
     }
 }
 
+/// Un bundle esterno che chiede una sola capacità. Il manifest **chiede**;
+/// l'host decide se quella richiesta è stata approvata.
+struct PermissionBundle;
+
+impl PermissionBundle {
+    const ID: &'static str = "com.acme.reader";
+}
+
+impl Bundle for PermissionBundle {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::new(Self::ID, "Reader")
+            .granting(PluginPermissions::of(&[permission::READ_VAULT]))
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Community
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        OnlyProviders::boxed(self.manifest())
+    }
+
+    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+        Vec::new()
+    }
+}
+
 #[test]
 fn a_bundle_that_speaks_a_other_contract_not_is_mounts() {
     let mut ws = vault();
@@ -317,6 +349,77 @@ fn closing_stops_bundles_in_reverse_while_they_are_still_intact() {
     assert!(ws.is_closed());
     assert!(ws.plugins().is_empty());
     assert!(registry.ids().is_empty());
+}
+
+#[test]
+fn external_permissions_are_opt_in_and_the_approval_is_machine_local() {
+    let mut ws = vault();
+    let mut registry = BundleRegistry::new();
+    registry.remember(Arc::new(PermissionBundle));
+    registry
+        .enable(&mut ws, PermissionBundle::ID)
+        .expect("the bundle mounts without receiving the requested capability");
+
+    let key = permission_key(PermissionBundle::ID, permission::READ_VAULT);
+    let entry = match ws
+        .query_index(IndexQuery::Settings {
+            plugin: Some(PermissionBundle::ID.to_string()),
+        })
+        .expect("settings query")
+    {
+        IndexResult::Settings(entries) => entries
+            .into_iter()
+            .find(|entry| entry.spec.key == key)
+            .expect("permission setting"),
+        other => panic!("settings query answered off-topic: {other:?}"),
+    };
+    assert_eq!(entry.spec.scope, SettingScope::Machine);
+    assert_eq!(entry.source, SettingSource::Machine);
+    assert_eq!(entry.value, SettingValue::Toggle(false));
+
+    ws.with_host(PermissionBundle::ID, |host| {
+        assert!(matches!(
+            host.list_documents(None),
+            Err(PluginError::PermissionDenied(_))
+        ));
+    });
+
+    // Questo è l'opt-in: la persona davanti alla shell muove la chiave
+    // sintetica. Il guard la rilegge subito, senza riavvio.
+    ws.set_setting(&key, SettingValue::Toggle(true))
+        .expect("the user grants the permission");
+    ws.with_host(PermissionBundle::ID, |host| {
+        host.list_documents(None)
+            .expect("the explicitly approved read is available");
+    });
+
+    // Spegnere e riaccendere non trasforma l'approvazione in un nuovo default:
+    // il valore di macchina resta una decisione esplicita e non viene riscritto
+    // dal default-deny del montaggio successivo.
+    assert!(registry
+        .unmount(&mut ws, PermissionBundle::ID)
+        .is_empty());
+    registry
+        .enable(&mut ws, PermissionBundle::ID)
+        .expect("remounts with the existing approval");
+    let entry = match ws
+        .query_index(IndexQuery::Settings {
+            plugin: Some(PermissionBundle::ID.to_string()),
+        })
+        .expect("settings query")
+    {
+        IndexResult::Settings(entries) => entries
+            .into_iter()
+            .find(|entry| entry.spec.key == key)
+            .expect("permission setting"),
+        other => panic!("settings query answered off-topic: {other:?}"),
+    };
+    assert_eq!(entry.source, SettingSource::Machine);
+    assert_eq!(entry.value, SettingValue::Toggle(true));
+    ws.with_host(PermissionBundle::ID, |host| {
+        host.list_documents(None)
+            .expect("the machine-local approval survives the remount");
+    });
 }
 
 #[test]
