@@ -181,14 +181,8 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // l'utente ha sbagliato una virgola nelle proprietà e vedrebbe
                 // le proprietà svanire senza un avviso. Il testo resta **dato**
                 // (escapato), e il motivo si legge accanto.
-                let reason = payload
-                    .get("error")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let text = payload
-                    .get("text")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let reason = payload.get("error").and_then(|v| v.as_str()).unwrap_or("");
+                let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 write!(
                     out,
                     "<div{attrs} class=\"block-frontmatter-unparsed\">\
