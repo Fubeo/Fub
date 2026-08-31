@@ -396,9 +396,7 @@ fn external_permissions_are_opt_in_and_the_approval_is_machine_local() {
     // Spegnere e riaccendere non trasforma l'approvazione in un nuovo default:
     // il valore di macchina resta una decisione esplicita e non viene riscritto
     // dal default-deny del montaggio successivo.
-    assert!(registry
-        .unmount(&mut ws, PermissionBundle::ID)
-        .is_empty());
+    assert!(registry.unmount(&mut ws, PermissionBundle::ID).is_empty());
     registry
         .enable(&mut ws, PermissionBundle::ID)
         .expect("remounts with the existing approval");

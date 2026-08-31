@@ -9,9 +9,7 @@
 use std::sync::Arc;
 
 use fub_abi::settings::{permission_of_key, SettingSource, SettingValue};
-use fub_abi::traits::{
-    abi_compatible, HostApi, IndexQuery, IndexResult, Plugin, PluginManifest,
-};
+use fub_abi::traits::{abi_compatible, HostApi, IndexQuery, IndexResult, Plugin, PluginManifest};
 use fub_abi::PluginError;
 use fub_kernel::{RegistryError, Trust, Workspace};
 
@@ -273,7 +271,9 @@ fn initialize_external_permissions(
 fn append_permission_rollback(ws: &mut Workspace, initialized: &[String], reason: &mut String) {
     for key in initialized.iter().rev() {
         if let Err(error) = ws.reset_setting(key) {
-            reason.push_str(&format!("; permission rollback for `{key}` failed: {error}"));
+            reason.push_str(&format!(
+                "; permission rollback for `{key}` failed: {error}"
+            ));
         }
     }
 }
