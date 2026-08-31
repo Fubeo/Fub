@@ -28,6 +28,7 @@ jobs:
           git config user.name "Fubeo audit bot"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
           python .audit-host.py
+          python .audit-host-fix.py
           cargo fmt --all
           node .github/scripts/check-host-workspace-boundary.mjs
           if ! (cargo check -p fub-host --all-targets && cargo check -p fub-app --all-targets) > /tmp/audit-check.log 2>&1; then
@@ -38,7 +39,8 @@ jobs:
             cat .audit-error.txt
             exit 1
           fi
-          git rm .audit-host.py
+          git rm .audit-host.py .audit-host-fix.py
+          git rm -f .audit-error.txt || true
           git add crates/fub-host crates/fub-app .github/scripts/check-host-workspace-boundary.mjs
           git commit -m "refactor(host): espone porte strette alla shell"
           git push origin HEAD:fix/audit-integration
