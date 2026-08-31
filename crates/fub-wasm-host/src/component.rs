@@ -80,15 +80,18 @@ impl Component {
 
     fn load(engine: Engine, component: WasmtimeComponent) -> Result<Self, LoadError> {
         let mut linker: Linker<State> = Linker::new(&engine);
-        add_to_linker(&mut linker)
-            .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
+        add_to_linker(&mut linker).map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
 
         let missing: Vec<String> = component
             .component_type()
             .imports(&engine)
             .map(|(name, _)| name.to_string())
             .filter(|name| name.starts_with(HOST_FAMILY_PREFIX))
-            .filter(|name| !FAMILIES_SERVED.iter().any(|served| name.starts_with(served)))
+            .filter(|name| {
+                !FAMILIES_SERVED
+                    .iter()
+                    .any(|served| name.starts_with(served))
+            })
             .collect();
         if !missing.is_empty() {
             return Err(LoadError::UnservedFamilies(missing.join(", ")));
@@ -144,7 +147,10 @@ fn cap_the_rest(
 ) -> wasmtime::Result<()> {
     let ty = component.component_type();
     for (name, item) in ty.imports(engine) {
-        if FAMILIES_SERVED.iter().any(|served| name.starts_with(served)) {
+        if FAMILIES_SERVED
+            .iter()
+            .any(|served| name.starts_with(served))
+        {
             continue;
         }
         let ComponentItem::ComponentInstance(interface) = item else {
@@ -347,9 +353,9 @@ impl WasmBundle {
             return Ok(Vec::new());
         };
         crate::limits::renew(&mut *store);
-        let specs = commands
-            .call_commands(&mut *store)
-            .map_err(|error| format!("comandi non dichiarati: il componente è caduto: {error:#}"))?;
+        let specs = commands.call_commands(&mut *store).map_err(|error| {
+            format!("comandi non dichiarati: il componente è caduto: {error:#}")
+        })?;
         Ok(specs.into_iter().map(tr::from_command_spec).collect())
     }
 
