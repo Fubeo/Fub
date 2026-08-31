@@ -6,8 +6,14 @@
   "build": {
     "frontendDist": "../../apps/client/dist",
     "devUrl": "http://localhost:1420",
-    "beforeDevCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)/apps/client\" && npm run dev'",
-    "beforeBuildCommand": "sh -c 'cd \"$(git rev-parse --show-toplevel)/apps/client\" && npm run build'"
+    "beforeDevCommand": {
+      "cwd": "../../apps/client",
+      "script": "npm run dev"
+    },
+    "beforeBuildCommand": {
+      "cwd": "../../apps/client",
+      "script": "npm run build"
+    }
   },
   "app": {
     "windows": [
