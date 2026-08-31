@@ -64,6 +64,8 @@ impl RegistrationReport {
     }
 }
 
+type RegistrationStep<'a> = Box<dyn FnOnce(&mut Workspace) -> RegistrationReport + 'a>;
+
 /// Plugin e registrazione provider appartenenti alla **stessa istanza** di un
 /// montaggio.
 ///
@@ -72,7 +74,7 @@ impl RegistrationReport {
 /// temporaneo del bundle fra due chiamate separate.
 pub struct BundleMount<'a> {
     plugin: Box<dyn Plugin>,
-    register: Box<dyn FnOnce(&mut Workspace) -> RegistrationReport + 'a>,
+    register: RegistrationStep<'a>,
 }
 
 impl<'a> BundleMount<'a> {
@@ -86,12 +88,7 @@ impl<'a> BundleMount<'a> {
         }
     }
 
-    fn into_parts(
-        self,
-    ) -> (
-        Box<dyn Plugin>,
-        Box<dyn FnOnce(&mut Workspace) -> RegistrationReport + 'a>,
-    ) {
+    fn into_parts(self) -> (Box<dyn Plugin>, RegistrationStep<'a>) {
         (self.plugin, self.register)
     }
 }
