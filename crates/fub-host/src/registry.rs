@@ -31,14 +31,11 @@
 //! 4. **i provider**, che il bundle registra da sé perché è lui a sapere quali
 //!    sono.
 //!
-//! I primi tre sono **tutto-o-niente**: se uno fallisce il bundle non è montato
-//! e non resta niente dietro — un `activate` fallito si porta via anche la
-//! dichiarazione. Il quarto no, e la differenza è deliberata: un bundle a cui
-//! una view si contende il nome è un bundle che funziona meno una view, e
-//! smontarlo per intero vorrebbe dire che un id doppio in un plugin di terzi
-//! spegne l'indice di ricerca. Ciò che non entra è un **avviso**, e chi monta
-//! lo scrive nel log: non torna al chiamante, perché un payload che torna è un
-//! payload che si può scartare — ed è ciò che due chiamanti su tre facevano.
+//! Tutti e quattro i passi sono **tutto-o-niente**. Un warning recuperabile è
+//! una cosa diversa da una registrazione fallita e va dichiarato come tale con
+//! [`RegistrationReport`]. Per compatibilità, i bundle che implementano ancora
+//! il vecchio [`Bundle::register`] sono conservativi: qualunque messaggio
+//! restituito da quel metodo è considerato un fallimento e provoca rollback.
 
 use std::sync::Arc;
 
@@ -60,6 +57,61 @@ pub enum BundleKind {
     Component,
     /// Un tema: solo la pelle, dichiarata da un [`ThemeManifest`](fub_abi::theme::ThemeManifest).
     Theme,
+}
+
+/// Esito della fase di registrazione dei provider di un bundle.
+///
+/// Un warning dice «il bundle è intero ma qualcosa di recuperabile è successo»;
+/// un failure dice invece «il bundle non è quello dichiarato dal manifest» e
+/// obbliga il registry a ritirare provider, dichiarazione e plugin attivato.
+#[derive(Debug, Default)]
+pub struct RegistrationReport {
+    warnings: Vec<String>,
+    failure: Option<String>,
+}
+
+impl RegistrationReport {
+    /// Nessun problema e nessun warning.
+    pub fn complete() -> Self {
+        Self::default()
+    }
+
+    /// Montaggio riuscito con un warning esplicitamente recuperabile.
+    pub fn warning(message: impl Into<String>) -> Self {
+        Self {
+            warnings: vec![message.into()],
+            failure: None,
+        }
+    }
+
+    /// Aggiunge un warning recuperabile a un report riuscito.
+    pub fn with_warning(mut self, message: impl Into<String>) -> Self {
+        self.warnings.push(message.into());
+        self
+    }
+
+    /// La registrazione non è completa: il bundle deve essere ritirato.
+    pub fn failed(message: impl Into<String>) -> Self {
+        Self {
+            warnings: Vec::new(),
+            failure: Some(message.into()),
+        }
+    }
+
+    /// Adatta il vecchio contratto `Vec<String>` in modo conservativo: se una
+    /// registrazione ha restituito anche un solo errore, il bundle non resta a
+    /// metà. I warning davvero recuperabili usano [`warning`](Self::warning).
+    fn from_legacy(failures: Vec<String>) -> Self {
+        if failures.is_empty() {
+            Self::complete()
+        } else {
+            Self::failed(failures.join("; "))
+        }
+    }
+
+    fn into_parts(self) -> (Vec<String>, Option<String>) {
+        (self.warnings, self.failure)
+    }
 }
 
 /// Un **bundle**: un [`Plugin`] e i provider che registra, visti da chi li
@@ -104,19 +156,21 @@ pub trait Bundle: Send + Sync {
     /// componente WASM, che il vault non lo vede nemmeno lei.
     fn plugin(&self) -> Box<dyn Plugin>;
 
-    /// Registra i provider del bundle: view, comandi, indici, handler, regole
-    /// sintattiche, renderer, servizi.
+    /// Registra i provider del bundle.
     ///
-    /// Chiamata **dopo** [`Plugin::activate`] e con l'id già dichiarato, quindi
-    /// ogni `register_*` qui dentro trova il proprio proprietario. Ciò che torna
-    /// sono **avvisi** già composti: un pezzo che non entra non smonta il
-    /// bundle, e chi monta ha un canale per dirlo (oggi `stderr`, §20.2).
-    ///
-    /// Il canale lo usa [`BundleRegistry::mount`], che è il punto che ogni
-    /// accensione attraversa — non il chiamante di turno: la frase qui sopra
-    /// era vera del contratto e falsa dei fatti finché scriverla toccava a chi
-    /// chiamava.
+    /// Questo è il contratto storico. Da ora qualunque elemento restituito è un
+    /// **fallimento di registrazione**: il registry ritira l'intero bundle. Chi
+    /// ha davvero un warning recuperabile sovrascrive [`registration`](Self::registration)
+    /// e lo dichiara esplicitamente con [`RegistrationReport`].
     fn register(&self, ws: &mut Workspace) -> Vec<String>;
+
+    /// Esito strutturato della registrazione.
+    ///
+    /// Il default rende sicuri anche i bundle non ancora migrati: un vecchio
+    /// `Vec<String>` non può più lasciare un componente montato a metà.
+    fn registration(&self, ws: &mut Workspace) -> RegistrationReport {
+        RegistrationReport::from_legacy(self.register(ws))
+    }
 }
 
 /// Perché un bundle **non** è montato.
@@ -132,13 +186,14 @@ pub enum BundleError {
     /// proprio namespace, requisito che nessuno offre.
     Declaration(RegistryError),
     /// Si è chiesto di accendere un bundle che questo host non sa montare
-    /// (§11.1). È un errore e non un silenzio: «l'ho riacceso» e «ho scritto
-    /// male l'id» devono essere due risposte diverse.
+    /// (§11.1).
     Unknown(String),
     /// [`Plugin::activate`] è fallita. La dichiarazione appena fatta è stata
-    /// **ritirata**: un bundle che non si è attivato non resta nell'inventario
-    /// del §7.6, o «dichiarato» smetterebbe di voler dire «montato».
+    /// ritirata.
     Activation { id: String, error: PluginError },
+    /// Il plugin si è attivato ma uno dei provider obbligatori non si è
+    /// registrato. Il registry ha eseguito il rollback prima di restituire.
+    Registration { id: String, error: String },
 }
 
 impl std::fmt::Display for BundleError {
@@ -154,6 +209,9 @@ impl std::fmt::Display for BundleError {
             BundleError::Activation { id, error } => {
                 write!(f, "`{id}` did not activate: {error}")
             }
+            BundleError::Registration { id, error } => {
+                write!(f, "`{id}` did not register atomically: {error}")
+            }
             BundleError::Unknown(id) => {
                 write!(f, "`{id}` is not a bundle this host knows how to mount")
             }
@@ -164,33 +222,14 @@ impl std::fmt::Display for BundleError {
 impl std::error::Error for BundleError {}
 
 /// Perché un bundle non è montato, **come lo vede chi l'ha chiesto** (§12.2).
-///
-/// Le quattro varianti non sono quattro modi di dire la stessa cosa, e
-/// appiattirle su [`PluginError::Internal`] toglieva a chi accende un
-/// componente l'unica cosa che gli serve sapere: se ha sbagliato l'id, se il
-/// componente è troppo nuovo per questo host, o se è il componente ad avere un
-/// difetto.
-///
-/// L'ultima riga è quella che conta di più: un'attivazione fallita **porta già
-/// un `PluginError`**, scritto da chi non si è attivato. Riavvolgerlo in un
-/// `Internal` avrebbe cancellato una risposta giusta per rimpiazzarla con una
-/// generica — e con essa il catalogo di chi l'aveva scritta.
 impl From<BundleError> for PluginError {
     fn from(and: BundleError) -> Self {
         match and {
-            // Non è un difetto di nessuno: questo host non parla quel
-            // contratto. È la stessa forma di «nessuno serve questa domanda».
             BundleError::Abi { .. } => PluginError::Unserved(and.to_string().into()),
-            // «L'ho riacceso» e «ho scritto male l'id» devono essere due
-            // risposte diverse: è la ragione per cui la variante esiste, e
-            // sopravvive alla traduzione solo restando distinta qui.
             BundleError::Unknown(_) => PluginError::NotFound(and.to_string().into()),
-            // La dichiarazione respinta dal kernel è un difetto di chi ha
-            // scritto il bundle: id doppio, nome fuori dal namespace, requisito
-            // che nessuno offre.
-            BundleError::Declaration(_) => PluginError::Internal(and.to_string().into()),
-            // La risposta di chi non si è attivato, **preservata**: il suo
-            // `kind` è più informato di qualunque cosa si possa mettere qui.
+            BundleError::Declaration(_) | BundleError::Registration { .. } => {
+                PluginError::Internal(and.to_string().into())
+            }
             BundleError::Activation { .. } => and.into_activation_error(),
         }
     }
@@ -198,8 +237,7 @@ impl From<BundleError> for PluginError {
 
 impl BundleError {
     /// L'errore di un'attivazione fallita, con l'id di chi non si è attivato
-    /// premesso al messaggio: chi lo riceve deve sapere **chi** ha detto di no,
-    /// e il `kind` di chi l'ha detto è quello che vale.
+    /// premesso al messaggio.
     fn into_activation_error(self) -> PluginError {
         let BundleError::Activation { id, mut error } = self else {
             unreachable!("called only on the Activation branch")
@@ -211,38 +249,12 @@ impl BundleError {
 }
 
 /// Un bundle montato: l'id con cui è dichiarato, e il suo plugin.
-///
-/// Il plugin è un `Arc` e non un `Box` dalla
-/// [0032](../../../docs/decisions/0183-composizione-host-kernel.md): il runner esegue
-/// `run_job` su un thread suo e per tutta la durata del job, quindi ha bisogno
-/// di **tenere** il corpo senza tenere il lock di questo registry — o chiudere
-/// il vault aspetterebbe la fine di un export. `Arc<dyn Plugin>` è la forma di
-/// quel prestito, e regge perché `run_job` prende `&self`.
 struct MountedBundle {
     id: String,
     plugin: Arc<dyn Plugin>,
 }
 
 /// **Chi possiede i bundle** di un workspace, in ordine di montaggio.
-///
-/// Possedere il plugin è tutto il mestiere di questo tipo, e da lì
-/// vengono le due cose che prima non avevano un posto dove stare:
-/// [`Plugin::deactivate`], che non aveva un chiamante
-/// ([decisione 0028](../../../docs/decisions/0183-composizione-host-kernel.md)),
-/// e [`Plugin::run_job`], che è il corpo di un job e che il runner del §9.3
-/// dovrà pur chiedere a qualcuno.
-///
-/// # I **conosciuti**, e perché ci vogliono (§11.1)
-///
-/// Prima di questa voce la tabella di montaggio era una variabile locale di
-/// `mount()`: i bundle esistevano per il tempo del ciclo che li montava, e
-/// quindi *smontarne uno era definitivo* — `unmount` toglieva, e per rimettere
-/// non c'era niente da cui ripartire. Un interruttore che si può solo spegnere
-/// non è un interruttore.
-///
-/// Adesso il registry tiene anche chi **non** è montato: è quello che rende
-/// vero il §11.1, e insieme è ciò che permette di non montare all'avvio ciò che
-/// l'utente ha spento (`plugins.disabled`) senza che diventi invisibile.
 #[derive(Default)]
 pub struct BundleRegistry {
     /// I bundle che questo host sa montare, in ordine di tabella. Chi è qui e
@@ -252,44 +264,19 @@ pub struct BundleRegistry {
 }
 
 /// Una riga dell'inventario dei bundle: chi c'è, come si chiama, e se è acceso.
-///
-/// Non è [`PluginInfo`](fub_kernel::PluginInfo) e non lo sostituisce: quello
-/// racconta chi è **dichiarato nel kernel**, e un bundle spento non lo è
-/// affatto. La differenza è il punto — «spento» e «non c'è» sono due stati
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct BundleInfo {
     /// Chi è: l'id con cui il bundle è dichiarato nel kernel.
     pub id: String,
     /// Come si chiama, per gli elenchi.
     pub name: String,
-    /// Se è acceso. «Spento» e «non c'è» sono due stati diversi, e questo
-    /// campo è l'unica riga che li distingue.
+    /// Se è acceso.
     pub mounted: bool,
     /// Di che famiglia è: un componente o un tema.
-    ///
-    /// Sta qui e non si deduce da altro perché è l'**unica** riga che lo dice a
-    /// chi guarda l'elenco: «spento» e «non c'è» sono già distinti da
-    /// [`mounted`](BundleInfo::mounted), e la famiglia è la terza domanda che
-    /// chi disegna si pone davanti a una riga — un tema non si spegne con un
-    /// interruttore di componente, e saperlo prima di cliccare è la differenza
-    /// fra un pannello che chiede e uno che insegna.
     pub kind: BundleKind,
     /// Quanto l'host si fida di chi lo ha prodotto.
-    ///
-    /// Non è una decorazione accanto ai permessi: è **l'altra metà della
-    /// domanda** che qualcuno si pone leggendoli. «Può leggere le mie note» non
-    /// vuol dire la stessa cosa detto di una feature di questo repo e di un
-    /// componente arrivato da fuori, e chi decide se lasciarglielo fare sta
-    /// decidendo soprattutto di **chi** si fida.
     pub trust: Trust,
     /// I permessi che il suo manifest dichiara, coi loro parametri (§23.17).
-    ///
-    /// Stanno qui e non solo in [`PluginInfo`](fub_kernel::PluginInfo) per una
-    /// ragione che si vede da chi guarda: l'inventario del kernel racconta chi è
-    /// **dichiarato**, e un componente spento non lo è. Ma la domanda *cosa
-    /// chiederebbe se lo accendessi* si pone precisamente **prima** di
-    /// accenderlo — e un elenco che comparisse solo dopo aver acceso sarebbe un
-    /// elenco che si legge quando la decisione è già stata presa.
     pub permissions: fub_abi::options::OptionMap,
 }
 
@@ -299,16 +286,11 @@ impl BundleRegistry {
     }
 
     /// Monta un bundle su un workspace: i quattro passi in testa al modulo.
-    ///
-    /// Torna gli **avvisi** dei provider che non sono entrati (il bundle è
-    /// montato lo stesso), o l'errore di uno dei tre passi che non ammettono un
-    /// mezzo montaggio.
     pub fn mount(&mut self, bundle: &dyn Bundle, ws: &mut Workspace) -> Result<(), BundleError> {
         let manifest = bundle.manifest();
         let id = manifest.id.clone();
 
-        // 1. La versione del contratto, prima di ogni altra cosa: un plugin che
-        //    parla un'altra major non deve nemmeno comparire nell'inventario.
+        // 1. La versione del contratto, prima di ogni altra cosa.
         if !abi_compatible(&manifest.abi_version) {
             return Err(BundleError::Abi {
                 id,
@@ -316,43 +298,44 @@ impl BundleRegistry {
             });
         }
 
-        // 2. La dichiarazione. È qui che il kernel applica il §7.3 (permessi e
-        //    fiducia), il §7.4 (i nomi dei servizi) e il §7.5 (i requisiti).
+        // 2. La dichiarazione.
         ws.register_plugin(manifest, bundle.trust())
             .map_err(BundleError::Declaration)?;
 
-        // 3. L'attivazione, con le capacità del manifest davanti. Fallire qui
-        //    non lascia un plugin dichiarato: il bundle non c'è.
+        // 3. L'attivazione. Fallire qui ritira la dichiarazione.
         let mut plugin = bundle.plugin();
         if let Err(error) = ws.with_host(&id, |host| plugin.activate(host)) {
             let _ = ws.deactivate_plugin(&id);
             return Err(BundleError::Activation { id, error });
         }
 
-        // 4. I provider. Da qui in poi ciò che va storto è un avviso, e **il
-        //    canale è questo**: il doc di [`Bundle::register`] lo scrive da
-        //    sempre («chi monta ha un canale per dirlo, oggi `stderr`, §20.2»),
-        //    ma finché gli avvisi tornavano al chiamante il canale era una
-        //    promessa che due chiamanti su tre non mantenevano — il bundle di
-        //    core li buttava in un `if let Err`, e `Host::set_plugin_enabled` in
-        //    un `?` che non lega. Scriverli qui è la regola nel posto che tutti
-        //    attraversano, e togliere il payload rende il gesto di scartarli
-        //    inesprimibile invece che solo sconsigliato: chi accende un
-        //    componente non ha più un modo di far sparire i provider che non
-        //    sono entrati.
-        //
-        //    L'id davanti alla frase non è decorazione: gli avvisi che i
-        //    `register_*` compongono dicono *cosa* non è entrato («sintassi non
-        //    innestata: …»), mai *di chi*, e una riga di log senza il
-        //    componente non si può nemmeno rileggere.
-        for warning in bundle.register(ws) {
+        // 4. I provider. A differenza del vecchio montaggio, una registrazione
+        // obbligatoria fallita non lascia il bundle a metà: prima si dà al
+        // plugin il commiato mentre il suo host e gli eventuali provider già
+        // entrati sono ancora vivi, poi il kernel ritira tutto ciò che porta
+        // quell'id. Non passa da `unmount`: il bundle non è mai entrato in
+        // `mounted`, quindi non fingiamo che un montaggio riuscito sia esistito.
+        let (warnings, failure) = bundle.registration(ws).into_parts();
+        if let Some(mut error) = failure {
+            if let Err(and) = ws.with_host(&id, |host| plugin.deactivate(host)) {
+                error.push_str(&format!("; rollback deactivate failed: {and}"));
+            }
+            match ws.deactivate_plugin(&id) {
+                Ok(errors) => {
+                    for and in errors {
+                        error.push_str(&format!("; rollback provider close failed: {and}"));
+                    }
+                }
+                Err(and) => error.push_str(&format!("; rollback failed: {and}")),
+            }
+            return Err(BundleError::Registration { id, error });
+        }
+
+        for warning in warnings {
             tracing::warn!(target: "fub.host", "{id}: {warning}");
         }
         self.mounted.push(MountedBundle {
             id,
-            // Dopo l'attivazione, e non prima: `activate` vuole `&mut self`, e
-            // il momento in cui il plugin è ancora solo di chi lo ha costruito è
-            // proprio questo.
             plugin: Arc::from(plugin),
         });
         Ok(())
@@ -364,11 +347,6 @@ impl BundleRegistry {
     }
 
     /// Aggiunge un bundle ai **conosciuti**, senza montarlo.
-    ///
-    /// È il primo dei due passi della tabella di montaggio: prima si dichiara
-    /// cosa esiste, poi si accende ciò che l'utente non ha spento. Chi passa di
-    /// qui e non da [`enable`](BundleRegistry::enable) resta una riga
-    /// nell'inventario con `mounted: false`.
     pub fn remember(&mut self, bundle: Arc<dyn Bundle>) {
         let id = bundle.manifest().id;
         self.known.retain(|b| b.manifest().id != id);
@@ -392,14 +370,7 @@ impl BundleRegistry {
             .collect()
     }
 
-    /// **Accende** un bundle conosciuto: gli stessi quattro passi di
-    /// [`mount`](BundleRegistry::mount), su un bundle che era spento.
-    ///
-    /// Un id che non è fra i conosciuti non si accende inventandolo: è
-    /// `Ok(vec![…])` con un avviso? No — è un errore, ed è l'unico modo di
-    /// distinguere «l'ho riacceso» da «ho scritto male l'id». Un bundle già
-    /// acceso invece è un no-op senza avvisi: accendere ciò che è acceso è già
-    /// il risultato voluto.
+    /// **Accende** un bundle conosciuto.
     pub fn enable(&mut self, ws: &mut Workspace, id: &str) -> Result<(), BundleError> {
         if self.mounted.iter().any(|m| m.id == id) {
             return Ok(());
@@ -410,27 +381,69 @@ impl BundleRegistry {
         self.mount(bundle.as_ref(), ws)
     }
 
-    /// **Sa montare questo id?** — cioè: è fra i conosciuti, o è già montato.
+    /// Accende più bundle in ordine **deterministico ma non dipendente
+    /// dall'ordine dell'inventario**.
     ///
-    /// È la sola metà di [`enable`](BundleRegistry::enable) che risponde senza
-    /// il workspace, e ha un nome suo perché qualcuno la chiede **prima** di
-    /// scrivere: chi accende un componente (`Host::set_plugin_enabled`) mette
-    /// la riga in `plugins.disabled` per prima, e un id inventato non deve
-    /// arrivare a quella scrittura — non è un montaggio andato storto, è una
-    /// domanda mal posta, e le domande mal poste si respingono prima di
-    /// cambiare qualcosa e non dopo.
+    /// Un `MissingRequirement` viene rimesso in coda e riprovato dopo che le
+    /// righe successive hanno avuto la possibilità di montare i servizi che
+    /// offre. Tutti gli altri errori sono definitivi. Se un giro intero non fa
+    /// alcun progresso, i requisiti rimasti sono realmente irrisolvibili e
+    /// vengono restituiti al chiamante nello stesso ordine in cui erano stati
+    /// richiesti.
+    pub fn enable_in_dependency_order<I, S>(
+        &mut self,
+        ws: &mut Workspace,
+        ids: I,
+    ) -> Vec<(String, BundleError)>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut pending: Vec<String> = ids.into_iter().map(Into::into).collect();
+        let mut failures = Vec::new();
+
+        while !pending.is_empty() {
+            let mut deferred = Vec::new();
+            let mut deferred_errors = Vec::new();
+            let mut progressed = false;
+
+            for id in pending {
+                let was_mounted = self.mounted.iter().any(|m| m.id == id);
+                match self.enable(ws, &id) {
+                    Ok(()) => {
+                        if !was_mounted {
+                            progressed = true;
+                        }
+                    }
+                    Err(
+                        error @ BundleError::Declaration(RegistryError::MissingRequirement { .. }),
+                    ) => {
+                        deferred.push(id);
+                        deferred_errors.push(error);
+                    }
+                    Err(error) => failures.push((id, error)),
+                }
+            }
+
+            if deferred.is_empty() {
+                break;
+            }
+            if !progressed {
+                failures.extend(deferred.into_iter().zip(deferred_errors));
+                break;
+            }
+            pending = deferred;
+        }
+
+        failures
+    }
+
+    /// **Sa montare questo id?** — cioè: è fra i conosciuti, o è già montato.
     pub fn knows(&self, id: &str) -> bool {
         self.mounted.iter().any(|m| m.id == id) || self.known.iter().any(|b| b.manifest().id == id)
     }
 
-    /// **Il corpo di un job.** Chi drena `take_pending_jobs` sa a quale plugin
-    /// chiederlo (è il campo che la
-    /// [0028](../../../docs/decisions/0183-composizione-host-kernel.md) ha
-    /// messo in `PendingJob`) e lo trova qui.
-    ///
-    /// Rende un `Arc` clonato e non un prestito, ed è il punto: chi esegue un
-    /// job lo tiene per minuti, e un prestito lo terrebbe legato a questo
-    /// registry per tutto quel tempo.
+    /// **Il corpo di un job.**
     pub fn body(&self, id: &str) -> Option<Arc<dyn Plugin>> {
         self.mounted
             .iter()
@@ -441,31 +454,11 @@ impl BundleRegistry {
     /// **Chi smette lo sa mentre è ancora intero**: chiama
     /// [`Plugin::deactivate`] e lascia cadere il plugin, senza toccare il
     /// kernel.
-    ///
-    /// È il passo che va infilato dentro la chiusura del vault
-    /// ([`Workspace::close_with`]) e dentro [`unmount`](BundleRegistry::unmount),
-    /// e non può stare da nessun'altra parte: dopo che il kernel ha ritirato la
-    /// dichiarazione, l'host intestato a quell'id nega tutto — un `deactivate`
-    /// chiamato lì riceverebbe rifiuti su ogni capacità, cioè il contrario
-    /// esatto di ciò per cui quel metodo ha un `host` nella firma.
-    ///
-    /// Un id che non è un bundle di questo registry non fa niente: il kernel
-    /// accetta anche dichiarazioni che non vengono da qui (una feature montata a
-    /// mano in un test), e quelle un plugin da spegnere non ce l'hanno.
     pub fn stop(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
         let Some(at) = self.mounted.iter().position(|m| m.id == id) else {
             return Vec::new();
         };
         let mut bundle = self.mounted.remove(at);
-        // `deactivate` prende `&mut self`, quindi vuole che il plugin sia di
-        // **uno solo**: un job in volo è l'unico altro che potrebbe tenerne una
-        // copia, e tutte e due le porte da cui si arriva qui lo aspettano prima
-        // di bussare — chi chiude il vault ferma il pool intero
-        // (`JobRunner::stop`), chi spegne un componente ferma i job **suoi**
-        // (`JobRunner::shutdown_bundle`), decisione 0032 per entrambe. Se un
-        // giorno qualcuno invertisse i due passi, o ne aprisse una terza, il
-        // commiato non verrebbe chiamato e questo lo **dice**, invece di
-        // aspettare in silenzio la fine di un export.
         let out = match Arc::get_mut(&mut bundle.plugin) {
             Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
             None => Some(PluginError::Internal(
@@ -476,20 +469,11 @@ impl BundleRegistry {
                 .into(),
             )),
         };
-        // Qui l'ultima copia cade, ed è il momento in cui un bundle nativo
-        // lascia andare ciò che il `deactivate` non ha saputo lasciare.
         drop(bundle);
         out.into_iter().collect()
     }
 
-    /// Spegne **un** bundle per intero: [`Plugin::deactivate`] mentre ha ancora
-    /// tutto, e poi il kernel che gli toglie i provider e la dichiarazione
-    /// ([`Workspace::deactivate_plugin`]).
-    ///
-    /// È l'inverso esatto di [`mount`](BundleRegistry::mount), ed è la strada di
-    /// chi spegne una feature dalle impostazioni (§11.1). Il bundle resta fra i
-    /// **conosciuti**: spegnere non è dimenticare, o non ci sarebbe niente da
-    /// riaccendere.
+    /// Spegne **un** bundle per intero.
     pub fn unmount(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
         let mut errors = self.stop(ws, id);
         match ws.deactivate_plugin(id) {
@@ -499,15 +483,7 @@ impl BundleRegistry {
         errors
     }
 
-    /// **Chiude il vault**: l'ordine della
-    /// [0029](../../../docs/decisions/0183-composizione-host-kernel.md)
-    /// — l'evento mentre tutti sono ancora vivi, il flush di tutti gli indici,
-    /// e poi ognuno che smette a rovescio — con `Plugin::deactivate` di ogni
-    /// bundle infilato al proprio posto.
-    ///
-    /// L'ordine resta del kernel e non si duplica qui: sarebbe una seconda idea
-    /// di come si chiude un vault, e le due non si accorgerebbero mai di essere
-    /// diverse.
+    /// **Chiude il vault** rispettando l'ordine del kernel.
     pub fn close(&mut self, ws: &mut Workspace) -> Vec<PluginError> {
         ws.close_with(|ws, id| self.stop(ws, id))
     }
@@ -515,13 +491,6 @@ impl BundleRegistry {
 
 /// Il [`Plugin`] di un bundle che **non possiede niente**: tutto ciò che ha sono
 /// i suoi provider, e quelli li toglie il kernel.
-///
-/// È il caso di quasi tutte le feature ufficiali, e non è un difetto del
-/// disegno: è ciò che il capitolo 7 aveva già ottenuto — un provider si registra
-/// e sparisce dentro il kernel, che sa attivarlo, interrogarlo e chiuderlo
-/// ([`IndexProvider::close`](fub_abi::traits::IndexProvider::close), decisione
-/// 0028). Ciò che resta a un `Plugin` è quel che il kernel *non* può sapere:
-/// risorse proprie del bundle, e il corpo dei suoi job.
 pub struct OnlyProviders(PluginManifest);
 
 impl OnlyProviders {
