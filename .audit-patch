@@ -1,53 +1,265 @@
-diff --git a/apps/client/src/ui/node.test.ts b/apps/client/src/ui/node.test.ts
-index de18199..4c447c8 100644
---- a/apps/client/src/ui/node.test.ts
-+++ b/apps/client/src/ui/node.test.ts
-@@ -241,6 +241,28 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", ()
-     expect(old).toEqual([]);
-   });
+diff --git a/apps/client/src/state/store.test.ts b/apps/client/src/state/store.test.ts
+index b97ae01..8f61014 100644
+--- a/apps/client/src/state/store.test.ts
++++ b/apps/client/src/state/store.test.ts
+@@ -3,11 +3,18 @@
+ // ricordare. Sono decisioni, non cablaggio — e una decisione che si prova solo
+ // aprendo l'app non la prova nessuno.
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+-import { loadActiveSpace, loadExpanded, saveExpanded, state } from "./store";
++import { emit, loadActiveSpace, loadExpanded, on, saveExpanded, state } from "./store";
  
-+  it("una chiave ambigua non patcha il primo match: forza il full render", () => {
-+    const host = document.createElement("div");
-+    document.body.appendChild(host);
-+    const duplicate = (value: string): UiNode =>
-+      ({
-+        node: "stack",
-+        dir: "column",
-+        gap: 0,
-+        children: [
-+          { ...field(value), key: "doppia" },
-+          { ...field(value), key: "doppia" },
-+        ],
-+      }) as UiNode;
+ const viewState = vi.fn();
+ const setViewState = vi.fn();
+ 
 +
-+    mountTree(host, duplicate("prima"), async () => {});
-+    expect(patchTree(host, "doppia", { ...field("dopo"), key: "doppia" } as UiNode)).toBe(false);
-+    expect([...host.querySelectorAll("input")].map((input) => input.value)).toEqual([
-+      "prima",
-+      "prima",
-+    ]);
++const notify = vi.fn();
++
++vi.mock("../ui/notify", () => ({
++  notify: (...args: unknown[]) => notify(...args),
++}));
++
+ vi.mock("../host/ipc", () => ({
+   api: {
+     viewState: (key: string) => viewState(key),
+@@ -21,6 +28,7 @@ beforeEach(() => {
+   setViewState.mockResolvedValue(undefined);
+   state.expanded = new Set();
+   state.activeSpace = null;
++  notify.mockReset();
+ });
+ 
+ describe("rileggere dove si era rimasti", () => {
+@@ -83,3 +91,35 @@ describe("ricordare", () => {
+     warn.mockRestore();
+   });
+ });
++
++
++describe("il bus sincrono non perde gli errori asincroni", () => {
++  it("raccoglie una Promise rifiutata senza fermare gli altri listener", async () => {
++    const later = vi.fn();
++    on("layout", async () => {
++      throw new Error("ridisegno fallito");
++    });
++    on("layout", later);
++
++    emit("layout");
++    expect(later).toHaveBeenCalledTimes(1);
++    await Promise.resolve();
++    await Promise.resolve();
++    expect(notify).toHaveBeenCalledTimes(1);
++    expect(String(notify.mock.calls[0]?.[0])).toContain("ridisegno fallito");
 +  });
 +
-   it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
-     const NS = "prova.porta";
-     const handlers: OnAction[] = [];
++  it("riconosce anche un thenable che non è una Promise", async () => {
++    on("organization", () => ({
++      then(_resolve: (value?: unknown) => void, reject: (reason: unknown) => void) {
++        reject(new Error("thenable fallito"));
++      },
++    }));
++
++    emit("organization");
++    await Promise.resolve();
++    await Promise.resolve();
++    expect(notify).toHaveBeenCalledTimes(1);
++    expect(String(notify.mock.calls[0]?.[0])).toContain("thenable fallito");
++  });
++});
+diff --git a/apps/client/src/state/store.ts b/apps/client/src/state/store.ts
+index a179697..7c03542 100644
+--- a/apps/client/src/state/store.ts
++++ b/apps/client/src/state/store.ts
+@@ -52,7 +52,7 @@ export interface Signals {
+   "stale-views": [ids: string[]];
+ }
+ 
+-type Listener = (...args: never[]) => void;
++type Listener = (...args: never[]) => unknown;
+ 
+ const listeners = new Map<keyof Signals, Listener[]>();
+ 
+@@ -62,7 +62,7 @@ const listeners = new Map<keyof Signals, Listener[]>();
+ /// questa la riga da cambiare, in un posto solo.
+ export function on<K extends keyof Signals>(
+   signal: K,
+-  listener: (...args: Signals[K]) => void,
++  listener: (...args: Signals[K]) => unknown,
+ ): void {
+   const list = listeners.get(signal);
+   if (list) list.push(listener as Listener);
+@@ -76,12 +76,28 @@ export function on<K extends keyof Signals>(
+ /// impedire agli altri di aggiornarsi — sarebbe un difetto che si manifesta
+ /// come "metà finestra ferma", cioè nel modo più difficile da ricondurre alla
+ /// sua causa (§20.3: gli esiti non si buttano via in silenzio).
++function isThenable(value: unknown): value is PromiseLike<unknown> {
++  return (typeof value === "object" && value !== null) || typeof value === "function"
++    ? typeof (value as { then?: unknown }).then === "function"
++    : false;
++}
++
++function listenerFailed(signal: keyof Signals, error: unknown): void {
++  notify(t("store.listener_failed", { signal, reason: errorText(error) }), "guasto");
++}
++
+ export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): void {
+   for (const listener of listeners.get(signal) ?? []) {
+     try {
+-      (listener as (...a: Signals[K]) => void)(...args);
++      const result = (listener as (...a: Signals[K]) => unknown)(...args);
++      // Il bus resta sincrono: `emit` non aspetta nessuno. Però TypeScript
++      // consente di passare una funzione async dove il ritorno è ignorato, e
++      // una rejection non attraversa il `try` qui sopra. Riconoscere qualunque
++      // thenable (non soltanto `instanceof Promise`) evita di trasformarla in
++      // una rejection globale senza proprietario.
++      if (isThenable(result)) void Promise.resolve(result).catch((e) => listenerFailed(signal, e));
+     } catch (e) {
+-      notify(t("store.listener_failed", { signal, reason: errorText(e) }), "guasto");
++      listenerFailed(signal, e);
+     }
+   }
+ }
+diff --git a/apps/client/src/ui/node.test.ts b/apps/client/src/ui/node.test.ts
+index 4c447c8..e692003 100644
+--- a/apps/client/src/ui/node.test.ts
++++ b/apps/client/src/ui/node.test.ts
+@@ -697,3 +697,40 @@ describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () =>
+     expect(notify).not.toHaveBeenCalled();
+   });
+ });
++
++
++describe("controlli statici e righe valide", () => {
++  const mount = (node: UiNode): HTMLElement => {
++    const host = document.createElement("div");
++    document.body.appendChild(host);
++    mountTree(host, node, async () => {});
++    return host;
++  };
++
++  it.each([
++    [{ node: "text_input", field: "x", label: null, value: "a", placeholder: null, action: null }, "input"],
++    [{ node: "text_area", field: "x", label: null, value: "a", rows: 2, action: null }, "textarea"],
++    [{ node: "number", field: "x", label: null, value: 1, min: null, max: null, step: null, action: null }, "input"],
++    [{ node: "checkbox", field: "x", label: "X", value: true, action: null }, "input"],
++    [{ node: "select", field: "x", label: null, value: [], options: [], multiple: false, action: null }, "select"],
++    [{ node: "radio", field: "x", label: null, value: null, options: [{ label: "A", value: "a" }], action: null }, "input"],
++    [{ node: "slider", field: "x", label: null, value: 1, min: 0, max: 2, step: 1, action: null }, "input"],
++    [{ node: "date_picker", field: "x", label: null, value: null, action: null }, "input"],
++  ] as const)("un campo senza azione è disabilitato: %s", (node, selector) => {
++    const host = mount(node as UiNode);
++    expect((host.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).disabled).toBe(true);
++  });
++
++  it("un campo con azione resta attivo", () => {
++    const host = mount({
++      node: "text_input", field: "x", label: null, value: "", placeholder: null,
++      action: { action: "cambia", payload: null },
++    } as UiNode);
++    expect(host.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
++  });
++
++  it("una riga senza celle resta una riga HTML valida", () => {
++    const host = mount({ node: "row", cells: [], action: null } as UiNode);
++    expect(host.querySelectorAll("tr > td")).toHaveLength(1);
++  });
++});
 diff --git a/apps/client/src/ui/node.ts b/apps/client/src/ui/node.ts
-index 52bcac3..bf61349 100644
+index bf61349..51bef69 100644
 --- a/apps/client/src/ui/node.ts
 +++ b/apps/client/src/ui/node.ts
-@@ -231,8 +231,13 @@ function unmount(el: Element): void {
+@@ -359,6 +359,7 @@ function update(
+     case "row":
+       if (prev.node !== "row") return false;
+       children(el, next.cells, onAction);
++      ensureRowCell(el as HTMLTableRowElement);
+       connect(el, next.action, onAction);
+       return true;
+     case "custom": {
+@@ -509,6 +510,13 @@ function key(el: HTMLElement, node: UiNode): void {
+   else delete el.dataset.key;
  }
  
- function findByKey(root: HTMLElement, key: string): HTMLElement | null {
--  if (rendered.get(root)?.node.key === key) return root;
--  return root.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
-+  const matches: HTMLElement[] = [];
-+  if (rendered.get(root)?.node.key === key) matches.push(root);
-+  matches.push(...root.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`));
-+  // Una patch identifica un nodo per chiave, quindi una chiave ambigua non è
-+  // un bersaglio: scegliere il primo trasformerebbe un albero malformato in
-+  // una mutazione deterministica ma sbagliata. Chi chiama farà il full render.
-+  return matches.length === 1 ? matches[0] : null;
- }
- 
- /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
++function ensureRowCell(row: HTMLTableRowElement): void {
++  if (row.cells.length > 0) return;
++  const td = document.createElement("td");
++  td.className = "ui-empty-cell";
++  row.appendChild(td);
++}
++
+ function draw(node: UiNode, onAction: Port): HTMLElement {
+   switch (node.node) {
+     case "stack": {
+@@ -636,6 +644,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
+         td.appendChild(renderUiNode(cell, onAction));
+         el.appendChild(td);
+       }
++      ensureRowCell(el);
+       return el;
+     }
+     case "tree": {
+@@ -941,6 +950,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
+       attribute(input, "placeholder", node.node === "text_input" ? node.placeholder : null);
+       writeValue(input, node.value ?? "");
+       value(el, () => ({ type: "text", value: input.value }));
++      staticControl(input, node.action);
+       actionsOfField(input, node.action, onAction);
+       break;
+     }
+@@ -950,6 +960,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
+       area.rows = node.rows;
+       writeValue(area, node.value);
+       value(el, () => ({ type: "text", value: area.value }));
++      staticControl(area, node.action);
+       actionsOfField(area, node.action, onAction);
+       break;
+     }
+@@ -966,6 +977,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
+       attribute(input, "step", node.step === null ? null : String(node.step));
+       writeValue(input, node.value === null ? "" : String(node.value));
+       value(el, () => ({ type: "number", value: Number(input.value) }));
++      staticControl(input, node.action);
+       actionsOfField(input, node.action, onAction);
+       break;
+     }
+@@ -974,6 +986,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
+       if (!input) return false;
+       if (document.activeElement !== input) input.checked = node.value;
+       value(el, () => ({ type: "bool", value: input.checked }));
++      staticControl(input, node.action);
+       actionsOfField(input, node.action, onAction);
+       break;
+     }
+@@ -991,6 +1004,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
+           ? { type: "choices", value: choices }
+           : { type: "text", value: choices[0] ?? "" };
+       });
++      staticControl(select, node.action);
+       actionsOfField(select, node.action, onAction);
+       break;
+     }
+@@ -1076,6 +1090,7 @@ function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction
+     input.name = el.id;
+     input.value = option.value;
+     input.checked = option.value === node.value;
++    input.disabled = node.action === null;
+     row.querySelector<HTMLElement>("span")!.textContent = option.label;
+     actionsOfField(input, node.action, onAction);
+   });
+@@ -1278,6 +1293,16 @@ function connect(el: HTMLElement, action: ActionRef | null, onAction: Port): voi
+ /// La chiamano il disegno e la riconciliazione, con le stesse due righe: chi
+ /// aggiungerà un terzo ascoltatore a un campo lo scrive qui, e lo ha in
+ /// entrambe le vite del campo senza ricordarsene.
++function staticControl(
++  control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
++  action: ActionRef | null,
++): void {
++  // Un campo senza azione è dato da leggere, non un editor senza salvataggio.
++  // Lasciarlo modificabile produce uno stato che sembra accettato e sparisce al
++  // primo ridisegno. Il browser espone già la semantica corretta: `disabled`.
++  control.disabled = action === null;
++}
++
+ function actionsOfField(
+   control: HTMLElement,
+   action: ActionRef | null,
