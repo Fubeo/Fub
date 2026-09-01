@@ -419,6 +419,28 @@ impl CommandProvider for LockProbe {
     }
 }
 
+const NESTED_LOCK_PROBE: &str = "audit.nested-lock-probe";
+
+struct NestedLockProbe;
+
+impl CommandProvider for NestedLockProbe {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(NESTED_LOCK_PROBE, "Nested lock probe")
+            .with_scope(CommandScope::read_only())]
+    }
+
+    fn invoke(
+        &self,
+        _: &str,
+        _: serde_json::Value,
+        _: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        host.run_command(LOCK_PROBE, serde_json::Value::Null)?;
+        Ok(CommandOutcome::done())
+    }
+}
+
 /// `ARCH-001`: il codice di un provider **non** gira mentre è detenuto il
 /// `Custody<Workspace>`. Il test fallisce con il vecchio `write_workspace`:
 /// mentre `LockProbe::invoke` è fermo, `try_read()` risponde `None`.
@@ -470,6 +492,62 @@ fn a_command_provider_runs_without_holding_the_workspace_lock() {
          the provider is still running under Custody<Workspace>"
     );
     outcome.expect("the provider keeps working through its per-capability host");
+}
+
+/// Anche il **secondo** provider di una macro deve essere staccato: il primo
+/// è già fuori lock, ma `JobHost::run_command` prima rientrava con `write()` e
+/// teneva la guardia per tutta la callback interna.
+#[test]
+fn a_nested_command_provider_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature("fub.audit-lock-probe", "Audit lock probe")
+            .expect("inner declares");
+        w.register_command_provider(
+            "fub.audit-lock-probe",
+            Box::new(LockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("inner registers");
+        w.register_core_feature("fub.audit-nested-probe", "Audit nested probe")
+            .expect("outer declares");
+        w.register_command_provider("fub.audit-nested-probe", Box::new(NestedLockProbe))
+            .expect("outer registers");
+    }
+
+    let call = std::thread::spawn(move || {
+        host.invoke_user_command(
+            None,
+            NESTED_LOCK_PROBE,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+        )
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("inner provider entered through HostApi::run_command");
+    let reader_progressed = {
+        let ws = ws.clone();
+        std::thread::spawn(move || ws.try_read().is_some())
+            .join()
+            .expect("reader probe finishes")
+    };
+    release_tx.send(()).expect("release inner provider");
+    let outcome = call.join().expect("command thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "HostApi::run_command held Custody<Workspace> across the nested provider"
+    );
+    outcome.expect("nested provider completes through the detached host");
 }
 
 /// Una view che pania mentre disegna.

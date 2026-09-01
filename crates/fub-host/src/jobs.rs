@@ -71,7 +71,7 @@ use fub_abi::traits::{
 };
 use fub_abi::{Event, PluginError};
 use fub_kernel::host::Guard;
-use fub_kernel::Workspace;
+use fub_kernel::{ReadOnly, Workspace};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
 /// condiviso, **senza tenerlo**.
@@ -162,6 +162,19 @@ impl JobHost {
     pub fn cancelled_by(mut self, flag: Arc<AtomicBool>) -> Self {
         self.cancelled = flag;
         self
+    }
+
+    /// Host figlio per un provider invocato da questo contesto. Condivide la
+    /// cancellazione, ma non l'identità del job: un comando annidato non può
+    /// attribuirsi il progresso del job che lo ha chiamato.
+    fn for_provider(&self, plugin: impl Into<String>, mode: InvokeMode) -> Self {
+        JobHost {
+            workspace: self.workspace.clone(),
+            plugin: plugin.into(),
+            mode,
+            job: None,
+            cancelled: Arc::clone(&self.cancelled),
+        }
     }
 
     /// Il rifiuto da dare a chi è stato annullato, se lo è stato.
@@ -437,15 +450,38 @@ impl HostQuery for JobHost {
 }
 
 impl HostCommands for JobHost {
-    /// Il comando gira **dentro** il prestito esclusivo, cioè nel giro sincrono
-    /// del kernel come se lo avesse invocato la shell: un job non porta i comandi
-    /// fuori dal kernel, ci entra.
+    /// Un comando annidato conserva il turno di mutazione ma **rilascia il
+    /// `RwLock`** durante `CommandProvider::invoke`, come il percorso top-level.
+    /// Il proxy figlio riacquisisce capacità strette una chiamata alla volta.
     fn run_command(
         &mut self,
         command: &str,
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
-        self.write_result(|h| h.run_command(command, args))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let mut prepared = {
+            let mut ws = workspace.write()?;
+            match ws.prepare_nested_provider_command(command, args.clone(), self.mode)? {
+                Some(prepared) => prepared,
+                None => return ws.invoke_nested_maintenance_command(command, args, self.mode),
+            }
+        };
+
+        let owner = prepared.owner().to_string();
+        let host_mode = prepared.host_mode();
+        let outcome = if let Some(why) = prepared.read_only_reason() {
+            let host = self.for_provider(owner, host_mode);
+            let mut host = Guard::new(host, ReadOnly { why });
+            prepared.invoke(&mut host)
+        } else {
+            let mut host = self.for_provider(owner, host_mode);
+            prepared.invoke(&mut host)
+        };
+
+        let mut ws = workspace.write()?;
+        ws.finish_provider_command(prepared, outcome)
     }
 
     /// Come sopra, e per la stessa ragione: annullare è scrivere, quindi entra

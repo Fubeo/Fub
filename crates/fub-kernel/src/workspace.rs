@@ -461,7 +461,7 @@ pub struct PreparedCommand {
     mode: InvokeMode,
     provider: Arc<dyn CommandProvider>,
     read_only_reason: Option<&'static str>,
-    previous_actor: Actor,
+    previous_actor: Option<Actor>,
     owns_batch: bool,
     previous_provider_call: bool,
 }
@@ -5752,6 +5752,28 @@ impl Workspace {
         mode: InvokeMode,
         by: Actor,
     ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
+        self.prepare_provider_command_here(command, args, mode, Some(by))
+    }
+
+    /// Versione per [`HostCommands::run_command`](fub_abi::traits::HostCommands::run_command):
+    /// apre un batch se non ce n'è già uno, ma **non cambia attore**. Il
+    /// chiamante resta chi è entrato nel kernel; annidare non è un nuovo ingresso.
+    pub fn prepare_nested_provider_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
+        self.prepare_provider_command_here(command, args, mode, None)
+    }
+
+    fn prepare_provider_command_here(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Option<Actor>,
+    ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
         let at = self.command_owner(command)?;
         let spec = self.providers.commands[at]
             .specs
@@ -5787,7 +5809,7 @@ impl Workspace {
             Some("il comando si è dichiarato di sola lettura")
         };
 
-        let previous_actor = self.dispatch.swap_actor(by);
+        let previous_actor = by.map(|by| self.dispatch.swap_actor(by));
         let owns_batch = self.dispatch.open_batch();
         self.providers.command_stack.push(command.to_string());
         let previous_provider_call = self.dispatch.enter_provider_call();
@@ -5842,7 +5864,9 @@ impl Workspace {
             self.dispatch.close_batch();
             self.dispatch_pending();
         }
-        self.dispatch.restore_actor(prepared.previous_actor);
+        if let Some(previous_actor) = prepared.previous_actor {
+            self.dispatch.restore_actor(previous_actor);
+        }
         result
     }
 
@@ -5865,6 +5889,26 @@ impl Workspace {
     /// passa l'host, che è l'unico a sapere in che modo sta girando chi
     /// invoca. Vedi `KernelHost::mode` e la politica `ReadOnly`.
     // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
+    /// Porta stretta dell'host per il solo ramo di manutenzione del kernel.
+    ///
+    /// Un `PreparedCommand` restituisce `None` soltanto per questo proprietario:
+    /// tenere questa porta distinta impedisce a `fub-host` di acquisire una
+    /// scorciatoia pubblica con cui eseguire provider arbitrari sotto lock.
+    pub fn invoke_nested_maintenance_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let at = self.command_owner(command)?;
+        if self.providers.commands[at].id != crate::maintenance::MAINTENANCE_ID {
+            return Err(PluginError::PermissionDenied(
+                format!("`{command}` non è un comando di manutenzione del kernel").into(),
+            ));
+        }
+        self.invoke_command_nested(command, args, mode)
+    }
+
     pub(crate) fn invoke_command_nested(
         &mut self,
         command: &str,
