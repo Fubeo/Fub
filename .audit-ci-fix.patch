@@ -54,7 +54,7 @@ diff --git a/crates/fub-abi/tests/a_named_rule_is_declared.rs b/crates/fub-abi/t
  //! già scritto — «*il generato, la fixture e il corpus prendono chi **cambia**
  //! una regola, non chi ne **aggiunge** una accanto*» — e la
  //! [0110](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) è
-@@ -241,11 +241,27 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
+@@ -241,11 +241,30 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
              ),
          ),
          (
@@ -88,7 +88,7 @@ diff --git a/crates/fub-abi/tests/a_named_rule_is_declared.rs b/crates/fub-abi/t
              ),
          ),
          (
-@@ -356,6 +372,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
+@@ -356,6 +375,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
              ),
          ),
          // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
