@@ -1,6 +1,10 @@
 from pathlib import Path
 
-Path('crates/fub-host/tests/audit_index_feed.rs').write_text(r'''use std::sync::{Arc, Mutex};
+# Regressione permanente sul percorso di scrittura esplicita. L'apertura viene
+# attesa prima di registrare il provider: così il feed osservato non può essere
+# quello asincrono della seconda fase dell'open e il test attribuisce il lock al
+# solo `Host::write_document`.
+Path('crates/fub-host/tests/index_feed_lock.rs').write_text(r'''use std::sync::Mutex;
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
@@ -82,6 +86,8 @@ fn an_index_feed_runs_without_holding_the_workspace_lock() {
     let v = vault();
     let host = Host::new().with_watcher(Box::new(NoWatcher));
     host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("the initial indexing finishes before the write probe");
     let ws = host.debug_workspace(None).expect("debug custody");
     let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
@@ -113,12 +119,7 @@ fn an_index_feed_runs_without_holding_the_workspace_lock() {
     entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("IndexProvider::on_documents_indexed entered");
-    let reader_progressed = {
-        let ws = ws.clone();
-        std::thread::spawn(move || ws.try_read().is_some())
-            .join()
-            .expect("reader probe finishes")
-    };
+    let reader_progressed = ws.try_read().is_some();
     release_tx.send(()).expect("release index feed");
     let outcome = call.join().expect("write thread does not panic");
 
