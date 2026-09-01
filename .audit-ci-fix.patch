@@ -108,7 +108,7 @@ diff --git a/crates/fub-abi/tests/a_named_rule_is_declared.rs b/crates/fub-abi/t
 diff --git a/apps/client/src/ui/node.test.ts b/apps/client/src/ui/node.test.ts
 --- a/apps/client/src/ui/node.test.ts
 +++ b/apps/client/src/ui/node.test.ts
-@@ -250,11 +250,11 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () => {
+@@ -250,13 +250,13 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () => {
          dir: "column",
          gap: 0,
          children: [
