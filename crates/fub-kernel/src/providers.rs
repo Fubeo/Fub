@@ -120,7 +120,7 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 // Il registro dei provider (§8.1)
 // ---------------------------------------------------------------------------
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use fub_abi::command::CommandSpec;
 use fub_abi::traits::{
@@ -149,7 +149,7 @@ use crate::workspace::Trust;
 /// chi interroga.
 pub(crate) struct RegisteredView {
     pub(crate) id: String,
-    pub(crate) provider: Box<dyn ViewProvider>,
+    pub(crate) provider: Arc<RwLock<Box<dyn ViewProvider>>>,
     pub(crate) specs: Vec<ViewSpec>,
     /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
     /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
@@ -380,7 +380,13 @@ impl ProviderRegistry {
             .iter()
             .enumerate()
             .filter(|(_, v)| v.id == id)
-            .map(|(at, v)| (at, declared_specs(v.provider.as_ref())))
+            .map(|(at, v)| {
+                let provider = v
+                    .provider
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                (at, declared_specs(provider.as_ref()))
+            })
             .collect();
         let commands: Vec<(usize, Vec<CommandSpec>)> = self
             .commands

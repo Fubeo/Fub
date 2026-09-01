@@ -536,6 +536,39 @@ impl PreparedService {
     }
 }
 
+/// Un render di [`ViewProvider`] risolto sotto lock e invocabile senza tenere
+/// `Custody<Workspace>`. Il provider resta registrato tramite un `Arc`; il lock
+/// qui è del solo provider, non del workspace, e consente render concorrenti.
+pub struct PreparedViewRender {
+    owner: String,
+    view: String,
+    instance: ViewInstance,
+    trust: Trust,
+    provider: Arc<RwLock<Box<dyn ViewProvider>>>,
+}
+
+impl PreparedViewRender {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn instance_id(&self) -> &str {
+        &self.instance.instance
+    }
+
+    /// Esegue soltanto il codice esterno del provider. Le letture richieste dal
+    /// provider passano dal proxy host e prendono il workspace per capacità.
+    pub fn invoke(&self, host: &dyn ReadApi) -> std::result::Result<UiNode, PluginError> {
+        let provider = self
+            .provider
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        crate::safety::calling(&self.owner, Gate::ViewRender, &self.view, || {
+            provider.render_view(&self.instance, host)
+        })
+    }
+}
+
 pub struct Workspace {
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
     /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
@@ -1705,6 +1738,20 @@ impl Workspace {
         result
     }
 
+    /// Variante del proxy di scrittura intestata a un esemplare di view. Le
+    /// capacità restano per-chiamata; cambia soltanto il timbro dello stato di
+    /// view.
+    pub fn with_host_mode_instance<R>(
+        &mut self,
+        plugin: &str,
+        mode: InvokeMode,
+        instance: &str,
+        f: impl FnOnce(&mut dyn HostApi) -> R,
+    ) -> R {
+        let mut host = self.host_for_view(plugin, mode, Some(instance));
+        f(&mut host)
+    }
+
     /// chiamata — il gemello in sola lettura di
     /// [`with_host`](Workspace::with_host).
     ///
@@ -1722,6 +1769,19 @@ impl Workspace {
         // e non si scrive, quindi non c'è nessuna coda che possa crescere.
         // L'host di **lettura** intestato a un plugin, con la stessa politica di
         let host = self.read_host_for(plugin);
+        f(&host)
+    }
+
+    /// Variante del proxy di lettura intestata a un esemplare di view. È la
+    /// stessa politica di `with_read_host`, con in più la chiave dello stato di
+    /// view che solo l'host può timbrare correttamente.
+    pub fn with_read_host_instance<R>(
+        &self,
+        plugin: &str,
+        instance: &str,
+        f: impl FnOnce(&dyn ReadApi) -> R,
+    ) -> R {
+        let host = self.read_host_for_view(plugin, Some(instance));
         f(&host)
     }
 
@@ -5345,7 +5405,7 @@ impl Workspace {
         self.providers.views.push(RegisteredView {
             id: plugin,
             specs,
-            provider,
+            provider: Arc::new(RwLock::new(provider)),
             trust,
         });
         Ok(())
@@ -5410,28 +5470,42 @@ impl Workspace {
     /// e view registrate compresi. La mutilazione del mondo osservabile resta
     /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
     // Anche il percorso di lettura passa dal punto di applicazione: un
-    pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
+    pub fn prepare_view_render(
+        &self,
+        instance: &ViewInstance,
+    ) -> std::result::Result<PreparedViewRender, PluginError> {
         let at = self.view_owner(&instance.view)?;
         let registered = &self.providers.views[at];
         self.check_params(at, instance)?;
-        // provider senza `read_vault` non legge il vault **mentre disegna** più
-        // di quanto lo legga da un'azione. Che il guard qui avvolga un
-        // `ReadHost` invece di un `KernelHost` non cambia niente per la
-        // politica — è la stessa, e non sa cosa ci sia sotto.
-        // **Dopo** la validazione del confine di fiducia, non prima: risolvere
-        let host = self.read_host_for_view(&registered.id, Some(instance.instance.as_str()));
-        let mut tree =
-            crate::safety::calling(&registered.id, Gate::ViewRender, &instance.view, || {
-                registered.provider.render_view(instance, &host)
-            })
-            .map_err(|and| self.localized(&registered.id, and))?;
-        guard_ui(registered.trust, &tree)?;
-        // una chiave non può trasformare un nodo innocuo in uno riservato — i
-        // `Text` non diventano markup — ma l'ordine giusto è comunque quello che
-        // non fa passare niente dal catalogo prima del controllo.
-        // La dichiarazione di interesse di **un esemplare** (§22.3).
-        self.localize(&registered.id, &mut tree);
+        Ok(PreparedViewRender {
+            owner: registered.id.clone(),
+            view: instance.view.clone(),
+            instance: instance.clone(),
+            trust: registered.trust,
+            provider: Arc::clone(&registered.provider),
+        })
+    }
+
+    /// Applica il confine di fiducia e la localizzazione dopo che il provider è
+    /// tornato. Nessun codice del provider viene eseguito in questa fase.
+    pub fn finish_view_render(
+        &self,
+        prepared: PreparedViewRender,
+        outcome: std::result::Result<UiNode, PluginError>,
+    ) -> std::result::Result<UiNode, PluginError> {
+        let mut tree = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
+        guard_ui(prepared.trust, &tree)?;
+        self.localize(&prepared.owner, &mut tree);
         Ok(tree)
+    }
+
+    pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
+        let prepared = self.prepare_view_render(instance)?;
+        let owner = prepared.owner().to_string();
+        let instance_id = prepared.instance_id().to_string();
+        let host = self.read_host_for_view(&owner, Some(instance_id.as_str()));
+        let outcome = prepared.invoke(&host);
+        self.finish_view_render(prepared, outcome)
     }
 
     ///
@@ -5447,7 +5521,11 @@ impl Workspace {
     ) -> std::result::Result<ViewInterests, PluginError> {
         let at = self.view_owner(&instance.view)?;
         let registered = &self.providers.views[at];
-        Ok(registered.provider.interests(instance))
+        let provider = registered
+            .provider
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        Ok(provider.interests(instance))
     }
 
     /// aggiornamento. Ogni albero che l'aggiornamento porta con sé —
@@ -5480,8 +5558,12 @@ impl Workspace {
                 // posto** la tabella delle view anche quando il provider pania,
                 // e lo fa perché il panico non arriva fin qui.
                 // Il proprietario è quello della view: un aggiornamento porta le
+                let mut provider = registered
+                    .provider
+                    .write()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
                 crate::safety::calling(&registered.id, Gate::ViewAction, &instance.view, || {
-                    registered.provider.on_action(instance, action, &mut host)
+                    provider.on_action(instance, action, &mut host)
                 })
             },
         );

@@ -1653,7 +1653,16 @@ impl Host {
         vault: Option<&str>,
         instance: &ViewInstance,
     ) -> Result<UiNode, PluginError> {
-        self.read_workspace(vault, |workspace| workspace.render_view(instance))
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        let prepared = {
+            let ws = workspace.read()?;
+            ws.prepare_view_render(instance)?
+        };
+        let detached = JobHost::new(workspace.clone(), prepared.owner().to_string())
+            .for_view_instance(prepared.instance_id().to_string());
+        let outcome = prepared.invoke(&detached);
+        let ws = workspace.read()?;
+        ws.finish_view_render(prepared, outcome)
     }
 
     pub fn view_action(

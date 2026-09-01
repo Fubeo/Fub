@@ -670,6 +670,120 @@ fn a_service_provider_runs_without_holding_the_workspace_lock() {
     outcome.expect("service provider completes through its per-capability host");
 }
 
+const VIEW_RENDER_LOCK_PLUGIN: &str = "fub.audit-view-render";
+const VIEW_RENDER_LOCK_VIEW: &str = "audit-view-render";
+
+struct ViewRenderLockProbe {
+    entered: std::sync::mpsc::SyncSender<()>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl ViewProvider for ViewRenderLockProbe {
+    fn interests(&self, instance: &ViewInstance) -> fub_abi::traits::ViewInterests {
+        self.views()
+            .into_iter()
+            .find(|spec| spec.id == instance.view)
+            .map(|spec| fub_abi::traits::ViewInterests {
+                refresh: spec.refresh,
+                follows: spec.follows,
+            })
+            .unwrap_or_default()
+    }
+
+    fn views(&self) -> Vec<ViewSpec> {
+        vec![ViewSpec {
+            id: VIEW_RENDER_LOCK_VIEW.into(),
+            title: "Audit detached render".into(),
+            surface: ViewSurface::RightSidebar,
+            refresh: Default::default(),
+            follows: Default::default(),
+            params: Vec::new(),
+            icon: None,
+            order: 0,
+            open_by_default: false,
+            preferred_size: None,
+            closable: true,
+        }]
+    }
+
+    fn render_view(&self, _: &ViewInstance, host: &dyn ReadApi) -> Result<UiNode, PluginError> {
+        let source = host.read_document(&DocId::new("Note 0.md"))?;
+        if !source.contains("Note 0") {
+            return Err(PluginError::Internal(
+                "view render re-entry returned the wrong note".into(),
+            ));
+        }
+        self.entered
+            .send(())
+            .map_err(|_| PluginError::Internal("view render probe receiver disappeared".into()))?;
+        self.release
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|_| PluginError::Internal("view render probe was not released".into()))?;
+        Ok(UiNode::text("ok"))
+    }
+
+    fn on_action(
+        &mut self,
+        _: &ViewInstance,
+        _: UiAction,
+        _: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        unreachable!()
+    }
+}
+
+#[test]
+fn a_view_render_provider_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature(VIEW_RENDER_LOCK_PLUGIN, "Audit view render")
+            .expect("view declares");
+        w.register_view_provider(
+            VIEW_RENDER_LOCK_PLUGIN,
+            Box::new(ViewRenderLockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("view registers");
+    }
+
+    let call = std::thread::spawn(move || {
+        host.render_view(None, &ViewInstance::only(VIEW_RENDER_LOCK_VIEW))
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("view entered after a successful ReadApi re-entry");
+    let (writer_tx, writer_rx) = std::sync::mpsc::sync_channel(1);
+    let writer = {
+        let ws = ws.clone();
+        std::thread::spawn(move || {
+            let acquired = ws.write().is_ok();
+            let _ = writer_tx.send(acquired);
+        })
+    };
+    let writer_progressed = writer_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or(false);
+    release_tx.send(()).expect("release view provider");
+    writer.join().expect("writer probe finishes");
+    let outcome = call.join().expect("render thread does not panic");
+
+    assert!(
+        writer_progressed,
+        "Host::render_view held Custody<Workspace> across ViewProvider::render_view"
+    );
+    outcome.expect("view render completes through its per-capability read host");
+}
+
 /// Una view che pania mentre disegna.
 struct Explodes;
 

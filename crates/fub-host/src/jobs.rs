@@ -95,6 +95,9 @@ pub struct JobHost {
     plugin: String,
     /// Modalità effettiva delle capacità annidate (`Apply` o simulazione).
     mode: InvokeMode,
+    /// L'esemplare di view quando questo proxy serve una callback staccata.
+    /// I job e i provider annidati restano `None`.
+    instance: Option<String>,
     /// **L'identità che il job non ha** (§10.3,
     /// [decisione 0035](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
     ///
@@ -132,6 +135,7 @@ impl JobHost {
             workspace,
             plugin: plugin.into(),
             mode: InvokeMode::Apply,
+            instance: None,
             job: None,
             cancelled: Arc::new(AtomicBool::new(false)),
         }
@@ -142,6 +146,14 @@ impl JobHost {
     /// sola lettura, così una macro simulata non rientra in `Apply`.
     pub fn in_mode(mut self, mode: InvokeMode) -> Self {
         self.mode = mode;
+        self
+    }
+
+    /// Intesta il proxy a un esemplare di view. Lo stato di view è una capacità
+    /// dell'esemplare, non del plugin in astratto, quindi il timbro viaggia col
+    /// proxy e viene applicato a ogni singola acquisizione del workspace.
+    pub(crate) fn for_view_instance(mut self, instance: impl Into<String>) -> Self {
+        self.instance = Some(instance.into());
         self
     }
 
@@ -172,6 +184,7 @@ impl JobHost {
             workspace: self.workspace.clone(),
             plugin: plugin.into(),
             mode,
+            instance: None,
             job: None,
             cancelled: Arc::clone(&self.cancelled),
         }
@@ -224,7 +237,11 @@ impl JobHost {
     /// nessuna di quelle risposte fa più da premessa a niente.
     fn reading<R>(&self, f: impl FnOnce(&dyn ReadApi) -> R) -> Result<R, PluginError> {
         let ws = self.workspace.read()?;
-        Ok(ws.with_read_host(&self.plugin, f))
+        if let Some(instance) = self.instance.as_deref() {
+            Ok(ws.with_read_host_instance(&self.plugin, instance, f))
+        } else {
+            Ok(ws.with_read_host(&self.plugin, f))
+        }
     }
 
     /// Una scrittura: prestito **esclusivo**, tenuto per il tempo di una
@@ -232,7 +249,11 @@ impl JobHost {
     /// succede lì dentro, come per ogni altra scrittura del kernel.
     fn writing<R>(&self, f: impl FnOnce(&mut dyn HostApi) -> R) -> Result<R, PluginError> {
         let mut ws = self.workspace.write()?;
-        Ok(ws.with_host_mode(&self.plugin, self.mode, f))
+        if let Some(instance) = self.instance.as_deref() {
+            Ok(ws.with_host_mode_instance(&self.plugin, self.mode, instance, f))
+        } else {
+            Ok(ws.with_host_mode(&self.plugin, self.mode, f))
+        }
     }
 }
 
@@ -341,11 +362,10 @@ impl DataWrite for JobHost {
     }
 }
 
-/// Un job non disegna una view, quindi **non ha uno stato di vista**: leggere
-/// torna `None` (che è il caso normale di chi non ha mai salvato) e scrivere è
-/// l'errore che il contratto dichiara. Non è una mutilazione di questo host: è
-/// la stessa riga che vale per un `EventHandler` e per un comando, scritta qui
-/// perché qui la si legge.
+/// Un job normale non disegna una view e quindi non ha uno stato di view.
+/// Lo stesso proxy, quando serve una callback di view staccata dal workspace,
+/// porta invece `instance`: in quel caso queste due capacità ricevono il timbro
+/// dell'esemplare. Comandi, servizi e job annidati non lo ereditano.
 impl ViewStateRead for JobHost {
     fn view_state(&self, key: &str) -> Result<Option<serde_json::Value>, PluginError> {
         self.read_result(|h| h.view_state(key))
