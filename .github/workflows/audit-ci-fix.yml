@@ -44,6 +44,10 @@ jobs:
           cargo test -p fub-abi --test a_named_rule_is_declared
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Prepara il bersaglio dei componenti
+        run: |
+          rustup target add wasm32-wasip2
+          cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
       - name: Test Rust Ubuntu
         id: rust_tests
         shell: bash
@@ -72,7 +76,12 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .audit-ci-fix.patch .github/workflows/audit-ci-fix.yml
-          rm -f .audit-rust-test.log .audit-error.txt
+          if git ls-files --error-unmatch .audit-error.txt >/dev/null 2>&1; then
+            git rm -f .audit-error.txt
+          else
+            rm -f .audit-error.txt
+          fi
+          rm -f .audit-rust-test.log
           git add crates/fub-app/src/lib.rs \
                   crates/fub-kernel/Cargo.toml \
                   crates/fub-abi/tests/dependency_invariant.rs \
