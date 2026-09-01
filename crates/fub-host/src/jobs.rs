@@ -560,6 +560,19 @@ impl HostServices for JobHost {
         method: &str,
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
-        self.write_result(|h| h.call_service(service, method, args))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let mut prepared = {
+            let mut ws = workspace.write()?;
+            ws.prepare_service_call(service, method, args)?
+        };
+
+        let owner = prepared.owner().to_string();
+        let mut host = self.for_provider(owner, InvokeMode::Apply);
+        let outcome = prepared.invoke(&mut host);
+
+        let mut ws = workspace.write()?;
+        ws.finish_service_call(prepared, outcome)
     }
 }

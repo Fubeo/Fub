@@ -500,6 +500,42 @@ impl PreparedCommand {
     }
 }
 
+/// Una chiamata a [`ServiceProvider`] preparata sotto lock e invocabile
+/// senza tenere `Custody<Workspace>`.
+pub struct PreparedService {
+    owner: String,
+    service: String,
+    method: String,
+    args: Option<serde_json::Value>,
+    provider: Arc<dyn ServiceProvider>,
+    previous_provider_call: bool,
+}
+
+impl PreparedService {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    /// Esegue soltanto il codice esterno. Stack e flag sono già stati impostati
+    /// da `prepare_service_call` e verranno chiusi da `finish_service_call`.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<serde_json::Value, PluginError> {
+        let args = self.args.take().ok_or_else(|| {
+            PluginError::Internal(
+                "una chiamata di servizio preparata è stata invocata due volte".into(),
+            )
+        })?;
+        crate::safety::calling(
+            &self.owner,
+            Gate::Service,
+            &format!("{}.{}", self.service, self.method),
+            || self.provider.call(&self.service, &self.method, args, host),
+        )
+    }
+}
+
 pub struct Workspace {
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
     /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
@@ -1163,6 +1199,24 @@ impl Workspace {
         method: &str,
         args: serde_json::Value,
     ) -> std::result::Result<serde_json::Value, PluginError> {
+        let mut prepared = self.prepare_service_call(service, method, args)?;
+        let owner = prepared.owner().to_string();
+        let outcome = {
+            let mut host = self.host_for(&owner, InvokeMode::Apply);
+            prepared.invoke(&mut host)
+        };
+        self.finish_service_call(prepared, outcome)
+    }
+
+    /// Risolve e apre il frame di una chiamata a servizio senza eseguire codice
+    /// esterno. Chi riceve il valore deve sempre riconsegnarlo a
+    /// [`finish_service_call`](Self::finish_service_call).
+    pub fn prepare_service_call(
+        &mut self,
+        service: &str,
+        method: &str,
+        args: serde_json::Value,
+    ) -> std::result::Result<PreparedService, PluginError> {
         let owner = self
             .providers
             .plugins
@@ -1182,9 +1236,6 @@ impl Workspace {
                 )
             })?;
 
-        // su sé stesso non è una profondità da limitare con un numero: è un
-        // errore di chi lo ha scritto, e l'unica risposta utile lo nomina.
-        // La rete contro i panici sta **attorno alla chiamata del
         if self.providers.service_stack.iter().any(|s| s == service) {
             let mut round = self.providers.service_stack.clone();
             round.push(service.to_string());
@@ -1199,23 +1250,30 @@ impl Workspace {
 
         let provider = Arc::clone(&self.providers.services[at].1);
         self.providers.service_stack.push(service.to_string());
-        let out = self.with_provider_call(|ws| {
-            let mut host = ws.host_for(&owner, InvokeMode::Apply);
-            // provider** e a niente di più (§9.3): tutto ciò che viene dopo —
-            // la pila dei servizi da svuotare, il dispatch da drenare — è già
-            // scritto per girare sul ramo dell'errore, e catturare più in alto
-            // lo salterebbe.
-            // Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
-            crate::safety::calling(
-                &owner,
-                Gate::Service,
-                &format!("{service}.{method}"),
-                || provider.call(service, method, args, &mut host),
-            )
-        });
-        self.providers.service_stack.pop();
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        Ok(PreparedService {
+            owner,
+            service: service.to_string(),
+            method: method.to_string(),
+            args: Some(args),
+            provider,
+            previous_provider_call,
+        })
+    }
+
+    /// Chiude il frame aperto da [`prepare_service_call`](Self::prepare_service_call)
+    /// nello stesso ordine del vecchio percorso sincrono: flag, stack, dispatch.
+    pub fn finish_service_call(
+        &mut self,
+        prepared: PreparedService,
+        outcome: std::result::Result<serde_json::Value, PluginError>,
+    ) -> std::result::Result<serde_json::Value, PluginError> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let popped = self.providers.service_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.service.as_str()));
         self.dispatch_pending();
-        out
+        outcome
     }
 
     /// permessi di

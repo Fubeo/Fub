@@ -18,18 +18,19 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandOutcome, CommandScope, CommandSpec, InvokeMode};
+use fub_abi::command::{CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::traits::{
-    CommandProvider, HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    CommandProvider, HostApi, PluginManifest, ReadApi, ServiceProvider, ViewInstance, ViewProvider,
+    ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, Host, NoWatcher};
-use fub_kernel::{FormatRegistry, Workspace};
+use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 /// Quanti lettori mettere in campo. Su una macchina a un core la
 /// sovrapposizione vera è impossibile, e il test lo dice invece di fallire.
@@ -548,6 +549,125 @@ fn a_nested_command_provider_runs_without_holding_the_workspace_lock() {
         "HostApi::run_command held Custody<Workspace> across the nested provider"
     );
     outcome.expect("nested provider completes through the detached host");
+}
+
+const SERVICE_LOCK_PROBE: &str = "fub.audit-service";
+const SERVICE_CALLER: &str = "fub.audit-service-caller.run";
+
+struct ServiceLockProbe {
+    entered: std::sync::mpsc::SyncSender<()>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl ServiceProvider for ServiceLockProbe {
+    fn call(
+        &self,
+        _service: &str,
+        _method: &str,
+        _args: serde_json::Value,
+        host: &mut dyn HostApi,
+    ) -> Result<serde_json::Value, PluginError> {
+        let source = host.read_document(&DocId::new("Note 0.md"))?;
+        if !source.contains("Note 0") {
+            return Err(PluginError::Internal(
+                "service re-entry read returned the wrong note".into(),
+            ));
+        }
+        self.entered
+            .send(())
+            .map_err(|_| PluginError::Internal("service probe receiver disappeared".into()))?;
+        self.release
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|_| PluginError::Internal("service probe was not released".into()))?;
+        Ok(serde_json::Value::String("ok".into()))
+    }
+}
+
+struct ServiceCaller;
+
+impl CommandProvider for ServiceCaller {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(SERVICE_CALLER, "Service caller")
+            .with_scope(CommandScope::writing(CommandReach::Session))]
+    }
+
+    fn invoke(
+        &self,
+        _: &str,
+        _: serde_json::Value,
+        _: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        let answer = host.call_service(SERVICE_LOCK_PROBE, "probe", serde_json::Value::Null)?;
+        if answer != serde_json::Value::String("ok".into()) {
+            return Err(PluginError::Internal(
+                "service returned the wrong answer".into(),
+            ));
+        }
+        Ok(CommandOutcome::done())
+    }
+}
+
+/// `ServiceProvider::call` deve essere staccato anche quando vi si arriva da
+/// una capacità annidata di un comando. Il provider è fermo *dopo* una vera
+/// re-entry sul vault: in quel punto un reader estraneo deve ancora avanzare.
+#[test]
+fn a_service_provider_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_plugin(
+            PluginManifest::core(SERVICE_LOCK_PROBE, "Audit service")
+                .providing(&[SERVICE_LOCK_PROBE]),
+            Trust::Core,
+        )
+        .expect("service declares");
+        w.register_service_provider(
+            SERVICE_LOCK_PROBE,
+            Box::new(ServiceLockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("service registers");
+        w.register_core_feature("fub.audit-service-caller", "Audit service caller")
+            .expect("caller declares");
+        w.register_command_provider("fub.audit-service-caller", Box::new(ServiceCaller))
+            .expect("caller registers");
+    }
+
+    let call = std::thread::spawn(move || {
+        host.invoke_user_command(
+            None,
+            SERVICE_CALLER,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+        )
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("service entered after a successful host re-entry");
+    let reader_progressed = {
+        let ws = ws.clone();
+        std::thread::spawn(move || ws.try_read().is_some())
+            .join()
+            .expect("reader probe finishes")
+    };
+    release_tx.send(()).expect("release service provider");
+    let outcome = call.join().expect("command thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "HostApi::call_service held Custody<Workspace> across ServiceProvider::call"
+    );
+    outcome.expect("service provider completes through its per-capability host");
 }
 
 /// Una view che pania mentre disegna.
