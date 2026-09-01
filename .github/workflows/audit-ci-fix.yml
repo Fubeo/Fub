@@ -20,8 +20,10 @@ jobs:
         run: |
           git apply --check .audit-ci-fix.patch
           git apply --check .audit-ci-fix-undo.patch
+          git apply --check .audit-ci-fix-switches.patch
           git apply .audit-ci-fix.patch
           git apply .audit-ci-fix-undo.patch
+          git apply .audit-ci-fix-switches.patch
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
           toolchain: 1.89
@@ -48,6 +50,7 @@ jobs:
           UPDATE_MIRROR=1 cargo test -p fub-features --test ts_mirror
           cargo test -p fub-features --test ts_mirror
           cargo test -p fub-features --test undo a_panic_inside_a_undo_does_not_carries_via_the_stack
+          cargo test -p fub-host --test switches a_permission_denied_survives_to_the_shutdown_and_to_the_reopening
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Prepara il bersaglio dei componenti
@@ -83,7 +86,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .audit-ci-fix.patch .audit-ci-fix-undo.patch .github/workflows/audit-ci-fix.yml
+          git rm .audit-ci-fix.patch .audit-ci-fix-undo.patch .audit-ci-fix-switches.patch .github/workflows/audit-ci-fix.yml
           if git ls-files --error-unmatch .audit-error.txt >/dev/null 2>&1; then
             git rm -f .audit-error.txt
           else
@@ -95,6 +98,7 @@ jobs:
                   crates/fub-abi/tests/dependency_invariant.rs \
                   crates/fub-abi/tests/a_named_rule_is_declared.rs \
                   crates/fub-features/tests/undo.rs \
+                  crates/fub-host/tests/switches.rs \
                   apps/client/src/ui/node.test.ts \
                   apps/client/src/__fixtures__/mirror-samples.json \
                   docs/development/versioning-and-releases.md
