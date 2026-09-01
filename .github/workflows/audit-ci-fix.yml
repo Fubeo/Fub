@@ -1,7 +1,9 @@
 name: Audit CI fix
 
 'on':
-  workflow_dispatch:
+  push:
+    branches:
+      - fix/audit-integration
 
 permissions:
   contents: write
