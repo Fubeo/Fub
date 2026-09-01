@@ -1,66 +1,49 @@
-test commands::tests::a_dirty_buffer_stops_it_because_the_model_is_the_one_of_the_file ... ok
-test commands::tests::a_position_that_is_not_a_byte_offset_is_refused_before_the_write ... ok
-test commands::tests::a_setting_value_is_read_according_to_the_kind_the_key_declares ... ok
-test commands::tests::a_dry_run_of_a_bulk_replace_says_what_it_would_do_and_writes_nothing ... ok
-test commands::tests::an_empty_document_list_is_not_the_whole_vault ... ok
-test commands::tests::an_empty_needle_is_refused_even_though_the_schema_accepts_it ... ok
-test commands::tests::naming_a_notes_without_saying_where_does_not_take_the_caret_of_another ... ok
-test commands::tests::checking_a_task_writes_one_character_where_the_model_says ... ok
-test commands::tests::every_command_declares_what_it_does_and_how_far_it_reaches ... ok
-test commands::tests::simulating_the_toggle_says_which_notes_it_would_touch_and_writes_nothing ... ok
-test commands::tests::the_command_refuses_a_key_that_is_not_program_writable_and_says_which ... ok
-test commands::tests::the_wikilink_command_needs_a_selection_that_is_true_for_the_file ... ok
-test commands::tests::the_innermost_task_wins_when_they_are_nested ... ok
-test commands::tests::the_wikilink_command_refuses_a_single_left_bracket_in_the_selection ... ok
-test commands::tests::opening_the_search_is_an_intent_for_the_shell_not_a_write ... ok
-test commands::tests::the_wikilink_command_wraps_exactly_the_selected_bytes ... ok
-test commands::tests::whole_words_only_is_the_difference_between_a_fix_and_a_mess ... ok
 test graph::tests::an_open_without_a_document_does_nothing ... ok
-test graph::tests::it_declares_the_main_surface ... ok
 test graph::tests::clicking_a_node_navigates ... ok
+test graph::tests::it_declares_the_main_surface ... ok
+test graph::tests::the_fallback_says_what_is_missing ... ok
 test graph::tests::the_graph_is_a_custom_node_with_nodes_and_edges ... ok
 test graph::tests::two_links_between_the_same_notes_are_one_edge ... ok
+test graph::tests::the_graph_does_not_redraw_on_its_own ... ok
 test outline::tests::a_dirty_buffer_marks_nothing ... ok
 test outline::tests::a_document_that_skips_levels_keeps_all_its_headings ... ok
-test graph::tests::the_fallback_says_what_is_missing ... ok
 test outline::tests::a_heading_clicked_after_the_document_changed_reveals_nothing ... ok
-test outline::tests::empty_shows_placeholder ... ok
 test outline::tests::a_payload_that_is_not_a_span_reveals_nothing ... ok
 test outline::tests::clicking_a_heading_reveals_its_span_in_the_active_doc ... ok
+test outline::tests::empty_shows_placeholder ... ok
 test outline::tests::nested_headings_become_a_tree_and_carry_reveal_payloads ... ok
-test outline::tests::render_reads_active_doc_and_queries_the_host ... ok
 test outline::tests::render_without_active_doc_is_a_placeholder ... ok
+test outline::tests::render_reads_active_doc_and_queries_the_host ... ok
 test outline::tests::the_caret_marks_the_section_it_is_in ... ok
-test outline::tests::the_drawn_tree_carries_the_document_it_was_drawn_from ... ok
 test properties::tests::bom_not_enters_in_the_span ... ok
+test outline::tests::the_drawn_tree_carries_the_document_it_was_drawn_from ... ok
+test properties::tests::serializes_empty_holds_the_delimiters ... ok
 test properties::tests::serialize_preserves_key_order ... ok
 test properties::tests::insert_without_frontmatter_leaves_the_body ... ok
 test properties::tests::parse_yaml_fallback_a_string ... ok
-test properties::tests::serializes_empty_holds_the_delimiters ... ok
 test properties::tests::wikilink_a_hand ... ok
 test queries::tests::id_slug_avoids_the_duplicates ... ok
 test queries::tests::id_slug_from_the_phrase ... ok
 test queries::tests::parse_expr_from_object ... ok
-test graph::tests::the_graph_does_not_redraw_on_its_own ... ok
-test search::tests::a_bumped_schema_throws_the_fingerprints_away ... ok
-test search::tests::a_document_exited_from_the_vault_not_leaves_a_revision_behind ... ok
 test search::tests::a_edit_that_not_changes_the_model_updates_the_same_the_revision ... ok
-test search::tests::a_index_closed_leaves_the_folder_a_who_arrives_after ... ok
+test search::tests::a_document_exited_from_the_vault_not_leaves_a_revision_behind ... ok
+test search::tests::a_bumped_schema_throws_the_fingerprints_away ... ok
 test search::tests::a_corrupt_index_is_rebuilt_not_diagnosed ... ok
 test search::tests::a_key_never_written_equals_the_its_default ... ok
-test search::tests::a_key_that_not_and_a_weight_not_does_reread ... ok
-test search::tests::a_missing_manifest_is_not_an_error ... ok
-test search::tests::a_heading_weighs_more_of_the_body_and_and_a_field_a_if ... ok
 test search::tests::a_folder_scope_takes_the_descendants_too ... ok
-test search::tests::a_manifest_of_a_other_era_is_carries_via_also_the_fingerprints_of_the_sources ... ok
+test search::tests::a_key_that_not_and_a_weight_not_does_reread ... ok
+test search::tests::a_heading_weighs_more_of_the_body_and_and_a_field_a_if ... ok
+test search::tests::a_index_closed_leaves_the_folder_a_who_arrives_after ... ok
+test search::tests::a_missing_manifest_is_not_an_error ... ok
 test search::tests::a_slice_not_cancels_the_declarations_of_that_first ... ok
-test search::tests::a_tag_is_a_key_not_prose ... ok
+test search::tests::a_manifest_of_a_other_era_is_carries_via_also_the_fingerprints_of_the_sources ... ok
 test search::tests::backlinks_are_not_served_here ... ok
+test search::tests::a_tag_is_a_key_not_prose ... ok
 test search::tests::ask_the_tolerance_not_makes_tolerant_of_hidden ... ok
 test search::tests::a_write_a_session_open_not_inherits_the_revision_of_first ... ok
-test search::tests::empty_query_returns_nothing ... ok
 test search::tests::conjunction_by_default ... ok
 test search::tests::head_of_truncates_on_char_boundaries ... ok
+test search::tests::empty_query_returns_nothing ... ok
 test search::tests::moving_a_notes_reindexes_it_even_with_the_same_content ... ok
 test search::tests::finds_by_body_and_reports_highlights ... ok
 test search::tests::finds_by_tag_as_an_exact_term ... ok
@@ -69,19 +52,19 @@ test search::tests::reconcile_drops_what_the_vault_no_longer_has ... ok
 test search::tests::removal_deletes_from_index ... ok
 test search::tests::latest_term_incomplete_and_a_prefix_and_the_other_no ... ok
 test search::tests::reopening_skips_unchanged_documents ... ok
-test search::tests::scoping_by_tag_is_an_and_with_the_query ... ok
 test search::tests::reopening_reindexes_when_the_manifest_is_of_another_epoch ... ok
+test search::tests::scoping_by_tag_is_an_and_with_the_query ... ok
 test search::tests::the_schema_declares_the_default_that_the_engine_uses ... ok
 test search::tests::the_schema_not_changes_without_that_the_number_rises ... ok
 test search::tests::tags_are_case_insensitive_but_exact ... ok
 test search::tests::the_fingerprints_live_in_the_plugin_storage ... ok
-test search::tests::that_that_and_changed_ad_app_closed_not_results_a_place ... ok
+test search::tests::the_weights_are_updated_at_vault_open ... ok
 test search::tests::to_the_first_opening_not_exists_nothing_of_already_a_place ... ok
 test search::tests::the_weights_arrive_from_settings ... ok
 test search::tests::two_searches_are_in_the_index_together ... ignored, misura un tempo, e in CI condivisa il tempo non è un segnale (§17.1)
-test search::tests::the_weights_are_updated_at_vault_open ... ok
-test search::tests::the_window_moves_over_the_matches_and_the_total_stays_the_total ... ok
+test search::tests::that_that_and_changed_ad_app_closed_not_results_a_place ... ok
 test search::tests::to_the_reopening_is_recognizes_that_that_not_and_changed ... ok
+test search::tests::the_window_moves_over_the_matches_and_the_total_stays_the_total ... ok
 test stats::tests::a_caret_among_many_selections_adds_nothing_and_is_not_counted ... ok
 test stats::tests::a_caret_is_not_a_selection ... ok
 test stats::tests::counts_words_and_characters_not_bytes ... ok
@@ -128,20 +111,20 @@ test versioning::tests::an_overflow_turns_a_lost_removal_into_a_tombstone ... ok
 test versioning::tests::an_overflow_turns_a_lost_rename_into_a_new_history_plus_a_tombstone ... ok
 test versioning::tests::asking_for_a_version_that_never_existed_says_so ... ok
 test versioning::tests::every_key_that_the_panel_writes_is_in_the_catalogs_of_the_languages ... ok
+test search::tests::what_used_to_be_a_syntax_error_is_now_just_terms ... ok
 test versioning::tests::every_new_content_becomes_a_version ... ok
 test versioning::tests::opening_the_vault_photographs_what_has_no_history_yet ... ok
-test versioning::tests::retention_thins_out_the_past_but_never_the_present ... ok
 test versioning::tests::saving_the_same_text_again_is_not_a_new_version ... ok
 test versioning::tests::the_abandoned_folder_does_not_as_back_as_a_second_history ... ok
+test versioning::tests::retention_thins_out_the_past_but_never_the_present ... ok
 test versioning::tests::the_first_write_photographs_the_original ... ok
 test versioning::tests::the_handler_is_subscribed_to_overflow ... ok
 test versioning::tests::the_index_is_rebuilt_from_the_store_never_the_other_way_round ... ok
 test versioning::tests::two_photographs_of_the_same_instant_do_not_swallow_each_other ... ok
-test search::tests::what_used_to_be_a_syntax_error_is_now_just_terms ... ok
 test search::tests::without_fingerprint_declared_not_is_responds ... ok
 test search::tests::update_replaces_previous_content ... ok
 
-test result: ok. 156 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.88s
+test result: ok. 156 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.86s
 
 [1m[32m     Running[0m tests/a_plan_names_touched_keys.rs (target/debug/deps/a_plan_names_touched_keys-ddf5fb98d39892d0)
 
@@ -184,8 +167,8 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 3 tests
 test every_cargo_feature_and_on_of_default ... ok
-test with_all_the_feature_the_two_lists_coincide ... ok
 test every_row_of_the_inventory_has_the_its_cargo_feature ... ok
+test with_all_the_feature_the_two_lists_coincide ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -195,8 +178,8 @@ running 5 tests
 test the_search_weights_speak_in_all_languages ... ok
 test the_settings_of_the_core_speak_also_their ... ok
 test no_hardcoded_prose_in_what_is_declared ... ok
-test every_key_declared_has_a_entry ... ok
 test every_language_says_the_same_things ... ok
+test every_key_declared_has_a_entry ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -215,30 +198,30 @@ running 28 tests
 test a_caret_among_the_selections_has_nothing_to_wrap_and_the_count_says_so ... ok
 test a_bulk_replace_is_shown_before_it_is_done_and_then_done ... ok
 test a_command_acts_on_every_selection_and_undoes_them_together ... ok
-test a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked ... ok
 test a_command_writes_a_setting_reading_its_type_from_the_declared_schema ... ok
-test a_command_writes_through_the_normal_path_so_the_graph_sees_it ... ok
 test a_dry_run_opens_no_batch_because_it_touches_nothing ... ok
+test a_command_writes_through_the_normal_path_so_the_graph_sees_it ... ok
 test a_program_cannot_move_a_key_that_did_not_declare_itself_program_writable ... ok
-test a_position_outside_every_task_is_refused_by_the_command_not_guessed ... ok
+test a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked ... ok
 test an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying ... ok
+test a_position_outside_every_task_is_refused_by_the_command_not_guessed ... ok
 test carets_only_is_still_nothing_to_wrap ... ok
 test one_cursor_toggles_one_task_without_naming_at ... ok
+test export_carries_what_someone_decided_and_import_puts_it_back ... ok
 test checking_a_task_goes_through_the_parsed_model_and_writes_one_byte ... ok
 test simulating_a_setting_change_says_what_would_change_and_changes_nothing ... ok
-test export_carries_what_someone_decided_and_import_puts_it_back ... ok
+test simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan ... ok
 test archiving_n_notes_is_n_renames_one_batch_and_one_actor ... ok
 test restoring_onto_an_occupied_path_says_exactly_that ... ok
-test simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan ... ok
 test simulating_an_import_counts_the_key_gate_too ... ok
 test simulating_an_out_of_range_setting_refuses_the_same_value_as_apply ... ok
-test the_plan_of_a_rename_names_the_notes_that_link_it ... ok
-test the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps ... ok
 test the_search_command_is_an_intent_and_the_kernel_refuses_it_no_writes ... ok
 test the_registry_is_what_a_palette_or_a_cli_reads ... ok
+test the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps ... ok
+test the_plan_of_a_rename_names_the_notes_that_link_it ... ok
 test the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so ... ok
-test trashing_without_an_argument_takes_the_notes_the_user_is_looking_at ... ok
 test two_cursors_toggle_two_tasks_without_naming_at ... ok
+test trashing_without_an_argument_takes_the_notes_the_user_is_looking_at ... ok
 test the_whole_life_of_a_notes_goes_through_the_registry ... ok
 
 test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
@@ -255,11 +238,11 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/contextless_leaf_costs_more.rs (target/debug/deps/contextless_leaf_costs_more-3dcd6f3e8450d423)
 
 running 3 tests
+test the_dry_run_spends_on_the_question_does_not_around ... ok
 test the_two_forms_name_the_same_notes ... ok
 test the_leaf_without_context_costs_more_of_the_contexts ... ok
-test the_dry_run_spends_on_the_question_does_not_around ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.67s
 
 [1m[32m     Running[0m tests/custom_blocks_e2e.rs (target/debug/deps/custom_blocks_e2e-2d6eba754c3a231d)
 
@@ -269,12 +252,12 @@ test a_kind_of_third_party_degraded_show_the_byte_of_the_key_convenzionale ... o
 test a_formula_exits_as_html_inside_the_stream ... ok
 test a_diagram_exits_as_part_declarative_not_as_markup ... ok
 test a_plugin_revoked_not_registers_nothing ... ok
-test a_syntax_of_third_party_traverses_all_and_three_the_sides ... ok
-test a_kind_without_renderer_arrives_all_preview_col_its_source ... ok
 test a_rule_inline_enters_in_the_label_of_a_link ... ok
+test a_kind_without_renderer_arrives_all_preview_col_its_source ... ok
 test a_third_not_is_does_pass_for_the_core ... ok
 test from_a_renderer_not_trusted_the_content_active_not_passes ... ok
 test a_syntax_off_leaves_the_document_com_was ... ok
+test a_syntax_of_third_party_traverses_all_and_three_the_sides ... ok
 test two_rules_on_the_same_syntax_not_is_register_in_silence ... ok
 test highlighted_arrives_from_the_model_and_not_disappears_more ... ok
 
@@ -291,45 +274,45 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/data_channel_e2e.rs (target/debug/deps/data_channel_e2e-10e3d8ad98fde5f8)
 
 running 18 tests
-test a_equal_relevance_sorts_the_contract_does_not_the_engine ... ok
-test a_clause_empty_beside_a_a_leaf_foreign_remains_every_document ... ok
 test a_clause_all_of_a_engine_there_goes_whole ... ok
+test a_clause_empty_beside_a_a_leaf_foreign_remains_every_document ... ok
 test a_leaf_denied_removes_from_what_is_the_other_has_selected ... ok
+test a_equal_relevance_sorts_the_contract_does_not_the_engine ... ok
 test a_reference_a_a_point_knows_say_where_points ... ok
 test a_result_knows_say_a_that_point_of_the_document_is ... ok
 test a_reference_without_page_names_who_the_hosts ... ok
 test a_row_carries_relevance_extracted_and_columns_together ... ok
 test a_selection_without_text_does_not_carries_coordinate ... ok
 test the_notes_of_a_kind_that_speak_of_something ... ok
-test the_phrase_exact_and_a_way_does_not_a_syntax ... ok
 test the_graph_whole_and_a_question_single ... ok
 test the_tag_of_a_result_are_the_its_facets ... ok
+test the_phrase_exact_and_a_way_does_not_a_syntax ... ok
 test who_generates_a_id_and_who_resolves_a_fragment_name_the_same_point ... ok
 test the_union_of_two_clauses_from_different_owners ... ok
-test what_nobody_needs_says_so ... ok
-test what_names_a_reference_the_says_the_channel_data ... ok
 test without_key_of_ordering_commands_the_relevance ... ok
+test what_names_a_reference_the_says_the_channel_data ... ok
+test what_nobody_needs_says_so ... ok
 
-test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
 
 [1m[32m     Running[0m tests/first_snapshot_does_not_rewrite_the_index.rs (target/debug/deps/first_snapshot_does_not_rewrite_the_index-e16109460e12d717)
 
 running 4 tests
 test the_vaultopened_event_does_not_snapshot_again ... ok
-test an_interrupted_pass_loses_nothing_because_the_index_is_rebuilt ... ok
 test the_before_snapshot_writes_the_index_a_time_single ... ok
 test the_index_written_once_says_everything_it_used_to ... ok
+test an_interrupted_pass_loses_nothing_because_the_index_is_rebuilt ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
 [1m[32m     Running[0m tests/graph_has_two_halves.rs (target/debug/deps/graph_has_two_halves-320c67678b338d3d)
 
 running 5 tests
-test the_keys_of_the_action_is_agree_between_the_two_ends ... ok
-test the_keys_of_the_payload_is_agree_between_the_two_ends ... ok
 test the_namespace_does_not_and_written_two_times_in_the_provider ... ok
 test the_two_ends_is_agree_on_the_namespace ... ok
 test the_two_ends_is_agree_on_the_id_of_the_view ... ok
+test the_keys_of_the_action_is_agree_between_the_two_ends ... ok
+test the_keys_of_the_payload_is_agree_between_the_two_ends ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -337,14 +320,14 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 9 tests
 test an_empty_vault_is_an_empty_graph ... ok
-test a_document_is_one_node_however_many_times_it_is_linked ... ok
 test a_self_link_is_not_an_edge ... ok
+test a_document_is_one_node_however_many_times_it_is_linked ... ok
 test a_notes_that_links_the_same_notes_twice_draws_one_edge ... ok
 test clicking_a_node_asks_the_core_to_open_that_notes ... ok
-test edges_arrive_in_a_deterministic_order ... ok
-test edges_as_from_the_data_channel_for_the_whole_vault_at_once ... ok
 test every_notes_is_a_node_even_the_lonely_ones ... ok
 test opening_a_nonexistent_doc_still_navigates ... ok
+test edges_as_from_the_data_channel_for_the_whole_vault_at_once ... ok
+test edges_arrive_in_a_deterministic_order ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
@@ -353,8 +336,8 @@ test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 5 tests
 test preview_is_remembers_between_two_redraws ... ok
 test restore_passes_from_the_record_and_is_cancels ... ok
-test inverse_of_a_restore_and_declared_from_the_command ... ok
 test a_restore_drawn_on_another_notes_not_writes_on_this ... ok
+test inverse_of_a_restore_and_declared_from_the_command ... ok
 test the_view_lists_the_versions_without_receive_the_store ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
@@ -370,9 +353,9 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/outline_view_e2e.rs (target/debug/deps/outline_view_e2e-00ef63e8d7521cbe)
 
 running 3 tests
+test the_view_reads_the_active_docs_outline_from_the_kernel ... ok
 test clicking_a_heading_reveals_its_span_back_through_the_kernel ... ok
 test the_caret_published_by_the_shell_reaches_the_view_through_the_kernel ... ok
-test the_view_reads_the_active_docs_outline_from_the_kernel ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -389,10 +372,10 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 8 tests
 test no_one_notes_open_and_empty_state ... ok
 test dry_run_not_writes ... ok
-test remove_removes_the_key_and_the_body_remains ... ok
 test add_on_notes_without_frontmatter_born_the_block ... ok
 test the_commands_are_in_the_record ... ok
 test render_mixed_has_the_widget_right_for_key ... ok
+test remove_removes_the_key_and_the_body_remains ... ok
 test set_bool_writes_yaml_and_leaves_the_body ... ok
 test undo_of_the_set_restores_the_block ... ok
 
@@ -402,9 +385,9 @@ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 6 tests
 test dry_run_not_writes ... ok
-test the_commands_are_in_the_record ... ok
 test the_collections_list_the_query_saved ... ok
 test form_save_from_text ... ok
+test the_commands_are_in_the_record ... ok
 test save_run_delete_on_a_folder ... ok
 test the_view_lists_and_launches ... ok
 
@@ -413,21 +396,21 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/search_e2e.rs (target/debug/deps/search_e2e-ab9b82afe1920db3)
 
 running 13 tests
-test deleting_a_notes_removes_it_from_search ... ok
 test excerpts_survive_the_planner ... ok
-test a_renamed_notes_leaves_no_ghost_behind ... ok
+test deleting_a_notes_removes_it_from_search ... ok
 test editing_a_notes_updates_what_is_findable ... ok
+test a_renamed_notes_leaves_no_ghost_behind ... ok
 test highlights_land_on_the_right_bytes_in_accented_text ... ok
 test query_latency_on_a_large_vault ... ignored, micro-bench: si esegue a mano, in release
 test finds_notes_by_content_title_and_tag ... ok
 test omitting_excerpts_keeps_relevance ... ok
 test reopening_a_vault_does_not_reindex_it ... ok
-test what_sits_in_the_trash_is_never_searchable ... ok
 test reopening_catches_up_with_what_happened_while_it_was_closed ... ok
+test what_sits_in_the_trash_is_never_searchable ... ok
 test trashing_a_notes_makes_it_vanish_from_search_and_backlinks_and_coming_back_undoes_it ... ok
 test incremental_index_matches_one_built_from_scratch ... ok
 
-test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.48s
+test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.47s
 
 [1m[32m     Running[0m tests/stats_view_e2e.rs (target/debug/deps/stats_view_e2e-ae5fe3adc75a5c82)
 
@@ -449,10 +432,10 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/template_e2e.rs (target/debug/deps/template_e2e-08801f6f9ddd30e9)
 
 running 5 tests
-test dry_run_not_writes ... ok
-test from_template_replaces_and_creates ... ok
-test daily_creates_and_the_second_time_opens ... ok
 test click_creates_from_template ... ok
+test dry_run_not_writes ... ok
+test daily_creates_and_the_second_time_opens ... ok
+test from_template_replaces_and_creates ... ok
 test the_view_lists_the_template ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -468,8 +451,8 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/trash_view_e2e.rs (target/debug/deps/trash_view_e2e-1cb8a279d9519384)
 
 running 5 tests
-test restore_passes_from_the_record_of_the_commands_and_brings_back_the_notes_in_the_vault ... ok
 test the_panel_lists_the_trash_and_the_says_when_and_empty ... ok
+test restore_passes_from_the_record_of_the_commands_and_brings_back_the_notes_in_the_vault ... ok
 test the_two_commands_that_the_panel_presses_are_in_the_record ... ok
 test a_new_occupied_path_becomes_a_question_in_the_tree_not_a_window ... ok
 test empty_asks_first_and_the_question_is_can_withdraw ... ok
@@ -479,22 +462,39 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/ts_mirror.rs (target/debug/deps/ts_mirror-aa90beaca6a0766f)
 
 running 1 test
-test ts_mirror_fixture_is_in_sync_with_the_rust_types ... FAILED
+test ts_mirror_fixture_is_in_sync_with_the_rust_types ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/undo.rs (target/debug/deps/undo-9e564d0f600ce7d6)
+
+running 13 tests
+test a_simulation_does_not_leaves_nothing_from_undo ... ok
+test an_operation_that_half_succeeded_says_so_as_data ... ok
+test a_panic_inside_a_undo_does_not_carries_via_the_stack ... FAILED
+test a_macro_of_three_renames_and_a_entry_single ... ok
+test an_undo_that_stops_halfway_says_where_it_stopped ... ok
+test empty_the_trash_remains_irreversible_and_the_says ... ok
+test nothing_missing_means_no_partial_at_all ... ok
+test undo_a_trash_brings_back_the_notes_where_was ... ok
+test undo_a_replacement_puts_back_the_text_of_first ... ok
+test undo_a_rename_brings_back_also_the_link_that_were_states_rewritten ... ok
+test undo_does_not_and_is_cancellable ... ok
+test undoing_a_half_done_operation_says_it_was_half_done ... ok
+test who_has_written_in_the_meantime_does_not_is_sees_delete_the_work ... ok
 
 failures:
 
----- ts_mirror_fixture_is_in_sync_with_the_rust_types stdout ----
+---- a_panic_inside_a_undo_does_not_carries_via_the_stack stdout ----
 
-thread 'ts_mirror_fixture_is_in_sync_with_the_rust_types' panicked at crates/fub-features/tests/ts_mirror.rs:1453:5:
-assertion `left == right` failed: la fixture dei mirror è stantia: un tipo Rust è cambiato senza rigenerarla. Rigenerala con `UPDATE_MIRROR=1 cargo test -p fub-features --test ts_mirror`, poi aggiorna il mirror TS finché `mirror.test.ts` non torna verde.
-  left: Object {"UiNode": Array [Object {"key": String("k"), "node": String("stack"), "dir": String("column"), "gap": Number(8), "children": Array []}, Object {"node": String("text"), "content": String("t")}, Object {"node": String("heading"), "level": Number(2), "content": String("h")}, Object {"node": String("list"), "items": Array []}, Object {"node": String("list_item"), "title": String("ti"), "subtitle": String("s"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(true)}, Object {"node": String("button"), "label": String("b"), "intent": String("primary"), "action": Object {"action": String("a"), "payload": Null}}, Object {"node": String("html"), "html": String("<i>")}, Object {"node": String("web_view"), "url": String("u"), "height": Number(100)}, Object {"node": String("section"), "title": String("s"), "collapsed": Bool(true), "children": Array []}, Object {"node": String("table"), "columns": Array [Object {"title": String("c"), "align": String("end")}], "rows": Array []}, Object {"node": String("row"), "cells": Array [Object {"node": String("text"), "content": String("c")}], "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("tree"), "roots": Array []}, Object {"node": String("tree_item"), "label": String("l"), "expanded": Bool(true), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(false), "children": Array []}, Object {"node": String("tabs"), "active": Number(1), "tabs": Array []}, Object {"node": String("tab"), "label": String("t"), "action": Null, "children": Array []}, Object {"node": String("badge"), "label": String("b"), "intent": String("danger")}, Object {"node": String("icon"), "name": String("i")}, Object {"node": String("progress"), "value": Number(0.5), "label": String("p")}, Object {"node": String("separator")}, Object {"node": String("empty_state"), "title": String("vuoto"), "detail": String("d"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("key_value"), "entries": Array [Object {"label": String("k"), "value": String("v")}]}, Object {"node": String("text_input"), "field": String("f"), "label": String("l"), "value": String("v"), "placeholder": String("p"), "action": Null}, Object {"node": String("text_area"), "field": String("f"), "label": Null, "value": String("v"), "rows": Number(4), "action": Null}, Object {"node": String("number"), "field": String("f"), "label": Null, "value": Number(1.5), "min": Number(0.0), "max": Number(2.0), "step": Number(0.5), "action": Null}, Object {"node": String("checkbox"), "field": String("f"), "label": String("l"), "value": Bool(true), "action": Null}, Object {"node": String("select"), "field": String("f"), "label": Null, "value": Array [String("u")], "options": Array [Object {"value": String("u"), "label": String("Uno")}], "multiple": Bool(false), "action": Null}, Object {"node": String("radio"), "field": String("f"), "label": Null, "value": String("u"), "options": Array [Object {"value": String("u"), "label": String("Uno")}], "action": Null}, Object {"node": String("slider"), "field": String("f"), "label": Null, "value": Number(0.5), "min": Number(0.0), "max": Number(1.0), "step": Number(0.1), "action": Null}, Object {"node": String("date_picker"), "field": String("f"), "label": Null, "value": String("2026-07-26"), "action": Null}, Object {"node": String("form"), "children": Array [], "submit_label": String("Salva"), "submit": Object {"action": String("submit"), "payload": Null}}, Object {"node": String("custom"), "ns": String("p"), "payload": Object {"x": Number(1)}, "fallback": Array [Object {"node": String("text"), "content": String("f")}]}, Object {"node": String("pending"), "label": String("carico")}, Object {"node": String("failed"), "message": String("m"), "retry": Object {"action": String("riprova"), "payload": Null}}], "ViewUpdate": Array [Object {"kind": String("replace"), "root": Object {"node": String("text"), "content": String("t")}}, Object {"kind": String("none")}, Object {"kind": String("navigate"), "doc_id": String("d")}, Object {"kind": String("reveal"), "doc_id": String("d"), "span": Object {"start": Number(0), "end": Number(3)}}, Object {"kind": String("run_search"), "query": String("q")}, Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, Object {"kind": String("patch"), "key": String("k"), "node": Object {"key": String("k"), "node": String("text"), "content": String("t")}}], "KernelEvent": Array [Object {"type": String("vault_opened"), "root": String("r")}, Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, Object {"type": String("document_removed"), "id": String("a")}, Object {"type": String("document_renamed"), "from": String("a"), "to": String("b")}, Object {"type": String("index_updated")}, Object {"type": String("job_done"), "id": String("1"), "job": String("j"), "result": Object {"Ok": Null}}, Object {"type": String("overflow"), "dropped": Number(2)}, Object {"type": String("custom"), "topic": String("p/x"), "payload": Null}, Object {"type": String("batch_ended"), "batch": String("18446744073709551615"), "changed": Array [String("a"), String("b")]}, Object {"type": String("view_invalidated"), "view": String("v"), "instance": String("v#2")}, Object {"type": String("vault_closed"), "root": String("/vault")}, Object {"type": String("job_started"), "id": String("18446744073709551615"), "job": String("export")}, Object {"type": String("job_progress"), "id": String("18446744073709551615"), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"type": String("setting_changed"), "key": String("versioning.enabled"), "scope": String("vault")}, Object {"type": String("entry_changed"), "id": String("allegati/foto.png"), "kind": String("asset")}, Object {"type": String("entry_removed"), "id": String("allegati/foto.png"), "kind": String("unknown")}, Object {"type": String("entry_renamed"), "from": String("allegati/foto.png"), "to": String("media/foto.png"), "kind": String("asset")}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("a.md"), "error": Object {"kind": String("internal"), "message": String("indice non allineato")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("failure"), "subject": Null, "error": Object {"kind": String("internal"), "message": String("flush fallito")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("b.md"), "error": Object {"kind": String("internal"), "message": String("render esploso")}, "gate": String("command")}, Object {"type": String("timer_fired"), "owner": String("com.acme.tasks"), "timer": String("sync")}], "KernelNotice": Array [Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("watcher")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("kernel")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("plugin"), "id": String("fub.versioning")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("index_updated")}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": Null}}], "Span": Array [Object {"start": Number(3), "end": Number(7)}], "SettingSpec": Array [Object {"key": String("prova.k0"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, Object {"key": String("prova.k1"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("number"), "default": Number(14.0), "min": Number(8.0), "max": Number(72.0)}, "program_writable": Bool(false)}, Object {"key": String("prova.k2"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("text"), "default": String("Diario")}, "program_writable": Bool(false)}, Object {"key": String("prova.k3"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, Object {"key": String("prova.k4"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array [String("fub.stats")]}, "program_writable": Bool(false)}], "SettingEntry": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}, Object {"spec": Object {"key": String("plugins.disabled"), "label": String("Componenti spenti"), "description": String(""), "group": String(""), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array []}, "program_writable": Bool(false)}, "value": Array [String("fub.stats")], "source": String("vault")}], "VersionRef": Array [Object {"ts": Number(1), "hash": String("18446744073709551615"), "size": Number(3)}], "DocumentMatch": Array [Object {"doc": String("a.md")}, Object {"doc": String("b.md"), "score": Number(0.5), "snippet": String("s"), "highlights": Array [Object {"start": Number(0), "end": Number(1)}], "properties": Array [Object {"key": String("tipo"), "value": Object {"kind": String("text"), "value": String("nota")}}], "occurrences": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(120), "end": Number(125)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}]}], "DocPosition": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}], "ResolvedRef": Array [Object {"doc": String("note/a.md")}, Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}], "NeighborRef": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "IndexQuery": Array [Object {"kind": String("documents"), "matching": Object {"any": Array [Object {"all": Array [Object {"negated": Bool(false), "predicate": Object {"kind": String("text"), "text": String("rust"), "mode": String("terms"), "fields": Array [], "tolerance": String("exact"), "partial_last_term": Bool(false)}}, Object {"negated": Bool(true), "predicate": Object {"kind": String("tag"), "name": String("archivio"), "descendants": Bool(true)}}]}]}, "sort": Null, "select": Object {"kind": String("none")}, "page": Object {"offset": Number(0), "limit": Number(20)}, "excerpts": String("attach")}, Object {"kind": String("backlinks"), "target": String("a.md"), "page": Null}, Object {"kind": String("outline"), "doc": String("a.md")}, Object {"kind": String("tags"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("neighbors"), "seeds": Object {"any": Array []}, "direction": String("outbound"), "depth": Number(1), "page": Null}, Object {"kind": String("property_values"), "key": String("tipo"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("vault_health"), "check": String("broken_links"), "page": Null}, Object {"kind": String("custom"), "ns": String("terzi"), "query": Object {"x": Number(1)}}, Object {"kind": String("vault_status")}, Object {"kind": String("jobs")}, Object {"kind": String("settings"), "plugin": Null}, Object {"kind": String("settings"), "plugin": String("fub.versioning")}, Object {"kind": String("organization")}, Object {"kind": String("resolve"), "target": Object {"kind": String("wiki"), "value": Object {"page": String("Nota"), "heading": String("Sezione"), "block": Null}}, "from": Null}, Object {"kind": String("resolve"), "target": Object {"kind": String("path"), "value": String("../altra.md")}, "from": String("x/y.md")}, Object {"kind": String("resolve"), "target": Object {"kind": String("url"), "value": String("https://example.org")}, "from": Null}, Object {"kind": String("entries"), "of_kind": Null, "within": Null, "page": Null}, Object {"kind": String("entries"), "of_kind": String("asset"), "within": Null, "page": Object {"offset": Number(40), "limit": Number(20)}}, Object {"kind": String("entries"), "of_kind": String("document"), "within": Object {"path": String("Progetti"), "descendants": Bool(false)}, "page": Null}, Object {"kind": String("folders"), "under": Null, "page": Null}, Object {"kind": String("folders"), "under": Object {"path": String("Progetti"), "descendants": Bool(true)}, "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("drafts"), "page": Null}, Object {"kind": String("drafts"), "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("render_preview"), "doc": String("a.md")}, Object {"kind": String("render_embed"), "page": String("Nota"), "heading": String("Sezione"), "block": Null}, Object {"kind": String("syntax_forms"), "doc": String("a.md")}], "IndexResult": Array [Object {"kind": String("documents"), "value": Object {"items": Array [Object {"doc": String("a.md")}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("backlinks"), "value": Object {"items": Array [Object {"source": String("b.md"), "context": Null}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("outline"), "value": Array []}, Object {"kind": String("tags"), "value": Object {"items": Array [Object {"name": String("rust"), "count": Number(2)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("neighbors"), "value": Object {"items": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("property_values"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("vault_health"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("custom"), "value": Object {"x": Number(1)}}, Object {"kind": String("vault_status"), "value": Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}}, Object {"kind": String("jobs"), "value": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}]}, Object {"kind": String("settings"), "value": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}]}, Object {"kind": String("organization"), "value": Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md")}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}}, Object {"kind": String("resolved"), "value": Null}, Object {"kind": String("entries"), "value": Object {"items": Array [Object {"id": String("note/a.md"), "kind": String("document"), "size": Number(1024), "mtime": Number(1769000000000), "fingerprint": String("0123456789abcdef")}, Object {"id": String("allegati/foto.png"), "kind": String("asset"), "size": Number(204800), "mtime": Number(1769000001000)}, Object {"id": String("archivio.zip"), "kind": String("unknown"), "size": Number(9000000), "mtime": Number(1769000002000)}], "offset": Number(0), "total": Number(3)}}, Object {"kind": String("folders"), "value": Object {"items": Array [Object {"path": String("note"), "folders": Number(1), "entries": Number(12)}, Object {"path": String("note/bozze"), "folders": Number(0), "entries": Number(0)}], "offset": Number(0), "total": Number(2)}}, Object {"kind": String("render_preview"), "value": Object {"html": String(""), "parts": Array []}}, Object {"kind": String("render_embed"), "value": Object {"doc_id": String("note/a.md"), "html": String(""), "parts": Array []}}, Object {"kind": String("syntax_forms"), "value": Array [Object {"name": String("terzi:spoiler"), "trigger": Object {"inline": Object {"open": String("||"), "close": String("||")}}}]}], "BacklinkRef": Array [Object {"source": String("b.md"), "context": String("ctx")}], "TrashEntry": Array [Object {"id": String(".trash/Nota.2026-01-01T00-00-00.md"), "original": String("p/Nota.md"), "deleted_at": Number(4), "size": Number(5)}], "TagCount": Array [Object {"name": String("rust"), "count": Number(2)}], "Organization": Array [Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}], "VaultStatus": Array [Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}], "JobProgress": Array [Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}], "JobStatus": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}], "UiAction": Array [Object {"action": String("nuda"), "payload": Null, "fields": Array []}, Object {"action": String("piena"), "payload": Object {"doc": String("a.md")}, "fields": Array [Object {"field": String("f0"), "value": Object {"type": String("text"), "value": String("t")}}, Object {"field": String("f1"), "value": Object {"type": String("number"), "value": Number(1.5)}}, Object {"field": String("f2"), "value": Object {"type": String("bool"), "value": Bool(true)}}, Object {"field": String("f3"), "value": Object {"type": String("choices"), "value": Array [String("a"), String("b")]}}]}], "ViewSpec": Array [Object {"id": String("v"), "title": String("V"), "surface": String("right_sidebar"), "refresh": Object {"kinds": Array [String("index_updated"), String("batch_ended")], "topics": Array [], "subjects": Array [], "changes": Array []}, "follows": Array [String("document"), String("selection")], "params": Array [Object {"name": String("tag"), "title": String("Tag"), "description": String(""), "kind": Object {"kind": String("text")}, "required": Bool(false)}], "icon": String("tag"), "order": Number(2), "open_by_default": Bool(false), "preferred_size": Number(280), "closable": Bool(true)}, Object {"id": String("v2"), "title": String("V2"), "surface": String("bottom"), "refresh": Object {"kinds": Array [String("document_changed"), String("custom")], "topics": Array [String("com.acme.tasks")], "subjects": Array [Object {"kind": String("document"), "id": String("Progetti/Alpha.md")}, Object {"kind": String("folder"), "path": String("Diario")}], "changes": Array [String("tags"), String("frontmatter")]}, "follows": Array [], "params": Array [], "icon": Null, "order": Number(0), "open_by_default": Bool(false), "preferred_size": Null, "closable": Bool(true)}], "ViewInstance": Array [Object {"view": String("v"), "instance": String("v"), "params": Null}, Object {"view": String("v"), "instance": String("v#2"), "params": Object {"tag": String("rust")}}], "ViewContext": Array [Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, "secondary": Array []}}, "mode": String("reading")}, Object {"pane": String("main"), "doc": Null, "selections": Null, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array []}}, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(10), "end": Number(14)}, "text": String("ciao")}, "secondary": Array [Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, Object {"span": Object {"start": Number(20), "end": Number(20)}, "text": String("")}]}}, "mode": String("live_preview")}], "SelectionSet": Array [Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}, "secondary": Array []}}, Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array [Object {"text": String("mondo")}]}}], "AnchoredSelection": Array [Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}], "FloatingSelection": Array [Object {"text": String("ciao")}], "AnchoredSelections": Array [Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("")}, "secondary": Array []}], "FloatingSelections": Array [Object {"primary": Object {"text": String("x")}, "secondary": Array []}], "Locale": Array [Object {"language": String("und"), "timezone": String(""), "utc_offset_minutes": Number(0), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("it-IT"), "timezone": String("Europe/Rome"), "utc_offset_minutes": Number(120), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("en-US"), "timezone": String("Asia/Kathmandu"), "utc_offset_minutes": Number(345), "first_day_of_week": String("sunday"), "hour_cycle": String("h12")}], "CommandSpec": Array [Object {"id": String("test.every"), "title": String("Tutte le specie"), "description": String("Un comando con un parametro per specie."), "keybinding": String("Mod-k"), "params": Array [Object {"name": String("p0"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("text")}, "required": Bool(false)}, Object {"name": String("p1"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("number")}, "required": Bool(false)}, Object {"name": String("p2"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("bool")}, "required": Bool(false)}, Object {"name": String("p3"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("document")}, "required": Bool(false)}, Object {"name": String("p4"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("documents")}, "required": Bool(false)}, Object {"name": String("p5"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("choice"), "value": Array [Object {"value": String("uno"), "title": String("Uno")}]}, "required": Bool(false)}, Object {"name": String("p6"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("numbers")}, "required": Bool(false)}], "scope": Object {"writes": Bool(true), "reach": String("documents"), "reversible": Bool(false)}}, Object {"id": String("test.min"), "title": String("Minimo"), "description": String(""), "keybinding": Null, "params": Array [], "scope": Object {"writes": Bool(false), "reach": String("session"), "reversible": Bool(true)}}], "CommandOutcome": Array [Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("navigate"), "doc": String("a.md")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("reveal"), "doc": String("a.md"), "span": Object {"start": Number(3), "end": Number(7)}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("run_search"), "query": String("q")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("plan"), "summary": String("una nota"), "docs": Array [String("a.md")], "edits": Array [Object {"doc": String("a.md"), "edit": Object {"base": String("af63f54c86021707"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("y")}]}}]}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("open_view"), "view": String("v"), "params": Object {"tag": String("rust")}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Object {"label": String("la creazione di «a.md»"), "steps": Array [Object {"kind": String("edit"), "doc": String("a.md"), "edit": Object {"base": String("af63f44c86021554"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("x")}]}}, Object {"kind": String("command"), "command": String("note.trash"), "args": Object {"doc": String("a.md")}}]}, "partial": Null}, Object {"notify": String("fatto a metà"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}}], "Partial": Array [Object {"attempted": Number(12), "done": Number(11), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}]}, Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}], "Failure": Array [Object {"subject": String("a.md"), "error": Object {"kind": String("conflict"), "message": String("cambiata nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("bad_args"), "message": String("`privacy.telemetry` (un programma non la scrive)")}}], "PluginError": Array [Object {"kind": String("already_exists"), "message": String("Progetti/Idee.md")}, Object {"kind": String("not_found"), "message": String("Fantasma.md")}, Object {"kind": String("io"), "message": String("disco pieno")}]}
- right: Object {"UiNode": Array [Object {"key": String("k"), "node": String("stack"), "dir": String("column"), "gap": Number(8), "children": Array []}, Object {"node": String("text"), "content": String("t")}, Object {"node": String("heading"), "level": Number(2), "content": String("h")}, Object {"node": String("list"), "items": Array []}, Object {"node": String("list_item"), "title": String("ti"), "subtitle": String("s"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(true)}, Object {"node": String("button"), "label": String("b"), "intent": String("primary"), "action": Object {"action": String("a"), "payload": Null}}, Object {"node": String("html"), "html": String("<i>")}, Object {"node": String("web_view"), "url": String("u"), "height": Number(100)}, Object {"node": String("section"), "title": String("s"), "collapsed": Bool(true), "children": Array []}, Object {"node": String("table"), "columns": Array [Object {"title": String("c"), "align": String("end")}], "rows": Array []}, Object {"node": String("row"), "cells": Array [Object {"node": String("text"), "content": String("c")}], "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("tree"), "roots": Array []}, Object {"node": String("tree_item"), "label": String("l"), "expanded": Bool(true), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(false), "children": Array []}, Object {"node": String("tabs"), "active": Number(1), "tabs": Array []}, Object {"node": String("tab"), "label": String("t"), "action": Null, "children": Array []}, Object {"node": String("badge"), "label": String("b"), "intent": String("danger")}, Object {"node": String("icon"), "name": String("i")}, Object {"node": String("progress"), "value": Number(0.5), "label": String("p")}, Object {"node": String("separator")}, Object {"node": String("empty_state"), "title": String("vuoto"), "detail": String("d"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("key_value"), "entries": Array [Object {"label": String("k"), "value": String("v")}]}, Object {"node": String("text_input"), "field": String("f"), "label": String("l"), "value": String("v"), "placeholder": String("p"), "action": Null}, Object {"node": String("text_area"), "field": String("f"), "label": Null, "value": String("v"), "rows": Number(4), "action": Null}, Object {"node": String("number"), "field": String("f"), "label": Null, "value": Number(1.5), "min": Number(0.0), "max": Number(2.0), "step": Number(0.5), "action": Null}, Object {"node": String("checkbox"), "field": String("f"), "label": String("l"), "value": Bool(true), "action": Null}, Object {"node": String("select"), "field": String("f"), "label": Null, "value": Array [String("u")], "options": Array [Object {"value": String("u"), "label": String("Uno")}], "multiple": Bool(false), "action": Null}, Object {"node": String("radio"), "field": String("f"), "label": Null, "value": String("u"), "options": Array [Object {"value": String("u"), "label": String("Uno")}], "action": Null}, Object {"node": String("slider"), "field": String("f"), "label": Null, "value": Number(0.5), "min": Number(0.0), "max": Number(1.0), "step": Number(0.1), "action": Null}, Object {"node": String("date_picker"), "field": String("f"), "label": Null, "value": String("2026-07-26"), "action": Null}, Object {"node": String("form"), "children": Array [], "submit_label": String("Salva"), "submit": Object {"action": String("submit"), "payload": Null}}, Object {"node": String("custom"), "ns": String("p"), "payload": Object {"x": Number(1)}, "fallback": Array [Object {"node": String("text"), "content": String("f")}]}, Object {"node": String("pending"), "label": String("carico")}, Object {"node": String("failed"), "message": String("m"), "retry": Object {"action": String("riprova"), "payload": Null}}], "ViewUpdate": Array [Object {"kind": String("replace"), "root": Object {"node": String("text"), "content": String("t")}}, Object {"kind": String("none")}, Object {"kind": String("navigate"), "doc_id": String("d")}, Object {"kind": String("reveal"), "doc_id": String("d"), "span": Object {"start": Number(0), "end": Number(3)}}, Object {"kind": String("run_search"), "query": String("q")}, Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, Object {"kind": String("patch"), "key": String("k"), "node": Object {"key": String("k"), "node": String("text"), "content": String("t")}}], "KernelEvent": Array [Object {"type": String("vault_opened"), "root": String("r")}, Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, Object {"type": String("document_removed"), "id": String("a")}, Object {"type": String("document_renamed"), "from": String("a"), "to": String("b")}, Object {"type": String("index_updated")}, Object {"type": String("job_done"), "id": String("1"), "job": String("j"), "result": Object {"Ok": Null}}, Object {"type": String("overflow"), "dropped": Number(2)}, Object {"type": String("custom"), "topic": String("p/x"), "payload": Null}, Object {"type": String("batch_ended"), "batch": String("18446744073709551615"), "changed": Array [String("a"), String("b")]}, Object {"type": String("view_invalidated"), "view": String("v"), "instance": String("v#2")}, Object {"type": String("vault_closed"), "root": String("/vault")}, Object {"type": String("job_started"), "id": String("18446744073709551615"), "job": String("export")}, Object {"type": String("job_progress"), "id": String("18446744073709551615"), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"type": String("setting_changed"), "key": String("versioning.enabled"), "scope": String("vault")}, Object {"type": String("entry_changed"), "id": String("allegati/foto.png"), "kind": String("asset")}, Object {"type": String("entry_removed"), "id": String("allegati/foto.png"), "kind": String("unknown")}, Object {"type": String("entry_renamed"), "from": String("allegati/foto.png"), "to": String("media/foto.png"), "kind": String("asset")}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("a.md"), "error": Object {"kind": String("internal"), "message": String("indice non allineato")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("failure"), "subject": Null, "error": Object {"kind": String("internal"), "message": String("flush fallito")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("b.md"), "error": Object {"kind": String("internal"), "message": String("render esploso")}, "gate": String("command")}, Object {"type": String("timer_fired"), "owner": String("com.acme.tasks"), "timer": String("sync")}], "KernelNotice": Array [Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("watcher")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("kernel")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("plugin"), "id": String("fub.versioning")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("index_updated")}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": Null}}], "Span": Array [Object {"start": Number(3), "end": Number(7)}], "SettingSpec": Array [Object {"key": String("prova.k0"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, Object {"key": String("prova.k1"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("number"), "default": Number(14.0), "min": Number(8.0), "max": Number(72.0)}, "program_writable": Bool(false)}, Object {"key": String("prova.k2"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("text"), "default": String("Diario")}, "program_writable": Bool(false)}, Object {"key": String("prova.k3"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, Object {"key": String("prova.k4"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array [String("fub.stats")]}, "program_writable": Bool(false)}], "SettingEntry": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}, Object {"spec": Object {"key": String("plugins.disabled"), "label": String("Componenti spenti"), "description": String(""), "group": String(""), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array []}, "program_writable": Bool(false)}, "value": Array [String("fub.stats")], "source": String("vault")}], "VersionRef": Array [Object {"ts": Number(1), "hash": String("18446744073709551615"), "size": Number(3)}], "DocumentMatch": Array [Object {"doc": String("a.md")}, Object {"doc": String("b.md"), "score": Number(0.5), "snippet": String("s"), "highlights": Array [Object {"start": Number(0), "end": Number(1)}], "properties": Array [Object {"key": String("tipo"), "value": Object {"kind": String("text"), "value": String("nota")}}], "occurrences": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(120), "end": Number(125)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}]}], "DocPosition": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}], "ResolvedRef": Array [Object {"doc": String("note/a.md")}, Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}], "NeighborRef": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "IndexQuery": Array [Object {"kind": String("documents"), "matching": Object {"any": Array [Object {"all": Array [Object {"negated": Bool(false), "predicate": Object {"kind": String("text"), "text": String("rust"), "mode": String("terms"), "fields": Array [], "tolerance": String("exact"), "partial_last_term": Bool(false)}}, Object {"negated": Bool(true), "predicate": Object {"kind": String("tag"), "name": String("archivio"), "descendants": Bool(true)}}]}]}, "sort": Null, "select": Object {"kind": String("none")}, "page": Object {"offset": Number(0), "limit": Number(20)}, "excerpts": String("attach")}, Object {"kind": String("backlinks"), "target": String("a.md"), "page": Null}, Object {"kind": String("outline"), "doc": String("a.md")}, Object {"kind": String("tags"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("neighbors"), "seeds": Object {"any": Array []}, "direction": String("outbound"), "depth": Number(1), "page": Null}, Object {"kind": String("property_values"), "key": String("tipo"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("vault_health"), "check": String("broken_links"), "page": Null}, Object {"kind": String("custom"), "ns": String("terzi"), "query": Object {"x": Number(1)}}, Object {"kind": String("vault_status")}, Object {"kind": String("jobs")}, Object {"kind": String("settings"), "plugin": Null}, Object {"kind": String("settings"), "plugin": String("fub.versioning")}, Object {"kind": String("organization")}, Object {"kind": String("resolve"), "target": Object {"kind": String("wiki"), "value": Object {"page": String("Nota"), "heading": String("Sezione"), "block": Null}}, "from": Null}, Object {"kind": String("resolve"), "target": Object {"kind": String("path"), "value": String("../altra.md")}, "from": String("x/y.md")}, Object {"kind": String("resolve"), "target": Object {"kind": String("url"), "value": String("https://example.org")}, "from": Null}, Object {"kind": String("entries"), "of_kind": Null, "within": Null, "page": Null}, Object {"kind": String("entries"), "of_kind": String("asset"), "within": Null, "page": Object {"offset": Number(40), "limit": Number(20)}}, Object {"kind": String("entries"), "of_kind": String("document"), "within": Object {"path": String("Progetti"), "descendants": Bool(false)}, "page": Null}, Object {"kind": String("folders"), "under": Null, "page": Null}, Object {"kind": String("folders"), "under": Object {"path": String("Progetti"), "descendants": Bool(true)}, "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("drafts"), "page": Null}, Object {"kind": String("drafts"), "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("render_preview"), "doc": String("a.md")}, Object {"kind": String("render_embed"), "page": String("Nota"), "heading": String("Sezione"), "block": Null}, Object {"kind": String("syntax_forms"), "doc": String("a.md")}], "IndexResult": Array [Object {"kind": String("documents"), "value": Object {"items": Array [Object {"doc": String("a.md")}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("backlinks"), "value": Object {"items": Array [Object {"source": String("b.md"), "context": Null}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("outline"), "value": Array []}, Object {"kind": String("tags"), "value": Object {"items": Array [Object {"name": String("rust"), "count": Number(2)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("neighbors"), "value": Object {"items": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("property_values"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("vault_health"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("custom"), "value": Object {"x": Number(1)}}, Object {"kind": String("vault_status"), "value": Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}}, Object {"kind": String("jobs"), "value": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}]}, Object {"kind": String("settings"), "value": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}]}, Object {"kind": String("organization"), "value": Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md")}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}}, Object {"kind": String("resolved"), "value": Null}, Object {"kind": String("entries"), "value": Object {"items": Array [Object {"id": String("note/a.md"), "kind": String("document"), "size": Number(1024), "mtime": Number(1769000000000), "fingerprint": String("0123456789abcdef")}, Object {"id": String("allegati/foto.png"), "kind": String("asset"), "size": Number(204800), "mtime": Number(1769000001000)}, Object {"id": String("archivio.zip"), "kind": String("unknown"), "size": Number(9000000), "mtime": Number(1769000002000)}], "offset": Number(0), "total": Number(3)}}, Object {"kind": String("folders"), "value": Object {"items": Array [Object {"path": String("note"), "folders": Number(1), "entries": Number(12)}, Object {"path": String("note/bozze"), "folders": Number(0), "entries": Number(0)}], "offset": Number(0), "total": Number(2)}}, Object {"kind": String("render_preview"), "value": Object {"html": String(""), "parts": Array []}}, Object {"kind": String("render_embed"), "value": Object {"doc_id": String("note/a.md"), "html": String(""), "parts": Array []}}, Object {"kind": String("syntax_forms"), "value": Array [Object {"name": String("terzi:spoiler"), "trigger": Object {"inline": Object {"open": String("||"), "close": String("||")}}}]}], "BacklinkRef": Array [Object {"source": String("b.md"), "context": String("ctx")}], "TrashEntry": Array [Object {"id": String(".trash/Nota.2026-01-01T00-00-00.md"), "original": String("p/Nota.md"), "deleted_at": Number(4), "size": Number(5)}], "TagCount": Array [Object {"name": String("rust"), "count": Number(2)}], "Organization": Array [Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}], "VaultStatus": Array [Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}], "JobProgress": Array [Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}], "JobStatus": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}], "UiAction": Array [Object {"action": String("nuda"), "payload": Null, "fields": Array []}, Object {"action": String("piena"), "payload": Object {"doc": String("a.md")}, "fields": Array [Object {"field": String("f0"), "value": Object {"type": String("text"), "value": String("t")}}, Object {"field": String("f1"), "value": Object {"type": String("number"), "value": Number(1.5)}}, Object {"field": String("f2"), "value": Object {"type": String("bool"), "value": Bool(true)}}, Object {"field": String("f3"), "value": Object {"type": String("choices"), "value": Array [String("a"), String("b")]}}]}], "ViewSpec": Array [Object {"id": String("v"), "title": String("V"), "surface": String("right_sidebar"), "refresh": Object {"kinds": Array [String("index_updated"), String("batch_ended")], "topics": Array [], "subjects": Array [], "changes": Array []}, "follows": Array [String("document"), String("selection")], "params": Array [Object {"name": String("tag"), "title": String("Tag"), "description": String(""), "kind": Object {"kind": String("text")}, "required": Bool(false)}], "icon": String("tag"), "order": Number(2), "open_by_default": Bool(false), "preferred_size": Number(280), "closable": Bool(true)}, Object {"id": String("v2"), "title": String("V2"), "surface": String("bottom"), "refresh": Object {"kinds": Array [String("document_changed"), String("custom")], "topics": Array [String("com.acme.tasks")], "subjects": Array [Object {"kind": String("document"), "id": String("Progetti/Alpha.md")}, Object {"kind": String("folder"), "path": String("Diario")}], "changes": Array [String("tags"), String("frontmatter")]}, "follows": Array [], "params": Array [], "icon": Null, "order": Number(0), "open_by_default": Bool(false), "preferred_size": Null, "closable": Bool(true)}], "ViewInstance": Array [Object {"view": String("v"), "instance": String("v"), "params": Null}, Object {"view": String("v"), "instance": String("v#2"), "params": Object {"tag": String("rust")}}], "ViewContext": Array [Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, "secondary": Array []}}, "mode": String("reading")}, Object {"pane": String("main"), "doc": Null, "selections": Null, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array []}}, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(10), "end": Number(14)}, "text": String("ciao")}, "secondary": Array [Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, Object {"span": Object {"start": Number(20), "end": Number(20)}, "text": String("")}]}}, "mode": String("live_preview")}], "SelectionSet": Array [Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}, "secondary": Array []}}, Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array [Object {"text": String("mondo")}]}}], "AnchoredSelection": Array [Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}], "FloatingSelection": Array [Object {"text": String("ciao")}], "AnchoredSelections": Array [Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("")}, "secondary": Array []}], "FloatingSelections": Array [Object {"primary": Object {"text": String("x")}, "secondary": Array []}], "Locale": Array [Object {"language": String("und"), "timezone": String(""), "utc_offset_minutes": Number(0), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("it-IT"), "timezone": String("Europe/Rome"), "utc_offset_minutes": Number(120), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("en-US"), "timezone": String("Asia/Kathmandu"), "utc_offset_minutes": Number(345), "first_day_of_week": String("sunday"), "hour_cycle": String("h12")}], "CommandSpec": Array [Object {"id": String("test.every"), "title": String("Tutte le specie"), "description": String("Un comando con un parametro per specie."), "keybinding": String("Mod-k"), "params": Array [Object {"name": String("p0"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("text")}, "required": Bool(false)}, Object {"name": String("p1"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("number")}, "required": Bool(false)}, Object {"name": String("p2"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("bool")}, "required": Bool(false)}, Object {"name": String("p3"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("document")}, "required": Bool(false)}, Object {"name": String("p4"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("documents")}, "required": Bool(false)}, Object {"name": String("p5"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("choice"), "value": Array [Object {"value": String("uno"), "title": String("Uno")}]}, "required": Bool(false)}, Object {"name": String("p6"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("numbers")}, "required": Bool(false)}], "scope": Object {"writes": Bool(true), "reach": String("documents"), "reversible": Bool(false)}}, Object {"id": String("test.min"), "title": String("Minimo"), "description": String(""), "keybinding": Null, "params": Array [], "scope": Object {"writes": Bool(false), "reach": String("session"), "reversible": Bool(true)}}], "CommandOutcome": Array [Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("navigate"), "doc": String("a.md")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("reveal"), "doc": String("a.md"), "span": Object {"start": Number(3), "end": Number(7)}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("run_search"), "query": String("q")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("plan"), "summary": String("una nota"), "docs": Array [String("a.md")], "edits": Array [Object {"doc": String("a.md"), "edit": Object {"base": String("sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("y")}]}}]}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("open_view"), "view": String("v"), "params": Object {"tag": String("rust")}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Object {"label": String("la creazione di «a.md»"), "steps": Array [Object {"kind": String("edit"), "doc": String("a.md"), "edit": Object {"base": String("sha256:a1fce4363854ff888cff4b8e7875d600c2682390412a8cf79b37d0b11148b0fa"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("x")}]}}, Object {"kind": String("command"), "command": String("note.trash"), "args": Object {"doc": String("a.md")}}]}, "partial": Null}, Object {"notify": String("fatto a metà"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}}], "Partial": Array [Object {"attempted": Number(12), "done": Number(11), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}]}, Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}], "Failure": Array [Object {"subject": String("a.md"), "error": Object {"kind": String("conflict"), "message": String("cambiata nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("bad_args"), "message": String("`privacy.telemetry` (un programma non la scrive)")}}], "PluginError": Array [Object {"kind": String("already_exists"), "message": String("Progetti/Idee.md")}, Object {"kind": String("not_found"), "message": String("Fantasma.md")}, Object {"kind": String("io"), "message": String("disco pieno")}]}
+thread 'a_panic_inside_a_undo_does_not_carries_via_the_stack' panicked at crates/fub-features/tests/undo.rs:683:5:
+il misfatto deve essere successo
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 
 failures:
-    ts_mirror_fixture_is_in_sync_with_the_rust_types
+    a_panic_inside_a_undo_does_not_carries_via_the_stack
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: FAILED. 12 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
-[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-features --test ts_mirror`
+[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-features --test undo`
