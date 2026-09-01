@@ -38,4 +38,13 @@ count = text.count(old)
 if count != 1:
     raise SystemExit(f'rewrite registry generator: expected one match, found {count}')
 text = text.replace(old, new, 1)
+
+# `documents.rs` already imports SyntaxRegistry on the current tree. The base
+# generator was written against an older snapshot and would add it a second
+# time, so remove that generator operation rather than changing the source.
+old = 'text = replace_once(text, "use crate::registry::FormatRegistry;", "use crate::registry::FormatRegistry;\\nuse crate::syntax::SyntaxRegistry;", "documents syntax import")\n'
+count = text.count(old)
+if count != 1:
+    raise SystemExit(f'remove stale syntax import generator: expected one match, found {count}')
+text = text.replace(old, '', 1)
 path.write_text(text)
