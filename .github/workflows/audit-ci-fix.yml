@@ -1,9 +1,7 @@
 name: Audit CI fix
 
 'on':
-  push:
-    branches:
-      - fix/audit-integration
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -42,6 +40,7 @@ jobs:
           cargo fmt --all --check
           cargo test -p fub-abi --test dependency_invariant
           cargo test -p fub-abi --test a_named_rule_is_declared
+          cargo test -p fub-app --test schemas_on_disk
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Prepara il bersaglio dei componenti
@@ -62,8 +61,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .audit-error.txt
-          git commit -m "ci(temp): cattura errore CI Rust" -- .audit-error.txt
-          git push origin HEAD:fix/audit-integration
+          if ! git diff --cached --quiet; then
+            git commit -m "ci(temp): cattura errore CI Rust" -- .audit-error.txt
+            git push origin HEAD:fix/audit-integration
+          fi
       - name: Test client
         if: steps.rust_tests.outcome == 'success'
         working-directory: apps/client
@@ -86,6 +87,7 @@ jobs:
                   crates/fub-kernel/Cargo.toml \
                   crates/fub-abi/tests/dependency_invariant.rs \
                   crates/fub-abi/tests/a_named_rule_is_declared.rs \
-                  apps/client/src/ui/node.test.ts
+                  apps/client/src/ui/node.test.ts \
+                  docs/development/versioning-and-releases.md
           git commit -m "fix(ci): riallinea i presidi della branch"
           git push origin HEAD:fix/audit-integration
