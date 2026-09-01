@@ -58,6 +58,7 @@ use fub_abi::command::{
 };
 use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
+use fub_abi::event::DocChanges;
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
 use fub_abi::locale::Locale;
 use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget, Span};
@@ -95,7 +96,7 @@ use crate::error::{KernelError, Result};
 use crate::graph::{BuiltGraph, GraphSources};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
-use crate::index::Indexes;
+use crate::index::{feed_handles as feed_index_handles, Indexes, SharedIndexProvider};
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
 use crate::occurrences;
@@ -621,6 +622,40 @@ pub struct PreparedDocumentWrite {
     expected_source: Option<String>,
     parser: PreparedParse,
     before_write: Option<(String, BeforeWriteHook)>,
+}
+
+pub struct PreparedIndexBatchFeed {
+    models: Vec<DocumentModel>,
+    providers: Vec<(String, SharedIndexProvider)>,
+    losses: Vec<IndexLoss>,
+}
+
+impl PreparedIndexBatchFeed {
+    pub fn invoke_indexes(mut self) -> Self {
+        self.losses
+            .extend(feed_index_handles(&self.providers, &self.models));
+        self
+    }
+}
+
+pub struct PreparedDocumentFeed {
+    id: DocId,
+    model: DocumentModel,
+    changes: DocChanges,
+    revision: Revision,
+    journal: JournalOp,
+    providers: Vec<(String, SharedIndexProvider)>,
+    losses: Vec<IndexLoss>,
+}
+
+impl PreparedDocumentFeed {
+    pub fn invoke_indexes(mut self) -> Self {
+        self.losses.extend(feed_index_handles(
+            &self.providers,
+            std::slice::from_ref(&self.model),
+        ));
+        self
+    }
 }
 
 impl PreparedDocumentWrite {
@@ -1455,7 +1490,10 @@ impl Workspace {
         let mut errors = Vec::new();
         let indexes = self.indexes.remove(plugin);
         let removed_indexes = !indexes.is_empty();
-        for (id, mut index) in indexes {
+        for (id, index) in indexes {
+            let mut index = index
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let out = self.with_provider_call(|ws| {
                 let mut host = ws.host_for(&id, InvokeMode::Apply);
                 // arriva a `close` ha già avuto il proprio punto di persistenza,
@@ -2031,7 +2069,9 @@ impl Workspace {
             let mut host = ws.host_for(&id, InvokeMode::Apply);
             index.activate(&mut host)
         });
-        self.indexes.providers.push((id, index));
+        self.indexes
+            .providers
+            .push((id, std::sync::Arc::new(std::sync::RwLock::new(index))));
         self.dispatch_pending();
         activated.map_err(RegistryError::Activate)
     }
@@ -2508,7 +2548,10 @@ impl Workspace {
     /// ed è la differenza con la 0119, dove il piano buttato era l'unica notizia
     /// che quel file fosse cambiato.
     // L'impronta appena calcolata torna in anagrafe: la voce c'era già
-    pub fn index_batch_prepared(&mut self, prepared: ParsedBatch) {
+    pub fn commit_index_batch_prepared(
+        &mut self,
+        prepared: ParsedBatch,
+    ) -> Option<PreparedIndexBatchFeed> {
         let ParsedBatch {
             read,
             reused,
@@ -2522,9 +2565,6 @@ impl Workspace {
             .collect();
 
         for entry in read {
-            // dalla prima fase, quello che qui si aggiunge è ciò che si è
-            // imparato leggendola.
-            // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
             if entry.fingerprint.is_some() && !aged.contains(&entry.id) {
                 self.indexes.core.set_entry_from_scan(entry);
             }
@@ -2539,23 +2579,28 @@ impl Workspace {
             .into_iter()
             .filter(|model| !aged.contains(&model.id))
             .collect();
-
-        // il lotto di alimentazione, quindi qui non si taglia una seconda
-        // volta. I modelli interi vivono solo dentro questa chiamata, il tempo
-        // di alimentare indici e conteggi: in cache restano i metadati.
-        //
-        // **Una fetta senza modelli non attraversa il confine** (§17.1,
-        // decisione 0113): è il caso normale di una riapertura a caldo, dove
-        // ogni documento è stato ripreso dalla cache, e un lotto vuoto non
-        // porta nessuna notizia a nessuno — a M5 sarebbe una serializzazione
-        // per dire niente. Lo ha trovato il banco contando le chiamate: nessun
-        // altro presidio le conta.
-        // Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
         if models.is_empty() {
-            return;
+            return None;
         }
-        let lost = self.indexes.on_documents_indexed(&models);
-        self.report_losses(lost);
+
+        let losses = self.indexes.core.on_documents_indexed(&models);
+        let providers = self.indexes.feed_handles();
+        Some(PreparedIndexBatchFeed {
+            models,
+            providers,
+            losses,
+        })
+    }
+
+    pub fn finalize_index_batch_prepared(&mut self, pending: PreparedIndexBatchFeed) {
+        self.report_losses(pending.losses);
+    }
+
+    pub fn index_batch_prepared(&mut self, prepared: ParsedBatch) {
+        if let Some(pending) = self.commit_index_batch_prepared(prepared) {
+            let pending = pending.invoke_indexes();
+            self.finalize_index_batch_prepared(pending);
+        }
     }
 
     /// (id, alias, link), e tiene il prestito condiviso solo per quella copia:
@@ -2978,13 +3023,13 @@ impl Workspace {
     /// Finalizza una scrittura già parsata e con il gancio già tornato. La CAS
     /// resta qui, sotto il writer turn: nessun writer Fub può infilarsi fra la
     /// base preparata e la sostituzione, mentre il provider gira senza RwLock.
-    pub fn finish_document_write(
+    pub fn commit_document_write(
         &mut self,
         prepared: PreparedDocumentWrite,
         source: &str,
         model: DocumentModel,
         before_write: std::result::Result<(), PluginError>,
-    ) -> Result<Revision> {
+    ) -> Result<PreparedDocumentFeed> {
         let PreparedDocumentWrite {
             id,
             existed,
@@ -2995,20 +3040,64 @@ impl Workspace {
         if let Err(and) = before_write {
             return Err(Self::before_write_error(&id, and));
         }
-        let to = self.write_source_parsed(&id, source, expected_source.as_deref(), model)?;
-        self.record(if existed {
+        let placed = if let Some(expected) = expected_source.as_deref() {
+            self.docs
+                .vault
+                .write_if_unchanged(&id, expected, source)?
+                .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else {
+            self.docs.vault.write(&id, source)?
+        };
+        let revision = Revision::of(source);
+        let changes = self.indexes.core.changes_for(&model, &revision);
+        self.set_entry(&id, placed.0, placed.1, Some(revision.clone()));
+        let losses = self
+            .indexes
+            .core
+            .on_documents_indexed(std::slice::from_ref(&model));
+        let providers = self.indexes.feed_handles();
+        let journal = if existed {
             JournalOp::Written {
                 doc: id.clone(),
                 from,
-                to: to.clone(),
+                to: revision.clone(),
             }
         } else {
             JournalOp::Created {
                 doc: id.clone(),
-                to: to.clone(),
+                to: revision.clone(),
             }
-        });
-        Ok(to)
+        };
+        Ok(PreparedDocumentFeed {
+            id,
+            model,
+            changes,
+            revision,
+            journal,
+            providers,
+            losses,
+        })
+    }
+
+    pub fn finalize_document_write(&mut self, pending: PreparedDocumentFeed) -> Result<Revision> {
+        let revision = pending.revision.clone();
+        let journal = pending.journal.clone();
+        self.finish_index_feed(pending);
+        self.dispatch_pending();
+        self.record(journal);
+        Ok(revision)
+    }
+
+    pub fn finish_document_write(
+        &mut self,
+        prepared: PreparedDocumentWrite,
+        source: &str,
+        model: DocumentModel,
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<Revision> {
+        let pending = self.commit_document_write(prepared, source, model, before_write)?;
+        let pending = pending.invoke_indexes();
+        self.finalize_document_write(pending)
     }
 
     pub fn write_document(
@@ -3349,35 +3438,44 @@ impl Workspace {
         let changes = self.indexes.core.changes_for(&model, &fingerprint);
         match placed {
             Some((size, mtime)) => {
-                self.set_entry(id, size, mtime, Some(fingerprint));
+                self.set_entry(id, size, mtime, Some(fingerprint.clone()));
             }
             None => {
-                self.touch_entry(id, Some(fingerprint));
+                self.touch_entry(id, Some(fingerprint.clone()));
             }
         }
-        // stessa verità, nessun canale che può perdere pezzi per strada. E la
-        // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
-        // testo esistono — la cache tiene i soli metadati.
-        // Un lotto di uno: la scrittura singola È il caso normale, e la firma
-        // a lotti non la trasforma in un'eccezione da spiegare.
-        // Il rebuild legge la cache: va aggiornata prima.
         let lost = self
             .indexes
+            .core
             .on_documents_indexed(std::slice::from_ref(&model));
-        self.report_losses(lost);
+        let providers = self.indexes.feed_handles();
+        let pending = PreparedDocumentFeed {
+            id: id.clone(),
+            model,
+            changes,
+            revision: fingerprint,
+            journal: JournalOp::Written {
+                doc: id.clone(),
+                from: None,
+                to: Revision::of(""),
+            },
+            providers,
+            losses: lost,
+        };
+        let pending = pending.invoke_indexes();
+        self.finish_index_feed(pending);
+    }
+
+    fn finish_index_feed(&mut self, pending: PreparedDocumentFeed) {
+        self.report_losses(pending.losses);
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-            // Il sorgente sotto la selezione è cambiato: gli offset pubblicati
             self.indexes.core.rebuild_graph();
         }
-        // dalla shell erano di un altro testo. La shell ne ripubblicherà uno
-        // vero al prossimo movimento del cursore (o subito dopo un
-        // salvataggio); fino ad allora il contesto dice "non so dove", che è
-        // la verità.
-        // Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
-        self.session.invalidate(id, ContextChange::Rewritten);
+        self.session
+            .invalidate(&pending.id, ContextChange::Rewritten);
         self.emit_event(Event::DocumentChanged {
-            id: id.clone(),
-            changes: Some(changes),
+            id: pending.id,
+            changes: Some(pending.changes),
         });
         self.emit_event(Event::IndexUpdated);
     }
@@ -5379,7 +5477,10 @@ impl Workspace {
             |ws| &mut ws.indexes.providers,
             |ws, indexes| {
                 let mut errors = Vec::new();
-                for (id, index) in indexes.iter_mut() {
+                for (id, index) in indexes.iter() {
+                    let mut index = index
+                        .write()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
                     let mut host = ws.host_for(id, InvokeMode::Apply);
                     if let Err(and) = index.flush(&mut host) {
                         errors.push(and);

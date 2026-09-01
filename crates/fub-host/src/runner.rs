@@ -542,9 +542,21 @@ impl Shared {
                 let ws = self.workspace.read()?;
                 ws.plan_batch(&mut in_progress.work)
             };
+            // Il turno serializza le mutazioni dell'apertura con le altre scritture,
+            // ma non è il `RwLock<Workspace>`: durante il codice del provider i
+            // lettori devono poter entrare. È la stessa forma di `write_document`:
+            // prepare/commit sotto lock, callback fuori lock, finalize sotto lock.
+            let _turn = self.workspace.write_turn();
+            let pending = {
+                let mut ws = self.workspace.write()?;
+                ws.commit_index_batch_prepared(prepared)
+            };
+            let pending = pending.map(|pending| pending.invoke_indexes());
             {
                 let mut ws = self.workspace.write()?;
-                ws.index_batch_prepared(prepared);
+                if let Some(pending) = pending {
+                    ws.finalize_index_batch_prepared(pending);
+                }
                 // Il `total` c'è perché la scansione lo sa: l'apertura è il
                 // caso in cui una barra può dire il vero, e
                 // [`JobProgress::total`] è opzionale proprio per distinguerlo
@@ -1435,6 +1447,115 @@ mod tests {
         ) -> Result<String, fub_abi::error::FormatError> {
             Ok(m.text.clone())
         }
+    }
+
+    struct OpeningIndexFeedLockProbe {
+        entered: std::sync::mpsc::SyncSender<()>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+
+    impl fub_abi::traits::IndexProvider for OpeningIndexFeedLockProbe {
+        fn routes(&self) -> Vec<fub_abi::traits::QueryRoute> {
+            Vec::new()
+        }
+
+        fn activate(&mut self, _: &mut dyn fub_abi::traits::HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn on_documents_indexed(
+            &mut self,
+            _: &[fub_abi::model::DocumentModel],
+        ) -> Vec<fub_abi::traits::IndexLoss> {
+            self.entered.send(()).expect("il test aspetta il feed");
+            self.release
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .recv_timeout(Duration::from_secs(10))
+                .expect("il test lascia uscire il feed");
+            Vec::new()
+        }
+
+        fn on_documents_removed(
+            &mut self,
+            _: &[fub_abi::model::DocId],
+        ) -> Vec<fub_abi::traits::IndexLoss> {
+            Vec::new()
+        }
+
+        fn reconcile(&mut self, _: &[fub_abi::model::DocId]) -> Vec<fub_abi::traits::IndexLoss> {
+            Vec::new()
+        }
+
+        fn flush(&mut self, _: &mut dyn fub_abi::traits::HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn close(&mut self, _: &mut dyn fub_abi::traits::HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn query(
+            &self,
+            _: fub_abi::traits::IndexQuery,
+        ) -> Result<fub_abi::traits::IndexResult, PluginError> {
+            Err(PluginError::Unserved("feed-only probe".into()))
+        }
+
+        fn up_to_date(&self, _: &[fub_abi::traits::VaultEntry]) -> Vec<fub_abi::model::DocId> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn reader_enters_while_opening_feeds_an_external_index() {
+        let mut formats = fub_kernel::FormatRegistry::new();
+        formats
+            .register(fub_format_markdown::MarkdownProvider::boxed())
+            .expect("un provider di formato solo non confligge");
+        let (_dir, shared, _id, _root) = a_vault_scanned(1, formats);
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+        {
+            let mut ws = shared.workspace.write().expect("il vault è vivo");
+            ws.register_plugin(
+                fub_abi::traits::PluginManifest::new(
+                    "fub.audit-index-feed-opening",
+                    "Audit detached opening index feed",
+                ),
+                fub_kernel::Trust::Community,
+            )
+            .expect("l'owner dell'indice si dichiara");
+            ws.register_index_provider(
+                "fub.audit-index-feed-opening",
+                Box::new(OpeningIndexFeedLockProbe {
+                    entered: entered_tx,
+                    release: Mutex::new(release_rx),
+                }),
+            )
+            .expect("il probe dell'indice si registra");
+        }
+
+        let slice = {
+            let shared = Arc::clone(&shared);
+            std::thread::spawn(move || shared.advance_opening())
+        };
+        entered_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("IndexProvider::on_documents_indexed entra durante l'apertura");
+        let reader_progressed = shared.workspace.try_read().is_some();
+        release_tx.send(()).expect("il feed può terminare");
+        let outcome = slice.join().expect("il thread dell'apertura non panica");
+
+        assert!(
+            reader_progressed,
+            "la seconda fase dell'apertura ha tenuto Custody<Workspace> durante \
+             IndexProvider::on_documents_indexed"
+        );
+        assert!(
+            outcome.expect("nessun veleno"),
+            "c'era una fetta di apertura da portare avanti"
+        );
     }
 
     /// **La proprietà** (0119, secondo sito): mentre la fetta dell'apertura

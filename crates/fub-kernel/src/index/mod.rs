@@ -31,7 +31,7 @@ pub mod plan;
 pub(crate) mod routing;
 
 use std::collections::BTreeSet;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
@@ -40,6 +40,8 @@ use fub_abi::PluginError;
 pub(crate) use core::CoreIndex;
 pub use routing::RouteConflict;
 pub(crate) use routing::{RouteTable, Target};
+
+pub(crate) type SharedIndexProvider = Arc<RwLock<Box<dyn IndexProvider>>>;
 
 use crate::organization::OrganizationStore;
 use crate::providers::ProviderTable;
@@ -82,13 +84,43 @@ fn feeding<'a>(
     }
 }
 
+pub(crate) fn feed_handles(
+    providers: &[(String, SharedIndexProvider)],
+    models: &[DocumentModel],
+) -> Vec<IndexLoss> {
+    let mut lost = Vec::new();
+    for (id, provider) in providers {
+        let mut provider = provider
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        lost.extend(feeding(
+            id,
+            Gate::IndexFeed,
+            models.iter().map(|model| &model.id),
+            || provider.on_documents_indexed(models),
+        ));
+    }
+    lost
+}
+
+fn feed_shared(
+    providers: &ProviderTable<(String, SharedIndexProvider)>,
+    models: &[DocumentModel],
+) -> Vec<IndexLoss> {
+    let handles: Vec<_> = providers
+        .iter()
+        .map(|(id, provider)| (id.clone(), Arc::clone(provider)))
+        .collect();
+    feed_handles(&handles, models)
+}
+
 pub(crate) struct Indexes {
     /// L'indice del kernel: metadati, tag, grafo. È `Target::Core` nella
     /// tabella, ed è registrato **per primo** — che è ciò che gli dà la
     /// precedenza sulle foglie che sa valutare, non un privilegio nel codice.
     pub(crate) core: CoreIndex,
     /// Gli indici registrati, col proprio id (che è anche il loro spazio dati).
-    pub(crate) providers: ProviderTable<(String, Box<dyn IndexProvider>)>,
+    pub(crate) providers: ProviderTable<(String, SharedIndexProvider)>,
     pub(crate) routes: RouteTable,
 }
 
@@ -143,7 +175,7 @@ impl Indexes {
     ///
     /// Le rotte seguono: quelle di chi se n'è andato spariscono, quelle di chi
     /// resta si spostano con lui ([`RouteTable::retarget`]).
-    pub(crate) fn remove(&mut self, plugin: &str) -> Vec<(String, Box<dyn IndexProvider>)> {
+    pub(crate) fn remove(&mut self, plugin: &str) -> Vec<(String, SharedIndexProvider)> {
         let doomed: Vec<usize> = self
             .providers
             .iter()
@@ -197,20 +229,16 @@ impl Indexes {
     /// risponde a metà.
     pub(crate) fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
         let mut lost = self.core.on_documents_indexed(models);
-        for (id, index) in self.providers.iter_mut() {
-            lost.extend(feeding(
-                id,
-                Gate::IndexFeed,
-                models.iter().map(|m| &m.id),
-                || index.on_documents_indexed(models),
-            ));
-        }
+        lost.extend(feed_shared(&self.providers, models));
         lost
     }
 
     pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.on_documents_removed(ids);
-        for (plugin, index) in self.providers.iter_mut() {
+        for (plugin, index) in self.providers.iter() {
+            let mut index = index
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             lost.extend(feeding(plugin, Gate::IndexForget, ids.iter(), || {
                 index.on_documents_removed(ids)
             }));
@@ -240,6 +268,9 @@ impl Indexes {
             if agreed.is_empty() {
                 break;
             }
+            let index = index
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             let theirs = crate::safety::calling(id, Gate::IndexUpToDate, "", || {
                 Ok(index.up_to_date(entries))
             })
@@ -264,7 +295,10 @@ impl Indexes {
     /// e non finge di sapere un elenco che non esiste.
     pub(crate) fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.reconcile(ids);
-        for (plugin, index) in self.providers.iter_mut() {
+        for (plugin, index) in self.providers.iter() {
+            let mut index = index
+                .write()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
             lost.extend(feeding(
                 plugin,
                 Gate::IndexReconcile,
@@ -289,12 +323,27 @@ impl Indexes {
         plan::explain(self, query)
     }
 
-    /// L'indice a cui punta un bersaglio (il core non ha un id di plugin).
-    pub(crate) fn at(&self, target: Target) -> Option<&dyn IndexProvider> {
+    pub(crate) fn query_at(
+        &self,
+        target: Target,
+        query: IndexQuery,
+    ) -> Option<Result<IndexResult, PluginError>> {
         match target {
-            Target::Core => Some(&self.core),
-            Target::Provider(at) => self.providers.get(at).map(|(_, p)| p.as_ref()),
+            Target::Core => Some(self.core.query(query)),
+            Target::Provider(at) => self.providers.get(at).map(|(_, provider)| {
+                let provider = provider
+                    .read()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                provider.query(query)
+            }),
         }
+    }
+
+    pub(crate) fn feed_handles(&self) -> Vec<(String, SharedIndexProvider)> {
+        self.providers
+            .iter()
+            .map(|(id, provider)| (id.clone(), Arc::clone(provider)))
+            .collect()
     }
 
     /// Il nome con cui un bersaglio compare in un piano o in un errore.

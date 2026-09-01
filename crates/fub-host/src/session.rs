@@ -1621,8 +1621,14 @@ impl Host {
         } else {
             Ok(())
         };
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_write(prepared, source, model, before_write)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
         let mut ws = workspace.write()?;
-        ws.finish_document_write(prepared, source, model, before_write)
+        ws.finalize_document_write(pending)
             .map_err(PluginError::from)
     }
 

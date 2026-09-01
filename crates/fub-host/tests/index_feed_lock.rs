@@ -1,10 +1,4 @@
-from pathlib import Path
-
-# Regressione permanente sul percorso di scrittura esplicita. L'apertura viene
-# attesa prima di registrare il provider: così il feed osservato non può essere
-# quello asincrono della seconda fase dell'open e il test attribuisce il lock al
-# solo `Host::write_document`.
-Path('crates/fub-host/tests/index_feed_lock.rs').write_text(r'''use std::sync::Mutex;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
@@ -129,4 +123,3 @@ fn an_index_feed_runs_without_holding_the_workspace_lock() {
     );
     outcome.expect("write completes after index feed");
 }
-''')

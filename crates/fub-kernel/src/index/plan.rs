@@ -59,10 +59,9 @@ pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, P
         // con l'espressione già risolta per ciò che non saprebbe valutare.
         Some(target) => {
             let query = resolve_for(indexes, target, query)?;
-            let index = indexes
-                .at(target)
-                .ok_or_else(|| PluginError::Unserved(format!("{kind:?}").into()))?;
-            index.query(query)
+            indexes
+                .query_at(target, query)
+                .ok_or_else(|| PluginError::Unserved(format!("{kind:?}").into()))?
         }
         // Nessuno: la sola famiglia che il kernel sa comporre da sé è
         // `Documents`, perché comporla È il pianificatore.
@@ -111,16 +110,18 @@ fn documents(
     // seleziona debba anche *raccontare* ogni riga che sta per essere buttata —
     // vedi `Router::ask` e [`rehydrate`] (§21.9).
     if only_evaluator(indexes, matching.predicates()) == Some(Target::Core) {
-        let index = indexes
-            .at(Target::Core)
-            .expect("il bersaglio viene dalla tabella delle rotte");
-        return index.query(IndexQuery::Documents {
-            matching,
-            sort,
-            select,
-            page,
-            excerpts,
-        });
+        return indexes
+            .query_at(
+                Target::Core,
+                IndexQuery::Documents {
+                    matching,
+                    sort,
+                    select,
+                    page,
+                    excerpts,
+                },
+            )
+            .expect("il bersaglio core esiste sempre");
     }
 
     let matches = router.expr(&matching)?;
@@ -156,19 +157,19 @@ fn rehydrate(
     }
     let docs: Vec<DocId> = rows.iter().map(|row| row.doc.clone()).collect();
     for (target, expr) in asked {
-        let Some(index) = indexes.at(*target) else {
-            // Sparito fra le due chiamate: la selezione è già stata fatta e
-            // resta valida — quello che manca è l'estratto, e un estratto che
-            // manca è, da contratto, «nessuno l'ha calcolato».
+        let Some(answer) = indexes.query_at(
+            *target,
+            IndexQuery::Documents {
+                matching: narrowed(expr, &docs),
+                sort: None,
+                select: PropertySelect::None,
+                page: None,
+                excerpts: Excerpts::Attach,
+            },
+        ) else {
             continue;
         };
-        let answer = index.query(IndexQuery::Documents {
-            matching: narrowed(expr, &docs),
-            sort: None,
-            select: PropertySelect::None,
-            page: None,
-            excerpts: Excerpts::Attach,
-        })?;
+        let answer = answer?;
         // In `Matches`, non in una `BTreeMap` nuda: un provider può rispondere
         // con **due righe per lo stesso documento** — un indice a segmenti ne
         // emette una per segmento — e con un `.collect()` sulla mappa la
@@ -248,22 +249,27 @@ impl Router<'_> {
     /// estratti per mostrarne venti, ventuno millisecondi su ventitré (§21.9).
     /// Li richiede [`rehydrate`], quando le righe sono quelle vere.
     fn ask(&self, target: Target, matching: QueryExpr) -> Result<Matches, PluginError> {
-        let index = self.indexes.at(target).ok_or_else(|| {
-            PluginError::Unserved("index disappeared from the route table".to_string().into())
-        })?;
         if matching
             .predicates()
             .any(|p| matches!(p, QueryPredicate::Text(_)))
         {
             self.asked.borrow_mut().push((target, matching.clone()));
         }
-        let answer = index.query(IndexQuery::Documents {
-            matching,
-            sort: None,
-            select: PropertySelect::None,
-            page: None,
-            excerpts: Excerpts::Omit,
-        })?;
+        let answer = self
+            .indexes
+            .query_at(
+                target,
+                IndexQuery::Documents {
+                    matching,
+                    sort: None,
+                    select: PropertySelect::None,
+                    page: None,
+                    excerpts: Excerpts::Omit,
+                },
+            )
+            .ok_or_else(|| {
+                PluginError::Unserved("index disappeared from the route table".to_string().into())
+            })??;
         Ok(answer.documents()?.items.into_iter().collect())
     }
 }

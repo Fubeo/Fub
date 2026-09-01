@@ -66,10 +66,6 @@ impl<T> ProviderTable<T> {
         self.entries.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
-        self.entries.iter_mut()
-    }
-
     pub(crate) fn get(&self, at: usize) -> Option<&T> {
         self.entries.get(at)
     }
