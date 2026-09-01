@@ -1,0 +1,27 @@
+name: Audit ARCH index feed probe
+
+on:
+  push:
+    branches: ["fix/audit-integration"]
+    paths:
+      - ".github/workflows/audit-arch-index-feed-probe.yml"
+      - ".audit-arch-index-feed-probe.py"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          toolchain: 1.89
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: applica il probe
+        run: python3 .audit-arch-index-feed-probe.py
+      - name: formatta il probe
+        run: cargo fmt --all
+      - name: il feed indice non tiene Custody Workspace
+        run: cargo test -p fub-host --test concurrency an_index_feed_runs_without_holding_the_workspace_lock -- --nocapture
