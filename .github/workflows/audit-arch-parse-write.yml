@@ -41,3 +41,5 @@ jobs:
           git add crates/fub-kernel/src/registry.rs crates/fub-kernel/src/syntax.rs crates/fub-kernel/src/documents.rs crates/fub-kernel/src/workspace.rs crates/fub-host/src/session.rs crates/fub-host/tests/concurrency.rs
           git commit -m "refactor(host): esegue il parse delle scritture fuori dal lock"
           git push origin HEAD:fix/audit-integration
+
+# retry: registry precondition narrowed
