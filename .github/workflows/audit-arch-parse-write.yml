@@ -42,4 +42,4 @@ jobs:
           git commit -m "refactor(host): esegue il parse delle scritture fuori dal lock"
           git push origin HEAD:fix/audit-integration
 
-# retry: generator fixed
+# retry: existing SyntaxRegistry import preserved
