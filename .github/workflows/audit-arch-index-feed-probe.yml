@@ -1,6 +1,14 @@
 name: Audit ARCH index feed
 
 on:
+  push:
+    branches: ["fix/audit-integration"]
+    paths:
+      - .github/workflows/audit-arch-index-feed-probe.yml
+      - .audit-arch-index-feed-probe.py
+      - .audit-arch-index-feed-fix.py
+      - .audit-arch-index-feed-compilefix.py
+      - .audit-arch-index-feed-opening-fix.py
   workflow_dispatch:
 
 permissions:
@@ -29,7 +37,7 @@ jobs:
       - name: regressione ARCH index feed
         run: |
           cargo test -p fub-host --test index_feed_lock -- --nocapture
-          cargo test -p fub-host reader_enters_while_opening_feeds_an_external_index -- --nocapture
+          cargo test -p fub-host --lib reader_enters_while_opening_feeds_an_external_index -- --nocapture
       - name: regressioni indici e host
         run: |
           cargo test -p fub-kernel --test index_feeding
