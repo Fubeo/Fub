@@ -1,0 +1,18 @@
+diff --git a/crates/fub-kernel/src/vault.rs b/crates/fub-kernel/src/vault.rs
+--- a/crates/fub-kernel/src/vault.rs
++++ b/crates/fub-kernel/src/vault.rs
+@@ -535,6 +535,14 @@ impl Vault {
+         self.storage.file_identity(&path).ok().flatten()
+     }
++
++    /// Timbro opaco di cambiamento del file, se il backend lo conosce.
++    ///
++    /// Non identifica il file e non partecipa al rejoin: serve soltanto a
++    /// invalidare una voce dell'anagrafe quando size e mtime sono rimasti
++    /// uguali ma il filesystem sa che il file è stato comunque toccato.
++    pub fn change_stamp(&self, id: &DocId) -> Option<u64> {
++        let path = self.path_for(id).ok()?;
++        self.storage.change_stamp(&path).ok().flatten()
++    }
+ 
+     /// Il testo di un documento: i byte del file, decodificati e **niente
