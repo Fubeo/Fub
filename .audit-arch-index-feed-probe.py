@@ -1,21 +1,32 @@
 from pathlib import Path
 
-p = Path('crates/fub-host/tests/concurrency.rs')
-s = p.read_text()
-s = s.replace(
-    'use fub_abi::model::DocId;',
-    'use fub_abi::model::{DocId, DocumentModel};',
-    1,
-)
-s = s.replace(
-    '    CommandProvider, HostApi, PluginManifest, ReadApi, ServiceProvider, ViewInstance, ViewProvider,\n    ViewSpec, ViewSurface,\n',
-    '    CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest,\n    QueryRoute, ReadApi, ServiceProvider, VaultEntry, ViewInstance, ViewProvider, ViewSpec, ViewSurface,\n',
-    1,
-)
-marker = '\nconst BEFORE_WRITE_LOCK_PLUGIN: &str = "fub.audit-before-write";\n'
-assert marker in s
-probe = r'''
+Path('crates/fub-host/tests/audit_index_feed.rs').write_text(r'''use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
+use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::traits::{
+    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest, QueryRoute,
+    VaultEntry,
+};
+use fub_abi::PluginError;
+use fub_host::{Host, NoWatcher};
+use fub_kernel::Trust;
+
 const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
+
+struct Vault {
+    _dir: tempfile::TempDir,
+    root: Utf8PathBuf,
+}
+
+fn vault() -> Vault {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Note 0.md"), "# Note 0\n").expect("seed note");
+    Vault { _dir: dir, root }
+}
 
 struct IndexFeedLockProbe {
     entered: std::sync::mpsc::SyncSender<()>,
@@ -68,16 +79,19 @@ impl IndexProvider for IndexFeedLockProbe {
 
 #[test]
 fn an_index_feed_runs_without_holding_the_workspace_lock() {
-    let _turn = bench_turn();
-    let v = vault(4);
-    let host = open(&v);
+    let v = vault();
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("the vault opens");
     let ws = host.debug_workspace(None).expect("debug custody");
     let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
     {
         let mut w = ws.write().expect("the vault is alive");
-        w.register_core_feature(INDEX_FEED_LOCK_PLUGIN, "Audit detached index feed")
-            .expect("index owner declares");
+        w.register_plugin(
+            PluginManifest::new(INDEX_FEED_LOCK_PLUGIN, "Audit detached index feed"),
+            Trust::Community,
+        )
+        .expect("index owner declares");
         w.register_index_provider(
             INDEX_FEED_LOCK_PLUGIN,
             Box::new(IndexFeedLockProbe {
@@ -114,6 +128,4 @@ fn an_index_feed_runs_without_holding_the_workspace_lock() {
     );
     outcome.expect("write completes after index feed");
 }
-'''
-s = s.replace(marker, '\n' + probe + marker, 1)
-p.write_text(s)
+''')
