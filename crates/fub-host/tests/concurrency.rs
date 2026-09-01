@@ -673,6 +673,78 @@ fn a_service_provider_runs_without_holding_the_workspace_lock() {
     outcome.expect("service provider completes through its per-capability host");
 }
 
+const BEFORE_WRITE_LOCK_PLUGIN: &str = "fub.audit-before-write";
+
+#[test]
+fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let release_rx = Mutex::new(release_rx);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature(BEFORE_WRITE_LOCK_PLUGIN, "Audit detached before-write")
+            .expect("hook owner declares");
+        w.set_before_write_hook(Some((
+            BEFORE_WRITE_LOCK_PLUGIN.to_string(),
+            Arc::new(move |host, id| {
+                let old = host.read_document(id)?;
+                if !old.contains("Note 0") {
+                    return Err(PluginError::Internal(
+                        "before-write re-entry returned the wrong note".into(),
+                    ));
+                }
+                entered_tx.send(()).map_err(|_| {
+                    PluginError::Internal("before-write probe receiver disappeared".into())
+                })?;
+                release_rx
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .recv_timeout(Duration::from_secs(10))
+                    .map_err(|_| {
+                        PluginError::Internal("before-write probe was not released".into())
+                    })?;
+                Ok(())
+            }),
+        )));
+    }
+
+    let call = std::thread::spawn(move || {
+        host.write_document(
+            None,
+            &DocId::new("Note 0.md"),
+            "# Note 0\nchanged by before-write probe\n",
+            WriteBase::Dictated,
+        )
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("before-write hook entered after a real HostApi read");
+    let (reader_tx, reader_rx) = std::sync::mpsc::sync_channel(1);
+    let reader = {
+        let ws = ws.clone();
+        std::thread::spawn(move || {
+            let acquired = ws.read().is_ok();
+            let _ = reader_tx.send(acquired);
+        })
+    };
+    let reader_progressed = reader_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or(false);
+    release_tx.send(()).expect("release before-write hook");
+    reader.join().expect("reader probe finishes");
+    let outcome = call.join().expect("write thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "Host::write_document held Custody<Workspace> across the before-write hook"
+    );
+    outcome.expect("write completes after detached before-write hook");
+}
+
 const PARSE_LOCK_PLUGIN: &str = "com.fub.auditparse";
 
 struct ParseLockRule {

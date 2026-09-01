@@ -620,12 +620,29 @@ pub struct PreparedDocumentWrite {
     from: Option<Revision>,
     expected_source: Option<String>,
     parser: PreparedParse,
+    before_write: Option<(String, BeforeWriteHook)>,
 }
 
 impl PreparedDocumentWrite {
     /// Esegue `FormatProvider::parse` e tutte le `SyntaxRule`, e nient'altro.
     pub fn parse(&self, source: &str) -> Result<DocumentModel> {
         self.parser.invoke(DocumentSource::Text(source.to_string()))
+    }
+
+    pub fn before_write_owner(&self) -> Option<&str> {
+        self.before_write.as_ref().map(|(owner, _)| owner.as_str())
+    }
+
+    /// Esegue soltanto il gancio esterno fra parse e disco. Il chiamante host
+    /// gli fornisce un proxy che riacquisisce capacità strette una per volta.
+    pub fn invoke_before_write(
+        &self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<(), PluginError> {
+        match &self.before_write {
+            Some((_, hook)) => hook(host, &self.id),
+            None => Ok(()),
+        }
     }
 }
 
@@ -2951,17 +2968,22 @@ impl Workspace {
             from,
             expected_source,
             parser,
+            before_write: self.before_write.clone(),
         })
     }
 
     /// Finalizza una scrittura già parsata. La CAS resta qui, sotto il writer
     /// turn, quindi il tempo passato nel provider non allarga la finestra fra
     /// expected e write per gli altri writer Fub.
+    /// Finalizza una scrittura già parsata e con il gancio già tornato. La CAS
+    /// resta qui, sotto il writer turn: nessun writer Fub può infilarsi fra la
+    /// base preparata e la sostituzione, mentre il provider gira senza RwLock.
     pub fn finish_document_write(
         &mut self,
         prepared: PreparedDocumentWrite,
         source: &str,
         model: DocumentModel,
+        before_write: std::result::Result<(), PluginError>,
     ) -> Result<Revision> {
         let PreparedDocumentWrite {
             id,
@@ -2970,6 +2992,9 @@ impl Workspace {
             expected_source,
             ..
         } = prepared;
+        if let Err(and) = before_write {
+            return Err(Self::before_write_error(&id, and));
+        }
         let to = self.write_source_parsed(&id, source, expected_source.as_deref(), model)?;
         self.record(if existed {
             JournalOp::Written {
@@ -2994,7 +3019,13 @@ impl Workspace {
     ) -> Result<Revision> {
         let prepared = self.prepare_document_write(id, base)?;
         let model = prepared.parse(source)?;
-        self.finish_document_write(prepared, source, model)
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut host = self.host_for(&owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut host)
+        } else {
+            Ok(())
+        };
+        self.finish_document_write(prepared, source, model, before_write)
     }
 
     /// coda di ogni scrittura, eventi. Rende la revisione prodotta.
@@ -3012,11 +3043,32 @@ impl Workspace {
         expected_source: Option<&str>,
     ) -> Result<Revision> {
         let model = self.docs.parse(id, source)?;
+        if let Some((plugin, hook)) = self.before_write.clone() {
+            let mut host = self.host_for(&plugin, InvokeMode::Apply);
+            if let Err(and) = hook(&mut host, id) {
+                return Err(Self::before_write_error(id, and));
+            }
+        }
         self.write_source_parsed(id, source, expected_source, model)
     }
 
     /// Seconda metà di `write_source`: da qui in poi il modello è già stato
     /// prodotto. Restano hook, storage/CAS, ingestione ed eventi.
+    /// Seconda metà di `write_source`: parse e gancio sono già tornati. Da qui
+    /// in poi restano soltanto storage/CAS, ingestione ed eventi.
+    fn before_write_error(id: &DocId, and: PluginError) -> KernelError {
+        match and {
+            PluginError::Io(why) => KernelError::Io {
+                path: id.to_string().into(),
+                source: std::io::Error::other(why.to_string()),
+            },
+            other => KernelError::BadEdit {
+                doc: id.to_string(),
+                why: other.to_string(),
+            },
+        }
+    }
+
     fn write_source_parsed(
         &mut self,
         id: &DocId,
@@ -3024,23 +3076,6 @@ impl Workspace {
         expected_source: Option<&str>,
         model: DocumentModel,
     ) -> Result<Revision> {
-        if let Some((plugin, hook)) = &self.before_write {
-            let plugin = plugin.clone();
-            let hook = hook.clone();
-            let mut host = self.host_for(&plugin, InvokeMode::Apply);
-            if let Err(and) = hook(&mut host, id) {
-                return Err(match and {
-                    PluginError::Io(why) => KernelError::Io {
-                        path: id.to_string().into(),
-                        source: std::io::Error::other(why.to_string()),
-                    },
-                    other => KernelError::BadEdit {
-                        doc: id.to_string(),
-                        why: other.to_string(),
-                    },
-                });
-            }
-        }
         let placed = if let Some(expected) = expected_source {
             self.docs
                 .vault

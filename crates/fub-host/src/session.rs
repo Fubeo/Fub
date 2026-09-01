@@ -1615,8 +1615,14 @@ impl Host {
                 .map_err(PluginError::from)?
         };
         let model = prepared.parse(source).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = JobHost::new(workspace.clone(), owner);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
         let mut ws = workspace.write()?;
-        ws.finish_document_write(prepared, source, model)
+        ws.finish_document_write(prepared, source, model, before_write)
             .map_err(PluginError::from)
     }
 
