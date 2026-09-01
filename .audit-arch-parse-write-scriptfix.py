@@ -23,22 +23,19 @@ repls = [
         '''        Ok(PreparedParse {\n            id: id.clone(),\n            descriptor,\n            provider,\n            syntax: self.syntax.clone(),\n        })\n''',
         'prepared descriptor construction',
     ),
-    (
-        '''        self.insert_normalized(provider, extensions);\n        Ok(())''',
-        '''        self.insert_normalized(provider, descriptor, extensions);\n        Ok(())''',
-        'registry register insert',
-    ),
 ]
 for old, new, label in repls:
     count = text.count(old)
     if count != 1:
         raise SystemExit(f'{label}: expected one match, found {count}')
     text = text.replace(old, new, 1)
-# The base script used a broader replacement for the same registry line. Remove
-# that operation now that the exact register branch has already been rewritten.
-old = '''text = replace_once(text, "        self.insert_normalized(provider, extensions);", "        self.insert_normalized(provider, descriptor, extensions);", "registry register insert")\n'''
+
+# Replace the broad registry rewrite *inside the generator* with one that also
+# includes the following `Ok(())`, which identifies the register branch only.
+old = 'text = replace_once(text, "        self.insert_normalized(provider, extensions);", "        self.insert_normalized(provider, descriptor, extensions);", "registry register insert")\n'
+new = '''text = replace_once(\n    text,\n    "        self.insert_normalized(provider, extensions);\\n        Ok(())",\n    "        self.insert_normalized(provider, descriptor, extensions);\\n        Ok(())",\n    "registry register insert",\n)\n'''
 count = text.count(old)
 if count != 1:
-    raise SystemExit(f'remove broad registry replacement: expected one match, found {count}')
-text = text.replace(old, '', 1)
+    raise SystemExit(f'rewrite registry generator: expected one match, found {count}')
+text = text.replace(old, new, 1)
 path.write_text(text)
