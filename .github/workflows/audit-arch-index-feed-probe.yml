@@ -1,13 +1,7 @@
 name: Audit ARCH index feed
 
 on:
-  push:
-    branches: ["fix/audit-integration"]
-    paths:
-      - ".github/workflows/audit-arch-index-feed-probe.yml"
-      - ".audit-arch-index-feed-probe.py"
-      - ".audit-arch-index-feed-fix.py"
-      - ".audit-arch-index-feed-compilefix.py"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -28,11 +22,14 @@ jobs:
         run: |
           python3 .audit-arch-index-feed-fix.py
           python3 .audit-arch-index-feed-compilefix.py
+          python3 .audit-arch-index-feed-opening-fix.py
           python3 .audit-arch-index-feed-probe.py
       - name: format
         run: cargo fmt --all
       - name: regressione ARCH index feed
-        run: cargo test -p fub-host --test audit_index_feed -- --nocapture
+        run: |
+          cargo test -p fub-host --test index_feed_lock -- --nocapture
+          cargo test -p fub-host reader_enters_while_opening_feeds_an_external_index -- --nocapture
       - name: regressioni indici e host
         run: |
           cargo test -p fub-kernel --test index_feeding
@@ -43,10 +40,9 @@ jobs:
         run: cargo clippy -p fub-kernel -p fub-host --all-targets -- -D warnings
       - name: crea checkpoint semantico
         run: |
-          rm -f crates/fub-host/tests/audit_index_feed.rs
-          git rm -f --ignore-unmatch .audit-error.txt .audit-arch-index-feed-probe.py .audit-arch-index-feed-fix.py .audit-arch-index-feed-compilefix.py .github/workflows/audit-arch-index-feed-probe.yml
+          git rm -f --ignore-unmatch .audit-error.txt .audit-arch-index-feed-probe.py .audit-arch-index-feed-fix.py .audit-arch-index-feed-compilefix.py .audit-arch-index-feed-opening-fix.py .github/workflows/audit-arch-index-feed-probe.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/fub-kernel/src/index/mod.rs crates/fub-kernel/src/index/plan.rs crates/fub-kernel/src/workspace.rs crates/fub-host/src/session.rs
+          git add crates/fub-kernel/src/index/mod.rs crates/fub-kernel/src/index/plan.rs crates/fub-kernel/src/workspace.rs crates/fub-host/src/session.rs crates/fub-host/src/runner.rs crates/fub-host/tests/index_feed_lock.rs
           git commit -m "refactor(host): esegue il feed degli indici fuori dal lock"
           git push origin HEAD:fix/audit-integration
