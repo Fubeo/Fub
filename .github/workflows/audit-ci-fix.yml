@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   fix:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -41,17 +42,34 @@ jobs:
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test Rust Ubuntu
-        run: cargo test --workspace
+        id: rust_tests
+        shell: bash
+        run: |
+          set -o pipefail
+          cargo test --workspace 2>&1 | tee .audit-rust-test.log
+      - name: Cattura il rosso Rust
+        if: steps.rust_tests.outcome == 'failure'
+        shell: bash
+        run: |
+          tail -n 500 .audit-rust-test.log > .audit-error.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audit-error.txt
+          git commit -m "ci(temp): cattura errore CI Rust" -- .audit-error.txt
+          git push origin HEAD:fix/audit-integration
       - name: Test client
+        if: steps.rust_tests.outcome == 'success'
         working-directory: apps/client
         run: |
           npm ci
           npm test
       - name: Checkpoint semantico e cleanup
+        if: steps.rust_tests.outcome == 'success'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git rm .audit-ci-fix.patch .github/workflows/audit-ci-fix.yml
+          rm -f .audit-rust-test.log .audit-error.txt
           git add crates/fub-app/src/lib.rs \
                   crates/fub-kernel/Cargo.toml \
                   crates/fub-abi/tests/dependency_invariant.rs \
