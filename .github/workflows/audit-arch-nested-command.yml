@@ -1,0 +1,40 @@
+name: Audit ARCH nested commands outside lock
+
+on:
+  push:
+    branches: ["fix/audit-integration"]
+    paths: [".github/workflows/audit-arch-nested-command.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: fix/audit-integration
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          components: rustfmt, clippy
+      - name: Applica e verifica i comandi annidati
+        run: |
+          git config user.name "Fubeo audit bot"
+          git config user.email "83821420+Fubeo@users.noreply.github.com"
+          python .audit-arch-nested-command.py
+          cargo fmt --all
+          if ! (cargo test -p fub-host --test concurrency && cargo test -p fub-kernel --test invoke_command && cargo check -p fub-host --all-targets && cargo clippy -p fub-host -p fub-kernel --all-targets -- -D warnings) > /tmp/arch-nested.log 2>&1; then
+            tail -n 350 /tmp/arch-nested.log > .audit-arch-nested-error.txt
+            git add .audit-arch-nested-error.txt
+            if ! git diff --cached --quiet; then
+              git commit -m "ci(temp): cattura errore ARCH nested command"
+              git push origin HEAD:fix/audit-integration
+            fi
+            cat .audit-arch-nested-error.txt
+            exit 1
+          fi
+          git rm -f .audit-arch-nested-command.py .github/workflows/audit-arch-nested-command.yml .audit-arch-nested-error.txt || true
+          git add crates/fub-host/src/jobs.rs crates/fub-host/tests/concurrency.rs crates/fub-kernel/src/workspace.rs
+          git commit -m "refactor(host): stacca anche i comandi annidati"
+          git push origin HEAD:fix/audit-integration
