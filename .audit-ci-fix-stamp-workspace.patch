@@ -1,0 +1,41 @@
+diff --git a/crates/fub-kernel/src/workspace.rs b/crates/fub-kernel/src/workspace.rs
+--- a/crates/fub-kernel/src/workspace.rs
++++ b/crates/fub-kernel/src/workspace.rs
+@@ -2197,17 +2197,13 @@ impl Workspace {
+                 // lock e una copia regalati per niente.
+                 // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
++                let change_stamp = self.docs.vault.change_stamp(&file.id);
+                 let known = self
+                     .entry_store
+                     .known(&file.id)
+                     .filter(|known| known.describes(file.size, file.mtime))
+-                    .filter(|known| {
+-                        let Some(fingerprint) = known.fingerprint.as_ref() else {
+-                            return false;
+-                        };
+-                        self.docs
+-                            .vault
+-                            .read_bytes(&file.id)
+-                            .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
+-                    });
++                    .filter(|known| known.same_change_stamp(change_stamp))
++                    .filter(|known| known.fingerprint.is_some());
+                 let entry = VaultEntry {
+                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
+@@ -2278,8 +2274,10 @@ impl Workspace {
+         }
+ 
+-        // (size+mtime → impronta) che porta i metadati e per cui tutti gli indici
+-        // plugin rispondono `up_to_date`, si ripristinano direttamente i metadati
++        // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
++        // per cui tutti gli indici plugin rispondono `up_to_date`, si
++        // ripristinano direttamente i metadati
+         // in memoria senza rileggerlo dal disco. A fette finiscono solo i documenti
+         // nuovi, modificati, o per cui un indice plugin deve essere allineato.
+@@ -2832,6 +2830,7 @@ impl Workspace {
+                     StoredEntry {
+                         size: entry.size,
+                         mtime: entry.mtime,
++                        change_stamp: self.docs.vault.change_stamp(&entry.id),
+                         identity: self.docs.vault.file_identity(&entry.id),
+                         fingerprint: entry.fingerprint.clone(),
