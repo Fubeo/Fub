@@ -49,10 +49,11 @@ use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Notice, PluginError};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
-use fub_kernel::{MachineSettings, SystemLocale, ViewStates, Workspace};
+use fub_kernel::{Guard, MachineSettings, ReadOnly, SystemLocale, ViewStates, Workspace};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
+use crate::jobs::JobHost;
 use crate::mount::mount;
 use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{Bundle, BundleInfo, BundleRegistry};
@@ -1675,9 +1676,34 @@ impl Host {
         args: serde_json::Value,
         mode: InvokeMode,
     ) -> Result<CommandOutcome, PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace.invoke_command(command, args, mode, Actor::User)
-        })
+        // La sessione si risolve prima e si conserva soltanto la Custody: il
+        // registro delle sessioni non attraversa codice del provider.
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        // Il turno serializza gli altri writer ma **non** è il RwLock del
+        // workspace: fra prepare e finalize i reader possono entrare, e il
+        // callback può rientrare sullo stesso thread per singola capacità.
+        let _turn = workspace.write_turn();
+        let mut prepared = {
+            let mut ws = workspace.write()?;
+            match ws.prepare_provider_command(command, args.clone(), mode, Actor::User)? {
+                Some(prepared) => prepared,
+                None => return ws.invoke_command(command, args, mode, Actor::User),
+            }
+        };
+
+        let owner = prepared.owner().to_string();
+        let host_mode = prepared.host_mode();
+        let outcome = if let Some(why) = prepared.read_only_reason() {
+            let host = JobHost::new(workspace.clone(), owner).in_mode(host_mode);
+            let mut host = Guard::new(host, ReadOnly { why });
+            prepared.invoke(&mut host)
+        } else {
+            let mut host = JobHost::new(workspace.clone(), owner).in_mode(host_mode);
+            prepared.invoke(&mut host)
+        };
+
+        let mut ws = workspace.write()?;
+        ws.finish_provider_command(prepared, outcome)
     }
 
     pub fn view_state(

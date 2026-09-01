@@ -449,6 +449,57 @@ pub const INDEX_JOB: &str = "vault.index";
 pub type BeforeWriteHook =
     Arc<dyn Fn(&mut dyn HostApi, &DocId) -> std::result::Result<(), PluginError> + Send + Sync>;
 
+/// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
+///
+/// Contiene anche il frame da ripristinare al rientro: attore, batch, pila e
+/// flag di provider restano una singola transazione logica anche se il `RwLock`
+/// non attraversa codice esterno.
+pub struct PreparedCommand {
+    owner: String,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: Arc<dyn CommandProvider>,
+    read_only_reason: Option<&'static str>,
+    previous_actor: Actor,
+    owns_batch: bool,
+    previous_provider_call: bool,
+}
+
+impl PreparedCommand {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    /// Modalità che il proxy deve usare per le capacità annidate.
+    pub fn host_mode(&self) -> InvokeMode {
+        if self.read_only_reason.is_some() {
+            InvokeMode::DryRun
+        } else {
+            self.mode
+        }
+    }
+
+    /// Il recinto addizionale da mettere davanti al proxy, se serve.
+    pub fn read_only_reason(&self) -> Option<&'static str> {
+        self.read_only_reason
+    }
+
+    /// Esegue **soltanto** il codice del provider. Nessun `Workspace` è
+    /// necessario qui: chi chiama deve aver già rilasciato la sua guardia.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let args = self.args.take().ok_or_else(|| {
+            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
+        })?;
+        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
+            self.provider.invoke(&self.command, args, self.mode, host)
+        })
+    }
+}
+
 pub struct Workspace {
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
     /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
@@ -1576,10 +1627,20 @@ impl Workspace {
     /// che nessuno ha dichiarato riceve un host che nega tutto, dicendo perché.
     // Anche questa è una "chiamata di provider" ai fini della consegna:
     pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
+        self.with_host_mode(plugin, InvokeMode::Apply, f)
+    }
+
+    /// Come [`with_host`](Self::with_host), conservando la modalità della
+    /// chiamata esterna. Serve ai proxy che rientrano per una singola capacità.
+    pub fn with_host_mode<R>(
+        &mut self,
+        plugin: &str,
+        mode: InvokeMode,
+        f: impl FnOnce(&mut dyn HostApi) -> R,
+    ) -> R {
         // ciò che `f` emette arriva agli handler quando `f` è tornata.
-        // Presta un [`ReadApi`] intestato a un plugin, per la durata di una
         let result = self.with_provider_call(|ws| {
-            let mut host = ws.host_for(plugin, InvokeMode::Apply);
+            let mut host = ws.host_for(plugin, mode);
             f(&mut host)
         });
         self.dispatch_pending();
@@ -5676,6 +5737,113 @@ impl Workspace {
         self.as_actor(by, |ws| {
             ws.batch(|ws| ws.invoke_command_here(command, args, mode))
         })
+    }
+
+    /// Prepara il ramo **esterno** di un comando provider. `None` significa che
+    /// il comando è manutenzione del kernel e va eseguito dal percorso interno.
+    ///
+    /// Dopo `Some`, il chiamante deve invocare [`PreparedCommand::invoke`] senza
+    /// una guardia del workspace e riconsegnare sempre l'esito a
+    /// [`finish_provider_command`](Self::finish_provider_command).
+    pub fn prepare_provider_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Actor,
+    ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
+        let at = self.command_owner(command)?;
+        let spec = self.providers.commands[at]
+            .specs
+            .iter()
+            .find(|s| s.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando")
+            .clone();
+        spec.validate_args(&args)?;
+
+        if self.providers.command_stack.iter().any(|c| c == command) {
+            let mut round = self.providers.command_stack.clone();
+            round.push(command.to_string());
+            return Err(PluginError::BadArgs(
+                format!(
+                    "un comando non può invocare sé stesso: {}",
+                    round.join(" → ")
+                )
+                .into(),
+            ));
+        }
+
+        if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+
+        let owner = self.providers.commands[at].id.clone();
+        let provider = Arc::clone(&self.providers.commands[at].provider);
+        let read_only_reason = if spec.scope.writes && mode == InvokeMode::Apply {
+            None
+        } else if mode.is_dry_run() {
+            Some("una simulazione non scrive")
+        } else {
+            Some("il comando si è dichiarato di sola lettura")
+        };
+
+        let previous_actor = self.dispatch.swap_actor(by);
+        let owns_batch = self.dispatch.open_batch();
+        self.providers.command_stack.push(command.to_string());
+        let previous_provider_call = self.dispatch.enter_provider_call();
+
+        Ok(Some(PreparedCommand {
+            owner,
+            command: command.to_string(),
+            args: Some(args),
+            mode,
+            provider,
+            read_only_reason,
+            previous_actor,
+            owns_batch,
+            previous_provider_call,
+        }))
+    }
+
+    /// Rientra dopo una [`PreparedCommand`] e riproduce l'epilogo del percorso
+    /// sincrono: ripristino del flag, pila, localizzazione, undo, batch, dispatch
+    /// e infine attore. Il provider non gira in questa funzione.
+    pub fn finish_provider_command(
+        &mut self,
+        prepared: PreparedCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let popped = self.providers.command_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.command.as_str()));
+
+        let result = match outcome {
+            Err(and) => Err(self.localized(&prepared.owner, and)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                if prepared.mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
+                    if let Some(undo) = outcome.undo.clone() {
+                        self.undo.push(undo, outcome.partial.clone());
+                    }
+                }
+                // Come `invoke_command_here`: dentro un batch questo è un no-op;
+                // resta qui perché nel caso annidato non siamo proprietari della
+                // chiusura e non dobbiamo anticipare la consegna.
+                self.dispatch_pending();
+                Ok(outcome)
+            }
+        };
+
+        if prepared.owns_batch {
+            self.dispatch.close_batch();
+            self.dispatch_pending();
+        }
+        self.dispatch.restore_actor(prepared.previous_actor);
+        result
     }
 
     /// [`HostCommands::run_command`](fub_abi::traits::HostCommands::run_command).

@@ -55,7 +55,7 @@ use std::sync::Arc;
 
 use crate::custody::Custody;
 
-use fub_abi::command::CommandOutcome;
+use fub_abi::command::{CommandOutcome, InvokeMode};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
@@ -93,6 +93,8 @@ use fub_kernel::Workspace;
 pub struct JobHost {
     workspace: Custody<Workspace>,
     plugin: String,
+    /// Modalità effettiva delle capacità annidate (`Apply` o simulazione).
+    mode: InvokeMode,
     /// **L'identità che il job non ha** (§10.3,
     /// [decisione 0035](../../../docs/decisions/0184-eventi-accodati-e-job.md)).
     ///
@@ -129,9 +131,18 @@ impl JobHost {
         JobHost {
             workspace,
             plugin: plugin.into(),
+            mode: InvokeMode::Apply,
             job: None,
             cancelled: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Usa `mode` per le capacità annidate. I job normali restano `Apply`;
+    /// un provider staccato dal lock usa `DryRun` quando il suo recinto è di
+    /// sola lettura, così una macro simulata non rientra in `Apply`.
+    pub fn in_mode(mut self, mode: InvokeMode) -> Self {
+        self.mode = mode;
+        self
     }
 
     /// Dice a questo host **di quale job** è l'host, che è tutto ciò che serve
@@ -208,7 +219,7 @@ impl JobHost {
     /// succede lì dentro, come per ogni altra scrittura del kernel.
     fn writing<R>(&self, f: impl FnOnce(&mut dyn HostApi) -> R) -> Result<R, PluginError> {
         let mut ws = self.workspace.write()?;
-        Ok(ws.with_host(&self.plugin, f))
+        Ok(ws.with_host_mode(&self.plugin, self.mode, f))
     }
 }
 

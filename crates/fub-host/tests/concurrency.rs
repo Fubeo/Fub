@@ -18,9 +18,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
+use fub_abi::command::{CommandOutcome, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
-use fub_abi::traits::{ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface};
+use fub_abi::traits::{
+    CommandProvider, HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
@@ -372,6 +375,101 @@ fn rereading_a_version_does_not_block_writers() {
         ws.read_source(&id).expect("the write is visible"),
         "# Note 0\n\nwriter\n"
     );
+}
+
+const LOCK_PROBE: &str = "audit.lock-probe";
+
+/// Un comando che prima **rientra** su una capacità di lettura e poi resta
+/// dentro `invoke` finché il test non gli dà il via. Il fermo rende osservabile
+/// il punto esatto in cui la callback è attiva senza usare tempo/scheduler.
+struct LockProbe {
+    entered: std::sync::mpsc::SyncSender<()>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl CommandProvider for LockProbe {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(LOCK_PROBE, "Lock probe").with_scope(CommandScope::read_only())]
+    }
+
+    fn invoke(
+        &self,
+        _: &str,
+        _: serde_json::Value,
+        _: InvokeMode,
+        host: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        // Questa lettura deve riacquisire la Custody dal proxy: è la prova che
+        // uscire dal lock non ha tolto al provider le sue capacità.
+        let source = host.read_document(&DocId::new("Note 0.md"))?;
+        if !source.contains("Note 0") {
+            return Err(PluginError::Internal(
+                "re-entry read returned the wrong note".into(),
+            ));
+        }
+        self.entered
+            .send(())
+            .map_err(|_| PluginError::Internal("probe receiver disappeared".into()))?;
+        self.release
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|_| PluginError::Internal("probe was not released".into()))?;
+        Ok(CommandOutcome::done())
+    }
+}
+
+/// `ARCH-001`: il codice di un provider **non** gira mentre è detenuto il
+/// `Custody<Workspace>`. Il test fallisce con il vecchio `write_workspace`:
+/// mentre `LockProbe::invoke` è fermo, `try_read()` risponde `None`.
+#[test]
+fn a_command_provider_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature("fub.audit-lock-probe", "Audit lock probe")
+            .expect("probe declares");
+        w.register_command_provider(
+            "fub.audit-lock-probe",
+            Box::new(LockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("probe registers");
+    }
+
+    // L'invocazione possiede l'Host; al thread principale basta la Custody già
+    // estratta. Così il test non dipende dal fatto che `Host` sia `Sync`.
+    let call = std::thread::spawn(move || {
+        host.invoke_user_command(None, LOCK_PROBE, serde_json::Value::Null, InvokeMode::Apply)
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("provider entered after a successful host re-entry");
+
+    let reader_progressed = {
+        let ws = ws.clone();
+        std::thread::spawn(move || ws.try_read().is_some())
+            .join()
+            .expect("reader probe finishes")
+    };
+    // Liberare prima degli assert evita di lasciare un thread appeso anche nel
+    // caso regressivo, in cui `reader_progressed` è false.
+    release_tx.send(()).expect("release provider");
+    let outcome = call.join().expect("command thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "a reader could not enter while CommandProvider::invoke was active: \
+         the provider is still running under Custody<Workspace>"
+    );
+    outcome.expect("the provider keeps working through its per-capability host");
 }
 
 /// Una view che pania mentre disegna.
