@@ -1,500 +1,500 @@
-[1m[32m   Compiling[0m gdk v0.18.2
-[1m[32m   Compiling[0m x11 v2.21.0
-[1m[32m   Compiling[0m libm v0.2.16
-[1m[32m   Compiling[0m cranelift-entity v0.123.14
-[1m[32m   Compiling[0m dpi v0.1.2
-[1m[32m   Compiling[0m raw-window-handle v0.6.2
-[1m[32m   Compiling[0m wasmtime-internal-math v36.0.14
-[1m[32m   Compiling[0m cranelift-codegen v0.123.14
-[1m[32m   Compiling[0m tauri v2.11.5
-[1m[32m   Compiling[0m target-lexicon v0.13.5
-[1m[32m   Compiling[0m soup3 v0.5.0
-[1m[32m   Compiling[0m javascriptcore-rs v1.1.2
-[1m[32m   Compiling[0m tauri-plugin v2.6.3
-[1m[32m   Compiling[0m bumpalo v3.20.3
-[1m[32m   Compiling[0m gimli v0.32.3
-[1m[32m   Compiling[0m arbitrary v1.4.2
-[1m[32m   Compiling[0m wit-parser v0.254.0
-[1m[32m   Compiling[0m cranelift-control v0.123.14
-[1m[32m   Compiling[0m regalloc2 v0.12.2
-[1m[32m   Compiling[0m png v0.17.16
-[1m[32m   Compiling[0m cranelift-assembler-x64 v0.123.14
-[1m[32m   Compiling[0m cookie v0.18.1
-[1m[32m   Compiling[0m libdbus-sys v0.2.7
-[1m[32m   Compiling[0m x11-dl v2.21.0
-[1m[32m   Compiling[0m cranelift-bforest v0.123.14
-[1m[32m   Compiling[0m dlopen2_derive v0.4.3
-[1m[32m   Compiling[0m wry v0.55.1
-[1m[32m   Compiling[0m sha2 v0.10.9
-[1m[32m   Compiling[0m dlopen2 v0.8.2
-[1m[32m   Compiling[0m dbus v0.9.12
-[1m[32m   Compiling[0m webkit2gtk v2.0.2
-[1m[32m   Compiling[0m ico v0.5.0
-[1m[32m   Compiling[0m tauri-plugin-fs v2.5.1
-[1m[32m   Compiling[0m gdkx11 v0.18.2
-[1m[32m   Compiling[0m gdkwayland-sys v0.18.2
-[1m[32m   Compiling[0m unicode-segmentation v1.13.3
-[1m[32m   Compiling[0m tao v0.35.3
-[1m[32m   Compiling[0m keyboard-types v0.7.0
-[1m[32m   Compiling[0m tauri-runtime v2.11.3
-[1m[32m   Compiling[0m tauri-codegen v2.6.3
-[1m[32m   Compiling[0m wasmparser v0.236.1
-[1m[32m   Compiling[0m object v0.37.3
-[1m[32m   Compiling[0m cobs v0.3.0
-[1m[32m   Compiling[0m wasmtime-internal-versioned-export-macros v36.0.14
-[1m[32m   Compiling[0m serialize-to-javascript-impl v0.1.2
-[1m[32m   Compiling[0m leb128fmt v0.1.0
-[1m[32m   Compiling[0m termcolor v1.4.1
-[1m[32m   Compiling[0m wasmtime-internal-component-util v36.0.14
-[1m[32m   Compiling[0m wasm-encoder v0.236.1
-[1m[32m   Compiling[0m wasmprinter v0.236.1
-[1m[32m   Compiling[0m wit-parser v0.236.1
-[1m[32m   Compiling[0m serialize-to-javascript v0.1.2
-[1m[32m   Compiling[0m postcard v1.1.3
-[1m[32m   Compiling[0m tauri-macros v2.6.3
-[1m[32m   Compiling[0m tauri-runtime-wry v2.11.4
-[1m[32m   Compiling[0m getrandom v0.3.4
-[1m[32m   Compiling[0m muda v0.19.3
-[1m[32m   Compiling[0m tauri-plugin-dialog v2.7.2
-[1m[32m   Compiling[0m tokio v1.53.1
-[1m[32m   Compiling[0m serde_repr v0.1.21
-[1m[32m   Compiling[0m mime v0.3.17
-[1m[32m   Compiling[0m rfd v0.16.0
-[1m[32m   Compiling[0m wasmtime-environ v36.0.14
-[1m[32m   Compiling[0m wasmtime-internal-wit-bindgen v36.0.14
-[1m[32m   Compiling[0m cranelift-frontend v0.123.14
-[1m[32m   Compiling[0m cranelift-native v0.123.14
-[1m[32m   Compiling[0m wasmtime v36.0.14
-[1m[32m   Compiling[0m wasmtime-internal-component-macro v36.0.14
-[1m[32m   Compiling[0m wasmtime-internal-cranelift v36.0.14
-[1m[32m   Compiling[0m wasmtime-internal-unwinder v36.0.14
-[1m[32m   Compiling[0m fub-app v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-app)
-[1m[32m   Compiling[0m wasmtime-internal-jit-icache-coherence v36.0.14
-[1m[32m   Compiling[0m memfd v0.6.5
-[1m[32m   Compiling[0m wasmtime-internal-asm-macros v36.0.14
-[1m[32m   Compiling[0m encoding_rs v0.8.35
-[1m[32m   Compiling[0m wasmtime-internal-slab v36.0.14
-[1m[32m   Compiling[0m fub-wasm-host v0.1.0 (/home/runner/work/Fub/Fub/crates/fub-wasm-host)
-[1m[32m    Finished[0m `test` profile [unoptimized + debuginfo] target(s) in 3m 54s
-[1m[32m     Running[0m unittests src/lib.rs (target/debug/deps/fub_abi-96aae5e925a80b11)
+test commands::tests::a_dirty_buffer_stops_it_because_the_model_is_the_one_of_the_file ... ok
+test commands::tests::a_position_that_is_not_a_byte_offset_is_refused_before_the_write ... ok
+test commands::tests::a_setting_value_is_read_according_to_the_kind_the_key_declares ... ok
+test commands::tests::a_dry_run_of_a_bulk_replace_says_what_it_would_do_and_writes_nothing ... ok
+test commands::tests::an_empty_document_list_is_not_the_whole_vault ... ok
+test commands::tests::an_empty_needle_is_refused_even_though_the_schema_accepts_it ... ok
+test commands::tests::naming_a_notes_without_saying_where_does_not_take_the_caret_of_another ... ok
+test commands::tests::checking_a_task_writes_one_character_where_the_model_says ... ok
+test commands::tests::every_command_declares_what_it_does_and_how_far_it_reaches ... ok
+test commands::tests::simulating_the_toggle_says_which_notes_it_would_touch_and_writes_nothing ... ok
+test commands::tests::the_command_refuses_a_key_that_is_not_program_writable_and_says_which ... ok
+test commands::tests::the_wikilink_command_needs_a_selection_that_is_true_for_the_file ... ok
+test commands::tests::the_innermost_task_wins_when_they_are_nested ... ok
+test commands::tests::the_wikilink_command_refuses_a_single_left_bracket_in_the_selection ... ok
+test commands::tests::opening_the_search_is_an_intent_for_the_shell_not_a_write ... ok
+test commands::tests::the_wikilink_command_wraps_exactly_the_selected_bytes ... ok
+test commands::tests::whole_words_only_is_the_difference_between_a_fix_and_a_mess ... ok
+test graph::tests::an_open_without_a_document_does_nothing ... ok
+test graph::tests::it_declares_the_main_surface ... ok
+test graph::tests::clicking_a_node_navigates ... ok
+test graph::tests::the_graph_is_a_custom_node_with_nodes_and_edges ... ok
+test graph::tests::two_links_between_the_same_notes_are_one_edge ... ok
+test outline::tests::a_dirty_buffer_marks_nothing ... ok
+test outline::tests::a_document_that_skips_levels_keeps_all_its_headings ... ok
+test graph::tests::the_fallback_says_what_is_missing ... ok
+test outline::tests::a_heading_clicked_after_the_document_changed_reveals_nothing ... ok
+test outline::tests::empty_shows_placeholder ... ok
+test outline::tests::a_payload_that_is_not_a_span_reveals_nothing ... ok
+test outline::tests::clicking_a_heading_reveals_its_span_in_the_active_doc ... ok
+test outline::tests::nested_headings_become_a_tree_and_carry_reveal_payloads ... ok
+test outline::tests::render_reads_active_doc_and_queries_the_host ... ok
+test outline::tests::render_without_active_doc_is_a_placeholder ... ok
+test outline::tests::the_caret_marks_the_section_it_is_in ... ok
+test outline::tests::the_drawn_tree_carries_the_document_it_was_drawn_from ... ok
+test properties::tests::bom_not_enters_in_the_span ... ok
+test properties::tests::serialize_preserves_key_order ... ok
+test properties::tests::insert_without_frontmatter_leaves_the_body ... ok
+test properties::tests::parse_yaml_fallback_a_string ... ok
+test properties::tests::serializes_empty_holds_the_delimiters ... ok
+test properties::tests::wikilink_a_hand ... ok
+test queries::tests::id_slug_avoids_the_duplicates ... ok
+test queries::tests::id_slug_from_the_phrase ... ok
+test queries::tests::parse_expr_from_object ... ok
+test graph::tests::the_graph_does_not_redraw_on_its_own ... ok
+test search::tests::a_bumped_schema_throws_the_fingerprints_away ... ok
+test search::tests::a_document_exited_from_the_vault_not_leaves_a_revision_behind ... ok
+test search::tests::a_edit_that_not_changes_the_model_updates_the_same_the_revision ... ok
+test search::tests::a_index_closed_leaves_the_folder_a_who_arrives_after ... ok
+test search::tests::a_corrupt_index_is_rebuilt_not_diagnosed ... ok
+test search::tests::a_key_never_written_equals_the_its_default ... ok
+test search::tests::a_key_that_not_and_a_weight_not_does_reread ... ok
+test search::tests::a_missing_manifest_is_not_an_error ... ok
+test search::tests::a_heading_weighs_more_of_the_body_and_and_a_field_a_if ... ok
+test search::tests::a_folder_scope_takes_the_descendants_too ... ok
+test search::tests::a_manifest_of_a_other_era_is_carries_via_also_the_fingerprints_of_the_sources ... ok
+test search::tests::a_slice_not_cancels_the_declarations_of_that_first ... ok
+test search::tests::a_tag_is_a_key_not_prose ... ok
+test search::tests::backlinks_are_not_served_here ... ok
+test search::tests::ask_the_tolerance_not_makes_tolerant_of_hidden ... ok
+test search::tests::a_write_a_session_open_not_inherits_the_revision_of_first ... ok
+test search::tests::empty_query_returns_nothing ... ok
+test search::tests::conjunction_by_default ... ok
+test search::tests::head_of_truncates_on_char_boundaries ... ok
+test search::tests::moving_a_notes_reindexes_it_even_with_the_same_content ... ok
+test search::tests::finds_by_body_and_reports_highlights ... ok
+test search::tests::finds_by_tag_as_an_exact_term ... ok
+test search::tests::page_name_outranks_body ... ok
+test search::tests::reconcile_drops_what_the_vault_no_longer_has ... ok
+test search::tests::removal_deletes_from_index ... ok
+test search::tests::latest_term_incomplete_and_a_prefix_and_the_other_no ... ok
+test search::tests::reopening_skips_unchanged_documents ... ok
+test search::tests::scoping_by_tag_is_an_and_with_the_query ... ok
+test search::tests::reopening_reindexes_when_the_manifest_is_of_another_epoch ... ok
+test search::tests::the_schema_declares_the_default_that_the_engine_uses ... ok
+test search::tests::the_schema_not_changes_without_that_the_number_rises ... ok
+test search::tests::tags_are_case_insensitive_but_exact ... ok
+test search::tests::the_fingerprints_live_in_the_plugin_storage ... ok
+test search::tests::that_that_and_changed_ad_app_closed_not_results_a_place ... ok
+test search::tests::to_the_first_opening_not_exists_nothing_of_already_a_place ... ok
+test search::tests::the_weights_arrive_from_settings ... ok
+test search::tests::two_searches_are_in_the_index_together ... ignored, misura un tempo, e in CI condivisa il tempo non è un segnale (§17.1)
+test search::tests::the_weights_are_updated_at_vault_open ... ok
+test search::tests::the_window_moves_over_the_matches_and_the_total_stays_the_total ... ok
+test search::tests::to_the_reopening_is_recognizes_that_that_not_and_changed ... ok
+test stats::tests::a_caret_among_many_selections_adds_nothing_and_is_not_counted ... ok
+test stats::tests::a_caret_is_not_a_selection ... ok
+test stats::tests::counts_words_and_characters_not_bytes ... ok
+test stats::tests::many_selections_are_counted_one_by_one_and_then_summed ... ok
+test stats::tests::many_selections_are_summed_and_counted ... ok
+test stats::tests::one_word_reads_the_same_as_two ... ok
+test stats::tests::reading_mode_shows_the_reading_time_instead ... ok
+test stats::tests::reading_time_rounds_up_and_is_zero_only_when_empty ... ok
+test stats::tests::the_english_catalog_says_the_same_things ... ok
+test stats::tests::the_selection_is_counted_from_its_text_even_with_a_dirty_buffer ... ok
+test stats::tests::without_a_document_it_says_so ... ok
+test tags::tests::a_filter_accented_not_finds_a_tag_ascii ... ok
+test tags::tests::a_filter_that_is_not_a_string_reads_as_empty ... ok
+test tags::tests::a_filter_that_matches_nothing_keeps_the_field ... ok
+test tags::tests::clearing_the_filter_forgets_it ... ok
+test tags::tests::clicking_a_tag_asks_for_a_search ... ok
+test tags::tests::empty_shows_placeholder_and_keeps_the_filter_field ... ok
+test tags::tests::filtering_outside_an_instance_says_so ... ok
+test tags::tests::lists_tags_with_counts_and_search_payloads ... ok
+test tags::tests::outside_from_ascii_the_case_remains_that_of_to_lowercase ... ok
+test tags::tests::render_asks_the_host_for_the_vault_tags ... ok
+test tags::tests::the_filter_ignores_the_case ... ok
+test tags::tests::the_filter_survives_between_two_renders ... ok
+test tags::tests::two_instances_of_the_panel_filter_apart ... ok
+test template::tests::expands_the_three_variables ... ok
+test versioning::tests::a_clock_going_backwards_does_not_disorder_the_history ... ok
+test versioning::tests::a_creation_is_not_photographed ... ok
+test versioning::tests::a_deletion_leaves_a_tombstone_and_the_content_stays_readable ... ok
+test versioning::tests::a_folder_whose_metadata_cannot_be_read_is_not_given_to_another_document ... ok
+test versioning::tests::a_history_arriving_where_another_lived_brings_its_contents_along ... ok
+test versioning::tests::a_metadata_the_index_did_not_follow_is_ahead_of_the_index_never_behind ... ok
+test versioning::tests::a_prune_that_cannot_write_the_index_leaves_every_named_version_readable ... ok
+test versioning::tests::a_relocation_reads_all_the_blob_first_of_rewrite_them ... ok
+test versioning::tests::a_rename_moves_the_history_with_the_notes ... ok
+test versioning::tests::a_rename_that_changes_the_extension_still_finds_the_old_contents ... ok
+test versioning::tests::a_rename_the_index_refuses_leaves_one_claim_for_document ... ok
+test versioning::tests::a_resurrection_the_disk_accepts_is_alive_in_memory_and_on_disk ... ok
+test versioning::tests::a_resurrection_the_disk_refuses_leaves_the_notes_dead_in_memory_too ... ok
+test versioning::tests::a_snapshot_the_disk_refuses_does_not_invent_a_document ... ok
+test versioning::tests::a_tombstone_the_disk_refuses_leaves_the_notes_alive_in_memory_too ... ok
+test versioning::tests::an_overflow_never_moves_the_moment_of_death ... ok
+test versioning::tests::an_overflow_recovers_the_snapshot_that_the_lost_event_would_have_taken ... ok
+test versioning::tests::an_overflow_turns_a_lost_removal_into_a_tombstone ... ok
+test versioning::tests::an_overflow_turns_a_lost_rename_into_a_new_history_plus_a_tombstone ... ok
+test versioning::tests::asking_for_a_version_that_never_existed_says_so ... ok
+test versioning::tests::every_key_that_the_panel_writes_is_in_the_catalogs_of_the_languages ... ok
+test versioning::tests::every_new_content_becomes_a_version ... ok
+test versioning::tests::opening_the_vault_photographs_what_has_no_history_yet ... ok
+test versioning::tests::retention_thins_out_the_past_but_never_the_present ... ok
+test versioning::tests::saving_the_same_text_again_is_not_a_new_version ... ok
+test versioning::tests::the_abandoned_folder_does_not_as_back_as_a_second_history ... ok
+test versioning::tests::the_first_write_photographs_the_original ... ok
+test versioning::tests::the_handler_is_subscribed_to_overflow ... ok
+test versioning::tests::the_index_is_rebuilt_from_the_store_never_the_other_way_round ... ok
+test versioning::tests::two_photographs_of_the_same_instant_do_not_swallow_each_other ... ok
+test search::tests::what_used_to_be_a_syntax_error_is_now_just_terms ... ok
+test search::tests::without_fingerprint_declared_not_is_responds ... ok
+test search::tests::update_replaces_previous_content ... ok
 
-running 229 tests
-test arena::tests::an_empty_body_is_an_empty_arena ... ok
-test arena::tests::a_cycle_is_an_error_not_a_hang ... ok
-test arena::tests::every_child_is_interned_before_its_parent ... ok
-test arena::tests::span_crosses_and_comes_back_unchanged ... ok
-test arena::tests::document_tree_round_trip_is_the_identity ... ok
-test arena::tests::an_index_out_of_range_is_an_error_not_a_panic ... ok
-test arena::tests::spans_survive_the_whole_round_trip ... ok
-test arena::tests::tasks_anchors_and_tables_survive_the_boundary ... ok
-test arena::tests::the_same_subtree_twice_is_not_a_cycle ... ok
-test command::tests::a_missing_required_argument_is_named ... ok
-test command::tests::a_choice_only_accepts_declared_values ... ok
-test arena::tests::ui_tree_round_trip_is_the_identity ... ok
-test command::tests::a_plan_names_every_document_it_would_touch ... ok
-test command::tests::an_undeclared_argument_is_refused_not_ignored ... ok
-test command::tests::no_arguments_is_null_or_empty_object ... ok
-test command::tests::null_counts_as_absent_in_both_directions ... ok
-test command::tests::the_kind_of_an_argument_is_checked ... ok
-test command::tests::the_reach_of_a_command_is_ordered ... ok
-test edit::tests::a_request_survives_the_json_boundary ... ok
-test edit::tests::a_span_in_the_middle_of_a_character_is_refused ... ok
-test edit::tests::a_revision_is_content_not_time ... ok
-test edit::tests::a_stale_base_is_a_conflict_and_produces_nothing ... ok
-test edit::tests::a_span_in_the_middle_of_a_line_ending_is_refused ... ok
-test edit::tests::an_edit_on_a_crlf_file_does_not_normalize_other_lines ... ok
-test edit::tests::insert_and_delete_are_replace_seen_from_two_sides ... ok
-test edit::tests::no_edits_is_not_an_error_and_changes_nothing ... ok
-test edit::tests::the_edits_are_a_set_and_the_result_does_not_depend_on_their_order ... ok
-test edit::tests::the_fingerprint_not_is_moves ... ok
-test edit::tests::the_discipline_of_the_spans_is_checked_before_anything_is_produced ... ok
-test edit::tests::revision_uses_sha256_and_reads_legacy_fnv_during_migration ... ok
-test edit::tests::the_inverse_of_an_edit_is_an_edit_that_puts_it_back ... ok
-test error::tests::display_is_still_for_logs ... ok
-test edit::tests::the_inverse_survives_edits_that_collapse_onto_the_same_point ... ok
-test error::tests::the_payload_is_reachable_whatever_the_variant ... ok
-test event::tests::a_mask_that_watches_the_index_must_watch_batches_too ... ok
-test error::tests::the_wire_shape_is_discriminable ... ok
-test event::tests::a_mask_survives_the_json_boundary_whole ... ok
-test event::tests::a_notice_survives_the_json_boundary_with_its_origin ... ok
-test event::tests::a_rename_names_the_new_path_as_the_touched_one ... ok
-test event::tests::the_actor_answers_the_only_question_it_exists_for ... ok
-test event::tests::a_subscription_can_name_a_topic_and_a_place ... ok
-test html::tests::an_attribute_brings_its_own_quotes_and_escape ... ok
-test event::tests::the_full_mask_is_full ... ok
-test event::tests::what_an_overflow_replaces_is_exactly_what_it_covers ... ok
-test html::tests::the_five_characters_and_no_others ... ok
-test ipc::tests::a_full_width_u64_survives_the_json_boundary_as_a_string ... ok
-test locale::tests::a_regional_tag_falls_back_to_its_language ... ok
-test ipc::tests::garbage_is_an_error_not_a_zero ... ok
-test ipc::tests::data_written_before_the_rule_is_still_readable ... ok
-test locale::tests::half_hour_zones_are_expressible ... ok
-test locale::tests::iso_weekdays_round_trip ... ok
-test locale::tests::the_day_before_the_epoch_is_the_day_before ... ok
-test locale::tests::the_default_names_no_country ... ok
-test locale::tests::the_same_instant_reads_differently_to_different_people ... ok
-test locale::tests::the_wire_shape_is_the_declared_one ... ok
-test locale::tests::twelve_hour_clocks_have_no_hour_zero ... ok
-test model::tests::a_declared_format_only_adds_readings ... ok
-test model::tests::a_task_marker_carries_the_symbol_not_just_a_flag ... ok
-test model::tests::a_fragment_finds_the_heading_the_allocator_named ... ok
-test model::tests::an_anchor_is_a_key_and_a_heading_slug_is_generated ... ok
-test model::tests::classify_tells_a_vault_resource_from_the_outside_world ... ok
-test model::tests::docid_page_name_strips_dir_and_ext ... ok
-test model::tests::declaring_a_format_is_not_a_tolerant_parser ... ok
-test model::tests::every_variant_survives_the_json_boundary ... ok
-test model::tests::frontmatter_aliases_accepts_string_or_list ... ok
-test model::tests::nfd_and_nfc_is_meet_on_the_text_and_not_on_the_slug ... ok
-test model::tests::only_iso_8601_is_a_date ... ok
-test model::tests::the_extractor_of_the_kind_skips_the_prose ... ok
-test model::tests::properties_are_normalized_by_shape_not_by_guessing ... ok
-test model::tests::every_kind_declares_what_carries ... ok
-test model::tests::the_word_of_the_setting_is_the_word_of_the_wire ... ok
-test model::tests::what_a_wikilink_writes_is_what_a_wikilink_reads ... ok
-test model::tests::two_headings_with_the_same_text_cannot_share_an_id ... ok
-test model::tests::wikilink_inner_splits_page_heading_block_and_alias ... ok
-test model::tests::what_looks_like_a_date_is_what_a_declaration_would_read ... ok
-test net::tests::a_redirect_is_read_not_followed ... ok
-test net::tests::an_error_status_remains_a_response ... ok
-test net::tests::headers_are_compared_case_insensitively ... ok
-test net::tests::the_same_header_can_repeat ... ok
-test options::tests::active_is_iter_minus_the_off_entries ... ok
-test options::tests::overlay_by_key_not_map ... ok
-test options::tests::presence_and_value ... ok
-test options::tests::serializes_as_object_and_in_order_stable ... ok
-test options::tests::the_namespace_separates_who_defines_the_entry ... ok
-test options::tests::the_permission_list_is_closed ... ok
-test options::tests::the_states_of_an_entry_are_three_not_two ... ok
-test query::tests::an_already_empty_and_does_not_query_the_rest ... ok
-test query::tests::a_query_crosses_the_json_as_the_sends_the_shell ... ok
-test query::tests::empty_means_everything_and_is_the_intersection_identity ... ok
-test query::tests::and_or_and_negation_are_written_a_time_single ... ok
-test rules::composition::tests::a_cluster_and_a_letter_with_the_its_combining ... ok
-test rules::composition::tests::the_two_writes_of_a_letter_accented_become_a ... ok
-test rules::doc_data::tests::remains_readable_to_the_eye ... ok
-test rules::doc_data::tests::outbound_and_return_on_hostile_names ... ok
-test rules::doc_data::tests::the_document_remains_a_component_only ... ok
-test rules::doc_data::tests::nemmeno_the_name_is_annida ... ok
-test rules::doc_data::tests::the_space_and_the_prefix_of_that_that_there_is_inside ... ok
-test rules::doc_data::tests::that_that_the_plugin_holds_for_if_not_and_of_no_document ... ok
-test rules::events::tests::a_batch_arrives_if_it_touched_the_subject ... ok
-test rules::events::tests::a_folder_holds_what_is_under_it_and_not_what_looks_like_it ... ok
-test rules::events::tests::a_rename_out_of_a_folder_is_news_for_that_folder ... ok
-test rules::events::tests::a_topic_prefix_stops_at_a_separator ... ok
-test rules::events::tests::an_overflow_in_the_burst_adds_up_instead_of_doubling ... ok
-test rules::events::tests::an_empty_filter_is_not_a_filter ... ok
-test rules::events::tests::nothing_to_drop_is_no_invitation ... ok
-test rules::events::tests::not_knowing_passes_and_knowing_nothing_does_not ... ok
-test rules::events::tests::what_cannot_be_rediscovered_passes_any_subject ... ok
-test rules::events::tests::what_cannot_be_rediscovered_survives_a_ceiling ... ok
-test rules::folders::tests::the_boundary_is_segment_level_not_prefix ... ok
-test rules::folders::tests::the_parent_of_something_at_root_is_root ... ok
-test rules::folders::tests::the_root_is_the_entire_vault_and_has_three_written_forms ... ok
-test rules::folders::tests::the_three_ways_to_write_the_same_folder_filter_alike ... ok
-test rules::health::tests::an_extension_nobody_claims_is_an_attachment ... ok
-test rules::ids::tests::a_colon_with_an_empty_half_is_malformed_for_everyone ... ok
-test rules::ids::tests::a_plugin_may_only_name_inside_its_own_id ... ok
-test rules::ids::tests::the_core_may_name_bare_and_in_its_own_namespace ... ok
-test rules::ids::tests::the_message_says_what_to_write_instead ... ok
-test rules::ids::tests::the_split_is_on_the_first_colon_so_reverse_domain_ids_work ... ok
-test rules::keys::tests::a_sequence_stays_a_sequence ... ok
-test rules::keys::tests::obscures_respects_chord_boundaries ... ok
-test rules::keys::tests::two_orders_of_modifiers_are_the_same_gesture ... ok
-test rules::keys::tests::what_this_app_cannot_press_does_not_normalize ... ok
-test rules::media::tests::the_mime_becomes_from_the_name_and_the_says_the_signature ... ok
-test rules::media::tests::unknown_and_a_response_not_a_hole ... ok
-test rules::media::tests::who_claims_extension_wins_always ... ok
-test rules::path::tests::a_folder_named_like_the_file_is_not_a_common_prefix ... ok
-test rules::path::tests::escaping_the_vault_resolves_to_nothing ... ok
-test rules::path::tests::fragments_and_empty_targets ... ok
-test rules::path::tests::leading_slash_is_the_vault_root ... ok
-test rules::path::tests::percent_encoding_round_trip ... ok
-test rules::path::tests::relative_ref_walks_up_and_down ... ok
-test rules::path::tests::relative_to_the_folder_of_the_source ... ok
-test rules::path::tests::strip_ext_only_looks_at_the_last_segment ... ok
-test rules::path::tests::the_resolution_key_folds_case_and_composition ... ok
-test rules::path_policy::tests::a_name_new_is_writes_in_nfc ... ok
-test rules::path_policy::tests::normalized_removes_the_spaces_of_every_segment_and_not_the_points ... ok
-test rules::path_policy::tests::a_name_that_exists_already_is_reads_also_if_not_and_portable ... ok
-test rules::path_policy::tests::the_device_dos_the_are_a_every_extension ... ok
-test rules::path_policy::tests::the_chars_that_a_filesystem_is_riserva ... ok
-test rules::path_policy::tests::the_fence_equals_in_the_two_directions ... ok
-test rules::path_policy::tests::the_judgment_on_a_name_new_and_that_on_the_form_that_is_writes ... ok
-test rules::path_policy::tests::the_point_in_queue_and_that_in_head_are_two_faults_different ... ok
-test rules::path_policy::tests::the_space_machine_not_and_a_document ... ok
-test rules::path_policy::tests::the_order_of_the_checks_and_that_declared ... ok
-test rules::properties::tests::a_facet_counts_every_element_of_a_list ... ok
-test rules::path_policy::tests::the_length_is_counts_in_byte_and_not_in_chars ... ok
-test rules::properties::tests::a_number_in_a_text_column_sorts_first_not_last ... ok
-test rules::properties::tests::a_missing_key_sorts_last_in_both_directions ... ok
-test rules::properties::tests::a_mixed_vault_answers_wrong_and_says_nothing_until_the_format_is_declared ... ok
-test rules::properties::tests::a_text_in_a_number_column_sorts_last_in_both_directions ... ok
-test rules::properties::tests::contains_looks_inside_a_list_and_inside_a_text ... ok
-test rules::properties::tests::comparing_different_species_is_false_not_an_error ... ok
-test rules::properties::tests::different_species_sort_by_fixed_rank_in_both_directions ... ok
-test rules::properties::tests::facets_count_on_the_already_selected_subset ... ok
-test rules::properties::tests::order_of_is_antisymmetric_for_every_pair ... ok
-test rules::properties::tests::filters_are_in_and_and_a_missing_key_never_matches ... ok
-test rules::properties::tests::select_narrows_the_columns_and_absence_stays_absence ... ok
-test rules::properties::tests::the_same_instant_written_in_two_time_zones_is_the_same_instant ... ok
-test rules::snippet::tests::a_cut_on_the_left_wears_a_leading_ellipsis ... ok
-test rules::snippet::tests::a_cut_on_both_sides_wears_two_ellipses ... ok
-test rules::snippet::tests::a_cut_on_the_right_wears_a_trailing_ellipsis ... ok
-test rules::properties::tests::sorting_is_total_so_a_page_never_repeats_itself ... ok
-test rules::snippet::tests::a_label_longer_than_the_cap_is_kept_whole ... ok
-test rules::snippet::tests::an_all_whitespace_window_is_empty ... ok
-test rules::snippet::tests::short_text_comes_back_trimmed_untouched ... ok
-test rules::snippet::tests::the_cap_is_exact ... ok
-test rules::tag::tests::extracts_simple_and_nested_tags ... ok
-test rules::tag::tests::ignores_numeric_and_mid_word_hash ... ok
-test rules::snippet::tests::the_window_never_splits_a_char ... ok
-test rules::tag::tests::tag_span_includes_hash ... ok
-test rules::tag::tests::the_separator_is_what_makes_a_child ... ok
-test rules::tag::tests::the_three_boundaries_that_a_second_implementation_fails ... ok
-test rules::text_policy::tests::a_bom_a_metadata_file_not_and_a_bom ... ok
-test rules::text_policy::tests::that_that_not_and_utf8_says_where_stops_of_being_it ... ok
-test rules::text_policy::tests::the_bom_is_measures_and_is_skips_without_touch_the_source ... ok
-test rules::text_policy::tests::the_boundary_of_a_crlf_not_a_character ... ok
-test rules::text_policy::tests::the_terminators_is_recognize_also_when_are_mixed ... ok
-test rules::text_policy::tests::who_generates_a_row_uses_that_of_the_file ... ok
-test rules::trash::tests::a_name_that_only_looks_stamped_is_left_alone ... ok
-test rules::trash::tests::a_trashed_name_keeps_its_extension ... ok
-test rules::trash::tests::the_original_name_survives_the_round_trip ... ok
-test rules::trash::tests::the_trash_is_flat_and_collisions_receive_the_stamp ... ok
-test schema::tests::it_compares_like_a_number ... ok
-test schema::tests::on_disk_it_remains_a_number ... ok
-test session::tests::a_mask_intersects_only_what_it_declares ... ok
-test session::tests::another_pane_changes_everything ... ok
-test session::tests::reading_mode_has_no_caret ... ok
-test session::tests::a_context_survives_the_json_boundary_with_every_field ... ok
-test session::tests::what_changed_is_computed_field_by_field ... ok
-test settings::tests::a_choice_outside_list_and_a_refusal_that_lists ... ok
-test settings::tests::a_number_outside_range_not_is_rounds ... ok
-test settings::tests::arbitrary_key_is_not_a_keybinding ... ok
-test settings::tests::arbitrary_key_is_not_a_permission ... ok
-test settings::tests::keybinding_key_recognizes_and_returns_to_command ... ok
-test settings::tests::permission_toggles_are_machine_scoped ... ok
-test settings::tests::permission_key_composes_and_reverse_reads ... ok
-test settings::tests::the_default_exits_from_the_kind ... ok
-test settings::tests::value_writes_as_a_human_would ... ok
-test text::tests::a_literal_is_a_bare_json_string ... ok
-test text::tests::a_typed_timestamp_is_formatted_by_whoever_knows_the_locale ... ok
-test text::tests::an_undetermined_language_goes_straight_to_the_default ... ok
-test text::tests::display_is_for_logs ... ok
-test text::tests::a_message_is_an_object_and_travels_both_ways ... ok
-test text::tests::no_catalog_is_not_an_error ... ok
-test text::tests::resolving_is_idempotent ... ok
-test text::tests::substitution_puts_the_arguments_where_the_braces_are ... ok
-test text::tests::the_ladder_descends_by_specificity ... ok
-test theme::tests::manifest_names_every_theme_boundary_value ... ok
-test text::tests::the_template_language_has_exactly_one_construct ... ok
-test theme::tests::theme_1_has_a_stable_wire_name ... ok
-test traits::tests::a_job_id_crosses_the_json_boundary_as_a_string ... ok
-test traits::tests::a_window_keeps_the_total_of_what_it_did_not_return ... ok
-test traits::tests::the_abi_version_rule_rejects_other_majors_and_newer_minors ... ok
-test traits::tests::the_discriminants_cover_every_check_of_health ... ok
-test traits::tests::the_discriminants_cover_every_surface ... ok
-test transfer::tests::a_destination_lives_under_the_folder_that_was_asked_for ... ok
-test transfer::tests::a_folder_selection_takes_the_descendants_and_not_the_namesakes ... ok
-test transfer::tests::a_receipt_and_bytes_agree_on_length ... ok
-test transfer::tests::a_not_utf8_source_is_an_error_and_not_a_log_line ... ok
-test transfer::tests::a_report_names_what_a_rollback_would_need ... ok
-test transfer::tests::a_source_name_never_becomes_a_path ... ok
-test transfer::tests::an_in_memory_source_answers_the_same_questions ... ok
-test transfer::tests::dispatch_looks_at_the_prologue_and_needs_no_host ... ok
-test transfer::tests::reading_all_does_not_stop_at_the_first_short_chunk ... ok
-test ui::tests::an_action_carries_both_halves_without_mixing_them ... ok
-test ui::tests::untrusted_html_is_rejected_even_if_nested ... ok
-test ui::tests::untrusted_html_is_rejected_inside_the_new_containers ... ok
-test ui::tests::the_key_travels_beside_the_kind ... ok
-test ui::tests::untrusted_tree_without_html_is_valid ... ok
+test result: ok. 156 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.88s
 
-test result: ok. 229 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-
-[1m[32m     Running[0m tests/a_named_rule_is_declared.rs (target/debug/deps/a_named_rule_is_declared-443532de47a318d4)
-
-running 4 tests
-test every_reason_says_something ... ok
-test the_path_and_the_extractor_attach ... ok
-test no_name_rule_without_declaration ... ok
-test the_family_declared_and_that_that_is_reads ... ok
-
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
-
-[1m[32m     Running[0m tests/context_has_four_fields.rs (target/debug/deps/context_has_four_fields-2644c3bb5d48971b)
-
-running 1 test
-test the_context_of_session_has_four_fields_and_no_target ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-
-[1m[32m     Running[0m tests/dependency_invariant.rs (target/debug/deps/dependency_invariant-be0057369f6bcdc7)
-
-running 11 tests
-test forbidden_families_match_by_prefix ... ok
-test the_contract_reaches_nothing_nobody_asked_for ... ok
-test the_diagram_parser_reads_what_it_claims_to_read ... ok
-test the_diagram_parser_refuses_what_it_cannot_read - should panic ... ok
-test the_diagram_declares_the_real_dependencies ... ok
-test official_features_do_not_depend_on_the_kernel ... ok
-test abi_and_kernel_stay_agnostic ... ok
-test the_glue_does_not_bypass_the_mounter ... ok
-test the_sdk_does_not_see_the_kernel ... ok
-test the_test_bench_enters_no_library ... ok
-test whoever_mounts_does_not_depend_on_whoever_draws ... ok
-
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s
-
-[1m[32m     Running[0m tests/one_escape_table.rs (target/debug/deps/one_escape_table-5c74d356f68be8cc)
-
-running 2 tests
-test the_walk_and_the_extractor_match ... ok
-test html_entities_live_in_a_single_file ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
-
-[1m[32m     Running[0m tests/one_fingerprint.rs (target/debug/deps/one_fingerprint-308e7bee26d4aa64)
-
-running 2 tests
-test the_walk_and_the_bench_match ... ok
-test the_fnv_constants_live_in_a_single_file ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
-
-[1m[32m     Running[0m tests/one_normalized_form.rs (target/debug/deps/one_normalized_form-a4b7fd79d03367fa)
-
-running 5 tests
-test the_slug_branch_hooks_too ... ok
-test a_name_key_does_not_change_with_encoding ... ok
-test the_two_spellings_are_different_bytes_or_this_bench_proves_nothing ... ok
-test the_form_on_which_is_judges_and_that_composed ... ok
-test two_titles_different_not_end_on_the_same_id ... ok
-
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-[1m[32m     Running[0m tests/rules_mirror.rs (target/debug/deps/rules_mirror-6d7896de296ebf20)
-
-running 2 tests
-test every_rule_has_cases_that_disagree_with_each_other ... ok
-test rules_fixture_is_in_sync_with_the_rust_rules ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
-
-[1m[32m     Running[0m tests/serialize_non_riscrive.rs (target/debug/deps/serialize_non_riscrive-a4bc015e41906528)
-
-running 6 tests
-test a_cfg_test_on_a_function_does_not_open_a_module ... ok
-test the_extractor_sees_the_wrong_path ... ok
-test the_extractor_distinguishes_definition_from_call ... ok
-test the_guarantee_is_still_written_in_the_contract ... ok
-test the_walk_finds_the_contract ... ok
-test serialize_is_not_the_way_to_rewrite_an_existing_document ... ok
-
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
-
-[1m[32m     Running[0m tests/single_folder.rs (target/debug/deps/single_folder-3030332da4c94669)
+[1m[32m     Running[0m tests/a_plan_names_touched_keys.rs (target/debug/deps/a_plan_names_touched_keys-ddf5fb98d39892d0)
 
 running 3 tests
-test who_is_subscribes_and_who_exports_take_the_same_notes ... ok
-test every_surface_that_does_the_question_from_the_same_response ... ok
-test import_in_a_folder_and_query_it_and_the_same_folder ... ok
+test a_index_rejected_does_not_leaves_in_memory_a_version_that_does_not_exists ... ok
+test a_save_writes_a_index_that_names_all ... ok
+test a_pass_does_not_pays_the_vault_a_every_snapshot ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+[1m[32m     Running[0m tests/backlinks_view_e2e.rs (target/debug/deps/backlinks_view_e2e-0a9ab01609901414)
+
+running 2 tests
+test clicking_a_backlink_routes_navigate_back_through_the_kernel ... ok
+test the_view_reads_active_doc_and_backlinks_from_the_kernel_host ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/backup_e2e.rs (target/debug/deps/backup_e2e-600083c6b6e87f5b)
+
+running 3 tests
+test the_commands_are_in_the_record ... ok
+test dry_run_not_writes ... ok
+test backup_and_restore_deleted_notes ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/both_hosts_answer_alike.rs (target/debug/deps/both_hosts_answer_alike-09809bc2943a82a6)
+
+running 5 tests
+test a_support_that_says_of_no_and_a_io_of_here_and_of_the ... ok
+test the_id_of_the_trash_has_the_same_form_of_here_and_of_the ... ok
+test absent_and_occupied_have_the_same_face_here_and_there ... ok
+test the_writes_leave_the_same_vault_of_here_and_of_the ... ok
+test every_name_and_every_format_is_judge_equal_of_here_and_of_the ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+[1m[32m     Running[0m tests/cargo_features.rs (target/debug/deps/cargo_features-3d2dab9352b1b8b8)
+
+running 3 tests
+test every_cargo_feature_and_on_of_default ... ok
+test with_all_the_feature_the_two_lists_coincide ... ok
+test every_row_of_the_inventory_has_the_its_cargo_feature ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-[1m[32m     Running[0m tests/superficie_della_radice.rs (target/debug/deps/superficie_della_radice-ea092f8eab873769)
+[1m[32m     Running[0m tests/catalogs.rs (target/debug/deps/catalogs-d0c68a3f33ec3631)
+
+running 5 tests
+test the_search_weights_speak_in_all_languages ... ok
+test the_settings_of_the_core_speak_also_their ... ok
+test no_hardcoded_prose_in_what_is_declared ... ok
+test every_key_declared_has_a_entry ... ok
+test every_language_says_the_same_things ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/command_keys.rs (target/debug/deps/command_keys-b47a64c5b694af3c)
 
 running 3 tests
-test a_qualified_module_is_qualified_throughout_and_with_reason ... ok
-test the_walker_descends ... ok
-test every_public_type_is_visible_from_the_root ... ok
+test no_agreement_official_of_it_hides_a_other ... ok
+test no_two_official_commands_want_the_same_chord ... ok
+test command_keys_fixture_is_in_sync_with_the_command_registry ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-[1m[32m     Running[0m tests/ts_enums.rs (target/debug/deps/ts_enums-03280d0083cd942a)
+[1m[32m     Running[0m tests/commands_e2e.rs (target/debug/deps/commands_e2e-6ba05ecdab19d410)
 
-running 4 tests
-test every_form_of_divergence_turns_red ... ok
-test a_variant_rename_is_the_json_name ... ok
-test mirror_unions_match_the_rust_types ... ok
-test the_emission_is_deterministic ... ok
+running 28 tests
+test a_caret_among_the_selections_has_nothing_to_wrap_and_the_count_says_so ... ok
+test a_bulk_replace_is_shown_before_it_is_done_and_then_done ... ok
+test a_command_acts_on_every_selection_and_undoes_them_together ... ok
+test a_bulk_replace_over_n_notes_is_one_thing_with_the_origin_of_who_asked ... ok
+test a_command_writes_a_setting_reading_its_type_from_the_declared_schema ... ok
+test a_command_writes_through_the_normal_path_so_the_graph_sees_it ... ok
+test a_dry_run_opens_no_batch_because_it_touches_nothing ... ok
+test a_program_cannot_move_a_key_that_did_not_declare_itself_program_writable ... ok
+test a_position_outside_every_task_is_refused_by_the_command_not_guessed ... ok
+test an_import_says_what_it_could_not_apply_instead_of_stopping_or_lying ... ok
+test carets_only_is_still_nothing_to_wrap ... ok
+test one_cursor_toggles_one_task_without_naming_at ... ok
+test checking_a_task_goes_through_the_parsed_model_and_writes_one_byte ... ok
+test simulating_a_setting_change_says_what_would_change_and_changes_nothing ... ok
+test export_carries_what_someone_decided_and_import_puts_it_back ... ok
+test archiving_n_notes_is_n_renames_one_batch_and_one_actor ... ok
+test restoring_onto_an_occupied_path_says_exactly_that ... ok
+test simulating_a_write_on_a_locked_key_is_a_refusal_and_not_a_plan ... ok
+test simulating_an_import_counts_the_key_gate_too ... ok
+test simulating_an_out_of_range_setting_refuses_the_same_value_as_apply ... ok
+test the_plan_of_a_rename_names_the_notes_that_link_it ... ok
+test the_plan_of_a_macro_is_the_union_of_the_plans_of_its_steps ... ok
+test the_search_command_is_an_intent_and_the_kernel_refuses_it_no_writes ... ok
+test the_registry_is_what_a_palette_or_a_cli_reads ... ok
+test the_selection_span_is_dropped_by_the_kernel_and_the_command_says_so ... ok
+test trashing_without_an_argument_takes_the_notes_the_user_is_looking_at ... ok
+test two_cursors_toggle_two_tasks_without_naming_at ... ok
+test the_whole_life_of_a_notes_goes_through_the_registry ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.53s
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
-[1m[32m     Running[0m tests/wit_additivity.rs (target/debug/deps/wit_additivity-c3f8c8f38a2e44ba)
+[1m[32m     Running[0m tests/conformance.rs (target/debug/deps/conformance-fd26eaed2d6f205b)
 
-running 4 tests
-test additions_at_the_end_pass ... ok
-test every_form_of_breakage_turns_red ... ok
-test a_baseline_exists_and_covers_the_current_version ... ok
-test the_contract_grows_only_by_addition ... ok
+running 3 tests
+test the_dogfooding_declares_fin_where_arrives ... ok
+test the_view_official_respect_the_contract ... ok
+test the_view_official_is_draw_also_with_a_document_open ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-[1m[32m     Running[0m tests/wit_conformance.rs (target/debug/deps/wit_conformance-ed0ab2d86583e22c)
+[1m[32m     Running[0m tests/contextless_leaf_costs_more.rs (target/debug/deps/contextless_leaf_costs_more-3dcd6f3e8450d423)
 
-running 6 tests
-test the_boundary_shape_of_a_span_is_wider_than_the_native_one ... ok
-test the_same_name_is_projected_in_two_different_ways ... ok
-test invalid_wit_is_not_silently_accepted - should panic ... ok
-test the_expected_case_order_comes_from_the_rust_declaration ... ok
-test abi_types_are_mirrored_in_wit ... ok
-test wit_conformance_actually_fails_on_drift ... ok
+running 3 tests
+test the_two_forms_name_the_same_notes ... ok
+test the_leaf_without_context_costs_more_of_the_contexts ... ok
+test the_dry_run_spends_on_the_question_does_not_around ... ok
 
-test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.73s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s
 
-[1m[32m     Running[0m unittests src/lib.rs (target/debug/deps/fub_app_lib-2ef4ddbd46300605)
+[1m[32m     Running[0m tests/custom_blocks_e2e.rs (target/debug/deps/custom_blocks_e2e-2d6eba754c3a231d)
 
-running 0 tests
+running 13 tests
+test a_kind_product_and_never_drawn_is_can_count ... ok
+test a_kind_of_third_party_degraded_show_the_byte_of_the_key_convenzionale ... ok
+test a_formula_exits_as_html_inside_the_stream ... ok
+test a_diagram_exits_as_part_declarative_not_as_markup ... ok
+test a_plugin_revoked_not_registers_nothing ... ok
+test a_syntax_of_third_party_traverses_all_and_three_the_sides ... ok
+test a_kind_without_renderer_arrives_all_preview_col_its_source ... ok
+test a_rule_inline_enters_in_the_label_of_a_link ... ok
+test a_third_not_is_does_pass_for_the_core ... ok
+test from_a_renderer_not_trusted_the_content_active_not_passes ... ok
+test a_syntax_off_leaves_the_document_com_was ... ok
+test two_rules_on_the_same_syntax_not_is_register_in_silence ... ok
+test highlighted_arrives_from_the_model_and_not_disappears_more ... ok
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-[1m[32m     Running[0m unittests src/main.rs (target/debug/deps/fub-5c3c603450a8b5cf)
-
-running 0 tests
-
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
-
-[1m[32m     Running[0m tests/lean_ipc.rs (target/debug/deps/lean_ipc-ef7a29ee002af259)
-
-running 11 tests
-test bridges_stay_six ... ok
-test declared_debt_is_a_guarded_number ... ok
-test every_named_capability_exists_in_the_contract ... ok
-test defined_and_registered_are_the_same_set ... ok
-test extractor_does_not_count_prose ... ok
-test extractor_catches_second_block_written_without_prefix - should panic ... ok
-test extractor_rejects_what_it_cannot_read - should panic ... ok
-test ipc_surface_is_a_closed_list ... ok
-test ipc_surface_lives_in_a_single_file ... ok
-test no_block_comment ... ok
-test every_registered_command_has_a_caller_or_says_why_not ... ok
-
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
-
-[1m[32m     Running[0m tests/schemas_on_disk.rs (target/debug/deps/schemas_on_disk-ab7d580e365f7fc6)
+[1m[32m     Running[0m tests/dashboard_e2e.rs (target/debug/deps/dashboard_e2e-cdbc8107a29f483f)
 
 running 2 tests
-test every_version_constant_has_its_row_in_the_table ... FAILED
-test every_table_row_points_to_a_constant_that_exists ... FAILED
+test vault_empty_zero_rotti ... ok
+test counts_notes_tag_and_link_rotti ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/data_channel_e2e.rs (target/debug/deps/data_channel_e2e-10e3d8ad98fde5f8)
+
+running 18 tests
+test a_equal_relevance_sorts_the_contract_does_not_the_engine ... ok
+test a_clause_empty_beside_a_a_leaf_foreign_remains_every_document ... ok
+test a_clause_all_of_a_engine_there_goes_whole ... ok
+test a_leaf_denied_removes_from_what_is_the_other_has_selected ... ok
+test a_reference_a_a_point_knows_say_where_points ... ok
+test a_result_knows_say_a_that_point_of_the_document_is ... ok
+test a_reference_without_page_names_who_the_hosts ... ok
+test a_row_carries_relevance_extracted_and_columns_together ... ok
+test a_selection_without_text_does_not_carries_coordinate ... ok
+test the_notes_of_a_kind_that_speak_of_something ... ok
+test the_phrase_exact_and_a_way_does_not_a_syntax ... ok
+test the_graph_whole_and_a_question_single ... ok
+test the_tag_of_a_result_are_the_its_facets ... ok
+test who_generates_a_id_and_who_resolves_a_fragment_name_the_same_point ... ok
+test the_union_of_two_clauses_from_different_owners ... ok
+test what_nobody_needs_says_so ... ok
+test what_names_a_reference_the_says_the_channel_data ... ok
+test without_key_of_ordering_commands_the_relevance ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+[1m[32m     Running[0m tests/first_snapshot_does_not_rewrite_the_index.rs (target/debug/deps/first_snapshot_does_not_rewrite_the_index-e16109460e12d717)
+
+running 4 tests
+test the_vaultopened_event_does_not_snapshot_again ... ok
+test an_interrupted_pass_loses_nothing_because_the_index_is_rebuilt ... ok
+test the_before_snapshot_writes_the_index_a_time_single ... ok
+test the_index_written_once_says_everything_it_used_to ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/graph_has_two_halves.rs (target/debug/deps/graph_has_two_halves-320c67678b338d3d)
+
+running 5 tests
+test the_keys_of_the_action_is_agree_between_the_two_ends ... ok
+test the_keys_of_the_payload_is_agree_between_the_two_ends ... ok
+test the_namespace_does_not_and_written_two_times_in_the_provider ... ok
+test the_two_ends_is_agree_on_the_namespace ... ok
+test the_two_ends_is_agree_on_the_id_of_the_view ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/graph_view_e2e.rs (target/debug/deps/graph_view_e2e-1b8784a9abd4d6f1)
+
+running 9 tests
+test an_empty_vault_is_an_empty_graph ... ok
+test a_document_is_one_node_however_many_times_it_is_linked ... ok
+test a_self_link_is_not_an_edge ... ok
+test a_notes_that_links_the_same_notes_twice_draws_one_edge ... ok
+test clicking_a_node_asks_the_core_to_open_that_notes ... ok
+test edges_arrive_in_a_deterministic_order ... ok
+test edges_as_from_the_data_channel_for_the_whole_vault_at_once ... ok
+test every_notes_is_a_node_even_the_lonely_ones ... ok
+test opening_a_nonexistent_doc_still_navigates ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/history_view_e2e.rs (target/debug/deps/history_view_e2e-43a4732284c06944)
+
+running 5 tests
+test preview_is_remembers_between_two_redraws ... ok
+test restore_passes_from_the_record_and_is_cancels ... ok
+test inverse_of_a_restore_and_declared_from_the_command ... ok
+test a_restore_drawn_on_another_notes_not_writes_on_this ... ok
+test the_view_lists_the_versions_without_receive_the_store ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+[1m[32m     Running[0m tests/independent_modules.rs (target/debug/deps/independent_modules-f41f6d72482027a7)
+
+running 2 tests
+test scanner_ignores_prose_and_finds_code ... ok
+test no_feature_module_names_at_root ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+[1m[32m     Running[0m tests/outline_view_e2e.rs (target/debug/deps/outline_view_e2e-00ef63e8d7521cbe)
+
+running 3 tests
+test clicking_a_heading_reveals_its_span_back_through_the_kernel ... ok
+test the_caret_published_by_the_shell_reaches_the_view_through_the_kernel ... ok
+test the_view_reads_the_active_docs_outline_from_the_kernel ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/panel_counts_what_it_declares.rs (target/debug/deps/panel_counts_what_it_declares-f2789c9116bb78bf)
+
+running 2 tests
+test the_render_and_a_snapshot_single ... ok
+test follows_exactly_the_three_context_pieces_it_uses ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/properties_view_e2e.rs (target/debug/deps/properties_view_e2e-679b63bc41763ef2)
+
+running 8 tests
+test no_one_notes_open_and_empty_state ... ok
+test dry_run_not_writes ... ok
+test remove_removes_the_key_and_the_body_remains ... ok
+test add_on_notes_without_frontmatter_born_the_block ... ok
+test the_commands_are_in_the_record ... ok
+test render_mixed_has_the_widget_right_for_key ... ok
+test set_bool_writes_yaml_and_leaves_the_body ... ok
+test undo_of_the_set_restores_the_block ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/queries_e2e.rs (target/debug/deps/queries_e2e-13a01593be0eb135)
+
+running 6 tests
+test dry_run_not_writes ... ok
+test the_commands_are_in_the_record ... ok
+test the_collections_list_the_query_saved ... ok
+test form_save_from_text ... ok
+test save_run_delete_on_a_folder ... ok
+test the_view_lists_and_launches ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/search_e2e.rs (target/debug/deps/search_e2e-ab9b82afe1920db3)
+
+running 13 tests
+test deleting_a_notes_removes_it_from_search ... ok
+test excerpts_survive_the_planner ... ok
+test a_renamed_notes_leaves_no_ghost_behind ... ok
+test editing_a_notes_updates_what_is_findable ... ok
+test highlights_land_on_the_right_bytes_in_accented_text ... ok
+test query_latency_on_a_large_vault ... ignored, micro-bench: si esegue a mano, in release
+test finds_notes_by_content_title_and_tag ... ok
+test omitting_excerpts_keeps_relevance ... ok
+test reopening_a_vault_does_not_reindex_it ... ok
+test what_sits_in_the_trash_is_never_searchable ... ok
+test reopening_catches_up_with_what_happened_while_it_was_closed ... ok
+test trashing_a_notes_makes_it_vanish_from_search_and_backlinks_and_coming_back_undoes_it ... ok
+test incremental_index_matches_one_built_from_scratch ... ok
+
+test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+[1m[32m     Running[0m tests/stats_view_e2e.rs (target/debug/deps/stats_view_e2e-ae5fe3adc75a5c82)
+
+running 2 tests
+test the_selection_text_survives_a_dirty_buffer_where_a_span_would_not ... ok
+test a_write_makes_the_kernel_drop_the_selection_under_it ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/tags_view_e2e.rs (target/debug/deps/tags_view_e2e-4a9259f799b2d4e1)
+
+running 3 tests
+test clicking_a_tag_asks_the_shell_to_search_for_it ... ok
+test spellings_of_the_same_tag_are_one_row_with_one_count ... ok
+test tags_are_aggregated_across_the_vault_and_counted_for_notes ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/template_e2e.rs (target/debug/deps/template_e2e-08801f6f9ddd30e9)
+
+running 5 tests
+test dry_run_not_writes ... ok
+test from_template_replaces_and_creates ... ok
+test daily_creates_and_the_second_time_opens ... ok
+test click_creates_from_template ... ok
+test the_view_lists_the_template ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/the_filter_does_not_allocate.rs (target/debug/deps/the_filter_does_not_allocate-1fc411558958b97e)
+
+running 2 tests
+test outside_from_ascii_is_pays_still_a_string_for_tag ... ok
+test a_keystroke_does_not_allocates_for_tag ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[1m[32m     Running[0m tests/trash_view_e2e.rs (target/debug/deps/trash_view_e2e-1cb8a279d9519384)
+
+running 5 tests
+test restore_passes_from_the_record_of_the_commands_and_brings_back_the_notes_in_the_vault ... ok
+test the_panel_lists_the_trash_and_the_says_when_and_empty ... ok
+test the_two_commands_that_the_panel_presses_are_in_the_record ... ok
+test a_new_occupied_path_becomes_a_question_in_the_tree_not_a_window ... ok
+test empty_asks_first_and_the_question_is_can_withdraw ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/ts_mirror.rs (target/debug/deps/ts_mirror-aa90beaca6a0766f)
+
+running 1 test
+test ts_mirror_fixture_is_in_sync_with_the_rust_types ... FAILED
 
 failures:
 
----- every_version_constant_has_its_row_in_the_table stdout ----
+---- ts_mirror_fixture_is_in_sync_with_the_rust_types stdout ----
 
-thread 'every_version_constant_has_its_row_in_the_table' panicked at crates/fub-app/tests/schemas_on_disk.rs:246:13:
-crates/fub-kernel/src/entries.rs:147 declares version 5 and no row of docs/development/versioning-and-releases.md says so. An on-disk format not in the table is a format nobody will know how to migrate: the row costs less than the day it will be needed.
-
----- every_table_row_points_to_a_constant_that_exists stdout ----
-
-thread 'every_table_row_points_to_a_constant_that_exists' panicked at crates/fub-app/tests/schemas_on_disk.rs:219:13:
-"anagrafe" says crates/fub-kernel/src/entries.rs:142, but there is no version constant there. That file's constants are at lines [147].
+thread 'ts_mirror_fixture_is_in_sync_with_the_rust_types' panicked at crates/fub-features/tests/ts_mirror.rs:1453:5:
+assertion `left == right` failed: la fixture dei mirror è stantia: un tipo Rust è cambiato senza rigenerarla. Rigenerala con `UPDATE_MIRROR=1 cargo test -p fub-features --test ts_mirror`, poi aggiorna il mirror TS finché `mirror.test.ts` non torna verde.
+  left: Object {"UiNode": Array [Object {"key": String("k"), "node": String("stack"), "dir": String("column"), "gap": Number(8), "children": Array []}, Object {"node": String("text"), "content": String("t")}, Object {"node": String("heading"), "level": Number(2), "content": String("h")}, Object {"node": String("list"), "items": Array []}, Object {"node": String("list_item"), "title": String("ti"), "subtitle": String("s"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(true)}, Object {"node": String("button"), "label": String("b"), "intent": String("primary"), "action": Object {"action": String("a"), "payload": Null}}, Object {"node": String("html"), "html": String("<i>")}, Object {"node": String("web_view"), "url": String("u"), "height": Number(100)}, Object {"node": String("section"), "title": String("s"), "collapsed": Bool(true), "children": Array []}, Object {"node": String("table"), "columns": Array [Object {"title": String("c"), "align": String("end")}], "rows": Array []}, Object {"node": String("row"), "cells": Array [Object {"node": String("text"), "content": String("c")}], "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("tree"), "roots": Array []}, Object {"node": String("tree_item"), "label": String("l"), "expanded": Bool(true), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(false), "children": Array []}, Object {"node": String("tabs"), "active": Number(1), "tabs": Array []}, Object {"node": String("tab"), "label": String("t"), "action": Null, "children": Array []}, Object {"node": String("badge"), "label": String("b"), "intent": String("danger")}, Object {"node": String("icon"), "name": String("i")}, Object {"node": String("progress"), "value": Number(0.5), "label": String("p")}, Object {"node": String("separator")}, Object {"node": String("empty_state"), "title": String("vuoto"), "detail": String("d"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("key_value"), "entries": Array [Object {"label": String("k"), "value": String("v")}]}, Object {"node": String("text_input"), "field": String("f"), "label": String("l"), "value": String("v"), "placeholder": String("p"), "action": Null}, Object {"node": String("text_area"), "field": String("f"), "label": Null, "value": String("v"), "rows": Number(4), "action": Null}, Object {"node": String("number"), "field": String("f"), "label": Null, "value": Number(1.5), "min": Number(0.0), "max": Number(2.0), "step": Number(0.5), "action": Null}, Object {"node": String("checkbox"), "field": String("f"), "label": String("l"), "value": Bool(true), "action": Null}, Object {"node": String("select"), "field": String("f"), "label": Null, "value": Array [String("u")], "options": Array [Object {"value": String("u"), "label": String("Uno")}], "multiple": Bool(false), "action": Null}, Object {"node": String("radio"), "field": String("f"), "label": Null, "value": String("u"), "options": Array [Object {"value": String("u"), "label": String("Uno")}], "action": Null}, Object {"node": String("slider"), "field": String("f"), "label": Null, "value": Number(0.5), "min": Number(0.0), "max": Number(1.0), "step": Number(0.1), "action": Null}, Object {"node": String("date_picker"), "field": String("f"), "label": Null, "value": String("2026-07-26"), "action": Null}, Object {"node": String("form"), "children": Array [], "submit_label": String("Salva"), "submit": Object {"action": String("submit"), "payload": Null}}, Object {"node": String("custom"), "ns": String("p"), "payload": Object {"x": Number(1)}, "fallback": Array [Object {"node": String("text"), "content": String("f")}]}, Object {"node": String("pending"), "label": String("carico")}, Object {"node": String("failed"), "message": String("m"), "retry": Object {"action": String("riprova"), "payload": Null}}], "ViewUpdate": Array [Object {"kind": String("replace"), "root": Object {"node": String("text"), "content": String("t")}}, Object {"kind": String("none")}, Object {"kind": String("navigate"), "doc_id": String("d")}, Object {"kind": String("reveal"), "doc_id": String("d"), "span": Object {"start": Number(0), "end": Number(3)}}, Object {"kind": String("run_search"), "query": String("q")}, Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, Object {"kind": String("patch"), "key": String("k"), "node": Object {"key": String("k"), "node": String("text"), "content": String("t")}}], "KernelEvent": Array [Object {"type": String("vault_opened"), "root": String("r")}, Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, Object {"type": String("document_removed"), "id": String("a")}, Object {"type": String("document_renamed"), "from": String("a"), "to": String("b")}, Object {"type": String("index_updated")}, Object {"type": String("job_done"), "id": String("1"), "job": String("j"), "result": Object {"Ok": Null}}, Object {"type": String("overflow"), "dropped": Number(2)}, Object {"type": String("custom"), "topic": String("p/x"), "payload": Null}, Object {"type": String("batch_ended"), "batch": String("18446744073709551615"), "changed": Array [String("a"), String("b")]}, Object {"type": String("view_invalidated"), "view": String("v"), "instance": String("v#2")}, Object {"type": String("vault_closed"), "root": String("/vault")}, Object {"type": String("job_started"), "id": String("18446744073709551615"), "job": String("export")}, Object {"type": String("job_progress"), "id": String("18446744073709551615"), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"type": String("setting_changed"), "key": String("versioning.enabled"), "scope": String("vault")}, Object {"type": String("entry_changed"), "id": String("allegati/foto.png"), "kind": String("asset")}, Object {"type": String("entry_removed"), "id": String("allegati/foto.png"), "kind": String("unknown")}, Object {"type": String("entry_renamed"), "from": String("allegati/foto.png"), "to": String("media/foto.png"), "kind": String("asset")}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("a.md"), "error": Object {"kind": String("internal"), "message": String("indice non allineato")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("failure"), "subject": Null, "error": Object {"kind": String("internal"), "message": String("flush fallito")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("b.md"), "error": Object {"kind": String("internal"), "message": String("render esploso")}, "gate": String("command")}, Object {"type": String("timer_fired"), "owner": String("com.acme.tasks"), "timer": String("sync")}], "KernelNotice": Array [Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("watcher")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("kernel")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("plugin"), "id": String("fub.versioning")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("index_updated")}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": Null}}], "Span": Array [Object {"start": Number(3), "end": Number(7)}], "SettingSpec": Array [Object {"key": String("prova.k0"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, Object {"key": String("prova.k1"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("number"), "default": Number(14.0), "min": Number(8.0), "max": Number(72.0)}, "program_writable": Bool(false)}, Object {"key": String("prova.k2"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("text"), "default": String("Diario")}, "program_writable": Bool(false)}, Object {"key": String("prova.k3"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, Object {"key": String("prova.k4"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array [String("fub.stats")]}, "program_writable": Bool(false)}], "SettingEntry": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}, Object {"spec": Object {"key": String("plugins.disabled"), "label": String("Componenti spenti"), "description": String(""), "group": String(""), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array []}, "program_writable": Bool(false)}, "value": Array [String("fub.stats")], "source": String("vault")}], "VersionRef": Array [Object {"ts": Number(1), "hash": String("18446744073709551615"), "size": Number(3)}], "DocumentMatch": Array [Object {"doc": String("a.md")}, Object {"doc": String("b.md"), "score": Number(0.5), "snippet": String("s"), "highlights": Array [Object {"start": Number(0), "end": Number(1)}], "properties": Array [Object {"key": String("tipo"), "value": Object {"kind": String("text"), "value": String("nota")}}], "occurrences": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(120), "end": Number(125)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}]}], "DocPosition": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}], "ResolvedRef": Array [Object {"doc": String("note/a.md")}, Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}], "NeighborRef": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "IndexQuery": Array [Object {"kind": String("documents"), "matching": Object {"any": Array [Object {"all": Array [Object {"negated": Bool(false), "predicate": Object {"kind": String("text"), "text": String("rust"), "mode": String("terms"), "fields": Array [], "tolerance": String("exact"), "partial_last_term": Bool(false)}}, Object {"negated": Bool(true), "predicate": Object {"kind": String("tag"), "name": String("archivio"), "descendants": Bool(true)}}]}]}, "sort": Null, "select": Object {"kind": String("none")}, "page": Object {"offset": Number(0), "limit": Number(20)}, "excerpts": String("attach")}, Object {"kind": String("backlinks"), "target": String("a.md"), "page": Null}, Object {"kind": String("outline"), "doc": String("a.md")}, Object {"kind": String("tags"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("neighbors"), "seeds": Object {"any": Array []}, "direction": String("outbound"), "depth": Number(1), "page": Null}, Object {"kind": String("property_values"), "key": String("tipo"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("vault_health"), "check": String("broken_links"), "page": Null}, Object {"kind": String("custom"), "ns": String("terzi"), "query": Object {"x": Number(1)}}, Object {"kind": String("vault_status")}, Object {"kind": String("jobs")}, Object {"kind": String("settings"), "plugin": Null}, Object {"kind": String("settings"), "plugin": String("fub.versioning")}, Object {"kind": String("organization")}, Object {"kind": String("resolve"), "target": Object {"kind": String("wiki"), "value": Object {"page": String("Nota"), "heading": String("Sezione"), "block": Null}}, "from": Null}, Object {"kind": String("resolve"), "target": Object {"kind": String("path"), "value": String("../altra.md")}, "from": String("x/y.md")}, Object {"kind": String("resolve"), "target": Object {"kind": String("url"), "value": String("https://example.org")}, "from": Null}, Object {"kind": String("entries"), "of_kind": Null, "within": Null, "page": Null}, Object {"kind": String("entries"), "of_kind": String("asset"), "within": Null, "page": Object {"offset": Number(40), "limit": Number(20)}}, Object {"kind": String("entries"), "of_kind": String("document"), "within": Object {"path": String("Progetti"), "descendants": Bool(false)}, "page": Null}, Object {"kind": String("folders"), "under": Null, "page": Null}, Object {"kind": String("folders"), "under": Object {"path": String("Progetti"), "descendants": Bool(true)}, "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("drafts"), "page": Null}, Object {"kind": String("drafts"), "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("render_preview"), "doc": String("a.md")}, Object {"kind": String("render_embed"), "page": String("Nota"), "heading": String("Sezione"), "block": Null}, Object {"kind": String("syntax_forms"), "doc": String("a.md")}], "IndexResult": Array [Object {"kind": String("documents"), "value": Object {"items": Array [Object {"doc": String("a.md")}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("backlinks"), "value": Object {"items": Array [Object {"source": String("b.md"), "context": Null}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("outline"), "value": Array []}, Object {"kind": String("tags"), "value": Object {"items": Array [Object {"name": String("rust"), "count": Number(2)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("neighbors"), "value": Object {"items": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("property_values"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("vault_health"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("custom"), "value": Object {"x": Number(1)}}, Object {"kind": String("vault_status"), "value": Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}}, Object {"kind": String("jobs"), "value": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}]}, Object {"kind": String("settings"), "value": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}]}, Object {"kind": String("organization"), "value": Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md")}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}}, Object {"kind": String("resolved"), "value": Null}, Object {"kind": String("entries"), "value": Object {"items": Array [Object {"id": String("note/a.md"), "kind": String("document"), "size": Number(1024), "mtime": Number(1769000000000), "fingerprint": String("0123456789abcdef")}, Object {"id": String("allegati/foto.png"), "kind": String("asset"), "size": Number(204800), "mtime": Number(1769000001000)}, Object {"id": String("archivio.zip"), "kind": String("unknown"), "size": Number(9000000), "mtime": Number(1769000002000)}], "offset": Number(0), "total": Number(3)}}, Object {"kind": String("folders"), "value": Object {"items": Array [Object {"path": String("note"), "folders": Number(1), "entries": Number(12)}, Object {"path": String("note/bozze"), "folders": Number(0), "entries": Number(0)}], "offset": Number(0), "total": Number(2)}}, Object {"kind": String("render_preview"), "value": Object {"html": String(""), "parts": Array []}}, Object {"kind": String("render_embed"), "value": Object {"doc_id": String("note/a.md"), "html": String(""), "parts": Array []}}, Object {"kind": String("syntax_forms"), "value": Array [Object {"name": String("terzi:spoiler"), "trigger": Object {"inline": Object {"open": String("||"), "close": String("||")}}}]}], "BacklinkRef": Array [Object {"source": String("b.md"), "context": String("ctx")}], "TrashEntry": Array [Object {"id": String(".trash/Nota.2026-01-01T00-00-00.md"), "original": String("p/Nota.md"), "deleted_at": Number(4), "size": Number(5)}], "TagCount": Array [Object {"name": String("rust"), "count": Number(2)}], "Organization": Array [Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}], "VaultStatus": Array [Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}], "JobProgress": Array [Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}], "JobStatus": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}], "UiAction": Array [Object {"action": String("nuda"), "payload": Null, "fields": Array []}, Object {"action": String("piena"), "payload": Object {"doc": String("a.md")}, "fields": Array [Object {"field": String("f0"), "value": Object {"type": String("text"), "value": String("t")}}, Object {"field": String("f1"), "value": Object {"type": String("number"), "value": Number(1.5)}}, Object {"field": String("f2"), "value": Object {"type": String("bool"), "value": Bool(true)}}, Object {"field": String("f3"), "value": Object {"type": String("choices"), "value": Array [String("a"), String("b")]}}]}], "ViewSpec": Array [Object {"id": String("v"), "title": String("V"), "surface": String("right_sidebar"), "refresh": Object {"kinds": Array [String("index_updated"), String("batch_ended")], "topics": Array [], "subjects": Array [], "changes": Array []}, "follows": Array [String("document"), String("selection")], "params": Array [Object {"name": String("tag"), "title": String("Tag"), "description": String(""), "kind": Object {"kind": String("text")}, "required": Bool(false)}], "icon": String("tag"), "order": Number(2), "open_by_default": Bool(false), "preferred_size": Number(280), "closable": Bool(true)}, Object {"id": String("v2"), "title": String("V2"), "surface": String("bottom"), "refresh": Object {"kinds": Array [String("document_changed"), String("custom")], "topics": Array [String("com.acme.tasks")], "subjects": Array [Object {"kind": String("document"), "id": String("Progetti/Alpha.md")}, Object {"kind": String("folder"), "path": String("Diario")}], "changes": Array [String("tags"), String("frontmatter")]}, "follows": Array [], "params": Array [], "icon": Null, "order": Number(0), "open_by_default": Bool(false), "preferred_size": Null, "closable": Bool(true)}], "ViewInstance": Array [Object {"view": String("v"), "instance": String("v"), "params": Null}, Object {"view": String("v"), "instance": String("v#2"), "params": Object {"tag": String("rust")}}], "ViewContext": Array [Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, "secondary": Array []}}, "mode": String("reading")}, Object {"pane": String("main"), "doc": Null, "selections": Null, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array []}}, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(10), "end": Number(14)}, "text": String("ciao")}, "secondary": Array [Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, Object {"span": Object {"start": Number(20), "end": Number(20)}, "text": String("")}]}}, "mode": String("live_preview")}], "SelectionSet": Array [Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}, "secondary": Array []}}, Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array [Object {"text": String("mondo")}]}}], "AnchoredSelection": Array [Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}], "FloatingSelection": Array [Object {"text": String("ciao")}], "AnchoredSelections": Array [Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("")}, "secondary": Array []}], "FloatingSelections": Array [Object {"primary": Object {"text": String("x")}, "secondary": Array []}], "Locale": Array [Object {"language": String("und"), "timezone": String(""), "utc_offset_minutes": Number(0), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("it-IT"), "timezone": String("Europe/Rome"), "utc_offset_minutes": Number(120), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("en-US"), "timezone": String("Asia/Kathmandu"), "utc_offset_minutes": Number(345), "first_day_of_week": String("sunday"), "hour_cycle": String("h12")}], "CommandSpec": Array [Object {"id": String("test.every"), "title": String("Tutte le specie"), "description": String("Un comando con un parametro per specie."), "keybinding": String("Mod-k"), "params": Array [Object {"name": String("p0"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("text")}, "required": Bool(false)}, Object {"name": String("p1"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("number")}, "required": Bool(false)}, Object {"name": String("p2"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("bool")}, "required": Bool(false)}, Object {"name": String("p3"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("document")}, "required": Bool(false)}, Object {"name": String("p4"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("documents")}, "required": Bool(false)}, Object {"name": String("p5"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("choice"), "value": Array [Object {"value": String("uno"), "title": String("Uno")}]}, "required": Bool(false)}, Object {"name": String("p6"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("numbers")}, "required": Bool(false)}], "scope": Object {"writes": Bool(true), "reach": String("documents"), "reversible": Bool(false)}}, Object {"id": String("test.min"), "title": String("Minimo"), "description": String(""), "keybinding": Null, "params": Array [], "scope": Object {"writes": Bool(false), "reach": String("session"), "reversible": Bool(true)}}], "CommandOutcome": Array [Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("navigate"), "doc": String("a.md")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("reveal"), "doc": String("a.md"), "span": Object {"start": Number(3), "end": Number(7)}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("run_search"), "query": String("q")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("plan"), "summary": String("una nota"), "docs": Array [String("a.md")], "edits": Array [Object {"doc": String("a.md"), "edit": Object {"base": String("af63f54c86021707"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("y")}]}}]}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("open_view"), "view": String("v"), "params": Object {"tag": String("rust")}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Object {"label": String("la creazione di «a.md»"), "steps": Array [Object {"kind": String("edit"), "doc": String("a.md"), "edit": Object {"base": String("af63f44c86021554"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("x")}]}}, Object {"kind": String("command"), "command": String("note.trash"), "args": Object {"doc": String("a.md")}}]}, "partial": Null}, Object {"notify": String("fatto a metà"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}}], "Partial": Array [Object {"attempted": Number(12), "done": Number(11), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}]}, Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}], "Failure": Array [Object {"subject": String("a.md"), "error": Object {"kind": String("conflict"), "message": String("cambiata nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("bad_args"), "message": String("`privacy.telemetry` (un programma non la scrive)")}}], "PluginError": Array [Object {"kind": String("already_exists"), "message": String("Progetti/Idee.md")}, Object {"kind": String("not_found"), "message": String("Fantasma.md")}, Object {"kind": String("io"), "message": String("disco pieno")}]}
+ right: Object {"UiNode": Array [Object {"key": String("k"), "node": String("stack"), "dir": String("column"), "gap": Number(8), "children": Array []}, Object {"node": String("text"), "content": String("t")}, Object {"node": String("heading"), "level": Number(2), "content": String("h")}, Object {"node": String("list"), "items": Array []}, Object {"node": String("list_item"), "title": String("ti"), "subtitle": String("s"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(true)}, Object {"node": String("button"), "label": String("b"), "intent": String("primary"), "action": Object {"action": String("a"), "payload": Null}}, Object {"node": String("html"), "html": String("<i>")}, Object {"node": String("web_view"), "url": String("u"), "height": Number(100)}, Object {"node": String("section"), "title": String("s"), "collapsed": Bool(true), "children": Array []}, Object {"node": String("table"), "columns": Array [Object {"title": String("c"), "align": String("end")}], "rows": Array []}, Object {"node": String("row"), "cells": Array [Object {"node": String("text"), "content": String("c")}], "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("tree"), "roots": Array []}, Object {"node": String("tree_item"), "label": String("l"), "expanded": Bool(true), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}, "selected": Bool(false), "children": Array []}, Object {"node": String("tabs"), "active": Number(1), "tabs": Array []}, Object {"node": String("tab"), "label": String("t"), "action": Null, "children": Array []}, Object {"node": String("badge"), "label": String("b"), "intent": String("danger")}, Object {"node": String("icon"), "name": String("i")}, Object {"node": String("progress"), "value": Number(0.5), "label": String("p")}, Object {"node": String("separator")}, Object {"node": String("empty_state"), "title": String("vuoto"), "detail": String("d"), "action": Object {"action": String("a"), "payload": Object {"doc": String("a.md")}}}, Object {"node": String("key_value"), "entries": Array [Object {"label": String("k"), "value": String("v")}]}, Object {"node": String("text_input"), "field": String("f"), "label": String("l"), "value": String("v"), "placeholder": String("p"), "action": Null}, Object {"node": String("text_area"), "field": String("f"), "label": Null, "value": String("v"), "rows": Number(4), "action": Null}, Object {"node": String("number"), "field": String("f"), "label": Null, "value": Number(1.5), "min": Number(0.0), "max": Number(2.0), "step": Number(0.5), "action": Null}, Object {"node": String("checkbox"), "field": String("f"), "label": String("l"), "value": Bool(true), "action": Null}, Object {"node": String("select"), "field": String("f"), "label": Null, "value": Array [String("u")], "options": Array [Object {"value": String("u"), "label": String("Uno")}], "multiple": Bool(false), "action": Null}, Object {"node": String("radio"), "field": String("f"), "label": Null, "value": String("u"), "options": Array [Object {"value": String("u"), "label": String("Uno")}], "action": Null}, Object {"node": String("slider"), "field": String("f"), "label": Null, "value": Number(0.5), "min": Number(0.0), "max": Number(1.0), "step": Number(0.1), "action": Null}, Object {"node": String("date_picker"), "field": String("f"), "label": Null, "value": String("2026-07-26"), "action": Null}, Object {"node": String("form"), "children": Array [], "submit_label": String("Salva"), "submit": Object {"action": String("submit"), "payload": Null}}, Object {"node": String("custom"), "ns": String("p"), "payload": Object {"x": Number(1)}, "fallback": Array [Object {"node": String("text"), "content": String("f")}]}, Object {"node": String("pending"), "label": String("carico")}, Object {"node": String("failed"), "message": String("m"), "retry": Object {"action": String("riprova"), "payload": Null}}], "ViewUpdate": Array [Object {"kind": String("replace"), "root": Object {"node": String("text"), "content": String("t")}}, Object {"kind": String("none")}, Object {"kind": String("navigate"), "doc_id": String("d")}, Object {"kind": String("reveal"), "doc_id": String("d"), "span": Object {"start": Number(0), "end": Number(3)}}, Object {"kind": String("run_search"), "query": String("q")}, Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, Object {"kind": String("patch"), "key": String("k"), "node": Object {"key": String("k"), "node": String("text"), "content": String("t")}}], "KernelEvent": Array [Object {"type": String("vault_opened"), "root": String("r")}, Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, Object {"type": String("document_removed"), "id": String("a")}, Object {"type": String("document_renamed"), "from": String("a"), "to": String("b")}, Object {"type": String("index_updated")}, Object {"type": String("job_done"), "id": String("1"), "job": String("j"), "result": Object {"Ok": Null}}, Object {"type": String("overflow"), "dropped": Number(2)}, Object {"type": String("custom"), "topic": String("p/x"), "payload": Null}, Object {"type": String("batch_ended"), "batch": String("18446744073709551615"), "changed": Array [String("a"), String("b")]}, Object {"type": String("view_invalidated"), "view": String("v"), "instance": String("v#2")}, Object {"type": String("vault_closed"), "root": String("/vault")}, Object {"type": String("job_started"), "id": String("18446744073709551615"), "job": String("export")}, Object {"type": String("job_progress"), "id": String("18446744073709551615"), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"type": String("setting_changed"), "key": String("versioning.enabled"), "scope": String("vault")}, Object {"type": String("entry_changed"), "id": String("allegati/foto.png"), "kind": String("asset")}, Object {"type": String("entry_removed"), "id": String("allegati/foto.png"), "kind": String("unknown")}, Object {"type": String("entry_renamed"), "from": String("allegati/foto.png"), "to": String("media/foto.png"), "kind": String("asset")}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("a.md"), "error": Object {"kind": String("internal"), "message": String("indice non allineato")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("failure"), "subject": Null, "error": Object {"kind": String("internal"), "message": String("flush fallito")}, "gate": Null}, Object {"type": String("trouble"), "severity": String("warning"), "subject": String("b.md"), "error": Object {"kind": String("internal"), "message": String("render esploso")}, "gate": String("command")}, Object {"type": String("timer_fired"), "owner": String("com.acme.tasks"), "timer": String("sync")}], "KernelNotice": Array [Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("watcher")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("kernel")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("document_changed"), "id": String("a"), "changes": Null}, "origin": Object {"actor": Object {"kind": String("plugin"), "id": String("fub.versioning")}, "batch": String("18446744073709551615")}}, Object {"event": Object {"type": String("index_updated")}, "origin": Object {"actor": Object {"kind": String("user")}, "batch": Null}}], "Span": Array [Object {"start": Number(3), "end": Number(7)}], "SettingSpec": Array [Object {"key": String("prova.k0"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, Object {"key": String("prova.k1"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("number"), "default": Number(14.0), "min": Number(8.0), "max": Number(72.0)}, "program_writable": Bool(false)}, Object {"key": String("prova.k2"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("text"), "default": String("Diario")}, "program_writable": Bool(false)}, Object {"key": String("prova.k3"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, Object {"key": String("prova.k4"), "label": String("Prova"), "description": String("Cosa fa, in prosa."), "group": String("Prova"), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array [String("fub.stats")]}, "program_writable": Bool(false)}], "SettingEntry": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}, Object {"spec": Object {"key": String("plugins.disabled"), "label": String("Componenti spenti"), "description": String(""), "group": String(""), "scope": String("vault"), "kind": Object {"kind": String("list"), "default": Array []}, "program_writable": Bool(false)}, "value": Array [String("fub.stats")], "source": String("vault")}], "VersionRef": Array [Object {"ts": Number(1), "hash": String("18446744073709551615"), "size": Number(3)}], "DocumentMatch": Array [Object {"doc": String("a.md")}, Object {"doc": String("b.md"), "score": Number(0.5), "snippet": String("s"), "highlights": Array [Object {"start": Number(0), "end": Number(1)}], "properties": Array [Object {"key": String("tipo"), "value": Object {"kind": String("text"), "value": String("nota")}}], "occurrences": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(120), "end": Number(125)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}]}], "DocPosition": Array [Object {"span": Object {"start": Number(4), "end": Number(9)}, "revision": String("0123456789abcdef")}, Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}], "ResolvedRef": Array [Object {"doc": String("note/a.md")}, Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}], "NeighborRef": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "IndexQuery": Array [Object {"kind": String("documents"), "matching": Object {"any": Array [Object {"all": Array [Object {"negated": Bool(false), "predicate": Object {"kind": String("text"), "text": String("rust"), "mode": String("terms"), "fields": Array [], "tolerance": String("exact"), "partial_last_term": Bool(false)}}, Object {"negated": Bool(true), "predicate": Object {"kind": String("tag"), "name": String("archivio"), "descendants": Bool(true)}}]}]}, "sort": Null, "select": Object {"kind": String("none")}, "page": Object {"offset": Number(0), "limit": Number(20)}, "excerpts": String("attach")}, Object {"kind": String("backlinks"), "target": String("a.md"), "page": Null}, Object {"kind": String("outline"), "doc": String("a.md")}, Object {"kind": String("tags"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("neighbors"), "seeds": Object {"any": Array []}, "direction": String("outbound"), "depth": Number(1), "page": Null}, Object {"kind": String("property_values"), "key": String("tipo"), "matching": Object {"any": Array []}, "page": Null}, Object {"kind": String("vault_health"), "check": String("broken_links"), "page": Null}, Object {"kind": String("custom"), "ns": String("terzi"), "query": Object {"x": Number(1)}}, Object {"kind": String("vault_status")}, Object {"kind": String("jobs")}, Object {"kind": String("settings"), "plugin": Null}, Object {"kind": String("settings"), "plugin": String("fub.versioning")}, Object {"kind": String("organization")}, Object {"kind": String("resolve"), "target": Object {"kind": String("wiki"), "value": Object {"page": String("Nota"), "heading": String("Sezione"), "block": Null}}, "from": Null}, Object {"kind": String("resolve"), "target": Object {"kind": String("path"), "value": String("../altra.md")}, "from": String("x/y.md")}, Object {"kind": String("resolve"), "target": Object {"kind": String("url"), "value": String("https://example.org")}, "from": Null}, Object {"kind": String("entries"), "of_kind": Null, "within": Null, "page": Null}, Object {"kind": String("entries"), "of_kind": String("asset"), "within": Null, "page": Object {"offset": Number(40), "limit": Number(20)}}, Object {"kind": String("entries"), "of_kind": String("document"), "within": Object {"path": String("Progetti"), "descendants": Bool(false)}, "page": Null}, Object {"kind": String("folders"), "under": Null, "page": Null}, Object {"kind": String("folders"), "under": Object {"path": String("Progetti"), "descendants": Bool(true)}, "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("drafts"), "page": Null}, Object {"kind": String("drafts"), "page": Object {"offset": Number(0), "limit": Number(20)}}, Object {"kind": String("render_preview"), "doc": String("a.md")}, Object {"kind": String("render_embed"), "page": String("Nota"), "heading": String("Sezione"), "block": Null}, Object {"kind": String("syntax_forms"), "doc": String("a.md")}], "IndexResult": Array [Object {"kind": String("documents"), "value": Object {"items": Array [Object {"doc": String("a.md")}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("backlinks"), "value": Object {"items": Array [Object {"source": String("b.md"), "context": Null}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("outline"), "value": Array []}, Object {"kind": String("tags"), "value": Object {"items": Array [Object {"name": String("rust"), "count": Number(2)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("neighbors"), "value": Object {"items": Array [Object {"doc": String("b.md"), "via": String("a.md"), "depth": Number(1)}], "offset": Number(0), "total": Number(1)}}, Object {"kind": String("property_values"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("vault_health"), "value": Object {"items": Array [], "offset": Number(0), "total": Number(0)}}, Object {"kind": String("custom"), "value": Object {"x": Number(1)}}, Object {"kind": String("vault_status"), "value": Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}}, Object {"kind": String("jobs"), "value": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}]}, Object {"kind": String("settings"), "value": Array [Object {"spec": Object {"key": String("versioning.enabled"), "label": String("Versioning"), "description": String("Tiene uno storico delle modifiche."), "group": String("Vault"), "scope": String("vault"), "kind": Object {"kind": String("toggle"), "default": Bool(true)}, "program_writable": Bool(true)}, "value": Bool(true), "source": String("default")}, Object {"spec": Object {"key": String("appearance.theme"), "label": String("Tema"), "description": String(""), "group": String(""), "scope": String("machine"), "kind": Object {"kind": String("choice"), "default": String("auto"), "options": Array [Object {"value": String("auto"), "label": String("Automatico")}, Object {"value": String("scuro"), "label": String("Scuro")}]}, "program_writable": Bool(false)}, "value": String("scuro"), "source": String("machine")}]}, Object {"kind": String("organization"), "value": Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md")}}, Object {"kind": String("resolved"), "value": Object {"doc": String("note/a.md"), "at": Object {"span": Object {"start": Number(42), "end": Number(96)}, "anchor": String("abc123"), "revision": String("0123456789abcdef")}}}, Object {"kind": String("resolved"), "value": Null}, Object {"kind": String("entries"), "value": Object {"items": Array [Object {"id": String("note/a.md"), "kind": String("document"), "size": Number(1024), "mtime": Number(1769000000000), "fingerprint": String("0123456789abcdef")}, Object {"id": String("allegati/foto.png"), "kind": String("asset"), "size": Number(204800), "mtime": Number(1769000001000)}, Object {"id": String("archivio.zip"), "kind": String("unknown"), "size": Number(9000000), "mtime": Number(1769000002000)}], "offset": Number(0), "total": Number(3)}}, Object {"kind": String("folders"), "value": Object {"items": Array [Object {"path": String("note"), "folders": Number(1), "entries": Number(12)}, Object {"path": String("note/bozze"), "folders": Number(0), "entries": Number(0)}], "offset": Number(0), "total": Number(2)}}, Object {"kind": String("render_preview"), "value": Object {"html": String(""), "parts": Array []}}, Object {"kind": String("render_embed"), "value": Object {"doc_id": String("note/a.md"), "html": String(""), "parts": Array []}}, Object {"kind": String("syntax_forms"), "value": Array [Object {"name": String("terzi:spoiler"), "trigger": Object {"inline": Object {"open": String("||"), "close": String("||")}}}]}], "BacklinkRef": Array [Object {"source": String("b.md"), "context": String("ctx")}], "TrashEntry": Array [Object {"id": String(".trash/Nota.2026-01-01T00-00-00.md"), "original": String("p/Nota.md"), "deleted_at": Number(4), "size": Number(5)}], "TagCount": Array [Object {"name": String("rust"), "count": Number(2)}], "Organization": Array [Object {"icons": Object {"note/a.md": String("📌")}, "pinned": Array [String("note/a.md")], "order": Object {"note": Array [String("a.md")]}, "spaces": Array [String("note")]}], "VaultStatus": Array [Object {"watching": Bool(true), "sync_failures": Number(1), "last_sync_error": String("Nota.md: frontmatter illeggibile"), "indexing": String("running")}], "JobProgress": Array [Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}], "JobStatus": Array [Object {"id": String("1"), "job": String("export"), "plugin": String("fub.transfer"), "since": Number(1700000000000), "progress": Object {"done": Number(12), "total": Number(300), "label": String("esportando Diario/2026.md")}}, Object {"id": String("2"), "job": String("reindex"), "plugin": String("fub.search"), "since": Number(1700000000500), "progress": Null}], "UiAction": Array [Object {"action": String("nuda"), "payload": Null, "fields": Array []}, Object {"action": String("piena"), "payload": Object {"doc": String("a.md")}, "fields": Array [Object {"field": String("f0"), "value": Object {"type": String("text"), "value": String("t")}}, Object {"field": String("f1"), "value": Object {"type": String("number"), "value": Number(1.5)}}, Object {"field": String("f2"), "value": Object {"type": String("bool"), "value": Bool(true)}}, Object {"field": String("f3"), "value": Object {"type": String("choices"), "value": Array [String("a"), String("b")]}}]}], "ViewSpec": Array [Object {"id": String("v"), "title": String("V"), "surface": String("right_sidebar"), "refresh": Object {"kinds": Array [String("index_updated"), String("batch_ended")], "topics": Array [], "subjects": Array [], "changes": Array []}, "follows": Array [String("document"), String("selection")], "params": Array [Object {"name": String("tag"), "title": String("Tag"), "description": String(""), "kind": Object {"kind": String("text")}, "required": Bool(false)}], "icon": String("tag"), "order": Number(2), "open_by_default": Bool(false), "preferred_size": Number(280), "closable": Bool(true)}, Object {"id": String("v2"), "title": String("V2"), "surface": String("bottom"), "refresh": Object {"kinds": Array [String("document_changed"), String("custom")], "topics": Array [String("com.acme.tasks")], "subjects": Array [Object {"kind": String("document"), "id": String("Progetti/Alpha.md")}, Object {"kind": String("folder"), "path": String("Diario")}], "changes": Array [String("tags"), String("frontmatter")]}, "follows": Array [], "params": Array [], "icon": Null, "order": Number(0), "open_by_default": Bool(false), "preferred_size": Null, "closable": Bool(true)}], "ViewInstance": Array [Object {"view": String("v"), "instance": String("v"), "params": Null}, Object {"view": String("v"), "instance": String("v#2"), "params": Object {"tag": String("rust")}}], "ViewContext": Array [Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, "secondary": Array []}}, "mode": String("reading")}, Object {"pane": String("main"), "doc": Null, "selections": Null, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array []}}, "mode": String("live_preview")}, Object {"pane": String("main"), "doc": String("a.md"), "selections": Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(10), "end": Number(14)}, "text": String("ciao")}, "secondary": Array [Object {"span": Object {"start": Number(3), "end": Number(7)}, "text": String("ciao")}, Object {"span": Object {"start": Number(20), "end": Number(20)}, "text": String("")}]}}, "mode": String("live_preview")}], "SelectionSet": Array [Object {"kind": String("anchored"), "value": Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}, "secondary": Array []}}, Object {"kind": String("floating"), "value": Object {"primary": Object {"text": String("ciao")}, "secondary": Array [Object {"text": String("mondo")}]}}], "AnchoredSelection": Array [Object {"span": Object {"start": Number(0), "end": Number(4)}, "text": String("ciao")}], "FloatingSelection": Array [Object {"text": String("ciao")}], "AnchoredSelections": Array [Object {"primary": Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("")}, "secondary": Array []}], "FloatingSelections": Array [Object {"primary": Object {"text": String("x")}, "secondary": Array []}], "Locale": Array [Object {"language": String("und"), "timezone": String(""), "utc_offset_minutes": Number(0), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("it-IT"), "timezone": String("Europe/Rome"), "utc_offset_minutes": Number(120), "first_day_of_week": String("monday"), "hour_cycle": String("h23")}, Object {"language": String("en-US"), "timezone": String("Asia/Kathmandu"), "utc_offset_minutes": Number(345), "first_day_of_week": String("sunday"), "hour_cycle": String("h12")}], "CommandSpec": Array [Object {"id": String("test.every"), "title": String("Tutte le specie"), "description": String("Un comando con un parametro per specie."), "keybinding": String("Mod-k"), "params": Array [Object {"name": String("p0"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("text")}, "required": Bool(false)}, Object {"name": String("p1"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("number")}, "required": Bool(false)}, Object {"name": String("p2"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("bool")}, "required": Bool(false)}, Object {"name": String("p3"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("document")}, "required": Bool(false)}, Object {"name": String("p4"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("documents")}, "required": Bool(false)}, Object {"name": String("p5"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("choice"), "value": Array [Object {"value": String("uno"), "title": String("Uno")}]}, "required": Bool(false)}, Object {"name": String("p6"), "title": String("P"), "description": String("un parametro"), "kind": Object {"kind": String("numbers")}, "required": Bool(false)}], "scope": Object {"writes": Bool(true), "reach": String("documents"), "reversible": Bool(false)}}, Object {"id": String("test.min"), "title": String("Minimo"), "description": String(""), "keybinding": Null, "params": Array [], "scope": Object {"writes": Bool(false), "reach": String("session"), "reversible": Bool(true)}}], "CommandOutcome": Array [Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("navigate"), "doc": String("a.md")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("reveal"), "doc": String("a.md"), "span": Object {"start": Number(3), "end": Number(7)}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("run_search"), "query": String("q")}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("plan"), "summary": String("una nota"), "docs": Array [String("a.md")], "edits": Array [Object {"doc": String("a.md"), "edit": Object {"base": String("sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("y")}]}}]}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("custom"), "ns": String("p"), "payload": Null}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("open_view"), "view": String("v"), "params": Object {"tag": String("rust")}}, "undo": Null, "partial": Null}, Object {"notify": String("fatto"), "effect": Object {"kind": String("done")}, "undo": Object {"label": String("la creazione di «a.md»"), "steps": Array [Object {"kind": String("edit"), "doc": String("a.md"), "edit": Object {"base": String("sha256:a1fce4363854ff888cff4b8e7875d600c2682390412a8cf79b37d0b11148b0fa"), "edits": Array [Object {"span": Object {"start": Number(0), "end": Number(0)}, "text": String("x")}]}}, Object {"kind": String("command"), "command": String("note.trash"), "args": Object {"doc": String("a.md")}}]}, "partial": Null}, Object {"notify": String("fatto a metà"), "effect": Object {"kind": String("done")}, "undo": Null, "partial": Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}}], "Partial": Array [Object {"attempted": Number(12), "done": Number(11), "failures": Array [Object {"subject": String("dodici.md"), "error": Object {"kind": String("conflict"), "message": String("scritta nel frattempo")}}]}, Object {"attempted": Number(12), "done": Number(10), "failures": Array [Object {"subject": Null, "error": Object {"kind": String("permission_denied"), "message": String("sola lettura")}}]}], "Failure": Array [Object {"subject": String("a.md"), "error": Object {"kind": String("conflict"), "message": String("cambiata nel frattempo")}}, Object {"subject": Null, "error": Object {"kind": String("bad_args"), "message": String("`privacy.telemetry` (un programma non la scrive)")}}], "PluginError": Array [Object {"kind": String("already_exists"), "message": String("Progetti/Idee.md")}, Object {"kind": String("not_found"), "message": String("Fantasma.md")}, Object {"kind": String("io"), "message": String("disco pieno")}]}
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 
 failures:
-    every_table_row_points_to_a_constant_that_exists
-    every_version_constant_has_its_row_in_the_table
+    ts_mirror_fixture_is_in_sync_with_the_rust_types
 
-test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
-[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-app --test schemas_on_disk`
+[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-features --test ts_mirror`
