@@ -253,6 +253,11 @@ p.write_text(s)
 p = Path('crates/fub-kernel/src/workspace.rs')
 s = p.read_text()
 s = s.replace(
+    'use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};',
+    'use fub_abi::event::DocChanges;\nuse fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};',
+    1,
+)
+s = s.replace(
     'use crate::index::Indexes;',
     'use crate::index::{feed_handles as feed_index_handles, Indexes, SharedIndexProvider};',
     1,
@@ -266,7 +271,7 @@ extra = r'''
 pub struct PreparedDocumentFeed {
     id: DocId,
     model: DocumentModel,
-    changes: DocumentChanges,
+    changes: DocChanges,
     revision: Revision,
     journal: JournalOp,
     providers: Vec<(String, SharedIndexProvider)>,
@@ -332,7 +337,6 @@ new_tail = '''        let lost = self.indexes.core.on_documents_indexed(std::sli
 assert old_tail in s
 s = s.replace(old_tail, new_tail, 1)
 
-# Replace the direct helper above with reusable prepare/finalize immediately after ingest_model.
 needle = '''        let pending = pending.invoke_indexes();
         self.finish_index_feed(pending);
     }
@@ -359,7 +363,6 @@ replacement = '''        let pending = pending.invoke_indexes();
 assert needle in s
 s = s.replace(needle, replacement, 1)
 
-# Add detached write commit/finalize methods before existing finish_document_write.
 anchor = '    pub fn finish_document_write(\n'
 idx = s.find(anchor)
 assert idx != -1
@@ -431,11 +434,9 @@ methods = r'''    pub fn commit_document_write(
 '''
 s = s[:idx] + methods + s[idx:]
 
-# Rebuild finish_document_write as the direct, no-Custody convenience path.
 start = s.find('    pub fn finish_document_write(\n')
 end = s.find('\n    pub fn write_document(', start)
 assert start != -1 and end != -1
-old = s[start:end]
 new = r'''    pub fn finish_document_write(
         &mut self,
         prepared: PreparedDocumentWrite,
