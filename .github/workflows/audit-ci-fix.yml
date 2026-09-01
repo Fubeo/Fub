@@ -24,6 +24,9 @@ jobs:
         with:
           toolchain: 1.89
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 22
@@ -48,7 +51,7 @@ jobs:
           set -o pipefail
           cargo test --workspace 2>&1 | tee .audit-rust-test.log
       - name: Cattura il rosso Rust
-        if: steps.rust_tests.outcome == 'failure'
+        if: failure() && steps.rust_tests.outcome == 'failure'
         shell: bash
         run: |
           tail -n 500 .audit-rust-test.log > .audit-error.txt
