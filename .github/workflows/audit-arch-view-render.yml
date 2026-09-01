@@ -22,6 +22,7 @@ jobs:
         run: |
           git config user.name "Fubeo audit bot"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
+          python .audit-arch-view-render-testfix.py
           python .audit-arch-view-render.py
           cargo fmt --all
           if ! (cargo test -p fub-host --test concurrency && cargo test -p fub-host --test one_lock_only && cargo test -p fub-host --test official_views && cargo test -p fub-kernel --test the_panic && cargo check -p fub-host --all-targets && cargo clippy -p fub-host -p fub-kernel --all-targets -- -D warnings) > /tmp/arch-view-render.log 2>&1; then
@@ -34,7 +35,7 @@ jobs:
             cat .audit-arch-view-render-error.txt
             exit 1
           fi
-          git rm -f .audit-arch-view-render.py .github/workflows/audit-arch-view-render.yml
+          git rm -f .audit-arch-view-render.py .audit-arch-view-render-testfix.py .github/workflows/audit-arch-view-render.yml
           rm -f .audit-arch-view-render-error.txt
           git add -u
           git add crates/fub-kernel/src/providers.rs crates/fub-kernel/src/workspace.rs crates/fub-host/src/jobs.rs crates/fub-host/src/session.rs crates/fub-host/tests/concurrency.rs
