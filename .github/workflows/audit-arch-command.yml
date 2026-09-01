@@ -22,6 +22,8 @@ jobs:
         run: |
           git config user.name "Fubeo audit bot"
           git config user.email "83821420+Fubeo@users.noreply.github.com"
+          # Corregge il generatore stesso prima dell'applicazione: ThreadId è Copy.
+          sed -i 's/state.owner = Some(me.clone());/state.owner = Some(me);/' .audit-arch-command.py
           python .audit-arch-command.py
           cargo fmt --all
           if ! (cargo test -p fub-host --test concurrency && cargo test -p fub-kernel --test invoke_command && cargo check -p fub-host --all-targets && cargo clippy -p fub-host -p fub-kernel --all-targets -- -D warnings) > /tmp/arch-command.log 2>&1; then
