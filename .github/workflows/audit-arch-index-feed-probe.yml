@@ -27,7 +27,16 @@ jobs:
           python3 .audit-arch-index-feed-fix.py
           python3 .audit-arch-index-feed-probe.py
       - name: format
-        run: cargo fmt --all
+        run: |
+          if ! cargo fmt --all 2>.audit-error.txt; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add .audit-error.txt
+            git commit -m "ci(temp): cattura errore ARCH index feed"
+            git push origin HEAD:fix/audit-integration
+            exit 1
+          fi
+          rm -f .audit-error.txt
       - name: regressione ARCH index feed
         run: cargo test -p fub-host --test audit_index_feed -- --nocapture
       - name: regressioni indici e host
@@ -40,7 +49,7 @@ jobs:
         run: cargo clippy -p fub-kernel -p fub-host --all-targets -- -D warnings
       - name: crea checkpoint semantico
         run: |
-          rm -f crates/fub-host/tests/audit_index_feed.rs
+          rm -f crates/fub-host/tests/audit_index_feed.rs .audit-error.txt
           git rm -f --ignore-unmatch .audit-arch-index-feed-probe.py .audit-arch-index-feed-fix.py .github/workflows/audit-arch-index-feed-probe.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
