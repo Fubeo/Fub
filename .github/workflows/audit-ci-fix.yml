@@ -1,9 +1,7 @@
 name: Audit CI fix
 
 'on':
-  push:
-    branches:
-      - fix/audit-integration
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -45,6 +43,7 @@ jobs:
           cargo test -p fub-app --test schemas_on_disk
           UPDATE_MIRROR=1 cargo test -p fub-features --test ts_mirror
           cargo test -p fub-features --test ts_mirror
+          cargo test -p fub-features --test undo a_panic_inside_a_undo_does_not_carries_via_the_stack
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Prepara il bersaglio dei componenti
@@ -91,6 +90,7 @@ jobs:
                   crates/fub-kernel/Cargo.toml \
                   crates/fub-abi/tests/dependency_invariant.rs \
                   crates/fub-abi/tests/a_named_rule_is_declared.rs \
+                  crates/fub-features/tests/undo.rs \
                   apps/client/src/ui/node.test.ts \
                   apps/client/src/__fixtures__/mirror-samples.json \
                   docs/development/versioning-and-releases.md
