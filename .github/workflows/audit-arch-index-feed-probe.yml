@@ -1,6 +1,14 @@
 name: Audit ARCH index feed
 
 on:
+  push:
+    branches: ["fix/audit-integration"]
+    paths:
+      - .github/workflows/audit-arch-index-feed-probe.yml
+      - .audit-arch-index-feed-probe.py
+      - .audit-arch-index-feed-fix.py
+      - .audit-arch-index-feed-compilefix.py
+      - .audit-arch-index-feed-opening-fix.py
   workflow_dispatch:
 
 permissions:
