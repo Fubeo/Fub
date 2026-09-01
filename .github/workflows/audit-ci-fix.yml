@@ -1,0 +1,185 @@
+name: Audit CI fix
+
+on:
+  push:
+    branches: ["fix/audit-integration"]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: Applica i fix deterministici
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: atteso 1 match, trovati {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          # Clippy: il refactor non usa più Actor direttamente nell'app.
+          replace_once(
+              "crates/fub-app/src/lib.rs",
+              "use fub_abi::event::Actor;\n",
+              "",
+          )
+
+          # cap-std è una scelta architetturale del filesystem capability-based,
+          # non un residuo: il manifesto deve dirlo e l'invariante deve nominarlo.
+          replace_once(
+              "crates/fub-kernel/Cargo.toml",
+              "camino = { workspace = true }\ncap-std = { workspace = true }\nthiserror = { workspace = true }",
+              "camino = { workspace = true }\n# Il vault di produzione apre la root una volta e poi opera tramite `cap_std::fs::Dir`:\n# il path ambientale resta solo un nome logico, così una sostituzione della root\n# dopo il mount non può reindirizzare letture e scritture fuori dal capability.\ncap-std = { workspace = true }\nthiserror = { workspace = true }",
+          )
+          replace_once(
+              "crates/fub-abi/tests/dependency_invariant.rs",
+              '            "camino",\n            "thiserror",',
+              '            "camino",\n            "cap-std",\n            "thiserror",',
+          )
+
+          # Le nuove porte del registry devono usare la stessa identità delle
+          # estensioni; la vecchia voce ::insert è diventata ::replace.
+          rules = Path("crates/fub-abi/tests/a_named_rule_is_declared.rs")
+          text = rules.read_text()
+          for old, new in [
+              ("**quarantadue**", "**quarantaquattro**"),
+              ("**quarantatreesima**", "**quarantacinquesima**"),
+              ('"crates/fub-kernel/src/registry.rs::insert"', '"crates/fub-kernel/src/registry.rs::replace"'),
+              (
+                  '"è la scrittura della mappa che `register` interroga: divergere da lei vorrebbe \\\n                 dire un provider registrato sotto una chiave che nessuno cercherà."',
+                  '"è la sostituzione intenzionale nella stessa mappa di `register`: riceve lo \\\n                 stesso descrittore e deve piegare le estensioni nello stesso modo, o registrare \\\n                 e sostituire darebbero identità diverse alla stessa estensione."',
+              ),
+          ]:
+              if text.count(old) != 1:
+                  raise SystemExit(f"a_named_rule: atteso 1 match per {old!r}, trovati {text.count(old)}")
+              text = text.replace(old, new, 1)
+
+          marker = '''        (
+            "crates/fub-kernel/src/registry.rs::provider_for_ext",
+            (
+                Family::ContextualCase,'''
+          inserted = '''        (
+            "crates/fub-kernel/src/registry.rs::provider_arc_for_ext",
+            (
+                Family::ContextualCase,
+                "è lo stesso lookup di `provider_for_ext`, ma rende un `Arc` perché la callback \\
+                 possa essere invocata dopo aver rilasciato il workspace. La forma di ownership \\
+                 non può cambiare l'identità dell'estensione che sceglie il provider.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::descriptor_for_ext",
+            (
+                Family::ContextualCase,
+                "legge il descrittore congelato della stessa registrazione: deve risolvere le \\
+                 stesse chiavi di `provider_for_ext` e `provider_arc_for_ext`, o metadati e \\
+                 callback potrebbero attribuire la stessa estensione a provider diversi.",
+            ),
+        ),
+''' + marker
+          if text.count(marker) != 1:
+              raise SystemExit(f"a_named_rule: marker provider_for_ext trovato {text.count(marker)} volte")
+          text = text.replace(marker, inserted, 1)
+
+          ascii_marker = "        // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------\n"
+          ascii_entry = '''        (
+            "crates/fub-abi/src/edit.rs::matches_bytes",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome ma compatibilità di migrazione: soltanto la vecchia \\
+                 revisione FNV-1a a sedici cifre accetta maiuscole e minuscole equivalenti, perché \\
+                 l'alfabeto esadecimale è ASCII. Le revisioni SHA-256 correnti restano canoniche \\
+                 e si confrontano esattamente; una piegatura Unicode inventerebbe equivalenze.",
+            ),
+        ),
+'''
+          if text.count(ascii_marker) != 1:
+              raise SystemExit(f"a_named_rule: marker CasoAscii trovato {text.count(ascii_marker)} volte")
+          text = text.replace(ascii_marker, ascii_marker + ascii_entry, 1)
+          rules.write_text(text)
+
+          # Le tre regressioni client erano fixture incoerenti con il contratto:
+          # field() riceve un'azione, non il valore; e un radio senza azione è
+          # disabilitato per definizione, quindi click() non può selezionarlo.
+          client = Path("apps/client/src/ui/node.test.ts")
+          text = client.read_text()
+          old = '{ ...field(value), key: "doppia" },'
+          if text.count(old) != 2:
+              raise SystemExit(f"node.test: attesi 2 field duplicati, trovati {text.count(old)}")
+          text = text.replace(old, '{ ...field("cambia"), value, key: "doppia" },')
+          old = '{ ...field("dopo"), key: "doppia" } as UiNode'
+          new = '{ ...field("cambia"), value: "dopo", key: "doppia" } as UiNode'
+          if text.count(old) != 1:
+              raise SystemExit(f"node.test: patch ambiguo trovato {text.count(old)} volte")
+          text = text.replace(old, new, 1)
+          old = '''  const choice = (): UiNode =>
+    ({
+      node: "radio",
+      field: "r",
+      label: "Scegli",
+      value: null,
+      options: [
+        { value: "a", label: "Uno" },
+        { value: "b", label: "Due" },
+      ],
+      action: null,
+    }) as UiNode;'''
+          new = old.replace('      action: null,', '      action: { action: "scegli", payload: null },')
+          if text.count(old) != 1:
+              raise SystemExit(f"node.test: fixture radio trovata {text.count(old)} volte")
+          text = text.replace(old, new, 1)
+          client.write_text(text)
+          PY
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          toolchain: 1.89
+          components: rustfmt, clippy
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - name: Dipendenze di sistema di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - name: Formato e invarianti mirati
+        run: |
+          cargo fmt --all --check
+          cargo test -p fub-abi --test dependency_invariant
+          cargo test -p fub-abi --test a_named_rule_is_declared
+      - name: Clippy completo
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Test Rust Ubuntu
+        run: cargo test --workspace
+      - name: Test client
+        working-directory: apps/client
+        run: |
+          npm ci
+          npm test
+      - name: Checkpoint semantico e cleanup
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/audit-ci-fix.yml
+          git add crates/fub-app/src/lib.rs \
+                  crates/fub-kernel/Cargo.toml \
+                  crates/fub-abi/tests/dependency_invariant.rs \
+                  crates/fub-abi/tests/a_named_rule_is_declared.rs \
+                  apps/client/src/ui/node.test.ts
+          git commit -m "fix(ci): riallinea i presidi della branch"
+          git push origin HEAD:fix/audit-integration
