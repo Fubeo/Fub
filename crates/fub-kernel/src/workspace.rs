@@ -88,7 +88,7 @@ use fub_abi::rules::path_policy::{self, Naming};
 
 use crate::bus::EventBus;
 use crate::dispatcher::{Dispatcher, JobBell, PendingJob};
-use crate::documents::{extension_of, DocumentStore};
+use crate::documents::{extension_of, DocumentStore, PreparedParse};
 use crate::drafts::Drafts;
 use crate::entries::{EntryStore, StoredEntry, StoredMeta};
 use crate::error::{KernelError, Result};
@@ -609,6 +609,23 @@ impl PreparedViewAction {
         crate::safety::calling(&self.owner, Gate::ViewAction, &self.view, || {
             provider.on_action(&self.instance, action, host)
         })
+    }
+}
+
+/// Scrittura risolta fino al confine del codice esterno. Non porta guardie del
+/// workspace: può essere parsata mentre `Custody<Workspace>` è rilasciato.
+pub struct PreparedDocumentWrite {
+    id: DocId,
+    existed: bool,
+    from: Option<Revision>,
+    expected_source: Option<String>,
+    parser: PreparedParse,
+}
+
+impl PreparedDocumentWrite {
+    /// Esegue `FormatProvider::parse` e tutte le `SyntaxRule`, e nient'altro.
+    pub fn parse(&self, source: &str) -> Result<DocumentModel> {
+        self.parser.invoke(DocumentSource::Text(source.to_string()))
     }
 }
 
@@ -2872,55 +2889,13 @@ impl Workspace {
     /// prima, perché una riga di registro non vale una lettura a ogni
     /// salvataggio (§15.2).
     // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
-    pub fn write_document(
-        &mut self,
+    pub fn prepare_document_write(
+        &self,
         id: &DocId,
-        source: &str,
         base: WriteBase,
-    ) -> Result<Revision> {
-        // documento esistesse affatto.
-        //
-        // **«C'era» lo dice il disco** (difetto 0180). L'anagrafe è una cache
-        // di ciò che si è indicizzato, quindi «non lo conosco» e «non c'è» ci
-        // si assomigliano solo finché nessuno scrive nel vault da fuori: un
-        // file creato da un'altra applicazione e non ancora visto dal
-        // rilevatore c'è sul disco e in anagrafe no, e sopra quel file il
-        // salvataggio scriveva `Created`. Non è una parola imprecisa in una
-        // lista: il registro è **autorevole** (0067) e di quella variante c'è
-        // scritto sopra che «l'inverso è cestinarlo», quindi chi ripercorre la
-        // riga porta nel cestino un file che non abbiamo creato noi, con dentro
-        // ciò che ci aveva messo qualcun altro.
-        //
-        // La domanda è la più povera che risponda — *c'è un file lì?* — e la
-        // paga un `stat`, non una lettura: la riga tre capoversi più su dice
-        // che «una riga di registro non vale una lettura a ogni salvataggio»,
-        // ed è vera e resta vera, perché una lettura porta i byte e li fa
-        // parsare per averne l'impronta mentre qui non serve niente di tutto
-        // ciò. Con [`WriteBase::DescendsFrom`] non si paga nemmeno quello: il
-        // disco è già stato letto qui sotto, e se non fosse esistito la base non
-        // combaciava e non si arrivava a scrivere.
-        //
-        // E non si paga **quasi mai**, perché l'anagrafe sbaglia in una
-        // direzione sola: conosce meno di quanto c'è, mai di più. Quando ha la
-        // voce il file c'era, e la domanda è già risposta senza toccare il
-        // disco; il `stat` resta al solo caso in cui l'anagrafe tace, che è
-        // esattamente la finestra del difetto. Il salvataggio di una nota che
-        // si sta scrivendo non ci passa mai, ed è ciò che tiene ferma la 0179 —
-        // «un salvataggio non torna a chiedere al disco cosa ha appena
-        // scritto», che ha un banco che conta gli `stat` e li vuole zero.
-        // Un file che **non c'è** non è un errore da propagare: è una
-        let (id, esisteva, from, expected_source) = match base {
+    ) -> Result<PreparedDocumentWrite> {
+        let (id, existed, from, expected_source) = match base {
             WriteBase::DescendsFrom(expected) => {
-                // base che non combacia — chi scrive credeva di riscrivere
-                // qualcosa che nel frattempo è stato cestinato, e ha diritto
-                // alla stessa risposta. Ogni **altro** guasto invece risale con
-                // il suo tipo, ed è la differenza che vale la riga: con `.ok()`
-                // chi non riusciva più a leggere la propria nota — permessi, un
-                // disco che sta fallendo, byte che non sono più testo — si
-                // sentiva dire «il documento è cambiato sotto di te», cioè un
-                // fatto del vault che non era avvenuto, e un conflitto vero non
-                // si distingueva da un supporto rotto.
-                // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
                 let current = crate::error::optional(self.docs.vault.read(id))?;
                 let now = current.as_ref().map(|s| Revision::of(s));
                 if !current
@@ -2933,20 +2908,9 @@ impl Workspace {
             }
             WriteBase::Dictated => {
                 let in_store = self.indexes.core.entries.get(id);
-                // An indexed, already-portable id is the ordinary save path:
-                // the index is authoritative for that unchanged spelling, so
-                // keep the no-stat fast path. Imported names that would be
-                // changed or rejected by `new_doc_id` must ask the disk: a
-                // stale index cannot prove that such a file still exists.
                 let candidate = new_doc_id(id.as_str());
                 let unchanged_portable =
                     in_store.is_some() && candidate.as_ref().is_ok_and(|candidate| candidate == id);
-                // Su Windows un nome con spazio finale (`nota.md `) risolve
-                // allo stesso file di `nota.md`: se si guarda prima il nome
-                // grezzo, si conserva però l'estensione `md ` e il provider
-                // non viene trovato. Il target normalizzato ha precedenza se è
-                // l'unico esistente o se i due nomi indicano lo stesso file;
-                // due file distinti conservano invece l'import non portabile.
                 let normalized_exists = !unchanged_portable
                     && candidate.as_ref().is_ok_and(|candidate| {
                         candidate != id && self.docs.vault.stat(candidate).is_some()
@@ -2958,13 +2922,8 @@ impl Workspace {
                         .as_ref()
                         .is_ok_and(|candidate| self.docs.vault.same_file(id, candidate));
                 let use_normalized = normalized_exists && (!raw_exists || normalized_aliases_raw);
-                let esisteva = unchanged_portable || normalized_exists || raw_exists;
-                // A dictated write is also the path used by importers and
-                // restores. Apply the stricter naming rule only when this
-                // call is actually creating a new document: an imported file
-                // may already have a name that is not portable to every OS,
-                // and writing it back must preserve that existing name.
-                if esisteva {
+                let existed = unchanged_portable || normalized_exists || raw_exists;
+                if existed {
                     let id = if use_normalized {
                         candidate
                             .as_ref()
@@ -2978,24 +2937,41 @@ impl Workspace {
                     (id, true, fingerprint, None)
                 } else {
                     let id = candidate?;
-                    // `new_doc_id` may normalize the name (NFC and trimmed
-                    // segments) onto a file that is already on disk.  The
-                    // stale index is not evidence that this normalized target
-                    // exists: only the storage stat can classify this write.
                     let in_store = self.indexes.core.entries.get(&id);
                     let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
-                    let esisteva = self.docs.vault.stat(&id).is_some();
-                    (
-                        id,
-                        esisteva,
-                        esisteva.then_some(fingerprint).flatten(),
-                        None,
-                    )
+                    let existed = self.docs.vault.stat(&id).is_some();
+                    (id, existed, existed.then_some(fingerprint).flatten(), None)
                 }
             }
         };
-        let to = self.write_source(&id, source, expected_source.as_deref())?;
-        self.record(if esisteva {
+        let parser = self.docs.prepare_parse(&id)?;
+        Ok(PreparedDocumentWrite {
+            id,
+            existed,
+            from,
+            expected_source,
+            parser,
+        })
+    }
+
+    /// Finalizza una scrittura già parsata. La CAS resta qui, sotto il writer
+    /// turn, quindi il tempo passato nel provider non allarga la finestra fra
+    /// expected e write per gli altri writer Fub.
+    pub fn finish_document_write(
+        &mut self,
+        prepared: PreparedDocumentWrite,
+        source: &str,
+        model: DocumentModel,
+    ) -> Result<Revision> {
+        let PreparedDocumentWrite {
+            id,
+            existed,
+            from,
+            expected_source,
+            ..
+        } = prepared;
+        let to = self.write_source_parsed(&id, source, expected_source.as_deref(), model)?;
+        self.record(if existed {
             JournalOp::Written {
                 doc: id.clone(),
                 from,
@@ -3008,6 +2984,17 @@ impl Workspace {
             }
         });
         Ok(to)
+    }
+
+    pub fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision> {
+        let prepared = self.prepare_document_write(id, base)?;
+        let model = prepared.parse(source)?;
+        self.finish_document_write(prepared, source, model)
     }
 
     /// coda di ogni scrittura, eventi. Rende la revisione prodotta.
@@ -3024,19 +3011,19 @@ impl Workspace {
         source: &str,
         expected_source: Option<&str>,
     ) -> Result<Revision> {
-        // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
-        // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
-        // pur avendo scritto.
-        // Il gancio **prima della scrittura** (0154): fra il parse e il disco
         let model = self.docs.parse(id, source)?;
-        // l'originale è ancora leggibile, e chi ha registrato una chiusura
-        // (la fotografia del versioning) la vuole guardare in questo istante.
-        // Un suo errore ferma la scrittura: sovrascrivere senza che la
-        // fotografia sia riuscita sarebbe la finestra che il meccanismo
-        // esiste per chiudere. L'host è intestato al plugin che ha registrato
-        // il gancio, in modalità `Apply` — e non è `with_host`, che in fondo
-        // drenerebbe la coda delle scritture mentre siamo dentro una scrittura.
-        // Dimensione e data arrivano dalla scrittura stessa: sono ciò che i byte
+        self.write_source_parsed(id, source, expected_source, model)
+    }
+
+    /// Seconda metà di `write_source`: da qui in poi il modello è già stato
+    /// prodotto. Restano hook, storage/CAS, ingestione ed eventi.
+    fn write_source_parsed(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        expected_source: Option<&str>,
+        model: DocumentModel,
+    ) -> Result<Revision> {
         if let Some((plugin, hook)) = &self.before_write {
             let plugin = plugin.clone();
             let hook = hook.clone();
@@ -3054,9 +3041,6 @@ impl Workspace {
                 });
             }
         }
-        // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
-        // difetto 0179.
-        // Scrive una riga nel registro delle mutazioni (§15.2).
         let placed = if let Some(expected) = expected_source {
             self.docs
                 .vault

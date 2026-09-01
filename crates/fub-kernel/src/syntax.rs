@@ -98,9 +98,10 @@ impl std::fmt::Display for SyntaxConflict {
     }
 }
 
+#[derive(Clone)]
 struct Registered {
     spec: SyntaxRuleSpec,
-    rule: Box<dyn SyntaxRule>,
+    rule: Arc<dyn SyntaxRule>,
 }
 
 /// Una vista immutabile delle forme dichiarate, pubblicata dopo ogni mutazione.
@@ -117,7 +118,7 @@ impl SyntaxSnapshot {
 }
 
 /// Le regole innestate, per formato.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct SyntaxRegistry {
     /// In ordine di applicazione: `order` crescente, i pari merito nell'ordine
     /// di registrazione.
@@ -177,7 +178,13 @@ impl SyntaxRegistry {
             .iter()
             .position(|r| r.spec.order > spec.order)
             .unwrap_or(self.rules.len());
-        self.rules.insert(at, Registered { spec, rule });
+        self.rules.insert(
+            at,
+            Registered {
+                spec,
+                rule: Arc::from(rule),
+            },
+        );
         self.publish_snapshot();
         Ok(())
     }

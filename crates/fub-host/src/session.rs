@@ -1607,11 +1607,17 @@ impl Host {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.write_workspace(vault, |workspace| {
-            workspace
-                .write_document(id, source, base)
-                .map_err(PluginError::from)
-        })
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            ws.prepare_document_write(id, base)
+                .map_err(PluginError::from)?
+        };
+        let model = prepared.parse(source).map_err(PluginError::from)?;
+        let mut ws = workspace.write()?;
+        ws.finish_document_write(prepared, source, model)
+            .map_err(PluginError::from)
     }
 
     pub fn save_draft(

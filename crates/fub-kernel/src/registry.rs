@@ -13,7 +13,9 @@
 //! [`FormatRegistry::replace`].
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use fub_abi::format::FormatDescriptor;
 use fub_abi::FormatProvider;
 
 /// Due provider si contendono la stessa estensione.
@@ -37,9 +39,14 @@ impl std::fmt::Display for RegistryConflict {
     }
 }
 
+struct RegisteredFormat {
+    descriptor: FormatDescriptor,
+    provider: Arc<dyn FormatProvider>,
+}
+
 #[derive(Default)]
 pub struct FormatRegistry {
-    providers: Vec<Box<dyn FormatProvider>>,
+    providers: Vec<RegisteredFormat>,
     /// estensione (minuscola) → indice in `providers`.
     by_ext: HashMap<String, usize>,
 }
@@ -63,13 +70,13 @@ impl FormatRegistry {
             if let Some(&at) = self.by_ext.get(&ext) {
                 return Err(RegistryConflict {
                     extension: ext,
-                    incumbent: self.providers[at].descriptor().id,
+                    incumbent: self.providers[at].descriptor.id.clone(),
                     challenger: descriptor.id,
                 });
             }
             extensions.push(ext);
         }
-        self.insert_normalized(provider, extensions);
+        self.insert_normalized(provider, descriptor, extensions);
         Ok(())
     }
 
@@ -77,30 +84,64 @@ impl FormatRegistry {
     /// estensioni. È l'operazione che `register` faceva prima senza dirlo:
     /// resta possibile, ma adesso chi la vuole la chiede per nome.
     pub fn replace(&mut self, provider: Box<dyn FormatProvider>) {
-        let extensions = provider.descriptor().extensions;
-        self.insert(provider, &extensions);
+        let descriptor = provider.descriptor();
+        let extensions = descriptor.extensions.clone();
+        self.insert_normalized(
+            provider,
+            descriptor,
+            extensions
+                .into_iter()
+                .map(|ext| ext.to_lowercase())
+                .collect(),
+        );
     }
 
-    fn insert(&mut self, provider: Box<dyn FormatProvider>, extensions: &[String]) {
-        let extensions = extensions.iter().map(|ext| ext.to_lowercase()).collect();
-        self.insert_normalized(provider, extensions);
-    }
-
-    fn insert_normalized(&mut self, provider: Box<dyn FormatProvider>, extensions: Vec<String>) {
+    fn insert_normalized(
+        &mut self,
+        provider: Box<dyn FormatProvider>,
+        descriptor: FormatDescriptor,
+        extensions: Vec<String>,
+    ) {
         let idx = self.providers.len();
         for ext in extensions {
             self.by_ext.insert(ext, idx);
         }
-        self.providers.push(provider);
+        self.providers.push(RegisteredFormat {
+            descriptor,
+            provider: Arc::from(provider),
+        });
     }
 
     pub fn provider_for_ext(&self, ext: &str) -> Option<&dyn FormatProvider> {
         if let Some(&at) = self.by_ext.get(ext) {
-            return Some(self.providers[at].as_ref());
+            return Some(self.providers[at].provider.as_ref());
         }
         self.by_ext
             .get(&ext.to_lowercase())
-            .map(|&at| self.providers[at].as_ref())
+            .map(|&at| self.providers[at].provider.as_ref())
+    }
+
+    /// Lo stesso lookup di `provider_for_ext`, ma con ownership condivisa: chi
+    /// prepara una callback clona l'`Arc` sotto lock e poi può eseguirla dopo
+    /// aver rilasciato il workspace.
+    pub(crate) fn provider_arc_for_ext(&self, ext: &str) -> Option<Arc<dyn FormatProvider>> {
+        let at = self
+            .by_ext
+            .get(ext)
+            .copied()
+            .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
+        Some(Arc::clone(&self.providers[at].provider))
+    }
+
+    /// Descriptor congelato al momento della registrazione. Consultarlo non è
+    /// una callback del provider.
+    pub(crate) fn descriptor_for_ext(&self, ext: &str) -> Option<&FormatDescriptor> {
+        let at = self
+            .by_ext
+            .get(ext)
+            .copied()
+            .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
+        Some(&self.providers[at].descriptor)
     }
 
     /// Tutte le estensioni conosciute, per la scansione del vault.
@@ -129,7 +170,7 @@ impl FormatRegistry {
     pub fn default_extension(&self) -> Option<String> {
         self.providers
             .first()?
-            .descriptor()
+            .descriptor
             .extensions
             .first()
             .map(|and| and.to_lowercase())

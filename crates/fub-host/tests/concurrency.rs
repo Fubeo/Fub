@@ -19,7 +19,10 @@ use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode};
+use fub_abi::custom::{SyntaxMatch, SyntaxProduct, SyntaxRule, SyntaxRuleSpec, SyntaxTrigger};
 use fub_abi::edit::WriteBase;
+use fub_abi::error::FormatError;
+use fub_abi::format::ParseContext;
 use fub_abi::model::DocId;
 use fub_abi::traits::{
     CommandProvider, HostApi, PluginManifest, ReadApi, ServiceProvider, ViewInstance, ViewProvider,
@@ -668,6 +671,102 @@ fn a_service_provider_runs_without_holding_the_workspace_lock() {
         "HostApi::call_service held Custody<Workspace> across ServiceProvider::call"
     );
     outcome.expect("service provider completes through its per-capability host");
+}
+
+const PARSE_LOCK_PLUGIN: &str = "com.fub.auditparse";
+
+struct ParseLockRule {
+    entered: std::sync::mpsc::SyncSender<()>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl SyntaxRule for ParseLockRule {
+    fn spec(&self) -> SyntaxRuleSpec {
+        SyntaxRuleSpec {
+            id: format!("{PARSE_LOCK_PLUGIN}:lock"),
+            format: "markdown".into(),
+            trigger: SyntaxTrigger::Fence {
+                info: vec!["audit-lock".into()],
+            },
+            order: 0,
+            option: None,
+            produces: vec![format!("{PARSE_LOCK_PLUGIN}:block")],
+        }
+    }
+
+    fn apply(
+        &self,
+        _: &SyntaxMatch,
+        _: &ParseContext,
+    ) -> Result<Option<SyntaxProduct>, FormatError> {
+        self.entered
+            .send(())
+            .map_err(|_| FormatError::Parse("parse probe receiver disappeared".into()))?;
+        self.release
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|_| FormatError::Parse("parse probe was not released".into()))?;
+        Ok(None)
+    }
+}
+
+#[test]
+fn a_syntax_rule_during_host_write_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_plugin(
+            PluginManifest::new(PARSE_LOCK_PLUGIN, "Audit detached parse"),
+            Trust::Community,
+        )
+        .expect("parse probe plugin registers");
+        w.register_syntax_rule(
+            PARSE_LOCK_PLUGIN,
+            Box::new(ParseLockRule {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("parse probe rule registers");
+    }
+
+    let call = std::thread::spawn(move || {
+        host.write_document(
+            None,
+            &DocId::new("ParseProbe.md"),
+            "```audit-lock\npayload\n```\n",
+            WriteBase::Dictated,
+        )
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("syntax rule entered during the Host write");
+    let (reader_tx, reader_rx) = std::sync::mpsc::sync_channel(1);
+    let reader = {
+        let ws = ws.clone();
+        std::thread::spawn(move || {
+            let acquired = ws.read().is_ok();
+            let _ = reader_tx.send(acquired);
+        })
+    };
+    let reader_progressed = reader_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or(false);
+    release_tx.send(()).expect("release syntax rule");
+    reader.join().expect("reader probe finishes");
+    let outcome = call.join().expect("write thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "Host::write_document held Custody<Workspace> across the parse callbacks"
+    );
+    outcome.expect("write completes after the detached parse");
 }
 
 const VIEW_RENDER_LOCK_PLUGIN: &str = "fub.audit-view-render";

@@ -49,6 +49,31 @@ use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
 /// metterlo in sync deve portarsi dietro anche loro.
 const PLUGIN_DATA_DIR: &str = "plugins";
 
+/// Parser risolto senza eseguire codice esterno. Provider, descriptor e regole
+/// sono una fotografia coerente che può attraversare il confine del lock.
+pub(crate) struct PreparedParse {
+    id: DocId,
+    descriptor: fub_abi::format::FormatDescriptor,
+    provider: Arc<dyn fub_abi::FormatProvider>,
+    syntax: SyntaxRegistry,
+}
+
+impl PreparedParse {
+    pub(crate) fn invoke(&self, source: DocumentSource) -> Result<DocumentModel> {
+        let ctx = ParseContext::obsidian(self.id.as_str());
+        let mut model = crate::safety::caught(
+            &self.descriptor.id,
+            crate::safety::Gate::FormatParse,
+            self.id.as_str(),
+            fub_abi::error::FormatError::Parse,
+            || self.provider.parse(&source, &ctx),
+        )?;
+        ensure_model_identity(&self.id, &model.id)?;
+        self.syntax.apply(&mut model, &ctx, &self.descriptor.id);
+        Ok(model)
+    }
+}
+
 pub struct DocumentStore {
     /// I byte sul disco. `pub(crate)` e non dietro accessori perché le
     /// operazioni composte del `Workspace` (rinomina, cestino, riscrittura dei
@@ -113,6 +138,27 @@ impl DocumentStore {
         extension_of(id).is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some())
     }
 
+    /// Risolve il parser senza eseguire callback. Il descriptor viene dalla
+    /// cache del registro, le regole sono una fotografia condivisa.
+    pub(crate) fn prepare_parse(&self, id: &DocId) -> Result<PreparedParse> {
+        let ext = extension_of(id).unwrap_or_default();
+        let provider = self
+            .registry
+            .provider_arc_for_ext(&ext)
+            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        let descriptor = self
+            .registry
+            .descriptor_for_ext(&ext)
+            .cloned()
+            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        Ok(PreparedParse {
+            id: id.clone(),
+            descriptor,
+            provider,
+            syntax: self.syntax.clone(),
+        })
+    }
+
     // --- cestino -----------------------------------------------------------
 
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
@@ -167,7 +213,12 @@ impl DocumentStore {
     /// di lì. Lo stesso file aveva due destini a seconda di chi lo leggeva
     /// (§21.8).
     pub(crate) fn source_from_disk(&self, id: &DocId) -> Result<DocumentSource> {
-        Ok(match self.provider_for(id)?.descriptor().source {
+        let ext = extension_of(id).unwrap_or_default();
+        let descriptor = self
+            .registry
+            .descriptor_for_ext(&ext)
+            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        Ok(match descriptor.source {
             SourceKind::Text => DocumentSource::Text(self.vault.read(id)?),
             SourceKind::Bytes => DocumentSource::Bytes(self.vault.read_bytes(id)?),
         })
@@ -179,27 +230,7 @@ impl DocumentStore {
     }
 
     pub(crate) fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
-        let provider = self.provider_for(id)?;
-        let ctx = ParseContext::obsidian(id.as_str());
-        // Il parse è dentro ogni scrittura, quindi sotto il prestito esclusivo
-        // di chi scrive: un provider di formato che pania su un documento
-        // storto si porterebbe via il vault, e non il documento (§9.3). Con la
-        // rete il panico diventa un `FormatError` come un altro, e la scrittura
-        // fallisce dicendo di chi è la colpa.
-        let mut model = crate::safety::caught(
-            &provider.descriptor().id,
-            crate::safety::Gate::FormatParse,
-            id.as_str(),
-            fub_abi::error::FormatError::Parse,
-            || provider.parse(&source, &ctx),
-        )?;
-        ensure_model_identity(id, &model.id)?;
-        // L'innesto del §3.1: le regole sintattiche registrate girano DOPO il
-        // provider, sul modello. È ciò che le rende innestabili su un provider
-        // che non le conosce — vedi `syntax::apply_rules`.
-        self.syntax
-            .apply(&mut model, &ctx, &provider.descriptor().id);
-        Ok(model)
+        self.prepare_parse(id)?.invoke(source)
     }
 
     pub(crate) fn provider_for(&self, id: &DocId) -> Result<&dyn fub_abi::FormatProvider> {
