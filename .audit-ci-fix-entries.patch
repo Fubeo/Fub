@@ -25,7 +25,14 @@ diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
              continue;
          }
          if entry.identity.is_none() {
-@@ -629,3 +639,34 @@ mod tests {
+@@ -622,11 +632,42 @@ mod tests {
+     fn entry(size: u64, mtime: u64) -> StoredEntry {
+         StoredEntry {
+             size,
+             mtime,
+             identity: None,
+             fingerprint: None,
+             metadata: None,
          }
      }
  
