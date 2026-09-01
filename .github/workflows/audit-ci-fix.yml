@@ -1,7 +1,9 @@
 name: Audit CI fix
 
 'on':
-  workflow_dispatch:
+  push:
+    branches:
+      - fix/audit-integration
 
 permissions:
   contents: write
@@ -14,10 +16,12 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
-      - name: Applica la patch fail-closed
+      - name: Applica le patch fail-closed
         run: |
           git apply --check .audit-ci-fix.patch
+          git apply --check .audit-ci-fix-undo.patch
           git apply .audit-ci-fix.patch
+          git apply .audit-ci-fix-undo.patch
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
           toolchain: 1.89
@@ -79,7 +83,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .audit-ci-fix.patch .github/workflows/audit-ci-fix.yml
+          git rm .audit-ci-fix.patch .audit-ci-fix-undo.patch .github/workflows/audit-ci-fix.yml
           if git ls-files --error-unmatch .audit-error.txt >/dev/null 2>&1; then
             git rm -f .audit-error.txt
           else
