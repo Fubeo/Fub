@@ -22,14 +22,25 @@ jobs:
           git apply --check .audit-ci-fix-undo.patch
           git apply --check .audit-ci-fix-switches.patch
           git apply --check .audit-ci-fix-entries.patch
+          git apply --check .audit-ci-fix-stamp-storage.patch
+          git apply --check .audit-ci-fix-stamp-rooted.patch
+          git apply --check .audit-ci-fix-stamp-vault.patch
+          git apply --check .audit-ci-fix-stamp-entries.patch
+          git apply --check .audit-ci-fix-stamp-workspace.patch
           git apply .audit-ci-fix.patch
           git apply .audit-ci-fix-undo.patch
           git apply .audit-ci-fix-switches.patch
           git apply .audit-ci-fix-entries.patch
+          git apply .audit-ci-fix-stamp-storage.patch
+          git apply .audit-ci-fix-stamp-rooted.patch
+          git apply .audit-ci-fix-stamp-vault.patch
+          git apply .audit-ci-fix-stamp-entries.patch
+          git apply .audit-ci-fix-stamp-workspace.patch
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
           toolchain: 1.89
           components: rustfmt, clippy
+          targets: x86_64-pc-windows-gnu
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           cache-on-failure: true
@@ -55,6 +66,9 @@ jobs:
           cargo test -p fub-host --test switches a_permission_denied_survives_to_the_shutdown_and_to_the_reopening
           cargo test -p fub-kernel --lib entries::tests
           cargo test -p fub-kernel --test rejoin
+          cargo test -p fub-kernel --test entry_store
+          cargo test -p fub-kernel --test entry_store_closes_with_the_vault
+          cargo check -p fub-kernel --lib --target x86_64-pc-windows-gnu
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Prepara il bersaglio dei componenti
@@ -90,7 +104,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .audit-ci-fix.patch .audit-ci-fix-undo.patch .audit-ci-fix-switches.patch .audit-ci-fix-entries.patch .github/workflows/audit-ci-fix.yml
+          git rm .audit-ci-fix.patch .audit-ci-fix-undo.patch .audit-ci-fix-switches.patch .audit-ci-fix-entries.patch \
+                 .audit-ci-fix-stamp-storage.patch .audit-ci-fix-stamp-rooted.patch \
+                 .audit-ci-fix-stamp-vault.patch .audit-ci-fix-stamp-entries.patch \
+                 .audit-ci-fix-stamp-workspace.patch .github/workflows/audit-ci-fix.yml
           if git ls-files --error-unmatch .audit-error.txt >/dev/null 2>&1; then
             git rm -f .audit-error.txt
           else
@@ -99,6 +116,10 @@ jobs:
           rm -f .audit-rust-test.log
           git add crates/fub-app/src/lib.rs \
                   crates/fub-kernel/Cargo.toml \
+                  crates/fub-kernel/src/storage.rs \
+                  crates/fub-kernel/src/storage/rooted.rs \
+                  crates/fub-kernel/src/vault.rs \
+                  crates/fub-kernel/src/workspace.rs \
                   crates/fub-kernel/src/entries.rs \
                   crates/fub-abi/tests/dependency_invariant.rs \
                   crates/fub-abi/tests/a_named_rule_is_declared.rs \
