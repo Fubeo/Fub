@@ -784,6 +784,120 @@ fn a_view_render_provider_runs_without_holding_the_workspace_lock() {
     outcome.expect("view render completes through its per-capability read host");
 }
 
+const VIEW_ACTION_LOCK_PLUGIN: &str = "fub.audit-view-action";
+const VIEW_ACTION_LOCK_VIEW: &str = "audit-view-action";
+
+struct ViewActionLockProbe {
+    entered: std::sync::mpsc::SyncSender<()>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl ViewProvider for ViewActionLockProbe {
+    fn interests(&self, _: &ViewInstance) -> fub_abi::traits::ViewInterests {
+        fub_abi::traits::ViewInterests::default()
+    }
+
+    fn views(&self) -> Vec<ViewSpec> {
+        vec![ViewSpec {
+            id: VIEW_ACTION_LOCK_VIEW.into(),
+            title: "Audit detached action".into(),
+            surface: ViewSurface::RightSidebar,
+            refresh: Default::default(),
+            follows: Default::default(),
+            params: Vec::new(),
+            icon: None,
+            order: 0,
+            open_by_default: false,
+            preferred_size: None,
+            closable: true,
+        }]
+    }
+
+    fn render_view(&self, _: &ViewInstance, _: &dyn ReadApi) -> Result<UiNode, PluginError> {
+        Ok(UiNode::text("action probe"))
+    }
+
+    fn on_action(
+        &mut self,
+        _: &ViewInstance,
+        _: UiAction,
+        host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        let source = host.read_document(&DocId::new("Note 0.md"))?;
+        if !source.contains("Note 0") {
+            return Err(PluginError::Internal(
+                "view action re-entry returned the wrong note".into(),
+            ));
+        }
+        self.entered
+            .send(())
+            .map_err(|_| PluginError::Internal("view action probe receiver disappeared".into()))?;
+        self.release
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|_| PluginError::Internal("view action probe was not released".into()))?;
+        Ok(ViewUpdate::None)
+    }
+}
+
+#[test]
+fn a_view_action_provider_runs_without_holding_the_workspace_lock() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature(VIEW_ACTION_LOCK_PLUGIN, "Audit view action")
+            .expect("view declares");
+        w.register_view_provider(
+            VIEW_ACTION_LOCK_PLUGIN,
+            Box::new(ViewActionLockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("view registers");
+    }
+
+    let call = std::thread::spawn(move || {
+        host.view_action(
+            None,
+            &ViewInstance::only(VIEW_ACTION_LOCK_VIEW),
+            UiAction::new("probe"),
+        )
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("view action entered after a successful HostApi re-entry");
+    let (reader_tx, reader_rx) = std::sync::mpsc::sync_channel(1);
+    let reader = {
+        let ws = ws.clone();
+        std::thread::spawn(move || {
+            let acquired = ws.read().is_ok();
+            let _ = reader_tx.send(acquired);
+        })
+    };
+    let reader_progressed = reader_rx
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap_or(false);
+    release_tx.send(()).expect("release view action provider");
+    reader.join().expect("reader probe finishes");
+    let outcome = call.join().expect("view action thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "Host::view_action held Custody<Workspace> across ViewProvider::on_action"
+    );
+    assert_eq!(
+        outcome.expect("view action completes through its per-capability host"),
+        ViewUpdate::None
+    );
+}
+
 /// Una view che pania mentre disegna.
 struct Explodes;
 

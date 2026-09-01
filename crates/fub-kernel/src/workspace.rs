@@ -569,6 +569,49 @@ impl PreparedViewRender {
     }
 }
 
+/// Un'azione di [`ViewProvider`] risolta sotto lock e invocabile senza tenere
+/// `Custody<Workspace>`. Il frame di provider resta logicamente aperto fino al
+/// finalize, mentre l'esclusione sulla mutabilità riguarda il solo provider.
+pub struct PreparedViewAction {
+    owner: String,
+    view: String,
+    instance: ViewInstance,
+    action: Option<UiAction>,
+    trust: Trust,
+    provider: Arc<RwLock<Box<dyn ViewProvider>>>,
+    previous_provider_call: bool,
+}
+
+impl PreparedViewAction {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn instance_id(&self) -> &str {
+        &self.instance.instance
+    }
+
+    /// Esegue soltanto il codice esterno. Il provider ha il proprio lock; il
+    /// workspace viene ripreso dal proxy soltanto per la singola capacità che
+    /// la callback usa.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        let action = self
+            .action
+            .take()
+            .expect("a prepared view action is invoked exactly once");
+        let mut provider = self
+            .provider
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        crate::safety::calling(&self.owner, Gate::ViewAction, &self.view, || {
+            provider.on_action(&self.instance, action, host)
+        })
+    }
+}
+
 pub struct Workspace {
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
     /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
@@ -5535,49 +5578,47 @@ impl Workspace {
     /// invece che al rendering, né per la via stretta invece che per quella
     /// larga.
     // Prima del `take`: dopo, il registro è vuoto.
-    pub fn view_action(
+    /// Prepara un'azione di view senza eseguire codice del provider. Il flag di
+    /// provider-call viene aperto qui e chiuso in `finish_view_action`, così gli
+    /// eventi prodotti dalla callback non possono rientrare nel suo frame.
+    pub fn prepare_view_action(
         &mut self,
         instance: &ViewInstance,
         action: UiAction,
-    ) -> std::result::Result<ViewUpdate, PluginError> {
+    ) -> std::result::Result<PreparedViewAction, PluginError> {
         let at = self.view_owner(&instance.view)?;
         self.check_params(at, instance)?;
-        // Il prestito rimanda il dispatch: se il provider scrive via `HostApi`
-        let trust = self.providers.views[at].trust;
-        // dentro `on_action`, gli handler NON girano nel suo frame — girano
-        // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
-        // plugin che è sia view sia handler (il caso versioning) sarebbe
-        // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
-        // Dentro il prestito, non attorno: il `lend` deve **rimettere a
-        let updated = self.lend(
-            |ws| &mut ws.providers.views,
-            |ws, views| {
-                let registered = &mut views[at];
-                let mut host =
-                    ws.host_for_view(&registered.id, InvokeMode::Apply, Some(&instance.instance));
-                // posto** la tabella delle view anche quando il provider pania,
-                // e lo fa perché il panico non arriva fin qui.
-                // Il proprietario è quello della view: un aggiornamento porta le
-                let mut provider = registered
-                    .provider
-                    .write()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                crate::safety::calling(&registered.id, Gate::ViewAction, &instance.view, || {
-                    provider.on_action(instance, action, &mut host)
-                })
-            },
-        );
-        // stringhe di chi l'ha scritto, come l'albero che sostituisce — e come
-        // l'errore con cui, invece dell'aggiornamento, può rispondere.
-        // **Ogni** albero che l'aggiornamento porta con sé, non solo quello di
-        let owner = self.providers.views[at].id.clone();
-        let mut update = updated.map_err(|and| self.localized(&owner, and))?;
-        // `Replace`: una `Patch` è un nodo che entra nella webview come gli
-        // altri, ed è più piccola solo nella dimensione. Il `match` è esaustivo
-        // di proposito — è la stessa lezione di `UiNode::children`, che elencava
-        // a mano i contenitori che c'erano: una variante nuova che portasse un
-        // nodo deve rompere la compilazione qui, non passare in silenzio.
-        // Gli eventi accodati durante `on_action` arrivano ADESSO, dopo che la
+        let (owner, trust, provider) = {
+            let registered = &self.providers.views[at];
+            (
+                registered.id.clone(),
+                registered.trust,
+                Arc::clone(&registered.provider),
+            )
+        };
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        Ok(PreparedViewAction {
+            owner,
+            view: instance.view.clone(),
+            instance: instance.clone(),
+            action: Some(action),
+            trust,
+            provider,
+            previous_provider_call,
+        })
+    }
+
+    /// Chiude il frame aperto da `prepare_view_action` e riproduce l'epilogo
+    /// del vecchio percorso: ripristino flag, errore localizzato, trust gate,
+    /// localizzazione e soltanto alla fine consegna degli eventi accodati.
+    pub fn finish_view_action(
+        &mut self,
+        prepared: PreparedViewAction,
+        outcome: std::result::Result<ViewUpdate, PluginError>,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let mut update = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
         let tree = match &update {
             ViewUpdate::Replace { root } => Some(root),
             ViewUpdate::Patch { node, .. } => Some(node),
@@ -5588,13 +5629,28 @@ impl Workspace {
             | ViewUpdate::Custom { .. } => None,
         };
         if let Some(tree) = tree {
-            guard_ui(trust, tree)?;
+            guard_ui(prepared.trust, tree)?;
         }
-        self.localize(&owner, &mut update);
-        // chiamata del provider è tornata: è il contratto di consegna.
-        // I parametri di questa istanza reggono la spec della sua view?
+        self.localize(&prepared.owner, &mut update);
         self.dispatch_pending();
         Ok(update)
+    }
+
+    /// Compatibilità per i chiamanti diretti del kernel. L'host di processo usa
+    /// le tre fasi separatamente, perché solo lui possiede `Custody<Workspace>`.
+    pub fn view_action(
+        &mut self,
+        instance: &ViewInstance,
+        action: UiAction,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        let mut prepared = self.prepare_view_action(instance, action)?;
+        let owner = prepared.owner().to_string();
+        let instance_id = prepared.instance_id().to_string();
+        let outcome = {
+            let mut host = self.host_for_view(&owner, InvokeMode::Apply, Some(&instance_id));
+            prepared.invoke(&mut host)
+        };
+        self.finish_view_action(prepared, outcome)
     }
 
     ///

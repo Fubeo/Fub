@@ -1671,7 +1671,17 @@ impl Host {
         instance: &ViewInstance,
         action: UiAction,
     ) -> Result<ViewUpdate, PluginError> {
-        self.write_workspace(vault, |workspace| workspace.view_action(instance, action))
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        let _turn = workspace.write_turn();
+        let mut prepared = {
+            let mut ws = workspace.write()?;
+            ws.prepare_view_action(instance, action)?
+        };
+        let mut detached = JobHost::new(workspace.clone(), prepared.owner().to_string())
+            .for_view_instance(prepared.instance_id().to_string());
+        let outcome = prepared.invoke(&mut detached);
+        let mut ws = workspace.write()?;
+        ws.finish_view_action(prepared, outcome)
     }
 
     pub fn commands(&self, vault: Option<&str>) -> Result<Vec<CommandSpec>, PluginError> {
