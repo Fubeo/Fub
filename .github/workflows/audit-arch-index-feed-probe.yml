@@ -1,14 +1,6 @@
 name: Audit ARCH index feed
 
 on:
-  push:
-    branches: ["fix/audit-integration"]
-    paths:
-      - .github/workflows/audit-arch-index-feed-probe.yml
-      - .audit-arch-index-feed-probe.py
-      - .audit-arch-index-feed-fix.py
-      - .audit-arch-index-feed-compilefix.py
-      - .audit-arch-index-feed-opening-fix.py
   workflow_dispatch:
 
 permissions:
@@ -51,6 +43,6 @@ jobs:
           git rm -f --ignore-unmatch .audit-error.txt .audit-arch-index-feed-probe.py .audit-arch-index-feed-fix.py .audit-arch-index-feed-compilefix.py .audit-arch-index-feed-opening-fix.py .github/workflows/audit-arch-index-feed-probe.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add crates/fub-kernel/src/index/mod.rs crates/fub-kernel/src/index/plan.rs crates/fub-kernel/src/workspace.rs crates/fub-host/src/session.rs crates/fub-host/src/runner.rs crates/fub-host/tests/index_feed_lock.rs
+          git add crates/fub-kernel/src/index/mod.rs crates/fub-kernel/src/index/plan.rs crates/fub-kernel/src/providers.rs crates/fub-kernel/src/workspace.rs crates/fub-host/src/session.rs crates/fub-host/src/runner.rs crates/fub-host/tests/index_feed_lock.rs
           git commit -m "refactor(host): esegue il feed degli indici fuori dal lock"
           git push origin HEAD:fix/audit-integration
