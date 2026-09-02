@@ -37,14 +37,17 @@ diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
              identity: None,
              fingerprint: None,
              metadata: None,
-@@ -672,4 +685,29 @@ mod tests {
+@@ -672,4 +685,32 @@ mod tests {
          );
      }
 +
 +    #[test]
 +    fn a_different_change_stamp_does_not_inherit_the_old_fingerprint() {
 +        let id = DocId::new("same.md");
-+        let identity = FileIdentity { volume: 1, file: 10 };
++        let identity = FileIdentity {
++            volume: 1,
++            file: 10,
++        };
 +
 +        let mut previous = entry(3, 1_000);
 +        previous.identity = Some(identity);
