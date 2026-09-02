@@ -83,7 +83,6 @@ jobs:
           remove_local_poison_policy(providers, 1)
 
           workspace = "crates/fub-kernel/src/workspace.rs"
-          replace_exact(workspace, "use std::sync::{Arc, RwLock};", "use std::sync::Arc;")
           replace_exact(
               workspace,
               "use crate::poison::Shelter;",
