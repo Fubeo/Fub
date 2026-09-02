@@ -127,6 +127,7 @@ jobs:
             librsvg2-dev patchelf libgtk-3-dev
       - name: Formato, invarianti e fixture mirate
         run: |
+          cargo fmt --all
           cargo fmt --all --check
           cargo test -p fub-abi --test dependency_invariant
           cargo test -p fub-abi --test a_named_rule_is_declared
