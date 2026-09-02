@@ -138,3 +138,5 @@ jobs:
           git diff --cached --check
           git commit -m "refactor(host): stacca le query degli indici dal workspace"
           git push origin HEAD:fix/audit-integration
+
+# Trigger esplicito della materializzazione G3: 2026-09-03.
