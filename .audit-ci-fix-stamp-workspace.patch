@@ -1,7 +1,7 @@
 diff --git a/crates/fub-kernel/src/workspace.rs b/crates/fub-kernel/src/workspace.rs
 --- a/crates/fub-kernel/src/workspace.rs
 +++ b/crates/fub-kernel/src/workspace.rs
-@@ -2197,17 +2197,13 @@ impl Workspace {
+@@ -2197,17 +2197,11 @@ impl Workspace {
                  // lock e una copia regalati per niente.
                  // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
 +                let change_stamp = self.docs.vault.change_stamp(&file.id);
@@ -22,7 +22,7 @@ diff --git a/crates/fub-kernel/src/workspace.rs b/crates/fub-kernel/src/workspac
 +                    .filter(|known| known.fingerprint.is_some());
                  let entry = VaultEntry {
                      fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
-@@ -2278,8 +2274,10 @@ impl Workspace {
+@@ -2278,6 +2272,7 @@ impl Workspace {
          }
  
 -        // (size+mtime → impronta) che porta i metadati e per cui tutti gli indici
@@ -32,7 +32,7 @@ diff --git a/crates/fub-kernel/src/workspace.rs b/crates/fub-kernel/src/workspac
 +        // ripristinano direttamente i metadati
          // in memoria senza rileggerlo dal disco. A fette finiscono solo i documenti
          // nuovi, modificati, o per cui un indice plugin deve essere allineato.
-@@ -2832,6 +2830,7 @@ impl Workspace {
+@@ -2832,5 +2827,6 @@ impl Workspace {
                      StoredEntry {
                          size: entry.size,
                          mtime: entry.mtime,
