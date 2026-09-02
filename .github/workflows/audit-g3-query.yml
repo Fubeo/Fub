@@ -60,24 +60,94 @@ jobs:
               (
                   "fn query_core(&self, query: IndexQuery) -> Result<IndexResult, PluginError>",
                   "fn query_core(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError>",
+                  1,
               ),
               (
                   "fn core_documents(&self) -> Result<Vec<DocId>, PluginError>",
                   "fn core_documents(&self) -> std::result::Result<Vec<DocId>, PluginError>",
+                  1,
               ),
               (
                   "fn core_predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError>",
                   "fn core_predicate(&self, predicate: &QueryPredicate) -> std::result::Result<Matches, PluginError>",
+                  1,
               ),
               (
                   ") -> Result<Paged<DocumentMatch>, PluginError> {",
                   ") -> std::result::Result<Paged<DocumentMatch>, PluginError> {",
+                  1,
               ),
           )
-          for old, new in replacements:
+          for old, new, expected in replacements:
               count = source.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected one occurrence of {old!r}, found {count}")
+              if count != expected:
+                  raise SystemExit(f"expected {expected} occurrence(s) of {old!r}, found {count}")
+              source = source.replace(old, new)
+          path.write_text(source)
+
+          path = Path("crates/fub-host/tests/query_index_lock.rs")
+          source = path.read_text()
+          replacements = (
+              (
+                  "use std::sync::{Arc, Mutex};",
+                  "use std::sync::Mutex;",
+                  1,
+              ),
+              (
+                  "use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};\n",
+                  "",
+                  1,
+              ),
+              (
+                  "    DocumentMatch, Excerpts, HostApi, HostQuery, IndexLoss, IndexProvider, IndexQuery, IndexResult,\n    Paged, PredicateKind, PropertySelect, QueryRoute,\n",
+                  "    HostApi, HostQuery, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind, QueryRoute,\n",
+                  1,
+              ),
+              (
+                  "fn query() -> IndexQuery {\n    IndexQuery::Documents {\n        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms(\"alpha\"))),\n        sort: None,\n        select: PropertySelect::None,\n        page: None,\n        excerpts: Excerpts::Omit,\n    }\n}\n\nstruct BlockingTextIndex {",
+                  "fn query() -> IndexQuery {\n    IndexQuery::Custom {\n        ns: PLUGIN.into(),\n        query: serde_json::json!({ \"probe\": \"workspace-lock\" }),\n    }\n}\n\nstruct BlockingCustomIndex {",
+                  1,
+              ),
+              (
+                  "impl IndexProvider for BlockingTextIndex {",
+                  "impl IndexProvider for BlockingCustomIndex {",
+                  1,
+              ),
+              (
+                  "vec![QueryRoute::Predicate(PredicateKind::Text)]",
+                  "vec![QueryRoute::Query(QueryKind::Custom(PLUGIN.into()))]",
+                  1,
+              ),
+              (
+                  "fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {\n        assert!(\n            matches!(query, IndexQuery::Documents { .. }),\n            \"the text predicate is served through the Documents planner\"\n        );",
+                  "fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {\n        assert_eq!(request, crate::query());",
+                  1,
+              ),
+              (
+                  "Ok(IndexResult::Documents(Paged::all(vec![DocumentMatch::of(\n            DocId::new(\"Note 0.md\"),\n        )])))",
+                  "Ok(IndexResult::Custom(serde_json::json!({ \"ok\": true })))",
+                  1,
+              ),
+              (
+                  "Box::new(BlockingTextIndex {",
+                  "Box::new(BlockingCustomIndex {",
+                  1,
+              ),
+              (
+                  "fn assert_one_note(result: Result<IndexResult, PluginError>) {\n    let IndexResult::Documents(page) = result.expect(\"query succeeds\") else {\n        panic!(\"the Documents planner returned another family\");\n    };\n    assert_eq!(page.total, 1);\n    assert_eq!(page.items.len(), 1);\n    assert_eq!(page.items[0].doc, DocId::new(\"Note 0.md\"));\n}",
+                  "fn assert_probe_result(result: Result<IndexResult, PluginError>) {\n    assert_eq!(\n        result.expect(\"query succeeds\"),\n        IndexResult::Custom(serde_json::json!({ \"ok\": true }))\n    );\n}",
+                  1,
+              ),
+              (
+                  "assert_one_note(call.join().expect(\"query thread does not panic\"));",
+                  "assert_probe_result(call.join().expect(\"query thread does not panic\"));",
+                  2,
+              ),
+          )
+          for old, new, expected in replacements:
+              count = source.count(old)
+              if count != expected:
+                  raise SystemExit(f"expected {expected} occurrence(s) of {old!r}, found {count}")
               source = source.replace(old, new)
           path.write_text(source)
           PY
