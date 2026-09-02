@@ -110,6 +110,15 @@ fn next_result(events: &Subscription) -> (String, Result<serde_json::Value, Plug
 fn a_component_wasm_is_mounts_lives_and_is_unmounts() {
     let v = Vault::new();
     let (host, events) = bench(&v, true);
+    host.with_session(None, |s| {
+        let key = fub_abi::settings::permission_key(ID, permission::READ_VAULT);
+        s.workspace()
+            .write()
+            .unwrap()
+            .set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))
+            .expect("il permesso di lettura è concesso esplicitamente");
+    })
+    .expect("aperto");
 
     // Montato: il plugin è nell'inventario del §7.6 con ciò che il **manifest
     // del componente** ha dichiarato, non ciò che un file accanto diceva di lui.
