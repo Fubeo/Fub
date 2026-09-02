@@ -18,7 +18,7 @@ diff --git a/crates/fub-kernel/src/storage.rs b/crates/fub-kernel/src/storage.rs
  
      fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
          if a == b {
-@@ -869,5 +879,58 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
+@@ -869,5 +879,59 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
      }
  }
 +
@@ -31,9 +31,7 @@ diff --git a/crates/fub-kernel/src/storage.rs b/crates/fub-kernel/src/storage.rs
 +}
 +
 +#[cfg(windows)]
-+pub(super) fn windows_change_stamp(
-+    handle: std::os::windows::io::RawHandle,
-+) -> io::Result<u64> {
++pub(super) fn windows_change_stamp(handle: std::os::windows::io::RawHandle) -> io::Result<u64> {
 +    use windows_sys::Win32::Storage::FileSystem::{
 +        FileBasicInfo, GetFileInformationByHandleEx, FILE_BASIC_INFO,
 +    };
@@ -60,7 +58,10 @@ diff --git a/crates/fub-kernel/src/storage.rs b/crates/fub-kernel/src/storage.rs
 +    {
 +        use std::os::unix::fs::MetadataExt;
 +        let metadata = std::fs::metadata(path)?;
-+        return Ok(Some(unix_change_stamp(metadata.ctime(), metadata.ctime_nsec())));
++        return Ok(Some(unix_change_stamp(
++            metadata.ctime(),
++            metadata.ctime_nsec(),
++        )));
 +    }
 +    #[cfg(windows)]
 +    {
@@ -77,7 +78,7 @@ diff --git a/crates/fub-kernel/src/storage.rs b/crates/fub-kernel/src/storage.rs
  
  /// L'identità di un file: il volume e il numero che lo distingue là dentro.
  ///
-@@ -1444,5 +1507,9 @@ impl VaultStorage for FsStorage {
+@@ -1444,5 +1508,9 @@ impl VaultStorage for FsStorage {
      fn exists(&self, path: &Utf8Path) -> bool {
          path.exists()
      }
