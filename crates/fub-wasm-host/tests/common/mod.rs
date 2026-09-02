@@ -60,8 +60,8 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
         .join("esempi")
         .join(example);
     let variant = if feature.is_empty() { "base" } else { feature };
-    let output = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
-        .join(format!("{example}-{variant}-{nonce}"));
+    let output =
+        Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("{example}-{variant}-{nonce}"));
     let copy = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join(format!("{artifact}-{variant}-{nonce}.wasm"));
 

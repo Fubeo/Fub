@@ -37,6 +37,14 @@ fn folder() -> (tempfile::TempDir, Utf8PathBuf) {
 /// Rende la radice *canonica*, che è la chiave con cui l'apertura ha
 /// registrato la sessione, ed è ciò che la shell ha in mano: `vaults()` e
 /// `known_vaults()` non ne restituiscono altre.
+// `RootedFsStorage` tiene intenzionalmente il capability della directory
+// senza `FILE_SHARE_DELETE` su Windows: è la barriera che impedisce a un nome
+// ambientale sostituito durante il mount di cambiare ciò che il vault indica.
+// Là una cancellazione fisica mentre la sessione è aperta non è quindi una
+// simulazione valida. Qui Unix esercita il ramo della sessione con l'unlink
+// reale; il banco multipiattaforma più sotto esercita il ramo del registro dopo
+// che la sessione ha rilasciato ordinatamente tutti i capability.
+#[cfg(unix)]
 fn open_and_vanished(host: &Host) -> (tempfile::TempDir, Utf8PathBuf) {
     let (dir, root) = folder();
     std::fs::write(root.join("Nota.md"), "# Nota\n").expect("writes");
@@ -71,6 +79,7 @@ fn open_and_vanished(host: &Host) -> (tempfile::TempDir, Utf8PathBuf) {
 /// `close_vault` rende già, ed è il canale giusto perché lo si legge senza
 /// perdere la chiusura.
 #[test]
+#[cfg(unix)]
 fn a_vault_vanished_from_the_disk_is_closes_the_same() {
     let (_config_dir, config) = folder();
     let host = installed(&config);
@@ -93,6 +102,7 @@ fn a_vault_vanished_from_the_disk_is_closes_the_same() {
 /// e ogni comando che lo nominava falliva prima ancora di provare — anche
 /// quelli a cui la cartella non serviva.
 #[test]
+#[cfg(unix)]
 fn a_vault_vanished_and_again_nameable_for_name() {
     let (_config_dir, config) = folder();
     let host = installed(&config);
@@ -114,8 +124,18 @@ fn a_vault_vanished_and_again_nameable_for_name() {
 fn a_vault_vanished_can_be_favorited_and_renamed_again() {
     let (_config_dir, config) = folder();
     let host = installed(&config);
-    let (_dir, root) = open_and_vanished(&host);
+    let (_dir, root) = folder();
+    std::fs::write(root.join("Nota.md"), "# Nota\n").expect("writes");
+    let root = root.canonicalize_utf8().expect("still exists");
+    host.open(&root).expect("opens");
+    host.wait_indexed(None).expect("waits for indexing");
     host.close_vault(&root).expect("chiuso");
+
+    // Dopo la chiusura non resta alcun capability sul filesystem, quindi anche
+    // Windows può rappresentare onestamente la radice che scompare. La voce
+    // rimane nel registro e deve continuare a essere usabile col nome già noto.
+    std::fs::remove_dir_all(&root).expect("the directory is gone");
+    assert!(!root.exists(), "the root has really vanished");
 
     host.set_vault_favorite(&root, true)
         .expect("favoriting is not a disk query");
