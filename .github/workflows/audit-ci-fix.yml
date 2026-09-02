@@ -118,7 +118,32 @@ jobs:
               '        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))\n'
               '            .expect("il permesso di lettura è concesso esplicitamente");\n',
           )
+
+          component_timing = "crates/fub-wasm-host/tests/component_timing.rs"
+          replace_exact(
+              component_timing,
+              '        for b in &bundle {\n'
+              '            registry.mount(b, &mut ws).expect("il bundle si monta");\n'
+              '        }\n',
+              '        for b in &bundle {\n'
+              '            registry.mount(b, &mut ws).expect("il bundle si monta");\n'
+              '        }\n'
+              '        let key = fub_abi::settings::permission_key(\n'
+              '            PING,\n'
+              '            fub_abi::options::permission::READ_VAULT,\n'
+              '        );\n'
+              '        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))\n'
+              '            .expect("il permesso di lettura del ping è concesso esplicitamente");\n',
+          )
           PY
+      - name: Impacchetta il candidato trasformato
+        run: |
+          tar --exclude=.git --exclude=target --exclude=apps/client/node_modules \
+            --exclude='*.tgz' -czf /tmp/fub-audit-worktree.tgz .
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fub-audit-worktree-${{ github.sha }}
+          path: /tmp/fub-audit-worktree.tgz
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
           toolchain: 1.89
@@ -213,6 +238,7 @@ jobs:
                   crates/fub-features/tests/undo.rs \
                   crates/fub-host/tests/switches.rs \
                   crates/fub-wasm-host/tests/commands_cross_the_boundary.rs \
+                  crates/fub-wasm-host/tests/component_timing.rs \
                   apps/client/src/ui/node.test.ts \
                   apps/client/src/__fixtures__/mirror-samples.json \
                   docs/development/versioning-and-releases.md
