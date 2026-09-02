@@ -25,11 +25,15 @@ use camino::Utf8PathBuf;
 /// Le varianti di uno stesso esempio condividono la `--target-dir`, ed è la
 /// ragione del lucchetto. Misurato sul ping: con una cartella per variante
 /// l'albero delle dipendenze si compilava tre volte (~62s), con una sola una
-/// volta (~19s) e a cambiare resta il `cdylib`. Il prezzo è che due `cargo`
-/// sulla stessa cartella con feature diverse si sovrascriverebbero il `.wasm` a
-/// vicenda — e i test girano su thread paralleli. Quindi: si serializza, e
-/// appena l'artefatto è pronto lo si **copia** in un file che porta il nome
-/// della variante, prima di lasciare il lucchetto.
+/// volta (~19s) e a cambiare resta il `cdylib`.
+///
+/// Il file finale del `cdylib`, però, ha lo stesso nome per tutte le feature.
+/// Cargo conserva fingerprint separate, ma una build successiva può lasciare
+/// sul nome comune i byte dell'altra variante. Prima di ogni build si pulisce
+/// quindi **solo il package dell'esempio**: le dipendenze restano nella cache,
+/// mentre il componente viene certamente ricompiliato con le feature chieste.
+/// Appena l'artefatto è pronto lo si copia in un file che porta il nome della
+/// variante, prima di lasciare il lucchetto.
 ///
 /// Il lucchetto è per processo, e i binari di prova di un crate sono processi
 /// diversi: cargo li esegue uno alla volta, ed è **quello** a coprire il resto.
@@ -40,7 +44,6 @@ use camino::Utf8PathBuf;
 pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     // è una ragione per farne fallire altri con un messaggio che parla di
-    // avvelenamento invece che del guasto vero.
     // avvelenamento invece che del guasto vero.
     let _guard = LOCK.lock().unwrap_or_else(|and| and.into_inner());
 
@@ -53,6 +56,25 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
         "{artifact}-{}.wasm",
         if feature.is_empty() { "base" } else { feature }
     ));
+
+    let cleaned = std::process::Command::new(env!("CARGO"))
+        .arg("clean")
+        .arg("--release")
+        .arg("--target")
+        .arg("wasm32-wasip2")
+        .arg("--manifest-path")
+        .arg(root.join("Cargo.toml"))
+        .arg("--target-dir")
+        .arg(&output)
+        .arg("-p")
+        .arg(example)
+        .output()
+        .expect("cargo clean runs");
+    assert!(
+        cleaned.status.success(),
+        "the previous `{example}` variant cannot be cleaned:\n{}",
+        String::from_utf8_lossy(&cleaned.stderr)
+    );
 
     let mut cargo = std::process::Command::new(env!("CARGO"));
     cargo
