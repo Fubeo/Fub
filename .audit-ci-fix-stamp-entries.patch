@@ -21,17 +21,15 @@ diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
 +        }
 +    }
  }
-@@ -439,6 +449,8 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEntry>) {
-         let Some(previous) = old.get(id) else {
-             continue;
-         };
+@@ -443,4 +453,6 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEntry>) {
 -        if !previous.describes(entry.size, entry.mtime) {
 +        if !previous.describes(entry.size, entry.mtime)
 +            || !previous.same_change_stamp(entry.change_stamp)
 +        {
              continue;
          }
-@@ -625,6 +637,7 @@ mod tests {
+ 
+@@ -635,6 +647,7 @@ mod tests {
          StoredEntry {
              size,
              mtime,
@@ -39,7 +37,7 @@ diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
              identity: None,
              fingerprint: None,
              metadata: None,
-@@ -662,4 +675,29 @@ mod tests {
+@@ -672,4 +685,29 @@ mod tests {
          );
      }
 +
