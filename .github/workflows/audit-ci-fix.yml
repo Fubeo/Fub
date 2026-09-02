@@ -105,6 +105,19 @@ jobs:
               "Arc::new(SharedShelter::new(provider))",
           )
           remove_local_poison_policy(workspace, 5)
+
+          wasm_commands = "crates/fub-wasm-host/tests/commands_cross_the_boundary.rs"
+          replace_exact(
+              wasm_commands,
+              '            .expect("il bundle si monta");\n',
+              '            .expect("il bundle si monta");\n'
+              '        let key = fub_abi::settings::permission_key(\n'
+              '            ID,\n'
+              '            fub_abi::options::permission::READ_VAULT,\n'
+              '        );\n'
+              '        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))\n'
+              '            .expect("il permesso di lettura è concesso esplicitamente");\n',
+          )
           PY
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
@@ -199,6 +212,7 @@ jobs:
                   crates/fub-abi/tests/a_named_rule_is_declared.rs \
                   crates/fub-features/tests/undo.rs \
                   crates/fub-host/tests/switches.rs \
+                  crates/fub-wasm-host/tests/commands_cross_the_boundary.rs \
                   apps/client/src/ui/node.test.ts \
                   apps/client/src/__fixtures__/mirror-samples.json \
                   docs/development/versioning-and-releases.md
