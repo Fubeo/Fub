@@ -20,26 +20,18 @@ use camino::Utf8PathBuf;
 ///   differenza** dentro il componente — il manifest senza `read-vault`, il
 ///   mondo che chiede anche la rete — e non un secondo esempio.
 ///
-/// # Una cartella per esempio, un `cargo` per volta
+/// # Una cartella per variante
 ///
-/// Le varianti di uno stesso esempio condividono la `--target-dir`, ed è la
-/// ragione del lucchetto. Misurato sul ping: con una cartella per variante
-/// l'albero delle dipendenze si compilava tre volte (~62s), con una sola una
-/// volta (~19s) e a cambiare resta il `cdylib`.
+/// Il file finale del `cdylib` ha lo stesso nome per tutte le feature. Inoltre
+/// i binari di integrazione sono processi distinti: un `Mutex` statico ne
+/// serializza i thread, non le build lanciate da un altro binario di test.
 ///
-/// Il file finale del `cdylib`, però, ha lo stesso nome per tutte le feature.
-/// Cargo conserva fingerprint separate, ma una build successiva può lasciare
-/// sul nome comune i byte dell'altra variante. Prima di ogni build si pulisce
-/// quindi **solo il package dell'esempio**: le dipendenze restano nella cache,
-/// mentre il componente viene certamente ricompiliato con le feature chieste.
-/// Appena l'artefatto è pronto lo si copia in un file che porta il nome della
-/// variante, prima di lasciare il lucchetto.
-///
-/// Il lucchetto è per processo, e i binari di prova di un crate sono processi
-/// diversi: cargo li esegue uno alla volta, ed è **quello** a coprire il resto.
-/// Detto qui perché il giorno in cui qualcuno li lancerà in parallelo il
-/// sintomo sarà un `.wasm` della variante sbagliata, che non somiglia a una
-/// corsa fra processi.
+/// Per questo ogni variante ha una `--target-dir` propria. Due chiamanti della
+/// stessa variante possono ancora incontrarsi, ma Cargo protegge quella stessa
+/// cartella col proprio lock e producono gli stessi byte; varianti diverse non
+/// condividono invece né fingerprint né artefatto finale. È più importante che
+/// il test monti deterministicamente il manifest richiesto che risparmiare una
+/// ricompilazione del piccolo esempio.
 // Un panico dentro la parentesi avvelena il `Mutex`, e un test già rotto non
 pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
     static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -51,30 +43,11 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
         .join("../..")
         .join("esempi")
         .join(example);
-    let output = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(example);
-    let copy = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!(
-        "{artifact}-{}.wasm",
-        if feature.is_empty() { "base" } else { feature }
-    ));
-
-    let cleaned = std::process::Command::new(env!("CARGO"))
-        .arg("clean")
-        .arg("--release")
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .arg("--manifest-path")
-        .arg(root.join("Cargo.toml"))
-        .arg("--target-dir")
-        .arg(&output)
-        .arg("-p")
-        .arg(example)
-        .output()
-        .expect("cargo clean runs");
-    assert!(
-        cleaned.status.success(),
-        "the previous `{example}` variant cannot be cleaned:\n{}",
-        String::from_utf8_lossy(&cleaned.stderr)
-    );
+    let variant = if feature.is_empty() { "base" } else { feature };
+    let output = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("{example}-{variant}"));
+    let copy = Utf8PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
+        .join(format!("{artifact}-{variant}.wasm"));
 
     let mut cargo = std::process::Command::new(env!("CARGO"));
     cargo
