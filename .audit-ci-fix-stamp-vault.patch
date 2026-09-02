@@ -1,7 +1,7 @@
 diff --git a/crates/fub-kernel/src/vault.rs b/crates/fub-kernel/src/vault.rs
 --- a/crates/fub-kernel/src/vault.rs
 +++ b/crates/fub-kernel/src/vault.rs
-@@ -535,6 +535,14 @@ impl Vault {
+@@ -535,4 +535,14 @@ impl Vault {
          self.storage.file_identity(&path).ok().flatten()
      }
 +
