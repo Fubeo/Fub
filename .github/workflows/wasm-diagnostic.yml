@@ -1,0 +1,31 @@
+name: Audit WASM diagnostic
+
+'on':
+  push:
+    branches:
+      - audit/source-snapshot-20260902
+
+permissions:
+  contents: read
+
+jobs:
+  commands:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: f14b62b1fdeb242837e6c34441c4df3df17cf313
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          toolchain: 1.89
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+      - name: Dipendenze di sistema di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+      - name: Solo comandi WASM, un thread
+        run: cargo test -p fub-wasm-host --test commands_cross_the_boundary -- --test-threads=1
