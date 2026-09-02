@@ -1,7 +1,7 @@
 diff --git a/crates/fub-kernel/src/storage/rooted.rs b/crates/fub-kernel/src/storage/rooted.rs
 --- a/crates/fub-kernel/src/storage/rooted.rs
 +++ b/crates/fub-kernel/src/storage/rooted.rs
-@@ -473,6 +473,26 @@ impl VaultStorage for RootedFsStorage {
+@@ -473,5 +473,28 @@ impl VaultStorage for RootedFsStorage {
      fn file_identity(&self, path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
          self.identity(path).map(Some)
      }
