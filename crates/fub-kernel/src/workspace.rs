@@ -96,7 +96,10 @@ use crate::error::{KernelError, Result};
 use crate::graph::{BuiltGraph, GraphSources};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::QueryPlan;
-use crate::index::{feed_handles as feed_index_handles, Indexes, SharedIndexProvider};
+use crate::index::{
+    feed_handles as feed_index_handles, reconcile_handles as reconcile_index_handles,
+    up_to_date_handles as up_to_date_index_handles, Indexes, SharedIndexProvider,
+};
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
 use crate::occurrences;
@@ -327,10 +330,25 @@ pub struct ParsedBatch {
 /// di [`ParsedBatch`], ma senza `seen` (che si calcola una volta per tutta la
 /// fetta). Si fondono in [`Workspace::plan_batch`].
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
+struct PendingIndexEntry {
+    entry: VaultEntry,
+    source: Option<DocumentSource>,
+}
+
 #[derive(Default)]
-struct PlanChunk {
-    read: Vec<VaultEntry>,
-    reused: Vec<(DocId, StoredMeta)>,
+struct IndexCheckChunk {
+    entries: Vec<PendingIndexEntry>,
+    discarded: Vec<(DocId, KernelError)>,
+}
+
+struct PendingDocumentParse {
+    id: DocId,
+    parser: PreparedParse,
+    source: DocumentSource,
+}
+
+#[derive(Default)]
+struct IndexParseChunk {
     models: Vec<DocumentModel>,
     discarded: Vec<(DocId, KernelError)>,
 }
@@ -616,6 +634,162 @@ pub struct PreparedDocumentWrite {
     expected_source: Option<String>,
     parser: PreparedParse,
     before_write: Option<(String, BeforeWriteHook)>,
+}
+
+/// La scansione preparata senza chiamare codice esterno. Contiene una
+/// fotografia degli handle degli indici, non una guardia del `Workspace`.
+pub struct PreparedVaultScan {
+    folders: Vec<String>,
+    entries: Vec<VaultEntry>,
+    documents: Vec<VaultEntry>,
+    known_entries: Vec<Option<StoredEntry>>,
+    assets: Vec<VaultEntry>,
+    providers: Vec<(String, SharedIndexProvider)>,
+}
+
+/// La risposta degli indici alla scansione, pronta per la finalizzazione.
+pub struct CompletedVaultScan {
+    prepared: PreparedVaultScan,
+    up_to_date: BTreeSet<DocId>,
+}
+
+impl PreparedVaultScan {
+    /// Esegue soltanto `IndexProvider::up_to_date`, sugli handle staccati.
+    pub fn invoke(self) -> CompletedVaultScan {
+        let up_to_date = up_to_date_index_handles(&self.providers, &self.documents);
+        CompletedVaultScan {
+            prepared: self,
+            up_to_date,
+        }
+    }
+}
+
+/// Prima metà di una fetta d'apertura: impronte e fotografia dei provider,
+/// senza callback esterne.
+pub struct PreparedIndexBatchCheck {
+    seen: BTreeMap<DocId, Option<Revision>>,
+    entries: Vec<PendingIndexEntry>,
+    discarded: Vec<(DocId, KernelError)>,
+    providers: Vec<(String, SharedIndexProvider)>,
+}
+
+/// Risposta di `up_to_date` che non porta alcuna guardia del workspace.
+pub struct CheckedIndexBatch {
+    seen: BTreeMap<DocId, Option<Revision>>,
+    entries: Vec<PendingIndexEntry>,
+    discarded: Vec<(DocId, KernelError)>,
+    already: BTreeSet<DocId>,
+}
+
+impl PreparedIndexBatchCheck {
+    /// Attraversa il solo confine degli indici. Il chiamante deve aver già
+    /// rilasciato qualunque guardia di `Custody<Workspace>`.
+    pub fn invoke(self) -> CheckedIndexBatch {
+        let documents: Vec<VaultEntry> = self
+            .entries
+            .iter()
+            .filter(|pending| pending.entry.kind == EntryKind::Document)
+            .map(|pending| pending.entry.clone())
+            .collect();
+        let already = up_to_date_index_handles(&self.providers, &documents);
+        CheckedIndexBatch {
+            seen: self.seen,
+            entries: self.entries,
+            discarded: self.discarded,
+            already,
+        }
+    }
+}
+
+/// Seconda metà preparata della fetta: parser e sorgenti risolti, ma nessun
+/// `FormatProvider` o `SyntaxRule` ancora eseguito.
+pub struct PreparedIndexBatchParse {
+    read: Vec<VaultEntry>,
+    reused: Vec<(DocId, StoredMeta)>,
+    parses: Vec<PendingDocumentParse>,
+    discarded: Vec<(DocId, KernelError)>,
+    seen: BTreeMap<DocId, Option<Revision>>,
+}
+
+impl PreparedIndexBatchParse {
+    /// Esegue soltanto parse e regole sintattiche. Gli scarti aggiornano
+    /// `Indexing`, che vive fuori dal workspace.
+    pub fn invoke(self, work: &mut Indexing) -> ParsedBatch {
+        let PreparedIndexBatchParse {
+            read,
+            reused,
+            parses,
+            mut discarded,
+            seen,
+        } = self;
+
+        let n = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .clamp(1, 8);
+        let chunks: Vec<IndexParseChunk> = if n > 1 && parses.len() > n {
+            let mut buckets: Vec<Vec<PendingDocumentParse>> = (0..n).map(|_| Vec::new()).collect();
+            for (at, pending) in parses.into_iter().enumerate() {
+                buckets[at % n].push(pending);
+            }
+            std::thread::scope(|scope| {
+                let handles: Vec<_> = buckets
+                    .into_iter()
+                    .filter(|bucket| !bucket.is_empty())
+                    .map(|bucket| scope.spawn(move || Workspace::invoke_parse_chunk(bucket)))
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|handle| handle.join().expect("il parser non esce dal recinto"))
+                    .collect()
+            })
+        } else {
+            vec![Workspace::invoke_parse_chunk(parses)]
+        };
+
+        let mut models = Vec::new();
+        for chunk in chunks {
+            models.extend(chunk.models);
+            discarded.extend(chunk.discarded);
+        }
+        for (id, why) in discarded {
+            work.opening.discards(id, why);
+        }
+        ParsedBatch {
+            read,
+            reused,
+            models,
+            seen,
+        }
+    }
+}
+
+/// Chiusura dell'indicizzazione preparata: grafo, insieme completo e handle dei
+/// provider attraversano il confine senza portarsi dietro il `Workspace`.
+pub struct PreparedIndexFinish {
+    work: Indexing,
+    graph: BuiltGraph,
+    ids: Vec<DocId>,
+    providers: Vec<(String, SharedIndexProvider)>,
+}
+
+pub struct CompletedIndexFinish {
+    prepared: PreparedIndexFinish,
+    external_losses: Vec<IndexLoss>,
+}
+
+impl PreparedIndexFinish {
+    pub fn invoke(self) -> CompletedIndexFinish {
+        let external_losses = if self.work.finished() {
+            reconcile_index_handles(&self.providers, &self.ids)
+        } else {
+            Vec::new()
+        };
+        CompletedIndexFinish {
+            prepared: self,
+            external_losses,
+        }
+    }
 }
 
 pub struct PreparedIndexBatchFeed {
@@ -2172,21 +2346,18 @@ impl Workspace {
     /// quindi la fase che può fallire e la fase che dura sono due fasi diverse.
     /// Chi apre aspetta la prima e non la seconda.
     // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
-    pub fn scan_vault(&mut self) -> Result<Indexing> {
+    pub fn prepare_scan_vault(&self) -> Result<PreparedVaultScan> {
         let _phase = tracing::info_span!(target: "fub.apertura", "scan_vault").entered();
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
 
-        // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
-        // che qualcuno rivendica quell'estensione, senza essere cambiato.
-        // Una domanda sola all'anagrafe: la risposta intera serve
-        let mut entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
+        // La scansione raccoglie una fotografia completa ma non muta ancora il
+        // core: durante `IndexProvider::up_to_date` i reader vedono l'ultimo stato
+        // coerente, non metà della nuova anagrafe.
+        let entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
             .files
             .into_iter()
             .map(|file| {
-                // alla riapertura incrementale qui sotto, e rifarla là è un
-                // lock e una copia regalati per niente.
-                // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
                 let change_stamp = self.docs.vault.change_stamp(&file.id);
                 let known = self
                     .entry_store
@@ -2205,62 +2376,54 @@ impl Workspace {
             })
             .collect();
 
-        // (che lo chiedono per valore), l'anagrafe per la riapertura.
-        // **Gli indici si svuotano qui**, cioè all'inizio della prima fase e
-        let mut documents: Vec<VaultEntry> = Vec::new();
-        let mut known_entries: Vec<Option<StoredEntry>> = Vec::new();
-        let mut assets: Vec<VaultEntry> = Vec::new();
-        for (entry, _) in entries
-            .iter()
-            .filter(|(and, _)| and.kind == EntryKind::Asset)
-        {
-            assets.push(entry.clone());
-        }
-        for (entry, known) in entries
-            .iter()
-            .filter(|(and, _)| and.kind == EntryKind::Document)
-        {
-            documents.push(entry.clone());
-            known_entries.push(known.clone());
+        let mut documents = Vec::new();
+        let mut known_entries = Vec::new();
+        let mut assets = Vec::new();
+        for (entry, known) in &entries {
+            match entry.kind {
+                EntryKind::Document => {
+                    documents.push(entry.clone());
+                    known_entries.push(known.clone());
+                }
+                EntryKind::Asset => assets.push(entry.clone()),
+                _ => {}
+            }
         }
 
-        // non a giro di lettura finito. Finché il parse era fatale, svuotare
-        // tardi teneva il tutto-o-niente; quando la
-        // [0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
-        // gliel'ha tolto, teneva ancora una cosa vera — gli indici non restano
-        // vuoti per il tempo in cui si cammina il disco. Quella cosa **si
-        // perde qui**, ed è il prezzo dichiarato dell'apertura a fasi: fra
-        // `scan_vault` e `finish_index` la ricerca risponde poco e poi di più.
-        // Il prezzo si paga in questo verso perché l'alternativa lo fa pagare
-        // tutto a chi apre — che aspetta a schermo fermo — invece che a chi
-        // cerca nei primi secondi, che vede l'app viva e i risultati arrivare.
-        // Chi guarda non deve indovinarlo: lo dice `Indicizzazione` a chi la
-        // porta avanti, e `VaultStatus::indexing` a chiunque altro.
-        // Le cartelle prima delle voci, e dalla **camminata** e non dai path
+        Ok(PreparedVaultScan {
+            folders: scanned.folders,
+            entries: entries.into_iter().map(|(entry, _)| entry).collect(),
+            documents,
+            known_entries,
+            assets,
+            providers: self.indexes.feed_handles(),
+        })
+    }
+
+    /// Installa atomicamente la fotografia della scansione dopo che le risposte
+    /// esterne sono tornate. Nessuna callback provider gira in questa fase.
+    pub fn finalize_scan_vault(&mut self, completed: CompletedVaultScan) -> Indexing {
+        let CompletedVaultScan {
+            prepared:
+                PreparedVaultScan {
+                    folders,
+                    entries,
+                    documents,
+                    known_entries,
+                    assets,
+                    providers: _,
+                },
+            up_to_date,
+        } = completed;
+
         self.indexes.core.clear();
-        // dei file (§14.3): una cartella vuota non compare in nessun path, e
-        // dedurle dai file vorrebbe dire che l'unica cartella che esiste è
-        // quella che ha già qualcosa dentro.
-        // L'anagrafe è **intera già adesso**, ed è ciò che rende il vault
-        for folder in scanned.folders {
+        for folder in folders {
             self.indexes.core.set_folder(folder);
         }
-        // utilizzabile alla fine di questa fase: l'albero dei file, le
-        // cartelle e la specie di ogni voce non aspettano di aver letto niente.
-        // Le impronte che mancano le riempirà la seconda fase, rimettendo in
-        // anagrafe le voci che legge.
-        // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
-        for (entry, _) in entries.drain(..) {
+        for entry in entries {
             self.indexes.core.set_entry(entry);
         }
 
-        // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
-        // per cui tutti gli indici plugin rispondono `up_to_date`, si
-        // ripristinano direttamente i metadati
-        // in memoria senza rileggerlo dal disco. A fette finiscono solo i documenti
-        // nuovi, modificati, o per cui un indice plugin deve essere allineato.
-        // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
-        let up_to_date = self.indexes.up_to_date(&documents);
         let mut to_index = Vec::new();
         for (entry, known) in documents.into_iter().zip(known_entries) {
             let metadata = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
@@ -2276,30 +2439,23 @@ impl Workspace {
                 to_index.push(entry);
             }
         }
-        // Gli allegati non hanno metadati da ripristinare: la seconda fase ne
-        // legge i byte e aggiorna la stessa impronta dei documenti.
         to_index.extend(assets);
 
-        // dichiara di esistere (decisione 0012).
-        //
-        // `VaultOpened` esce **qui**, dove il vault diventa usabile, e non alla
-        // fine dell'indicizzazione: è l'evento che dice *questo vault è
-        // aperto*, e con le fasi quel momento è questo. Chi lo riceve sa che
-        // l'anagrafe c'è; per sapere se la ricerca è pronta c'è `IndexUpdated`,
-        // che resta dov'era — in fondo.
-        // Da qui l'indice risponde **meno di quanto il vault sappia**, e chi lo
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::VaultOpened {
                 root: ws.docs.vault.root().to_string(),
             });
             ws.dispatch_pending();
         });
-
-        // interroga deve poterlo distinguere da un vault vuoto (§15.7).
-        // **Una fetta della seconda fase** (§15.7): legge, parsa e alimenta fino a
         self.indexes.core.watch.indexing = IndexingState::Running;
+        Indexing::new(to_index)
+    }
 
-        Ok(Indexing::new(to_index))
+    /// Percorso sincrono per chi possiede direttamente un `Workspace`. L'host,
+    /// che usa `Custody`, chiama esplicitamente prepare/invoke/finalize.
+    pub fn scan_vault(&mut self) -> Result<Indexing> {
+        let completed = self.prepare_scan_vault()?.invoke();
+        Ok(self.finalize_scan_vault(completed))
     }
 
     /// [`FEED_BATCH`] documenti, e torna.
@@ -2342,170 +2498,162 @@ impl Workspace {
     /// nella 0119 lo diceva `ExternalSync::batch`.
     // Lo span copre tutto il lavoro parallelo della fetta, `thread::scope`
     pub fn plan_batch(&self, work: &mut Indexing) -> ParsedBatch {
+        let checked = self.prepare_index_batch_check(work).invoke();
+        self.prepare_index_batch_parse(checked).invoke(work)
+    }
+
+    /// Legge soltanto ciò che serve a determinare le impronte della prossima
+    /// fetta e cattura gli handle degli indici. Nessuna callback esterna gira
+    /// sotto il prestito condiviso del workspace.
+    pub fn prepare_index_batch_check(&self, work: &mut Indexing) -> PreparedIndexBatchCheck {
         let slice = work.next_slice();
-        if slice.is_empty() {
-            return ParsedBatch::default();
-        }
-
-        // compreso: è ciò che il banco dell'apertura legge per vedere se le
-        // fette scalano davvero (§25.3).
-        // L'impronta che l'anagrafe dà a ogni voce **adesso**: è ciò che il
-        let _phase = tracing::info_span!(target: "fub.apertura", "plan_batch").entered();
-
-        // piano si porta dietro per accorgersi di essere invecchiato (0119).
-        // Si calcola una volta per tutta la fetta, prima del lavoro parallelo.
-        // La fetta si lavora in parallelo quando ci sono abbastanza documenti
         let seen: BTreeMap<DocId, Option<Revision>> = slice
             .iter()
-            .map(|and| (and.id.clone(), self.entry_fingerprint(&and.id)))
+            .map(|entry| (entry.id.clone(), self.entry_fingerprint(&entry.id)))
             .collect();
+        if slice.is_empty() {
+            return PreparedIndexBatchCheck {
+                seen,
+                entries: Vec::new(),
+                discarded: Vec::new(),
+                providers: self.indexes.feed_handles(),
+            };
+        }
 
-        // da ripagare i thread: su un vault da 30k file la prima apertura
-        // legge e parsa ogni documento, e farlo in un thread solo la rende
-        // seriale. `thread::scope` presta `&self` ai figli — `docs`,
-        // `entry_store` e `indexes` sono `Sync` — e li aspetta prima di
-        // restituire. Gli handle si raccolgono **tutti** prima di joinare:
-        // `map(spawn).map(join)` è pigro, e joinerebbe un thread alla volta.
-        // Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
+        let _phase = tracing::info_span!(target: "fub.apertura", "plan_batch").entered();
         let n = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
             .clamp(1, 8);
         let docs = &self.docs;
-        let store = &self.entry_store;
-        let indexes = &self.indexes;
-
-        let chunks: Vec<PlanChunk> = if n > 1 && slice.len() > n {
+        let chunks: Vec<IndexCheckChunk> = if n > 1 && slice.len() > n {
             let size = slice.len().div_ceil(n);
-            std::thread::scope(|s| {
+            std::thread::scope(|scope| {
                 let handles: Vec<_> = slice
                     .chunks(size)
-                    .map(|c| {
-                        let c = c.to_vec();
-                        s.spawn(move || Self::plan_one_chunk(docs, store, indexes, c))
+                    .map(|chunk| {
+                        let chunk = chunk.to_vec();
+                        scope.spawn(move || Self::prepare_index_check_chunk(docs, chunk))
                     })
                     .collect();
-                handles.into_iter().map(|h| h.join().unwrap()).collect()
+                handles
+                    .into_iter()
+                    .map(|handle| handle.join().expect("la lettura non esce dal recinto"))
+                    .collect()
             })
         } else {
-            vec![Self::plan_one_chunk(docs, store, indexes, slice)]
+            vec![Self::prepare_index_check_chunk(docs, slice)]
         };
 
-        let mut prepared = ParsedBatch {
-            seen,
-            ..Default::default()
-        };
-        for c in chunks {
-            prepared.read.extend(c.read);
-            prepared.models.extend(c.models);
-            prepared.reused.extend(c.reused);
-            for (id, why) in c.discarded {
-                work.opening.discards(id, why);
-            }
+        let mut entries = Vec::new();
+        let mut discarded = Vec::new();
+        for chunk in chunks {
+            entries.extend(chunk.entries);
+            discarded.extend(chunk.discarded);
         }
-        prepared
+        PreparedIndexBatchCheck {
+            seen,
+            entries,
+            discarded,
+            providers: self.indexes.feed_handles(),
+        }
     }
 
-    /// parse. Ogni pezzo è indipendente e può girare in un `thread::scope`.
-    // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
-    fn plan_one_chunk(
+    fn prepare_index_check_chunk(
         docs: &DocumentStore,
-        store: &EntryStore,
-        indexes: &Indexes,
         entries: Vec<VaultEntry>,
-    ) -> PlanChunk {
-        let mut out = PlanChunk::default();
-        let mut discarded_idx = BTreeSet::new();
-
-        // dopo un `git checkout` che ha ritimbrato mille file senza cambiarne
-        // uno, la data non combacia ma il contenuto sì — e chi tiene l'impronta
-        // (l'anagrafe, e chi risponde alla domanda di `up_to_date`) li riconosce
-        // tutti e mille.
-        //
-        // **Si legge nella forma che il provider ha dichiarato** (§21.8): un
-        // documento rivendicato a byte non passa da una decodifica UTF-8 che
-        // fallirebbe, e la sua impronta si prende sui byte — che per una
-        // sorgente di testo è lo stesso numero di prima.
-        // Ciò che non si è potuto leggere o parsare: si raccoglie
-        let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
+    ) -> IndexCheckChunk {
+        let mut out = IndexCheckChunk::default();
         for mut entry in entries {
-            if entry.kind == EntryKind::Asset {
-                if entry.fingerprint.is_none() {
+            let mut source = None;
+            match entry.kind {
+                EntryKind::Asset if entry.fingerprint.is_none() => {
                     match docs.vault.read_bytes(&entry.id) {
-                        Ok(bytes) => {
-                            entry.fingerprint = Some(Revision::of_bytes(&bytes));
-                        }
-                        Err(why) => {
-                            discarded_idx.insert(entry.id.clone());
-                            out.discarded.push((entry.id.clone(), why));
-                        }
-                    }
-                }
-                out.read.push(entry);
-                continue;
-            }
-            if entry.fingerprint.is_none() {
-                match docs.source_from_disk(&entry.id) {
-                    Ok(source) => {
-                        entry.fingerprint = Some(Revision::of_bytes(source.bytes()));
-                        sources.insert(entry.id.clone(), source);
-                    }
-                    Err(why) => {
-                        discarded_idx.insert(entry.id.clone());
-                        out.discarded.push((entry.id.clone(), why));
-                    }
-                }
-            }
-            out.read.push(entry);
-        }
-
-        // indice che risponde `up_to_date` guardando ciò che ha non cambia
-        // risposta perché gliela si chiede in dieci volte; chiederla una volta
-        // sola vorrebbe dire tenere in mano l'elenco intero prima di alimentare
-        // il primo documento, che è esattamente ciò che questa voce toglie.
-        //
-        // Per fetta di chunk: ogni thread chiede per le proprie voci, e il
-        // risultato è lo stesso — la domanda è per documento.
-        // L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
-        let documents: Vec<VaultEntry> = out
-            .read
-            .iter()
-            .filter(|entry| entry.kind == EntryKind::Document)
-            .cloned()
-            .collect();
-        let already = indexes.up_to_date(&documents);
-
-        for entry in &out.read {
-            if discarded_idx.contains(&entry.id) {
-                continue;
-            }
-            if entry.kind == EntryKind::Asset {
-                continue;
-            }
-            let remembered = store
-                .known(&entry.id)
-                .filter(|known| known.fingerprint == entry.fingerprint)
-                .and_then(|known| known.metadata.clone());
-            match remembered {
-                Some(metadata) if already.contains(&entry.id) => {
-                    out.reused.push((entry.id.clone(), metadata))
-                }
-                _ => {
-                    let source = match sources.remove(&entry.id) {
-                        Some(source) => source,
-                        None => match docs.source_from_disk(&entry.id) {
-                            Ok(source) => source,
-                            Err(why) => {
-                                out.discarded.push((entry.id.clone(), why));
-                                continue;
-                            }
-                        },
-                    };
-                    match docs.parse_source(&entry.id, source) {
-                        Ok(model) => out.models.push(model),
+                        Ok(bytes) => entry.fingerprint = Some(Revision::of_bytes(&bytes)),
                         Err(why) => out.discarded.push((entry.id.clone(), why)),
                     }
                 }
+                EntryKind::Document if entry.fingerprint.is_none() => {
+                    match docs.source_from_disk(&entry.id) {
+                        Ok(read) => {
+                            entry.fingerprint = Some(Revision::of_bytes(read.bytes()));
+                            source = Some(read);
+                        }
+                        Err(why) => out.discarded.push((entry.id.clone(), why)),
+                    }
+                }
+                _ => {}
+            }
+            out.entries.push(PendingIndexEntry { entry, source });
+        }
+        out
+    }
+
+    /// Risolve cache e parser dopo che `up_to_date` è tornato. Leggere il
+    /// sorgente resta sotto un prestito condiviso breve; il parser preparato lo
+    /// attraverserà soltanto dopo il rilascio della guardia.
+    pub fn prepare_index_batch_parse(&self, checked: CheckedIndexBatch) -> PreparedIndexBatchParse {
+        let CheckedIndexBatch {
+            seen,
+            entries,
+            mut discarded,
+            already,
+        } = checked;
+        let discarded_ids: BTreeSet<DocId> = discarded.iter().map(|(id, _)| id.clone()).collect();
+        let mut read = Vec::with_capacity(entries.len());
+        let mut reused = Vec::new();
+        let mut parses = Vec::new();
+
+        for pending in entries {
+            let PendingIndexEntry { entry, source } = pending;
+            read.push(entry.clone());
+            if discarded_ids.contains(&entry.id) || entry.kind != EntryKind::Document {
+                continue;
+            }
+            let remembered = self
+                .entry_store
+                .known(&entry.id)
+                .filter(|known| known.fingerprint == entry.fingerprint)
+                .and_then(|known| known.metadata.clone());
+            if let Some(metadata) = remembered.filter(|_| already.contains(&entry.id)) {
+                reused.push((entry.id.clone(), metadata));
+                continue;
+            }
+            let source = match source {
+                Some(source) => source,
+                None => match self.docs.source_from_disk(&entry.id) {
+                    Ok(source) => source,
+                    Err(why) => {
+                        discarded.push((entry.id.clone(), why));
+                        continue;
+                    }
+                },
+            };
+            match self.docs.prepare_parse(&entry.id) {
+                Ok(parser) => parses.push(PendingDocumentParse {
+                    id: entry.id,
+                    parser,
+                    source,
+                }),
+                Err(why) => discarded.push((entry.id, why)),
+            }
+        }
+
+        PreparedIndexBatchParse {
+            read,
+            reused,
+            parses,
+            discarded,
+            seen,
+        }
+    }
+
+    fn invoke_parse_chunk(parses: Vec<PendingDocumentParse>) -> IndexParseChunk {
+        let mut out = IndexParseChunk::default();
+        for pending in parses {
+            match pending.parser.invoke(pending.source) {
+                Ok(model) => out.models.push(model),
+                Err(why) => out.discarded.push((pending.id, why)),
             }
         }
         out
@@ -2630,7 +2778,13 @@ impl Workspace {
     pub fn finish_index(&mut self, work: Indexing) -> Opening {
         let _phase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         self.indexes.core.rebuild_graph();
-        let opening = self.close_indexing(work);
+        let ids = self.reconcile_ids(&work);
+        let external_losses = if work.finished() {
+            reconcile_index_handles(&self.indexes.feed_handles(), &ids)
+        } else {
+            Vec::new()
+        };
+        let opening = self.close_indexing(work, external_losses);
         // indice è stato derivato, il vault è la verità (M4: notifica).
         // Come [`finish_index`], col grafo già costruito fuori dal prestito
         {
@@ -2649,17 +2803,65 @@ impl Workspace {
     /// funzione — fra i due prestiti il lucchetto si rilascia e i lettori in
     /// coda passano, come nella terza fase di `ExternalSync::batch`.
     // **Gli scarti entrano nell'insieme completo**, e non è un
-    pub fn finish_index_with_graph(&mut self, work: Indexing, graph: BuiltGraph) -> Opening {
-        let _phase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
+    /// Prepara la chiusura senza eseguire provider. Il turno di scrittura può
+    /// restare aperto mentre la guardia del workspace viene rilasciata.
+    pub fn prepare_finish_index_with_graph(
+        &self,
+        work: Indexing,
+        graph: BuiltGraph,
+    ) -> PreparedIndexFinish {
+        let ids = self.reconcile_ids(&work);
+        PreparedIndexFinish {
+            work,
+            graph,
+            ids,
+            providers: self.indexes.feed_handles(),
+        }
+    }
+
+    /// Installa grafo e stato soltanto dopo che `reconcile` dei provider è
+    /// tornato. Questa fase non attraversa codice esterno.
+    pub fn finalize_finish_index(&mut self, completed: CompletedIndexFinish) -> Opening {
+        let CompletedIndexFinish {
+            prepared:
+                PreparedIndexFinish {
+                    work,
+                    graph,
+                    ids: _,
+                    providers: _,
+                },
+            external_losses,
+        } = completed;
         if graph.epoch == self.indexes.core.graph_epoch {
             self.indexes.core.graph = graph.graph;
         } else {
             self.indexes.core.rebuild_graph();
         }
-        self.close_indexing(work)
+        self.close_indexing(work, external_losses)
     }
 
-    fn close_indexing(&mut self, work: Indexing) -> Opening {
+    pub fn finish_index_with_graph(&mut self, work: Indexing, graph: BuiltGraph) -> Opening {
+        let completed = self.prepare_finish_index_with_graph(work, graph).invoke();
+        self.finalize_finish_index(completed)
+    }
+
+    fn reconcile_ids(&self, work: &Indexing) -> Vec<DocId> {
+        if !work.finished() {
+            return Vec::new();
+        }
+        let mut ids: Vec<DocId> = self.documents();
+        ids.extend(
+            work.opening
+                .discarded
+                .iter()
+                .map(|discard| discard.id.clone()),
+        );
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    fn close_indexing(&mut self, work: Indexing, external_losses: Vec<IndexLoss>) -> Opening {
         let mut opening = work.opening;
         if work.cursor >= work.from_do.len() {
             // dettaglio. `reconcile` dice agli indici *quali documenti
@@ -2670,13 +2872,14 @@ impl Workspace {
             // permesso storto la nota uscirebbe dalla ricerca in silenzio.
             // **Un'indicizzazione interrotta non riconcilia**, ed è la stessa
             let mut ids: Vec<DocId> = self.documents();
-            ids.extend(opening.discarded.iter().map(|s| s.id.clone()));
+            ids.extend(opening.discarded.iter().map(|discard| discard.id.clone()));
             ids.sort();
             ids.dedup();
-            let lost = {
+            let mut lost = {
                 let _phase = tracing::info_span!(target: "fub.apertura", "reconcile").entered();
-                self.indexes.reconcile(&ids)
+                self.indexes.core.reconcile(&ids)
             };
+            lost.extend(external_losses);
             self.report_losses(lost);
         } else {
             // riga con cui la 0068 tiene fatale la scansione: un insieme

@@ -538,10 +538,16 @@ impl Shared {
             // a ogni documento adesso, e chi applica la confronta: fra le due
             // fasi il prestito esclusivo passa di mano, e su un'apertura che
             // dura secondi in mezzo ci sta un salvataggio dell'utente.
-            let prepared = {
+            let checked = {
                 let ws = self.workspace.read()?;
-                ws.plan_batch(&mut in_progress.work)
-            };
+                ws.prepare_index_batch_check(&mut in_progress.work)
+            }
+            .invoke();
+            let parsed = {
+                let ws = self.workspace.read()?;
+                ws.prepare_index_batch_parse(checked)
+            }
+            .invoke(&mut in_progress.work);
             // Il turno serializza le mutazioni dell'apertura con le altre scritture,
             // ma non è il `RwLock<Workspace>`: durante il codice del provider i
             // lettori devono poter entrare. È la stessa forma di `write_document`:
@@ -549,7 +555,7 @@ impl Shared {
             let _turn = self.workspace.write_turn();
             let pending = {
                 let mut ws = self.workspace.write()?;
-                ws.commit_index_batch_prepared(prepared)
+                ws.commit_index_batch_prepared(parsed)
             };
             let pending = pending.map(|pending| pending.invoke_indexes());
             {
@@ -585,9 +591,15 @@ impl Shared {
             let sources = self.workspace.read()?.graph_sources();
             sources.build()
         };
+        let _turn = self.workspace.write_turn();
+        let prepared_finish = {
+            let ws = self.workspace.read()?;
+            ws.prepare_finish_index_with_graph(in_progress.work, graph)
+        };
+        let completed_finish = prepared_finish.invoke();
         let opening = {
             let mut ws = self.workspace.write()?;
-            ws.finish_index_with_graph(in_progress.work, graph)
+            ws.finalize_finish_index(completed_finish)
         };
         // **Il flush degli indici è una fase sua** (difetto 0113), come la
         // terza fase di `ExternalSync::batch`: un prestito esclusivo separato

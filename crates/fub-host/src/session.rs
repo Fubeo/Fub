@@ -657,19 +657,26 @@ impl Host {
 
         let workspace = Custody::new("il vault aperto", ws);
 
-        // Il rilevatore parte **sotto il write-lock di apertura**. Una factory
-        // può quindi avviare un thread che tenta subito una lettura: quel
-        // thread resta fermo finché scansione, subscriber live e JobStarted
-        // non sono tutti installati. `WatcherFactory::start` non deve dunque
-        // prendere sincronicamente questo lock, ma solo avviare il rilevatore.
-        let (work, index_job, work_total, live, watcher) = {
-            let mut ws = workspace.write()?;
+        // Il turno di apertura serializza ogni writer fino a subscriber e job
+        // installati, ma non è il `RwLock`: `IndexProvider::up_to_date` gira
+        // fuori dalla guardia e un reader può rientrare sul workspace coerente
+        // precedente. Il thread del watcher che prova a scrivere resta invece
+        // fermo sul turno, così la finestra fra start e subscriber non riappare.
+        let opening_turn = workspace.write_turn();
+        let (prepared_scan, watcher) = {
+            let ws = workspace.write()?;
             let watching = ws.watch_flag();
             let watcher = self
                 .watcher
                 .start(&root, workspace.clone(), watching)
                 .map_err(|and| PluginError::Io(and.into()))?;
-            let work = ws.scan_vault().map_err(PluginError::from)?;
+            let prepared = ws.prepare_scan_vault().map_err(PluginError::from)?;
+            (prepared, watcher)
+        };
+        let completed_scan = prepared_scan.invoke();
+        let (work, index_job, work_total, live) = {
+            let mut ws = workspace.write()?;
+            let work = ws.finalize_scan_vault(completed_scan);
             let work_total = work.total();
             let live = if self.sink.is_some() {
                 Some(ws.bus().subscribe())
@@ -677,7 +684,7 @@ impl Host {
                 None
             };
             let index_job = ws.begin_index_job();
-            (work, index_job, work_total, live, watcher)
+            (work, index_job, work_total, live)
         };
 
         if let (Some(sink), Some(live)) = (&self.sink, live) {
@@ -705,6 +712,7 @@ impl Host {
             self.job_threads,
             Some(in_progress),
         )?;
+        drop(opening_turn);
 
         let session = VaultSession {
             root: root.clone(),
