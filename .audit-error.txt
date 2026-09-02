@@ -1,146 +1,30 @@
-
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
-
-[1m[32m     Running[0m tests/the_watcher_batch.rs (target/debug/deps/the_watcher_batch-f1390a8ea7e705c4)
-
-running 2 tests
-test who_reads_enters_while_the_batch_reads_the_disk ... ok
-test a_plan_aged_not_deletes_who_has_written_in_middle ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
-
-[1m[32m     Running[0m tests/the_watcher_window.rs (target/debug/deps/the_watcher_window-dd99198eb9842b46)
-
-running 1 test
-test watcher_started_before_scan_delivers_one_change_after_live_setup ... ok
-
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
-
-[1m[32m     Running[0m tests/themes.rs (target/debug/deps/themes-5c91b77af1eae14b)
-
-running 9 tests
-test a_theme_with_a_newer_engine_is_rejected_before_installing ... ok
-test a_theme_with_permissions_is_rejected_by_name ... ok
-test a_theme_id_that_is_not_a_safe_path_component_is_rejected ... ok
-test a_symlink_inside_the_source_is_a_traversal ... ok
-test discover_skips_staging_folders ... ok
-test installing_the_same_theme_twice_collides ... ok
-test uninstall_removes_the_folder_and_spares_the_series ... ok
-test the_series_theme_is_a_row_of_the_mount_table ... ok
-test an_installed_theme_is_mounted_from_the_machine_folder ... ok
-
-test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
-
-[1m[32m     Running[0m unittests src/lib.rs (target/debug/deps/fub_kernel-5dcd50665e6520fd)
-
-running 302 tests
-test bus::tests::a_notice_that_arrives_while_waiting_is_subtracted_too ... ok
-test bus::tests::a_bus_poison_bust_continues_a_deliver_and_puts_all_in_debt ... ok
-test bus::tests::delivers_to_subscribers_with_the_origin_attached ... ok
-test bus::tests::a_bus_closed_not_asks_of_reconcile ... ok
-test bus::tests::taking_notices_makes_room_again ... ok
-test bus::tests::a_subscriber_that_never_takes_stops_growing_and_is_told ... ok
-test bus::tests::the_lock_of_the_list_not_is_takes_from_outside ... ok
-test bus::tests::the_count_survives_a_race_between_emitting_and_waiting ... ok
-test bus::tests::the_subscribe_internal_counts_are_not_touched_from_outside ... ok
-test dispatcher::tests::a_poisoned_bell_still_rings_and_wakes_waiters ... ok
-test bus::tests::what_cannot_be_rediscovered_passes_the_ceiling ... ok
-test docdata::tests::a_half_done_sweep_is_not_a_successful_sweep ... ok
-test docdata::tests::a_destination_collision_keeps_both_document_spaces_and_names_them ... ok
-test docdata::tests::a_successful_sweep_counts_what_it_removed ... ok
-test docdata::tests::case_only_rename_does_not_lose_the_document_space ... ok
-test documents::tests::parse_accepts_the_requested_document_identity ... ok
-test documents::tests::parse_rejects_a_model_for_a_different_document ... ok
-test drafts::tests::a_draft_that_follows_the_rename_not_is_duplicates_if_the_support_stumbles ... ok
-test drafts::tests::a_draft_follows_the_rename ... ok
-test drafts::tests::a_draft_is_writes_and_is_rereads ... ok
-test drafts::tests::a_file_broken_not_stops_the_other ... ok
-test dispatcher::tests::a_poisoned_bell_times_out_anyway ... ok
-test drafts::tests::a_recovery_name_already_taken_does_not_stop_the_migration ... ok
-test drafts::tests::a_rename_not_buries_the_draft_that_finds ... ok
-test drafts::tests::a_version_of_schema_unknown_is_counts_instead_of_disappear ... ok
-test drafts::tests::discard_a_draft_that_not_c_and_not_and_a_error ... ok
-test drafts::tests::of_who_and_a_draft_the_says_where_is ... ok
-test drafts::tests::rewrite_not_accumulates ... ok
-test drafts::tests::the_more_recent_becomes_first ... ok
-test drafts::tests::the_base_distinguishes_a_new_note_from_an_old_one ... ok
-test drafts::tests::the_document_survives_to_the_encoding_of_the_name ... ok
-test entries::tests::a_different_identity_does_not_inherit_the_old_fingerprint ... ok
-test entries::tests::a_truncated_queue_is_read_up_to_the_broken_line ... ok
-test entries::tests::an_unknown_version_is_discarded ... ok
-test entries::tests::goes_through_the_backing_store_not_through_the_disk ... ok
-test entries::tests::an_unreadable_table_is_not_a_warning_and_does_not_block_anything ... ok
-test entries::tests::what_the_disk_rejected_does_not_remain_in_memory ... ok
-test entries::tests::second_closer_does_not_discard_footprints_of_the_first_reader ... ok
-test error::tests::a_format_rejection_names_what_it_received ... ok
-test error::tests::the_other_three_remain_a_bug_not_an_unserved ... ok
-test families::tests::all_families_are_in_all ... ok
-test entries::tests::survives_a_round_trip_on_disk ... ok
-test families::tests::every_family_declares_something ... ok
-test graph::tests::a_bare_wikilink_keeps_the_extensionless_resolution ... ok
-test graph::tests::a_cycle_terminates_and_nobody_is_a_neighbour_of_itself ... ok
-test graph::tests::a_dotted_name_resolves_via_the_extensionless_fallback ... ok
-test graph::tests::a_markdown_link_picks_the_right_twin ... ok
-test graph::tests::a_path_link_is_relative_to_its_source ... ok
-test graph::tests::a_neighbour_reached_twice_keeps_the_shortest_distance ... ok
-test graph::tests::a_path_link_never_falls_back_to_name_or_alias ... ok
-test graph::tests::a_path_link_walks_up_and_starts_from_the_root ... ok
-test graph::tests::a_wikilink_with_an_explicit_extension_wins_over_its_twin ... ok
-test graph::tests::an_explicit_extension_is_taken_seriously ... ok
-test graph::tests::alias_collision_is_deterministic_and_survives_removal ... ok
-test graph::tests::depth_zero_is_an_empty_answer ... ok
-test graph::tests::both_directions_meet_in_the_middle ... ok
-test graph::tests::depth_is_a_breadth_first_walk_and_via_rebuilds_the_edges ... ok
-test graph::tests::duplicate_links_keep_multiplicity ... ok
-test graph::tests::nfd_file_names_meet_nfc_links ... ok
-test graph::tests::losing_an_alias_moves_the_backlink ... ok
-test graph::tests::one_step_out_is_plain_adjacency ... ok
-test graph::tests::path_key_collision_across_extensions ... ok
-test graph::tests::remove_of_the_winner_falls_back_for_an_extensionless_path_link ... ok
-test graph::tests::remove_of_unknown_document_is_a_noop ... ok
-test graph::tests::percent_encoding_and_fragments_do_not_change_the_edge ... ok
-test graph::tests::remove_of_winner_falls_back_to_runner_up ... ok
-test graph::tests::removing_the_extension_winner_falls_back_to_the_twin ... ok
-test graph::tests::removing_the_target_drops_its_backlinks ... ok
-test graph::tests::self_link_is_not_a_backlink ... ok
-test graph::tests::resolves_by_name_and_records_backlinks ... ok
-test graph::tests::resolves_by_path_and_alias ... ok
-test graph::tests::shortest_path_wins_among_homonyms ... ok
-test graph::tests::two_files_that_differ_by_case_are_not_the_same_edge ... ok
-test graph::tests::unresolved_link_yields_no_backlink ... ok
-test graph::tests::upsert_of_closer_homonym_steals_the_backlink ... ok
-test graph::tests::upsert_creating_target_resolves_dangling_links ... ok
-test graph::tests::upsert_replaces_the_links_of_a_document ... ok
-test graph::tests::upsert_resolves_and_steals_path_links_too ... ok
-test graph::tests::what_is_not_a_vault_resource_is_not_an_edge ... ok
-test graph::tests::without_a_twin_exact_the_case_remains_indifferent ... ok
 test health::tests::a_link_to_nothing_is_reported_with_what_was_written ... ok
 test health::tests::a_missing_attachment_is_a_broken_link ... ok
 test health::tests::a_property_that_looks_like_a_date_is_stated ... ok
-test health::tests::a_url_never_breaks ... ok
-test health::tests::a_date_inside_a_list_is_stated_too ... ok
-test health::tests::an_attachment_collides_like_a_notes ... ok
 test health::tests::an_attachment_that_exists_is_not_a_broken_link ... ok
-test health::tests::the_anchor_is_not_part_of_an_attachment_name ... ok
 test health::tests::an_orphan_is_a_notes_nobody_names ... ok
+test health::tests::the_anchor_is_not_part_of_an_attachment_name ... ok
 test health::tests::two_different_extensions_are_not_a_collision ... ok
-test health::tests::whoever_declared_the_format_is_not_told_again ... ok
-test health::tests::unicode_compositions_collide_too ... ok
 test health::tests::two_files_differing_in_case_are_a_collision ... ok
+test health::tests::unicode_compositions_collide_too ... ok
+test health::tests::a_url_never_breaks ... ok
 test host::guard::tests::a_different_denial_leaves_entropy_alone ... ok
-test host::guard::tests::a_malformed_allowlist_fences_everything_out ... ok
+test health::tests::whoever_declared_the_format_is_not_told_again ... ok
 test host::guard::tests::a_missing_path_parameter_keeps_the_vault_unrestricted ... ok
+test host::guard::tests::a_malformed_allowlist_fences_everything_out ... ok
 test host::guard::tests::a_name_that_starts_like_a_loopback_address_is_not_this_machine ... ok
 test host::guard::tests::a_redirect_out_of_the_fence_is_a_second_call_and_is_stopped ... ok
+test host::guard::tests::a_simulation_does_not_reach_the_network ... ok
 test host::guard::tests::a_wildcard_does_not_hand_over_someone_elses_domain ... ok
-test host::guard::tests::credentials_do_not_borrow_an_allowed_name ... ok
+test health::tests::an_attachment_collides_like_a_notes ... ok
 test host::guard::tests::denied_entropy_says_so_instead_of_answering_empty ... ok
+test host::guard::tests::credentials_do_not_borrow_an_allowed_name ... ok
 test host::guard::tests::denying_drafts_leaves_the_rest_of_the_index_readable ... ok
 test host::guard::tests::denying_the_selection_leaves_the_notes_visible ... ok
 test host::guard::tests::denying_the_session_takes_the_selection_with_it ... ok
 test host::guard::tests::draft_results_are_filtered_one_item_at_a_time ... ok
-test host::guard::tests::a_simulation_does_not_reach_the_network ... ok
-test host::guard::tests::no_allowlist_means_anywhere_and_that_is_the_uniform_rule ... ok
+test host::guard::tests::every_family_permission_is_named ... ok
+test host::guard::tests::granting_drafts_alone_does_not_open_the_index ... ok
 test host::guard::tests::permission_prefixes_are_folder_scoped_on_every_document_port ... ok
 test host::guard::tests::plaintext_is_refused_except_towards_this_machine ... ok
 test host::guard::tests::session_and_selection_paths_are_independent ... ok
@@ -153,34 +37,34 @@ test host::guard::tests::undo_does_not_undo_a_family_that_is_not_granted ... ok
 test host::guard::tests::with_the_granted_families_the_undo_passes ... ok
 test host::guard::tests::without_the_permission_the_refusal_names_the_permission ... ok
 test ignore::tests::a_bare_name_matches_at_any_depth_without_becoming_a_prefix ... ok
-test host::guard::tests::every_family_permission_is_named ... ok
 test ignore::tests::a_file_is_not_the_folder_named_after_it ... ok
-test host::guard::tests::granting_drafts_alone_does_not_open_the_index ... ok
 test ignore::tests::a_folder_declared_in_nfc_is_the_same_written_in_nfd ... ok
-test ignore::tests::a_nested_path_matches_as_a_suffix ... ok
 test ignore::tests::a_folder_declared_with_a_slash_is_the_same_folder ... ok
 test ignore::tests::a_gitignore_negation_does_not_override_higher_precedence ... ok
+test host::guard::tests::no_allowlist_means_anywhere_and_that_is_the_uniform_rule ... ok
+test ignore::tests::a_nested_path_matches_as_a_suffix ... ok
 test ignore::tests::a_single_letter_case_does_not_make_two_folders ... ok
+test ignore::tests::a_trailing_slash_names_only_a_directory ... ok
 test ignore::tests::an_initial_slash_anchors_the_pattern_at_the_root ... ok
 test ignore::tests::declaring_folders_replaces_the_default ... ok
+test ignore::tests::default_policy_excludes_like_before ... ok
 test ignore::tests::empty_lines_and_comments_do_not_exclude_anything ... ok
 test ignore::tests::folding_case_does_not_widen_the_declaration ... ok
-test ignore::tests::a_trailing_slash_names_only_a_directory ... ok
 test ignore::tests::no_declaration_reveals_the_structure ... ok
-test ignore::tests::showing_hidden_files_reveals_those_too ... ok
 test ignore::tests::other_programs_temporary_files_are_not_notes ... ok
-test ignore::tests::the_policy_travels_with_the_vault_and_no_program_writes_it ... ok
+test ignore::tests::showing_hidden_files_reveals_those_too ... ok
 test ignore::tests::the_last_matching_negation_decides ... ok
-test ignore::tests::the_schema_and_the_evaluator_declare_the_same_default ... ok
-test index::core::tests::a_bare_attachment_link_prefers_the_declared_folder ... ok
+test ignore::tests::the_policy_travels_with_the_vault_and_no_program_writes_it ... ok
 test index::core::tests::changing_the_declared_folder_changes_existing_link_resolution ... ok
 test index::routing::tests::a_family_has_a_owner_and_the_second_not_wins_in_silence ... ok
+test index::routing::tests::a_index_in_conflict_not_remains_registered_a_metadata ... ok
 test index::routing::tests::a_leaf_of_it_admits_more_one_in_order_of_registration ... ok
 test index::routing::tests::replace_remains_possible_but_goes_asked_for_name ... ok
 test journal::tests::a_row_for_mutation_and_is_reread_in_order ... ok
-test index::routing::tests::a_index_in_conflict_not_remains_registered_a_metadata ... ok
-test ignore::tests::default_policy_excludes_like_before ... ok
+test ignore::tests::the_schema_and_the_evaluator_declare_the_same_default ... ok
+test index::core::tests::a_bare_attachment_link_prefers_the_declared_folder ... ok
 test journal::tests::a_row_of_tomorrow_is_skips_and_is_counts ... ok
+test locale::tests::a_value_nobody_can_read_falls_back_instead_of_failing ... ok
 test locale::tests::an_empty_value_means_as_the_system_and_not_empty ... ok
 test locale::tests::choosing_another_zone_drops_the_offset_of_this_one ... ok
 test locale::tests::no_component_can_change_the_language_of_who_reads ... ok
@@ -189,99 +73,98 @@ test locale::tests::the_shell_speaks_and_everyone_sees_it ... ok
 test locale::tests::with_nobody_choosing_the_system_wins_whole ... ok
 test log::tests::a_file_of_log_poisoned_writes_the_same_and_the_says_in_the_file ... ok
 test log::tests::a_file_of_log_that_not_is_opens_not_becomes_a_sink ... ok
-test log::tests::a_filter_poisoned_responds_the_same ... ok
 test log::tests::a_log_deleted_from_outside_returns_ad_have_a_file ... ok
-test log::tests::a_rotation_of_someone_other_not_is_carries_via_the_rows_of_this ... ok
+test log::tests::a_filter_poisoned_responds_the_same ... ok
 test log::tests::a_row_says_when_how_much_and_who_first_of_say_what ... ok
 test log::tests::a_target_verbose_raises_the_threshold_and_not_the_lowers ... ok
 test log::tests::off_wants_say_off ... ok
+test log::tests::a_rotation_of_someone_other_not_is_carries_via_the_rows_of_this ... ok
 test log::tests::the_collector_writes_that_that_passes_and_only_that ... ok
-test locale::tests::a_value_nobody_can_read_falls_back_instead_of_failing ... ok
 test log::tests::the_level_globale_cuts ... ok
 test log::tests::the_steps_is_reread_from_the_name_that_write ... ok
 test occurrences::tests::a_negated_leaf_is_not_localized ... ok
 test occurrences::tests::a_prefix_and_a_whole_term_do_not_eat_each_other ... ok
 test occurrences::tests::a_term_not_present_invents_nothing ... ok
-test occurrences::tests::accent_encoding_does_not_hide_a_word ... ok
+test entries::tests::one_changed_entry_out_of_a_thousand_appends_and_does_not_rewrite ... ok
 test occurrences::tests::does_not_merge_what_the_searcher_distinguishes ... ok
 test occurrences::tests::offsets_are_source_bytes_even_with_accents ... ok
+test occurrences::tests::accent_encoding_does_not_hide_a_word ... ok
 test occurrences::tests::past_the_ceiling_the_list_is_truncated ... ok
 test occurrences::tests::removing_the_duplicate_changes_not_one_line_of_the_result ... ok
 test occurrences::tests::terms_are_searched_individually_and_the_full_phrase ... ok
-test occurrences::tests::the_rare_term_does_not_displace_the_common_one ... ok
 test occurrences::tests::the_same_term_does_not_overlap_itself ... ok
 test occurrences::tests::the_second_occurrence_has_the_second_span ... ok
 test occurrences::tests::two_different_terms_still_overlap ... ok
-test entries::tests::one_changed_entry_out_of_a_thousand_appends_and_does_not_rewrite ... ok
 test occurrences::tests::two_writes_of_the_same_text_yield_one_scan ... ok
+test occurrences::tests::the_rare_term_does_not_displace_the_common_one ... ok
 test organization::tests::a_broken_file_is_not_overwritten_by_the_first_write ... ok
 test organization::tests::a_duplicated_order_does_not_keep_the_duplicate ... ok
-test organization::tests::a_file_from_the_future_is_not_guessed ... ok
 test organization::tests::a_migration_does_not_leave_the_same_id_in_two_places ... ok
+test organization::tests::a_file_from_the_future_is_not_guessed ... ok
 test organization::tests::a_rename_carries_icon_pin_and_position ... ok
-test log::tests::the_file_rotates_and_not_loses_the_generation_of_first ... ok
-test journal::tests::the_ceiling_cuts_the_more_old ... ok
+test organization::tests::a_sidecar_fixed_by_hand_does_not_wait_for_a_reopen ... ok
+test organization::tests::a_sidecar_disappeared_mid_session_does_not_lose_the_organization ... ok
 test organization::tests::an_empty_order_is_forgotten ... ok
 test organization::tests::an_icon_collision_keeps_the_destination_and_names_the_source ... ok
 test organization::tests::an_unorganized_notes_triggers_no_write ... ok
+test organization::tests::a_sidecar_written_before_this_entry_is_read ... ok
 test organization::tests::moving_to_another_folder_leaves_the_position_in_order ... ok
 test organization::tests::pinning_twice_does_not_double_or_move ... ok
-test organization::tests::a_sidecar_written_before_this_entry_is_read ... ok
-test organization::tests::a_sidecar_fixed_by_hand_does_not_wait_for_a_reopen ... ok
 test organization::tests::writing_one_key_does_not_touch_the_others ... ok
-test poison::tests::a_poisoned_condition_still_wakes ... ok
-test poison::tests::a_poisoned_shared_shelter_still_lends_and_counts ... ok
-test poison::tests::a_poisoned_shelter_still_lends_and_counts ... ok
-test poison::tests::a_second_incident_counts_two ... ok
 test organization::tests::survives_a_disk_round_trip ... ok
+test poison::tests::a_poisoned_condition_still_wakes ... ok
+test poison::tests::a_poisoned_condition_times_out ... ok
+test poison::tests::a_poisoned_shared_shelter_still_lends_and_counts ... ok
+test poison::tests::a_second_incident_counts_two ... ok
+test poison::tests::a_poisoned_shelter_still_lends_and_counts ... ok
 test poison::tests::dying_while_changing_still_wakes ... ok
 test properties::tests::a_vault_that_declares_nothing_reads_like_yesterday ... ok
 test poison::tests::reported_once_for_incident ... ok
-test properties::tests::every_choice_in_the_menu_is_an_order_the_parser_knows ... ok
 test properties::tests::the_format_travels_with_the_vault_and_no_program_writes_it ... ok
+test properties::tests::every_choice_in_the_menu_is_an_order_the_parser_knows ... ok
 test random::tests::a_long_block_does_not_repeat_itself ... ok
-test random::tests::it_gives_exactly_what_was_asked ... ok
 test random::tests::the_ceiling_itself_is_still_granted ... ok
 test random::tests::the_ceiling_says_no_instead_of_truncating ... ok
+test random::tests::it_gives_exactly_what_was_asked ... ok
 test registry::tests::a_provider_in_conflict_not_remains_registered_a_metadata ... ok
-test poison::tests::a_poisoned_condition_times_out ... ok
 test registry::tests::extension_lookups_use_normalized_hash_keys ... ok
 test registry::tests::replace_remains_possible_but_goes_asked_for_name ... ok
 test registry::tests::who_registers_after_not_wins_more_in_silence ... ok
-test settings::tests::a_key_not_declared_not_is_reads_and_not_is_writes ... ok
-test organization::tests::a_sidecar_disappeared_mid_session_does_not_lose_the_organization ... ok
-test settings::tests::a_key_of_machine_written_in_the_vault_not_is_apply ... ok
-test settings::tests::a_key_written_two_times_not_is_resolves_from_if ... ok
-test settings::tests::a_malformed_file_does_not_overwrite_the_first_write ... ok
 test settings::tests::a_file_correct_a_hand_not_waits_a_reopening ... ok
-test settings::tests::a_value_outside_kind_written_a_hand_is_discards_with_default_under ... ok
-test settings::tests::a_support_that_not_and_the_disk_receives_a_error_and_not_a_panic ... ok
-test settings::tests::also_the_level_machine_not_chooses_between_two_keys_equal ... ok
+test settings::tests::a_key_not_declared_not_is_reads_and_not_is_writes ... ok
+test settings::tests::a_key_of_machine_written_in_the_vault_not_is_apply ... ok
 test settings::tests::a_key_suspended_equals_the_default_and_the_file_not_is_touches ... ok
 test random::tests::two_calls_never_agree ... ok
-test settings::tests::not_even_the_same_manifest_can_declare_two_times_a_key ... ok
-test settings::tests::also_the_level_machine_returns_a_read_from_if ... ok
-test settings::tests::the_log_remains_of_the_machine ... ok
-test settings::tests::the_keys_of_the_file_is_read_also_without_no_one_that_them_declare ... ok
-test settings::tests::two_schemas_on_the_same_key_not_coexist ... ok
+test settings::tests::a_key_written_two_times_not_is_resolves_from_if ... ok
+test settings::tests::a_support_that_not_and_the_disk_receives_a_error_and_not_a_panic ... ok
+test settings::tests::a_malformed_file_does_not_overwrite_the_first_write ... ok
+test settings::tests::a_value_outside_kind_written_a_hand_is_discards_with_default_under ... ok
+test settings::tests::also_the_level_machine_not_chooses_between_two_keys_equal ... ok
 test settings::tests::a_vault_key_does_not_watch_the_machine_file ... ok
+test settings::tests::also_the_level_machine_returns_a_read_from_if ... ok
+test settings::tests::not_even_the_same_manifest_can_declare_two_times_a_key ... ok
 test settings::tests::clear_a_key_suspended_the_wakes ... ok
-test settings::tests::without_no_value_equals_the_default_of_the_schema ... ok
+test settings::tests::the_keys_of_the_file_is_read_also_without_no_one_that_them_declare ... ok
+test settings::tests::the_log_remains_of_the_machine ... ok
+test settings::tests::two_schemas_on_the_same_key_not_coexist ... ok
 test settings::tests::who_reads_not_waits_the_disk ... ok
-test settings::tests::withdraw_a_schema_not_deletes_the_value ... ok
 test settings::tests::the_write_atomic_not_leaves_residue ... ok
+test settings::tests::without_no_value_equals_the_default_of_the_schema ... ok
+test settings::tests::withdraw_a_schema_not_deletes_the_value ... ok
+test settings::tests::write_a_key_suspended_the_wakes ... ok
+test storage::rooted::tests::replacing_the_ambient_root_does_not_move_the_capability ... ok
 test storage::tests::a_hidden_any_not_and_a_temporary ... ok
 test storage::tests::a_lock_free_is_takes ... ok
-test storage::rooted::tests::replacing_the_ambient_root_does_not_move_the_capability ... ok
+test storage::rooted::tests::cooperative_cas_has_exactly_one_winner ... ok
 test storage::tests::a_update_that_not_writes_not_does_birth_the_folder ... ok
 test storage::tests::the_data_of_a_folder_follows_that_that_there_is_inside ... ok
-test storage::rooted::tests::cooperative_cas_has_exactly_one_winner ... ok
-test settings::tests::write_a_key_suspended_the_wakes ... ok
+test storage::tests::the_first_write_in_a_vault_new_not_loses_that_of_the_other ... ok
+test storage::tests::the_rename_not_buries_who_occupies_the_destination_in_the_middle ... ok
 test storage::tests::the_same_name_guard_is_local_to_one_folder ... ok
 test storage::tests::the_temporary_is_in_the_folder_of_destination ... ok
 test storage::tests::the_temporary_of_a_write_not_and_a_document ... ok
 test storage::tests::two_writes_not_have_the_same_temporary ... ok
-test storage::tests::the_first_write_in_a_vault_new_not_loses_that_of_the_other ... ok
+test log::tests::the_file_rotates_and_not_loses_the_generation_of_first ... ok
 test syntax::tests::a_id_without_namespace_and_rejected ... ok
 test syntax::tests::a_kind_declared_enters_and_proof_that_the_test_of_above_not_and_empty ... ok
 test syntax::tests::a_kind_not_declared_not_enters_in_the_model ... ok
@@ -295,7 +178,7 @@ test tag_counts::tests::removing_the_unknown_is_a_noop ... ok
 test time::tests::a_stamp_never_carries_characters_a_filename_cannot ... ok
 test time::tests::known_instants_print_as_utc ... ok
 test time::tests::leap_days_exist ... ok
-test storage::tests::the_rename_not_buries_who_occupies_the_destination_in_the_middle ... ok
+test time::tests::the_calendar_advances_one_day_at_a_time ... ok
 test time::tests::the_readable_stamp_is_the_other_one_with_colons_and_millis ... ok
 test transfer::tests::a_artifact_not_exits_from_the_folder_that_the_user_has_selected ... ok
 test transfer::tests::a_export_a_metadata_not_has_already_eaten_that_of_first ... ok
@@ -312,7 +195,6 @@ test undo::tests::the_stack_and_a_stack ... ok
 test undo::tests::undo_is_not_cancellable ... ok
 test vault::tests::a_file_named_like_an_excluded_folder_stays_in_the_vault ... ok
 test vault::tests::a_folder_declared_with_a_slash_stays_out_of_the_vault ... ok
-test time::tests::the_calendar_advances_one_day_at_a_time ... ok
 test vault::tests::a_lock_file_that_is_not_ours_stays_in_the_vault ... ok
 test vault::tests::a_missing_gitignore_is_an_empty_policy ... ok
 test vault::tests::a_ring_of_links_does_not_stop_the_scan ... ok
@@ -321,59 +203,60 @@ test vault::tests::an_invalid_gitignore_is_an_observable_io_error ... ok
 test vault::tests::showing_hidden_files_does_not_open_the_structure ... ok
 test vault::tests::the_excluded_folders_are_declared_by_the_vault ... ok
 test vault::tests::the_vault_reads_gitignore_at_construction_and_scan ... ok
+test vault::tests::the_watcher_and_the_scan_share_the_same_policy ... ok
 test vault::tests::what_is_ignored_is_ignored_at_any_depth ... ok
 test viewstate::tests::a_file_broken_not_the_rewrites_the_first_write ... ok
-test vault::tests::the_watcher_and_the_scan_share_the_same_policy ... ok
+test viewstate::tests::a_file_correct_a_hand_not_waits_a_reopening ... ok
 test viewstate::tests::a_file_from_the_future_not_is_guesses ... ok
 test viewstate::tests::a_owner_not_sees_the_key_of_a_other ... ok
 test viewstate::tests::forget_a_key_not_leaves_containers_empty ... ok
 test viewstate::tests::forget_a_vault_forgets_as_the_is_watched ... ok
-test viewstate::tests::a_file_correct_a_hand_not_waits_a_reopening ... ok
 test viewstate::tests::forgets_also_that_that_and_arrived_in_the_file_after_the_opening ... ok
+test viewstate::tests::survives_a_a_round_on_disk ... ok
 test viewstate::tests::the_forms_of_a_root_if_of_it_go_in_a_move_single ... ok
 test viewstate::tests::the_same_instance_in_two_vault_not_is_mixes ... ok
 test viewstate::tests::two_instances_of_the_same_view_have_two_states ... ok
-test viewstate::tests::survives_a_a_round_on_disk ... ok
 test storage::tests::a_lock_held_for_a_momento_is_waits ... ok
 test storage::tests::who_waits_a_lock_dead_not_waits_for_always ... ok
+test journal::tests::the_ceiling_cuts_the_more_old ... ok
 
-test result: ok. 302 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+test result: ok. 303 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
 
 [1m[32m     Running[0m tests/apply_edit.rs (target/debug/deps/apply_edit-6205b0ba615b22e9)
 
 running 12 tests
 test a_failing_parse_leaves_the_document_alone ... ok
 test a_multibyte_document_is_edited_on_character_boundaries ... ok
-test a_request_without_edits_is_not_a_write ... ok
 test a_provider_patches_a_document_through_the_host_api ... ok
+test a_request_without_edits_is_not_a_write ... ok
 test a_stale_base_from_a_provider_is_a_conflict_not_an_internal_error ... ok
-test a_stale_base_writes_nothing ... ok
-test a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_dispatch ... ok
 test a_revision_is_content_so_a_round_trip_of_the_text_keeps_it_valid ... ok
-test edits_that_do_not_stand_up_are_refused_before_the_disk ... ok
+test a_rename_and_a_neighbour_write_no_longer_race_because_the_batch_defers_the_dispatch ... ok
+test a_stale_base_writes_nothing ... ok
 test the_edits_are_a_set_in_the_coordinates_of_the_base ... ok
 test a_surgical_edit_goes_through_the_whole_write_path ... ok
+test edits_that_do_not_stand_up_are_refused_before_the_disk ... ok
 test the_inverse_of_an_edit_puts_the_document_back_through_the_kernel ... ok
 
-test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
 [1m[32m     Running[0m tests/batch_and_origin.rs (target/debug/deps/batch_and_origin-152ff4d8bd497b5b)
 
 running 12 tests
 test a_batch_that_touched_nothing_says_nothing ... ok
-test a_panic_inside_a_batch_does_not_leave_the_batch_open ... ok
 test a_batch_id_is_new_every_time ... ok
+test a_panic_inside_a_batch_does_not_leave_the_batch_open ... ok
 test a_batch_does_not_roll_back_and_says_so_by_closing_anyway ... ok
-test inside_a_batch_no_handler_sees_the_vault_halfway_through ... ok
 test a_nested_batch_joins_the_one_that_is_open ... ok
+test inside_a_batch_no_handler_sees_the_vault_halfway_through ... ok
 test the_actor_of_a_plugin_write_is_the_plugin_and_of_a_shell_write_is_the_user ... ok
+test the_watcher_is_a_distinct_actor_because_that_write_did_not_pass_from_us ... ok
 test the_touched_set_has_no_repetitions_and_keeps_the_order_of_what_happened ... ok
 test what_the_kernel_does_on_its_own_is_not_attributed_to_anyone_else ... ok
-test the_watcher_is_a_distinct_actor_because_that_write_did_not_pass_from_us ... ok
 test a_rename_with_backlinks_is_one_redraw_and_not_one_for_source ... ok
 test an_on_change_automation_recognises_its_own_writes_by_the_origin ... ok
 
-test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.85s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s
 
 [1m[32m     Running[0m tests/case_only_rename.rs (target/debug/deps/case_only_rename-a67af06388418c40)
 
@@ -388,25 +271,25 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 [1m[32m     Running[0m tests/crash_leaves_no_trace.rs (target/debug/deps/crash_leaves_no_trace-eedaa06fde451bc1)
 
 running 3 tests
-test the_walk_sees_the_temporary_that_nobody_else_sees ... ok
 test a_live_write_is_not_interrupted ... ok
 test an_opening_removes_what_the_crash_left ... ok
+test the_walk_sees_the_temporary_that_nobody_else_sees ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
 [1m[32m     Running[0m tests/deactivation.rs (target/debug/deps/deactivation-855c6ca127631258)
 
 running 10 tests
-test a_plugin_that_does_not_exist_cannot_be_deactivated ... ok
 test a_job_requested_during_closing_is_refused_immediately ... ok
 test and_the_outcome_also_reaches_the_one_listening_from_the_kernel ... ok
+test a_plugin_that_does_not_exist_cannot_be_deactivated ... ok
 test closing_twice_does_not_close_twice ... ok
 test the_closing_guard_does_not_survive_a_reopen ... ok
-test the_queued_jobs_of_the_one_shutting_down_receive_an_outcome ... ok
 test deactivation_removes_everything_and_frees_the_names ... ok
 test a_deactivated_index_receives_flush_then_close_then_nothing ... ok
-test the_routes_of_the_one_who_leaves_do_not_pass_to_the_one_who_was_behind ... ok
+test the_queued_jobs_of_the_one_shutting_down_receive_an_outcome ... ok
 test closing_is_the_last_round_then_flush_then_the_one_stopping ... ok
+test the_routes_of_the_one_who_leaves_do_not_pass_to_the_one_who_was_behind ... ok
 
 test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
@@ -415,9 +298,9 @@ test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 5 tests
 test a_vault_without_a_detector_says_so ... ok
 test a_failing_rename_counts_only_once ... ok
+test a_sync_failure_reaches_the_listener_too ... ok
 test a_discarded_result_remains_written_in_the_vault ... ok
 test the_flag_is_single_and_belongs_to_the_watcher ... ok
-test a_sync_failure_reaches_the_listener_too ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -427,9 +310,9 @@ running 21 tests
 test a_derived_entry_is_written_and_reread ... ok
 test a_a_file_that_not_c_and_not_is_asks_nothing ... ok
 test a_count_that_not_is_knows_not_and_a_name_only ... ok
-test a_file_with_two_names_not_is_duplicates ... ok
 test a_file_with_more_names_not_is_replaces_everywhere_rounds_this_test ... ok
 test a_link_receives_the_byte_instead_of_be_replaced ... ok
+test a_file_with_two_names_not_is_duplicates ... ok
 test a_name_only_buys_the_atomicity ... ok
 test a_write_not_leaves_nothing_behind_of_if ... ok
 test a_move_responds_again_that_that_responded ... ok
@@ -440,19 +323,19 @@ test the_folders_of_a_move_are_in_a_table ... ok
 test rewrite_a_notes_of_it_replaces_the_file ... ok
 test the_documents_remain_on_the_write_durable ... ok
 test the_rule_is_in_a_table_and_the_table_turns_everywhere ... ok
-test the_merger_adopts_what_it_found ... ok
 test the_permissions_of_a_notes_survive_to_the_save ... ok
+test the_merger_adopts_what_it_found ... ok
 test two_installations_not_is_delete_the_keys ... ok
 test two_installations_not_is_delete_the_state_of_view ... ok
 test eight_writers_together_and_no_key_lost ... ok
 
-test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
 
 [1m[32m     Running[0m tests/effective_capabilities.rs (target/debug/deps/effective_capabilities-08be1cd495a63e32)
 
 running 2 tests
-test the_declared_forms_are_the_effective_capabilities ... ok
 test a_syntax_turned_off_by_the_provider_does_not_reach_the_drawer ... ok
+test the_declared_forms_are_the_effective_capabilities ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -462,39 +345,156 @@ running 11 tests
 test a_attachment_moved_from_outside_not_remains_in_registry_col_name_old ... ok
 test a_attachment_that_compare_and_changes_the_announces_saying_what_and ... ok
 test a_index_that_not_says_nothing_receives_all ... ok
+test a_data_that_can_again_change_not_ends_in_registry ... ok
 test is_rereads_only_that_that_and_changed ... ok
 test reopen_a_vault_unchanged_not_rereads_nothing ... ok
-test a_data_that_can_again_change_not_ends_in_registry ... ok
-test the_registry_is_filters_for_kind_and_is_asks_a_pages ... ok
 test an_attachment_fingerprint_persists_and_updates_after_rename ... ok
-test the_vault_not_and_only_documents ... ok
 test same_size_and_mtime_do_not_hide_changed_bytes ... ok
+test the_registry_is_filters_for_kind_and_is_asks_a_pages ... ok
+test the_vault_not_and_only_documents ... ok
 test the_kind_depends_on_who_registered_now ... ok
 
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
 [1m[32m     Running[0m tests/entry_store_closes_with_the_vault.rs (target/debug/deps/entry_store_closes_with_the_vault-cb3a641a0529d678)
 
 running 4 tests
-test to_the_closing_the_registry_is_writes_after_the_indexes ... ok
 test a_session_that_not_touches_nothing_not_rewrites_the_registry ... ok
-test a_reopening_after_a_session_of_writes_not_reappeared_nothing ... FAILED
+test to_the_closing_the_registry_is_writes_after_the_indexes ... ok
+test a_reopening_after_a_session_of_writes_not_reappeared_nothing ... ok
 test the_registry_written_to_the_closing_reports_the_writes_and_not_the_opening ... ok
 
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+[1m[32m     Running[0m tests/folders.rs (target/debug/deps/folders-989f6032c238cb49)
+
+running 5 tests
+test an_empty_folder_exists_and_says_it_is_empty ... ok
+test folders_are_queried_one_level_at_a_time ... ok
+test a_created_notes_brings_along_the_folders_it_traverses ... ok
+test the_folder_survives_when_its_last_notes_goes_to_trash ... ok
+test the_list_is_for_folder_and_the_page_is_of_that_folder ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/graph_incremental.rs (target/debug/deps/graph_incremental-54619551d698d983)
+
+running 5 tests
+test incremental_is_cheaper_than_rebuild ... ignored, micro-bench: si esegue a mano, in release
+test removing_everything_empties_the_graph ... ok
+test upserts_from_empty_match_build ... ok
+test incremental_matches_rebuild_on_a_long_sequence ... ok
+test incremental_matches_rebuild_on_random_sequences ... ok
+
+test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 17.62s
+
+[1m[32m     Running[0m tests/guarded_write.rs (target/debug/deps/guarded_write-326a4ca9e7d0044d)
+
+running 10 tests
+test a_base_invented_not_passes ... ok
+test a_write_foreign_not_view_not_becomes_more_covered ... ok
+test a_legacy_fnv_base_still_guards_the_same_source_during_migration ... ok
+test a_base_on_a_document_vanished_and_a_conflict ... ok
+test the_guard_does_not_trust_the_registry ... ok
+test the_base_that_matches_writes ... ok
+test the_two_cases_are_two_responses_and_not_a_and_the_its_absence ... ok
+test without_base_is_writes_as_first ... ok
+test the_revision_resa_chains_the_write_after ... ok
+test where_the_reader_does_not_cover_the_guard_and_the_single_network ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/hot_opening_graph.rs (target/debug/deps/hot_opening_graph-a0f60081e6fc8669)
+
+running 3 tests
+test a_graph_prepared_outside_from_the_exclusive_and_the_same_of_reindex ... ok
+test a_warm_a_wikilink_resolves_again ... ok
+test a_reopening_a_warm_has_the_same_graph_of_a_a_cold ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+[1m[32m     Running[0m tests/index_feeding.rs (target/debug/deps/index_feeding-170a29471764a9fc)
+
+running 12 tests
+test a_query_nobody_declared_is_unserved ... ok
+test a_file_the_vault_ignores_never_reaches_models_events_or_index ... ok
+test a_rename_is_remove_plus_add_for_an_index ... ok
+test a_provider_that_declared_nothing_is_never_asked ... ok
+test reindex_feeds_every_document_then_declares_the_full_truth ... ok
+test backlinks_never_reach_the_providers ... ok
+test two_excerpt_rows_for_one_document_merge_instead_of_overwriting ... ok
+test registering_an_index_activates_it_in_its_own_data_space ... ok
+test with_no_provider_a_search_says_so_instead_of_pretending ... ok
+test two_indexes_claiming_the_same_family_is_a_conflict_at_registration ... ok
+test writes_and_removals_reach_the_index ... ok
+test an_index_never_misses_an_update_even_when_the_event_queue_overflows ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+[1m[32m     Running[0m tests/invoke_command.rs (target/debug/deps/invoke_command-3b0b8f42f4645922)
+
+running 10 tests
+test a_reveal_from_a_command_speaks_in_bytes_of_the_new_text ... ok
+test a_command_that_nobody_offers_is_named_as_unknown ... ok
+test declaring_yourself_read_only_is_binding ... ok
+test every_structural_capability_is_refused_by_the_same_gate ... ok
+test the_arguments_are_validated_before_the_command_is_ever_called ... ok
+test a_dry_run_cannot_write_even_if_the_command_tries ... ok
+test a_plan_calculated_now_refuses_to_apply_over_someone_elses_write ... ok
+test the_registry_lists_what_a_caller_needs_to_invoke_without_reading_the_code ... ok
+test what_a_command_writes_reaches_the_handlers_after_it_has_returned ... ok
+test the_host_completes_the_set_of_documents_a_plan_would_touch ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+[1m[32m     Running[0m tests/kernel_poison.rs (target/debug/deps/kernel_poison-ad8d70e0532761cf)
+
+running 4 tests
+test no_bare_lock_remains_in_the_repaired_files ... ok
+test the_files_the_counts_name_actually_exist ... ok
+test nobody_rewrites_a_reason_instead_of_a_policy ... FAILED
+test the_poison_policy_lives_in_two_files_only ... FAILED
+
 failures:
 
----- a_reopening_after_a_session_of_writes_not_reappeared_nothing stdout ----
+---- nobody_rewrites_a_reason_instead_of_a_policy stdout ----
 
-thread 'a_reopening_after_a_session_of_writes_not_reappeared_nothing' panicked at crates/fub-kernel/tests/entry_store_closes_with_the_vault.rs:348:5:
-assertion `left == right` failed: la riapertura ha riletto e riparsato 400 documenti su 400: l'anagrafe non ha seguito le 40 scritture della sessione fino al disco
-  left: 400
- right: 0
+thread 'nobody_rewrites_a_reason_instead_of_a_policy' panicked at crates/fub-kernel/tests/kernel_poison.rs:153:5:
+a poison reason written as a sentence instead of through a gate:
+mod.rs:95 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:241 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:273 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:301 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:336 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+providers.rs:383 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:566 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:609 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:1496 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:5479 — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:5686 — .unwrap_or_else(|poisoned| poisoned.into_inner());
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
+---- the_poison_policy_lives_in_two_files_only stdout ----
+
+thread 'the_poison_policy_lives_in_two_files_only' panicked at crates/fub-kernel/tests/kernel_poison.rs:175:5:
+the answer to a poisoned lock is hand-written outside the two gates (bus.rs, poison.rs). The kernel's two policies are decided (0126, and 0120 for the host): a third place improvising a third is the defect the two decisions exist to prevent.
+mod.rs:95 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:241 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:273 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:301 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+mod.rs:336 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+providers.rs:383 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:566 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:609 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:1496 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:5479 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+workspace.rs:5686 `into_inner()` — .unwrap_or_else(|poisoned| poisoned.into_inner());
+
 
 failures:
-    a_reopening_after_a_session_of_writes_not_reappeared_nothing
+    nobody_rewrites_a_reason_instead_of_a_policy
+    the_poison_policy_lives_in_two_files_only
 
-test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
-[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-kernel --test entry_store_closes_with_the_vault`
+[1m[31merror[0m[1m:[0m test failed, to rerun pass `-p fub-kernel --test kernel_poison`
