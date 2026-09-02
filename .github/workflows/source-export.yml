@@ -1,0 +1,29 @@
+name: Temporary source export
+
+on:
+  push:
+    branches:
+      - integration/surface-export-20260902
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - name: Create source archive
+        shell: bash
+        run: |
+          tar \
+            --exclude=.git \
+            --exclude=target \
+            --exclude=node_modules \
+            -czf "/tmp/fub-surface-${GITHUB_SHA}.tar.gz" .
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: surface-${{ github.sha }}
+          path: /tmp/fub-surface-${{ github.sha }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
