@@ -32,6 +32,81 @@ jobs:
             git apply --check "$patch"
             git apply "$patch"
           done
+      - name: Centralizza la policy del veleno dei provider
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          def replace_exact(path, old, new, expected=1):
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              seen = text.count(old)
+              if seen != expected:
+                  raise SystemExit(f"{path}: attesi {expected} anchor, trovati {seen}: {old!r}")
+              file.write_text(text.replace(old, new), encoding="utf-8")
+
+          def remove_local_poison_policy(path, expected):
+              file = Path(path)
+              text = file.read_text(encoding="utf-8")
+              pattern = re.compile(
+                  r"\n[ \t]*\.unwrap_or_else\(\|poisoned\| poisoned\.into_inner\(\)\)"
+              )
+              seen = len(pattern.findall(text))
+              if seen != expected:
+                  raise SystemExit(
+                      f"{path}: attese {expected} policy locali di poison, trovate {seen}"
+                  )
+              file.write_text(pattern.sub("", text), encoding="utf-8")
+
+          index = "crates/fub-kernel/src/index/mod.rs"
+          replace_exact(index, "use std::sync::{Arc, RwLock};", "use std::sync::Arc;")
+          replace_exact(
+              index,
+              "pub(crate) type SharedIndexProvider = Arc<RwLock<Box<dyn IndexProvider>>>;",
+              "pub(crate) type SharedIndexProvider = Arc<crate::poison::SharedShelter<Box<dyn IndexProvider>>>;",
+          )
+          remove_local_poison_policy(index, 5)
+
+          providers = "crates/fub-kernel/src/providers.rs"
+          replace_exact(providers, "use std::sync::{Arc, RwLock};", "use std::sync::Arc;")
+          replace_exact(
+              providers,
+              "use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};",
+              "use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};\nuse crate::poison::SharedShelter;",
+          )
+          replace_exact(
+              providers,
+              "pub(crate) provider: Arc<RwLock<Box<dyn ViewProvider>>>,",
+              "pub(crate) provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,",
+          )
+          remove_local_poison_policy(providers, 1)
+
+          workspace = "crates/fub-kernel/src/workspace.rs"
+          replace_exact(workspace, "use std::sync::{Arc, RwLock};", "use std::sync::Arc;")
+          replace_exact(
+              workspace,
+              "use crate::poison::Shelter;",
+              "use crate::poison::{SharedShelter, Shelter};",
+          )
+          replace_exact(
+              workspace,
+              "provider: Arc<RwLock<Box<dyn ViewProvider>>>,",
+              "provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,",
+              expected=2,
+          )
+          replace_exact(
+              workspace,
+              "std::sync::Arc::new(std::sync::RwLock::new(index))",
+              "Arc::new(SharedShelter::new(index))",
+          )
+          replace_exact(
+              workspace,
+              "Arc::new(RwLock::new(provider))",
+              "Arc::new(SharedShelter::new(provider))",
+          )
+          remove_local_poison_policy(workspace, 5)
+          PY
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
           toolchain: 1.89
@@ -64,6 +139,7 @@ jobs:
           cargo test -p fub-kernel --test rejoin
           cargo test -p fub-kernel --test entry_store
           cargo test -p fub-kernel --test entry_store_closes_with_the_vault
+          cargo test -p fub-kernel --test kernel_poison
           cargo check -p fub-kernel --lib --target x86_64-pc-windows-gnu
       - name: Clippy completo
         run: cargo clippy --workspace --all-targets -- -D warnings
@@ -117,6 +193,8 @@ jobs:
                   crates/fub-kernel/src/vault.rs \
                   crates/fub-kernel/src/workspace.rs \
                   crates/fub-kernel/src/entries.rs \
+                  crates/fub-kernel/src/index/mod.rs \
+                  crates/fub-kernel/src/providers.rs \
                   crates/fub-abi/tests/dependency_invariant.rs \
                   crates/fub-abi/tests/a_named_rule_is_declared.rs \
                   crates/fub-features/tests/undo.rs \
