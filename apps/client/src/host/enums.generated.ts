@@ -67,6 +67,7 @@ export type Gate =
   | "syntax_rule"
   | "custom_render"
   | "job"
+  | "index_query"
 ;
 
 export type HealthCheck =

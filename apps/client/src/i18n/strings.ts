@@ -233,6 +233,7 @@ const IT = {
   "gate.syntax_rule": "innestandosi sul documento",
   "gate.custom_render": "disegnando con un renderer personalizzato",
   "gate.job": "eseguendo un job",
+  "gate.index_query": "rispondendo a una query di indice",
 
   // --- il cestino --------------------------------------------------------
   "trash.confirm_delete": "Spostare «{doc}» nel cestino?",
@@ -755,6 +756,7 @@ const EN: Record<Key, string> = {
   "gate.syntax_rule": "grafting onto the document",
   "gate.custom_render": "drawing with a custom renderer",
   "gate.job": "running a job",
+  "gate.index_query": "answering an index query",
 
   "trash.confirm_delete": "Move «{doc}» to the trash?",
   "trash.delete_title": "Delete note",

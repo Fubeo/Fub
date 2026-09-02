@@ -55,6 +55,7 @@ use crate::config::{config_dir, machine_settings_path, vault_registry_path, view
 use crate::custody::Custody;
 use crate::jobs::JobHost;
 use crate::mount::mount;
+use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{Bundle, BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
@@ -1296,7 +1297,7 @@ impl Host {
                 self.machine_settings(),
             ));
         }
-        self.read_workspace(vault, |workspace| workspace.query_index(query))
+        self.in_session(vault, |session| query_workspace(session.workspace(), query))
     }
 
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e

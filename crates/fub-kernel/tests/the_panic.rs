@@ -732,6 +732,7 @@ fn every_carries_declares_where_and_tested() {
             Gate::SyntaxRule => Test::Here,
             Gate::CustomRender => Test::Here,
             Gate::Job => Test::Elsewhere("crates/fub-host/tests/the_runner.rs"),
+            Gate::IndexQuery => Test::Elsewhere("crates/fub-host/tests/query_index_lock.rs"),
         };
         if let Test::Elsewhere(file) = test {
             assert!(
@@ -760,7 +761,8 @@ fn a_carries_that_receives_a_detail_the_names() {
             | Gate::Service
             | Gate::FormatParse
             | Gate::CustomRender
-            | Gate::Job => true,
+            | Gate::Job
+            | Gate::IndexQuery => true,
             Gate::Event
             | Gate::IndexFeed
             | Gate::IndexForget
@@ -888,7 +890,7 @@ fn a_source_that_dies_reading_not_carries_with_if_the_table() {
     // L'hook dei panici si tace per la durata del misfatto, o un panico voluto
     // stamperebbe la sua traccia e farebbe sembrare rotto un banco verde.
     // **Il `catch_unwind` è qui e non nel kernel, ed è una zona cieca misurata.**
-    // Le tredici porte di `safety::Gate` coprono comandi, view, handler, indici,
+    // Le quattordici porte di `safety::Gate` coprono comandi, view, handler, indici,
     // formati, regole di sintassi, renderer, servizi e job — e **non** l'import
     // né l'export: `Workspace::import` chiama il provider nudo. Il panico di
     // questo banco srotolerebbe quindi fino a chi ha chiesto l'import, che è una

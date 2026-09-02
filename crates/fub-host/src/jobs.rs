@@ -54,6 +54,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::custody::Custody;
+use crate::query::query_workspace;
 
 use fub_abi::command::{CommandOutcome, InvokeMode};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
@@ -71,7 +72,7 @@ use fub_abi::traits::{
 };
 use fub_abi::{Event, PluginError};
 use fub_kernel::host::Guard;
-use fub_kernel::{ReadOnly, Workspace};
+use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
 /// condiviso, **senza tenerlo**.
@@ -465,7 +466,11 @@ impl HostEvents for JobHost {
 
 impl HostQuery for JobHost {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        self.read_result(|h| h.query_index(query))
+        self.stopped()?;
+        let policy = self.workspace.read()?.granted_policy(&self.plugin);
+        let capability = authorize_query(&policy, &query.kind())?;
+        let result = query_workspace(&self.workspace, query)?;
+        Ok(filter_query_result(&policy, capability, result))
     }
 }
 

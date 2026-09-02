@@ -328,5 +328,6 @@ fn from_gate(g: w_events::Gate) -> Gate {
         w_events::Gate::SyntaxRule => Gate::SyntaxRule,
         w_events::Gate::CustomRender => Gate::CustomRender,
         w_events::Gate::Job => Gate::Job,
+        w_events::Gate::IndexQuery => Gate::IndexQuery,
     }
 }

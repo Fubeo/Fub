@@ -197,6 +197,7 @@ const GATE_LABELS: Record<Gate, Key> = {
   syntax_rule: "gate.syntax_rule",
   custom_render: "gate.custom_render",
   job: "gate.job",
+  index_query: "gate.index_query",
 };
 
 /// Ciò che è stato detto, dal più recente. Serve a chi disegna lo storico, e ai

@@ -43,6 +43,46 @@ pub(crate) use routing::{RouteTable, Target};
 
 pub(crate) type SharedIndexProvider = Arc<crate::poison::SharedShelter<Box<dyn IndexProvider>>>;
 
+/// Attraversa la porta `query` di un indice con la stessa rete usata dagli
+/// altri callback dei provider. La guardia dell'handle appartiene al provider,
+/// non al workspace: se il callback panica, lo srotolamento la rilascia dentro
+/// [`safety::calling`](crate::safety::calling) e al chiamante torna un errore.
+pub(crate) fn query_handle(
+    who: &str,
+    provider: &SharedIndexProvider,
+    query: IndexQuery,
+) -> Result<IndexResult, PluginError> {
+    let detail = format!("{:?}", query.kind());
+    let provider = provider.read();
+    crate::safety::calling(who, Gate::IndexQuery, &detail, || provider.query(query))
+}
+
+/// Una fotografia immutabile del routing e degli handle degli indici esterni.
+///
+/// Prepararla richiede soltanto una lettura breve del [`Workspace`](crate::Workspace);
+/// eseguirla non richiede più il suo prestito. Il core viene fornito da chi
+/// monta il workspace tramite [`plan::QueryCore`], così ogni accesso allo stato
+/// locale può prendere una nuova guardia breve senza attraversare il confine di
+/// un provider.
+pub struct PreparedIndexQuery {
+    routes: RouteTable,
+    providers: Vec<(String, SharedIndexProvider)>,
+    routing_generation: u64,
+}
+
+impl PreparedIndexQuery {
+    /// Esegue il piano congelato. Le callback degli indici usano soltanto gli
+    /// handle contenuti nella fotografia; il core passa dalla porta fornita dal
+    /// composition root.
+    pub fn query(
+        &self,
+        core: &dyn plan::QueryCore,
+        query: IndexQuery,
+    ) -> Result<IndexResult, PluginError> {
+        plan::run_detached(self, core, query)
+    }
+}
+
 use crate::organization::OrganizationStore;
 use crate::providers::ProviderTable;
 use crate::registry::FormatRegistry;
@@ -167,6 +207,8 @@ pub(crate) struct Indexes {
     /// Gli indici registrati, col proprio id (che è anche il loro spazio dati).
     pub(crate) providers: ProviderTable<(String, SharedIndexProvider)>,
     pub(crate) routes: RouteTable,
+    /// Cambia ogni volta che una fotografia di routing diventa obsoleta.
+    routing_generation: u64,
 }
 
 impl Indexes {
@@ -185,6 +227,7 @@ impl Indexes {
             core,
             providers: ProviderTable::new(),
             routes,
+            routing_generation: 0,
         }
     }
 
@@ -201,6 +244,7 @@ impl Indexes {
                 c.challenger = id.to_string();
                 c
             })?;
+        self.routing_generation = self.routing_generation.wrapping_add(1);
         Ok(target)
     }
 
@@ -211,6 +255,7 @@ impl Indexes {
     pub(crate) fn declare_replacing(&mut self, index: &dyn IndexProvider) -> Target {
         let target = Target::Provider(self.providers.len());
         self.routes.replace(target, &index.routes());
+        self.routing_generation = self.routing_generation.wrapping_add(1);
         target
     }
 
@@ -242,6 +287,7 @@ impl Indexes {
             )),
         };
         self.routes.retarget(&moved);
+        self.routing_generation = self.routing_generation.wrapping_add(1);
         let mut removed = Vec::with_capacity(doomed.len());
         let mut kept = Vec::new();
         for (at, entry) in self.providers.take().into_iter().enumerate() {
@@ -294,6 +340,40 @@ impl Indexes {
         plan::run(self, query)
     }
 
+    /// Congela routing e handle prima che l'host lasci andare
+    /// `Custody<Workspace>`. Nessun provider viene interrogato durante questa
+    /// fase.
+    pub(crate) fn prepare_query(&self) -> PreparedIndexQuery {
+        PreparedIndexQuery {
+            routes: self.routes.clone(),
+            providers: self.feed_handles(),
+            routing_generation: self.routing_generation,
+        }
+    }
+
+    /// Una risposta preparata non si applica a una tabella di routing diversa:
+    /// l'handle resta vivo grazie all'`Arc`, ma non è più il proprietario della
+    /// domanda. Restituirne comunque la risposta renderebbe visibile stato di
+    /// un provider ritirato o sostituito.
+    pub(crate) fn ensure_query_is_current(
+        &self,
+        prepared: &PreparedIndexQuery,
+    ) -> Result<(), PluginError> {
+        if prepared.routing_generation == self.routing_generation {
+            return Ok(());
+        }
+        Err(PluginError::Conflict(
+            "il routing degli indici è cambiato durante la query".into(),
+        ))
+    }
+
+    /// Le quattro query composte dal `Workspace` possono seguire la fast-path
+    /// locale soltanto finché la loro rotta appartiene davvero al core. Una
+    /// sostituzione esplicita le trasforma in callback esterne come ogni altra.
+    pub(crate) fn query_owner_is_external(&self, query: &IndexQuery) -> bool {
+        matches!(self.routes.owner(&query.kind()), Some(Target::Provider(_)))
+    }
+
     /// Chi risponderebbe a questa domanda, e come. Non attraversa il contratto —
     /// l'explain plan che 9.2 vorrà mostrare è un'altra cosa, con altri clienti
     /// — ma è ciò che rende il routing **provabile** invece che descritto: un
@@ -310,10 +390,10 @@ impl Indexes {
     ) -> Option<Result<IndexResult, PluginError>> {
         match target {
             Target::Core => Some(self.core.query(query)),
-            Target::Provider(at) => self.providers.get(at).map(|(_, provider)| {
-                let provider = provider.read();
-                provider.query(query)
-            }),
+            Target::Provider(at) => self
+                .providers
+                .get(at)
+                .map(|(id, provider)| query_handle(id, provider, query)),
         }
     }
 

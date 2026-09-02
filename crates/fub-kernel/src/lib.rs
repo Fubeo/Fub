@@ -89,7 +89,10 @@ pub use dispatcher::{Dispatcher, JobBell, PendingJob};
 pub use documents::DocumentStore;
 pub use error::{KernelError, Result};
 pub use graph::{BuiltGraph, GraphSources, LinkGraph};
-pub use host::{Capability, CapabilitySet, Granted, Guard, Policy, ReadOnly};
+pub use host::{
+    authorize_query, filter_query_result, Capability, CapabilitySet, Granted, Guard, Policy,
+    ReadOnly,
+};
 pub use index::plan::{PlanStep, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
 pub use journal::{journal_path, JournalOp, JournalRead, JournalRecord};

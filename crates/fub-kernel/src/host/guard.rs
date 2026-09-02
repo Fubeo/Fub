@@ -1130,25 +1130,51 @@ impl<H: HostEvents, P: Policy> HostEvents for Guard<H, P> {
 
 impl<H: HostQuery, P: Policy> HostQuery for Guard<H, P> {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        let (cap, what) = Guard::<H, P>::query_capability(&query.kind());
-        self.check(cap, || what.into())?;
+        let cap = authorize_query(&self.policy, &query.kind())?;
         let result = self.inner.query_index(query)?;
-        if cap == Capability::Drafts {
-            if let IndexResult::Drafts(mut page) = result {
-                let before = page.items.len();
-                page.items.retain(|draft| {
-                    self.policy
-                        .denies_path(Capability::Drafts, draft.doc.as_str())
-                        .is_none()
-                });
-                if page.items.len() != before {
-                    page.total = page.items.len() as u32;
-                }
-                return Ok(IndexResult::Drafts(page));
-            }
-        }
-        Ok(result)
+        Ok(filter_query_result(&self.policy, cap, result))
     }
+}
+
+/// Applica lo stesso cancello di [`Guard`] a un piano che deve essere eseguito
+/// fuori dalla guardia del workspace. È pubblico perché il composition root
+/// stacca la callback, non perché esista una seconda politica.
+pub fn authorize_query<P: Policy>(
+    policy: &P,
+    kind: &fub_abi::traits::QueryKind,
+) -> Result<Capability, PluginError> {
+    let (cap, what) = Guard::<(), P>::query_capability(kind);
+    match policy.denies(cap) {
+        None => Ok(cap),
+        Some(why) => Err(PluginError::PermissionDenied(
+            format!("{what}: {why}").into(),
+        )),
+    }
+}
+
+/// Rifinisce una risposta con le regole dipendenti dalla politica. Oggi la
+/// sola è il recinto delle bozze; tenerla qui impedisce che il percorso
+/// staccato e il `Guard` imparino due semantiche diverse.
+pub fn filter_query_result<P: Policy>(
+    policy: &P,
+    cap: Capability,
+    result: IndexResult,
+) -> IndexResult {
+    if cap == Capability::Drafts {
+        if let IndexResult::Drafts(mut page) = result {
+            let before = page.items.len();
+            page.items.retain(|draft| {
+                policy
+                    .denies_path(Capability::Drafts, draft.doc.as_str())
+                    .is_none()
+            });
+            if page.items.len() != before {
+                page.total = page.items.len() as u32;
+            }
+            return IndexResult::Drafts(page);
+        }
+    }
+    result
 }
 
 impl<H, P: Policy> Guard<H, P> {

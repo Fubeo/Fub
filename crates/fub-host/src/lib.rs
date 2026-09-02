@@ -88,6 +88,7 @@ pub mod mount;
 /// ce l'hanno.
 #[cfg(feature = "http-client")]
 pub mod net;
+mod query;
 pub mod records;
 pub mod registry;
 pub mod runner;

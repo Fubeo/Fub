@@ -3750,9 +3750,10 @@ pub trait IndexProvider: Send + Sync {
     ///
     /// # Due `query` possono essere in volo insieme
     ///
-    /// Questo trait è `Send + Sync` e questo metodo prende `&self`: il kernel
-    /// serve le interrogazioni sotto **prestito condiviso** del workspace, e N
-    /// chiamate concorrenti sulla stessa istanza sono lecite per costruzione.
+    /// Questo trait è `Send + Sync` e questo metodo prende `&self`: l'host
+    /// prepara routing e handle sotto un prestito breve, poi serve le
+    /// interrogazioni **fuori da ogni prestito del workspace**. N chiamate
+    /// concorrenti sulla stessa istanza sono lecite per costruzione.
     ///
     /// Lecite, non necessariamente **parallele**. Un provider che metta un lock
     /// dentro il proprio `&self` è conforme, e si rimette in fila da solo senza

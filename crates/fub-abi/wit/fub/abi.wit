@@ -1357,6 +1357,7 @@ interface events {
         syntax-rule,
         custom-render,
         job,
+        index-query,
     }
     /// Quanto pesa ciò che è andato storto. Due gradini e non cinque: una
     /// scala che chi emette non sa dove tagliare finisce con tutto sullo
