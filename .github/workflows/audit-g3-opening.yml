@@ -35,6 +35,67 @@ jobs:
           echo '924c6ba4eed3032762c710a2577051106217f6e6a6a533d385681e655ac4dda7  /tmp/g3-opening.patch' | sha256sum -c -
           git apply --check /tmp/g3-opening.patch
           git apply /tmp/g3-opening.patch
+
+          cat > /tmp/g3-first-failure-fix.patch <<'PATCH'
+          --- a/crates/fub-kernel/src/index/mod.rs
+          +++ b/crates/fub-kernel/src/index/mod.rs
+          @@ -65,7 +65,7 @@
+           /// `ids` è ciò che va dichiarato perduto **se pania**, e i tre chiamanti lo
+           /// passano diverso perché la domanda è diversa: chi alimenta perde ciò che gli
+           /// è stato dato, chi riconcilia perde dei morti di cui non si conosce il nome
+          -/// (vedi [`Indexes::reconcile`]).
+          +/// (vedi [`reconcile_handles`]).
+           fn feeding<'a>(
+               who: &str,
+               gate: Gate,
+          @@ -285,44 +285,6 @@
+                   lost
+               }
+           
+          -    /// **Cosa hanno già tutti**, di queste voci (§14.2): l'intersezione delle
+          -    /// risposte, non l'unione.
+          -    ///
+          -    /// L'intersezione perché un documento si salta solo se **nessuno** lo
+          -    /// aspetta: basta un indice che non ce l'ha, e il kernel deve comunque
+          -    /// leggerlo e parsarlo per darglielo — a quel punto tanto vale darlo a
+          -    /// tutti, che è ciò che rende il salto un tutto-o-niente per documento e
+          -    /// non una consegna a metà.
+          -    ///
+          -    /// Senza indici registrati l'intersezione è l'insieme intero, ed è la
+          -    /// risposta giusta e non un caso limite: se nessuno aspetta niente, non
+          -    /// c'è niente da rileggere per nessuno.
+          -    ///
+          -    /// Chi pania rispondendo non blocca l'apertura, e non fa nemmeno saltare
+          -    /// niente: si porta via solo la propria risposta, che senza di lui è vuota
+          -    /// — cioè «mandami tutto», che è il verso sicuro dello sbaglio.
+          -    pub(crate) fn up_to_date(&self, entries: &[VaultEntry]) -> BTreeSet<DocId> {
+          -        up_to_date_handles(&self.feed_handles(), entries)
+          -    }
+          -
+          -    /// Chi non è riuscito ad allinearsi lo dice, e **nomina i morti che si
+          -    /// tiene**: gli id che tornano di qui non stanno in `ids` — sono ciò che
+          -    /// l'indice ha in più, cioè quello che avrebbe dovuto dimenticare.
+          -    ///
+          -    /// La rete contro i panici c'è come nell'alimentazione, ma ciò che torna
+          -    /// indietro è **diverso**: chi pania riconciliando non ha lasciato indietro
+          -    /// i documenti che gli sono stati dati (quelli ci sono), ha lasciato
+          -    /// indietro dei morti di cui nessuno conosce il nome — nemmeno il kernel,
+          -    /// che sa solo chi è vivo. La perdita si nomina quindi sul primo id del
+          -    /// lotto se c'è, e su nessuno se il vault è vuoto: dice *quale indice* e
+          -    /// *cosa è successo*, che è ciò su cui si può agire (riaprire il vault),
+          -    /// e non finge di sapere un elenco che non esiste.
+          -    pub(crate) fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
+          -        let mut lost = self.core.reconcile(ids);
+          -        lost.extend(reconcile_handles(&self.feed_handles(), ids));
+          -        lost
+          -    }
+          -
+               /// Interroga: il **percorso unico** di dispatch (vedi [`plan`]).
+               pub(crate) fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+                   plan::run(self, query)
+          PATCH
+          git apply --check /tmp/g3-first-failure-fix.patch
+          git apply /tmp/g3-first-failure-fix.patch
           git diff --check
           tar --exclude=.git --exclude=target --exclude=apps/client/node_modules \
             --exclude='.audit-g3-opening.b64.*' \
@@ -43,7 +104,6 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
-          toolchain: 1.89
           components: rustfmt, clippy
           targets: x86_64-pc-windows-gnu
 
