@@ -1,0 +1,39 @@
+name: Materializza piano audit e handoff
+
+'on':
+  push:
+    branches:
+      - fix/audit-integration
+    paths:
+      - .github/workflows/materialize-audit-plan.yml
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Ricompone e verifica i documenti
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin fix/audit-integration
+          git merge --ff-only origin/fix/audit-integration
+          cat .audit-plan-upload.gz.b64.00 .audit-plan-upload.gz.b64.01 .audit-plan-upload.gz.b64.02 > /tmp/fub-audit-plan.gz.b64
+          base64 -d /tmp/fub-audit-plan.gz.b64 > /tmp/fub-audit-plan.gz
+          echo 'a83a464b6af0ae1e759d1e17b7ac2fe51cf26d451ed0230591395f476110b417  /tmp/fub-audit-plan.gz' | sha256sum -c -
+          gzip -dc /tmp/fub-audit-plan.gz > PIANO-AZIONE-FUB-AUDIT-2026-09-01.md
+          echo 'b29fa49739d3655324c0084c85384ea10f41be951d7c59915add5752af234816  PIANO-AZIONE-FUB-AUDIT-2026-09-01.md' | sha256sum -c -
+          mv .audit-handoff-upload.md HANDOFF-FUB-DOPPIO-TODO-2026-09-02.md
+          git rm .audit-plan-upload.gz.b64.00 .audit-plan-upload.gz.b64.01 .audit-plan-upload.gz.b64.02 .github/workflows/materialize-audit-plan.yml
+          git add -A
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs(audit): aggiunge piano operativo e handoff doppio TODO'
+          git push origin HEAD:fix/audit-integration
