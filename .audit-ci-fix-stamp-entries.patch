@@ -1,14 +1,14 @@
 diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
 --- a/crates/fub-kernel/src/entries.rs
 +++ b/crates/fub-kernel/src/entries.rs
-@@ -234,6 +234,8 @@ pub(crate) struct StoredEntry {
+@@ -234,4 +234,6 @@ pub(crate) struct StoredEntry {
      pub(crate) size: u64,
      pub(crate) mtime: u64,
 +    #[serde(default, skip_serializing_if = "Option::is_none")]
 +    pub(crate) change_stamp: Option<u64>,
      #[serde(default, skip_serializing_if = "Option::is_none")]
      pub(crate) identity: Option<FileIdentity>,
-@@ -252,6 +254,14 @@ impl StoredEntry {
+@@ -252,4 +254,12 @@ impl StoredEntry {
      pub(crate) fn describes(&self, size: u64, mtime: u64) -> bool {
          self.size == size && self.mtime == mtime
      }
@@ -21,7 +21,7 @@ diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
 +        }
 +    }
  }
-@@ -439,7 +449,9 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEntry>) {
+@@ -439,6 +449,8 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEntry>) {
          let Some(previous) = old.get(id) else {
              continue;
          };
@@ -39,7 +39,7 @@ diff --git a/crates/fub-kernel/src/entries.rs b/crates/fub-kernel/src/entries.rs
              identity: None,
              fingerprint: None,
              metadata: None,
-@@ -662,6 +675,31 @@ mod tests {
+@@ -662,4 +675,29 @@ mod tests {
          );
      }
 +
