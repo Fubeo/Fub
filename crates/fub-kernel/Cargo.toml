@@ -11,6 +11,9 @@ fub-abi = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
+# Il vault di produzione apre la root una volta e poi opera tramite `cap_std::fs::Dir`:
+# il path ambientale resta solo un nome logico, così una sostituzione della root
+# dopo il mount non può reindirizzare letture e scritture fuori dal capability.
 cap-std = { workspace = true }
 thiserror = { workspace = true }
 # Solo la facciata: il collettore è `crate::log`, e non ha dipendenze.

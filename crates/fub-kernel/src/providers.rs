@@ -116,7 +116,7 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 // Il registro dei provider (§8.1)
 // ---------------------------------------------------------------------------
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use fub_abi::command::CommandSpec;
 use fub_abi::traits::{
@@ -126,6 +126,7 @@ use fub_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
 use fub_abi::PluginError;
 
 use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
+use crate::poison::SharedShelter;
 use crate::workspace::Trust;
 
 /// Un provider registrato, con **ciò che ha dichiarato al momento della
@@ -145,7 +146,7 @@ use crate::workspace::Trust;
 /// chi interroga.
 pub(crate) struct RegisteredView {
     pub(crate) id: String,
-    pub(crate) provider: Arc<RwLock<Box<dyn ViewProvider>>>,
+    pub(crate) provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
     pub(crate) specs: Vec<ViewSpec>,
     /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
     /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
@@ -377,10 +378,7 @@ impl ProviderRegistry {
             .enumerate()
             .filter(|(_, v)| v.id == id)
             .map(|(at, v)| {
-                let provider = v
-                    .provider
-                    .read()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let provider = v.provider.read();
                 (at, declared_specs(provider.as_ref()))
             })
             .collect();

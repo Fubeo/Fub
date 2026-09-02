@@ -31,7 +31,7 @@ pub mod plan;
 pub(crate) mod routing;
 
 use std::collections::BTreeSet;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexLoss, IndexProvider, IndexQuery, IndexResult, VaultEntry};
@@ -41,7 +41,7 @@ pub(crate) use core::CoreIndex;
 pub use routing::RouteConflict;
 pub(crate) use routing::{RouteTable, Target};
 
-pub(crate) type SharedIndexProvider = Arc<RwLock<Box<dyn IndexProvider>>>;
+pub(crate) type SharedIndexProvider = Arc<crate::poison::SharedShelter<Box<dyn IndexProvider>>>;
 
 use crate::organization::OrganizationStore;
 use crate::providers::ProviderTable;
@@ -90,9 +90,7 @@ pub(crate) fn feed_handles(
 ) -> Vec<IndexLoss> {
     let mut lost = Vec::new();
     for (id, provider) in providers {
-        let mut provider = provider
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut provider = provider.write();
         lost.extend(feeding(
             id,
             Gate::IndexFeed,
@@ -236,9 +234,7 @@ impl Indexes {
     pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.on_documents_removed(ids);
         for (plugin, index) in self.providers.iter() {
-            let mut index = index
-                .write()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut index = index.write();
             lost.extend(feeding(plugin, Gate::IndexForget, ids.iter(), || {
                 index.on_documents_removed(ids)
             }));
@@ -268,9 +264,7 @@ impl Indexes {
             if agreed.is_empty() {
                 break;
             }
-            let index = index
-                .read()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let index = index.read();
             let theirs = crate::safety::calling(id, Gate::IndexUpToDate, "", || {
                 Ok(index.up_to_date(entries))
             })
@@ -296,9 +290,7 @@ impl Indexes {
     pub(crate) fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.reconcile(ids);
         for (plugin, index) in self.providers.iter() {
-            let mut index = index
-                .write()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut index = index.write();
             lost.extend(feeding(
                 plugin,
                 Gate::IndexReconcile,
@@ -331,9 +323,7 @@ impl Indexes {
         match target {
             Target::Core => Some(self.core.query(query)),
             Target::Provider(at) => self.providers.get(at).map(|(_, provider)| {
-                let provider = provider
-                    .read()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                let provider = provider.read();
                 provider.query(query)
             }),
         }

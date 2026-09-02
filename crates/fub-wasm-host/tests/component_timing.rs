@@ -176,6 +176,15 @@ fn crashed(error: &PluginError) -> String {
 fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
     let v = Vault::new();
     let (host, events) = bench(&v, &[cycle(), ping()]);
+    host.with_session(None, |s| {
+        let key = fub_abi::settings::permission_key(PING, fub_abi::options::permission::READ_VAULT);
+        s.workspace()
+            .write()
+            .unwrap()
+            .set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))
+            .expect("il permesso di lettura del ping è concesso esplicitamente");
+    })
+    .expect("aperto");
 
     // 1. Lo stesso componente, un job che torna: i limiti non sono una tassa su
     //    chi si comporta bene.

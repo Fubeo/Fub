@@ -104,6 +104,7 @@ const ALLOWED_DIRECT: &[(&str, &[&str])] = &[
             "serde",
             "serde_json",
             "camino",
+            "cap-std",
             "thiserror",
             "tracing",
             "windows-sys",

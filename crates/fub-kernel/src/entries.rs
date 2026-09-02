@@ -233,6 +233,8 @@ pub(crate) struct StoredEntry {
     pub(crate) size: u64,
     pub(crate) mtime: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) change_stamp: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) identity: Option<FileIdentity>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) fingerprint: Option<Revision>,
@@ -250,6 +252,14 @@ impl StoredEntry {
     /// modifica vera (una parola sostituita con un'altra della stessa
     pub(crate) fn describes(&self, size: u64, mtime: u64) -> bool {
         self.size == size && self.mtime == mtime
+    }
+
+    pub(crate) fn same_change_stamp(&self, observed: Option<u64>) -> bool {
+        match (self.change_stamp, observed) {
+            (Some(stored), Some(observed)) => stored == observed,
+            (None, None) => true,
+            _ => false,
+        }
     }
 }
 
@@ -440,9 +450,21 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
             continue;
         };
         if !previous.describes(entry.size, entry.mtime)
-            || entry.fingerprint.is_none()
-            || entry.fingerprint != previous.fingerprint
+            || !previous.same_change_stamp(entry.change_stamp)
         {
+            continue;
+        }
+
+        // Una fotografia che non ha letto il file può ereditare l'impronta
+        // durevole soltanto se l'identità che conosce non smentisce quella
+        // precedente. Se l'identità è cambiata, stessi size/mtime non bastano:
+        // sarebbe associare il digest del file vecchio a un file nuovo.
+        if entry.fingerprint.is_none()
+            && (entry.identity.is_none() || entry.identity == previous.identity)
+        {
+            entry.fingerprint = previous.fingerprint.clone();
+        }
+        if entry.fingerprint != previous.fingerprint {
             continue;
         }
         if entry.identity.is_none() {
@@ -623,10 +645,70 @@ mod tests {
         StoredEntry {
             size,
             mtime,
+            change_stamp: None,
             identity: None,
             fingerprint: None,
             metadata: None,
         }
+    }
+
+    #[test]
+    fn a_different_identity_does_not_inherit_the_old_fingerprint() {
+        let id = DocId::new("same.md");
+        let previous_identity = FileIdentity {
+            volume: 1,
+            file: 10,
+        };
+        let current_identity = FileIdentity {
+            volume: 1,
+            file: 11,
+        };
+
+        let mut previous = entry(3, 1_000);
+        previous.identity = Some(previous_identity);
+        previous.fingerprint = Some(Revision::new("0123456789abcdef"));
+
+        let mut current = entry(3, 1_000);
+        current.identity = Some(current_identity);
+
+        let old = BTreeMap::from([(id.clone(), previous)]);
+        let mut new = BTreeMap::from([(id.clone(), current)]);
+        enrich(&mut new, &old);
+
+        let merged = new.get(&id).expect("the entry remains present");
+        assert_eq!(merged.identity, Some(current_identity));
+        assert!(
+            merged.fingerprint.is_none(),
+            "same size/mtime do not authorize attaching the old digest to a different file identity"
+        );
+    }
+
+    #[test]
+    fn a_different_change_stamp_does_not_inherit_the_old_fingerprint() {
+        let id = DocId::new("same.md");
+        let identity = FileIdentity {
+            volume: 1,
+            file: 10,
+        };
+
+        let mut previous = entry(3, 1_000);
+        previous.identity = Some(identity);
+        previous.change_stamp = Some(7);
+        previous.fingerprint = Some(Revision::new("0123456789abcdef"));
+
+        let mut current = entry(3, 1_000);
+        current.identity = Some(identity);
+        current.change_stamp = Some(8);
+
+        let old = BTreeMap::from([(id.clone(), previous)]);
+        let mut new = BTreeMap::from([(id.clone(), current)]);
+        enrich(&mut new, &old);
+
+        let merged = new.get(&id).expect("the entry remains present");
+        assert!(
+            merged.fingerprint.is_none(),
+            "a filesystem change stamp that advanced invalidates the old digest even when size, mtime and identity match"
+        );
     }
 
     /// un `update` che risponde con dei byte, o una `write` — dall'altra. È

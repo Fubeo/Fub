@@ -61,7 +61,7 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | registro dei vault | [`crates/fub-host/src/vaults.rs:44`](../../crates/fub-host/src/vaults.rs) | 1 | vault conosciuti dalla macchina |
 | organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../../crates/fub-kernel/src/viewstate.rs) | 1 | posizione e stato per esemplare di vista |
-| anagrafe | [`crates/fub-kernel/src/entries.rs:142`](../../crates/fub-kernel/src/entries.rs) | 4 | metadati indicizzati delle voci |
+| anagrafe | [`crates/fub-kernel/src/entries.rs:147`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |
 | impostazioni | [`crates/fub-kernel/src/settings.rs:89`](../../crates/fub-kernel/src/settings.rs) | 1 | valori per vault e macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:261`](../../crates/fub-features/src/versioning.rs) | 1 | snapshot dei file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:93`](../../crates/fub-features/src/search.rs) | 5 | campi, opzioni e tokenizer dell'indice |

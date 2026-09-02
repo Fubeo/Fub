@@ -1708,7 +1708,7 @@
           {
             "doc": "a.md",
             "edit": {
-              "base": "af63f54c86021707",
+              "base": "sha256:2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
               "edits": [
                 {
                   "span": {
@@ -1759,7 +1759,7 @@
             "kind": "edit",
             "doc": "a.md",
             "edit": {
-              "base": "af63f44c86021554",
+              "base": "sha256:a1fce4363854ff888cff4b8e7875d600c2682390412a8cf79b37d0b11148b0fa",
               "edits": [
                 {
                   "span": {

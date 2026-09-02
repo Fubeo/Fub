@@ -250,13 +250,13 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
         dir: "column",
         gap: 0,
         children: [
-          { ...field(value), key: "doppia" },
-          { ...field(value), key: "doppia" },
+          { ...field("cambia"), value, key: "doppia" },
+          { ...field("cambia"), value, key: "doppia" },
         ],
       }) as UiNode;
 
     mountTree(host, duplicate("prima"), async () => {});
-    expect(patchTree(host, "doppia", { ...field("dopo"), key: "doppia" } as UiNode)).toBe(false);
+    expect(patchTree(host, "doppia", { ...field("cambia"), value: "dopo", key: "doppia" } as UiNode)).toBe(false);
     expect([...host.querySelectorAll("input")].map((input) => input.value)).toEqual([
       "prima",
       "prima",
@@ -491,7 +491,7 @@ describe("un gruppo di radio è il nodo che lo dichiara (§2.1)", () => {
         { value: "a", label: "Uno" },
         { value: "b", label: "Due" },
       ],
-      action: null,
+      action: { action: "scegli", payload: null },
     }) as UiNode;
 
   const insideForm = (): UiNode =>

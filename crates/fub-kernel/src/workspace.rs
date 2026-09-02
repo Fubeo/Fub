@@ -102,7 +102,7 @@ use crate::locale::SystemLocale;
 use crate::occurrences;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
-use crate::poison::Shelter;
+use crate::poison::{SharedShelter, Shelter};
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
 use crate::registry::FormatRegistry;
 use crate::renderer::{self, RenderedDocument};
@@ -545,7 +545,7 @@ pub struct PreparedViewRender {
     view: String,
     instance: ViewInstance,
     trust: Trust,
-    provider: Arc<RwLock<Box<dyn ViewProvider>>>,
+    provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
 }
 
 impl PreparedViewRender {
@@ -560,10 +560,7 @@ impl PreparedViewRender {
     /// Esegue soltanto il codice esterno del provider. Le letture richieste dal
     /// provider passano dal proxy host e prendono il workspace per capacità.
     pub fn invoke(&self, host: &dyn ReadApi) -> std::result::Result<UiNode, PluginError> {
-        let provider = self
-            .provider
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let provider = self.provider.read();
         crate::safety::calling(&self.owner, Gate::ViewRender, &self.view, || {
             provider.render_view(&self.instance, host)
         })
@@ -579,7 +576,7 @@ pub struct PreparedViewAction {
     instance: ViewInstance,
     action: Option<UiAction>,
     trust: Trust,
-    provider: Arc<RwLock<Box<dyn ViewProvider>>>,
+    provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
     previous_provider_call: bool,
 }
 
@@ -603,10 +600,7 @@ impl PreparedViewAction {
             .action
             .take()
             .expect("a prepared view action is invoked exactly once");
-        let mut provider = self
-            .provider
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut provider = self.provider.write();
         crate::safety::calling(&self.owner, Gate::ViewAction, &self.view, || {
             provider.on_action(&self.instance, action, host)
         })
@@ -1491,9 +1485,7 @@ impl Workspace {
         let indexes = self.indexes.remove(plugin);
         let removed_indexes = !indexes.is_empty();
         for (id, index) in indexes {
-            let mut index = index
-                .write()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let mut index = index.write();
             let out = self.with_provider_call(|ws| {
                 let mut host = ws.host_for(&id, InvokeMode::Apply);
                 // arriva a `close` ha già avuto il proprio punto di persistenza,
@@ -2071,7 +2063,7 @@ impl Workspace {
         });
         self.indexes
             .providers
-            .push((id, std::sync::Arc::new(std::sync::RwLock::new(index))));
+            .push((id, Arc::new(SharedShelter::new(index))));
         self.dispatch_pending();
         activated.map_err(RegistryError::Activate)
     }
@@ -2195,19 +2187,13 @@ impl Workspace {
                 // alla riapertura incrementale qui sotto, e rifarla là è un
                 // lock e una copia regalati per niente.
                 // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
+                let change_stamp = self.docs.vault.change_stamp(&file.id);
                 let known = self
                     .entry_store
                     .known(&file.id)
                     .filter(|known| known.describes(file.size, file.mtime))
-                    .filter(|known| {
-                        let Some(fingerprint) = known.fingerprint.as_ref() else {
-                            return false;
-                        };
-                        self.docs
-                            .vault
-                            .read_bytes(&file.id)
-                            .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
-                    });
+                    .filter(|known| known.same_change_stamp(change_stamp))
+                    .filter(|known| known.fingerprint.is_some());
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
                     kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),
@@ -2268,8 +2254,9 @@ impl Workspace {
             self.indexes.core.set_entry(entry);
         }
 
-        // (size+mtime → impronta) che porta i metadati e per cui tutti gli indici
-        // plugin rispondono `up_to_date`, si ripristinano direttamente i metadati
+        // (size+mtime+timbro di cambiamento → impronta) che porta i metadati e
+        // per cui tutti gli indici plugin rispondono `up_to_date`, si
+        // ripristinano direttamente i metadati
         // in memoria senza rileggerlo dal disco. A fette finiscono solo i documenti
         // nuovi, modificati, o per cui un indice plugin deve essere allineato.
         // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
@@ -2854,6 +2841,7 @@ impl Workspace {
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
+                        change_stamp: self.docs.vault.change_stamp(&entry.id),
                         identity: self.docs.vault.file_identity(&entry.id),
                         fingerprint: entry.fingerprint.clone(),
                         metadata: self.indexes.core.stored_metadata(&entry.id),
@@ -5478,9 +5466,7 @@ impl Workspace {
             |ws, indexes| {
                 let mut errors = Vec::new();
                 for (id, index) in indexes.iter() {
-                    let mut index = index
-                        .write()
-                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    let mut index = index.write();
                     let mut host = ws.host_for(id, InvokeMode::Apply);
                     if let Err(and) = index.flush(&mut host) {
                         errors.push(and);
@@ -5568,7 +5554,7 @@ impl Workspace {
         self.providers.views.push(RegisteredView {
             id: plugin,
             specs,
-            provider: Arc::new(RwLock::new(provider)),
+            provider: Arc::new(SharedShelter::new(provider)),
             trust,
         });
         Ok(())
@@ -5684,10 +5670,7 @@ impl Workspace {
     ) -> std::result::Result<ViewInterests, PluginError> {
         let at = self.view_owner(&instance.view)?;
         let registered = &self.providers.views[at];
-        let provider = registered
-            .provider
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let provider = registered.provider.read();
         Ok(provider.interests(instance))
     }
 

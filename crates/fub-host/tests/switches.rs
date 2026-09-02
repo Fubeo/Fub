@@ -180,9 +180,11 @@ fn a_permission_denied_survives_to_the_shutdown_and_to_the_reopening() {
     use fub_abi::settings::permission_key;
 
     let v = Vault::new();
+    let config = tempfile::tempdir().expect("tempdir");
+    let config = Utf8PathBuf::from_path_buf(config.path().to_path_buf()).unwrap();
     let key = permission_key("fub.stats", permission::WRITE_VAULT);
 
-    let host = headless();
+    let host = installed(&config);
     host.open(&v.root).expect("opens");
     host.with_session(None, |s| {
         s.workspace()
@@ -207,11 +209,11 @@ fn a_permission_denied_survives_to_the_shutdown_and_to_the_reopening() {
     );
 
     host.close_vault(&v.root).expect("closed");
-    let host = headless();
+    let host = installed(&config);
     host.open(&v.root).expect("reopens");
     assert!(
         !granted(&host, "fub.stats", permission::WRITE_VAULT),
-        "and it also holds across restarts, as with `plugins.disabled`"
+        "and it also holds across restarts of the same installation"
     );
     // Le **altre** non le ha toccate nessuno: si nega un permesso per volta, e
     // negarne uno non è spegnere il componente.

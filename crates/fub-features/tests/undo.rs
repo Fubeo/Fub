@@ -613,6 +613,7 @@ impl VaultStorage for SupportThatExplodes {
         path: &camino::Utf8Path,
         merge: fub_kernel::storage::Merge<'_>,
     ) -> std::io::Result<()> {
+        self.maybe_explodes(path);
         self.inner.update(path, merge)
     }
     fn append(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {

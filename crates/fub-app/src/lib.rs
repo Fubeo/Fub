@@ -28,7 +28,6 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
-use fub_abi::event::Actor;
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;

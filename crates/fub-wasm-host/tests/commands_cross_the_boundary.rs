@@ -83,6 +83,9 @@ fn bench(v: &Vault) -> Host {
             .unwrap()
             .mount(&bundle, &mut ws)
             .expect("il bundle si monta");
+        let key = fub_abi::settings::permission_key(ID, fub_abi::options::permission::READ_VAULT);
+        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))
+            .expect("il permesso di lettura è concesso esplicitamente");
     })
     .expect("aperto");
     host

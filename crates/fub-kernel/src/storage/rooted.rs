@@ -482,6 +482,29 @@ impl VaultStorage for RootedFsStorage {
         self.identity(path).map(Some)
     }
 
+    fn change_stamp(&self, path: &Utf8Path) -> io::Result<Option<u64>> {
+        #[cfg(unix)]
+        {
+            use cap_std::fs::MetadataExt;
+            let metadata = self.dir.metadata(self.rel(path)?)?;
+            Ok(Some(super::unix_change_stamp(
+                metadata.ctime(),
+                metadata.ctime_nsec(),
+            )))
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            let file = self.dir.open(self.rel(path)?)?;
+            super::windows_change_stamp(file.as_raw_handle()).map(Some)
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = path;
+            Ok(None)
+        }
+    }
+
     fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
         if a == b {
             return true;
