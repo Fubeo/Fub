@@ -1,0 +1,140 @@
+name: Audit G3 detached queries
+
+'on':
+  push:
+    branches:
+      - fix/audit-integration
+    paths:
+      - .github/workflows/audit-g3-query.yml
+      - .audit-g3-query.b64.00
+      - .audit-g3-query.b64.01
+      - .audit-g3-query.b64.02
+
+permissions:
+  contents: write
+
+jobs:
+  query:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Verifica la base e applica la tranche fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee -a /tmp/g3-query.log) 2>&1
+          test "$(git hash-object crates/fub-host/src/jobs.rs)" = e9baf5793bcc0d06d04922eb8cbe87104029ff4b
+          test "$(git hash-object crates/fub-host/src/lib.rs)" = 7f683cd5389dad3f503e7b2c0c6be086c3934b4e
+          test "$(git hash-object crates/fub-host/src/session.rs)" = 28ab90d42f89b1699a4244c30f8a8e16fe0076c7
+          test "$(git hash-object crates/fub-kernel/src/host/guard.rs)" = 770381343941290a496e0ea476dbbb5cf3317522
+          test "$(git hash-object crates/fub-kernel/src/host/mod.rs)" = 1857a90fc71a54cb78dfc8898906d4502c6db64b
+          test "$(git hash-object crates/fub-kernel/src/index/mod.rs)" = 2fc19129ee59737b9b2e72e85d5e1e7cd597f210
+          test "$(git hash-object crates/fub-kernel/src/index/plan.rs)" = b15ae74a316966e8d6650aca3d76edbbf997ee8b
+          test "$(git hash-object crates/fub-kernel/src/index/routing.rs)" = 7f8c940dcef1d1a2b24a414e094ca333a4d8c668
+          test "$(git hash-object crates/fub-kernel/src/lib.rs)" = 166c42efccfb5569972067a67182b22202de63e4
+          test "$(git hash-object crates/fub-kernel/src/workspace.rs)" = fcd69f98dc5f2d3ae742cd0668f63c82796e457f
+          test ! -e crates/fub-host/src/query.rs
+          test ! -e crates/fub-host/tests/query_index_lock.rs
+          cat .audit-g3-query.b64.00 \
+              .audit-g3-query.b64.01 \
+              .audit-g3-query.b64.02 > /tmp/g3-query.patch.gz.b64
+          echo 'fc8ab816449115a9bf54b348a9e31946acf83006728f82dacf636e22adb7c25f  /tmp/g3-query.patch.gz.b64' | sha256sum -c -
+          base64 -d /tmp/g3-query.patch.gz.b64 > /tmp/g3-query.patch.gz
+          echo '8a5cf5fbd2e04606ccd64cf41d0e64940fff29358328a775ca2a5e9eec54baab  /tmp/g3-query.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/g3-query.patch.gz > /tmp/g3-query.patch
+          echo 'a6862b3669998991f4d862a2342e93dee160c38b2a03d12895e04fda27e8d2d6  /tmp/g3-query.patch' | sha256sum -c -
+          git apply --check --verbose /tmp/g3-query.patch
+          git apply /tmp/g3-query.patch
+          git diff --check
+
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          toolchain: 1.89
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-gnu
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+
+      - name: Dipendenze di sistema di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Compila e verifica la tranche query
+        id: gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          exec > >(tee -a /tmp/g3-query.log) 2>&1
+          cargo fmt --all
+          cargo fmt --all --check
+          git diff --check
+          tar --exclude=.git --exclude=target --exclude=apps/client/node_modules \
+            --exclude='.audit-g3-query.b64.*' \
+            --exclude='.github/workflows/audit-g3-query.yml' \
+            -czf /tmp/fub-g3-query-transformed.tgz .
+          cargo check -p fub-kernel -p fub-host --all-targets
+          cargo test -p fub-host --test query_index_lock
+          cargo test -p fub-kernel --test index_feeding
+          cargo test -p fub-host --test concurrency
+          cargo clippy --workspace --all-targets -- -D warnings
+          rustup target add wasm32-wasip2
+          cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+          cargo test --workspace
+
+      - name: Conserva candidato e log
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fub-g3-query-${{ github.sha }}
+          path: |
+            /tmp/fub-g3-query-transformed.tgz
+            /tmp/g3-query.log
+          if-no-files-found: warn
+
+      - name: Commit semantico e cleanup
+        if: steps.gates.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .audit-g3-query.b64.00 \
+                 .audit-g3-query.b64.01 \
+                 .audit-g3-query.b64.02 \
+                 .github/workflows/audit-g3-query.yml
+          git add -A
+          cat > /tmp/expected-paths <<'PATHS'
+          .audit-g3-query.b64.00
+          .audit-g3-query.b64.01
+          .audit-g3-query.b64.02
+          .github/workflows/audit-g3-query.yml
+          crates/fub-host/src/jobs.rs
+          crates/fub-host/src/lib.rs
+          crates/fub-host/src/query.rs
+          crates/fub-host/src/session.rs
+          crates/fub-host/tests/query_index_lock.rs
+          crates/fub-kernel/src/host/guard.rs
+          crates/fub-kernel/src/host/mod.rs
+          crates/fub-kernel/src/index/mod.rs
+          crates/fub-kernel/src/index/plan.rs
+          crates/fub-kernel/src/index/routing.rs
+          crates/fub-kernel/src/lib.rs
+          crates/fub-kernel/src/workspace.rs
+          PATHS
+          git diff --cached --name-only | sort > /tmp/actual-paths
+          sort -o /tmp/expected-paths /tmp/expected-paths
+          diff -u /tmp/expected-paths /tmp/actual-paths
+          git diff --cached --check
+          git commit -m "refactor(host): stacca le query degli indici dal workspace"
+          git push origin HEAD:fix/audit-integration
