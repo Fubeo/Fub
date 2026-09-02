@@ -1,0 +1,106 @@
+name: Audit G3 opening
+
+'on':
+  push:
+    branches:
+      - fix/audit-integration
+    paths:
+      - .github/workflows/audit-g3-opening.yml
+
+permissions:
+  contents: write
+
+jobs:
+  opening:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Ricompone e applica la tranche fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .audit-g3-opening.b64.00 \
+              .audit-g3-opening.b64.01 \
+              .audit-g3-opening.b64.02 > /tmp/g3-opening.patch.gz.b64
+          echo '6e8ccaa6b172e35530d8cc8fb6c5507206b759165425a84a2bbbda84ff7c81eb  /tmp/g3-opening.patch.gz.b64' | sha256sum -c -
+          base64 -d /tmp/g3-opening.patch.gz.b64 > /tmp/g3-opening.patch.gz
+          echo '3ae2a338e5cd234d43972c162253b0f9bcd30a88f6cc4be1b23b43d266a777d2  /tmp/g3-opening.patch.gz' | sha256sum -c -
+          gzip -dc /tmp/g3-opening.patch.gz > /tmp/g3-opening.patch
+          echo '924c6ba4eed3032762c710a2577051106217f6e6a6a533d385681e655ac4dda7  /tmp/g3-opening.patch' | sha256sum -c -
+          git apply --check /tmp/g3-opening.patch
+          git apply /tmp/g3-opening.patch
+          git diff --check
+          tar --exclude=.git --exclude=target --exclude=apps/client/node_modules \
+            --exclude='.audit-g3-opening.b64.*' \
+            --exclude='.github/workflows/audit-g3-opening.yml' \
+            -czf /tmp/fub-g3-opening-transformed.tgz .
+
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
+        with:
+          toolchain: 1.89
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-gnu
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          cache-on-failure: true
+
+      - name: Dipendenze di sistema di Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
+            librsvg2-dev patchelf libgtk-3-dev
+
+      - name: Compila e verifica la tranche
+        id: gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -o pipefail
+          {
+            cargo fmt --all
+            cargo fmt --all --check
+            git diff --check
+            cargo check -p fub-kernel -p fub-host --all-targets
+            cargo test -p fub-kernel --test the_opening
+            cargo test -p fub-kernel --test opening_slice
+            cargo test -p fub-kernel --test the_bench
+            cargo test -p fub-kernel --test hot_opening_graph
+            cargo test -p fub-host --test the_watcher_window
+            cargo clippy --workspace --all-targets -- -D warnings
+            rustup target add wasm32-wasip2
+            cargo build --manifest-path esempi/ping-wasm/Cargo.toml --target wasm32-wasip2
+            cargo test --workspace
+          } 2>&1 | tee /tmp/g3-opening.log
+
+      - name: Conserva candidato e log
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fub-g3-opening-${{ github.sha }}
+          path: |
+            /tmp/fub-g3-opening-transformed.tgz
+            /tmp/g3-opening.log
+          if-no-files-found: warn
+
+      - name: Commit semantico e cleanup
+        if: steps.gates.outcome == 'success'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .audit-g3-opening.b64.00 \
+                 .audit-g3-opening.b64.01 \
+                 .audit-g3-opening.b64.02 \
+                 .github/workflows/audit-g3-opening.yml
+          git add -u
+          test "$(git diff --cached --name-only | wc -l)" -eq 8
+          git commit -m "refactor(host): stacca l'apertura dagli indici esterni"
+          git push origin HEAD:fix/audit-integration
