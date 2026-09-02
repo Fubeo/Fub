@@ -18,7 +18,7 @@ diff --git a/crates/fub-kernel/src/storage.rs b/crates/fub-kernel/src/storage.rs
  
      fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
          if a == b {
-@@ -869,5 +879,56 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
+@@ -869,5 +879,57 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
      }
  }
 +
@@ -76,7 +76,7 @@ diff --git a/crates/fub-kernel/src/storage.rs b/crates/fub-kernel/src/storage.rs
  
  /// L'identità di un file: il volume e il numero che lo distingue là dentro.
  ///
-@@ -1444,5 +1505,9 @@ impl VaultStorage for FsStorage {
+@@ -1444,5 +1506,9 @@ impl VaultStorage for FsStorage {
      fn exists(&self, path: &Utf8Path) -> bool {
          path.exists()
      }
