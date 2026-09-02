@@ -122,18 +122,20 @@ jobs:
           component_timing = "crates/fub-wasm-host/tests/component_timing.rs"
           replace_exact(
               component_timing,
-              '        for b in &bundle {\n'
-              '            registry.mount(b, &mut ws).expect("il bundle si monta");\n'
-              '        }\n',
-              '        for b in &bundle {\n'
-              '            registry.mount(b, &mut ws).expect("il bundle si monta");\n'
-              '        }\n'
+              '    let (host, events) = bench(&v, &[cycle(), ping()]);\n\n',
+              '    let (host, events) = bench(&v, &[cycle(), ping()]);\n'
+              '    host.with_session(None, |s| {\n'
               '        let key = fub_abi::settings::permission_key(\n'
               '            PING,\n'
               '            fub_abi::options::permission::READ_VAULT,\n'
               '        );\n'
-              '        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))\n'
-              '            .expect("il permesso di lettura del ping è concesso esplicitamente");\n',
+              '        s.workspace()\n'
+              '            .write()\n'
+              '            .unwrap()\n'
+              '            .set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))\n'
+              '            .expect("il permesso di lettura del ping è concesso esplicitamente");\n'
+              '    })\n'
+              '    .expect("aperto");\n\n',
           )
           PY
       - name: Impacchetta il candidato trasformato
