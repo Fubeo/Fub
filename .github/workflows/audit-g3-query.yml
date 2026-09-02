@@ -51,6 +51,36 @@ jobs:
           echo 'a6862b3669998991f4d862a2342e93dee160c38b2a03d12895e04fda27e8d2d6  /tmp/g3-query.patch' | sha256sum -c -
           git apply --check --verbose /tmp/g3-query.patch
           git apply /tmp/g3-query.patch
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("crates/fub-kernel/src/workspace.rs")
+          source = path.read_text()
+          replacements = (
+              (
+                  "fn query_core(&self, query: IndexQuery) -> Result<IndexResult, PluginError>",
+                  "fn query_core(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError>",
+              ),
+              (
+                  "fn core_documents(&self) -> Result<Vec<DocId>, PluginError>",
+                  "fn core_documents(&self) -> std::result::Result<Vec<DocId>, PluginError>",
+              ),
+              (
+                  "fn core_predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError>",
+                  "fn core_predicate(&self, predicate: &QueryPredicate) -> std::result::Result<Matches, PluginError>",
+              ),
+              (
+                  ") -> Result<Paged<DocumentMatch>, PluginError> {",
+                  ") -> std::result::Result<Paged<DocumentMatch>, PluginError> {",
+              ),
+          )
+          for old, new in replacements:
+              count = source.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one occurrence of {old!r}, found {count}")
+              source = source.replace(old, new)
+          path.write_text(source)
+          PY
           git diff --check
 
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
@@ -138,5 +168,3 @@ jobs:
           git diff --cached --check
           git commit -m "refactor(host): stacca le query degli indici dal workspace"
           git push origin HEAD:fix/audit-integration
-
-# Trigger esplicito della materializzazione G3: 2026-09-03.
