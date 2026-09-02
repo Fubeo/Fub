@@ -1,0 +1,37 @@
+name: Audit G3 bootstrap
+
+'on':
+  push:
+    branches:
+      - fix/audit-integration
+    paths:
+      - .github/workflows/audit-g3-bootstrap.yml
+
+permissions:
+  contents: write
+
+jobs:
+  snapshot:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - name: Impacchetta il tree semantico corrente
+        run: |
+          rm .github/workflows/audit-g3-bootstrap.yml
+          tar --exclude=.git --exclude=target --exclude=apps/client/node_modules \
+            -czf /tmp/fub-g3-bootstrap.tgz .
+          git checkout -- .github/workflows/audit-g3-bootstrap.yml
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fub-g3-bootstrap-${{ github.sha }}
+          path: /tmp/fub-g3-bootstrap.tgz
+      - name: Rimuove il bootstrap
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/audit-g3-bootstrap.yml
+          git commit -m "ci(temp): rimuove il bootstrap G3"
+          git push origin HEAD:fix/audit-integration
