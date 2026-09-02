@@ -1,5 +1,6 @@
 name: Materializza piano audit e handoff
 
+# retry controllato: payload verificato presente sulla branch
 'on':
   push:
     branches:
