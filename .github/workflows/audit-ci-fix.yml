@@ -18,24 +18,20 @@ jobs:
           fetch-depth: 0
       - name: Applica le patch fail-closed
         run: |
-          git apply --check .audit-ci-fix.patch
-          git apply --check .audit-ci-fix-undo.patch
-          git apply --check .audit-ci-fix-switches.patch
-          git apply --check .audit-ci-fix-entries.patch
-          git apply --check .audit-ci-fix-stamp-storage.patch
-          git apply --check .audit-ci-fix-stamp-rooted.patch
-          git apply --check .audit-ci-fix-stamp-vault.patch
-          git apply --check .audit-ci-fix-stamp-entries.patch
-          git apply --check .audit-ci-fix-stamp-workspace.patch
-          git apply .audit-ci-fix.patch
-          git apply .audit-ci-fix-undo.patch
-          git apply .audit-ci-fix-switches.patch
-          git apply .audit-ci-fix-entries.patch
-          git apply .audit-ci-fix-stamp-storage.patch
-          git apply .audit-ci-fix-stamp-rooted.patch
-          git apply .audit-ci-fix-stamp-vault.patch
-          git apply .audit-ci-fix-stamp-entries.patch
-          git apply .audit-ci-fix-stamp-workspace.patch
+          for patch in \
+            .audit-ci-fix.patch \
+            .audit-ci-fix-undo.patch \
+            .audit-ci-fix-switches.patch \
+            .audit-ci-fix-entries.patch \
+            .audit-ci-fix-stamp-storage.patch \
+            .audit-ci-fix-stamp-rooted.patch \
+            .audit-ci-fix-stamp-vault.patch \
+            .audit-ci-fix-stamp-entries.patch \
+            .audit-ci-fix-stamp-workspace.patch
+          do
+            git apply --check "$patch"
+            git apply "$patch"
+          done
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05 # 1.89
         with:
           toolchain: 1.89
