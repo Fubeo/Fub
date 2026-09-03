@@ -53,7 +53,7 @@ use jiff::Timestamp;
 use crate::wall::{verdict, Position, Zone};
 
 use crate::custody::Custody;
-use crate::jobs::JobHost;
+use crate::jobs::{with_event_drain, JobHost};
 use crate::records::UnreadDoc;
 use crate::registry::BundleRegistry;
 
@@ -558,8 +558,7 @@ impl Shared {
                 ws.commit_index_batch_prepared(parsed)
             };
             let pending = pending.map(|pending| pending.invoke_indexes());
-            {
-                let mut ws = self.workspace.write()?;
+            with_event_drain(&self.workspace, |ws| {
                 if let Some(pending) = pending {
                     ws.finalize_index_batch_prepared(pending);
                 }
@@ -575,7 +574,7 @@ impl Shared {
                         label,
                     },
                 );
-            }
+            })?;
             *self.opening.write()? = Some(in_progress);
             return Ok(true);
         }
@@ -597,10 +596,9 @@ impl Shared {
             ws.prepare_finish_index_with_graph(in_progress.work, graph)
         };
         let completed_finish = prepared_finish.invoke();
-        let opening = {
-            let mut ws = self.workspace.write()?;
+        let opening = with_event_drain(&self.workspace, |ws| {
             ws.finalize_finish_index(completed_finish)
-        };
+        })?;
         // **Il flush degli indici è una fase sua** (difetto 0113), come la
         // terza fase di `ExternalSync::batch`: un prestito esclusivo separato
         // da quello della chiusura dell'indicizzazione. Fra i due prestiti il
@@ -608,10 +606,9 @@ impl Shared {
         // delle fasi — riconciliazione, ricongiungimento, flush, anagrafe —
         // ma la sola che sta correndo. Il flush tocca solo gli indici e il
         // disco, non lo stato condiviso del workspace.
-        {
-            let mut ws = self.workspace.write()?;
+        with_event_drain(&self.workspace, |ws| {
             let _ = ws.flush_indexes();
-        }
+        })?;
         // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
         // entrambe sotto prestito condiviso.**
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
@@ -641,11 +638,13 @@ impl Shared {
             Ok(serde_json::json!({ "discarded": opening.discarded.len() }))
         };
         self.forget(in_progress.id)?;
-        self.workspace.write()?.complete_job(
-            in_progress.id,
-            fub_kernel::INDEX_JOB.to_string(),
-            outcome,
-        );
+        with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(
+                in_progress.id,
+                fub_kernel::INDEX_JOB.to_string(),
+                outcome,
+            );
+        })?;
         // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
         // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
         // sta mettendo.
@@ -757,9 +756,9 @@ impl Shared {
         // lucchetto che con quella risposta non c'entra niente. Si riconsegna,
         // e poi lo si dice.
         let flags = self.forget(job.id);
-        self.workspace
-            .write()?
-            .complete_job(job.id, job.spec.job, outcome);
+        with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(job.id, job.spec.job, outcome);
+        })?;
         flags
     }
 
@@ -835,9 +834,9 @@ impl Shared {
         // riconsegna. Chi rifiuta è già dentro un guaio, ed è il momento in cui
         // un esito perso non lo nota nessuno.
         let flags = self.forget(job.id);
-        self.workspace
-            .write()?
-            .complete_job(job.id, job.spec.job, Err(refusal.clone()));
+        with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(job.id, job.spec.job, Err(refusal.clone()));
+        })?;
         flags?;
         Ok(refusal)
     }
@@ -925,7 +924,7 @@ impl Shared {
             if self.stopping.load(Ordering::Acquire) {
                 return Ok(());
             }
-            self.workspace.write()?.fire_timer(&owner, &timer);
+            with_event_drain(&self.workspace, |ws| ws.fire_timer(&owner, &timer))?;
         }
         Ok(())
     }

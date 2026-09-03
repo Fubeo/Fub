@@ -2,18 +2,22 @@
 //! `Custody<Workspace>` e riconsegna sempre il runner e il vault al lavoro
 //! successivo, anche quando il plugin restituisce un errore.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
+use fub_abi::edit::WriteBase;
+use fub_abi::event::{EventKind, EventMask, Notice};
 use fub_abi::model::DocId;
-use fub_abi::traits::{HostApi, JobSpec, Plugin, PluginManifest};
+use fub_abi::traits::{EventHandler, HostApi, JobSpec, Plugin, PluginManifest};
 use fub_abi::{Event, PluginError};
 use fub_host::registry::Bundle;
 use fub_host::{Custody, Host, NoWatcher};
 use fub_kernel::{Subscription, Trust, Workspace};
 
 const PLUGIN: &str = "fub.audit-job-callback";
+const EVENT_HANDLER: &str = "fub.audit-job-completion-handler";
 const TIMEOUT: Duration = Duration::from_secs(10);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
@@ -119,12 +123,22 @@ struct Bench {
 }
 
 fn bench(vault: &Vault) -> Bench {
-    let host = Host::new()
-        .with_watcher(Box::new(NoWatcher))
-        .with_job_threads(1);
-    host.open(&vault.root).expect("the vault opens");
-    host.wait_indexed(None)
-        .expect("initial indexing finishes before the job probe");
+    let root = vault.root.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
+    let opening = std::thread::spawn(move || {
+        let host = Host::new()
+            .with_watcher(Box::new(NoWatcher))
+            .with_job_threads(1);
+        let outcome = host.open(&root).and_then(|_| host.wait_indexed(None));
+        let _ = done_tx.send((host, outcome));
+    });
+    let (host, outcome) = done_rx
+        .recv_timeout(TIMEOUT)
+        .expect("opening and indexing finish before the timeout");
+    opening
+        .join()
+        .expect("the completed opening thread does not panic");
+    outcome.expect("the vault opens and its initial indexing finishes");
     let workspace = host.debug_workspace(None).expect("debug custody");
     let events = workspace
         .read()
@@ -208,6 +222,163 @@ fn both_guards_become_available(workspace: &Custody<Workspace>, timeout: Duratio
         std::thread::yield_now();
     }
     false
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum EventCallback {
+    Subscribed,
+    Handle,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct EventObservation {
+    callback: EventCallback,
+    read: bool,
+    write: bool,
+}
+
+struct CompletionWorkspace(Mutex<Option<Custody<Workspace>>>);
+
+impl CompletionWorkspace {
+    fn custody(&self) -> Custody<Workspace> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .expect("the completion workspace is installed")
+            .clone()
+    }
+
+    fn detach(&self) {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .take();
+    }
+}
+
+struct CompletionHandler {
+    workspace: Arc<CompletionWorkspace>,
+    observations: mpsc::SyncSender<EventObservation>,
+    reentered: mpsc::SyncSender<()>,
+    measured_subscription: AtomicBool,
+}
+
+impl CompletionHandler {
+    fn observe(&self, callback: EventCallback) -> EventObservation {
+        let workspace = self.workspace.custody();
+        let read = workspace.try_read();
+        let read_free = read.is_some();
+        drop(read);
+        let write = workspace.try_write();
+        let write_free = write.is_some();
+        drop(write);
+        EventObservation {
+            callback,
+            read: read_free,
+            write: write_free,
+        }
+    }
+}
+
+impl EventHandler for CompletionHandler {
+    fn subscribed(&self) -> EventMask {
+        if !self.measured_subscription.swap(true, Ordering::SeqCst) {
+            let _ = self
+                .observations
+                .send(self.observe(EventCallback::Subscribed));
+        }
+        EventMask::of([EventKind::JobDone])
+    }
+
+    fn handle(&mut self, notice: &Notice, host: &mut dyn HostApi) -> Result<(), PluginError> {
+        if !matches!(notice.event, Event::JobDone { .. }) {
+            return Ok(());
+        }
+        self.observations
+            .send(self.observe(EventCallback::Handle))
+            .map_err(|_| {
+                PluginError::Internal("the event completion observer disappeared".into())
+            })?;
+        host.write_document(
+            &DocId::new("Event completion re-entry.md"),
+            "# Event completion re-entry\n",
+            WriteBase::Dictated,
+        )?;
+        self.reentered.send(()).map_err(|_| {
+            PluginError::Internal("the event completion observer disappeared".into())
+        })?;
+        Ok(())
+    }
+}
+
+#[test]
+fn job_completion_drains_event_handlers_outside_both_guards_and_allows_reentry() {
+    let vault = vault();
+    let Bench {
+        host,
+        events,
+        workspace,
+        entered,
+        release,
+    } = bench(&vault);
+
+    ask(&host, "probe-lock");
+    entered
+        .recv_timeout(TIMEOUT)
+        .expect("the job is blocked before its completion is delivered");
+
+    let probe_workspace = Arc::new(CompletionWorkspace(Mutex::new(Some(workspace.clone()))));
+    let (callback_tx, callback_rx) = mpsc::sync_channel(2);
+    let (reentered_tx, reentered_rx) = mpsc::sync_channel(1);
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(EVENT_HANDLER, "Audit job completion handler")
+            .expect("the event handler owner declares");
+        ws.register_event_handler(
+            EVENT_HANDLER,
+            Box::new(CompletionHandler {
+                workspace: Arc::clone(&probe_workspace),
+                observations: callback_tx,
+                reentered: reentered_tx,
+                measured_subscription: AtomicBool::new(false),
+            }),
+        )
+        .expect("the event handler registers");
+    }
+
+    release.send(()).expect("the job callback is released");
+    for expected in [EventCallback::Subscribed, EventCallback::Handle] {
+        let observed = callback_rx
+            .recv_timeout(TIMEOUT)
+            .unwrap_or_else(|_| panic!("{expected:?} did not run before the timeout"));
+        assert_eq!(observed.callback, expected);
+        assert!(observed.read, "{expected:?} retained a write guard");
+        assert!(
+            observed.write,
+            "{expected:?} retained a workspace read or write guard"
+        );
+    }
+    reentered_rx
+        .recv_timeout(TIMEOUT)
+        .expect("the JobDone handler re-enters through HostApi");
+    let (job, result) = outcome(&events);
+    assert_eq!(job, "probe-lock");
+    result.expect("the job succeeds after detached completion delivery");
+    assert!(
+        workspace
+            .read()
+            .expect("workspace reusable")
+            .documents()
+            .contains(&DocId::new("Event completion re-entry.md")),
+        "the handler's re-entry made observable progress"
+    );
+    assert!(
+        both_guards_become_available(&workspace, TIMEOUT),
+        "the completion drain left a workspace lock behind"
+    );
+    probe_workspace.detach();
+    assert!(host.close().is_empty(), "the completed runner closes cleanly");
 }
 
 #[test]

@@ -62,6 +62,7 @@ use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::rules::path_policy::fenced_doc_id;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
 use fub_abi::traits::{
@@ -71,7 +72,8 @@ use fub_abi::traits::{
     ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{Event, PluginError};
-use fub_kernel::host::Guard;
+use fub_kernel::host::{authorize_path, Capability, Guard};
+use fub_kernel::workspace::{DeferredEvents, EventDrain};
 use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -246,16 +248,81 @@ impl JobHost {
     }
 
     /// Una scrittura: prestito **esclusivo**, tenuto per il tempo di una
-    /// capacità sola. Ciò che ne nasce — parse, grafo, indici, eventi, handler —
-    /// succede lì dentro, come per ogni altra scrittura del kernel.
+    /// capacità sola. Gli eventi prodotti dalla capacità restano accodati
+    /// finché il guard non è stato rilasciato; il turno di scrittura conserva
+    /// invece l'unità logica e consente il rientro sullo stesso thread.
     fn writing<R>(&self, f: impl FnOnce(&mut dyn HostApi) -> R) -> Result<R, PluginError> {
-        let mut ws = self.workspace.write()?;
-        if let Some(instance) = self.instance.as_deref() {
-            Ok(ws.with_host_mode_instance(&self.plugin, self.mode, instance, f))
-        } else {
-            Ok(ws.with_host_mode(&self.plugin, self.mode, f))
-        }
+        let workspace = self.workspace.clone();
+        with_event_drain(&workspace, |ws| {
+            if let Some(instance) = self.instance.as_deref() {
+                ws.with_host_mode_instance(&self.plugin, self.mode, instance, f)
+            } else {
+                ws.with_host_mode(&self.plugin, self.mode, f)
+            }
+        })
     }
+}
+
+/// Esegue una mutazione di casa sotto guard, ma rimanda ogni dispatch fino a
+/// quando il guard è stato rilasciato. È la porta comune di sessione, watcher,
+/// runner e `JobHost` per gli ingressi che non hanno un epilogo preparato più
+/// specifico.
+pub(crate) fn with_event_drain<R>(
+    workspace: &Custody<Workspace>,
+    f: impl FnOnce(&mut Workspace) -> R,
+) -> Result<R, PluginError> {
+    let _turn = workspace.write_turn();
+    let result = {
+        let mut ws = workspace.write()?;
+        let deferred = ws.defer_event_dispatch();
+        let result = f(&mut ws);
+        ws.restore_event_dispatch(deferred);
+        result
+    };
+    drain_events(workspace)?;
+    Ok(result)
+}
+
+/// Drena gli handler un notice alla volta, lasciando il workspace libero
+/// durante entrambe le callback esterne (`subscribed` e `handle`).
+pub(crate) fn drain_events(workspace: &Custody<Workspace>) -> Result<(), PluginError> {
+    let mut drain = EventDrain::new();
+    loop {
+        let prepared = {
+            let mut ws = workspace.write()?;
+            ws.prepare_event_delivery(&mut drain)
+        };
+        let Some(prepared) = prepared else {
+            return Ok(());
+        };
+
+        let completed = prepared.invoke(|plugin, invoke| {
+            // L'attore deve restare installato per tutta la callback: le
+            // capacità del JobHost riacquisiscono il workspace una per volta.
+            let previous_actor = {
+                let mut ws = workspace.write()?;
+                ws.prepare_event_handler(plugin)
+            };
+            let mut host = JobHost::new(workspace.clone(), plugin.to_string());
+            invoke(&mut host);
+            let mut ws = workspace.write()?;
+            ws.finish_event_handler(previous_actor);
+            Ok(())
+        });
+
+        let mut ws = workspace.write()?;
+        ws.finish_event_delivery(&mut drain, completed);
+    }
+}
+
+/// Consegna gli eventi e completa l'epilogo opaco preparato dal kernel.
+pub(crate) fn finish_events<T>(
+    workspace: &Custody<Workspace>,
+    deferred: DeferredEvents<T>,
+) -> Result<T, PluginError> {
+    drain_events(workspace)?;
+    let mut ws = workspace.write()?;
+    Ok(ws.finish_deferred_events(deferred))
 }
 
 // Le dodici famiglie. Sono righe di delega e nessuna decisione: ogni
@@ -305,7 +372,37 @@ impl VaultWrite for JobHost {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.write_result(|h| h.write_document(id, source, base.clone()))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            let policy = ws.granted_policy(&self.plugin);
+            authorize_path(&policy, Capability::VaultWrite, id.as_str(), || {
+                format!("writing `{id}`")
+            })?;
+            let id = fenced_doc_id(id)?;
+            ws.prepare_document_write(&id, base)
+                .map_err(PluginError::from)?
+        };
+        let model = prepared.parse(source).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_write(prepared, source, model, before_write)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_write_deferred(pending)
+        };
+        finish_events(&workspace, deferred)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
@@ -458,9 +555,8 @@ impl HostEvents for JobHost {
         let Some(id) = self.job else {
             return;
         };
-        if let Ok(mut ws) = self.workspace.write() {
-            ws.notes_job_progress(id, progress);
-        }
+        let workspace = self.workspace.clone();
+        let _ = with_event_drain(&workspace, |ws| ws.notes_job_progress(id, progress));
     }
 }
 
@@ -490,7 +586,14 @@ impl HostCommands for JobHost {
             let mut ws = workspace.write()?;
             match ws.prepare_nested_provider_command(command, args.clone(), self.mode)? {
                 Some(prepared) => prepared,
-                None => return ws.invoke_nested_maintenance_command(command, args, self.mode),
+                None => {
+                    let deferred = ws.defer_event_dispatch();
+                    let outcome = ws.invoke_nested_maintenance_command(command, args, self.mode);
+                    ws.restore_event_dispatch(deferred);
+                    drop(ws);
+                    drain_events(&workspace)?;
+                    return outcome;
+                }
             }
         };
 
@@ -505,8 +608,11 @@ impl HostCommands for JobHost {
             prepared.invoke(&mut host)
         };
 
-        let mut ws = workspace.write()?;
-        ws.finish_provider_command(prepared, outcome)
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_provider_command_deferred(prepared, outcome)
+        };
+        finish_events(&workspace, deferred)?
     }
 
     /// Come sopra, e per la stessa ragione: annullare è scrivere, quindi entra
@@ -597,7 +703,10 @@ impl HostServices for JobHost {
         let mut host = self.for_provider(owner, InvokeMode::Apply);
         let outcome = prepared.invoke(&mut host);
 
-        let mut ws = workspace.write()?;
-        ws.finish_service_call(prepared, outcome)
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_service_call_deferred(prepared, outcome)
+        };
+        finish_events(&workspace, deferred)?
     }
 }

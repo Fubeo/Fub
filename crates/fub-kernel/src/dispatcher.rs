@@ -197,6 +197,11 @@ pub struct Dispatcher {
     /// model impone a M5 (un'istanza non è rientrante: un plugin che è sia
     /// view sia handler trapperebbe), promossa a contratto già in nativo.
     in_provider_call: bool,
+    /// Il composition root ha chiuso la mutazione ma deve ancora rilasciare
+    /// `Custody<Workspace>` prima di consegnare gli eventi. A differenza di
+    /// `in_provider_call`, questo flag non significa che una tabella di
+    /// provider è in prestito e quindi non blocca mount/unmount.
+    dispatch_deferred: bool,
     /// Job richiesti via `HostEvents::spawn_job`, in attesa che l'host li
     /// esegua fuori dal giro sincrono.
     pending_jobs: Vec<PendingJob>,
@@ -226,6 +231,7 @@ impl Dispatcher {
             drain: Drain::Open,
             dispatching: false,
             in_provider_call: false,
+            dispatch_deferred: false,
             pending_jobs: Vec::new(),
             bell: Arc::new(JobBell::default()),
             next_job_id: 0,
@@ -366,6 +372,16 @@ impl Dispatcher {
         self.in_provider_call
     }
 
+    /// Rimanda il drenaggio senza dichiarare in prestito alcuna tabella di
+    /// provider. Rende il valore precedente per supportare frame annidati.
+    pub(crate) fn defer_dispatch(&mut self) -> bool {
+        std::mem::replace(&mut self.dispatch_deferred, true)
+    }
+
+    pub(crate) fn restore_dispatch(&mut self, previous: bool) {
+        self.dispatch_deferred = previous;
+    }
+
     // --- drenaggio ---------------------------------------------------------
 
     /// Apre un drenaggio, se se ne può aprire uno. Rende `false` — e in quel
@@ -386,7 +402,11 @@ impl Dispatcher {
         // drena quando la SUA chiamata è tornata — mai dentro il suo frame
         // (a M5 il component model vieta la rientranza di un'istanza; la
         // semantica di consegna non può cambiare al freeze).
-        if self.dispatching || self.in_provider_call || self.batch.is_some() {
+        if self.dispatching
+            || self.in_provider_call
+            || self.dispatch_deferred
+            || self.batch.is_some()
+        {
             return false;
         }
         if !has_handlers {
@@ -664,6 +684,25 @@ impl JobBell {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn deferring_delivery_does_not_mark_provider_tables_as_lent() {
+        let mut dispatcher = Dispatcher::new(EventBus::new());
+
+        let previous = dispatcher.defer_dispatch();
+        assert!(
+            !dispatcher.in_provider_call(),
+            "delivery deferral must not block provider retirement"
+        );
+        assert!(
+            !dispatcher.begin_drain(true),
+            "delivery remains deferred until the composition root releases its guard"
+        );
+
+        dispatcher.restore_dispatch(previous);
+        assert!(dispatcher.begin_drain(true));
+        dispatcher.end_drain();
+    }
 
     /// Avvelena un lucchetto facendo paniare **dentro** un `catch_unwind` col
     /// prestito in mano: è come lo produce la vita, e non serve un thread —

@@ -795,19 +795,38 @@ impl<H, P: Policy> Guard<H, P> {
         path: &str,
         what: impl FnOnce() -> String,
     ) -> Result<(), PluginError> {
-        let action = what();
-        self.check(cap, || action.clone())?;
-        if let Some(why) = self.policy.denies_path(cap, path) {
-            return Err(PluginError::PermissionDenied(
-                format!("{action}: {why}").into(),
-            ));
-        }
-        Ok(())
+        authorize_path(&self.policy, cap, path, what)
     }
 
     fn allows_path(&self, cap: Capability, path: &str) -> bool {
         self.allows(cap) && self.policy.denies_path(cap, path).is_none()
     }
+}
+
+/// Applica i due cancelli (famiglia e path) a un'operazione che deve essere
+/// preparata fuori dal `Guard` preso in prestito dal workspace.
+///
+/// Il composition root usa questa porta prima di staccare parse, hook e indici
+/// di una scrittura `JobHost`: la policy resta quella unica di [`Guard`], non
+/// una seconda interpretazione nel proxy.
+pub fn authorize_path<P: Policy>(
+    policy: &P,
+    cap: Capability,
+    path: &str,
+    what: impl FnOnce() -> String,
+) -> Result<(), PluginError> {
+    let action = what();
+    if let Some(why) = policy.denies(cap) {
+        return Err(PluginError::PermissionDenied(
+            format!("{action}: {why}").into(),
+        ));
+    }
+    if let Some(why) = policy.denies_path(cap, path) {
+        return Err(PluginError::PermissionDenied(
+            format!("{action}: {why}").into(),
+        ));
+    }
+    Ok(())
 }
 
 impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {

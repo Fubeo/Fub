@@ -30,6 +30,7 @@ use fub_abi::{PluginError, Severity};
 use fub_kernel::{ParsedChange, Workspace};
 
 use crate::custody::Custody;
+use crate::jobs::with_event_drain;
 
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
 ///
@@ -219,10 +220,7 @@ impl ExternalSync {
                 .collect()
         };
         // Fase 2 — la memoria, sotto prestito esclusivo.
-        {
-            let Ok(mut ws) = self.workspace.write() else {
-                return;
-            };
+        let Ok(()) = with_event_drain(&self.workspace, |ws| {
             for (change, plan) in changes.iter().zip(prepared) {
                 match change {
                     ExternalChange::Touched(path) => {
@@ -233,7 +231,9 @@ impl ExternalSync {
                     }
                 }
             }
-        }
+        }) else {
+            return;
+        };
         // Fase 3 — la durevolezza.
         self.flush();
     }
@@ -274,14 +274,13 @@ impl ExternalSync {
             return;
         }
         // Fase 2 — la memoria, sotto prestito esclusivo.
-        {
-            let Ok(mut ws) = self.workspace.write() else {
-                return;
-            };
+        let Ok(()) = with_event_drain(&self.workspace, |ws| {
             for (path, plan) in prepared {
                 let _ = ws.sync_path_prepared(&path, plan);
             }
-        }
+        }) else {
+            return;
+        };
         // Fase 3 — la durevolezza.
         self.flush();
     }
@@ -295,25 +294,24 @@ impl ExternalSync {
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
     fn flush(&mut self) {
-        let Ok(mut ws) = self.workspace.write() else {
-            return;
-        };
-        let flush_errors = ws.flush_indexes();
-        if flush_errors.is_empty() {
-            return;
-        }
-        for and in &flush_errors {
-            tracing::warn!(target: "fub.host", "flush index: {and}");
-        }
-        ws.with_host("fub.host", |host| {
-            for and in flush_errors {
-                host.emit(Event::Trouble {
-                    severity: Severity::Warning,
-                    subject: None,
-                    error: PluginError::Internal(format!("flush index: {and}").into()),
-                    gate: None,
-                });
+        let _ = with_event_drain(&self.workspace, |ws| {
+            let flush_errors = ws.flush_indexes();
+            if flush_errors.is_empty() {
+                return;
             }
+            for and in &flush_errors {
+                tracing::warn!(target: "fub.host", "flush index: {and}");
+            }
+            ws.with_host("fub.host", |host| {
+                for and in flush_errors {
+                    host.emit(Event::Trouble {
+                        severity: Severity::Warning,
+                        subject: None,
+                        error: PluginError::Internal(format!("flush index: {and}").into()),
+                        gate: None,
+                    });
+                }
+            });
         });
     }
 
@@ -335,18 +333,17 @@ impl ExternalSync {
         for reason in &reasons {
             tracing::error!(target: "fub.host", "{reason}");
         }
-        let Ok(mut ws) = self.workspace.write() else {
-            return;
-        };
-        ws.with_host("fub.host", |host| {
-            for reason in reasons {
-                host.emit(Event::Trouble {
-                    severity: Severity::Failure,
-                    subject: None,
-                    error: PluginError::Internal(reason.into()),
-                    gate: None,
-                });
-            }
+        let _ = with_event_drain(&self.workspace, |ws| {
+            ws.with_host("fub.host", |host| {
+                for reason in reasons {
+                    host.emit(Event::Trouble {
+                        severity: Severity::Failure,
+                        subject: None,
+                        error: PluginError::Internal(reason.into()),
+                        gate: None,
+                    });
+                }
+            });
         });
     }
 }

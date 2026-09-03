@@ -906,6 +906,139 @@ pub struct PreparedDocumentFeed {
     losses: Vec<IndexLoss>,
 }
 
+/// Un epilogo che ha già chiuso il frame dell'operazione ma deve ancora
+/// consegnare gli eventi fuori da `Custody<Workspace>`.
+///
+/// Il valore resta opaco all'host: il kernel conserva qui anche lo stato che
+/// va ripristinato *dopo* il drain (l'attore di un comando) e il journal che,
+/// per una scrittura, deve restare nell'ordine storico
+/// `indici -> eventi -> journal`.
+pub struct DeferredEvents<T> {
+    outcome: T,
+    previous_actor: Option<Actor>,
+    journal: Option<JournalOp>,
+}
+
+impl<T> DeferredEvents<T> {
+    fn outcome(outcome: T) -> Self {
+        Self {
+            outcome,
+            previous_actor: None,
+            journal: None,
+        }
+    }
+}
+
+/// Token opaco usato dal proxy dei job per rimandare il dispatch finché il
+/// suo write guard non è stato rilasciato.
+pub struct EventDispatchDeferral {
+    previous_dispatch_deferral: bool,
+}
+
+/// Cursore di un drenaggio eventi eseguito dall'host fuori dal lock.
+///
+/// Il budget appartiene all'intero drenaggio, non a una singola callback: una
+/// cascata rientrante conserva quindi lo stesso limite del percorso diretto di
+/// [`Workspace`].
+pub struct EventDrain {
+    budget: usize,
+    active: bool,
+    lent: bool,
+    done: bool,
+}
+
+impl EventDrain {
+    pub fn new() -> Self {
+        Self {
+            budget: Dispatcher::budget(),
+            active: false,
+            lent: false,
+            done: false,
+        }
+    }
+}
+
+impl Default for EventDrain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Una consegna preparata sotto il write guard e invocabile senza alcun
+/// prestito di `Custody<Workspace>`.
+pub struct PreparedEventDelivery {
+    notice: Notice,
+    handlers: Vec<(String, Box<dyn EventHandler>)>,
+    previous_provider_call: bool,
+}
+
+/// La parte che deve rientrare nel workspace anche quando uno o più handler
+/// hanno risposto con errore o sono andati in panico.
+pub struct CompletedEventDelivery {
+    notice: Notice,
+    handlers: Vec<(String, Box<dyn EventHandler>)>,
+    previous_provider_call: bool,
+    troubles: Vec<(String, PluginError)>,
+}
+
+impl PreparedEventDelivery {
+    /// Esegue `subscribed` e `handle` fuori dal workspace. La closure presta
+    /// l'host stretto del singolo plugin e viene chiamata soltanto dopo che il
+    /// chiamante ha rilasciato il write guard.
+    pub fn invoke(
+        mut self,
+        mut with_host: impl FnMut(
+            &str,
+            &mut dyn FnMut(&mut dyn HostApi),
+        ) -> std::result::Result<(), PluginError>,
+    ) -> CompletedEventDelivery {
+        let mut troubles = Vec::new();
+        for (id, handler) in &mut self.handlers {
+            let subscribed = crate::safety::calling(id, Gate::Event, "", || {
+                Ok::<_, PluginError>(handler.subscribed())
+            });
+            let mask = match subscribed {
+                Ok(mask) => mask,
+                Err(error) => {
+                    troubles.push((id.clone(), error));
+                    continue;
+                }
+            };
+            if !mask.wants(&self.notice.event) {
+                continue;
+            }
+
+            let mut outcome = None;
+            let mut invoke = |host: &mut dyn HostApi| {
+                outcome = Some(crate::safety::calling(id, Gate::Event, "", || {
+                    handler.handle(&self.notice, host)
+                }));
+            };
+            if let Err(error) = with_host(id, &mut invoke) {
+                troubles.push((id.clone(), error));
+                continue;
+            }
+            match outcome {
+                Some(Ok(())) => {}
+                Some(Err(error)) => troubles.push((id.clone(), error)),
+                None => troubles.push((
+                    id.clone(),
+                    PluginError::Internal(
+                        "l'host non ha invocato la consegna evento preparata".into(),
+                    ),
+                )),
+            }
+        }
+
+        CompletedEventDelivery {
+            notice: self.notice,
+            handlers: self.handlers,
+            previous_provider_call: self.previous_provider_call,
+            troubles,
+        }
+    }
+}
+
 impl PreparedDocumentFeed {
     pub fn invoke_indexes(mut self) -> Self {
         self.losses.extend(feed_index_handles(
@@ -1670,6 +1803,20 @@ impl Workspace {
         })
     }
 
+    /// Chiude flag e stack senza consegnare eventi. L'host usa questa forma per
+    /// rilasciare `Custody<Workspace>` prima degli [`EventHandler`].
+    pub fn finish_service_call_deferred(
+        &mut self,
+        prepared: PreparedService,
+        outcome: std::result::Result<serde_json::Value, PluginError>,
+    ) -> DeferredEvents<std::result::Result<serde_json::Value, PluginError>> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let popped = self.providers.service_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.service.as_str()));
+        DeferredEvents::outcome(outcome)
+    }
+
     /// Chiude il frame aperto da [`prepare_service_call`](Self::prepare_service_call)
     /// nello stesso ordine del vecchio percorso sincrono: flag, stack, dispatch.
     pub fn finish_service_call(
@@ -1677,12 +1824,9 @@ impl Workspace {
         prepared: PreparedService,
         outcome: std::result::Result<serde_json::Value, PluginError>,
     ) -> std::result::Result<serde_json::Value, PluginError> {
-        self.dispatch
-            .restore_provider_call(prepared.previous_provider_call);
-        let popped = self.providers.service_stack.pop();
-        debug_assert_eq!(popped.as_deref(), Some(prepared.service.as_str()));
+        let deferred = self.finish_service_call_deferred(prepared, outcome);
         self.dispatch_pending();
-        outcome
+        self.finish_deferred_events(deferred)
     }
 
     /// permessi di
@@ -3370,13 +3514,26 @@ impl Workspace {
         })
     }
 
-    pub fn finalize_document_write(&mut self, pending: PreparedDocumentFeed) -> Result<Revision> {
+    /// Chiude la fase indici senza consegnare eventi. Il journal resta nel
+    /// token e verrà registrato solo dopo il drain staccato.
+    pub fn finish_document_write_deferred(
+        &mut self,
+        pending: PreparedDocumentFeed,
+    ) -> DeferredEvents<Revision> {
         let revision = pending.revision.clone();
         let journal = pending.journal.clone();
         self.finish_index_feed(pending);
+        DeferredEvents {
+            outcome: revision,
+            previous_actor: None,
+            journal: Some(journal),
+        }
+    }
+
+    pub fn finalize_document_write(&mut self, pending: PreparedDocumentFeed) -> Result<Revision> {
+        let deferred = self.finish_document_write_deferred(pending);
         self.dispatch_pending();
-        self.record(journal);
-        Ok(revision)
+        Ok(self.finish_deferred_events(deferred))
     }
 
     pub fn finish_document_write(
@@ -6189,14 +6346,13 @@ impl Workspace {
         })
     }
 
-    /// Chiude il frame aperto da `prepare_view_action` e riproduce l'epilogo
-    /// del vecchio percorso: ripristino flag, errore localizzato, trust gate,
-    /// localizzazione e soltanto alla fine consegna degli eventi accodati.
-    pub fn finish_view_action(
+    /// Chiude il frame dell'azione senza consegnare eventi. Il valore opaco
+    /// permette all'host di eseguire il drain dopo aver rilasciato il guard.
+    pub fn finish_view_action_deferred(
         &mut self,
         prepared: PreparedViewAction,
         outcome: std::result::Result<ViewUpdate, PluginError>,
-    ) -> std::result::Result<ViewUpdate, PluginError> {
+    ) -> DeferredEvents<std::result::Result<ViewUpdate, PluginError>> {
         self.dispatch
             .restore_provider_call(prepared.previous_provider_call);
         let result = (|| {
@@ -6222,8 +6378,20 @@ impl Workspace {
             self.localize(&prepared.owner, &mut update);
             Ok(update)
         })();
+        DeferredEvents::outcome(result)
+    }
+
+    /// Chiude il frame aperto da `prepare_view_action` e riproduce l'epilogo
+    /// del vecchio percorso: ripristino flag, errore localizzato, trust gate,
+    /// localizzazione e soltanto alla fine consegna degli eventi accodati.
+    pub fn finish_view_action(
+        &mut self,
+        prepared: PreparedViewAction,
+        outcome: std::result::Result<ViewUpdate, PluginError>,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        let deferred = self.finish_view_action_deferred(prepared, outcome);
         self.dispatch_pending();
-        result
+        self.finish_deferred_events(deferred)
     }
 
     /// Compatibilità per i chiamanti diretti del kernel. L'host di processo usa
@@ -6613,14 +6781,14 @@ impl Workspace {
         }))
     }
 
-    /// Rientra dopo una [`PreparedCommand`] e riproduce l'epilogo del percorso
-    /// sincrono: ripristino del flag, pila, localizzazione, undo, batch, dispatch
-    /// e infine attore. Il provider non gira in questa funzione.
-    pub fn finish_provider_command(
+    /// Chiude il frame del comando senza consegnare eventi. L'attore precedente
+    /// resta nel token: storicamente veniva ripristinato soltanto *dopo* il
+    /// dispatch e il percorso staccato conserva lo stesso ordine.
+    pub fn finish_provider_command_deferred(
         &mut self,
         prepared: PreparedCommand,
         outcome: std::result::Result<CommandOutcome, PluginError>,
-    ) -> std::result::Result<CommandOutcome, PluginError> {
+    ) -> DeferredEvents<std::result::Result<CommandOutcome, PluginError>> {
         self.dispatch
             .restore_provider_call(prepared.previous_provider_call);
         let popped = self.providers.command_stack.pop();
@@ -6638,22 +6806,31 @@ impl Workspace {
                         self.undo.push(undo, outcome.partial.clone());
                     }
                 }
-                // Come `invoke_command_here`: dentro un batch questo è un no-op;
-                // resta qui perché nel caso annidato non siamo proprietari della
-                // chiusura e non dobbiamo anticipare la consegna.
-                self.dispatch_pending();
                 Ok(outcome)
             }
         };
 
         if prepared.owns_batch {
             self.dispatch.close_batch();
-            self.dispatch_pending();
         }
-        if let Some(previous_actor) = prepared.previous_actor {
-            self.dispatch.restore_actor(previous_actor);
+        DeferredEvents {
+            outcome: result,
+            previous_actor: prepared.previous_actor,
+            journal: None,
         }
-        result
+    }
+
+    /// Rientra dopo una [`PreparedCommand`] e riproduce l'epilogo del percorso
+    /// sincrono: ripristino del flag, pila, localizzazione, undo, batch, dispatch
+    /// e infine attore. Il provider non gira in questa funzione.
+    pub fn finish_provider_command(
+        &mut self,
+        prepared: PreparedCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let deferred = self.finish_provider_command_deferred(prepared, outcome);
+        self.dispatch_pending();
+        self.finish_deferred_events(deferred)
     }
 
     /// [`HostCommands::run_command`](fub_abi::traits::HostCommands::run_command).
@@ -7252,6 +7429,112 @@ impl Workspace {
         self.dispatch_pending();
     }
 
+    /// Rimanda il dispatch avviato da una capacità del proxy host. Il token va
+    /// sempre restituito a [`restore_event_dispatch`](Self::restore_event_dispatch)
+    /// prima di rilasciare il guard.
+    pub fn defer_event_dispatch(&mut self) -> EventDispatchDeferral {
+        EventDispatchDeferral {
+            previous_dispatch_deferral: self.dispatch.defer_dispatch(),
+        }
+    }
+
+    /// Ripristina il frame aperto da [`defer_event_dispatch`](Self::defer_event_dispatch).
+    pub fn restore_event_dispatch(&mut self, deferred: EventDispatchDeferral) {
+        self.dispatch
+            .restore_dispatch(deferred.previous_dispatch_deferral);
+    }
+
+    /// Completa un epilogo dopo che l'host ha drenato gli eventi. Non chiama
+    /// codice esterno.
+    pub fn finish_deferred_events<T>(&mut self, deferred: DeferredEvents<T>) -> T {
+        if let Some(journal) = deferred.journal {
+            self.record(journal);
+        }
+        if let Some(previous_actor) = deferred.previous_actor {
+            self.dispatch.restore_actor(previous_actor);
+        }
+        deferred.outcome
+    }
+
+    /// Prepara una sola consegna del drenaggio `drain` senza eseguire callback.
+    ///
+    /// Dopo `Some`, chi chiama deve rilasciare il guard, invocare
+    /// [`PreparedEventDelivery::invoke`] e riconsegnare sempre il risultato a
+    /// [`finish_event_delivery`](Self::finish_event_delivery). `None` chiude
+    /// il drenaggio (o dice che, per le regole consuete, va rimandato).
+    pub fn prepare_event_delivery(
+        &mut self,
+        drain: &mut EventDrain,
+    ) -> Option<PreparedEventDelivery> {
+        if drain.done {
+            return None;
+        }
+        debug_assert!(
+            !drain.lent,
+            "una consegna va finalizzata prima di prepararne un'altra"
+        );
+        if !drain.active {
+            if !self
+                .dispatch
+                .begin_drain(!self.providers.handlers.is_empty())
+            {
+                drain.done = true;
+                return None;
+            }
+            drain.active = true;
+        }
+
+        let Some(notice) = self.dispatch.next_to_deliver(&mut drain.budget) else {
+            self.dispatch.end_drain();
+            drain.active = false;
+            drain.done = true;
+            return None;
+        };
+        let handlers = self.providers.handlers.take();
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        drain.lent = true;
+        Some(PreparedEventDelivery {
+            notice,
+            handlers,
+            previous_provider_call,
+        })
+    }
+
+    /// Ripristina tabella e flag della consegna, quindi trasforma gli errori
+    /// raccolti nei `Trouble` previsti dal contratto. Gira anche sul ramo
+    /// errore/panico, perché entrambi sono già valori nel completamento.
+    pub fn finish_event_delivery(
+        &mut self,
+        drain: &mut EventDrain,
+        completed: CompletedEventDelivery,
+    ) {
+        let CompletedEventDelivery {
+            notice,
+            handlers,
+            previous_provider_call,
+            troubles,
+        } = completed;
+        self.dispatch.restore_provider_call(previous_provider_call);
+        self.providers.handlers.restore(handlers);
+        drain.lent = false;
+        self.report_handler_troubles(&notice, troubles);
+    }
+
+    /// Attribuisce le capacità rientranti al plugin che sta ricevendo
+    /// l'evento. Il token va sempre riconsegnato a
+    /// [`finish_event_handler`](Self::finish_event_handler).
+    pub fn prepare_event_handler(&mut self, plugin: &str) -> Actor {
+        self.dispatch.swap_actor(Actor::Plugin {
+            id: plugin.to_string(),
+        })
+    }
+
+    /// Ripristina l'attore installato da [`prepare_event_handler`](Self::prepare_event_handler).
+    pub fn finish_event_handler(&mut self, previous: Actor) {
+        self.dispatch.restore_actor(previous);
+    }
+
+    /// Drena la coda eventi verso gli handler. Mai rientrante: chiamato
     /// durante un dispatch (es. da un `write_document` fatto da un handler)
     /// ritorna subito e lascia drenare il ciclo esterno.
     ///
@@ -7355,7 +7638,17 @@ impl Workspace {
                     // il secondo lettore è la shell — che decide da sé quando
                     // ridisegnare una view dichiarata.
                     // L'errore di un handler non deve far fallire
-                    if !handler.subscribed().wants(&notice.event) {
+                    let subscribed = crate::safety::calling(id, Gate::Event, "", || {
+                        Ok::<_, PluginError>(handler.subscribed())
+                    });
+                    let mask = match subscribed {
+                        Ok(mask) => mask,
+                        Err(error) => {
+                            troubles.push((id.clone(), error));
+                            continue;
+                        }
+                    };
+                    if !mask.wants(&notice.event) {
                         continue;
                     }
                     let attore = Actor::Plugin { id: id.clone() };
@@ -7370,19 +7663,24 @@ impl Workspace {
                         // `EventHandler` e nient'altro — smetteva di fare
                         // snapshot in un modo indistinguibile dal funzionare.
                         // **Il guasto della consegna di un guasto non si emette** (decisione
-                        let mut fault = None;
-                        if let Some(panic) = crate::safety::reporting(id, Gate::Event, "", || {
-                            fault = handler.handle(notice, &mut host).err();
-                        }) {
-                            fault = Some(panic);
-                        }
-                        fault
+                        crate::safety::calling(id, Gate::Event, "", || {
+                            handler.handle(notice, &mut host)
+                        })
+                        .err()
                     });
                     troubles.extend(fault.map(|and| (id.clone(), and)));
                 }
                 troubles
             },
         );
+        self.report_handler_troubles(notice, troubles);
+    }
+
+    fn report_handler_troubles(
+        &mut self,
+        notice: &Notice,
+        troubles: Vec<(String, PluginError)>,
+    ) {
         // 0052). È l'unico ciclo che questa variante rende possibile — un
         // handler che fallisce ricevendo un `Trouble` ne produrrebbe un
         // secondo, che ripasserebbe da lui — e si chiude dove nasce, cioè qui,

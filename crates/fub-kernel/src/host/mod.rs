@@ -48,8 +48,8 @@ mod kernel;
 mod read;
 
 pub use guard::{
-    authorize_query, filter_query_result, Capability, CapabilitySet, Granted, Guard, Policy,
-    ReadOnly,
+    authorize_path, authorize_query, filter_query_result, Capability, CapabilitySet, Granted,
+    Guard, Policy, ReadOnly,
 };
 pub(crate) use kernel::KernelHost;
 pub(crate) use read::ReadHost;

@@ -53,7 +53,7 @@ use fub_kernel::{Guard, MachineSettings, ReadOnly, SystemLocale, ViewStates, Wor
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
-use crate::jobs::JobHost;
+use crate::jobs::{drain_events, finish_events, with_event_drain, JobHost};
 use crate::mount::mount;
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
@@ -675,8 +675,7 @@ impl Host {
             (prepared, watcher)
         };
         let completed_scan = prepared_scan.invoke();
-        let (work, index_job, work_total, live) = {
-            let mut ws = workspace.write()?;
+        let (work, index_job, work_total, live) = with_event_drain(&workspace, |ws| {
             let work = ws.finalize_scan_vault(completed_scan);
             let work_total = work.total();
             let live = if self.sink.is_some() {
@@ -686,7 +685,7 @@ impl Host {
             };
             let index_job = ws.begin_index_job();
             (work, index_job, work_total, live)
-        };
+        })?;
 
         if let (Some(sink), Some(live)) = (&self.sink, live) {
             crate::bridge::spawn(live, sink.clone());
@@ -1004,66 +1003,67 @@ impl Host {
             // si dichiara per primo anche perché cada per ultimo: finché vive,
             // nessun job di quel bundle riparte da dietro.
             let _shutdown = (!enabled).then(|| session.runner.shutdown_bundle(id));
-            let mut ws = session.workspace.write()?;
-            let mut registry = session.registry.write()?;
+            with_event_drain(&session.workspace, |ws| {
+                let mut registry = session.registry.write()?;
 
-            // **La domanda mal posta si respinge prima di toccare qualunque
-            // cosa.** Accendere un id che nessuno conosce non è un guasto a
-            // metà strada: è un id scritto male, e la risposta è la stessa che
-            // dà [`BundleRegistry::enable`] — solo, arriva *prima* della
-            // scrittura invece che dopo. È l'unico pezzo di `enable` che non
-            // ha bisogno del workspace per rispondere, ed è quello che va
-            // portato davanti al punto di non ritorno: ciò che resta dietro è
-            // il montaggio, che il workspace lo tocca per forza.
-            if enabled && !registry.knows(id) {
-                return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
-            }
+                // **La domanda mal posta si respinge prima di toccare qualunque
+                // cosa.** Accendere un id che nessuno conosce non è un guasto a
+                // metà strada: è un id scritto male, e la risposta è la stessa che
+                // dà [`BundleRegistry::enable`] — solo, arriva *prima* della
+                // scrittura invece che dopo. È l'unico pezzo di `enable` che non
+                // ha bisogno del workspace per rispondere, ed è quello che va
+                // portato davanti al punto di non ritorno: ciò che resta dietro è
+                // il montaggio, che il workspace lo tocca per forza.
+                if enabled && !registry.knows(id) {
+                    return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
+                }
 
-            // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
-            // mano perché le due memorie non sono la copia di un file (quelle
-            // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
-            // *montaggio*, che è il registry più il kernel.
-            //
-            // Nel verso dello spegnimento l'ordine è gratis e non c'è niente da
-            // scambiare: `unmount` **non fallisce** — raccoglie i guasti del
-            // commiato e li rende, ma smonta comunque — quindi la mossa che può
-            // andare storta è una sola ed è la scrittura, e sta davanti. Se non
-            // riesce non è stato smontato niente: il vuoto fra le due metà non
-            // è più esprimibile.
-            //
-            // Nel verso dell'accensione, invece, di mosse che possono fallire
-            // ne restano due (la scrittura e il montaggio) e l'ordine è una
-            // scelta. Va così, e non al contrario, per due ragioni. La prima:
-            // `plugins.disabled` è ciò che l'utente **vuole**, non lo specchio
-            // di ciò che è montato — non a caso non è `program_writable`. La
-            // seconda: «scritto come acceso, non montato» non è uno stato
-            // inventato qui, è quello che ogni avvio produce quando un bundle
-            // non si monta (`mount.rs`: l'errore si scrive nel log e si tira
-            // avanti), quindi è uno stato che il resto del programma sa già
-            // abitare, e il prossimo avvio ci riprova. Lo stato opposto —
-            // montato adesso, spento nel file — nessun avvio lo sa produrre, e
-            // si disfa da sé alla prima riapertura senza dire niente. Il
-            // commento che stava qui prometteva che «se il montaggio fallisce
-            // non resta scritto che il componente è acceso»: non era vero
-            // nemmeno allora, perché all'avvio resta scritto eccome.
-            let mut disabled = crate::settings::disabled_plugins(&ws);
-            disabled.retain(|d| d != id);
-            if !enabled {
-                disabled.push(id.to_string());
-            }
-            disabled.sort();
-            ws.set_setting(
-                crate::settings::PLUGINS_DISABLED,
-                fub_abi::settings::SettingValue::List(disabled),
-            )?;
+                // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
+                // mano perché le due memorie non sono la copia di un file (quelle
+                // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
+                // *montaggio*, che è il registry più il kernel.
+                //
+                // Nel verso dello spegnimento l'ordine è gratis e non c'è niente da
+                // scambiare: `unmount` **non fallisce** — raccoglie i guasti del
+                // commiato e li rende, ma smonta comunque — quindi la mossa che può
+                // andare storta è una sola ed è la scrittura, e sta davanti. Se non
+                // riesce non è stato smontato niente: il vuoto fra le due metà non
+                // è più esprimibile.
+                //
+                // Nel verso dell'accensione, invece, di mosse che possono fallire
+                // ne restano due (la scrittura e il montaggio) e l'ordine è una
+                // scelta. Va così, e non al contrario, per due ragioni. La prima:
+                // `plugins.disabled` è ciò che l'utente **vuole**, non lo specchio
+                // di ciò che è montato — non a caso non è `program_writable`. La
+                // seconda: «scritto come acceso, non montato» non è uno stato
+                // inventato qui, è quello che ogni avvio produce quando un bundle
+                // non si monta (`mount.rs`: l'errore si scrive nel log e si tira
+                // avanti), quindi è uno stato che il resto del programma sa già
+                // abitare, e il prossimo avvio ci riprova. Lo stato opposto —
+                // montato adesso, spento nel file — nessun avvio lo sa produrre, e
+                // si disfa da sé alla prima riapertura senza dire niente. Il
+                // commento che stava qui prometteva che «se il montaggio fallisce
+                // non resta scritto che il componente è acceso»: non era vero
+                // nemmeno allora, perché all'avvio resta scritto eccome.
+                let mut disabled = crate::settings::disabled_plugins(ws);
+                disabled.retain(|d| d != id);
+                if !enabled {
+                    disabled.push(id.to_string());
+                }
+                disabled.sort();
+                ws.set_setting(
+                    crate::settings::PLUGINS_DISABLED,
+                    fub_abi::settings::SettingValue::List(disabled),
+                )?;
 
-            let mut errors = Vec::new();
-            if enabled {
-                registry.enable(&mut ws, id).map_err(PluginError::from)?;
-            } else {
-                errors.extend(registry.unmount(&mut ws, id));
-            }
-            Ok(errors)
+                let mut errors = Vec::new();
+                if enabled {
+                    registry.enable(ws, id).map_err(PluginError::from)?;
+                } else {
+                    errors.extend(registry.unmount(ws, id));
+                }
+                Ok(errors)
+            })?
         })?
     }
 
@@ -1107,8 +1107,7 @@ impl Host {
         let shown: std::collections::BTreeSet<String> =
             self.pending_keybindings(vault)?.into_keys().collect();
         self.in_session(vault, |session| {
-            session.workspace.write()?.resume_settings(&shown);
-            Ok(())
+            with_event_drain(&session.workspace, |ws| ws.resume_settings(&shown))
         })?;
         self.remember_seen_keys(vault)
     }
@@ -1128,7 +1127,6 @@ impl Host {
     pub fn discard_keybindings(&self, vault: Option<&str>) -> Result<(), PluginError> {
         let shown: Vec<String> = self.pending_keybindings(vault)?.into_keys().collect();
         let missing = self.in_session(vault, |session| {
-            let mut ws = session.workspace.write()?;
             // Il `reset` **risveglia** la chiave che azzera — è la riga in
             // `SettingsStore::write` — quindi alla fine del giro non resta
             // sospeso niente di ciò che è stato mostrato, e non serve una
@@ -1140,14 +1138,16 @@ impl Host {
             // cioè esattamente l'ambiguità che questa risposta esiste per
             // togliere — e senza nemmeno arrivare al promemoria, così la volta
             // dopo si richiede di un insieme che è già stato in parte distrutto.
-            Ok(shown
-                .iter()
-                .filter_map(|key| {
-                    ws.reset_setting(key)
-                        .err()
-                        .map(|why| format!("`{key}`: {why}"))
-                })
-                .collect::<Vec<_>>())
+            with_event_drain(&session.workspace, |ws| {
+                shown
+                    .iter()
+                    .filter_map(|key| {
+                        ws.reset_setting(key)
+                            .err()
+                            .map(|why| format!("`{key}`: {why}"))
+                    })
+                    .collect::<Vec<_>>()
+            })
         })?;
         // Il promemoria si scrive **comunque**, e dice il vero da solo: ricorda
         // ciò che il file porta meno ciò che è rimasto sospeso, quindi le chiavi
@@ -1187,9 +1187,9 @@ impl Host {
             self.machine.set(key, value)?;
             return self.tell_observer(key);
         }
-        self.with_session(vault, |session| {
-            session.workspace.write()?.set_setting(key, value)
-        })??;
+        self.in_session(vault, |session| {
+            with_event_drain(&session.workspace, |ws| ws.set_setting(key, value))?
+        })?;
         self.if_key_remember_it(vault, key)
     }
 
@@ -1204,9 +1204,9 @@ impl Host {
             self.machine.reset(key)?;
             return self.tell_observer(key);
         }
-        self.with_session(vault, |session| {
-            session.workspace.write()?.reset_setting(key)
-        })??;
+        self.in_session(vault, |session| {
+            with_event_drain(&session.workspace, |ws| ws.reset_setting(key))?
+        })?;
         self.if_key_remember_it(vault, key)
     }
 
@@ -1590,10 +1590,7 @@ impl Host {
         vault: Option<&str>,
         f: impl FnOnce(&mut Workspace) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
-        self.in_session(vault, |session| {
-            let mut workspace = session.workspace.write()?;
-            f(&mut workspace)
-        })
+        self.in_session(vault, |session| with_event_drain(&session.workspace, f)?)
     }
 
     /// Sorgente e revisione dalla stessa lettura.
@@ -1636,9 +1633,11 @@ impl Host {
                 .map_err(PluginError::from)?
         };
         let pending = pending.invoke_indexes();
-        let mut ws = workspace.write()?;
-        ws.finalize_document_write(pending)
-            .map_err(PluginError::from)
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_write_deferred(pending)
+        };
+        finish_events(&workspace, deferred)
     }
 
     pub fn save_draft(
@@ -1707,8 +1706,11 @@ impl Host {
         let mut detached = JobHost::new(workspace.clone(), prepared.owner().to_string())
             .for_view_instance(prepared.instance_id().to_string());
         let outcome = prepared.invoke(&mut detached);
-        let mut ws = workspace.write()?;
-        ws.finish_view_action(prepared, outcome)
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_view_action_deferred(prepared, outcome)
+        };
+        finish_events(&workspace, deferred)?
     }
 
     pub fn commands(&self, vault: Option<&str>) -> Result<Vec<CommandSpec>, PluginError> {
@@ -1733,7 +1735,14 @@ impl Host {
             let mut ws = workspace.write()?;
             match ws.prepare_provider_command(command, args.clone(), mode, Actor::User)? {
                 Some(prepared) => prepared,
-                None => return ws.invoke_command(command, args, mode, Actor::User),
+                None => {
+                    let deferred = ws.defer_event_dispatch();
+                    let outcome = ws.invoke_command(command, args, mode, Actor::User);
+                    ws.restore_event_dispatch(deferred);
+                    drop(ws);
+                    drain_events(&workspace)?;
+                    return outcome;
+                }
             }
         };
 
@@ -1748,8 +1757,11 @@ impl Host {
             prepared.invoke(&mut host)
         };
 
-        let mut ws = workspace.write()?;
-        ws.finish_provider_command(prepared, outcome)
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_provider_command_deferred(prepared, outcome)
+        };
+        finish_events(&workspace, deferred)?
     }
 
     pub fn view_state(
