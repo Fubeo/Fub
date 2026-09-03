@@ -7676,11 +7676,7 @@ impl Workspace {
         self.report_handler_troubles(notice, troubles);
     }
 
-    fn report_handler_troubles(
-        &mut self,
-        notice: &Notice,
-        troubles: Vec<(String, PluginError)>,
-    ) {
+    fn report_handler_troubles(&mut self, notice: &Notice, troubles: Vec<(String, PluginError)>) {
         // 0052). È l'unico ciclo che questa variante rende possibile — un
         // handler che fallisce ricevendo un `Trouble` ne produrrebbe un
         // secondo, che ripasserebbe da lui — e si chiude dove nasce, cioè qui,

@@ -26,9 +26,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{
-    CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode,
-};
+use fub_abi::command::{CommandOutcome, CommandReach, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::edit::WriteBase;
 use fub_abi::event::{EventKind, EventMask, Notice};
 use fub_abi::model::DocId;
@@ -265,7 +263,11 @@ fn assert_workspace_reusable(workspace: &Custody<Workspace>) {
         );
         std::thread::yield_now();
     }
-    assert_eq!(workspace.reports(), 0, "the event boundary poisoned custody");
+    assert_eq!(
+        workspace.reports(),
+        0,
+        "the event boundary poisoned custody"
+    );
 }
 
 fn run_detached<T: Send + 'static>(
@@ -285,7 +287,10 @@ fn run_detached<T: Send + 'static>(
             .recv_timeout(TIMEOUT)
             .unwrap_or_else(|_| panic!("{expected:?} did not run before the timeout"));
         assert_eq!(observed.callback, expected);
-        assert!(observed.read, "{expected:?} retained a workspace write guard");
+        assert!(
+            observed.read,
+            "{expected:?} retained a workspace write guard"
+        );
         assert!(
             observed.write,
             "{expected:?} retained a workspace read or write guard"
@@ -298,7 +303,9 @@ fn run_detached<T: Send + 'static>(
         .recv_timeout(TIMEOUT)
         .expect("the host entrypoint did not complete before the timeout")
         .expect("the host entrypoint succeeds");
-    thread.join().expect("the completed call thread does not panic");
+    thread
+        .join()
+        .expect("the completed call thread does not panic");
     assert_workspace_reusable(workspace);
     outcome
 }
@@ -621,13 +628,17 @@ fn assert_fault_is_contained(fault: Fault) {
         .unwrap_or_else(|_| panic!("{fault:?} left the event drain blocked"));
     first.expect("handler faults do not roll back the completed write");
     second.expect("the next write still works");
-    call.join().expect("the completed write thread does not panic");
+    call.join()
+        .expect("the completed write thread does not panic");
 
     assert!(
         handled.load(Ordering::SeqCst) > 0,
         "the handler was not reusable after {fault:?}"
     );
-    assert!(workspace.try_read().is_some(), "read lock leaked after {fault:?}");
+    assert!(
+        workspace.try_read().is_some(),
+        "read lock leaked after {fault:?}"
+    );
     assert!(
         workspace.try_write().is_some(),
         "write lock or writer turn leaked after {fault:?}"
@@ -664,7 +675,10 @@ fn event_handler_errors_and_panics_restore_the_table_flags_and_budget() {
 #[test]
 fn every_background_event_source_keeps_the_detached_host_drain() {
     fn compact(source: &str) -> String {
-        source.chars().filter(|char| !char.is_whitespace()).collect()
+        source
+            .chars()
+            .filter(|char| !char.is_whitespace())
+            .collect()
     }
 
     let session = compact(include_str!("../src/session.rs"));

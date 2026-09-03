@@ -378,7 +378,10 @@ fn job_completion_drains_event_handlers_outside_both_guards_and_allows_reentry()
         "the completion drain left a workspace lock behind"
     );
     probe_workspace.detach();
-    assert!(host.close().is_empty(), "the completed runner closes cleanly");
+    assert!(
+        host.close().is_empty(),
+        "the completed runner closes cleanly"
+    );
 }
 
 #[test]

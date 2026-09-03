@@ -639,11 +639,7 @@ impl Shared {
         };
         self.forget(in_progress.id)?;
         with_event_drain(&self.workspace, |ws| {
-            ws.complete_job(
-                in_progress.id,
-                fub_kernel::INDEX_JOB.to_string(),
-                outcome,
-            );
+            ws.complete_job(in_progress.id, fub_kernel::INDEX_JOB.to_string(), outcome);
         })?;
         // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
         // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
