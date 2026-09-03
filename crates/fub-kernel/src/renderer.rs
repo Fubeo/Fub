@@ -71,14 +71,15 @@ impl std::fmt::Display for RendererConflict {
     }
 }
 
+#[derive(Clone)]
 struct Registered {
     spec: CustomRendererSpec,
     trust: Trust,
-    renderer: Box<dyn CustomRenderer>,
+    renderer: std::sync::Arc<dyn CustomRenderer>,
 }
 
 /// Chi disegna quale `custom_kind`.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct RendererRegistry {
     renderers: Vec<Registered>,
     /// `custom_kind` → indice in `renderers`.
@@ -121,7 +122,7 @@ impl RendererRegistry {
         self.renderers.push(Registered {
             spec,
             trust,
-            renderer,
+            renderer: std::sync::Arc::from(renderer),
         });
         Ok(())
     }
@@ -238,12 +239,18 @@ fn slot_html(slot: u32, kind: &str) -> String {
 /// quello di una view. Il punto di applicazione è **uno**, ed è qui.
 pub(crate) fn compose(
     model: &DocumentModel,
+    provider_id: &str,
     provider: &dyn FormatProvider,
     renderers: &RendererRegistry,
     opts: &RenderOptions,
 ) -> Result<RenderedDocument, fub_abi::FormatError> {
     if renderers.is_empty() {
-        return Ok(RenderedDocument::html(provider.render_html(model, opts)?));
+        return Ok(RenderedDocument::html(render_format(
+            provider_id,
+            provider,
+            model,
+            opts,
+        )?));
     }
 
     let mut out = RenderedDocument::default();
@@ -254,6 +261,7 @@ pub(crate) fn compose(
     fn flush(
         run: &mut Vec<Block>,
         model: &DocumentModel,
+        provider_id: &str,
         provider: &dyn FormatProvider,
         opts: &RenderOptions,
         out: &mut String,
@@ -263,7 +271,7 @@ pub(crate) fn compose(
         }
         let mut piece = DocumentModel::empty(model.id.clone());
         piece.body = std::mem::take(run);
-        out.push_str(&provider.render_html(&piece, opts)?);
+        out.push_str(&render_format(provider_id, provider, &piece, opts)?);
         Ok(())
     }
 
@@ -305,7 +313,14 @@ pub(crate) fn compose(
         match rendering {
             CustomRendering::Fallback => run.push(block.clone()),
             CustomRendering::Html(html) => {
-                flush(&mut run, model, provider, opts, &mut out.html)?;
+                flush(
+                    &mut run,
+                    model,
+                    provider_id,
+                    provider,
+                    opts,
+                    &mut out.html,
+                )?;
                 out.html.push_str(&html);
             }
             CustomRendering::Ui(node) => {
@@ -315,7 +330,14 @@ pub(crate) fn compose(
                     run.push(block.clone());
                     continue;
                 }
-                flush(&mut run, model, provider, opts, &mut out.html)?;
+                flush(
+                    &mut run,
+                    model,
+                    provider_id,
+                    provider,
+                    opts,
+                    &mut out.html,
+                )?;
                 out.html.push_str(&slot_html(slot, custom_kind));
                 out.parts.push(RenderedPart {
                     slot,
@@ -326,6 +348,36 @@ pub(crate) fn compose(
             }
         }
     }
-    flush(&mut run, model, provider, opts, &mut out.html)?;
+    flush(
+        &mut run,
+        model,
+        provider_id,
+        provider,
+        opts,
+        &mut out.html,
+    )?;
     Ok(out)
+}
+
+/// Il confine immediato di `FormatProvider::render_html`: un panico costa la
+/// proiezione corrente, non il processo e non una guardia eventualmente presa
+/// dal chiamante. Sta qui perché `compose` può chiamare il provider più volte.
+///
+/// `FormatParse` nomina per ora la famiglia `FormatProvider`, non soltanto il
+/// verbo `parse`: ABI 0.1.1 non può ricevere un nuovo discriminante WIT senza
+/// una release minor. Il giorno in cui quella release introdurrà una porta di
+/// render dedicata, questo è il solo boundary da aggiornare.
+fn render_format(
+    provider_id: &str,
+    provider: &dyn FormatProvider,
+    model: &DocumentModel,
+    options: &RenderOptions,
+) -> Result<String, fub_abi::FormatError> {
+    crate::safety::caught(
+        provider_id,
+        crate::safety::Gate::FormatParse,
+        model.id.as_str(),
+        fub_abi::error::FormatError::Render,
+        || provider.render_html(model, options),
+    )
 }

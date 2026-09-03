@@ -72,6 +72,24 @@ impl PreparedParse {
         self.syntax.apply(&mut model, &ctx, &self.descriptor.id);
         Ok(model)
     }
+
+    /// Rende un modello con la stessa fotografia di provider usata dal parse.
+    /// Il chiamante può così tenere l'intera proiezione oltre il confine di un
+    /// lock senza risolvere di nuovo un provider nel frattempo.
+    pub(crate) fn render(
+        &self,
+        model: &DocumentModel,
+        renderers: &RendererRegistry,
+        options: &fub_abi::format::RenderOptions,
+    ) -> Result<crate::renderer::RenderedDocument> {
+        Ok(crate::renderer::compose(
+            model,
+            &self.descriptor.id,
+            self.provider.as_ref(),
+            renderers,
+            options,
+        )?)
+    }
 }
 
 pub struct DocumentStore {

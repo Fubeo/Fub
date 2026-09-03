@@ -49,10 +49,17 @@ pub(crate) fn query_workspace(
     workspace: &Custody<Workspace>,
     query: IndexQuery,
 ) -> Result<IndexResult, PluginError> {
-    let prepared = {
+    let local = {
         let workspace = workspace.read()?;
-        workspace.prepare_detached_index_query(&query)
+        workspace.prepare_local_index_projection(&query)?
     };
+    if let Some(prepared) = local {
+        let completed = prepared.invoke()?;
+        let workspace = workspace.read()?;
+        return workspace.finish_local_index_projection(completed);
+    }
+
+    let prepared = workspace.read()?.prepare_detached_index_query(&query);
     let Some(prepared) = prepared else {
         return workspace.read()?.query_index(query);
     };

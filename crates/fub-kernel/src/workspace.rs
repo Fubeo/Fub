@@ -94,7 +94,7 @@ use crate::dispatcher::{Dispatcher, JobBell, PendingJob};
 use crate::documents::{extension_of, DocumentStore, PreparedParse};
 use crate::drafts::Drafts;
 use crate::entries::{EntryStore, StoredEntry, StoredMeta};
-use crate::error::{KernelError, Result};
+use crate::error::{KernelError, Missing, Result};
 use crate::graph::{BuiltGraph, GraphSources};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::{QueryCore, QueryPlan};
@@ -111,7 +111,7 @@ use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::poison::{SharedShelter, Shelter};
 use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
 use crate::registry::FormatRegistry;
-use crate::renderer::{self, RenderedDocument};
+use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
@@ -641,6 +641,91 @@ pub struct PreparedDocumentWrite {
     before_write: Option<(String, BeforeWriteHook)>,
 }
 
+/// Una proiezione locale risolta fino al confine dei provider. Sorgente,
+/// parser, regole e renderer sono valori posseduti: nessuno porta con sé una
+/// guardia del workspace.
+pub struct PreparedLocalProjection {
+    id: DocId,
+    resolved_page: Option<String>,
+    source_revision: Revision,
+    source: DocumentSource,
+    parser: PreparedParse,
+    renderers: crate::renderer::RendererRegistry,
+    kind: LocalProjectionKind,
+    routing: PreparedIndexQuery,
+    projection_generation: u64,
+}
+
+enum LocalProjectionKind {
+    Preview,
+    Embed {
+        heading: Option<String>,
+        block: Option<String>,
+    },
+}
+
+/// Il risultato esterno di una proiezione, ancora da validare contro lo stato
+/// corrente del workspace.
+pub struct CompletedLocalProjection {
+    id: DocId,
+    resolved_page: Option<String>,
+    source_revision: Revision,
+    result: IndexResult,
+    routing: PreparedIndexQuery,
+    projection_generation: u64,
+}
+
+impl PreparedLocalProjection {
+    /// Attraversa `FormatProvider::parse`, le `SyntaxRule`,
+    /// `FormatProvider::render_html` e i `CustomRenderer`. Il chiamante deve
+    /// aver già rilasciato ogni guardia di `Custody<Workspace>`.
+    pub fn invoke(self) -> std::result::Result<CompletedLocalProjection, PluginError> {
+        let PreparedLocalProjection {
+            id,
+            resolved_page,
+            source_revision,
+            source,
+            parser,
+            renderers,
+            kind,
+            routing,
+            projection_generation,
+        } = self;
+        let model = parser.invoke(source).map_err(PluginError::from)?;
+        let (model, result_kind) = match kind {
+            LocalProjectionKind::Preview => (model, None),
+            LocalProjectionKind::Embed { block, heading } => {
+                let clipped = match (block.as_deref(), heading.as_deref()) {
+                    (Some(block), _) => block_of(&model, block)
+                        .ok_or_else(|| PluginError::NotFound(format!("{id}#^{block}").into()))?,
+                    (None, Some(heading)) => section_of(&model, heading)
+                        .ok_or_else(|| PluginError::NotFound(format!("{id}#{heading}").into()))?,
+                    (None, None) => model,
+                };
+                (clipped, Some(id.0.clone()))
+            }
+        };
+        let rendered = parser
+            .render(&model, &renderers, &RenderOptions::preview())
+            .map_err(PluginError::from)?;
+        let result = match result_kind {
+            None => IndexResult::RenderPreview(rendered.into()),
+            Some(doc_id) => IndexResult::RenderEmbed(EmbedContent {
+                doc_id,
+                content: rendered.into(),
+            }),
+        };
+        Ok(CompletedLocalProjection {
+            id,
+            resolved_page,
+            source_revision,
+            result,
+            routing,
+            projection_generation,
+        })
+    }
+}
+
 /// La scansione preparata senza chiamare codice esterno. Contiene una
 /// fotografia degli handle degli indici, non una guardia del `Workspace`.
 pub struct PreparedVaultScan {
@@ -869,6 +954,11 @@ pub struct Workspace {
     /// ricorda di ciò che ha già visto.
     /// *Chi è registrato, cosa ha dichiarato, chi possiede quale nome* (§8.1):
     indexes: Indexes,
+    /// Cambia quando regole sintattiche o renderer rendono obsoleta una
+    /// fotografia della pipeline di proiezione. È distinta dai token delle
+    /// view: quei token versionano il proprietario di una callback, questa
+    /// versione il contenuto della pipeline documentale.
+    projection_generation: u64,
     /// le sei tabelle di provider, il registro dei plugin (decisione 0021) e le
     /// due catene di chiamate in corso. Ciò che si risponde **senza svegliare
     /// nessuno** sta lì dentro; chiamare un provider vuole un `HostApi`, che è
@@ -1192,6 +1282,7 @@ impl Workspace {
                 Arc::clone(&organization),
                 Arc::clone(&drafts),
             ),
+            projection_generation: 0,
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
@@ -1691,19 +1782,23 @@ impl Workspace {
         // registrata. Chi lo sa è l'inventario, ed è da lì che si prendono i
         // nomi da togliere.
         // Lo schema delle sue impostazioni se ne va con lui: da qui in poi le
+        let mut projection_changed = false;
         for id in self
             .providers
             .plugins
             .ids_of(plugin, RegistrationKind::Syntax)
         {
-            self.docs.syntax.remove(&id);
+            projection_changed |= self.docs.syntax.remove(&id);
         }
         for id in self
             .providers
             .plugins
             .ids_of(plugin, RegistrationKind::Renderer)
         {
-            self.docs.renderers.remove(&id);
+            projection_changed |= self.docs.renderers.remove(&id);
+        }
+        if projection_changed {
+            self.projection_generation = self.projection_generation.wrapping_add(1);
         }
 
         self.providers.plugins.retire(plugin);
@@ -5240,6 +5335,7 @@ impl Workspace {
         self.providers
             .plugins
             .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
+        self.projection_generation = self.projection_generation.wrapping_add(1);
         Ok(())
     }
 
@@ -5272,6 +5368,7 @@ impl Workspace {
             RegistrationKind::Renderer,
             std::slice::from_ref(&id),
         );
+        self.projection_generation = self.projection_generation.wrapping_add(1);
         Ok(())
     }
 
@@ -5350,14 +5447,10 @@ impl Workspace {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let model = self.docs.parse_from_disk(id)?;
-        let provider = self.docs.provider_for(id)?;
-        Ok(renderer::compose(
-            &model,
-            provider,
-            &self.docs.renderers,
-            &RenderOptions::preview(),
-        )?)
+        let source = self.docs.source_from_disk(id)?;
+        let parser = self.docs.prepare_parse(id)?;
+        let model = parser.invoke(source)?;
+        parser.render(&model, &self.docs.renderers, &RenderOptions::preview())
     }
 
     /// risolve la pagina e rende l'intero documento, o la sola sezione del
@@ -5392,8 +5485,9 @@ impl Workspace {
             return Err(KernelError::NotFound(id.to_string()));
         }
         // Anche un embed passa dai renderer: un diagramma dentro una nota
-        let model = self.docs.parse_from_disk(&id)?;
-        let provider = self.docs.provider_for(&id)?;
+        let source = self.docs.source_from_disk(&id)?;
+        let parser = self.docs.prepare_parse(&id)?;
+        let model = parser.invoke(source)?;
         let opts = RenderOptions::preview();
         let model =
             match (block, heading) {
@@ -5407,10 +5501,7 @@ impl Workspace {
         // dentro QUESTA composizione, e il frontend li monta dentro il
         // segnaposto dell'embed che ha appena idratato.
         // Backlink verso un documento.
-        Ok((
-            id,
-            renderer::compose(&model, provider, &self.docs.renderers, &opts)?,
-        ))
+        Ok((id, parser.render(&model, &self.docs.renderers, &opts)?))
     }
 
     /// Link uscenti risolti da un documento.
@@ -5517,6 +5608,104 @@ impl Workspace {
             }
             _ => Some(self.indexes.prepare_query()),
         }
+    }
+
+    /// Prepara le due proiezioni servite localmente senza eseguire provider.
+    /// Una rotta sostituita da un indice esterno resta sul planner staccato e
+    /// non entra qui.
+    pub fn prepare_local_index_projection(
+        &self,
+        query: &IndexQuery,
+    ) -> Result<Option<PreparedLocalProjection>> {
+        if self.indexes.query_owner_is_external(query) {
+            return Ok(None);
+        }
+        let (id, resolved_page, kind) = match query {
+            IndexQuery::RenderPreview { doc } => {
+                (doc.clone(), None, LocalProjectionKind::Preview)
+            }
+            IndexQuery::RenderEmbed {
+                page,
+                heading,
+                block,
+            } => {
+                let id = self
+                    .resolve_link(page)
+                    .ok_or_else(|| KernelError::NotFound(page.clone()))?;
+                (
+                    id,
+                    Some(page.clone()),
+                    LocalProjectionKind::Embed {
+                        heading: heading.clone(),
+                        block: block.clone(),
+                    },
+                )
+            }
+            _ => return Ok(None),
+        };
+        if !self.indexes.core.metas.contains_key(&id) {
+            return Err(KernelError::NotFound(id.to_string()));
+        }
+        let source = self.docs.source_from_disk(&id)?;
+        let source_revision = Revision::of_bytes(source.bytes());
+        let parser = self.docs.prepare_parse(&id)?;
+        Ok(Some(PreparedLocalProjection {
+            id,
+            resolved_page,
+            source_revision,
+            source,
+            parser,
+            renderers: self.docs.renderers.clone(),
+            kind,
+            routing: self.indexes.prepare_query(),
+            projection_generation: self.projection_generation,
+        }))
+    }
+
+    /// Accetta una proiezione soltanto se appartiene ancora alla stessa rotta,
+    /// alla stessa pipeline e allo stesso sorgente. Mutazioni su altri
+    /// documenti sono compatibili e non la invalidano; qualunque registrazione
+    /// o ritiro di regole sintattiche o renderer è invece conservativamente
+    /// incompatibile con lo snapshot della pipeline.
+    pub fn finish_local_index_projection(
+        &self,
+        completed: CompletedLocalProjection,
+    ) -> std::result::Result<IndexResult, PluginError> {
+        self.indexes.ensure_query_is_current(&completed.routing)?;
+        if completed.projection_generation != self.projection_generation {
+            return Err(PluginError::Conflict(
+                "la pipeline di proiezione è cambiata durante la query".into(),
+            ));
+        }
+        if !self.indexes.core.metas.contains_key(&completed.id) {
+            return Err(PluginError::Conflict(
+                format!("{} è stato ritirato durante la query", completed.id).into(),
+            ));
+        }
+        if completed
+            .resolved_page
+            .as_deref()
+            .is_some_and(|page| self.resolve_link(page).as_ref() != Some(&completed.id))
+        {
+            return Err(PluginError::Conflict(
+                format!("il riferimento a {} è cambiato durante la query", completed.id).into(),
+            ));
+        }
+        let current = match self.docs.source_from_disk(&completed.id) {
+            Ok(current) => current,
+            Err(error) if error.is_missing() => {
+                return Err(PluginError::Conflict(
+                    format!("{} è stato rimosso durante la query", completed.id).into(),
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if Revision::of_bytes(current.bytes()) != completed.source_revision {
+            return Err(PluginError::Conflict(
+                format!("{} è cambiato durante la query", completed.id).into(),
+            ));
+        }
+        Ok(completed.result)
     }
 
     /// Completa la sola parte locale della risposta dopo l'esecuzione del
