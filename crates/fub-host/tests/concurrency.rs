@@ -683,9 +683,11 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
     host.wait_indexed(None)
         .expect("initial indexing finishes before the before-write probe");
     let ws = host.debug_workspace(None).expect("debug custody");
+    let workspace_probe = Arc::new(Mutex::new(Some(ws.clone())));
     let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
     let release_rx = Mutex::new(release_rx);
+    let workspace_probe_for_hook = Arc::clone(&workspace_probe);
     {
         let mut w = ws.write().expect("the vault is alive");
         w.register_core_feature(BEFORE_WRITE_LOCK_PLUGIN, "Audit detached before-write")
@@ -699,9 +701,24 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
                         "before-write re-entry returned the wrong note".into(),
                     ));
                 }
-                entered_tx.send(()).map_err(|_| {
-                    PluginError::Internal("before-write probe receiver disappeared".into())
-                })?;
+                let workspace = workspace_probe_for_hook
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .as_ref()
+                    .expect("the probe custody is installed")
+                    .clone();
+                let read = workspace.try_read();
+                let reader_progressed = read.is_some();
+                drop(read);
+                let write = workspace.try_write();
+                let writer_progressed = write.is_some();
+                drop(write);
+
+                entered_tx
+                    .send((reader_progressed, writer_progressed))
+                    .map_err(|_| {
+                        PluginError::Internal("before-write probe receiver disappeared".into())
+                    })?;
                 release_rx
                     .lock()
                     .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -724,17 +741,20 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
         );
         let _ = outcome_tx.send(outcome);
     });
-    entered_rx
+    let (reader_progressed, writer_progressed) = entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("before-write hook entered after a real HostApi read");
-    let reader_progressed = ws.try_read().is_some();
-    let writer_progressed = ws.try_write().is_some();
+    let foreign_reader_progressed = ws.try_read().is_some();
     release_tx.send(()).expect("release before-write hook");
     let outcome = outcome_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("the write returns after the before-write hook is released");
     call.join()
         .expect("the write thread finishes after delivering its outcome");
+    workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .take();
 
     assert!(
         reader_progressed,
@@ -743,6 +763,10 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
     assert!(
         writer_progressed,
         "Host::write_document held a read-lock across the before-write hook"
+    );
+    assert!(
+        foreign_reader_progressed,
+        "a foreign reader could not enter Custody<Workspace> during the before-write hook"
     );
     outcome.expect("write completes after detached before-write hook");
 }
