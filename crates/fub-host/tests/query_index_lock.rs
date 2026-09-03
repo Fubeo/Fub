@@ -431,7 +431,7 @@ fn a_provider_error_propagates_and_the_next_query_still_works() {
     let failed = job.query_index(query());
     assert!(
         matches!(&failed, Err(PluginError::BadArgs(message))
-            if message.to_string() == "errore intenzionale del provider"),
+            if *message == "errore intenzionale del provider"),
         "the provider error must propagate unchanged: {failed:?}"
     );
     assert_workspace_is_free(&workspace);
