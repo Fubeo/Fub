@@ -25,7 +25,6 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_abi::event::Event;
 use fub_abi::{PluginError, Severity};
 use fub_kernel::{ParsedChange, Workspace};
 
@@ -302,16 +301,12 @@ impl ExternalSync {
             for and in &flush_errors {
                 tracing::warn!(target: "fub.host", "flush index: {and}");
             }
-            ws.with_host("fub.host", |host| {
-                for and in flush_errors {
-                    host.emit(Event::Trouble {
-                        severity: Severity::Warning,
-                        subject: None,
-                        error: PluginError::Internal(format!("flush index: {and}").into()),
-                        gate: None,
-                    });
-                }
-            });
+            for and in flush_errors {
+                ws.report_host_trouble(
+                    Severity::Warning,
+                    PluginError::Internal(format!("flush index: {and}").into()),
+                );
+            }
         });
     }
 
@@ -334,16 +329,12 @@ impl ExternalSync {
             tracing::error!(target: "fub.host", "{reason}");
         }
         let _ = with_event_drain(&self.workspace, |ws| {
-            ws.with_host("fub.host", |host| {
-                for reason in reasons {
-                    host.emit(Event::Trouble {
-                        severity: Severity::Failure,
-                        subject: None,
-                        error: PluginError::Internal(reason.into()),
-                        gate: None,
-                    });
-                }
-            });
+            for reason in reasons {
+                ws.report_host_trouble(
+                    Severity::Failure,
+                    PluginError::Internal(reason.into()),
+                );
+            }
         });
     }
 }

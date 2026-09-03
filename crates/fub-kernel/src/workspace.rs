@@ -7355,6 +7355,20 @@ impl Workspace {
         });
     }
 
+    /// Accoda un guasto prodotto dal composition root dell'host.
+    ///
+    /// Il watcher non è un plugin e non deve attraversare un [`HostApi`]
+    /// intestato a un id fittizio: la guardia delle capacità filtrerebbe
+    /// correttamente quell'emissione. L'host chiama questa porta dentro il
+    /// proprio `with_event_drain`; qui si attribuisce il fatto al kernel e si
+    /// accoda soltanto il notice, così gli handler verranno invocati dopo che
+    /// il composition root avrà rilasciato la guardia del workspace.
+    pub fn report_host_trouble(&mut self, severity: Severity, error: PluginError) {
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.report_trouble(severity, None, error, None)
+        });
+    }
+
     /// giunzione fra le due voci, ed è l'unica ragione per cui vanno decise
     /// nella stessa seduta — un esito che nomina i documenti perduti e nessun
     /// posto dove portarlo è un canale senza destinazione.
