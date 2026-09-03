@@ -11,7 +11,8 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Event, PluginError};
-use fub_host::{Host, NoWatcher};
+use fub_host::{Custody, Host, NoWatcher};
+use fub_kernel::Workspace;
 
 const PLUGIN: &str = "fub.audit-view-stale";
 const OTHER_PLUGIN: &str = "fub.audit-view-other";
@@ -108,6 +109,7 @@ impl ViewProvider for BlockingRender {
 }
 
 struct BlockingAction {
+    workspace: Custody<Workspace>,
     entered: mpsc::SyncSender<()>,
     release: Mutex<mpsc::Receiver<()>>,
 }
@@ -131,6 +133,24 @@ impl ViewProvider for BlockingAction {
         _: UiAction,
         _: &mut dyn HostApi,
     ) -> Result<ViewUpdate, PluginError> {
+        if self.workspace.try_read().is_none() {
+            return Err(PluginError::Internal(
+                "a workspace read lock remained during the action".into(),
+            ));
+        }
+        self.workspace
+            .try_write()
+            .ok_or_else(|| {
+                PluginError::Internal("a workspace write lock remained during the action".into())
+            })?
+            .replace_view_provider(
+                PLUGIN,
+                Box::new(FixedView {
+                    view: VIEW,
+                    text: "new",
+                }),
+            )
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
         self.entered
             .send(())
             .map_err(|_| PluginError::Internal("action probe receiver disappeared".into()))?;
@@ -177,9 +197,10 @@ fn a_render_from_a_replaced_view_provider_is_rejected_as_stale() {
         }),
     );
 
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
     let call = std::thread::spawn(move || {
         let outcome = host.render_view(None, &ViewInstance::only(VIEW));
-        (host, outcome)
+        let _ = done_tx.send((host, outcome));
     });
     entered_rx
         .recv_timeout(TIMEOUT)
@@ -201,7 +222,10 @@ fn a_render_from_a_replaced_view_provider_is_rejected_as_stale() {
         .expect("replacement registers");
     release_tx.send(()).expect("old provider returns");
 
-    let (host, stale) = call.join().expect("render thread does not panic");
+    let (host, stale) = done_rx
+        .recv_timeout(TIMEOUT)
+        .expect("render thread finishes");
+    drop(call);
     assert_stale(stale);
 
     let prepared_error = workspace
@@ -249,18 +273,20 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
     declare_and_register(
         &host,
         Box::new(BlockingAction {
+            workspace: workspace.clone(),
             entered: entered_tx,
             release: Mutex::new(release_rx),
         }),
     );
 
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
     let call = std::thread::spawn(move || {
         let outcome = host.view_action(
             None,
             &ViewInstance::only(VIEW),
             UiAction::new("old"),
         );
-        (host, outcome)
+        let _ = done_tx.send((host, outcome));
     });
     entered_rx
         .recv_timeout(TIMEOUT)
@@ -269,20 +295,12 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
         workspace.try_read().is_some(),
         "no workspace read lock remains during the action"
     );
-    workspace
-        .try_write()
-        .expect("no workspace write lock remains during the action")
-        .replace_view_provider(
-            PLUGIN,
-            Box::new(FixedView {
-                view: VIEW,
-                text: "new",
-            }),
-        )
-        .expect("replacement registers");
     release_tx.send(()).expect("old provider returns");
 
-    let (host, stale) = call.join().expect("action thread does not panic");
+    let (host, stale) = done_rx
+        .recv_timeout(TIMEOUT)
+        .expect("action thread finishes");
+    drop(call);
     assert_stale(stale);
     assert_eq!(
         host.view_action(
