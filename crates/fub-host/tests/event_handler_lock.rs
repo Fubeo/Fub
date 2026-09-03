@@ -37,7 +37,7 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Event, Gate, PluginError};
-use fub_host::{Custody, ExternalChange, ExternalSync, Host, JobHost, NoWatcher};
+use fub_host::{Custody, ExternalSync, Host, JobHost, NoWatcher};
 use fub_kernel::{Trust, Workspace};
 
 const HANDLER: &str = "fub.audit-event-handler";
@@ -116,8 +116,8 @@ impl ProbeWorkspace {
 enum ExpectedEvent {
     Custom(&'static str),
     Document(&'static str),
-    Renamed(&'static str),
     Setting(&'static str),
+    Trouble(&'static str),
 }
 
 impl ExpectedEvent {
@@ -127,8 +127,10 @@ impl ExpectedEvent {
             (Self::Document(expected), Event::DocumentChanged { id, .. }) => {
                 id.as_str() == expected
             }
-            (Self::Renamed(expected), Event::DocumentRenamed { to, .. }) => to.as_str() == expected,
             (Self::Setting(expected), Event::SettingChanged { key, .. }) => key == expected,
+            (Self::Trouble(expected), Event::Trouble { error, .. }) => {
+                error.to_string().contains(expected)
+            }
             _ => false,
         }
     }
@@ -181,8 +183,8 @@ impl EventHandler for LockProbe {
         EventMask::of([
             EventKind::Custom,
             EventKind::DocumentChanged,
-            EventKind::DocumentRenamed,
             EventKind::SettingChanged,
+            EventKind::Trouble,
         ])
     }
 
@@ -421,19 +423,14 @@ fn host_setting_drains_event_handlers_outside_both_guards() {
 }
 
 #[test]
-fn watcher_sync_drains_event_handlers_outside_both_guards() {
-    let (vault, _host, workspace) = opened();
-    let renamed = vault.root.join("Renamed.md");
+fn watcher_failure_drains_event_handlers_outside_both_guards() {
+    let (_vault, _host, workspace) = opened();
     let (probe, observations, reentered) =
-        register_probe(&workspace, ExpectedEvent::Renamed("Renamed.md"));
-    let original = vault.root.join("Note.md");
-    std::fs::rename(&original, &renamed).expect("external rename succeeds");
+        register_probe(&workspace, ExpectedEvent::Trouble("audit watcher stopped"));
     let workspace_for_call = workspace.clone();
     run_detached(&workspace, observations, reentered, move || {
-        ExternalSync::new(workspace_for_call).batch(&[ExternalChange::Renamed {
-            from: original,
-            to: renamed,
-        }]);
+        ExternalSync::new(workspace_for_call)
+            .watch_died(vec!["audit watcher stopped".to_string()]);
         Ok(())
     });
     probe.detach();
