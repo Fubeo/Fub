@@ -27,6 +27,7 @@ use fub_host::{Custody, Host, JobHost, NoWatcher};
 use fub_kernel::{FormatRegistry, Trust, Workspace};
 
 const PLUGIN: &str = "fub.audit-projection-lock";
+const PIPELINE_MUTATOR: &str = "fub.audit-projection-mutator";
 const CUSTOM_KIND: &str = "fub.audit-projection-lock:block";
 const TIMEOUT: Duration = Duration::from_secs(10);
 const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -443,8 +444,8 @@ struct PassiveRenderer;
 impl CustomRenderer for PassiveRenderer {
     fn spec(&self) -> CustomRendererSpec {
         CustomRendererSpec {
-            id: format!("{PLUGIN}:later-renderer"),
-            kinds: vec![format!("{PLUGIN}:later-kind")],
+            id: format!("{PIPELINE_MUTATOR}:later-renderer"),
+            kinds: vec![format!("{PIPELINE_MUTATOR}:later-kind")],
         }
     }
 
@@ -477,7 +478,13 @@ fn a_projection_from_a_changed_pipeline_is_rejected_as_stale() {
     {
         let mut workspace = workspace.write().expect("workspace is free");
         workspace
-            .register_custom_renderer(PLUGIN, Box::new(PassiveRenderer))
+            .register_plugin(
+                PluginManifest::new(PIPELINE_MUTATOR, "Audit projection mutator"),
+                Trust::Community,
+            )
+            .expect("pipeline mutator declares");
+        workspace
+            .register_custom_renderer(PIPELINE_MUTATOR, Box::new(PassiveRenderer))
             .expect("pipeline changes");
     }
     release.send(()).expect("release render");

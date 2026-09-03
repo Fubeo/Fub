@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
-use fub_abi::traits::{HostApi, HostEvents, JobSpec, Plugin, PluginManifest};
+use fub_abi::traits::{HostApi, JobSpec, Plugin, PluginManifest};
 use fub_abi::{Event, PluginError};
 use fub_host::registry::Bundle;
 use fub_host::{Custody, Host, NoWatcher};
