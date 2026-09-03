@@ -429,8 +429,7 @@ fn watcher_failure_drains_event_handlers_outside_both_guards() {
         register_probe(&workspace, ExpectedEvent::Trouble("audit watcher stopped"));
     let workspace_for_call = workspace.clone();
     run_detached(&workspace, observations, reentered, move || {
-        ExternalSync::new(workspace_for_call)
-            .watch_died(vec!["audit watcher stopped".to_string()]);
+        ExternalSync::new(workspace_for_call).watch_died(vec!["audit watcher stopped".to_string()]);
         Ok(())
     });
     probe.detach();
