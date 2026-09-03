@@ -496,7 +496,10 @@ fn split_text(
     let mut rest = text;
     let mut matched = false;
     let mut search_from = 0;
-    while let Some(the) = rest[search_from..].find(open).map(|offset| search_from + offset) {
+    while let Some(the) = rest[search_from..]
+        .find(open)
+        .map(|offset| search_from + offset)
+    {
         let after = the + open.len();
         let Some(j) = rest[after..].find(close).map(|j| after + j) else {
             break;
