@@ -5604,10 +5604,7 @@ impl Workspace {
         if !indexed && !parseable_file {
             return Err(PluginError::NotFound(id.to_string().into()));
         }
-        let source = self
-            .docs
-            .source_from_disk(&id)
-            .map_err(PluginError::from)?;
+        let source = self.docs.source_from_disk(&id).map_err(PluginError::from)?;
         let source_revision = Revision::of_bytes(source.bytes());
         let parser = self.docs.prepare_parse(&id).map_err(PluginError::from)?;
         Ok(PreparedDocumentModel {
@@ -5646,11 +5643,7 @@ impl Workspace {
         };
         if Revision::of_bytes(current.bytes()) != completed.source_revision {
             return Err(PluginError::Conflict(
-                format!(
-                    "{} è cambiato durante la lettura del modello",
-                    completed.id
-                )
-                .into(),
+                format!("{} è cambiato durante la lettura del modello", completed.id).into(),
             ));
         }
         Ok(completed.model)

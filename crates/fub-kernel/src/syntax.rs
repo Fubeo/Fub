@@ -334,8 +334,7 @@ impl SyntaxRegistry {
             }
             match &r.spec.trigger {
                 SyntaxTrigger::Fence { info } => {
-                    let wanted: Vec<String> =
-                        info.iter().map(|the| the.to_lowercase()).collect();
+                    let wanted: Vec<String> = info.iter().map(|the| the.to_lowercase()).collect();
                     apply_to_blocks(&mut model.body, &mut |block| {
                         fence_rule(block, r, &wanted, ctx)
                     });
@@ -354,11 +353,7 @@ impl SyntaxRegistry {
 /// Invoca una regola col boundary stretto attorno alla sola callback esterna.
 /// Un errore o un panico fanno degradare **questa corrispondenza**: il prodotto
 /// non viene mai applicato a metà, e la camminata può proseguire sulle altre.
-fn invoke_rule(
-    r: &Registered,
-    matched: &SyntaxMatch,
-    ctx: &ParseContext,
-) -> Option<SyntaxProduct> {
+fn invoke_rule(r: &Registered, matched: &SyntaxMatch, ctx: &ParseContext) -> Option<SyntaxProduct> {
     let mut outcome = None;
     if let Some(fault) = crate::safety::reporting(&r.spec.id, Gate::SyntaxRule, "", || {
         outcome = Some(r.rule.apply(matched, ctx));

@@ -251,16 +251,10 @@ fn release_parse_and_syntax(
 #[test]
 fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
     let vault = vault("```audit-model\npayload\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) =
-        blocking_workspace(&vault);
+    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
-    release_parse_and_syntax(
-        &workspace,
-        &entered,
-        &parse_release,
-        &syntax_release,
-    );
+    release_parse_and_syntax(&workspace, &entered, &parse_release, &syntax_release);
     let model = done
         .recv_timeout(TIMEOUT)
         .expect("model read completes")
@@ -272,8 +266,7 @@ fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
 #[test]
 fn a_model_from_a_changed_source_is_rejected_as_stale_and_the_workspace_is_reusable() {
     let vault = vault("```audit-model\nbefore\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) =
-        blocking_workspace(&vault);
+    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
@@ -301,8 +294,7 @@ fn a_model_from_a_changed_source_is_rejected_as_stale_and_the_workspace_is_reusa
 #[test]
 fn a_model_from_a_removed_source_is_rejected_as_stale_and_the_workspace_is_reusable() {
     let vault = vault("```audit-model\nbefore\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) =
-        blocking_workspace(&vault);
+    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
@@ -321,8 +313,11 @@ fn a_model_from_a_removed_source_is_rejected_as_stale_and_the_workspace_is_reusa
     assert!(matches!(outcome, Err(PluginError::Conflict(_))));
 
     armed.store(false, Ordering::SeqCst);
-    std::fs::write(vault.root.join("Note.md"), "```audit-model\nrestored\n```\n")
-        .expect("restore source");
+    std::fs::write(
+        vault.root.join("Note.md"),
+        "```audit-model\nrestored\n```\n",
+    )
+    .expect("restore source");
     assert!(JobHost::new(workspace, PLUGIN)
         .read_model(&DocId::new("Note.md"))
         .is_ok());
@@ -356,15 +351,17 @@ impl SyntaxRule for LaterSyntax {
 #[test]
 fn a_model_from_a_changed_syntax_pipeline_is_rejected_as_stale() {
     let vault = vault("```audit-model\npayload\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) =
-        blocking_workspace(&vault);
+    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
         entered.recv_timeout(TIMEOUT).expect("parse entered"),
         Stage::Parse
     );
-    assert_workspace_is_free(&workspace, "FormatProvider::parse before syntax replacement");
+    assert_workspace_is_free(
+        &workspace,
+        "FormatProvider::parse before syntax replacement",
+    );
     workspace
         .write()
         .expect("workspace is free")
@@ -399,15 +396,17 @@ impl CustomRenderer for LaterRenderer {
 #[test]
 fn a_renderer_change_is_compatible_with_a_model_read() {
     let vault = vault("```audit-model\npayload\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) =
-        blocking_workspace(&vault);
+    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
         entered.recv_timeout(TIMEOUT).expect("parse entered"),
         Stage::Parse
     );
-    assert_workspace_is_free(&workspace, "FormatProvider::parse before renderer registration");
+    assert_workspace_is_free(
+        &workspace,
+        "FormatProvider::parse before renderer registration",
+    );
     workspace
         .write()
         .expect("workspace is free")
@@ -480,7 +479,10 @@ fn assert_parse_recovers(panic: bool) {
             .expect("format registers");
         let mut workspace = Workspace::new(&vault.root, formats).expect("workspace opens");
         workspace
-            .register_plugin(PluginManifest::core(PLUGIN, "Audit model lock"), Trust::Core)
+            .register_plugin(
+                PluginManifest::core(PLUGIN, "Audit model lock"),
+                Trust::Core,
+            )
             .expect("model caller declares");
         let workspace = Custody::new("the model workspace", workspace);
         let job = JobHost::new(workspace.clone(), PLUGIN);
@@ -491,6 +493,7 @@ fn assert_parse_recovers(panic: bool) {
             other => panic!("the first parse must fail, got {other:?}"),
         };
         if panic {
+            let message = message.to_string();
             assert!(
                 message.contains("`markdown`")
                     && message.contains("parsando `Note.md`")
@@ -499,7 +502,9 @@ fn assert_parse_recovers(panic: bool) {
             );
         } else {
             assert!(
-                message.contains("intentional format parse error"),
+                message
+                    .to_string()
+                    .contains("intentional format parse error"),
                 "the ordinary format error propagates: {message}"
             );
         }
@@ -554,9 +559,7 @@ impl SyntaxRule for FailsOnceSyntax {
             if self.panic {
                 panic!("intentional syntax rule panic");
             }
-            return Err(FormatError::Parse(
-                "intentional syntax rule error".into(),
-            ));
+            return Err(FormatError::Parse("intentional syntax rule error".into()));
         }
         Ok(Some(SyntaxProduct::Block {
             custom_kind: CUSTOM_KIND.into(),
@@ -688,7 +691,10 @@ fn format_metadata_is_not_called_by_job_read_or_borrowed_kernel_hosts() {
         .expect("format registers");
     let mut workspace = Workspace::new(&vault.root, formats).expect("workspace opens");
     workspace
-        .register_plugin(PluginManifest::core(PLUGIN, "Audit model lock"), Trust::Core)
+        .register_plugin(
+            PluginManifest::core(PLUGIN, "Audit model lock"),
+            Trust::Core,
+        )
         .expect("metadata caller declares");
     let workspace = Custody::new("the model workspace", workspace);
     let descriptors_before = descriptor_calls.load(Ordering::SeqCst);
@@ -718,7 +724,9 @@ fn format_metadata_is_not_called_by_job_read_or_borrowed_kernel_hosts() {
     ));
     {
         let workspace = workspace.read().expect("workspace lives");
-        assert!(workspace.with_read_host(PLUGIN, |host| host.format_of(&id)).is_some());
+        assert!(workspace
+            .with_read_host(PLUGIN, |host| host.format_of(&id))
+            .is_some());
         assert!(matches!(
             workspace.with_read_host(PLUGIN, |host| {
                 host.query_index(IndexQuery::SyntaxForms { doc: id.clone() })
@@ -731,7 +739,9 @@ fn format_metadata_is_not_called_by_job_read_or_borrowed_kernel_hosts() {
     }
     {
         let mut workspace = workspace.write().expect("workspace lives");
-        assert!(workspace.with_host(PLUGIN, |host| host.format_of(&id)).is_some());
+        assert!(workspace
+            .with_host(PLUGIN, |host| host.format_of(&id))
+            .is_some());
         assert!(matches!(
             workspace.with_host(PLUGIN, |host| {
                 host.query_index(IndexQuery::SyntaxForms { doc: id.clone() })
@@ -765,8 +775,7 @@ fn detached_model_reads_preserve_the_vault_read_gate() {
     let mut workspace = Workspace::new(&vault.root, formats).expect("workspace opens");
     workspace
         .register_plugin(
-            PluginManifest::new(PLUGIN, "Audit model lock")
-                .granting(PluginPermissions::of(&[])),
+            PluginManifest::new(PLUGIN, "Audit model lock").granting(PluginPermissions::of(&[])),
             Trust::Community,
         )
         .expect("model caller declares");
@@ -775,6 +784,6 @@ fn detached_model_reads_preserve_the_vault_read_gate() {
     assert!(matches!(
         outcome,
         Err(PluginError::PermissionDenied(message))
-            if message.contains(permission::READ_VAULT)
+            if message.to_string().contains(permission::READ_VAULT)
     ));
 }
