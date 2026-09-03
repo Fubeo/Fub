@@ -300,7 +300,7 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
     assert_stale(stale);
     assert_eq!(
         host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("new"),)
-        .expect("the replacement handles actions"),
+            .expect("the replacement handles actions"),
         ViewUpdate::None
     );
 }
@@ -394,7 +394,7 @@ fn action_error_and_panic_drain_events_and_leave_the_provider_reusable() {
 
     assert_eq!(
         host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("success"),)
-        .expect("the provider remains reusable"),
+            .expect("the provider remains reusable"),
         ViewUpdate::None
     );
     assert_eq!(seen.load(Ordering::SeqCst), 3);

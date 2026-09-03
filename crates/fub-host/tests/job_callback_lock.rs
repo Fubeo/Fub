@@ -15,6 +15,7 @@ use fub_kernel::{Subscription, Trust, Workspace};
 
 const PLUGIN: &str = "fub.audit-job-callback";
 const TIMEOUT: Duration = Duration::from_secs(10);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(2);
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -184,6 +185,31 @@ fn outcome(events: &Subscription) -> (String, Result<serde_json::Value, PluginEr
     panic!("the queued job did not produce an outcome before the timeout");
 }
 
+/// Il runner prende brevemente il workspace per consegnare code ed esiti.
+/// Una singola `try_write` misurerebbe quindi lo scheduler, non il confine del
+/// provider. Entrambe le guardie devono invece diventare disponibili entro un
+/// intervallo molto più corto del timeout della callback bloccata.
+fn both_guards_become_available(workspace: &Custody<Workspace>, timeout: Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    let mut read_seen = false;
+    let mut write_seen = false;
+    while std::time::Instant::now() < deadline {
+        let read = workspace.try_read();
+        read_seen |= read.is_some();
+        drop(read);
+
+        let write = workspace.try_write();
+        write_seen |= write.is_some();
+        drop(write);
+
+        if read_seen && write_seen {
+            return true;
+        }
+        std::thread::yield_now();
+    }
+    false
+}
+
 #[test]
 fn run_job_releases_both_workspace_guards_and_can_reenter_the_host() {
     let vault = vault();
@@ -199,31 +225,22 @@ fn run_job_releases_both_workspace_guards_and_can_reenter_the_host() {
     entered
         .recv_timeout(TIMEOUT)
         .expect("Plugin::run_job re-enters through JobHost and then blocks");
-    let read_available = workspace.try_read().is_some();
-    let write_available = workspace.try_write().is_some();
+    let guards_available = both_guards_become_available(&workspace, PROBE_TIMEOUT);
     release.send(()).expect("release the job callback");
     let (job, result) = outcome(&events);
-    let reusable_read = workspace.try_read().is_some();
-    let reusable_write = workspace.try_write().is_some();
+    let reusable = both_guards_become_available(&workspace, TIMEOUT);
     host.close();
 
     assert!(
-        read_available,
-        "the runner retained a workspace write-lock across Plugin::run_job"
-    );
-    assert!(
-        write_available,
-        "the runner retained a workspace read-lock across Plugin::run_job"
+        guards_available,
+        "the runner retained a workspace read-lock or write-lock across Plugin::run_job"
     );
     assert_eq!(job, "probe-lock");
     assert_eq!(
         result.expect("the detached job callback succeeds"),
         serde_json::json!({ "reentered": true })
     );
-    assert!(
-        reusable_read && reusable_write,
-        "the job left a lock behind"
-    );
+    assert!(reusable, "the job left a lock behind");
 }
 
 #[test]
@@ -239,13 +256,11 @@ fn a_job_error_propagates_and_the_next_job_reuses_the_workspace() {
 
     ask(&host, "fail");
     let (job, result) = outcome(&events);
-    let read_after_error = workspace.try_read().is_some();
-    let write_after_error = workspace.try_write().is_some();
+    let guards_after_error = both_guards_become_available(&workspace, TIMEOUT);
 
     ask(&host, "recover");
     let (next_job, next_result) = outcome(&events);
-    let read_after_recovery = workspace.try_read().is_some();
-    let write_after_recovery = workspace.try_write().is_some();
+    let guards_after_recovery = both_guards_become_available(&workspace, TIMEOUT);
     host.close();
 
     assert_eq!(job, "fail");
@@ -255,7 +270,7 @@ fn a_job_error_propagates_and_the_next_job_reuses_the_workspace() {
         "the job error changed at the runner boundary: {result:?}"
     );
     assert!(
-        read_after_error && write_after_error,
+        guards_after_error,
         "an ordinary job error left a workspace guard held"
     );
     assert_eq!(next_job, "recover");
@@ -264,7 +279,7 @@ fn a_job_error_propagates_and_the_next_job_reuses_the_workspace() {
         serde_json::json!({ "source": "# Nota\n" })
     );
     assert!(
-        read_after_recovery && write_after_recovery,
+        guards_after_recovery,
         "the recovered job left the workspace unusable"
     );
 }
