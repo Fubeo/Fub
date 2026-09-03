@@ -5621,9 +5621,7 @@ impl Workspace {
             return Ok(None);
         }
         let (id, resolved_page, kind) = match query {
-            IndexQuery::RenderPreview { doc } => {
-                (doc.clone(), None, LocalProjectionKind::Preview)
-            }
+            IndexQuery::RenderPreview { doc } => (doc.clone(), None, LocalProjectionKind::Preview),
             IndexQuery::RenderEmbed {
                 page,
                 heading,
@@ -5688,7 +5686,11 @@ impl Workspace {
             .is_some_and(|page| self.resolve_link(page).as_ref() != Some(&completed.id))
         {
             return Err(PluginError::Conflict(
-                format!("il riferimento a {} è cambiato durante la query", completed.id).into(),
+                format!(
+                    "il riferimento a {} è cambiato durante la query",
+                    completed.id
+                )
+                .into(),
             ));
         }
         let current = match self.docs.source_from_disk(&completed.id) {

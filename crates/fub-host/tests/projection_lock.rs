@@ -263,11 +263,7 @@ impl CustomRenderer for BlockingRenderer {
         }
     }
 
-    fn render(
-        &self,
-        _: &CustomBlock,
-        _: &RenderOptions,
-    ) -> Result<CustomRendering, FormatError> {
+    fn render(&self, _: &CustomBlock, _: &RenderOptions) -> Result<CustomRendering, FormatError> {
         self.entered
             .send(Stage::Render)
             .map_err(|_| FormatError::Render("renderer probe receiver disappeared".into()))?;
@@ -449,11 +445,7 @@ impl CustomRenderer for PassiveRenderer {
         }
     }
 
-    fn render(
-        &self,
-        _: &CustomBlock,
-        _: &RenderOptions,
-    ) -> Result<CustomRendering, FormatError> {
+    fn render(&self, _: &CustomBlock, _: &RenderOptions) -> Result<CustomRendering, FormatError> {
         Ok(CustomRendering::Fallback)
     }
 }
@@ -594,7 +586,8 @@ fn assert_format_render_recovers(panic: bool) {
     done_rx
         .recv_timeout(TIMEOUT)
         .expect("error cleanup and recovery complete before the timeout");
-    call.join().expect("completed recovery thread does not panic");
+    call.join()
+        .expect("completed recovery thread does not panic");
 }
 
 #[test]

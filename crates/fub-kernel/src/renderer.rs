@@ -313,14 +313,7 @@ pub(crate) fn compose(
         match rendering {
             CustomRendering::Fallback => run.push(block.clone()),
             CustomRendering::Html(html) => {
-                flush(
-                    &mut run,
-                    model,
-                    provider_id,
-                    provider,
-                    opts,
-                    &mut out.html,
-                )?;
+                flush(&mut run, model, provider_id, provider, opts, &mut out.html)?;
                 out.html.push_str(&html);
             }
             CustomRendering::Ui(node) => {
@@ -330,14 +323,7 @@ pub(crate) fn compose(
                     run.push(block.clone());
                     continue;
                 }
-                flush(
-                    &mut run,
-                    model,
-                    provider_id,
-                    provider,
-                    opts,
-                    &mut out.html,
-                )?;
+                flush(&mut run, model, provider_id, provider, opts, &mut out.html)?;
                 out.html.push_str(&slot_html(slot, custom_kind));
                 out.parts.push(RenderedPart {
                     slot,
@@ -348,14 +334,7 @@ pub(crate) fn compose(
             }
         }
     }
-    flush(
-        &mut run,
-        model,
-        provider_id,
-        provider,
-        opts,
-        &mut out.html,
-    )?;
+    flush(&mut run, model, provider_id, provider, opts, &mut out.html)?;
     Ok(out)
 }
 
