@@ -495,7 +495,8 @@ fn split_text(
 ) {
     let mut rest = text;
     let mut matched = false;
-    while let Some(the) = rest.find(open) {
+    let mut search_from = 0;
+    while let Some(the) = rest[search_from..].find(open).map(|offset| search_from + offset) {
         let after = the + open.len();
         let Some(j) = rest[after..].find(close).map(|j| after + j) else {
             break;
@@ -517,12 +518,15 @@ fn split_text(
             _ => None,
         };
         let Some((custom_kind, attrs)) = product else {
-            // Declina o fallisce: si salta l'apertura e si continua a cercare,
-            // invece di fermarsi — un `$` isolato non deve spegnere la regola
-            // per il resto del paragrafo.
+            // Declina o fallisce: questa corrispondenza resta testo base e la
+            // ricerca riparte **dopo la sua chiusura**. Ripartire subito dopo
+            // l'apertura farebbe scambiare la chiusura per una nuova apertura
+            // quando i due delimitatori coincidono (`==…==`).
+            let resume = j + close.len() - after;
             let (head, tail) = rest.split_at(after);
             out.push(Inline::Text(head.to_string()));
             rest = tail;
+            search_from = resume;
             matched = true;
             continue;
         };
@@ -535,6 +539,7 @@ fn split_text(
             span,
         });
         rest = &rest[j + close.len()..];
+        search_from = 0;
         matched = true;
     }
     if !rest.is_empty() || !matched {
