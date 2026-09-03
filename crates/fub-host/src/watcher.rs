@@ -330,10 +330,7 @@ impl ExternalSync {
         }
         let _ = with_event_drain(&self.workspace, |ws| {
             for reason in reasons {
-                ws.report_host_trouble(
-                    Severity::Failure,
-                    PluginError::Internal(reason.into()),
-                );
+                ws.report_host_trouble(Severity::Failure, PluginError::Internal(reason.into()));
             }
         });
     }
