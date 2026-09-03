@@ -680,6 +680,8 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
     let _turn = bench_turn();
     let v = vault(4);
     let host = open(&v);
+    host.wait_indexed(None)
+        .expect("initial indexing finishes before the before-write probe");
     let ws = host.debug_workspace(None).expect("debug custody");
     let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
     let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
@@ -712,37 +714,114 @@ fn the_before_write_hook_runs_without_holding_the_workspace_lock() {
         )));
     }
 
+    let (outcome_tx, outcome_rx) = std::sync::mpsc::sync_channel(1);
     let call = std::thread::spawn(move || {
-        host.write_document(
+        let outcome = host.write_document(
             None,
             &DocId::new("Note 0.md"),
             "# Note 0\nchanged by before-write probe\n",
             WriteBase::Dictated,
-        )
+        );
+        let _ = outcome_tx.send(outcome);
     });
     entered_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("before-write hook entered after a real HostApi read");
-    let (reader_tx, reader_rx) = std::sync::mpsc::sync_channel(1);
-    let reader = {
-        let ws = ws.clone();
-        std::thread::spawn(move || {
-            let acquired = ws.read().is_ok();
-            let _ = reader_tx.send(acquired);
-        })
-    };
-    let reader_progressed = reader_rx
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap_or(false);
+    let reader_progressed = ws.try_read().is_some();
+    let writer_progressed = ws.try_write().is_some();
     release_tx.send(()).expect("release before-write hook");
-    reader.join().expect("reader probe finishes");
-    let outcome = call.join().expect("write thread does not panic");
+    let outcome = outcome_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the write returns after the before-write hook is released");
+    call.join()
+        .expect("the write thread finishes after delivering its outcome");
 
     assert!(
         reader_progressed,
-        "Host::write_document held Custody<Workspace> across the before-write hook"
+        "Host::write_document held a write-lock across the before-write hook"
+    );
+    assert!(
+        writer_progressed,
+        "Host::write_document held a read-lock across the before-write hook"
     );
     outcome.expect("write completes after detached before-write hook");
+}
+
+#[test]
+fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
+    let _turn = bench_turn();
+    let v = vault(4);
+    let host = open(&v);
+    host.wait_indexed(None)
+        .expect("initial indexing finishes before the before-write error probe");
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let first = Arc::new(AtomicBool::new(true));
+    {
+        let mut workspace = ws.write().expect("the vault is alive");
+        workspace
+            .register_core_feature(BEFORE_WRITE_LOCK_PLUGIN, "Audit detached before-write")
+            .expect("hook owner declares");
+        workspace.set_before_write_hook(Some((
+            BEFORE_WRITE_LOCK_PLUGIN.to_string(),
+            {
+                let first = Arc::clone(&first);
+                Arc::new(move |_host, _id| {
+                    if first.swap(false, Ordering::SeqCst) {
+                        Err(PluginError::BadArgs(
+                            "errore intenzionale del before-write".into(),
+                        ))
+                    } else {
+                        Ok(())
+                    }
+                })
+            },
+        )));
+    }
+
+    let original = host
+        .read_document(None, &DocId::new("Note 0.md"))
+        .expect("the original document is readable")
+        .0;
+    let failed = host.write_document(
+        None,
+        &DocId::new("Note 0.md"),
+        "# Note 0\nshould not be written\n",
+        WriteBase::Dictated,
+    );
+    let read_after_error = ws.try_read().is_some();
+    let write_after_error = ws.try_write().is_some();
+    let source_after_error = host
+        .read_document(None, &DocId::new("Note 0.md"))
+        .expect("the document remains readable")
+        .0;
+
+    let recovered = host.write_document(
+        None,
+        &DocId::new("Note 0.md"),
+        "# Note 0\nwritten after the hook error\n",
+        WriteBase::Dictated,
+    );
+    let read_after_recovery = ws.try_read().is_some();
+    let write_after_recovery = ws.try_write().is_some();
+
+    assert!(
+        matches!(&failed, Err(PluginError::BadArgs(_))),
+        "the before-write error did not propagate through the write: {failed:?}"
+    );
+    assert_eq!(
+        source_after_error,
+        original,
+        "a rejected before-write partially finalized the document"
+    );
+    assert!(
+        read_after_error && write_after_error,
+        "a before-write error left a workspace guard held"
+    );
+    recovered.expect("the next write succeeds after the hook recovers");
+    assert!(
+        read_after_recovery && write_after_recovery,
+        "the recovered before-write left the workspace unusable"
+    );
 }
 
 const PARSE_LOCK_PLUGIN: &str = "com.fub.auditparse";
