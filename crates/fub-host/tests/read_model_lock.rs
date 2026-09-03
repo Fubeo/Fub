@@ -167,15 +167,15 @@ impl SyntaxRule for BlockingSyntax {
     }
 }
 
-fn blocking_workspace(
-    vault: &Vault,
-) -> (
-    Custody<Workspace>,
-    Arc<AtomicBool>,
-    mpsc::Receiver<Stage>,
-    mpsc::SyncSender<()>,
-    mpsc::SyncSender<()>,
-) {
+struct BlockingWorkspace {
+    workspace: Custody<Workspace>,
+    armed: Arc<AtomicBool>,
+    entered: mpsc::Receiver<Stage>,
+    parse_release: mpsc::SyncSender<()>,
+    syntax_release: mpsc::SyncSender<()>,
+}
+
+fn blocking_workspace(vault: &Vault) -> BlockingWorkspace {
     let (entered_tx, entered_rx) = mpsc::sync_channel(1);
     let (parse_release_tx, parse_release_rx) = mpsc::sync_channel(1);
     let (syntax_release_tx, syntax_release_rx) = mpsc::sync_channel(1);
@@ -205,13 +205,13 @@ fn blocking_workspace(
             }),
         )
         .expect("syntax registers");
-    (
-        Custody::new("the model workspace", workspace),
+    BlockingWorkspace {
+        workspace: Custody::new("the model workspace", workspace),
         armed,
-        entered_rx,
-        parse_release_tx,
-        syntax_release_tx,
-    )
+        entered: entered_rx,
+        parse_release: parse_release_tx,
+        syntax_release: syntax_release_tx,
+    }
 }
 
 fn start_read(
@@ -251,7 +251,13 @@ fn release_parse_and_syntax(
 #[test]
 fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
     let vault = vault("```audit-model\npayload\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        syntax_release,
+    } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     release_parse_and_syntax(&workspace, &entered, &parse_release, &syntax_release);
@@ -266,7 +272,13 @@ fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
 #[test]
 fn a_model_from_a_changed_source_is_rejected_as_stale_and_the_workspace_is_reusable() {
     let vault = vault("```audit-model\nbefore\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        syntax_release,
+    } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
@@ -294,7 +306,13 @@ fn a_model_from_a_changed_source_is_rejected_as_stale_and_the_workspace_is_reusa
 #[test]
 fn a_model_from_a_removed_source_is_rejected_as_stale_and_the_workspace_is_reusable() {
     let vault = vault("```audit-model\nbefore\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        syntax_release,
+    } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
@@ -351,7 +369,13 @@ impl SyntaxRule for LaterSyntax {
 #[test]
 fn a_model_from_a_changed_syntax_pipeline_is_rejected_as_stale() {
     let vault = vault("```audit-model\npayload\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        syntax_release,
+    } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
@@ -396,7 +420,13 @@ impl CustomRenderer for LaterRenderer {
 #[test]
 fn a_renderer_change_is_compatible_with_a_model_read() {
     let vault = vault("```audit-model\npayload\n```\n");
-    let (workspace, armed, entered, parse_release, syntax_release) = blocking_workspace(&vault);
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        syntax_release,
+    } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
     assert_eq!(
