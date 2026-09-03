@@ -166,7 +166,9 @@ impl ServiceProvider for BlockingService {
     }
 }
 
-fn boundary(workspace: &Custody<Workspace>) -> (
+fn boundary(
+    workspace: &Custody<Workspace>,
+) -> (
     Arc<BlockingBoundary>,
     mpsc::Receiver<LockObservation>,
     mpsc::SyncSender<()>,

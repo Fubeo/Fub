@@ -281,11 +281,7 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
 
     let (done_tx, done_rx) = mpsc::sync_channel(1);
     let call = std::thread::spawn(move || {
-        let outcome = host.view_action(
-            None,
-            &ViewInstance::only(VIEW),
-            UiAction::new("old"),
-        );
+        let outcome = host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("old"));
         let _ = done_tx.send((host, outcome));
     });
     entered_rx
@@ -303,11 +299,7 @@ fn an_action_from_a_replaced_view_provider_is_rejected_as_stale() {
     drop(call);
     assert_stale(stale);
     assert_eq!(
-        host.view_action(
-            None,
-            &ViewInstance::only(VIEW),
-            UiAction::new("new"),
-        )
+        host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("new"),)
         .expect("the replacement handles actions"),
         ViewUpdate::None
     );
@@ -388,19 +380,11 @@ fn action_error_and_panic_drain_events_and_leave_the_provider_reusable() {
             .expect("view registers");
     }
 
-    let error = host.view_action(
-        None,
-        &ViewInstance::only(VIEW),
-        UiAction::new("error"),
-    );
+    let error = host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("error"));
     assert!(matches!(error, Err(PluginError::BadArgs(_))));
     assert_eq!(seen.load(Ordering::SeqCst), 1, "error events are drained");
 
-    let panic = host.view_action(
-        None,
-        &ViewInstance::only(VIEW),
-        UiAction::new("panic"),
-    );
+    let panic = host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("panic"));
     assert!(
         matches!(&panic, Err(PluginError::Internal(message))
             if message.to_string().contains("panico")),
@@ -409,11 +393,7 @@ fn action_error_and_panic_drain_events_and_leave_the_provider_reusable() {
     assert_eq!(seen.load(Ordering::SeqCst), 2, "panic events are drained");
 
     assert_eq!(
-        host.view_action(
-            None,
-            &ViewInstance::only(VIEW),
-            UiAction::new("success"),
-        )
+        host.view_action(None, &ViewInstance::only(VIEW), UiAction::new("success"),)
         .expect("the provider remains reusable"),
         ViewUpdate::None
     );

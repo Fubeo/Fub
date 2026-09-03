@@ -74,9 +74,7 @@ impl Plugin for JobProbe {
                     })?;
                 Ok(serde_json::json!({ "reentered": true }))
             }
-            "fail" => Err(PluginError::BadArgs(
-                "errore intenzionale del job".into(),
-            )),
+            "fail" => Err(PluginError::BadArgs("errore intenzionale del job".into())),
             "recover" => Ok(serde_json::json!({
                 "source": host.read_document(&DocId::new("Nota.md"))?
             })),
@@ -222,7 +220,10 @@ fn run_job_releases_both_workspace_guards_and_can_reenter_the_host() {
         result.expect("the detached job callback succeeds"),
         serde_json::json!({ "reentered": true })
     );
-    assert!(reusable_read && reusable_write, "the job left a lock behind");
+    assert!(
+        reusable_read && reusable_write,
+        "the job left a lock behind"
+    );
 }
 
 #[test]

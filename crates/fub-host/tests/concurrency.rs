@@ -761,21 +761,18 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         workspace
             .register_core_feature(BEFORE_WRITE_LOCK_PLUGIN, "Audit detached before-write")
             .expect("hook owner declares");
-        workspace.set_before_write_hook(Some((
-            BEFORE_WRITE_LOCK_PLUGIN.to_string(),
-            {
-                let first = Arc::clone(&first);
-                Arc::new(move |_host, _id| {
-                    if first.swap(false, Ordering::SeqCst) {
-                        Err(PluginError::BadArgs(
-                            "errore intenzionale del before-write".into(),
-                        ))
-                    } else {
-                        Ok(())
-                    }
-                })
-            },
-        )));
+        workspace.set_before_write_hook(Some((BEFORE_WRITE_LOCK_PLUGIN.to_string(), {
+            let first = Arc::clone(&first);
+            Arc::new(move |_host, _id| {
+                if first.swap(false, Ordering::SeqCst) {
+                    Err(PluginError::BadArgs(
+                        "errore intenzionale del before-write".into(),
+                    ))
+                } else {
+                    Ok(())
+                }
+            })
+        })));
     }
 
     let original = host
@@ -809,8 +806,7 @@ fn a_before_write_error_aborts_the_write_and_the_next_write_still_works() {
         "the before-write error did not propagate through the write: {failed:?}"
     );
     assert_eq!(
-        source_after_error,
-        original,
+        source_after_error, original,
         "a rejected before-write partially finalized the document"
     );
     assert!(
