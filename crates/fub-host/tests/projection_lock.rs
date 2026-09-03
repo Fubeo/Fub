@@ -163,7 +163,10 @@ fn blocking_workspace(
     let mut workspace = Workspace::new(&vault.root, formats).expect("workspace opens");
     workspace.reindex().expect("workspace indexes");
     workspace
-        .register_core_feature(PLUGIN, "Audit projection lock")
+        .register_plugin(
+            PluginManifest::core(PLUGIN, "Audit projection lock"),
+            Trust::Core,
+        )
         .expect("query caller declares");
     (
         Custody::new("the projection workspace", workspace),
