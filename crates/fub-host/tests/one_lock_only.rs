@@ -103,6 +103,7 @@ fn allowed_locks() -> BTreeMap<&'static str, Why> {
 /// esattamente nella build in cui nessuno lo compila.
 const SOURCES: &[(&str, &str)] = &[
     ("src/lib.rs", include_str!("../src/lib.rs")),
+    ("src/query.rs", include_str!("../src/query.rs")),
     ("src/session.rs", include_str!("../src/session.rs")),
     ("src/runner.rs", include_str!("../src/runner.rs")),
     ("src/watcher.rs", include_str!("../src/watcher.rs")),
