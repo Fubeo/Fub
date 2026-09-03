@@ -600,6 +600,56 @@ fn closing_twice_does_not_close_twice() {
     assert!(ws.is_closed());
 }
 
+/// La radice non è l'identità di un workspace: una sessione ritirata e quella
+/// riaperta sullo stesso vault hanno lo stesso path. I token possono quindi
+/// essere scambiati per errore proprio nel caso in cui il vecchio confronto
+/// della radice li avrebbe accettati. Il nonce rifiuta entrambi senza avviare
+/// una finalizzazione parziale e riconsegna i token ai proprietari corretti.
+#[test]
+fn close_tokens_cannot_be_swapped_between_workspaces_on_the_same_root() {
+    let bench = Bench::new();
+    let mut first = bench.workspace();
+    let mut replacement = bench.workspace();
+    let first_token = first.prepare_close().expect("first close prepares");
+    let replacement_token = replacement
+        .prepare_close()
+        .expect("replacement close prepares");
+
+    let (first_token, first_error) = match replacement
+        .finish_close_with(first_token, |_, _| Vec::new())
+    {
+        Ok(_) => panic!("the replacement accepted the retired workspace token"),
+        Err(rejected) => rejected,
+    };
+    let (replacement_token, replacement_error) =
+        match first.finish_close_with(replacement_token, |_, _| Vec::new()) {
+            Ok(_) => panic!("the retired workspace accepted its replacement token"),
+            Err(rejected) => rejected,
+        };
+    assert!(matches!(first_error, PluginError::Conflict(_)));
+    assert!(matches!(replacement_error, PluginError::Conflict(_)));
+    assert_eq!(first.plugins().len(), 2, "mismatch did not finalize first");
+    assert_eq!(
+        replacement.plugins().len(),
+        2,
+        "mismatch did not finalize replacement"
+    );
+
+    let first_errors = first
+        .finish_close_with(first_token, |_, _| Vec::new())
+        .expect("the token returns to the first workspace");
+    let replacement_errors = replacement
+        .finish_close_with(replacement_token, |_, _| Vec::new())
+        .expect("the token returns to the replacement workspace");
+    assert!(first_errors.is_empty(), "first closes: {first_errors:?}");
+    assert!(
+        replacement_errors.is_empty(),
+        "replacement closes: {replacement_errors:?}"
+    );
+    assert!(first.plugins().is_empty());
+    assert!(replacement.plugins().is_empty());
+}
+
 // --- la guardia dei job in chiusura ----------------------------------------
 
 /// Un handler che, ricevendo l'ultimo giro, chiede un job — **due volte**, per

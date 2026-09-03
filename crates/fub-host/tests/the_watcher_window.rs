@@ -1,18 +1,20 @@
 //! **Il rilevatore parte prima della scansione e non perde il primo lotto**
 //! (§15.7, [decisione 0070](../../../docs/decisions/0183-composizione-host-kernel.md)):
-//! l'apertura tiene il write-lock mentre avvia il watcher, fotografa il vault,
-//! registra il subscriber live e crea il job iniziale.
+//! l'apertura tiene il writer turn (non il `RwLock`) mentre avvia il watcher,
+//! fotografa il vault, registra il subscriber live e crea il job iniziale. Su
+//! rollback libera quel turno prima di aspettare i thread del watcher.
 //!
 //! La prova vive dove quell'ordine viene montato — nell'apertura, fatta di
 //! thread — e quindi sta qui, nel crate che quei thread li monta. La forma è
 //! quella delle altre: un `Host` vero, un sink che registra ciò che esce, e un
 //! rilevatore **finto**, per non provare il debouncer insieme al protocollo.
 //!
-//! Il trucco della prova è sincronizzare il thread del fake con il lock di
+//! Il trucco della prova è sincronizzare il thread del fake con il **turno** di
 //! apertura: `start` parte prima della scansione, poi aspetta che il thread
-//! abbia tentato la propria lettura. Quella lettura resta bloccata finché
+//! abbia tentato la propria scrittura. Quel writer resta bloccato finché
 //! subscriber live e job iniziale non sono installati; solo dopo il thread
-//! scrive, sincronizza e consegna il lotto.
+//! scrive il file, sincronizza e consegna il lotto. Il callback `start` stesso
+//! non ha invece nessun lock del workspace, come verifica il banco dedicato.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -45,7 +47,7 @@ impl Drop for WatcherWindow {
 }
 
 /// La fabbrica che avvia il rilevatore prima della scansione: il suo callback
-/// tenta una lettura, resta trattenuto dal lock di apertura e poi consegna il
+/// tenta una scrittura, resta trattenuto dal turno di apertura e poi consegna il
 /// cambiamento attraverso [`ExternalSync::batch`].
 struct Window {
     ready: Mutex<Receiver<()>>,
@@ -65,9 +67,9 @@ impl WatcherFactory for Window {
         let handle = std::thread::spawn(move || {
             attempted
                 .send(())
-                .expect("watcher reached the workspace read");
-            let read = workspace.read().expect("the workspace is not poisoned");
-            drop(read);
+                .expect("watcher reached the workspace write");
+            let write = workspace.write().expect("the workspace is not poisoned");
+            drop(write);
             std::fs::write(&notes, "dopo\n").expect("event after live setup");
             let mut sync = ExternalSync::new(workspace);
             sync.batch(&[ExternalChange::Touched(notes)]);
@@ -120,9 +122,10 @@ fn watcher_started_before_scan_delivers_one_change_after_live_setup() {
 
     host.open(&root).expect("vault opens");
 
-    // `start` ha atteso `attempted` mentre teneva il write-lock; il thread ha
-    // quindi potuto superare `workspace.read()` solo dopo subscriber live e
-    // `begin_index_job`. Ora il ponte deve consegnare il cambiamento esterno.
+    // `start` ha atteso `attempted` mentre teneva il turno di apertura; il
+    // thread ha quindi potuto superare `workspace.write()` solo dopo subscriber
+    // live e `begin_index_job`. Ora il ponte deve consegnare il cambiamento
+    // esterno.
     let mut seen = Vec::new();
     loop {
         let notice = entered

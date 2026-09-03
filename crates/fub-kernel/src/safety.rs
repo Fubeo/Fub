@@ -118,6 +118,29 @@ pub fn calling<R>(
     caught(who, gate, detail, |m| PluginError::Internal(m.into()), f)
 }
 
+/// Isola una callback esterna che non appartiene a una porta dell'ABI.
+///
+/// [`Gate`] censisce le chiamate del kernel ai provider del contratto. Alcuni
+/// adattatori dell'host — per esempio la fabbrica del watcher — sono comunque
+/// codice esterno e possono paniare, ma non producono un `Event::Trouble`
+/// perché vengono eseguiti prima che il vault e il suo bus esistano. Questa è
+/// la stessa rete di [`caught`], senza inventare una porta ABI che nessun
+/// evento può osservare.
+///
+/// `context` deve descrivere la callback completa. Il chiamante mantiene la
+/// rete stretta attorno alla sola invocazione esterna, così i ripristini che la
+/// circondano continuano a essere eseguiti sul ramo d'errore.
+pub fn external<R, E>(
+    context: &str,
+    wrap: impl FnOnce(String) -> E,
+    f: impl FnOnce() -> Result<R, E>,
+) -> Result<R, E> {
+    match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(out) => out,
+        Err(payload) => Err(wrap(format!("{context}: {}", why(payload)))),
+    }
+}
+
 /// Come [`calling`], per chi risponde di no in un'altra lingua: `wrap` è la
 /// variante d'errore in cui il panico si traduce.
 ///

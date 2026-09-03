@@ -49,7 +49,7 @@
 //! [`Workspace::reindex`].
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -119,6 +119,13 @@ use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
 use crate::vault::TrashEntry;
 use crate::viewstate::ViewStates;
+
+/// Identità process-local di un'istanza `Workspace`.
+///
+/// Non è una versione persistita e non attraversa alcun confine: distingue due
+/// workspace costruiti sulla stessa radice, così un token preparato da quello
+/// ritirato non può finalizzare il suo sostituto.
+static NEXT_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Il pannello di una shell che ne ha uno solo.
 ///
@@ -961,6 +968,21 @@ pub struct DeferredEvents<T> {
     journal: Option<JournalOp>,
 }
 
+/// Diritto monouso a completare una chiusura già annunciata.
+///
+/// [`Workspace::prepare_close`] alza la generazione terminale del workspace
+/// (`closed`) e accoda `VaultClosed`; da quel momento nessun'altra prepare può
+/// riuscire. Il token non è clonabile e i suoi campi sono privati: l'host lo
+/// conserva mentre drena l'evento fuori da `Custody<Workspace>`, quindi lo
+/// riconsegna una volta sola a [`Workspace::finish_close_with`]. Un nonce
+/// process-local impedisce che venga accettato da un'altra istanza aperta sulla
+/// stessa radice.
+#[derive(Debug)]
+pub struct PreparedClose {
+    root: String,
+    workspace_id: u64,
+}
+
 impl<T> DeferredEvents<T> {
     fn outcome(outcome: T) -> Self {
         Self {
@@ -1115,6 +1137,8 @@ impl PreparedDocumentWrite {
 }
 
 pub struct Workspace {
+    /// Nonce process-local che lega i token opachi a questa istanza precisa.
+    workspace_id: u64,
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
     /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
     /// li attraversa tutti e quattro.
@@ -1449,6 +1473,7 @@ impl Workspace {
         // L'anagrafe è **del vault**, come l'organizzazione: si apre col
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
         Ok(Workspace {
+            workspace_id: NEXT_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed),
             docs: DocumentStore::new(
                 root,
                 Arc::clone(&registry),
@@ -2086,6 +2111,31 @@ impl Workspace {
         self.close_with(|_, _| Vec::new())
     }
 
+    /// Annuncia una chiusura senza chiamare alcun provider.
+    ///
+    /// `closed` è la versione che invalida un secondo tentativo: una volta
+    /// prodotto il token, lo stesso workspace non può essere preparato di
+    /// nuovo. Le scritture compiute da un handler di `VaultClosed` sono invece
+    /// compatibili e intenzionali: chi monta dietro `Custody` conserva il
+    /// writer turn, drena gli handler senza guardie e le include nel flush che
+    /// segue. La sostituzione concorrente di un provider non può attraversare
+    /// quel turno; il token, monouso, impedisce la doppia finalizzazione.
+    pub fn prepare_close(&mut self) -> Option<PreparedClose> {
+        if self.closed {
+            return None;
+        }
+        self.closed = true;
+
+        let root = self.docs.vault.root().to_string();
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::VaultClosed { root: root.clone() });
+        });
+        Some(PreparedClose {
+            root,
+            workspace_id: self.workspace_id,
+        })
+    }
+
     /// `stopping` gira su ciascuno subito prima che il kernel lo disattivi, ed è
     /// il posto in cui chi possiede i bundle chiama
     /// [`Plugin::deactivate`](fub_abi::traits::Plugin::deactivate) (§9.3).
@@ -2108,18 +2158,49 @@ impl Workspace {
     // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da
     pub fn close_with(
         &mut self,
-        mut stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
+        stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
     ) -> Vec<PluginError> {
-        if self.closed {
+        let Some(prepared) = self.prepare_close() else {
             return Vec::new();
+        };
+        self.dispatch_pending();
+        match self.finish_close_with(prepared, stopping) {
+            Ok(errors) => errors,
+            Err((_prepared, error)) => vec![error],
         }
-        self.closed = true;
+    }
 
-        let root = self.docs.vault.root().to_string();
-        self.as_actor(Actor::Kernel, |ws| {
-            ws.emit_event(Event::VaultClosed { root });
-            ws.dispatch_pending();
-        });
+    /// Completa una chiusura preparata dopo che `VaultClosed` è stato drenato.
+    ///
+    /// Il metodo non riemette il terminale e consuma il token. L'identità
+    /// process-local valida il token anche se due istanze hanno la **stessa**
+    /// radice; un mismatch restituisce token ed errore senza toccare il
+    /// workspace, così il chiamante può riconsegnarlo al proprietario giusto.
+    /// Nel percorso host il writer turn tenuto fra prepare e finalize esclude
+    /// inoltre qualsiasi writer concorrente.
+    ///
+    /// Questo confine riguarda soltanto gli `EventHandler` del terminale:
+    /// `flush_indexes`, `IndexProvider::close`, `stopping` e la disattivazione
+    /// restano il seguito sincrono preesistente e richiedono ciascuno la
+    /// propria migrazione prima che l'intera lifecycle possa dirsi staccata.
+    pub fn finish_close_with(
+        &mut self,
+        prepared: PreparedClose,
+        mut stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
+    ) -> std::result::Result<Vec<PluginError>, (PreparedClose, PluginError)> {
+        if prepared.workspace_id != self.workspace_id || !self.closed {
+            let error = PluginError::Conflict(
+                format!(
+                    "close prepared by workspace {} on `{}` cannot finalize workspace {} on `{}`",
+                    prepared.workspace_id,
+                    prepared.root,
+                    self.workspace_id,
+                    self.docs.vault.root()
+                )
+                .into(),
+            );
+            return Err((prepared, error));
+        }
 
         let mut errors = self.flush_indexes();
 
@@ -2180,7 +2261,7 @@ impl Workspace {
         // Il vault è già stato chiuso?
         self.store_entries();
 
-        errors
+        Ok(errors)
     }
 
     /// La bandiera del **rilevamento delle modifiche esterne** (§9.7), da dare a

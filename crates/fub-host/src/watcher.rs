@@ -21,14 +21,14 @@
 //! quando smette, e chiunque può leggerla dal canale dati
 //! (`IndexQuery::VaultStatus`).
 
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
 use fub_kernel::{ParsedChange, Workspace};
 
-use crate::custody::Custody;
+use crate::custody::{Custody, WriteTurn};
 use crate::jobs::with_event_drain;
 
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
@@ -72,11 +72,11 @@ pub trait VaultWatcher: Send + Sync {
 /// un vault: `Host::with_watcher` la prende una volta, e ogni apertura la usa.
 pub trait WatcherFactory: Send + Sync {
     /// Avvia il rilevamento su `root`, sincronizzando `workspace` a ogni
-    /// cambiamento. L'apertura chiama questo metodo mentre tiene il write-lock
-    /// del workspace: `start` deve solo avviare il rilevatore e non può prendere
-    /// sincronicamente quel lock. I thread che consegnano cambiamenti possono
-    /// tentare subito la lettura; resteranno bloccati finché il subscriber live
-    /// non è registrato e il lock di apertura non viene rilasciato.
+    /// cambiamento. L'apertura chiama questo metodo senza un read-lock o un
+    /// write-lock del workspace: una fabbrica può quindi verificarlo, leggere o
+    /// scrivere sincronicamente durante l'avvio. Il turno di apertura resta
+    /// invece prenotato: i thread che consegnano cambiamenti aspettano che il
+    /// subscriber live sia registrato prima di iniziare una mutazione.
     ///
     /// `watching` è la bandiera del kernel (`Workspace::watch_flag`): chi
     /// guarda davvero la alza avviandosi e la abbassa quando smette. Chi non
@@ -87,6 +87,178 @@ pub trait WatcherFactory: Send + Sync {
         workspace: Custody<Workspace>,
         watching: Arc<AtomicBool>,
     ) -> Result<Box<dyn VaultWatcher>, String>;
+}
+
+/// Un watcher consegnato alla sessione insieme al rollback della bandiera.
+///
+/// La fabbrica esterna può restituire un oggetto il cui `Drop` pania. La
+/// bandiera non può quindi essere affidata a quel distruttore: questo involucro
+/// la abbassa da codice host anche quando la rete trasforma il panico in errore.
+pub(crate) struct RunningWatcher {
+    watcher: Option<Box<dyn VaultWatcher>>,
+    watching: Arc<AtomicBool>,
+}
+
+impl RunningWatcher {
+    pub(crate) fn is_watching(&self) -> bool {
+        let Some(watcher) = self.watcher.as_ref() else {
+            return false;
+        };
+        let status = fub_kernel::safety::external(
+            "il watcher è andato in panico mentre dichiarava il proprio stato",
+            |message| PluginError::Internal(message.into()),
+            || Ok(watcher.is_watching()),
+        );
+        match status {
+            Ok(watching) => watching,
+            Err(error) => {
+                // Lo stato esterno non è più affidabile, quindi la risposta
+                // conservativa è «non sta guardando». Il watcher resta però
+                // posseduto dalla sessione: `close` ne esegue ancora il Drop e
+                // il reset host della bandiera.
+                tracing::error!(target: "fub.host", "watcher status failed: {error}");
+                false
+            }
+        }
+    }
+
+    /// Ferma esplicitamente il watcher e conserva l'errore per chi chiude.
+    pub(crate) fn stop(mut self) -> Result<(), PluginError> {
+        self.stop_inner()
+    }
+
+    fn stop_inner(&mut self) -> Result<(), PluginError> {
+        // Nasce prima della chiamata esterna e vive fuori dalla closure: anche
+        // se `drop` pania, `external` prende il panico e poi questo guardiano
+        // abbassa la bandiera prima che il risultato torni al chiamante.
+        let reset = WatchFlagReset::new(Arc::clone(&self.watching));
+        let result = match self.watcher.take() {
+            Some(watcher) => fub_kernel::safety::external(
+                "il watcher è andato in panico mentre smetteva di guardare il vault",
+                |message| PluginError::Internal(message.into()),
+                || {
+                    drop(watcher);
+                    Ok(())
+                },
+            ),
+            None => Ok(()),
+        };
+        drop(reset);
+        result
+    }
+}
+
+impl Drop for RunningWatcher {
+    fn drop(&mut self) {
+        if let Err(error) = self.stop_inner() {
+            tracing::error!(target: "fub.host", "watcher rollback failed: {error}");
+        }
+    }
+}
+
+/// Abbassa una bandiera su ogni uscita finché il proprietario non lo disarma.
+struct WatchFlagReset {
+    watching: Arc<AtomicBool>,
+    armed: bool,
+}
+
+impl WatchFlagReset {
+    fn new(watching: Arc<AtomicBool>) -> Self {
+        Self {
+            watching,
+            armed: true,
+        }
+    }
+
+    fn disarm(mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for WatchFlagReset {
+    fn drop(&mut self) {
+        if self.armed {
+            self.watching.store(false, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Il tratto d'apertura che possiede insieme writer turn e watcher.
+///
+/// Su qualunque `?` successivo a `start`, il `Drop` rilascia prima il turno e
+/// soltanto dopo lascia che il watcher fermi o raggiunga i propri thread. Un
+/// worker già in attesa di scrivere può così progredire e terminare invece di
+/// essere atteso da chi conserva ancora il turno che gli serve.
+pub(crate) struct OpeningWatcher<'a> {
+    turn: Option<WriteTurn<'a, Workspace>>,
+    watcher: Option<RunningWatcher>,
+}
+
+impl<'a> OpeningWatcher<'a> {
+    pub(crate) fn new(workspace: &'a Custody<Workspace>) -> Self {
+        Self {
+            turn: Some(workspace.write_turn()),
+            watcher: None,
+        }
+    }
+
+    pub(crate) fn start(
+        &mut self,
+        factory: &dyn WatcherFactory,
+        root: &Utf8Path,
+        workspace: Custody<Workspace>,
+        watching: Arc<AtomicBool>,
+    ) -> Result<(), PluginError> {
+        assert!(
+            self.watcher.is_none(),
+            "an opening can start exactly one watcher"
+        );
+        self.watcher = Some(start_safely(factory, root, workspace, watching)?);
+        Ok(())
+    }
+
+    /// Pubblica il watcher solo dopo avere liberato il writer turn.
+    pub(crate) fn finish(mut self) -> RunningWatcher {
+        drop(self.turn.take());
+        self.watcher
+            .take()
+            .expect("an opening watcher is finished only after start")
+    }
+}
+
+impl Drop for OpeningWatcher<'_> {
+    fn drop(&mut self) {
+        drop(self.turn.take());
+        drop(self.watcher.take());
+    }
+}
+
+/// Attraversa la fabbrica esterna con la rete dei provider, prima che esista un
+/// bus su cui poter riportare il guasto.
+fn start_safely(
+    factory: &dyn WatcherFactory,
+    root: &Utf8Path,
+    workspace: Custody<Workspace>,
+    watching: Arc<AtomicBool>,
+) -> Result<RunningWatcher, PluginError> {
+    // Una fabbrica può alzare la bandiera e poi rispondere con errore o
+    // paniare. Finché non esiste un `RunningWatcher`, il rollback appartiene a
+    // questa chiamata e deve coprire entrambe le uscite.
+    let reset = WatchFlagReset::new(Arc::clone(&watching));
+    let watcher = fub_kernel::safety::external(
+        "la fabbrica del watcher è andata in panico durante l'avvio",
+        |message| PluginError::Internal(message.into()),
+        || {
+            factory
+                .start(root, workspace, Arc::clone(&watching))
+                .map_err(|message| PluginError::Io(message.into()))
+        },
+    )?;
+    reset.disarm();
+    Ok(RunningWatcher {
+        watcher: Some(watcher),
+        watching,
+    })
 }
 
 /// Nessun rilevamento: il vault cambia solo attraverso Fub.

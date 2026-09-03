@@ -60,7 +60,7 @@ use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{Bundle, BundleInfo, BundleRegistry};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
-use crate::watcher::{VaultWatcher, WatcherFactory};
+use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
 ///
@@ -166,7 +166,7 @@ pub struct VaultSession {
     versions: Option<VersionStore>,
     /// Va tenuto in vita, e **lasciato andare per primo**: quando smette di
     /// guardare, il vault non cambia più da sotto a chi lo sta chiudendo.
-    watcher: Box<dyn VaultWatcher>,
+    watcher: RunningWatcher,
     /// **Quando questa sessione è stata usata l'ultima volta**, nel contatore
     /// di [`Sessions::usi`]. Da qui si legge il corrente, e per questo sta
     /// sulla sessione e non accanto alla mappa: una sessione porta con sé il
@@ -215,8 +215,8 @@ impl VaultSession {
     ///
     /// «Smette di guardare» vuol dire **e ha smesso**: lasciarlo andare aspetta
     /// il suo thread di consegna, ed è una riga del rilevatore e non di qui
-    /// ([`VaultWatcher`], difetto 0159). Prima non lo aspettava, e questo
-    /// commento raccontava un ordine che la riga sotto non teneva.
+    /// ([`crate::watcher::VaultWatcher`], difetto 0159). Prima non lo aspettava,
+    /// e questo commento raccontava un ordine che la riga sotto non teneva.
     ///
     /// La chiusura passa dal registry e non dal workspace, ed è l'unica
     /// differenza col §9.5: l'ordine resta quello di [`Workspace::close`] —
@@ -237,15 +237,59 @@ impl VaultSession {
         // 1. smette di guardare, 2. smette di lavorare, 3. si chiude. I primi
         // due sono la stessa regola letta due volte: nessun altro thread deve
         // poter entrare nel vault mentre lo si chiude.
-        drop(watcher);
-        let mut errors = runner.stop();
+        let mut errors: Vec<PluginError> = watcher.stop().err().into_iter().collect();
+        errors.extend(runner.stop());
         drop(runner);
-        // Il veleno, qui, **è** uno degli errori di chiusura: chi chiude ha già
-        // un canale per ciò che va storto chiudendo, e non serviva inventarne
-        // un secondo. Ciò che non si chiude non si chiude, e si dice.
-        match (workspace.write(), registry.write()) {
-            (Ok(mut ws), Ok(mut reg)) => errors.extend(reg.close(&mut ws)),
-            (Err(and), _) | (Ok(_), Err(and)) => errors.push(and),
+        // Il turno conserva una sola chiusura logica, ma non è il `RwLock`:
+        // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
+        // La prepare alza `closed` e accoda il terminale; il drain ripristina
+        // sempre tabella, attore e flag prima che la finalize ritiri i provider.
+        // Questo non rivendica le altre callback di chiusura: flush/close degli
+        // indici e `Plugin::deactivate` restano nel seguito sincrono censito.
+        let _closing_turn = workspace.write_turn();
+        let prepared = match workspace.write() {
+            Ok(mut ws) => ws.prepare_close(),
+            Err(and) => {
+                errors.push(and);
+                return errors;
+            }
+        };
+        let Some(prepared) = prepared else {
+            return errors;
+        };
+        if let Err(and) = drain_events(&workspace) {
+            errors.push(and);
+        }
+
+        // Dopo la prepare non ci sono uscite anticipate: anche un errore del
+        // drain viene raccolto prima di tentare l'epilogo. Se è il registry a
+        // essere avvelenato, i corpi host non sono più affidabili e il loro
+        // `Plugin::deactivate` viene saltato; il workspace è però sano, quindi
+        // il kernel deve comunque ritirare provider e dichiarazioni. Se invece
+        // è morto il workspace stesso, la politica di `Custody` ne vieta il
+        // recupero: provare la presa registra l'errore, ma non può finalizzare
+        // uno stato lasciato a metà. In quel ramo il token viene abbandonato e
+        // la custodia resta esplicitamente irrecuperabile.
+        let finalized = match workspace.write() {
+            Ok(mut ws) => match registry.write() {
+                Ok(mut reg) => Some(
+                    ws.finish_close_with(prepared, |workspace, id| reg.stop(workspace, id)),
+                ),
+                Err(and) => {
+                    errors.push(and);
+                    Some(ws.finish_close_with(prepared, |_, _| Vec::new()))
+                }
+            },
+            Err(and) => {
+                errors.push(and);
+                None
+            }
+        };
+        if let Some(result) = finalized {
+            match result {
+                Ok(close_errors) => errors.extend(close_errors),
+                Err((_prepared, and)) => errors.push(and),
+            }
         }
         errors
     }
@@ -582,7 +626,7 @@ impl Host {
     }
 
     /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):
-    /// monta, prende il lock di apertura, avvia il rilevatore, scansiona,
+    /// monta, prende il writer turn di apertura, avvia il rilevatore, scansiona,
     /// registra il subscriber live, accende il ponte e avvia il pool, e
     /// mette la sessione nella mappa. **Non decide chi è corrente**: quello lo
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
@@ -659,20 +703,25 @@ impl Host {
         let workspace = Custody::new("il vault aperto", ws);
 
         // Il turno di apertura serializza ogni writer fino a subscriber e job
-        // installati, ma non è il `RwLock`: `IndexProvider::up_to_date` gira
-        // fuori dalla guardia e un reader può rientrare sul workspace coerente
-        // precedente. Il thread del watcher che prova a scrivere resta invece
-        // fermo sul turno, così la finestra fra start e subscriber non riappare.
-        let opening_turn = workspace.write_turn();
-        let (prepared_scan, watcher) = {
+        // installati, ma non è il `RwLock`: sia `IndexProvider::up_to_date` sia
+        // `WatcherFactory::start` girano fuori dalla guardia e possono rientrare
+        // sul workspace. `OpeningWatcher` possiede il turno insieme al watcher:
+        // su ogni errore successivo libera **prima** il turno, poi ferma/raggiunge
+        // i thread del watcher, che possono già essere in attesa di scrivere.
+        let mut opening = OpeningWatcher::new(&workspace);
+        let watching = {
             let ws = workspace.write()?;
-            let watching = ws.watch_flag();
-            let watcher = self
-                .watcher
-                .start(&root, workspace.clone(), watching)
-                .map_err(|and| PluginError::Io(and.into()))?;
-            let prepared = ws.prepare_scan_vault().map_err(PluginError::from)?;
-            (prepared, watcher)
+            ws.watch_flag()
+        };
+        opening.start(
+            self.watcher.as_ref(),
+            &root,
+            workspace.clone(),
+            watching,
+        )?;
+        let prepared_scan = {
+            let ws = workspace.write()?;
+            ws.prepare_scan_vault().map_err(PluginError::from)?
         };
         let completed_scan = prepared_scan.invoke();
         let (work, index_job, work_total, live) = with_event_drain(&workspace, |ws| {
@@ -712,7 +761,7 @@ impl Host {
             self.job_threads,
             Some(in_progress),
         )?;
-        drop(opening_turn);
+        let watcher = opening.finish();
 
         let session = VaultSession {
             root: root.clone(),

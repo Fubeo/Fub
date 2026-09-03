@@ -6,9 +6,9 @@
 //! rientra con una scrittura reale. Tutte le attese sono limitate e un `join`
 //! avviene soltanto dopo il segnale di fine.
 //!
-//! `VaultSession::close`/`VaultClosed` non è rivendicato da questa tranche:
-//! deve consegnare l'ultimo evento prima di ritirare gli handler e appartiene
-//! alla migrazione lifecycle, che integra un epilogo preparato dedicato.
+//! Anche `VaultSession::close` passa da un epilogo dedicato: prepara il
+//! terminale, lo drena mentre handler e capacità sono ancora vivi, quindi
+//! consuma il token di chiusura e ritira i provider.
 //!
 //! # Staleness
 //!
@@ -118,6 +118,7 @@ enum ExpectedEvent {
     Document(&'static str),
     Setting(&'static str),
     Trouble(&'static str),
+    VaultClosed,
 }
 
 impl ExpectedEvent {
@@ -131,6 +132,7 @@ impl ExpectedEvent {
             (Self::Trouble(expected), Event::Trouble { error, .. }) => {
                 error.to_string().contains(expected)
             }
+            (Self::VaultClosed, Event::VaultClosed { .. }) => true,
             _ => false,
         }
     }
@@ -185,6 +187,7 @@ impl EventHandler for LockProbe {
             EventKind::DocumentChanged,
             EventKind::SettingChanged,
             EventKind::Trouble,
+            EventKind::VaultClosed,
         ])
     }
 
@@ -540,6 +543,52 @@ fn job_host_write_drains_event_handlers_outside_both_guards() {
     probe.detach();
 }
 
+#[test]
+fn vault_closed_drains_handlers_before_provider_retirement_without_both_guards() {
+    let (vault, host, workspace) = opened();
+    let (probe, observations, reentered) =
+        register_probe(&workspace, ExpectedEvent::VaultClosed);
+    let events = workspace
+        .read()
+        .expect("workspace readable")
+        .bus()
+        .subscribe();
+    let root = vault.root.clone();
+    let errors = run_detached(&workspace, observations, reentered, move || {
+        host.close_vault(&root)
+    });
+    assert!(errors.is_empty(), "the detached close succeeds: {errors:?}");
+    assert!(
+        workspace
+            .read()
+            .expect("closed workspace remains readable")
+            .is_closed(),
+        "the close token was not finalized"
+    );
+    assert!(
+        workspace
+            .read()
+            .expect("closed workspace remains readable")
+            .plugins()
+            .is_empty(),
+        "finalize must retire provider owners, not only set the closed flag"
+    );
+    assert!(
+        workspace
+            .write()
+            .expect("closed workspace remains writable")
+            .close()
+            .is_empty(),
+        "a consumed close token must make a second close a no-op"
+    );
+    let closed = events
+        .try_iter()
+        .filter(|notice| matches!(notice.event, Event::VaultClosed { .. }))
+        .count();
+    assert_eq!(closed, 1, "VaultClosed must be emitted exactly once");
+    probe.detach();
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Fault {
     SubscribedPanic,
@@ -675,6 +724,175 @@ fn event_handler_errors_and_panics_restore_the_table_flags_and_budget() {
     }
 }
 
+struct FlakyCloseHandler {
+    fault: Fault,
+    tripped: AtomicBool,
+}
+
+impl EventHandler for FlakyCloseHandler {
+    fn subscribed(&self) -> EventMask {
+        if self.fault == Fault::SubscribedPanic && !self.tripped.swap(true, Ordering::SeqCst) {
+            panic!("subscribed event probe");
+        }
+        EventMask::of([EventKind::VaultClosed])
+    }
+
+    fn handle(&mut self, _: &Notice, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        if self.tripped.swap(true, Ordering::SeqCst) {
+            return Ok(());
+        }
+        match self.fault {
+            Fault::SubscribedPanic => Ok(()),
+            Fault::HandleError => Err(PluginError::Internal("event probe error".into())),
+            Fault::HandlePanic => panic!("handle event probe"),
+        }
+    }
+}
+
+fn assert_close_fault_is_contained(fault: Fault) {
+    let (vault, host, workspace) = opened();
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(HANDLER, "Audit close handler")
+            .expect("close handler declares");
+        ws.register_event_handler(
+            HANDLER,
+            Box::new(FlakyCloseHandler {
+                fault,
+                tripped: AtomicBool::new(false),
+            }),
+        )
+        .expect("close handler registers");
+    }
+    let events = workspace
+        .read()
+        .expect("workspace readable")
+        .bus()
+        .subscribe();
+
+    let root = vault.root.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
+    let call = std::thread::spawn(move || {
+        let first = host.close_vault(&root);
+        let reopened = host.open(&root).and_then(|_| host.wait_indexed(None));
+        let final_errors = host.close();
+        let _ = done_tx.send((first, reopened, final_errors));
+    });
+    let (first, reopened, final_errors) = done_rx
+        .recv_timeout(TIMEOUT)
+        .unwrap_or_else(|_| panic!("{fault:?} left the close drain blocked"));
+    assert!(
+        first
+            .expect("the vault closes despite the handler fault")
+            .is_empty(),
+        "event handler faults are reported as Trouble, not close failures"
+    );
+    reopened.expect("the same host can reopen after a faulty close handler");
+    assert!(
+        final_errors.is_empty(),
+        "the reopened vault closes cleanly"
+    );
+    call.join()
+        .expect("the completed close thread does not panic");
+
+    assert!(
+        workspace.try_read().is_some(),
+        "read lock leaked after {fault:?}"
+    );
+    assert!(
+        workspace.try_write().is_some(),
+        "write lock or writer turn leaked after {fault:?}"
+    );
+    assert!(
+        workspace
+            .read()
+            .expect("old workspace remains readable")
+            .is_closed(),
+        "the close did not finish after {fault:?}"
+    );
+    assert!(
+        workspace
+            .read()
+            .expect("old workspace remains readable")
+            .plugins()
+            .is_empty(),
+        "provider owners survived the finalize after {fault:?}"
+    );
+    let mut saw_event_trouble = false;
+    while let Ok(notice) = events.try_recv() {
+        let is_expected = match notice.event {
+            Event::Trouble {
+                error,
+                gate: Some(Gate::Event),
+                ..
+            } => error.to_string().contains(fault.marker()),
+            _ => false,
+        };
+        saw_event_trouble |= is_expected;
+    }
+    assert!(
+        saw_event_trouble,
+        "{fault:?} during VaultClosed was contained but not reported"
+    );
+}
+
+#[test]
+fn vault_closed_errors_and_panics_finalize_once_and_allow_reopening() {
+    for fault in [
+        Fault::SubscribedPanic,
+        Fault::HandleError,
+        Fault::HandlePanic,
+    ] {
+        assert_close_fault_is_contained(fault);
+    }
+}
+
+/// Il registry possiede i corpi dei plugin, ma non le loro dichiarazioni e i
+/// provider: quelli appartengono al kernel. Se il registry è avvelenato non si
+/// può chiamare `Plugin::deactivate`; la finalize kernel deve però consumare il
+/// token e ritirare comunque tutto ciò che essa possiede.
+#[test]
+fn a_poisoned_bundle_registry_does_not_skip_kernel_close_finalization() {
+    let (vault, host, workspace) = opened();
+    let registry = host
+        .in_session(None, |session| Ok(session.bundles().clone()))
+        .expect("bundle registry custody");
+    let poison = std::thread::spawn(move || {
+        let _guard = registry.write().expect("registry is alive before poison");
+        panic!("poison bundle registry before close");
+    });
+    assert!(poison.join().is_err(), "the fixture poisoned the registry");
+
+    let root = vault.root.clone();
+    let (done_tx, done_rx) = mpsc::sync_channel(1);
+    let closing = std::thread::spawn(move || {
+        let result = host.close_vault(&root);
+        let _ = done_tx.send(result);
+    });
+    let errors = done_rx
+        .recv_timeout(TIMEOUT)
+        .expect("registry poison must not deadlock close")
+        .expect("the session still closes");
+    closing
+        .join()
+        .expect("the completed close thread does not panic");
+
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.to_string().contains("irrecuperabile")),
+        "registry poison was not reported: {errors:?}"
+    );
+    let ws = workspace
+        .read()
+        .expect("registry poison leaves the workspace credible");
+    assert!(ws.is_closed(), "the prepared close was finalized");
+    assert!(
+        ws.plugins().is_empty(),
+        "kernel providers and declarations must be retired despite registry poison"
+    );
+}
+
 #[test]
 fn every_background_event_source_keeps_the_detached_host_drain() {
     fn compact(source: &str) -> String {
@@ -696,6 +914,18 @@ fn every_background_event_source_keeps_the_detached_host_drain() {
             && !session.contains("session.workspace.write()?.reset_setting(")
             && !session.contains("session.workspace.write()?.resume_settings("),
         "session settings must not dispatch EventHandler under Custody"
+    );
+    assert!(
+        session.contains("letprepared=matchworkspace.write(){Ok(mutws)=>ws.prepare_close(),")
+            && session.contains("ifletErr(and)=drain_events(&workspace)")
+            && session.contains(
+                "ws.finish_close_with(prepared,|workspace,id|reg.stop(workspace,id))",
+            )
+            && session.contains("ws.finish_close_with(prepared,|_,_|Vec::new())")
+            && !session.contains(
+                "ifletErr(and)=drain_events(&workspace){errors.push(and);returnerrors;"
+            ),
+        "VaultClosed must be drained after prepare and before provider retirement"
     );
 
     let runner = compact(include_str!("../src/runner.rs"));
