@@ -106,6 +106,9 @@ impl VaultRead for KernelHost<'_> {
     }
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
+        // Attorno a una callback staccata il composition root deve usare il
+        // proxy che prepara e parsa fuori dalla custodia. Questa resta la via
+        // diretta di un Workspace posseduto dal kernel.
         let id = fenced_doc_id(id)?;
         self.ws.read_model(&id).map_err(PluginError::from)
     }

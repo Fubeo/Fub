@@ -67,6 +67,11 @@ impl VaultRead for ReadHost<'_> {
     /// Il modello è una **lettura**, quindi arriva anche di qui: è ciò che
     /// permette a una view di guardare la struttura del documento che sta
     /// disegnando senza chiedere all'app di passargliela.
+    ///
+    /// Questo host prende in prestito un `&Workspace` e non può rilasciare il
+    /// lock di chi glielo ha prestato. Quando il composition root stacca una
+    /// callback, deve quindi darle il proxy per-chiamata che usa il planner di
+    /// `read_model` dell'host.
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
         let id = fenced_doc_id(id)?;
         self.ws.read_model(&id).map_err(PluginError::from)

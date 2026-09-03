@@ -332,43 +332,44 @@ impl SyntaxRegistry {
                     continue;
                 }
             }
-            // Una regola gira dentro **ogni** parse, cioè sotto il prestito di
-            // chi ha chiesto di scrivere: un panico qui si porterebbe via il
-            // vault (§9.3). Si ferma, si racconta, e ciò che perde è la propria
-            // trasformazione — le altre regole girano lo stesso.
-            if let Some(fault) = crate::safety::reporting(&r.spec.id, Gate::SyntaxRule, "", || {
-                match &r.spec.trigger {
-                    SyntaxTrigger::Fence { info } => {
-                        let wanted: Vec<String> =
-                            info.iter().map(|the| the.to_lowercase()).collect();
-                        apply_to_blocks(&mut model.body, &mut |block| {
-                            fence_rule(block, r, &wanted, ctx)
-                        });
-                    }
-                    SyntaxTrigger::Inline { open, close } => {
-                        apply_to_blocks(&mut model.body, &mut |block| {
-                            inline_rule(block, r, open, close, ctx);
-                            None
-                        });
-                    }
+            match &r.spec.trigger {
+                SyntaxTrigger::Fence { info } => {
+                    let wanted: Vec<String> =
+                        info.iter().map(|the| the.to_lowercase()).collect();
+                    apply_to_blocks(&mut model.body, &mut |block| {
+                        fence_rule(block, r, &wanted, ctx)
+                    });
                 }
-            }) {
-                // Una regola sintattica che pania è un difetto di chi l'ha
-                // scritta, e il posto giusto è il log — non il canale degli
-                // eventi. La ragione è il criterio della decisione 0062:
-                // l'evento è la porta per le **perdita**, e qui non se ne perde
-                // nessuna. Il documento si è comunque aperto (il panico è
-                // catturato), la trasformazione della regola è ciò che manca,
-                // e l'utente non ha perso una riga che aveva scritto — ha al
-                // più una resa degradata, che è esattamente il caso di chi
-                // sviluppa e non di chi legge. È la conseguenza che la decisione
-                // 0052 lasciava in sospeso («dare un esito a `parse` e ai suoi
-                // otto chiamanti»): non serve, perché il criterio dice che
-                // questa riga non è una porta.
-                tracing::warn!(target: "fub.kernel", "regola sintattica `{rule}` in panico: {fault}", rule = r.spec.id);
+                SyntaxTrigger::Inline { open, close } => {
+                    apply_to_blocks(&mut model.body, &mut |block| {
+                        inline_rule(block, r, open, close, ctx);
+                        None
+                    });
+                }
             }
         }
     }
+}
+
+/// Invoca una regola col boundary stretto attorno alla sola callback esterna.
+/// Un errore o un panico fanno degradare **questa corrispondenza**: il prodotto
+/// non viene mai applicato a metà, e la camminata può proseguire sulle altre.
+fn invoke_rule(
+    r: &Registered,
+    matched: &SyntaxMatch,
+    ctx: &ParseContext,
+) -> Option<SyntaxProduct> {
+    let mut outcome = None;
+    if let Some(fault) = crate::safety::reporting(&r.spec.id, Gate::SyntaxRule, "", || {
+        outcome = Some(r.rule.apply(matched, ctx));
+    }) {
+        // Una regola sintattica che pania è un difetto di chi l'ha scritta, e
+        // il posto giusto è il log — non il canale degli eventi. Non si perde
+        // sorgente: questa corrispondenza resta nel modello nella forma base.
+        tracing::warn!(target: "fub.kernel", "regola sintattica `{rule}` in panico: {fault}", rule = r.spec.id);
+        return None;
+    }
+    outcome.and_then(std::result::Result::ok).flatten()
 }
 
 /// Un blocco recintato che questa regola rivendica diventa il suo prodotto.
@@ -401,7 +402,7 @@ fn fence_rule(
         custom_kind,
         attrs,
         blocks,
-    } = r.rule.apply(&m, ctx).ok()??
+    } = invoke_rule(r, &m, ctx)?
     else {
         // Una regola su recinto che restituisse un inline sta sbagliando forma:
         // il recinto è un blocco, e non c'è dove mettere un inline al suo posto.
@@ -512,8 +513,8 @@ fn split_text(
         };
         // Un kind che la regola non ha dichiarato è come un rifiuto: `produces`
         // è un contratto, e ciò che non c'è dentro non entra nel modello.
-        let product = match r.rule.apply(&m, ctx) {
-            Ok(Some(SyntaxProduct::Inline { custom_kind, attrs }))
+        let product = match invoke_rule(r, &m, ctx) {
+            Some(SyntaxProduct::Inline { custom_kind, attrs })
                 if r.spec.produces.contains(&custom_kind) =>
             {
                 Some((custom_kind, attrs))
@@ -600,6 +601,9 @@ fn with_inlines(block: &mut Block, f: &mut dyn FnMut(&mut Vec<Inline>, Span)) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
     use fub_abi::custom::SyntaxTrigger;
     use fub_abi::error::FormatError;
     use fub_abi::model::DocId;
@@ -792,5 +796,85 @@ mod tests {
             err,
             SyntaxConflict::NothingProduced("terzi:bugiarda".into())
         );
+    }
+
+    struct PanicsOnceInline {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl SyntaxRule for PanicsOnceInline {
+        fn spec(&self) -> SyntaxRuleSpec {
+            SyntaxRuleSpec {
+                id: "prova:panico-inline".into(),
+                format: "markdown".into(),
+                trigger: SyntaxTrigger::Inline {
+                    open: "==".into(),
+                    close: "==".into(),
+                },
+                order: 0,
+                option: None,
+                produces: vec!["prova:evidenza".into()],
+            }
+        }
+
+        fn apply(
+            &self,
+            _: &SyntaxMatch,
+            _: &ParseContext,
+        ) -> Result<Option<SyntaxProduct>, FormatError> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                panic!("panico sintattico intenzionale");
+            }
+            Ok(Some(SyntaxProduct::Inline {
+                custom_kind: "prova:evidenza".into(),
+                attrs: json!({}),
+            }))
+        }
+    }
+
+    fn inline_model() -> DocumentModel {
+        model_with(vec![Block::Paragraph {
+            inlines: vec![Inline::Text("prima ==boom== poi ==bene== fine".into())],
+            anchor: None,
+            span: Span::EMPTY,
+        }])
+    }
+
+    #[test]
+    fn a_syntax_panic_does_not_empty_the_inline_and_the_rule_is_reusable() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let mut reg = SyntaxRegistry::new();
+        reg.register(Box::new(PanicsOnceInline {
+            calls: Arc::clone(&calls),
+        }))
+        .expect("the rule registers");
+
+        let mut first = inline_model();
+        reg.apply(&mut first, &ParseContext::obsidian("a.md"), "markdown");
+        let Block::Paragraph { inlines, .. } = &first.body[0] else {
+            panic!("the paragraph remains a paragraph");
+        };
+        assert!(matches!(&inlines[0], Inline::Text(text) if text == "prima =="));
+        assert!(matches!(&inlines[1], Inline::Text(text) if text == "boom== poi "));
+        assert!(matches!(
+            &inlines[2],
+            Inline::Custom { custom_kind, .. } if custom_kind == "prova:evidenza"
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+
+        let mut next = inline_model();
+        reg.apply(&mut next, &ParseContext::obsidian("a.md"), "markdown");
+        let Block::Paragraph { inlines, .. } = &next.body[0] else {
+            panic!("the next paragraph remains readable");
+        };
+        assert_eq!(
+            inlines
+                .iter()
+                .filter(|inline| matches!(inline, Inline::Custom { .. }))
+                .count(),
+            2,
+            "the same rule handles both matches on the next model"
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 4);
     }
 }

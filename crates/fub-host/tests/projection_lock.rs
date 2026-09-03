@@ -2,8 +2,12 @@
 //! attraversano formato, sintassi e renderer senza una guardia di
 //! `Custody<Workspace>` e non pubblicano fotografie ormai stantie.
 //!
-//! Non è un presidio per `ReadHost`/`KernelHost`, `read_model`, `format_of` o
-//! `SyntaxForms`: quelle vie sono sotto-tranche distinte di `ARCH-001`.
+//! Il `read_model` staccato di `JobHost` e le interrogazioni sui metadati degli
+//! host kernel presi in prestito hanno il proprio presidio in
+//! `read_model_lock.rs`.
+//!
+//! `FormatProvider`, `SyntaxRule` e `CustomRenderer` non ricevono un
+//! `HostApi`: per queste callback la prova di re-entry non è applicabile.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};

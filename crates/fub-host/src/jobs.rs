@@ -353,7 +353,19 @@ impl VaultRead for JobHost {
     }
 
     fn read_model(&self, id: &DocId) -> Result<DocumentModel, PluginError> {
-        self.read_result(|h| h.read_model(id))
+        self.stopped()?;
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            let policy = workspace.granted_policy(&self.plugin);
+            authorize_path(&policy, Capability::VaultRead, id.as_str(), || {
+                format!("reading model of `{id}`")
+            })?;
+            workspace.prepare_detached_document_model(id)?
+        };
+        let completed = prepared.invoke()?;
+        self.workspace
+            .read()?
+            .finish_detached_document_model(completed)
     }
 
     fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {

@@ -269,12 +269,15 @@ impl DocumentStore {
     /// L'ordine della sovrapposizione dice chi vince su una chiave condivisa,
     /// ed è il provider: se sa fare `fub:math` per conto suo, il suo dettaglio
     /// è più informativo del semplice «acceso» che una regola può dichiarare.
+    /// Descrittore e capacità native sono la fotografia di registrazione: qui
+    /// non si richiama codice del provider.
     pub fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        let provider = self.provider_for(id).ok()?;
-        let descriptor = provider.descriptor();
+        let ext = extension_of(id).unwrap_or_default();
+        let descriptor = self.registry.descriptor_for_ext(&ext)?.clone();
+        let native = self.registry.capabilities_for_ext(&ext)?;
         let grafted = self.syntax.grafted_syntax(&descriptor.id);
         let capabilities = FormatCapabilities {
-            syntax: grafted.overlay(&provider.capabilities().syntax),
+            syntax: grafted.overlay(&native.syntax),
         };
         Some(DocumentFormat {
             descriptor,
@@ -316,17 +319,22 @@ impl DocumentStore {
     /// decorata e il parse non l'avrebbe letta. Nessun provider di questo repo
     /// la usa, il che è precisamente il motivo per cui la divergenza poteva
     /// restare lì.
+    /// Anche questa via legge soltanto metadati congelati e lo snapshot delle
+    /// forme: non entra nel provider.
     pub fn syntax_forms(&self, id: &DocId) -> Vec<SyntaxForm> {
-        let Ok(provider) = self.provider_for(id) else {
+        let ext = extension_of(id).unwrap_or_default();
+        let Some(descriptor) = self.registry.descriptor_for_ext(&ext) else {
+            return Vec::new();
+        };
+        let Some(capabilities) = self.registry.capabilities_for_ext(&ext) else {
             return Vec::new();
         };
         let snapshot = self.syntax.snapshot();
-        let grafted = snapshot.forms(&provider.descriptor().id).to_vec();
+        let grafted = snapshot.forms(&descriptor.id).to_vec();
         // La domanda «è già innestato?» si fa una volta per nome che il
         // provider dichiara: su un insieme, non rescandendo l'elenco.
         let nested: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
-        let mut out: Vec<SyntaxForm> = provider
-            .capabilities()
+        let mut out: Vec<SyntaxForm> = capabilities
             .syntax
             .active()
             .filter(|(name, _)| !nested.contains(*name))

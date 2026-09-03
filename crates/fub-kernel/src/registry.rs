@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use fub_abi::format::FormatDescriptor;
+use fub_abi::format::{FormatCapabilities, FormatDescriptor};
 use fub_abi::FormatProvider;
 
 /// Due provider si contendono la stessa estensione.
@@ -41,6 +41,7 @@ impl std::fmt::Display for RegistryConflict {
 
 struct RegisteredFormat {
     descriptor: FormatDescriptor,
+    capabilities: FormatCapabilities,
     provider: Arc<dyn FormatProvider>,
 }
 
@@ -76,7 +77,8 @@ impl FormatRegistry {
             }
             extensions.push(ext);
         }
-        self.insert_normalized(provider, descriptor, extensions);
+        let capabilities = provider.capabilities();
+        self.insert_normalized(provider, descriptor, capabilities, extensions);
         Ok(())
     }
 
@@ -85,10 +87,12 @@ impl FormatRegistry {
     /// resta possibile, ma adesso chi la vuole la chiede per nome.
     pub fn replace(&mut self, provider: Box<dyn FormatProvider>) {
         let descriptor = provider.descriptor();
+        let capabilities = provider.capabilities();
         let extensions = descriptor.extensions.clone();
         self.insert_normalized(
             provider,
             descriptor,
+            capabilities,
             extensions
                 .into_iter()
                 .map(|ext| ext.to_lowercase())
@@ -100,6 +104,7 @@ impl FormatRegistry {
         &mut self,
         provider: Box<dyn FormatProvider>,
         descriptor: FormatDescriptor,
+        capabilities: FormatCapabilities,
         extensions: Vec<String>,
     ) {
         let idx = self.providers.len();
@@ -108,6 +113,7 @@ impl FormatRegistry {
         }
         self.providers.push(RegisteredFormat {
             descriptor,
+            capabilities,
             provider: Arc::from(provider),
         });
     }
@@ -142,6 +148,22 @@ impl FormatRegistry {
             .copied()
             .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
         Some(&self.providers[at].descriptor)
+    }
+
+    /// Capacità congelate insieme al descrittore durante la registrazione.
+    ///
+    /// `FormatProvider::capabilities` è metadato del provider, non stato del
+    /// documento: conservarlo qui evita di richiamare codice esterno mentre un
+    /// `Workspace` è già dietro la propria custodia. Le capacità effettive del
+    /// singolo vault vengono comunque composte con le regole sintattiche
+    /// correnti da [`DocumentStore`](crate::documents::DocumentStore).
+    pub(crate) fn capabilities_for_ext(&self, ext: &str) -> Option<&FormatCapabilities> {
+        let at = self
+            .by_ext
+            .get(ext)
+            .copied()
+            .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
+        Some(&self.providers[at].capabilities)
     }
 
     /// Tutte le estensioni conosciute, per la scansione del vault.

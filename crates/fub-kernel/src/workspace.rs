@@ -656,6 +656,26 @@ pub struct PreparedLocalProjection {
     projection_generation: u64,
 }
 
+/// Lettura del modello risolta fino al confine del parser. La sorgente, il
+/// provider e le regole sono posseduti: `invoke` non prende in prestito il
+/// workspace e può quindi attraversare il codice esterno senza la sua guardia.
+pub struct PreparedDocumentModel {
+    id: DocId,
+    source_revision: Revision,
+    source: DocumentSource,
+    parser: PreparedParse,
+    syntax_generation: u64,
+}
+
+/// Modello prodotto fuori dal workspace, ancora da confrontare con la
+/// sorgente e la pipeline correnti.
+pub struct CompletedDocumentModel {
+    id: DocId,
+    source_revision: Revision,
+    model: DocumentModel,
+    syntax_generation: u64,
+}
+
 enum LocalProjectionKind {
     Preview,
     Embed {
@@ -722,6 +742,28 @@ impl PreparedLocalProjection {
             result,
             routing,
             projection_generation,
+        })
+    }
+}
+
+impl PreparedDocumentModel {
+    /// Esegue `FormatProvider::parse` e le `SyntaxRule` sulla fotografia
+    /// preparata. Il chiamante deve avere già rilasciato qualunque guardia di
+    /// `Custody<Workspace>`.
+    pub fn invoke(self) -> std::result::Result<CompletedDocumentModel, PluginError> {
+        let PreparedDocumentModel {
+            id,
+            source_revision,
+            source,
+            parser,
+            syntax_generation,
+        } = self;
+        let model = parser.invoke(source).map_err(PluginError::from)?;
+        Ok(CompletedDocumentModel {
+            id,
+            source_revision,
+            model,
+            syntax_generation,
         })
     }
 }
@@ -1092,6 +1134,10 @@ pub struct Workspace {
     /// view: quei token versionano il proprietario di una callback, questa
     /// versione il contenuto della pipeline documentale.
     projection_generation: u64,
+    /// Versiona la sola parte della pipeline che costruisce un modello. Un
+    /// renderer nuovo invalida una resa in volo, ma è compatibile con un parse
+    /// che non lo consulta.
+    syntax_generation: u64,
     /// le sei tabelle di provider, il registro dei plugin (decisione 0021) e le
     /// due catene di chiamate in corso. Ciò che si risponde **senza svegliare
     /// nessuno** sta lì dentro; chiamare un provider vuole un `HostApi`, che è
@@ -1416,6 +1462,7 @@ impl Workspace {
                 Arc::clone(&drafts),
             ),
             projection_generation: 0,
+            syntax_generation: 0,
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
@@ -1926,22 +1973,26 @@ impl Workspace {
         // registrata. Chi lo sa è l'inventario, ed è da lì che si prendono i
         // nomi da togliere.
         // Lo schema delle sue impostazioni se ne va con lui: da qui in poi le
-        let mut projection_changed = false;
+        let mut syntax_changed = false;
         for id in self
             .providers
             .plugins
             .ids_of(plugin, RegistrationKind::Syntax)
         {
-            projection_changed |= self.docs.syntax.remove(&id);
+            syntax_changed |= self.docs.syntax.remove(&id);
         }
+        let mut renderer_changed = false;
         for id in self
             .providers
             .plugins
             .ids_of(plugin, RegistrationKind::Renderer)
         {
-            projection_changed |= self.docs.renderers.remove(&id);
+            renderer_changed |= self.docs.renderers.remove(&id);
         }
-        if projection_changed {
+        if syntax_changed {
+            self.syntax_generation = self.syntax_generation.wrapping_add(1);
+        }
+        if syntax_changed || renderer_changed {
             self.projection_generation = self.projection_generation.wrapping_add(1);
         }
 
@@ -5493,6 +5544,7 @@ impl Workspace {
             .plugins
             .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
         self.projection_generation = self.projection_generation.wrapping_add(1);
+        self.syntax_generation = self.syntax_generation.wrapping_add(1);
         Ok(())
     }
 
@@ -5539,6 +5591,71 @@ impl Workspace {
         self.docs.undrawn_kinds()
     }
 
+    /// Congela sorgente, parser e regole per una lettura del modello che verrà
+    /// eseguita dal composition root senza la guardia del workspace.
+    pub fn prepare_detached_document_model(
+        &self,
+        id: &DocId,
+    ) -> std::result::Result<PreparedDocumentModel, PluginError> {
+        let id = fenced_doc_id(id)?;
+        let indexed = self.indexes.core.metas.contains_key(&id);
+        let parseable_file =
+            self.docs.vault.stat(&id).is_some() && self.docs.provider_for(&id).is_ok();
+        if !indexed && !parseable_file {
+            return Err(PluginError::NotFound(id.to_string().into()));
+        }
+        let source = self
+            .docs
+            .source_from_disk(&id)
+            .map_err(PluginError::from)?;
+        let source_revision = Revision::of_bytes(source.bytes());
+        let parser = self.docs.prepare_parse(&id).map_err(PluginError::from)?;
+        Ok(PreparedDocumentModel {
+            id,
+            source_revision,
+            source,
+            parser,
+            syntax_generation: self.syntax_generation,
+        })
+    }
+
+    /// Pubblica il modello soltanto se sorgente e regole sono ancora quelle
+    /// fotografate da `prepare_detached_document_model`. Mutazioni di altri
+    /// documenti e cambi ai soli renderer sono compatibili.
+    pub fn finish_detached_document_model(
+        &self,
+        completed: CompletedDocumentModel,
+    ) -> std::result::Result<DocumentModel, PluginError> {
+        if completed.syntax_generation != self.syntax_generation {
+            return Err(PluginError::Conflict(
+                "la pipeline sintattica è cambiata durante la lettura del modello".into(),
+            ));
+        }
+        let current = match self.docs.source_from_disk(&completed.id) {
+            Ok(current) => current,
+            Err(error) if error.is_missing() => {
+                return Err(PluginError::Conflict(
+                    format!(
+                        "{} è stato rimosso durante la lettura del modello",
+                        completed.id
+                    )
+                    .into(),
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if Revision::of_bytes(current.bytes()) != completed.source_revision {
+            return Err(PluginError::Conflict(
+                format!(
+                    "{} è cambiato durante la lettura del modello",
+                    completed.id
+                )
+                .into(),
+            ));
+        }
+        Ok(completed.model)
+    }
+
     /// [`VaultRead::read_model`](fub_abi::traits::VaultRead::read_model).
     ///
     /// **Rilegge e riparsa dal disco**, con le regole di sintassi registrate già
@@ -5553,6 +5670,11 @@ impl Workspace {
     /// scartato perché il parse è fallito: in quel caso lo ripariamo comunque,
     /// così il chiamante riceve il `FormatError` reale (e non un falso
     /// `NotFound`). Asset, directory e file senza provider restano assenti.
+    ///
+    /// Questa è la comodità del kernel quando possiede già un `&Workspace`:
+    /// chi lo monta in una `Custody` usa `prepare_detached_document_model` e
+    /// `finish_detached_document_model`, perché soltanto il composition root
+    /// può rilasciare la propria guardia prima del parse.
     /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
     pub fn read_model(&self, id: &DocId) -> Result<DocumentModel> {
         let indexed = self.indexes.core.metas.contains_key(id);

@@ -290,6 +290,11 @@ pub trait FormatProvider: Send + Sync {
     fn descriptor(&self) -> FormatDescriptor;
 
     /// Che sintassi sa leggere.
+    ///
+    /// È metadato di registrazione come [`descriptor`](Self::descriptor):
+    /// l'host lo fotografa quando monta il provider e lo compone poi con le
+    /// regole sintattiche del vault. Non è una callback per-documento e non può
+    /// essere usata come stato mutabile del provider.
     fn capabilities(&self) -> FormatCapabilities;
 
     /// Parsa la sorgente nel modello comune.
