@@ -192,7 +192,7 @@ fn blocking_workspace(vault: &Vault) -> BlockingWorkspace {
     workspace
         .register_plugin(
             PluginManifest::core(PLUGIN, "Audit model lock"),
-            Trust::Core,
+            Trust::Community,
         )
         .expect("model caller declares");
     workspace
@@ -511,7 +511,7 @@ fn assert_parse_recovers(panic: bool) {
         workspace
             .register_plugin(
                 PluginManifest::core(PLUGIN, "Audit model lock"),
-                Trust::Core,
+                Trust::Community,
             )
             .expect("model caller declares");
         let workspace = Custody::new("the model workspace", workspace);
@@ -612,7 +612,7 @@ fn assert_syntax_recovers(panic: bool) {
         workspace
             .register_plugin(
                 PluginManifest::core(PLUGIN, "Audit syntax recovery"),
-                Trust::Core,
+                Trust::Community,
             )
             .expect("model caller declares");
         workspace
@@ -723,7 +723,7 @@ fn format_metadata_is_not_called_by_job_read_or_borrowed_kernel_hosts() {
     workspace
         .register_plugin(
             PluginManifest::core(PLUGIN, "Audit model lock"),
-            Trust::Core,
+            Trust::Community,
         )
         .expect("metadata caller declares");
     let workspace = Custody::new("the model workspace", workspace);
