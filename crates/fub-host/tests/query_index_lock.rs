@@ -57,10 +57,7 @@ fn indexed_workspace(vault: &Vault) -> Custody<Workspace> {
 
 macro_rules! inert_index_lifecycle {
     () => {
-        fn activate(
-            &mut self,
-            _: &mut dyn HostApi,
-        ) -> std::result::Result<(), PluginError> {
+        fn activate(&mut self, _: &mut dyn HostApi) -> std::result::Result<(), PluginError> {
             Ok(())
         }
 
@@ -76,17 +73,11 @@ macro_rules! inert_index_lifecycle {
             Vec::new()
         }
 
-        fn flush(
-            &mut self,
-            _: &mut dyn HostApi,
-        ) -> std::result::Result<(), PluginError> {
+        fn flush(&mut self, _: &mut dyn HostApi) -> std::result::Result<(), PluginError> {
             Ok(())
         }
 
-        fn close(
-            &mut self,
-            _: &mut dyn HostApi,
-        ) -> std::result::Result<(), PluginError> {
+        fn close(&mut self, _: &mut dyn HostApi) -> std::result::Result<(), PluginError> {
             Ok(())
         }
     };
@@ -110,10 +101,7 @@ struct BlockingCustomIndex {
 impl IndexProvider for BlockingCustomIndex {
     custom_index_contract!();
 
-    fn query(
-        &self,
-        request: IndexQuery,
-    ) -> std::result::Result<IndexResult, PluginError> {
+    fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         assert_eq!(request, crate::query());
         self.entered
             .send(())
@@ -139,10 +127,7 @@ impl IndexProvider for BlockingSettingsIndex {
 
     inert_index_lifecycle!();
 
-    fn query(
-        &self,
-        request: IndexQuery,
-    ) -> std::result::Result<IndexResult, PluginError> {
+    fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         assert_eq!(request, settings_query());
         self.entered
             .send(())
@@ -163,10 +148,7 @@ struct FixedCustomIndex {
 impl IndexProvider for FixedCustomIndex {
     custom_index_contract!();
 
-    fn query(
-        &self,
-        request: IndexQuery,
-    ) -> std::result::Result<IndexResult, PluginError> {
+    fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         assert_eq!(request, crate::query());
         Ok(answer(self.value.clone()))
     }
@@ -179,13 +161,12 @@ struct ErrorThenSuccessIndex {
 impl IndexProvider for ErrorThenSuccessIndex {
     custom_index_contract!();
 
-    fn query(
-        &self,
-        request: IndexQuery,
-    ) -> std::result::Result<IndexResult, PluginError> {
+    fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         assert_eq!(request, crate::query());
         if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
-            return Err(PluginError::BadArgs("errore intenzionale del provider".into()));
+            return Err(PluginError::BadArgs(
+                "errore intenzionale del provider".into(),
+            ));
         }
         Ok(answer(serde_json::json!({ "recovered": "error" })))
     }
@@ -198,10 +179,7 @@ struct PanicThenSuccessIndex {
 impl IndexProvider for PanicThenSuccessIndex {
     custom_index_contract!();
 
-    fn query(
-        &self,
-        request: IndexQuery,
-    ) -> std::result::Result<IndexResult, PluginError> {
+    fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         assert_eq!(request, crate::query());
         if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
             panic!("panic intenzionale della query");
@@ -218,10 +196,7 @@ struct ReentrantCustomIndex {
 impl IndexProvider for ReentrantCustomIndex {
     custom_index_contract!();
 
-    fn query(
-        &self,
-        request: IndexQuery,
-    ) -> std::result::Result<IndexResult, PluginError> {
+    fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
         assert_eq!(request, crate::query());
         self.reenter
             .send(())

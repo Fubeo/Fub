@@ -44,8 +44,8 @@ use fub_abi::query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
 };
 use fub_abi::traits::{
-    DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, Paged, PredicateKind, PropertySelect,
-    PropertySort, QueryKind,
+    DocumentMatch, Excerpts, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
+    PropertySelect, PropertySort, QueryKind,
 };
 use fub_abi::PluginError;
 
