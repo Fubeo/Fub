@@ -546,8 +546,7 @@ fn job_host_write_drains_event_handlers_outside_both_guards() {
 #[test]
 fn vault_closed_drains_handlers_before_provider_retirement_without_both_guards() {
     let (vault, host, workspace) = opened();
-    let (probe, observations, reentered) =
-        register_probe(&workspace, ExpectedEvent::VaultClosed);
+    let (probe, observations, reentered) = register_probe(&workspace, ExpectedEvent::VaultClosed);
     let events = workspace
         .read()
         .expect("workspace readable")
@@ -788,10 +787,7 @@ fn assert_close_fault_is_contained(fault: Fault) {
         "event handler faults are reported as Trouble, not close failures"
     );
     reopened.expect("the same host can reopen after a faulty close handler");
-    assert!(
-        final_errors.is_empty(),
-        "the reopened vault closes cleanly"
-    );
+    assert!(final_errors.is_empty(), "the reopened vault closes cleanly");
     call.join()
         .expect("the completed close thread does not panic");
 
@@ -918,13 +914,11 @@ fn every_background_event_source_keeps_the_detached_host_drain() {
     assert!(
         session.contains("letprepared=matchworkspace.write(){Ok(mutws)=>ws.prepare_close(),")
             && session.contains("ifletErr(and)=drain_events(&workspace)")
-            && session.contains(
-                "ws.finish_close_with(prepared,|workspace,id|reg.stop(workspace,id))",
-            )
+            && session
+                .contains("ws.finish_close_with(prepared,|workspace,id|reg.stop(workspace,id))",)
             && session.contains("ws.finish_close_with(prepared,|_,_|Vec::new())")
-            && !session.contains(
-                "ifletErr(and)=drain_events(&workspace){errors.push(and);returnerrors;"
-            ),
+            && !session
+                .contains("ifletErr(and)=drain_events(&workspace){errors.push(and);returnerrors;"),
         "VaultClosed must be drained after prepare and before provider retirement"
     );
 

@@ -272,9 +272,9 @@ impl VaultSession {
         // la custodia resta esplicitamente irrecuperabile.
         let finalized = match workspace.write() {
             Ok(mut ws) => match registry.write() {
-                Ok(mut reg) => Some(
-                    ws.finish_close_with(prepared, |workspace, id| reg.stop(workspace, id)),
-                ),
+                Ok(mut reg) => {
+                    Some(ws.finish_close_with(prepared, |workspace, id| reg.stop(workspace, id)))
+                }
                 Err(and) => {
                     errors.push(and);
                     Some(ws.finish_close_with(prepared, |_, _| Vec::new()))
@@ -713,12 +713,7 @@ impl Host {
             let ws = workspace.write()?;
             ws.watch_flag()
         };
-        opening.start(
-            self.watcher.as_ref(),
-            &root,
-            workspace.clone(),
-            watching,
-        )?;
+        opening.start(self.watcher.as_ref(), &root, workspace.clone(), watching)?;
         let prepared_scan = {
             let ws = workspace.write()?;
             ws.prepare_scan_vault().map_err(PluginError::from)?

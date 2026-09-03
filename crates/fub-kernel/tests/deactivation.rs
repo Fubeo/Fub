@@ -615,12 +615,11 @@ fn close_tokens_cannot_be_swapped_between_workspaces_on_the_same_root() {
         .prepare_close()
         .expect("replacement close prepares");
 
-    let (first_token, first_error) = match replacement
-        .finish_close_with(first_token, |_, _| Vec::new())
-    {
-        Ok(_) => panic!("the replacement accepted the retired workspace token"),
-        Err(rejected) => rejected,
-    };
+    let (first_token, first_error) =
+        match replacement.finish_close_with(first_token, |_, _| Vec::new()) {
+            Ok(_) => panic!("the replacement accepted the retired workspace token"),
+            Err(rejected) => rejected,
+        };
     let (replacement_token, replacement_error) =
         match first.finish_close_with(replacement_token, |_, _| Vec::new()) {
             Ok(_) => panic!("the retired workspace accepted its replacement token"),

@@ -131,10 +131,12 @@ fn open_with_timeout(host: Arc<Host>, root: Utf8PathBuf) -> Result<(), PluginErr
         let result = host.open(&root).and_then(|_| host.wait_indexed(None));
         let _ = done.send(result);
     });
-    let result = completed.recv_timeout(TIMEOUT).unwrap_or_else(|error| match error {
-        RecvTimeoutError::Timeout => panic!("opening deadlocked inside WatcherFactory::start"),
-        RecvTimeoutError::Disconnected => panic!("opening thread disappeared"),
-    });
+    let result = completed
+        .recv_timeout(TIMEOUT)
+        .unwrap_or_else(|error| match error {
+            RecvTimeoutError::Timeout => panic!("opening deadlocked inside WatcherFactory::start"),
+            RecvTimeoutError::Disconnected => panic!("opening thread disappeared"),
+        });
     call.join().expect("opening thread joins");
     result
 }
@@ -144,10 +146,12 @@ fn close_with_timeout(host: Arc<Host>) -> Vec<PluginError> {
     let call = std::thread::spawn(move || {
         let _ = done.send(host.close());
     });
-    let result = completed.recv_timeout(TIMEOUT).unwrap_or_else(|error| match error {
-        RecvTimeoutError::Timeout => panic!("closing deadlocked after WatcherFactory::start"),
-        RecvTimeoutError::Disconnected => panic!("closing thread disappeared"),
-    });
+    let result = completed
+        .recv_timeout(TIMEOUT)
+        .unwrap_or_else(|error| match error {
+            RecvTimeoutError::Timeout => panic!("closing deadlocked after WatcherFactory::start"),
+            RecvTimeoutError::Disconnected => panic!("closing thread disappeared"),
+        });
     call.join().expect("closing thread joins");
     result
 }
@@ -177,7 +181,10 @@ fn watcher_start_error_leaves_no_session_and_the_host_can_retry() {
         error,
         PluginError::Io("watcher refused to start".to_string().into())
     );
-    assert!(host.debug_workspace(None).is_err(), "no partial session remains");
+    assert!(
+        host.debug_workspace(None).is_err(),
+        "no partial session remains"
+    );
     let abandoned = probe
         .workspaces
         .lock()
@@ -210,7 +217,10 @@ fn watcher_start_panic_is_contained_and_the_host_can_retry() {
     let error = open_with_timeout(Arc::clone(&host), root.clone()).expect_err("panic is caught");
     assert!(matches!(error, PluginError::Internal(_)), "{error:?}");
     assert!(error.to_string().contains("watcher start panic"));
-    assert!(host.debug_workspace(None).is_err(), "no partial session remains");
+    assert!(
+        host.debug_workspace(None).is_err(),
+        "no partial session remains"
+    );
     let abandoned = probe
         .workspaces
         .lock()
@@ -346,7 +356,10 @@ fn a_post_start_error_releases_the_opening_turn_before_joining_a_waiting_writer(
         worker_finished.load(Ordering::SeqCst),
         "rollback released the turn before joining the watcher worker"
     );
-    assert!(host.debug_workspace(None).is_err(), "no partial session remains");
+    assert!(
+        host.debug_workspace(None).is_err(),
+        "no partial session remains"
+    );
     assert!(
         !flags.lock().expect("watch flags")[0].load(Ordering::Relaxed),
         "the abandoned running watcher flag was reset"
@@ -414,7 +427,11 @@ fn a_panicking_watcher_drop_does_not_skip_close_and_the_host_can_reopen() {
 
     open_with_timeout(Arc::clone(&host), root).expect("the same host reopens after drop panic");
     let errors = close_with_timeout(host);
-    assert_eq!(errors.len(), 1, "the retry closes with the same contained defect");
+    assert_eq!(
+        errors.len(),
+        1,
+        "the retry closes with the same contained defect"
+    );
     assert!(errors[0].to_string().contains("watcher drop panic"));
 }
 
