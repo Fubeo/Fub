@@ -127,9 +127,7 @@ impl ExpectedEvent {
             (Self::Document(expected), Event::DocumentChanged { id, .. }) => {
                 id.as_str() == expected
             }
-            (Self::Renamed(expected), Event::DocumentRenamed { to, .. }) => {
-                to.as_str() == expected
-            }
+            (Self::Renamed(expected), Event::DocumentRenamed { to, .. }) => to.as_str() == expected,
             (Self::Setting(expected), Event::SettingChanged { key, .. }) => key == expected,
             _ => false,
         }
