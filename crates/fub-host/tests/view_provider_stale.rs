@@ -37,6 +37,8 @@ fn vault() -> Vault {
 fn open(vault: &Vault) -> Host {
     let host = Host::new().with_watcher(Box::new(NoWatcher));
     host.open(&vault.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("opening indexing finishes before the view probe");
     host
 }
 
