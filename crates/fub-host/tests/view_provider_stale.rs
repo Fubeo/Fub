@@ -253,7 +253,7 @@ fn a_render_from_a_replaced_view_provider_is_rejected_as_stale() {
         );
     assert!(
         matches!(&provider_error, Err(PluginError::BadArgs(message))
-            if message.to_string() == "intentional render error"),
+            if *message == "intentional render error"),
         "replacement must not mask the provider error: {provider_error:?}"
     );
     assert_eq!(
@@ -463,7 +463,7 @@ fn refresh_invalidates_only_its_own_prepared_view() {
         );
     assert!(
         matches!(&provider_error, Err(PluginError::BadArgs(message))
-            if message.to_string() == "intentional render error"),
+            if *message == "intentional render error"),
         "a concurrent refresh must not mask the provider error: {provider_error:?}"
     );
 
