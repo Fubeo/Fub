@@ -116,6 +116,7 @@ impl ProbeWorkspace {
 enum ExpectedEvent {
     Custom(&'static str),
     Document(&'static str),
+    Renamed(&'static str),
     Setting(&'static str),
 }
 
@@ -125,6 +126,9 @@ impl ExpectedEvent {
             (Self::Custom(expected), Event::Custom { topic, .. }) => topic == expected,
             (Self::Document(expected), Event::DocumentChanged { id, .. }) => {
                 id.as_str() == expected
+            }
+            (Self::Renamed(expected), Event::DocumentRenamed { to, .. }) => {
+                to.as_str() == expected
             }
             (Self::Setting(expected), Event::SettingChanged { key, .. }) => key == expected,
             _ => false,
@@ -179,6 +183,7 @@ impl EventHandler for LockProbe {
         EventMask::of([
             EventKind::Custom,
             EventKind::DocumentChanged,
+            EventKind::DocumentRenamed,
             EventKind::SettingChanged,
         ])
     }
@@ -420,13 +425,17 @@ fn host_setting_drains_event_handlers_outside_both_guards() {
 #[test]
 fn watcher_sync_drains_event_handlers_outside_both_guards() {
     let (vault, _host, workspace) = opened();
+    let renamed = vault.root.join("Renamed.md");
     let (probe, observations, reentered) =
-        register_probe(&workspace, ExpectedEvent::Document("Note.md"));
-    let changed = vault.root.join("Note.md");
-    std::fs::write(&changed, "# Note\nchanged outside\n").expect("external write succeeds");
+        register_probe(&workspace, ExpectedEvent::Renamed("Renamed.md"));
+    let original = vault.root.join("Note.md");
+    std::fs::rename(&original, &renamed).expect("external rename succeeds");
     let workspace_for_call = workspace.clone();
     run_detached(&workspace, observations, reentered, move || {
-        ExternalSync::new(workspace_for_call).batch(&[ExternalChange::Touched(changed)]);
+        ExternalSync::new(workspace_for_call).batch(&[ExternalChange::Renamed {
+            from: original,
+            to: renamed,
+        }]);
         Ok(())
     });
     probe.detach();
