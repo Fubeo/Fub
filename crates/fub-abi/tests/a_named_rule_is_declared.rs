@@ -1,7 +1,7 @@
 //! **Una regola di identità di un nome si dichiara** (decisione 0136).
 //!
 //! La domanda «quando due nomi sono lo stesso nome» in questo repo ha
-//! **quarantaquattro** risposte in produzione, e non è il difetto. Quattro verbali
+//! **quarantacinque** risposte in produzione, e non è il difetto. Quattro verbali
 //! hanno stabilito che devono essere più d'una: la
 //! [0020](../../../docs/decisions/README.md) («*due
 //! requisiti che **devono** divergere, e una fixture che li legasse nascerebbe
@@ -12,7 +12,7 @@
 //! e un nome che nasce non si giudicano con la stessa regola*») e la
 //! [0115](../../../docs/decisions/0196-test-e-artefatti-generati.md).
 //!
-//! Il difetto è che la **quarantacinquesima** nasce in silenzio. La 0115 lo aveva
+//! Il difetto è che la **quarantaseiesima** nasce in silenzio. La 0115 lo aveva
 //! già scritto — «*il generato, la fixture e il corpus prendono chi **cambia**
 //! una regola, non chi ne **aggiunge** una accanto*» — e la
 //! [0110](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) è
@@ -268,6 +268,15 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "legge il descrittore congelato della stessa registrazione: deve risolvere le \
                  stesse chiavi di `provider_for_ext` e `provider_arc_for_ext`, o metadati e \
                  callback potrebbero attribuire la stessa estensione a provider diversi.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::capabilities_for_ext",
+            (
+                Family::ContextualCase,
+                "legge le capacità congelate accanto al descrittore: deve risolvere la stessa \
+                 estensione di `descriptor_for_ext`, o il provider selezionato e le forme \
+                 sintattiche dichiarate per quel documento potrebbero divergere.",
             ),
         ),
         (
