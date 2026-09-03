@@ -19,7 +19,10 @@ const OTHER_PLUGIN: &str = "fub.audit-view-other";
 const HANDLER: &str = "fub.audit-view-handler";
 const VIEW: &str = "audit-view-stale";
 const OTHER_VIEW: &str = "audit-view-other";
-const EVENT: &str = "fub.audit-view-stale:called";
+// Le feature `Trust::Core` possiedono il namespace condiviso `fub`, non il
+// proprio id di manifest: il probe deve emettere un topic che il cancello
+// accetti davvero, altrimenti misurerebbe soltanto il rifiuto di `HostEvents`.
+const EVENT: &str = "fub:audit-view-stale-called";
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 struct Vault {
