@@ -567,6 +567,7 @@ pub struct PreparedViewRender {
     instance: ViewInstance,
     trust: Trust,
     provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    generation: Arc<()>,
 }
 
 impl PreparedViewRender {
@@ -598,6 +599,7 @@ pub struct PreparedViewAction {
     action: Option<UiAction>,
     trust: Trust,
     provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    generation: Arc<()>,
     previous_provider_call: bool,
 }
 
@@ -5773,7 +5775,9 @@ impl Workspace {
         // effetti, e un rifiuto in mezzo lascerebbe il primo fatto e il secondo
         // no — cioè una view del core cancellata da chi non poteva nemmeno
         // nominarla, con in mano un errore che dice «non è registrato».
-        // Il grado di fiducia è quello del plugin: era un parametro di questa
+        // Il token nasce insieme all'entry: non c'è un contatore condiviso che
+        // renda obsolete view estranee quando questa viene sostituita.
+        let generation = Arc::new(());
         if replacing {
             self.providers
                 .plugins
@@ -5791,6 +5795,8 @@ impl Workspace {
         // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
         // avesse dato un grado (§7.3).
         // Rilegge ciò che un provider dichiara: view e comandi.
+        // Il grado di fiducia è quello del plugin: era un parametro di questa
+        // sola registrazione, prima che la politica diventasse dato del plugin.
         let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
         self.providers
             .plugins
@@ -5799,6 +5805,7 @@ impl Workspace {
             id: plugin,
             specs,
             provider: Arc::new(SharedShelter::new(provider)),
+            generation,
             trust,
         });
         Ok(())
@@ -5876,7 +5883,35 @@ impl Workspace {
             instance: instance.clone(),
             trust: registered.trust,
             provider: Arc::clone(&registered.provider),
+            generation: Arc::clone(&registered.generation),
         })
+    }
+
+    /// Una callback preparata può terminare soltanto se la stessa entry
+    /// possiede ancora la view. L'`Arc` distingue rimozione e nuova
+    /// registrazione; il token di generazione distingue invece un refresh
+    /// delle spec sullo stesso provider.
+    fn ensure_view_is_current(
+        &self,
+        owner: &str,
+        view: &str,
+        generation: &Arc<()>,
+        provider: &Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    ) -> std::result::Result<(), PluginError> {
+        let current = self.providers.views.iter().any(|registered| {
+            registered.id == owner
+                && Arc::ptr_eq(&registered.generation, generation)
+                && Arc::ptr_eq(&registered.provider, provider)
+                && registered.specs.iter().any(|spec| spec.id == view)
+        });
+        if current {
+            Ok(())
+        } else {
+            Err(PluginError::Conflict(
+                format!("la registrazione della view `{view}` è cambiata durante la callback")
+                    .into(),
+            ))
+        }
     }
 
     /// Applica il confine di fiducia e la localizzazione dopo che il provider è
@@ -5887,6 +5922,12 @@ impl Workspace {
         outcome: std::result::Result<UiNode, PluginError>,
     ) -> std::result::Result<UiNode, PluginError> {
         let mut tree = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
+        self.ensure_view_is_current(
+            &prepared.owner,
+            &prepared.view,
+            &prepared.generation,
+            &prepared.provider,
+        )?;
         guard_ui(prepared.trust, &tree)?;
         self.localize(&prepared.owner, &mut tree);
         Ok(tree)
@@ -5935,12 +5976,13 @@ impl Workspace {
     ) -> std::result::Result<PreparedViewAction, PluginError> {
         let at = self.view_owner(&instance.view)?;
         self.check_params(at, instance)?;
-        let (owner, trust, provider) = {
+        let (owner, trust, provider, generation) = {
             let registered = &self.providers.views[at];
             (
                 registered.id.clone(),
                 registered.trust,
                 Arc::clone(&registered.provider),
+                Arc::clone(&registered.generation),
             )
         };
         let previous_provider_call = self.dispatch.enter_provider_call();
@@ -5951,6 +5993,7 @@ impl Workspace {
             action: Some(action),
             trust,
             provider,
+            generation,
             previous_provider_call,
         })
     }
@@ -5965,22 +6008,31 @@ impl Workspace {
     ) -> std::result::Result<ViewUpdate, PluginError> {
         self.dispatch
             .restore_provider_call(prepared.previous_provider_call);
-        let mut update = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
-        let tree = match &update {
-            ViewUpdate::Replace { root } => Some(root),
-            ViewUpdate::Patch { node, .. } => Some(node),
-            ViewUpdate::None
-            | ViewUpdate::Navigate { .. }
-            | ViewUpdate::Reveal { .. }
-            | ViewUpdate::RunSearch { .. }
-            | ViewUpdate::Custom { .. } => None,
-        };
-        if let Some(tree) = tree {
-            guard_ui(prepared.trust, tree)?;
-        }
-        self.localize(&prepared.owner, &mut update);
+        let result = (|| {
+            let mut update = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
+            self.ensure_view_is_current(
+                &prepared.owner,
+                &prepared.view,
+                &prepared.generation,
+                &prepared.provider,
+            )?;
+            let tree = match &update {
+                ViewUpdate::Replace { root } => Some(root),
+                ViewUpdate::Patch { node, .. } => Some(node),
+                ViewUpdate::None
+                | ViewUpdate::Navigate { .. }
+                | ViewUpdate::Reveal { .. }
+                | ViewUpdate::RunSearch { .. }
+                | ViewUpdate::Custom { .. } => None,
+            };
+            if let Some(tree) = tree {
+                guard_ui(prepared.trust, tree)?;
+            }
+            self.localize(&prepared.owner, &mut update);
+            Ok(update)
+        })();
         self.dispatch_pending();
-        Ok(update)
+        result
     }
 
     /// Compatibilità per i chiamanti diretti del kernel. L'host di processo usa

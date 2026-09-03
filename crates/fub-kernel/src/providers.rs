@@ -148,6 +148,11 @@ pub(crate) struct RegisteredView {
     pub(crate) id: String,
     pub(crate) provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
     pub(crate) specs: Vec<ViewSpec>,
+    /// Token di generazione della singola registrazione. Cambia soltanto
+    /// quando questa entry viene rinegoziata o sostituita: una mutazione a una
+    /// view estranea non rende obsolete le callback già in volo. L'identità
+    /// dell'`Arc` evita un contatore globale e non ha un caso di overflow.
+    pub(crate) generation: Arc<()>,
     /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
     /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
     /// albero è legittimo da una feature ufficiale e inaccettabile da un plugin
@@ -406,6 +411,7 @@ impl ProviderRegistry {
 
         for (at, specs) in views {
             self.views[at].specs = specs;
+            self.views[at].generation = Arc::new(());
         }
         for (at, specs) in commands {
             self.commands[at].specs = specs;
