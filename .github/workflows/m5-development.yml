@@ -28,7 +28,7 @@ jobs:
         with:
           cache-on-failure: true
       - name: Apply the reviewed development changes
-        run: python3 .github/scripts/m5-driver.py
+        run: python3 .github/scripts/m5-current.py
       - name: Format the changed Rust sources
         run: cargo fmt --all
       - name: Compile and lint the runtime
