@@ -9,6 +9,7 @@ assert source.count(old) == 1
 source = source.replace(old, new, 1)
 source = source.replace('if text.count(old) != 1:', 'if text.count(old) != (2 if old == ".any(|s| name.starts_with(s))" else 1):', 1)
 source = source.replace('p.write_text(text.replace(old, new, 1))', 'p.write_text(text.replace(old, new))', 1)
+source = source.replace('stubs: true,', 'stubs,')
 exec(compile(source, str(path), 'exec'))
 
 p = Path('crates/fub-wasm-host/tests/views_cross_the_boundary.rs')
