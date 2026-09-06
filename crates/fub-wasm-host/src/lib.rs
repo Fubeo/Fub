@@ -33,11 +33,14 @@
 
 mod borrow;
 mod component;
+mod directory;
 mod events;
 mod guest;
 mod limits;
 mod model;
 mod translate;
+
+pub use directory::{ComponentDirectory, DiscoveryReport, MAX_COMPONENT_BYTES};
 
 pub use component::{Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin};
 

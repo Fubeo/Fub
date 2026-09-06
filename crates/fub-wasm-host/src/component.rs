@@ -9,7 +9,7 @@
 //! `register` senza sapere che dietro c'è una macchina virtuale, e il giorno in
 //! cui gli servisse saperlo il «un trait, due backend» sarebbe finito.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
@@ -491,7 +491,7 @@ pub struct WasmBundle {
     /// È `Option` e si **svuota** quando la si prende: un `register` senza il
     /// `plugin` che lo precede non trova niente e lo dice, invece di registrare
     /// i comandi di un'istanza di un montaggio di prima.
-    last: Mutex<Option<Arc<Mutex<Instance>>>>,
+    last: Mutex<Option<Weak<Mutex<Instance>>>>,
 }
 
 /// Chi è, non com'è fatto: l'istanza e il linker non hanno niente da dire a
@@ -519,7 +519,12 @@ impl WasmBundle {
     /// componente che non sa dire il proprio manifest non è un bundle, e lo si
     /// scopre qui invece che a metà montaggio.
     pub fn from_file(path: &Utf8Path, trust: Trust) -> Result<Self, LoadError> {
-        let component = Component::from_file(path)?;
+        Self::from_bytes(&std::fs::read(path)?, trust)
+    }
+
+    /// Legge il manifest dai byte che verranno installati, senza riaprire il file.
+    pub fn from_bytes(bytes: &[u8], trust: Trust) -> Result<Self, LoadError> {
+        let component = Component::from_bytes(bytes)?;
         let manifest = {
             let mut inst = component.instantiate()?;
             let m = inst
@@ -584,12 +589,11 @@ impl Bundle for WasmBundle {
         match self.component.instantiate() {
             Ok(inst) => {
                 let inner = Arc::new(Mutex::new(inst));
-                // La copia che `register` verrà a prendere fra un passo. Un
-                // `plugin()` senza il `register()` che lo segue la lascia qui e
-                // la fa buttare dal prossimo: è un `Arc` in più che vive quanto
-                // il bundle, non una perdita.
+                // Un riferimento debole: se l'attivazione fallisce, il plugin
+                // restituito viene scartato e l'istanza muore subito, anche
+                // quando il bundle resta nell'inventario dei conosciuti.
                 if let Ok(mut last) = self.last.lock() {
-                    *last = Some(Arc::clone(&inner));
+                    *last = Some(Arc::downgrade(&inner));
                 }
                 Box::new(WasmPlugin { inner })
             }
@@ -615,7 +619,11 @@ impl Bundle for WasmBundle {
     /// pezzo manca.
     fn register(&self, ws: &mut Workspace) -> Vec<String> {
         let mut warnings = Vec::new();
-        let inner = match self.last.lock().map(|mut u| u.take()) {
+        let inner = match self
+            .last
+            .lock()
+            .map(|mut u| u.take().and_then(|instance| instance.upgrade()))
+        {
             Ok(Some(the)) => the,
             Ok(None) => {
                 warnings.push("no instance to register: `plugin()` was not called".into());
