@@ -25,6 +25,7 @@ path = "src/main.rs"
 [dependencies]
 fub-abi = { workspace = true }
 fub-kernel = { workspace = true }
+fub-wasm-host = { workspace = true }
 # Chi monta: registro, feature, sessione, watcher, ponte eventi (§8.2).
 #
 # L'app è la build **piena**, e le feature ufficiali le chiede **per nome**

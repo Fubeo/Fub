@@ -1,0 +1,14 @@
+package esempio:provider-probe;
+
+world probe-format {
+    export fub:abi/plugin@0.1.1;
+    export fub:abi/format@0.1.1;
+}
+world probe-index {
+    export fub:abi/plugin@0.1.1;
+    export fub:abi/index@0.1.1;
+}
+world probe-events {
+    export fub:abi/plugin@0.1.1;
+    export fub:abi/event-handler@0.1.1;
+}

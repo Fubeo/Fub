@@ -335,6 +335,7 @@ pub struct Host {
     /// (si installano qui), e il tema di serie basta a sé stesso — la stessa
     /// regola di «perdere il tema è meglio di un'app che non parte».
     config_dir: Option<Utf8PathBuf>,
+    bundle_source: Option<Box<dyn crate::BundleSource>>,
     /// Quanti thread esegue i job di **ogni** vault aperto (§9.3). Per vault e
     /// non in totale: i pool non si conoscono, come non si conoscono i vault.
     job_threads: usize,
@@ -410,6 +411,7 @@ impl Host {
             view_states: ViewStates::in_memory(),
             vaults: VaultRegistry::in_memory(),
             config_dir: None,
+            bundle_source: None,
             job_threads: DEFAULT_JOB_THREADS,
             system_locale: Arc::new(SystemLocale::default()),
             levels: Arc::new(fub_kernel::log::Levels::default()),
@@ -442,6 +444,16 @@ impl Host {
             Some(dir) => Host::new().with_config_dir(dir.as_path()),
             None => Host::new(),
         }
+    }
+
+    /// Aggiunge la discovery dei componenti della macchina.
+    ///
+    /// Un componente esterno resta spento a ogni apertura. L'attivazione passa
+    /// da `set_plugin_enabled`, anche se un vault porta una preferenza diversa:
+    /// la presenza sul disco e le impostazioni del vault non sono un consenso.
+    pub fn with_bundle_source(mut self, source: Box<dyn crate::BundleSource>) -> Self {
+        self.bundle_source = Some(source);
+        self
     }
 
     /// Come [`installed`](Host::installed), su una cartella scelta: è la porta
@@ -634,6 +646,27 @@ impl Host {
             }
             for problem in errors {
                 tracing::error!(target: "fub.host", "theme skipped: {problem}");
+            }
+        }
+        if let (Some(source), Some(config_dir)) = (&self.bundle_source, &self.config_dir) {
+            match source.discover(config_dir) {
+                Ok(found) => {
+                    for bundle in found.bundles {
+                        let id = bundle.manifest().id;
+                        if registry.knows(&id) {
+                            tracing::error!(target: "fub.host", "component identity already known: {id}");
+                            continue;
+                        }
+                        // Soltanto l'inventario: nessun activate durante discovery.
+                        registry.remember(bundle);
+                    }
+                    for error in found.errors {
+                        tracing::error!(target: "fub.host", "component skipped: {error}");
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(target: "fub.host", "component discovery failed: {error}")
+                }
             }
         }
         let registry = Custody::new("i componenti montati", registry);

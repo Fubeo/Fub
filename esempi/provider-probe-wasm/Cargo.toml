@@ -1,0 +1,16 @@
+[package]
+name = "provider-probe-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+format = []
+index = []
+events = []
+
+[dependencies]
+wit-bindgen = "0.60"

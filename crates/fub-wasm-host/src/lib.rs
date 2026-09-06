@@ -34,6 +34,8 @@
 mod borrow;
 mod component;
 mod directory;
+mod source;
+pub use source::WasmSource;
 mod events;
 mod guest;
 mod limits;

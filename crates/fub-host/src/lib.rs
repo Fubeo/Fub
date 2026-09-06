@@ -90,6 +90,8 @@ pub mod mount;
 pub mod net;
 pub mod records;
 pub mod registry;
+mod source;
+pub use source::{BundleDiscovery, BundleSource};
 pub mod runner;
 pub mod session;
 pub mod settings;

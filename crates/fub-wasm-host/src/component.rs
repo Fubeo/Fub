@@ -56,6 +56,15 @@ const FAMILIES_SERVED: &[&str] = &[
 /// abbiamo misurato al primo caricamento vero: il ping ne importava otto.
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
 
+fn family(name: &str, base: &str) -> bool {
+    name == base
+        || name
+            .strip_prefix(base)
+            .is_some_and(|suffix| suffix.starts_with('@'))
+}
+
+const PROVIDERS_SERVED: &[&str] = &["fub:abi/plugin", "fub:abi/command", "fub:abi/view"];
+
 // ---------------------------------------------------------------------------
 // Gli errori del caricamento
 // ---------------------------------------------------------------------------
@@ -79,6 +88,13 @@ pub enum LoadError {
     /// cercare, «manca `fub:abi/host-net`» manda a leggere il §20.3.
     #[error("il componente importa famiglie che questo host non serve: {0}")]
     UnservedFamilies(String),
+    /// Un provider esportato non ha ancora un proxy: rifiutarlo evita un mount
+    /// apparentemente riuscito che scarta in silenzio una parte del plugin.
+    #[error("il componente esporta provider che questo host non serve: {0}")]
+    UnservedProviders(String),
+    /// Un export presente non rispetta la firma del contratto.
+    #[error("export del componente incompatibile: {0}")]
+    InvalidExport(String),
     /// Il componente non esporta `fub:abi/plugin`, cioè non è un plugin.
     #[error("il componente non esporta `fub:abi/plugin`: non è un plugin ({0})")]
     NotAPlugin(String),
@@ -143,10 +159,24 @@ impl Component {
             .imports(&engine)
             .map(|(name, _)| name.to_string())
             .filter(|name| name.starts_with(HOST_FAMILY_PREFIX))
-            .filter(|name| !FAMILIES_SERVED.iter().any(|s| name.starts_with(s)))
+            .filter(|name| !FAMILIES_SERVED.iter().any(|s| family(name, s)))
             .collect();
         if !missing.is_empty() {
             return Err(LoadError::UnservedFamilies(missing.join(", ")));
+        }
+        let exports: Vec<String> = component
+            .component_type()
+            .exports(&engine)
+            .map(|(name, _)| name.to_string())
+            .collect();
+        let unsupported: Vec<&str> = exports
+            .iter()
+            .filter(|name| name.starts_with("fub:abi/"))
+            .filter(|name| !PROVIDERS_SERVED.iter().any(|base| family(name, base)))
+            .map(String::as_str)
+            .collect();
+        if !unsupported.is_empty() {
+            return Err(LoadError::UnservedProviders(unsupported.join(", ")));
         }
         cap_the_rest(&mut linker, &engine, &component)
             .map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
@@ -161,8 +191,22 @@ impl Component {
         // «non lo esporta» e non è un guasto da riportare. Sono le due righe in
         // cui si vede la differenza fra ciò che il contratto pretende e ciò che
         // offre.
-        let command_indices = w_command::GuestIndices::new(&pre).ok();
-        let view_indices = w_view::GuestIndices::new(&pre).ok();
+        let command_indices =
+            if exports.iter().any(|name| family(name, "fub:abi/command")) {
+                Some(w_command::GuestIndices::new(&pre).map_err(|error| {
+                    LoadError::InvalidExport(format!("fub:abi/command: {error:#}"))
+                })?)
+            } else {
+                None
+            };
+        let view_indices =
+            if exports.iter().any(|name| family(name, "fub:abi/view")) {
+                Some(w_view::GuestIndices::new(&pre).map_err(|error| {
+                    LoadError::InvalidExport(format!("fub:abi/view: {error:#}"))
+                })?)
+            } else {
+                None
+            };
 
         Ok(Component {
             pre,
@@ -233,7 +277,7 @@ fn cap_the_rest(
 ) -> wasmtime::Result<()> {
     let ty = component.component_type();
     for (name, item) in ty.imports(engine) {
-        if FAMILIES_SERVED.iter().any(|s| name.starts_with(s)) {
+        if FAMILIES_SERVED.iter().any(|s| family(name, s)) {
             continue;
         }
         let ComponentItem::ComponentInstance(iface) = item else {

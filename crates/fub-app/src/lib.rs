@@ -801,6 +801,7 @@ pub fn run() {
         // della shell (§25.5).
         .manage(
             Host::installed()
+                .with_bundle_source(Box::new(fub_wasm_host::WasmSource))
                 .with_session_notice(warning)
                 .with_levels(levels)
                 .with_sink(sink),

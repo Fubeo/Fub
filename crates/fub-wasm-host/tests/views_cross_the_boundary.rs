@@ -192,3 +192,100 @@ fn denied_activation_leaves_no_partial_mount() {
     .unwrap();
     host.close();
 }
+
+struct NativeView;
+impl fub_abi::traits::ViewProvider for NativeView {
+    fn interests(&self, _: &ViewInstance) -> fub_abi::traits::ViewInterests {
+        use fub_abi::event::{EventKind, EventMask};
+        fub_abi::traits::ViewInterests {
+            refresh: EventMask {
+                kinds: vec![
+                    EventKind::DocumentChanged,
+                    EventKind::DocumentRemoved,
+                    EventKind::DocumentRenamed,
+                ],
+                ..Default::default()
+            },
+            follows: Default::default(),
+        }
+    }
+
+    fn views(&self) -> Vec<fub_abi::traits::ViewSpec> {
+        vec![fub_abi::traits::ViewSpec {
+            id: "demo.native:documents".into(),
+            title: "Documenti del vault".into(),
+            surface: fub_abi::traits::ViewSurface::RightSidebar,
+            refresh: Default::default(),
+            follows: Default::default(),
+            params: vec![],
+            icon: Some("files".into()),
+            order: 10,
+            open_by_default: false,
+            preferred_size: Some(280),
+            closable: true,
+        }]
+    }
+    fn render_view(
+        &self,
+        _: &ViewInstance,
+        host: &dyn fub_abi::traits::ReadApi,
+    ) -> Result<fub_abi::ui::UiNode, PluginError> {
+        use fub_abi::ui::{ActionId, ActionRef, UiNode};
+        let mut ids = host.list_documents(None)?.items;
+        ids.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut items = Vec::new();
+        for id in ids {
+            let text = host.read_document(&id)?;
+            items.push(UiNode {
+                key: Some(id.0.clone()),
+                kind: UiKind::ListItem {
+                    title: id.0.clone().into(),
+                    subtitle: Some(format!("{} caratteri", text.chars().count()).into()),
+                    action: Some(ActionRef {
+                        action: ActionId("open".into()),
+                        payload: serde_json::json!(id.0),
+                    }),
+                    selected: false,
+                },
+            });
+        }
+        Ok(UiNode {
+            key: Some("documents".into()),
+            kind: UiKind::List { items },
+        })
+    }
+    fn on_action(
+        &mut self,
+        _: &ViewInstance,
+        action: UiAction,
+        _: &mut dyn fub_abi::traits::HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        Ok(ViewUpdate::Navigate {
+            doc_id: serde_json::from_value(action.payload)
+                .map_err(|error| PluginError::BadArgs(error.to_string().into()))?,
+        })
+    }
+}
+
+#[test]
+fn native_and_wasm_views_have_the_same_observable_tree_and_action() {
+    with_view(|ws, _, bundle| {
+        use fub_host::Bundle;
+        let mut manifest = bundle.manifest();
+        manifest.id = "demo.native".into();
+        ws.register_plugin(manifest, Trust::Community).unwrap();
+        ws.register_view_provider("demo.native", Box::new(NativeView))
+            .unwrap();
+        let native = ViewInstance::only("demo.native:documents");
+        let wasm = ViewInstance::only(VIEW);
+        assert_eq!(
+            ws.render_view(&native).unwrap(),
+            ws.render_view(&wasm).unwrap()
+        );
+        let action = || UiAction::new("open").with_payload(serde_json::json!("Nota.md"));
+        assert_eq!(
+            ws.view_action(&native, action()).unwrap(),
+            ws.view_action(&wasm, action()).unwrap()
+        );
+    });
+}

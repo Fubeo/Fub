@@ -1388,6 +1388,7 @@ dependencies = [
  "fub-abi",
  "fub-host",
  "fub-kernel",
+ "fub-wasm-host",
  "serde",
  "serde_json",
  "tauri",
