@@ -1,0 +1,8 @@
+package esempio:vault-view;
+
+world vault-view {
+    import fub:abi/host-vault-read@0.1.1;
+    import fub:abi/host-data-write@0.1.1;
+    export fub:abi/plugin@0.1.1;
+    export fub:abi/view@0.1.1;
+}

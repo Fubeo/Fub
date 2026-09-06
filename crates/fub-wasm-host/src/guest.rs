@@ -69,6 +69,15 @@ macro_rules! guest {
 // host-env: le capacità senza permesso (§7.3)
 // ---------------------------------------------------------------------------
 
+macro_rules! read_guest {
+    ($self:expr) => {
+        match $self.read_guest() {
+            Ok(h) => h,
+            Err(error) => return Err(tr::to_error(&error)),
+        }
+    };
+}
+
 impl host_env::Host for State {
     /// Senza host prestato l'orologio risponde `0`. È l'unica firma di questa
     /// famiglia che non può dire di no — il contratto la dà come `u64` nudo,
@@ -76,13 +85,16 @@ impl host_env::Host for State {
     /// l'epoca, cioè un istante che nessuno scambia per adesso.
     /// l'epoca, cioè un istante che nessuno scambia per adesso.
     fn now_unix_millis(&mut self) -> u64 {
-        self.guest().map(|h| h.now_unix_millis()).unwrap_or(0)
+        self.read_guest().map(|h| h.now_unix_millis()).unwrap_or(0)
     }
 
     /// Come sopra: il locale di ripiego è quello di default, che è la stessa
     /// cosa che l'host risponde quando l'utente non ha scelto niente.
     fn user_locale(&mut self) -> w_intl::Locale {
-        let locale = self.guest().map(|h| h.user_locale()).unwrap_or_default();
+        let locale = self
+            .read_guest()
+            .map(|h| h.user_locale())
+            .unwrap_or_default();
         tr::to_locale(&locale)
     }
 
@@ -90,12 +102,12 @@ impl host_env::Host for State {
         &mut self,
         n: u32,
     ) -> Result<Vec<u8>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.random_bytes(n).map_err(|and| tr::to_error(&and))
     }
 
     fn active_context(&mut self) -> Option<w_session::ViewContext> {
-        self.guest()
+        self.read_guest()
             .ok()
             .and_then(|h| h.active_context())
             .as_ref()
@@ -112,7 +124,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.read_document(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))
     }
@@ -121,7 +133,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<Vec<u8>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.read_document_bytes(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))
     }
@@ -130,7 +142,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.document_revision(&DocId::new(id))
             .map(|r| r.0)
             .map_err(|and| tr::to_error(&and))
@@ -140,14 +152,14 @@ impl host_vault_read::Host for State {
         &mut self,
         page: Option<w_index::Page>,
     ) -> Result<w_index::DocIdsPage, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.list_documents(tr::from_page(page))
             .map(tr::to_doc_ids_page)
             .map_err(|and| tr::to_error(&and))
     }
 
     fn free_name(&mut self, id: w_model::DocId) -> w_model::DocId {
-        match self.guest() {
+        match self.read_guest() {
             Ok(h) => h.free_name(&DocId::new(id)).0,
             // Senza host non c'è nessun vault in cui il nome sia libero: torna
             // quello chiesto, che è ciò che `free_name` risponde quando è già
@@ -174,7 +186,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<w_model::DocumentModel, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         let model = h
             .read_model(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))?;
@@ -182,7 +194,7 @@ impl host_vault_read::Host for State {
     }
 
     fn format_of(&mut self, id: w_model::DocId) -> Option<w_format::DocumentFormat> {
-        self.guest()
+        self.read_guest()
             .ok()
             .and_then(|h| h.format_of(&DocId::new(id)))
             .as_ref()
@@ -193,7 +205,7 @@ impl host_vault_read::Host for State {
         &mut self,
     ) -> Result<Vec<host_vault_read::TrashEntry>, crate::contract::fub::abi::errors::PluginError>
     {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.list_trash()
             .map(|v| v.into_iter().map(tr::to_trash).collect())
             .map_err(|and| tr::to_error(&and))
@@ -209,7 +221,7 @@ impl host_data_read::Host for State {
         &mut self,
         path: String,
     ) -> Result<Option<Vec<u8>>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.data_read(&path).map_err(|and| tr::to_error(&and))
     }
 
@@ -217,7 +229,7 @@ impl host_data_read::Host for State {
         &mut self,
         prefix: String,
     ) -> Result<Vec<String>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.data_list(&prefix).map_err(|and| tr::to_error(&and))
     }
 
@@ -225,7 +237,7 @@ impl host_data_read::Host for State {
         &mut self,
         path: String,
     ) -> Result<Option<Vec<u8>>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = read_guest!(self);
         h.cache_read(&path).map_err(|and| tr::to_error(&and))
     }
 }

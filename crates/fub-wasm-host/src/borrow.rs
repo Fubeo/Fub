@@ -29,14 +29,18 @@
 //! attraversa nessun confine di thread. Lo `Store` invece i thread li
 //! attraversa — un job gira sul pool — e ci arriva sempre **vuoto**.
 
-use fub_abi::traits::HostApi;
+use fub_abi::traits::{HostApi, ReadApi};
 use fub_abi::PluginError;
 use wasmtime::{Store, StoreLimits};
 
 /// L'host prestato. `'static` per finta: la vita vera è quella della parentesi
 /// di [`with_guest`], e l'invariante che la sostituisce è scritta lì sopra.
 /// Ciò che una host function ha davanti quando la chiamano.
-type Guest = *mut (dyn HostApi + 'static);
+#[derive(Clone, Copy)]
+enum Guest {
+    Mutable(*mut (dyn HostApi + 'static)),
+    ReadOnly(*const (dyn ReadApi + 'static)),
+}
 
 /// Il tetto di memoria di questa istanza (`crate::limits`).
 pub(crate) struct State {
@@ -72,6 +76,20 @@ impl State {
         &mut self.limits
     }
 
+    /// La metà leggibile del prestito, senza fabbricare un riferimento mutabile.
+    pub(crate) fn read_guest(&mut self) -> Result<&dyn ReadApi, PluginError> {
+        match self.guest {
+            // SAFETY: entrambi i puntatori sono vivi soltanto nello scope del
+            // prestito. Il riferimento condiviso termina prima che lo State
+            // possa essere prestato nuovamente, anche in modalità mutabile.
+            Some(Guest::Mutable(p)) => Ok(unsafe { &*p }),
+            Some(Guest::ReadOnly(p)) => Ok(unsafe { &*p }),
+            None => Err(PluginError::Internal(
+                "host capabilities requested outside a contract call".into(),
+            )),
+        }
+    }
+
     /// Le capacità di questa chiamata.
     ///
     /// L'errore non è teorico solo in apparenza: è ciò che succederebbe se un
@@ -84,7 +102,10 @@ impl State {
             // SAFETY: il puntatore è stato scritto da `with_guest`, che è
             // ancora nella propria parentesi — altrimenti il campo sarebbe
             // `None` — e quindi il riferimento originale è vivo.
-            Some(p) => Ok(unsafe { &mut *p }),
+            Some(Guest::Mutable(p)) => Ok(unsafe { &mut *p }),
+            Some(Guest::ReadOnly(_)) => Err(PluginError::PermissionDenied(
+                "il render di una view dispone soltanto di ReadApi".into(),
+            )),
             None => Err(PluginError::Internal(
                 "host capabilities requested outside a contract call".into(),
             )),
@@ -114,8 +135,28 @@ pub(crate) fn with_guest<R>(
     // finché `host` vale, cioè finché questa funzione non è tornata.
     // finché `host` vale, cioè finché questa funzione non è tornata.
     let ptr: *mut (dyn HostApi + '_) = host;
-    let ptr: Guest = unsafe { std::mem::transmute(ptr) };
+    let ptr = Guest::Mutable(unsafe {
+        std::mem::transmute::<*mut (dyn HostApi + '_), *mut (dyn HostApi + 'static)>(ptr)
+    });
 
+    let previous = store.data_mut().guest.replace(ptr);
+    let guard = Return { store, previous };
+    f(&mut *guard.store)
+}
+
+/// Presta la sola lettura per il render. Non converte mai `&T` in `&mut T`.
+pub(crate) fn with_read_guest<R>(
+    store: &mut Store<State>,
+    host: &dyn ReadApi,
+    f: impl FnOnce(&mut Store<State>) -> R,
+) -> R {
+    crate::limits::renew(store);
+    let ptr: *const (dyn ReadApi + '_) = host;
+    // SAFETY: come in with_guest, Return cancella il prestito prima che host
+    // possa morire e la chiamata sincrona non sposta il puntatore fra thread.
+    let ptr = Guest::ReadOnly(unsafe {
+        std::mem::transmute::<*const (dyn ReadApi + '_), *const (dyn ReadApi + 'static)>(ptr)
+    });
     let previous = store.data_mut().guest.replace(ptr);
     let guard = Return { store, previous };
     f(&mut *guard.store)

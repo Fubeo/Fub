@@ -38,6 +38,7 @@ exclude = [
     "esempi/ciclo-wasm",
     "esempi/modello-wasm",
     "esempi/eventi-wasm",
+    "esempi/vault-view-wasm",
 ]
 
 [workspace.package]

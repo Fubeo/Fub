@@ -416,7 +416,7 @@ pub(crate) fn to_span(s: fub_abi::model::Span) -> w_model::Span {
 /// davanti anche il sorgente e sa dire pure «fuori dal documento» e «a metà di
 /// un carattere»: un secondo punto in cui si decide cos'è uno span buono
 /// sarebbe un secondo punto da tenere allineato al primo.
-fn from_span(s: w_model::Span) -> Result<fub_abi::model::Span, PluginError> {
+pub(crate) fn from_span(s: w_model::Span) -> Result<fub_abi::model::Span, PluginError> {
     fn narrow(v: u64, which: &str) -> Result<usize, PluginError> {
         usize::try_from(v).map_err(|_| {
             PluginError::BadArgs(
@@ -514,7 +514,7 @@ fn from_param_kind(k: w_command::ParamKind) -> fub_abi::command::ParamKind {
     }
 }
 
-fn from_param_spec(p: w_command::ParamSpec) -> fub_abi::command::ParamSpec {
+pub(crate) fn from_param_spec(p: w_command::ParamSpec) -> fub_abi::command::ParamSpec {
     fub_abi::command::ParamSpec {
         name: p.name,
         title: from_text(p.title),

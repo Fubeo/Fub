@@ -9,6 +9,10 @@
 //! `register` senza sapere che dietro c'è una macchina virtuale, e il giorno in
 //! cui gli servisse saperlo il «un trait, due backend» sarebbe finito.
 
+use crate::borrow::with_read_guest;
+use crate::contract::exports::fub::abi::view as w_view;
+use fub_abi::traits::{ReadApi, ViewInstance, ViewInterests, ViewProvider, ViewSpec};
+use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use std::sync::{Arc, Mutex, Weak};
 
 use camino::Utf8Path;
@@ -104,6 +108,7 @@ pub struct Component {
     /// nel tipo del componente e ripeterla a ogni istanza sarebbe pagarla a
     /// ogni montaggio.
     command_indices: Option<w_command::GuestIndices>,
+    view_indices: Option<w_view::GuestIndices>,
 }
 
 impl Component {
@@ -157,11 +162,13 @@ impl Component {
         // cui si vede la differenza fra ciò che il contratto pretende e ciò che
         // offre.
         let command_indices = w_command::GuestIndices::new(&pre).ok();
+        let view_indices = w_view::GuestIndices::new(&pre).ok();
 
         Ok(Component {
             pre,
             indices,
             command_indices,
+            view_indices,
         })
     }
 
@@ -184,9 +191,19 @@ impl Component {
             ),
             None => None,
         };
+        let views = self
+            .view_indices
+            .as_ref()
+            .map(|indices| indices.load(&mut store, &instance))
+            .transpose()
+            .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?;
         Ok(Instance {
             store,
-            interfaces: Interfaces { plugin, commands },
+            interfaces: Interfaces {
+                plugin,
+                commands,
+                views,
+            },
         })
     }
 }
@@ -266,6 +283,7 @@ fn cap_the_rest(
 struct Interfaces {
     plugin: w_plugin::Guest,
     commands: Option<w_command::Guest>,
+    views: Option<w_view::Guest>,
 }
 
 /// Un'istanza viva: lo store con dentro il prestito, e le sue interfacce.
@@ -647,10 +665,38 @@ impl Bundle for WasmBundle {
             }
         };
         if !specs.is_empty() {
-            let provider = WasmCommandProvider { inner, specs };
+            let provider = WasmCommandProvider {
+                inner: Arc::clone(&inner),
+                specs,
+            };
             if let Err(and) = ws.register_command_provider(&self.manifest.id, Box::new(provider)) {
                 warnings.push(format!("comandi non registrati: {and}"));
             }
+        }
+        let views = (|| -> Result<Vec<ViewSpec>, String> {
+            let mut inst = inner
+                .lock()
+                .map_err(|_| "component instance is poisoned".to_string())?;
+            let Instance { store, interfaces } = &mut *inst;
+            let Some(views) = interfaces.views.as_ref() else {
+                return Ok(Vec::new());
+            };
+            crate::limits::renew(&mut *store);
+            let specs = views
+                .call_views(&mut *store)
+                .map_err(|error| format!("view non dichiarate: {error:#}"))?;
+            Ok(specs.into_iter().map(crate::view::from_spec).collect())
+        })();
+        match views {
+            Ok(specs) if !specs.is_empty() => {
+                let provider = WasmViewProvider { inner, specs };
+                if let Err(error) = ws.register_view_provider(&self.manifest.id, Box::new(provider))
+                {
+                    warnings.push(format!("view non registrate: {error}"));
+                }
+            }
+            Ok(_) => {}
+            Err(error) => warnings.push(error),
         }
         warnings
     }
@@ -683,5 +729,88 @@ impl Plugin for FailedPlugin {
         _host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         Err(PluginError::Internal(self.error.clone().into()))
+    }
+}
+
+/// Una view dello stesso componente che possiede lifecycle e comandi.
+pub struct WasmViewProvider {
+    inner: Arc<Mutex<Instance>>,
+    specs: Vec<ViewSpec>,
+}
+
+impl ViewProvider for WasmViewProvider {
+    fn views(&self) -> Vec<ViewSpec> {
+        self.specs.clone()
+    }
+
+    fn interests(&self, instance: &ViewInstance) -> ViewInterests {
+        // Il trait è infallibile: conserviamo gli interessi dichiarati se la
+        // chiamata cade. Il render successivo restituisce l'errore tipizzato.
+        let fallback = self
+            .specs
+            .iter()
+            .find(|spec| spec.id == instance.view)
+            .map(|spec| ViewInterests {
+                refresh: spec.refresh.clone(),
+                follows: spec.follows.clone(),
+            })
+            .unwrap_or_default();
+        let Ok(mut inst) = self.inner.lock() else {
+            return fallback;
+        };
+        let Instance { store, interfaces } = &mut *inst;
+        let Some(views) = interfaces.views.as_ref() else {
+            return fallback;
+        };
+        crate::limits::renew(&mut *store);
+        views
+            .call_interests(&mut *store, &crate::view::to_instance(instance))
+            .map(crate::view::from_interests)
+            .unwrap_or(fallback)
+    }
+
+    fn render_view(
+        &self,
+        instance: &ViewInstance,
+        host: &dyn ReadApi,
+    ) -> Result<UiNode, PluginError> {
+        let mut inst = self
+            .inner
+            .lock()
+            .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *inst;
+        let views = interfaces
+            .views
+            .as_ref()
+            .ok_or_else(|| PluginError::UnknownView(instance.view.clone().into()))?;
+        let tree = with_read_guest(store, host, |store| {
+            views.call_render_view(store, &crate::view::to_instance(instance))
+        })
+        .map_err(failure)?
+        .map_err(tr::from_error)?;
+        crate::ui::from_tree(tree)
+    }
+
+    fn on_action(
+        &mut self,
+        instance: &ViewInstance,
+        action: UiAction,
+        host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        call(&self.inner, host, |interfaces, store| {
+            let views = interfaces
+                .views
+                .as_ref()
+                .ok_or_else(|| PluginError::UnknownView(instance.view.clone().into()))?;
+            let update = views
+                .call_on_action(
+                    store,
+                    &crate::view::to_instance(instance),
+                    &crate::ui::to_action(action),
+                )
+                .map_err(failure)?
+                .map_err(tr::from_error)?;
+            crate::ui::from_update(update)
+        })
     }
 }

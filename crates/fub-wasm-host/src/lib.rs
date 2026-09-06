@@ -39,7 +39,10 @@ mod guest;
 mod limits;
 mod model;
 mod translate;
+mod ui;
+mod view;
 
+pub use component::WasmViewProvider;
 pub use directory::{ComponentDirectory, DiscoveryReport, MAX_COMPONENT_BYTES};
 
 pub use component::{Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin};
