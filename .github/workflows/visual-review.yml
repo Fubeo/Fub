@@ -1,0 +1,92 @@
+name: Visual baseline review
+on:
+  push:
+    branches: [verify/visual-baselines]
+    paths: [.github/workflows/visual-review.yml]
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: cf50f60fd17e53d11e74ff2e7af96d572f69b10e
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/client
+      - name: Record canonical environment and baseline history
+        shell: bash
+        run: |
+          mkdir -p visual-review
+          { git rev-parse HEAD; uname -a; cat /etc/os-release; node --version; npm --version; } > visual-review/environment.txt
+          git log --follow -8 --format=fuller --stat -- apps/client/bench/baseline/graph-light.png > visual-review/baseline-history.txt
+          git show 5d8af02050700c738e73461a7a0a98059d91dfc2:frontend/bench/photos.mjs > visual-review/historical-photos.mjs
+          cp apps/client/bench/photos.mjs visual-review/current-photos.mjs
+          cp apps/client/package-lock.json visual-review/package-lock.json
+          cp -r apps/client/bench/baseline visual-review/baseline
+      - name: First visual verification without updating baselines
+        working-directory: apps/client
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run bench:verify | tee ../../visual-review/first.log
+          cp -r bench/.output ../../visual-review/first
+      - name: Second consecutive verification on the same runner
+        working-directory: apps/client
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run bench:verify | tee ../../visual-review/second.log
+          cp -r bench/.output ../../visual-review/second
+      - name: Accessibility in both lights
+        working-directory: apps/client
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run bench:a11y | tee ../../visual-review/accessibility.log
+      - name: Measure repeatability using unchanged thresholds
+        working-directory: apps/client
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import fs from 'node:fs';
+          import { PNG } from 'pngjs';
+          import pixelmatch from 'pixelmatch';
+          const root = '../../visual-review';
+          const current = fs.readFileSync(`${root}/current-photos.mjs`, 'utf8');
+          const historical = fs.readFileSync(`${root}/historical-photos.mjs`, 'utf8');
+          function threshold(text, names) {
+            const match = text.match(new RegExp(`const (?:${names.join('|')}) = ([0-9.]+);`));
+            if (!match) throw new Error('threshold missing');
+            return Number(match[1]);
+          }
+          const color = threshold(current, ['COLOR_THRESHOLD', 'SOGLIA_COLORE']);
+          const ratio = threshold(current, ['DIFF_THRESHOLD', 'SOGLIA_DIVERSI']);
+          if (color !== threshold(historical, ['COLOR_THRESHOLD', 'SOGLIA_COLORE']) || ratio !== threshold(historical, ['DIFF_THRESHOLD', 'SOGLIA_DIVERSI'])) throw new Error('threshold changed');
+          const rows = fs.readdirSync(`${root}/first/attuale`).filter(f => f.endsWith('.png')).map(name => {
+            const a = PNG.sync.read(fs.readFileSync(`${root}/first/attuale/${name}`));
+            const b = PNG.sync.read(fs.readFileSync(`${root}/second/attuale/${name}`));
+            if (a.width !== b.width || a.height !== b.height) throw new Error('dimensions changed');
+            const different = pixelmatch(a.data, b.data, null, a.width, a.height, { threshold: color });
+            return { name, different, pixels: a.width * a.height, ratio: different / (a.width * a.height) };
+          });
+          fs.writeFileSync(`${root}/repeatability.json`, JSON.stringify({ color, threshold: ratio, rows }, null, 2));
+          console.log(JSON.stringify(rows.sort((a,b) => b.ratio-a.ratio).slice(0,5)));
+          if (rows.length === 0 || rows.some(r => r.ratio > ratio)) throw new Error('repeatability failed');
+          JS
+          git diff --exit-code
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: visual-review-${{ github.run_id }}
+          path: visual-review/
+          retention-days: 30
