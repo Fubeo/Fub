@@ -1,0 +1,67 @@
+name: M5 development verification
+on:
+  push:
+    branches: [work/m5-wasm-runtime]
+    paths:
+      - .github/scripts/m5-work.py
+      - .github/workflows/m5-development.yml
+permissions:
+  contents: read
+concurrency:
+  group: m5-development-verification
+  cancel-in-progress: false
+jobs:
+  verify:
+    if: github.repository == 'Fubeo/Fub' && github.ref == 'refs/heads/work/m5-wasm-runtime'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.89
+        with:
+          targets: wasm32-wasip2
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Apply the reviewed development changes
+        run: python3 .github/scripts/m5-work.py
+      - name: Format the changed Rust sources
+        run: cargo fmt --all
+      - name: Compile and lint the runtime
+        shell: bash
+        run: |
+          set +e
+          cargo clippy -p fub-wasm-host --all-targets -- -D warnings > "$RUNNER_TEMP/m5-clippy.log" 2>&1
+          code=$?
+          tail -n 100 "$RUNNER_TEMP/m5-clippy.log"
+          exit "$code"
+      - name: Exercise the real component boundary
+        shell: bash
+        run: |
+          set +e
+          cargo test -p fub-wasm-host --tests > "$RUNNER_TEMP/m5-tests.log" 2>&1
+          code=$?
+          tail -n 150 "$RUNNER_TEMP/m5-tests.log"
+          exit "$code"
+      - name: Keep diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: m5-development-${{ github.run_id }}
+          path: ${{ runner.temp }}/m5-*.log
+      - name: Publish verified source changes to the development branch only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          test "$GITHUB_REF" = refs/heads/work/m5-wasm-runtime
+          git diff --check
+          git diff --stat
+          git add crates/fub-wasm-host crates/fub-host crates/fub-app esempi docs Cargo.lock
+          if git diff --cached --quiet; then exit 0; fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'feat(wasm): applica il passo M5 verificato sul confine reale'
+          git -c 'credential.helper=!f() { printf "username=x-access-token\npassword=%s\n" "$GH_TOKEN"; }; f' push https://github.com/Fubeo/Fub.git HEAD:refs/heads/work/m5-wasm-runtime
