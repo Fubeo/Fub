@@ -1,0 +1,24 @@
+name: Esporta sorgenti per verifica
+
+on:
+  push:
+    branches: [work/verification-2026-09-06]
+    paths: [.github/workflows/session-export.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Esporta soltanto i file versionati
+        run: git archive --format=tar.gz --output=/tmp/fub-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v6
+        with:
+          name: fub-source
+          path: /tmp/fub-source.tar.gz
+          retention-days: 1
