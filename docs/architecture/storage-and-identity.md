@@ -72,6 +72,22 @@ sequenceDiagram
 Il chiamante non tiene un lock durante codice esterno. Gli eventi vengono
 pubblicati dopo l'operazione autorevole.
 
+### CAS cooperativa
+
+`RootedFsStorage` coordina i writer Fub tramite un file stabile
+`.<nome>.lock` accanto al target, aperto relativamente alla capability.
+La creazione è esclusiva; soltanto `AlreadyExists` conduce all'apertura del
+lock esistente, senza troncarlo. Il file non viene rimosso al rilascio:
+writer concorrenti devono continuare a riferirsi alla stessa identità.
+
+Il lock viene acquisito prima della rilettura e resta detenuto durante il
+confronto e la sostituzione atomica. Un errore di apertura o acquisizione
+impedisce la scrittura e mantiene la specie I/O originale. La diagnostica
+distingue lo stadio del lock dall'operazione protetta.
+
+La CAS è esatta fra writer che rispettano questo protocollo. Con writer
+esterni che ignorano il lock la protezione resta best-effort.
+
 ## Rename
 
 Un rename deve considerare:
