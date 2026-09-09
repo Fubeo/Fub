@@ -64,6 +64,34 @@ cargo build \
 Gli esempi vivono fuori dal workspace principale perché richiedono un target
 diverso e vengono costruiti dai test che li usano.
 
+## Store per host nativi
+
+Un host Rust può installare un singolo componente compilato usando
+`fub_wasm_host::installed::InstalledPluginStore`. Deve passare esplicitamente
+la directory di configurazione della macchina, già esistente:
+
+```rust
+let store = InstalledPluginStore::open(config_dir)?;
+let base = store.snapshot()?;
+let installed = store.install(&base, component_path)?;
+```
+
+Il componente nasce disabilitato e senza consenso. `set_consent` registra
+l'approvazione all'esecuzione degli esatti byte, mentre `set_enabled` conserva
+una scelta distinta. Entrambi richiedono una fotografia corrente e possono
+restituire `InstallError::Conflict`; il chiamante rilegge e presenta la nuova
+situazione, senza ripetere automaticamente una decisione vecchia.
+
+`load` ricontrolla digest e manifest e restituisce un `WasmBundle` con fiducia
+Community. Non monta l'istanza né concede capability. Il chiamante completa
+il percorso comune di permessi, dipendenze e lifecycle, e deve completare il
+teardown prima di `remove`. La rimozione conserva i dati del plugin nel vault.
+
+Il banco `crates/fub-wasm-host/tests/installed_inventory.rs` esercita questa
+stessa API, compresi guasti, riavvio e concorrenza. L'integrazione desktop,
+l'aggiornamento di una versione già installata e il percorso completo restano
+tracciati in [#8](https://github.com/Fubeo/Fub/issues/8).
+
 ## WIT
 
 La sorgente viva è:

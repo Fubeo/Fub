@@ -28,6 +28,10 @@ crate-type = ["cdylib"]
 # del banco nativo (`il_primo_plugin.rs`) portato di qua dal confine, e serve a
 # provare che il cancello del §7.3 si chiude anche davanti a un componente.
 senza-permessi = []
+# Varianti reali per il rifiuto prima della pubblicazione nell’inventario.
+abi-incompatibile = []
+versione-successiva = []
+manifest-non-valido = []
 # Il mondo che chiede anche la rete (vedi `wit/ping.wit`): esiste perché il
 # rifiuto dell'host abbia davanti un componente vero.
 con-rete = []

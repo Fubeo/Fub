@@ -31,9 +31,37 @@ La cartella viene scelta in ordine:
 | `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
 | `themes/<id>/` | installato | per tema | fogli, skin e asset |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
+| `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
+| `wasm-plugins/components/<identità>-<digest>.wasm` | installato | componente | eseguibile verificato |
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
+
+## Componenti WASM installati
+
+`fub_wasm_host::installed::InstalledPluginStore` riceve esplicitamente la
+configurazione scelta dalla shell. Usa la capability della directory;
+non deduce percorsi dal manifest o dai dati del vault.
+
+L'inventario schema 1 conserva `next_installation` e `plugins`. Ogni record
+ha identità monotona, manifest, digest SHA-256, `enabled` e `consent`.
+Contatore e identità attraversano JSON come stringhe decimali. Il consenso
+può essere `undecided`, `denied` o `granted` e riguarda gli esatti byte
+installati; non concede capability. La fiducia resta decisa dall'host.
+
+Il blob viene pubblicato prima dell'inventario, che usa la CAS cooperativa.
+File `.part` e blob non referenziati sono invisibili allo store. Un errore
+nella pubblicazione lascia intatto l'inventario precedente; non viene
+reinterpretato come vuoto un file corrotto, illeggibile o di schema futuro.
+Un id duplicato, anche con versione diversa, richiede una scelta esplicita.
+
+La rimozione ritira il record prima del cleanup del blob. Un cleanup fallito
+è riportato nell'esito e può lasciare un orfano invisibile. La reinstallazione
+ha nuova identità e nessun consenso ereditato. Lo store non cancella dati in
+`.fub/plugins/` e non sostituisce il teardown delle istanze montate.
+
+La decisione è descritta nell'
+[ADR 0200](../decisions/0200-inventario-componenti-installati.md).
 
 ## Radice del vault
 

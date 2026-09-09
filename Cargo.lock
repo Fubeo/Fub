@@ -1540,10 +1540,12 @@ name = "fub-wasm-host"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "cap-std",
  "fub-abi",
  "fub-host",
  "fub-kernel",
  "fub-testkit",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.19",
