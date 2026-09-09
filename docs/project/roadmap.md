@@ -25,10 +25,10 @@ Questa roadmap stabilisce l'ordine del lavoro, non deroga ai gate audit.
 
 ### Riconciliare le linee prima di M5
 
-Certificare il fix CAS #27 anche nelle run push e PR; poi integrare la
-riconciliazione #25 e discovery #26 nella linea audit. Adattare #23 al lifecycle
-audit senza callback sotto il lock del workspace, compresi i percorsi di
-produzione, e riallineare #24 al risultato effettivo. Preservare il lavoro
+Il fix CAS #27 e la riconciliazione #25 hanno superato le run push e PR;
+#25 è integrata nella linea audit. Completare i gate della discovery #26 e del
+port documentale #28 sul candidato effettivo. Adattare #23 al lifecycle audit
+senza callback sotto il lock del workspace, compresi i percorsi di produzione. Preservare il lavoro
 esclusivo di entrambe le linee. Non ritirare il piano audit per aggirare G15.
 
 ### Completare M5

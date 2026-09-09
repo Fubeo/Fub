@@ -26,21 +26,30 @@ finale. Nessun gate viene spuntato per effetto di questo riallineamento.
 
 ## Candidati della linea audit
 
-La [PR #25](https://github.com/Fubeo/Fub/pull/25) riconcilia le due linee senza
-spostare `main`; la [PR #26](https://github.com/Fubeo/Fub/pull/26) porta solo
-discovery e prove dei candidati. Entrambe richiedono la certificazione del
-candidato integrato, compresa la regressione CAS macOS della
-[PR #27](https://github.com/Fubeo/Fub/pull/27).
+La [PR #25](https://github.com/Fubeo/Fub/pull/25) è stata integrata nella sola
+linea audit con fast-forward a `65a0cce5ed849fc8eba46b12f88a6aa23a07a0eb`,
+dopo il verde completo delle run push e PR sullo stesso SHA. Preserva #22,
+i 284 commit esclusivi audit e i due esclusivi di `main`.
+
+Il candidato di questa documentazione include anche la sola discovery della
+[PR #26](https://github.com/Fubeo/Fub/pull/26), al commit
+`77e1b8783fbba75364644078b0735a5b709de28d`. Le prove e il gate di integrazione
+sono registrati nella PR: il codice di discovery non completa il lifecycle.
+Ogni avanzamento della linea audit richiede i controlli applicabili sullo SHA
+effettivo; nessuna di queste integrazioni autorizza a spostare `main`.
 
 Il candidato CAS `4b3bd77e2b7af5584a56ba3a3556e1ade99e5976` corregge l'apertura
 concorrente del lock nuovo. La diagnostica precedente identifica `open_lock`
 come stadio dell'errore `ENOENT`; il protocollo usa creazione esclusiva e apre
 un file esistente soltanto dopo `AlreadyExists`. I due test CAS sono verdi sui
-tre sistemi nelle run push e PR. Al checkpoint del 9 settembre la
-[run push](https://github.com/Fubeo/Fub/actions/runs/34388493276) è tutta verde;
-la [run PR](https://github.com/Fubeo/Fub/actions/runs/34388497315) attende ancora
-il completamento di Windows. Questa prova non certifica un port o un
-successivo commit di integrazione.
+tre sistemi nelle run
+[push](https://github.com/Fubeo/Fub/actions/runs/34388493276) e
+[PR](https://github.com/Fubeo/Fub/actions/runs/34388497315), entrambe concluse
+con successo in tutti gli otto job. Anche il candidato di riconciliazione
+`65a0cce` ha superato entrambe le run
+[push](https://github.com/Fubeo/Fub/actions/runs/34391260104) e
+[PR](https://github.com/Fubeo/Fub/actions/runs/34391266023).
+Queste prove non certificano automaticamente un successivo SHA.
 
 C-04/G3 resta aperto: oltre al banco WASM, anche mount, abilitazione, rollback
 e teardown di produzione richiedono callback fuori da `Custody<Workspace>`.
@@ -155,8 +164,8 @@ non certificano automaticamente un candidato ottenuto integrando due linee.
 
 ## Prossimi passi
 
-1. certificare il CAS #27, integrare #25/#26 sulla linea audit, adattare il
-   lifecycle #23 a C-04 e portare lo stato #24 sul candidato effettivo;
+1. completare i gate del candidato audit dopo #25, discovery #26 e port
+   documentale #28; adattare il lifecycle #23 a C-04 in produzione;
 2. chiudere il percorso prodotto M5 delle issue #8 e #10;
 3. completare ripristino atomico e backup/restore #5/#7;
 4. separare e misurare la Graph View con #12/#6;

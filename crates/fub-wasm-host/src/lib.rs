@@ -33,6 +33,7 @@
 
 mod borrow;
 mod component;
+mod discovery;
 mod events;
 mod guest;
 mod limits;
@@ -40,6 +41,7 @@ mod model;
 mod translate;
 
 pub use component::{Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin};
+pub use discovery::{discover, DiscoveredPlugin};
 
 /// I binding **lato host** di `plugin-world`, generati dal contratto.
 ///
