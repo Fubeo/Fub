@@ -36,6 +36,7 @@ mod component;
 mod discovery;
 mod events;
 mod guest;
+pub mod installed;
 mod limits;
 mod model;
 mod translate;

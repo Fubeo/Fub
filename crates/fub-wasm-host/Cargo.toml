@@ -26,6 +26,8 @@ fub-kernel.workspace = true
 # li prende tutt'e due: è `fub-app`.
 fub-host.workspace = true
 camino.workspace = true
+cap-std.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 # Il runtime dei componenti. `default-features = false` più le tre che servono
