@@ -1,0 +1,9 @@
+// Il componente usa soltanto la lettura del vault e offre un comando.
+package esempio:lifecycle@0.1.0;
+
+world lifecycle {
+    import fub:abi/host-vault-read@0.1.1;
+
+    export fub:abi/plugin@0.1.1;
+    export fub:abi/command@0.1.1;
+}

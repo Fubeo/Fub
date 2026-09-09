@@ -9,7 +9,7 @@
 //! `register` senza sapere che dietro c'è una macchina virtuale, e il giorno in
 //! cui gli servisse saperlo il «un trait, due backend» sarebbe finito.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
 use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
@@ -488,10 +488,11 @@ pub struct WasmBundle {
     /// una sola: il plugin e i suoi provider sono lo stesso componente, non due
     /// copie che si somigliano.
     ///
-    /// È `Option` e si **svuota** quando la si prende: un `register` senza il
-    /// `plugin` che lo precede non trova niente e lo dice, invece di registrare
-    /// i comandi di un'istanza di un montaggio di prima.
-    last: Mutex<Option<Arc<Mutex<Instance>>>>,
+    /// Il riferimento è debole: se `activate` fallisce, il rollback lascia
+    /// cadere il plugin e con lui lo store, anche se il bundle resta fra i
+    /// conosciuti. Il passaggio a `register` non deve possedere un'istanza.
+    /// L'`Option` si svuota alla lettura e non riusa un montaggio precedente.
+    last: Mutex<Option<Weak<Mutex<Instance>>>>,
 }
 
 /// Chi è, non com'è fatto: l'istanza e il linker non hanno niente da dire a
@@ -584,12 +585,11 @@ impl Bundle for WasmBundle {
         match self.component.instantiate() {
             Ok(inst) => {
                 let inner = Arc::new(Mutex::new(inst));
-                // La copia che `register` verrà a prendere fra un passo. Un
-                // `plugin()` senza il `register()` che lo segue la lascia qui e
-                // la fa buttare dal prossimo: è un `Arc` in più che vive quanto
-                // il bundle, non una perdita.
+                // `register` può promuovere il riferimento solo mentre il
+                // plugin è vivo. Un'attivazione fallita non lascia uno store
+                // posseduto dal bundle in attesa del prossimo tentativo.
                 if let Ok(mut last) = self.last.lock() {
-                    *last = Some(Arc::clone(&inner));
+                    *last = Some(Arc::downgrade(&inner));
                 }
                 Box::new(WasmPlugin { inner })
             }
@@ -615,10 +615,14 @@ impl Bundle for WasmBundle {
     /// pezzo manca.
     fn register(&self, ws: &mut Workspace) -> Vec<String> {
         let mut warnings = Vec::new();
-        let inner = match self.last.lock().map(|mut u| u.take()) {
+        let inner = match self
+            .last
+            .lock()
+            .map(|mut u| u.take().and_then(|instance| instance.upgrade()))
+        {
             Ok(Some(the)) => the,
             Ok(None) => {
-                warnings.push("no instance to register: `plugin()` was not called".into());
+                warnings.push("no live instance to register".into());
                 return warnings;
             }
             Err(_) => {
