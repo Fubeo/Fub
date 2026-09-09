@@ -9,12 +9,7 @@ use std::sync::Barrier;
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_kernel::{ConditionalWrite, RootedFsStorage, VaultStorage};
 
-fn race(
-    left: &RootedFsStorage,
-    right: &RootedFsStorage,
-    path: &Utf8Path,
-    expected: Option<&[u8]>,
-) {
+fn race(left: &RootedFsStorage, right: &RootedFsStorage, path: &Utf8Path, expected: Option<&[u8]>) {
     let start = Barrier::new(2);
     let outcomes = std::thread::scope(|scope| {
         let worker = scope.spawn(|| {
