@@ -244,9 +244,7 @@ fn a_corrupt_snapshot_never_reaches_the_document_or_the_index() {
         .expect("riscritta");
     let ts = last_ts(&ws.render_view(&instance()).unwrap());
 
-    let store = fub_kernel::data_root(&vault.root)
-        .join("plugins")
-        .join(VERSIONING_ID);
+    let store = vault.root.join(".fub").join("plugins").join(VERSIONING_ID);
     let index = store.join("versions.json");
     let index_before = std::fs::read(&index).expect("indice delle versioni");
     let snapshot = std::fs::read_dir(&store)
