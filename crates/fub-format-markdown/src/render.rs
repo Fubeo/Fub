@@ -44,16 +44,17 @@ fn block_attrs(block: &Block) -> String {
 }
 
 fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
-    let attrs = block_attrs(block);
+    // Non confondere gli attributi HTML con il payload JSON di Block::Custom.
+    let html_attrs = block_attrs(block);
     match block {
         Block::Heading { level, inlines, .. } => {
             let the = (*level).clamp(1, 6);
-            write!(out, "<h{the}{attrs}>").unwrap();
+            write!(out, "<h{the}{html_attrs}>").unwrap();
             render_inlines(inlines, opts, out);
             write!(out, "</h{the}>").unwrap();
         }
         Block::Paragraph { inlines, .. } => {
-            write!(out, "<p{attrs}>").unwrap();
+            write!(out, "<p{html_attrs}>").unwrap();
             render_inlines(inlines, opts, out);
             out.push_str("</p>");
         }
@@ -71,7 +72,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 Some(n) if *ordered && *n != 1 => format!(" start=\"{n}\""),
                 _ => String::new(),
             };
-            write!(out, "<{tag}{attrs}{from}>").unwrap();
+            write!(out, "<{tag}{html_attrs}{from}>").unwrap();
             for item in items {
                 match &item.task {
                     Some(t) => {
@@ -97,7 +98,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         Block::Table {
             head, rows, align, ..
         } => {
-            write!(out, "<table{attrs}>").unwrap();
+            write!(out, "<table{html_attrs}>").unwrap();
             if let Some(h) = head {
                 out.push_str("<thead>");
                 render_row(h, align, true, opts, out);
@@ -113,21 +114,21 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
             match lang {
                 Some(the) => write!(
                     out,
-                    "<pre{attrs}><code{}>",
+                    "<pre{html_attrs}><code{}>",
                     attr("class", &format!("language-{the}"))
                 )
                 .unwrap(),
-                None => write!(out, "<pre{attrs}><code>").unwrap(),
+                None => write!(out, "<pre{html_attrs}><code>").unwrap(),
             }
             out.push_str(&escape(code));
             out.push_str("</code></pre>");
         }
         Block::Quote { blocks, .. } => {
-            write!(out, "<blockquote{attrs}>").unwrap();
+            write!(out, "<blockquote{html_attrs}>").unwrap();
             render_blocks(blocks, opts, out);
             out.push_str("</blockquote>");
         }
-        Block::ThematicBreak { .. } => write!(out, "<hr{attrs}>").unwrap(),
+        Block::ThematicBreak { .. } => write!(out, "<hr{html_attrs}>").unwrap(),
         Block::ReferenceDefinition {
             label, url, title, ..
         } => {
@@ -143,7 +144,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 .unwrap_or_default();
             write!(
                 out,
-                "<div{attrs} class=\"reference-definition\"{}>{}{}</div>",
+                "<div{html_attrs} class=\"reference-definition\"{}>{}{}</div>",
                 attr("data-label", label),
                 escape(url),
                 title
@@ -152,22 +153,19 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
         }
         Block::Custom {
             custom_kind,
-            attrs: payload,
+            attrs,
             blocks,
             ..
         } => {
             if custom_kind == custom_kind::CALLOUT {
-                let ty = payload
-                    .get("type")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("note");
+                let ty = attrs.get("type").and_then(|v| v.as_str()).unwrap_or("note");
                 write!(
                     out,
-                    "<div{attrs} class=\"callout\"{}>",
+                    "<div{html_attrs} class=\"callout\"{}>",
                     attr("data-callout", ty)
                 )
                 .unwrap();
-                if let Some(title) = payload.get("title").and_then(|v| v.as_str()) {
+                if let Some(title) = attrs.get("title").and_then(|v| v.as_str()) {
                     if !title.is_empty() {
                         write!(out, "<div class=\"callout-title\">{}</div>", escape(title))
                             .unwrap();
@@ -181,11 +179,11 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // l'utente ha sbagliato una virgola nelle proprietà e vedrebbe
                 // le proprietà svanire senza un avviso. Il testo resta **dato**
                 // (escapato), e il motivo si legge accanto.
-                let reason = payload.get("error").and_then(|v| v.as_str()).unwrap_or("");
-                let text = payload.get("text").and_then(|v| v.as_str()).unwrap_or("");
+                let reason = attrs.get("error").and_then(|v| v.as_str()).unwrap_or("");
+                let text = attrs.get("text").and_then(|v| v.as_str()).unwrap_or("");
                 write!(
                     out,
-                    "<div{attrs} class=\"block-frontmatter-unparsed\">\
+                    "<div{html_attrs} class=\"block-frontmatter-unparsed\">\
                      <div class=\"frontmatter-error\">{}</div><pre>{}</pre></div>",
                     escape(reason),
                     escape(text)
@@ -197,14 +195,14 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // `custom_kind::HTML` resta **dato** e non torna markup: la
                 // decisione su cosa sia lecito eseguire è della sanitizzazione
                 // (5.3), non del provider che ha letto il file.
-                let label = payload
+                let label = attrs
                     .get("label")
                     .and_then(|v| v.as_str())
                     .map(|the| attr("data-label", the))
                     .unwrap_or_default();
                 write!(
                     out,
-                    "<div{attrs}{}{label}>",
+                    "<div{html_attrs}{}{label}>",
                     attr("class", &css_class("block", custom_kind))
                 )
                 .unwrap();
@@ -216,7 +214,7 @@ fn render_block(block: &Block, opts: &RenderOptions, out: &mut String) {
                 // quella che una `SyntaxRule` produce — quindi va letto di lì.
                 if blocks.is_empty() {
                     out.push_str(&escape(
-                        text_content(custom_kind, payload).unwrap_or_default(),
+                        text_content(custom_kind, attrs).unwrap_or_default(),
                     ));
                 } else {
                     render_blocks(blocks, opts, out);
@@ -547,5 +545,136 @@ fn render_link_label(
     match label {
         Some(inlines) if !inlines.is_empty() => render_inlines(inlines, opts, out),
         _ => out.push_str(&escape(fallback)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use fub_abi::model::Span;
+    use serde_json::json;
+
+    fn custom_html(kind: &str, attrs: serde_json::Value, blocks: Vec<Block>) -> String {
+        let block = Block::Custom {
+            custom_kind: kind.into(),
+            attrs,
+            blocks,
+            anchor: Some("anchor".into()),
+            span: Span { start: 7, end: 42 },
+        };
+        let mut out = String::new();
+        render_block(&block, &RenderOptions::default(), &mut out);
+        out
+    }
+
+    #[test]
+    fn custom_fallback_keeps_html_attributes_separate_from_payload() {
+        let html = custom_html(
+            "com.example:convenzione",
+            json!({ "source": "GIRO-DEI-BYTE", "text": "TESTO-SBAGLIATO" }),
+            vec![],
+        );
+        assert_eq!(
+            html,
+            concat!(
+                "<div id=\"anchor\" data-fub-source-start=\"7\" data-fub-source-end=\"42\"",
+                " class=\"block-com.example:convenzione\">GIRO-DEI-BYTE</div>"
+            )
+        );
+    }
+
+    #[test]
+    fn callout_keeps_its_anchor_and_span_without_leaking_payload() {
+        let html = custom_html(
+            custom_kind::CALLOUT,
+            json!({ "type": "warning", "title": "Attenzione", "private": "NON-PUBBLICARE" }),
+            vec![],
+        );
+        assert_eq!(
+            html,
+            concat!(
+                "<div id=\"anchor\" data-fub-source-start=\"7\" data-fub-source-end=\"42\"",
+                " class=\"callout\" data-callout=\"warning\">",
+                "<div class=\"callout-title\">Attenzione</div></div>"
+            )
+        );
+    }
+
+    #[test]
+    fn unreadable_frontmatter_renders_only_its_declared_fields() {
+        let html = custom_html(
+            custom_kind::FRONTMATTER_UNPARSED,
+            json!({ "error": "Errore", "text": "titolo: [", "private": "NON-PUBBLICARE" }),
+            vec![],
+        );
+        assert_eq!(
+            html,
+            concat!(
+                "<div id=\"anchor\" data-fub-source-start=\"7\" data-fub-source-end=\"42\"",
+                " class=\"block-frontmatter-unparsed\">",
+                "<div class=\"frontmatter-error\">Errore</div><pre>titolo: [</pre></div>"
+            )
+        );
+    }
+
+    #[test]
+    fn custom_payloads_remain_escaped_in_every_rendering_branch() {
+        let hostile = "\"><script>alert('x')</script>&";
+        for kind in [
+            custom_kind::CALLOUT,
+            custom_kind::FRONTMATTER_UNPARSED,
+            "com.example:custom",
+        ] {
+            let html = custom_html(
+                kind,
+                json!({
+                    "type": hostile, "title": hostile, "error": hostile,
+                    "text": hostile, "source": hostile, "label": hostile,
+                    "private": "NON-PUBBLICARE"
+                }),
+                vec![],
+            );
+            assert!(html.starts_with("<div id=\"anchor\" "), "{kind}: {html}");
+            assert!(html.contains(&escape(hostile)), "{kind}: {html}");
+            assert!(!html.contains("<script>"), "{kind}: {html}");
+            assert!(!html.contains("NON-PUBBLICARE"), "{kind}: {html}");
+        }
+    }
+
+    #[test]
+    fn custom_children_take_precedence_over_source_without_losing_their_spans() {
+        let html = custom_html(
+            "com.example:container",
+            json!({ "source": "NON-PUBBLICARE" }),
+            vec![Block::Paragraph {
+                inlines: vec![Inline::Text("Figlio".into())],
+                anchor: None,
+                span: Span { start: 12, end: 18 },
+            }],
+        );
+        assert_eq!(
+            html,
+            concat!(
+                "<div id=\"anchor\" data-fub-source-start=\"7\" data-fub-source-end=\"42\"",
+                " class=\"block-com.example:container\">",
+                "<p data-fub-source-start=\"12\" data-fub-source-end=\"18\">Figlio</p></div>"
+            )
+        );
+    }
+
+    #[test]
+    fn a_custom_block_without_source_does_not_dump_other_attributes() {
+        let html = custom_html(
+            "com.example:empty",
+            json!({ "text": "NON-PUBBLICARE" }),
+            vec![],
+        );
+        assert_eq!(
+            html,
+            concat!(
+                "<div id=\"anchor\" data-fub-source-start=\"7\" data-fub-source-end=\"42\"",
+                " class=\"block-com.example:empty\"></div>"
+            )
+        );
     }
 }
