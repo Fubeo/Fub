@@ -54,6 +54,24 @@ sequenceDiagram
     GUARD-->>GUEST: valore o errore
 ```
 
+## Discovery nativa
+
+`discover` in `crates/fub-wasm-host/src/discovery.rs` legge una directory scelta
+dall'host e restituisce i candidati `.wasm` in ordine deterministico. Mantiene
+l'errore di ciascun file e non scambia una directory illeggibile per un elenco
+vuoto. Non visita sottodirectory e non segue link simbolici.
+
+Caricare non significa attivare. I manifest vengono letti senza un host del
+vault; tutti i candidati ricevono `Trust::Community`. La compatibilità ABI e
+la dichiarazione passano dal mount comune. Prima di ricordare un candidato,
+il chiamante deve rifiutare id duplicati o già occupati: `remember` non è una
+porta per sostituire implicitamente una feature esistente.
+
+Il percorso è disponibile per gli host nativi e per il banco degli autori,
+non come installer del desktop. Non interpreta `.fub/plugins/` come codice e
+non persiste il consenso dell'utente. La procedura è in
+[`../development/plugin-authoring.md`](../development/plugin-authoring.md).
+
 ## Capability
 
 Il runtime non replica la policy. Riceve un `HostApi` già incappucciato dal
@@ -84,6 +102,12 @@ Plugin e provider dello stesso componente condividono lo stato della medesima
 istanza. Un mutex rende esplicita la non rientranza richiesta dal component
 model; non offre esecuzione concorrente dentro l'istanza.
 
+Il collegamento temporaneo fra `WasmBundle::plugin` e `register` è debole:
+se l'attivazione fallisce, il bundle noto non mantiene in vita lo store.
+Il registry possiede il plugin attivo e rimuove dichiarazione e provider anche
+se il guest fallisce durante la disattivazione. Un nuovo mount crea una nuova
+istanza, non riattiva la memoria della precedente.
+
 Le host function che accodano lavoro non lo eseguono immediatamente durante la
 chiamata guest.
 
@@ -106,9 +130,10 @@ Questa proprietà non è ancora esercitata end-to-end ed è tracciata in
 | eventi host | presente |
 | timeout e memoria | presenti |
 | capability negate | presenti |
+| discovery da directory esplicita | presente per host nativi |
 | `ViewProvider` | da completare |
 | altri provider | da completare su casi reali |
-| discovery e installazione | da completare |
+| installazione e consenso nel desktop | da completare |
 | UI non fidata | da completare |
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).

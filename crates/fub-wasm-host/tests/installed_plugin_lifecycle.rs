@@ -42,10 +42,7 @@ fn discovered(directory: &Utf8Path) -> WasmBundle {
     bundle
 }
 
-fn with_workspace<R>(
-    host: &Host,
-    f: impl FnOnce(&mut Workspace, &mut BundleRegistry) -> R,
-) -> R {
+fn with_workspace<R>(host: &Host, f: impl FnOnce(&mut Workspace, &mut BundleRegistry) -> R) -> R {
     host.with_session(None, |session| {
         let mut ws = session.workspace().write().unwrap();
         let mut registry = session.bundles().write().unwrap();
@@ -56,7 +53,12 @@ fn with_workspace<R>(
 
 fn assert_command(ws: &mut Workspace) {
     let outcome = ws
-        .invoke_command(COMMAND, serde_json::json!({}), InvokeMode::Apply, Actor::User)
+        .invoke_command(
+            COMMAND,
+            serde_json::json!({}),
+            InvokeMode::Apply,
+            Actor::User,
+        )
         .expect("il comando attraversa WASM e legge il vault");
     assert_eq!(
         outcome.notify.unwrap().as_literal(),
@@ -80,7 +82,12 @@ fn assert_absent(ws: &mut Workspace, registry: &BundleRegistry) {
     assert!(!ws.plugins().iter().any(|plugin| plugin.id == ID));
     assert!(!ws.commands().iter().any(|command| command.id == COMMAND));
     assert!(matches!(
-        ws.invoke_command(COMMAND, serde_json::json!({}), InvokeMode::Apply, Actor::User),
+        ws.invoke_command(
+            COMMAND,
+            serde_json::json!({}),
+            InvokeMode::Apply,
+            Actor::User
+        ),
         Err(PluginError::UnknownCommand(_))
     ));
 }
@@ -104,7 +111,7 @@ fn installed_component_is_discovered_invoked_reopened_and_removed() {
         host.open(&vault).unwrap();
         host.wait_indexed(None).unwrap();
         let bundle = Arc::new(discovered(&plugins));
-        with_workspace(&host, |ws, registry| {
+        let released = with_workspace(&host, |ws, registry| {
             assert_absent(ws, registry);
             assert!(!registry.knows(ID));
             registry.remember(bundle.clone());
@@ -116,8 +123,13 @@ fn installed_component_is_discovered_invoked_reopened_and_removed() {
                 assert_absent(ws, registry);
                 assert!(registry.knows(ID), "spento non significa dimenticato");
             }
+            // La chiusura deve smontare anche un plugin ancora attivo.
+            registry.enable(ws, ID).unwrap();
+            assert_command(ws);
+            Arc::downgrade(&registry.body(ID).expect("plugin attivo"))
         });
         host.close();
+        assert!(released.upgrade().is_none(), "la sessione rilascia il plugin");
     }
 
     // La rimozione avviene a sessione chiusa. Non cancella dati del plugin o
@@ -131,7 +143,10 @@ fn installed_component_is_discovered_invoked_reopened_and_removed() {
         assert!(!registry.knows(ID));
     });
     host.close();
-    assert_eq!(std::fs::read_to_string(vault.join("Nota.md")).unwrap(), NOTE);
+    assert_eq!(
+        std::fs::read_to_string(vault.join("Nota.md")).unwrap(),
+        NOTE
+    );
 }
 
 #[test]
@@ -189,9 +204,8 @@ fn a_dropped_plugin_cannot_leave_an_instance_for_a_later_registration() {
 
 #[test]
 fn a_teardown_trap_still_removes_the_declaration_and_commands() {
-    let bundle = Arc::new(
-        WasmBundle::from_file(&component("trap-deactivate"), Trust::Community).unwrap(),
-    );
+    let bundle =
+        Arc::new(WasmBundle::from_file(&component("trap-deactivate"), Trust::Community).unwrap());
     let mut ws = Bench::new().mounts();
     ws.write("Nota.md", NOTE);
     ws.reindex().unwrap();
@@ -217,8 +231,5 @@ fn a_broken_component_does_not_hide_a_valid_neighbor() {
     assert_eq!(candidates.len(), 2);
     assert_eq!(candidates[0].path.file_name(), Some("broken.wasm"));
     assert!(candidates[0].bundle.is_err());
-    assert_eq!(
-        candidates[1].bundle.as_ref().unwrap().manifest().id,
-        ID
-    );
+    assert_eq!(candidates[1].bundle.as_ref().unwrap().manifest().id, ID);
 }
