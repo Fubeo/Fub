@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Stato aggiornato per:** 25 agosto 2026.
+> **Stato aggiornato per:** `main`, 9 settembre 2026.
 
 La roadmap descrive ordine e direzione. Le GitHub Issues restano il tracker
 delle attività eseguibili. Un prossimo passo approvato può avere un TODO
@@ -9,7 +9,7 @@ sequenza tecnica estesa.
 
 ```mermaid
 flowchart LR
-    NOW["Ora<br/>M5 e stabilizzazione"] --> NEXT["Dopo<br/>secondi clienti e release"]
+    NOW["Ora<br/>M5 e stabilizzazione"] --> NEXT["Dopo<br/>superfici condivise e release"]
     NEXT --> LATER["Più avanti<br/>nuovi formati e servizi opt-in"]
 ```
 
@@ -17,13 +17,18 @@ flowchart LR
 
 ### Completare M5
 
+La CI di riferimento di `main` è tornata verde dopo la correzione dei blocchi
+Markdown in #22; il runtime WASM resta la prima priorità operativa.
+
 - discovery e installazione di un componente;
 - proxy dei provider richiesti da casi reali;
 - view WASM e validazione non fidata;
 - errori, timeout, memoria e teardown dimostrati end-to-end.
 
 Issue: [#8](https://github.com/Fubeo/Fub/issues/8) e
-[#10](https://github.com/Fubeo/Fub/issues/10).
+[#10](https://github.com/Fubeo/Fub/issues/10). La
+[PR #23](https://github.com/Fubeo/Fub/pull/23) è il primo incremento nativo in
+revisione, non il completamento della milestone.
 
 ### Stabilizzare i dati
 
@@ -42,13 +47,24 @@ Issue: [#5](https://github.com/Fubeo/Fub/issues/5) e
 Issue: [#6](https://github.com/Fubeo/Fub/issues/6) e
 [#12](https://github.com/Fubeo/Fub/issues/12).
 
+### Completare le evidenze visuali
+
+Il passaggio del banco in CI non chiude la revisione delle baseline. Provenienza,
+foglio di contatto, ripetibilità nello stesso ambiente, soglie e diagnosi del
+drift restano in [#17](https://github.com/Fubeo/Fub/issues/17), tracker unico che
+ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
+
 ## Dopo
 
-### Secondo cliente delle superfici
+### Proseguire le superfici condivise
 
-Un caso reale diverso da Markdown deve dimostrare quali parti dell'editor sono
-motore comune e quali appartengono al profilo. Soltanto allora si consolida
-l'API interna.
+Le fasi 0–4 del piano sono concluse su `main`: il motore testuale ha già il
+secondo cliente e `DocumentSession` è estratta. Il seguito parte dalla fase 5,
+`DocumentSurfaceRegistry`, con risoluzione, collisioni esplicite e fallback.
+
+Seguono modalità e tastiera per superficie, formato pilota `.fubsheet`,
+vertical slice della griglia e misura del protocollo. L'estensione ABI/WIT
+resta l'ultima fase, dopo casi reali, limiti e teardown verificati.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:
@@ -74,13 +90,17 @@ Issue: [#13](https://github.com/Fubeo/Fub/issues/13).
 
 Queste direzioni richiedono una proposta, un owner e un caso reale:
 
-- secondo formato oltre Markdown;
+- formati ulteriori oltre al pilota delle superfici condivise;
 - servizi di rete opt-in;
 - sincronizzazione con garanzie esplicite;
 - collaborazione;
 - publishing;
 - integrazioni AI;
 - ecosistema di distribuzione dei plugin.
+
+La prova di convergenza, disconnessioni e riavvio della sincronizzazione
+esistente resta in [#9](https://github.com/Fubeo/Fub/issues/9): non è una
+garanzia già consegnata.
 
 Una direzione non autorizza a creare in anticipo tipi ABI, porte IPC o cartelle
 di documentazione.
@@ -91,7 +111,7 @@ di documentazione.
 - marketplace senza formato di pacchetto e sicurezza completati;
 - esecuzione di JavaScript di plugin nella webview;
 - accesso WASI generale;
-- un framework universale di superfici prima del secondo cliente;
+- superfici universali o contratti pubblici senza casi reali e misure;
 - specifiche dettagliate di prodotti non approvati.
 
 ## Regola di passaggio

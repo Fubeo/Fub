@@ -1,7 +1,7 @@
 # M5: runtime WASM
 
 > **Stato aggiornato per:** `main` al commit
-> `5d8af02050700c738e73461a7a0a98059d91dfc2`, 25 agosto 2026.
+> `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, 9 settembre 2026.
 
 ## Obiettivo
 
@@ -73,7 +73,7 @@ rifiutati prima dell'IPC.
 
 ### Discovery e installazione
 
-Manca un percorso supportato che:
+Manca su `main` un percorso supportato che:
 
 1. trova il componente;
 2. legge manifest e import;
@@ -83,6 +83,12 @@ Manca un percorso supportato che:
 6. disattiva;
 7. rimuove;
 8. dimostra zero risorse residue.
+
+La [PR #23](https://github.com/Fubeo/Fub/pull/23) propone discovery da directory
+esplicita, un componente costruito dai sorgenti, prova del lifecycle nativo e
+rilascio dell'istanza dopo attivazione fallita. Questo incremento è in revisione
+e non è incluso nella sezione consegnata. L'installazione e il consenso nel
+client desktop restano distinti dal banco di sviluppo.
 
 ## Criteri di completamento
 
