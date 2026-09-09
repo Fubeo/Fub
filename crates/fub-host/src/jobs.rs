@@ -432,7 +432,38 @@ impl VaultStructure for JobHost {
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.write_result(|h| h.trash_document(id))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let mut ws = workspace.write()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    id.as_str(),
+                    || format!("trashing `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                id.as_str(),
+                || format!("trashing `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            ws.prepare_document_deletion(&id)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared.invoke();
+        with_event_drain(&workspace, |ws| ws.finish_document_deletion(completed))?.map_err(
+            |failure| {
+                let (error, _) = *failure;
+                error
+            },
+        )
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
