@@ -208,6 +208,7 @@ impl SyntaxRegistry {
         self.take(id).is_some()
     }
 
+    /// Ritira la regola senza eseguire il suo disposer sotto il guard host.
     pub(crate) fn take(&mut self, id: &str) -> Option<Arc<dyn SyntaxRule>> {
         let at = self.rules.iter().position(|r| r.spec.id == id)?;
         let registered = self.rules.remove(at);

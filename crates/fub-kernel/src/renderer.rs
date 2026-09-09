@@ -151,16 +151,17 @@ impl RendererRegistry {
         self.take(id).is_some()
     }
 
+    /// Ritira il renderer lasciando il disposer all'orchestratore fuori lock.
     pub(crate) fn take(&mut self, id: &str) -> Option<std::sync::Arc<dyn CustomRenderer>> {
         let at = self.renderers.iter().position(|r| r.spec.id == id)?;
-        let registered = self.renderers.remove(at);
+        let retired = self.renderers.remove(at);
         self.by_kind.clear();
         for (at, registered) in self.renderers.iter().enumerate() {
             for kind in &registered.spec.kinds {
                 self.by_kind.insert(kind.clone(), at);
             }
         }
-        Some(registered.renderer)
+        Some(retired.renderer)
     }
 
     pub fn is_empty(&self) -> bool {

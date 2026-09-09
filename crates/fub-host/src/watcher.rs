@@ -29,7 +29,7 @@ use fub_abi::{PluginError, Severity};
 use fub_kernel::{ParsedChange, Workspace};
 
 use crate::custody::{Custody, WriteTurn};
-use crate::jobs::with_event_drain;
+use crate::jobs::{drain_events, with_event_drain};
 
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
 ///
@@ -390,21 +390,12 @@ impl ExternalSync {
                 })
                 .collect()
         };
-        // Fase 2 — la memoria, sotto prestito esclusivo.
-        let Ok(()) = with_event_drain(&self.workspace, |ws| {
-            for (change, plan) in changes.iter().zip(prepared) {
-                match change {
-                    ExternalChange::Touched(path) => {
-                        let _ = ws.sync_path_prepared(path, plan);
-                    }
-                    ExternalChange::Renamed { from, to } => {
-                        let _ = ws.sync_renamed_path(from, to);
-                    }
-                }
-            }
-        }) else {
+        if self
+            .apply_prepared(changes.iter().cloned().zip(prepared))
+            .is_err()
+        {
             return;
-        };
+        }
         // Fase 3 — la durevolezza.
         self.flush();
     }
@@ -444,16 +435,63 @@ impl ExternalSync {
         if prepared.is_empty() {
             return;
         }
-        // Fase 2 — la memoria, sotto prestito esclusivo.
-        let Ok(()) = with_event_drain(&self.workspace, |ws| {
-            for (path, plan) in prepared {
-                let _ = ws.sync_path_prepared(&path, plan);
-            }
-        }) else {
+        if self
+            .apply_prepared(
+                prepared
+                    .into_iter()
+                    .map(|(path, plan)| (ExternalChange::Touched(path), plan)),
+            )
+            .is_err()
+        {
             return;
-        };
+        }
         // Fase 3 — la durevolezza.
         self.flush();
+    }
+
+    // Il lotto conserva un solo drain, ma ogni rimozione lascia il guard prima
+    // di notificare gli indici. Il turno conserva la stessa unità di scrittura.
+    fn apply_prepared(
+        &self,
+        changes: impl IntoIterator<Item = (ExternalChange, Option<ParsedChange>)>,
+    ) -> Result<(), PluginError> {
+        let _turn = self.workspace.write_turn();
+        let deferred = self.workspace.write()?.defer_event_dispatch();
+        for (change, plan) in changes {
+            let removal = {
+                let mut ws = self.workspace.write()?;
+                match change {
+                    ExternalChange::Touched(path) => {
+                        match ws.prepare_sync_document_removal(&path) {
+                            Ok(Some(removal)) => Some(removal),
+                            Ok(None) => {
+                                let _ = ws.sync_path_prepared(&path, plan);
+                                None
+                            }
+                            Err(error) => {
+                                ws.report_host_trouble(Severity::Warning, error.into());
+                                None
+                            }
+                        }
+                    }
+                    ExternalChange::Renamed { from, to } => {
+                        let _ = ws.sync_renamed_path(&from, &to);
+                        None
+                    }
+                }
+            };
+            if let Some(removal) = removal {
+                let completed = removal.invoke();
+                if let Err((error, _)) = self.workspace.write()?.finish_document_removal(completed)
+                {
+                    self.workspace
+                        .write()?
+                        .report_host_trouble(Severity::Warning, error);
+                }
+            }
+        }
+        self.workspace.write()?.restore_event_dispatch(deferred);
+        drain_events(&self.workspace)
     }
 
     /// Fine del lotto: è il punto tranquillo in cui rendere durevoli gli indici.
@@ -465,18 +503,20 @@ impl ExternalSync {
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
     fn flush(&mut self) {
+        let Ok(flush_errors) = crate::teardown::flush_indexes(&self.workspace) else {
+            return;
+        };
+        if flush_errors.is_empty() {
+            return;
+        }
+        for error in &flush_errors {
+            tracing::warn!(target: "fub.host", "flush index: {error}");
+        }
         let _ = with_event_drain(&self.workspace, |ws| {
-            let flush_errors = ws.flush_indexes();
-            if flush_errors.is_empty() {
-                return;
-            }
-            for and in &flush_errors {
-                tracing::warn!(target: "fub.host", "flush index: {and}");
-            }
-            for and in flush_errors {
+            for error in flush_errors {
                 ws.report_host_trouble(
                     Severity::Warning,
-                    PluginError::Internal(format!("flush index: {and}").into()),
+                    PluginError::Internal(format!("flush index: {error}").into()),
                 );
             }
         });

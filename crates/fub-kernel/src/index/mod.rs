@@ -30,6 +30,7 @@ pub(crate) mod core;
 pub mod plan;
 pub(crate) mod routing;
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -43,6 +44,52 @@ pub(crate) use routing::{RouteTable, Target};
 
 pub(crate) type SharedIndexProvider = Arc<crate::poison::SharedShelter<Box<dyn IndexProvider>>>;
 
+/// Lascia andare una fotografia di handle senza alcuna guardia del provider.
+///
+/// L'ultimo `Arc` può eseguire il distruttore di un provider nativo. Anche
+/// quello è codice esterno: deve cadere dentro la rete contro i panici, dopo
+/// che l'eventuale guardia `read`/`write` della callback è già uscita.
+pub(crate) fn release_handles(
+    providers: Vec<(String, SharedIndexProvider)>,
+) -> Result<(), PluginError> {
+    crate::safety::external(
+        "rilascio degli handle staccati degli indici",
+        |message| PluginError::Internal(message.into()),
+        || {
+            drop(providers);
+            Ok(())
+        },
+    )
+}
+
+thread_local! {
+    static ACTIVE_INDEXES: RefCell<BTreeSet<usize>> = const { RefCell::new(BTreeSet::new()) };
+}
+
+/// La stessa istanza mutabile non può rientrare nel proprio lock. Il timbro è
+/// locale al thread: altre istanze e chiamate concorrenti conservano il normale
+/// protocollo dell'handle. Il Drop ripristina il frame anche dopo un panic.
+pub(crate) struct IndexCall(usize, std::marker::PhantomData<std::rc::Rc<()>>);
+
+impl IndexCall {
+    pub(crate) fn enter(who: &str, provider: &SharedIndexProvider) -> Result<Self, PluginError> {
+        let identity = Arc::as_ptr(provider) as usize;
+        if ACTIVE_INDEXES.with(|active| active.borrow_mut().insert(identity)) {
+            Ok(Self(identity, std::marker::PhantomData))
+        } else {
+            Err(PluginError::Conflict(
+                format!("l'indice `{who}` è già in chiamata su questo thread").into(),
+            ))
+        }
+    }
+}
+
+impl Drop for IndexCall {
+    fn drop(&mut self) {
+        ACTIVE_INDEXES.with(|active| active.borrow_mut().remove(&self.0));
+    }
+}
+
 /// Attraversa la porta `query` di un indice con la stessa rete usata dagli
 /// altri callback dei provider. La guardia dell'handle appartiene al provider,
 /// non al workspace: se il callback panica, lo srotolamento la rilascia dentro
@@ -52,6 +99,7 @@ pub(crate) fn query_handle(
     provider: &SharedIndexProvider,
     query: IndexQuery,
 ) -> Result<IndexResult, PluginError> {
+    let _call = IndexCall::enter(who, provider)?;
     let detail = format!("{:?}", query.kind());
     let provider = provider.read();
     crate::safety::calling(who, Gate::IndexQuery, &detail, || provider.query(query))
@@ -70,16 +118,31 @@ pub struct PreparedIndexQuery {
     routing_generation: u64,
 }
 
+/// Risposta staccata che non conserva più alcun handle del provider.
+pub struct CompletedIndexQuery {
+    pub(crate) result: IndexResult,
+    pub(crate) routing_generation: u64,
+}
+
 impl PreparedIndexQuery {
     /// Esegue il piano congelato. Le callback degli indici usano soltanto gli
-    /// handle contenuti nella fotografia; il core passa dalla porta fornita dal
-    /// composition root.
-    pub fn query(
-        &self,
+    /// handle contenuti nella fotografia; poi li rilascia nella rete esterna,
+    /// prima che il chiamante rientri nel workspace.
+    pub fn invoke(
+        mut self,
         core: &dyn plan::QueryCore,
         query: IndexQuery,
-    ) -> Result<IndexResult, PluginError> {
-        plan::run_detached(self, core, query)
+    ) -> Result<CompletedIndexQuery, PluginError> {
+        let outcome = plan::run_detached(&self, core, query);
+        let providers = std::mem::take(&mut self.providers);
+        let released = release_handles(providers);
+        match (outcome, released) {
+            (_, Err(error)) | (Err(error), Ok(())) => Err(error),
+            (Ok(result), Ok(())) => Ok(CompletedIndexQuery {
+                result,
+                routing_generation: self.routing_generation,
+            }),
+        }
     }
 }
 
@@ -130,6 +193,17 @@ pub(crate) fn feed_handles(
 ) -> Vec<IndexLoss> {
     let mut lost = Vec::new();
     for (id, provider) in providers {
+        let _call = match IndexCall::enter(id, provider) {
+            Ok(call) => call,
+            Err(error) => {
+                lost.extend(
+                    models
+                        .iter()
+                        .map(|model| IndexLoss::new(model.id.clone(), error.clone())),
+                );
+                continue;
+            }
+        };
         let mut provider = provider.write();
         lost.extend(feeding(
             id,
@@ -137,6 +211,30 @@ pub(crate) fn feed_handles(
             models.iter().map(|model| &model.id),
             || provider.on_documents_indexed(models),
         ));
+    }
+    lost
+}
+
+pub(crate) fn forget_handles(
+    providers: &[(String, SharedIndexProvider)],
+    ids: &[DocId],
+) -> Vec<IndexLoss> {
+    let mut lost = Vec::new();
+    for (who, provider) in providers {
+        let _call = match IndexCall::enter(who, provider) {
+            Ok(call) => call,
+            Err(error) => {
+                lost.extend(
+                    ids.iter()
+                        .map(|id| IndexLoss::new(id.clone(), error.clone())),
+                );
+                continue;
+            }
+        };
+        let mut provider = provider.write();
+        lost.extend(feeding(who, Gate::IndexForget, ids.iter(), || {
+            provider.on_documents_removed(ids)
+        }));
     }
     lost
 }
@@ -153,6 +251,9 @@ pub(crate) fn up_to_date_handles(
         if agreed.is_empty() {
             break;
         }
+        let Ok(_call) = IndexCall::enter(id, index) else {
+            return BTreeSet::new();
+        };
         let index = index.read();
         let theirs =
             crate::safety::calling(
@@ -177,6 +278,17 @@ pub(crate) fn reconcile_handles(
 ) -> Vec<IndexLoss> {
     let mut lost = Vec::new();
     for (plugin, index) in providers {
+        let _call = match IndexCall::enter(plugin, index) {
+            Ok(call) => call,
+            Err(error) => {
+                lost.extend(
+                    ids.iter()
+                        .take(1)
+                        .map(|id| IndexLoss::new(id.clone(), error.clone())),
+                );
+                continue;
+            }
+        };
         let mut index = index.write();
         lost.extend(feeding(
             plugin,
@@ -324,13 +436,18 @@ impl Indexes {
 
     pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
         let mut lost = self.core.on_documents_removed(ids);
-        for (plugin, index) in self.providers.iter() {
-            let mut index = index.write();
-            lost.extend(feeding(plugin, Gate::IndexForget, ids.iter(), || {
-                index.on_documents_removed(ids)
-            }));
-        }
+        lost.extend(forget_handles(&self.feed_handles(), ids));
         lost
+    }
+
+    pub(crate) fn ensure_mutation_available(&self) -> crate::error::Result<()> {
+        for (who, provider) in self.providers.iter() {
+            let identity = Arc::as_ptr(provider) as usize;
+            if ACTIVE_INDEXES.with(|active| active.borrow().contains(&identity)) {
+                return Err(crate::error::KernelError::IndexReentry(who.clone()));
+            }
+        }
+        Ok(())
     }
 
     /// Interroga: il **percorso unico** di dispatch (vedi [`plan`]).
@@ -355,14 +472,18 @@ impl Indexes {
     /// un provider ritirato o sostituito.
     pub(crate) fn ensure_query_is_current(
         &self,
-        prepared: &PreparedIndexQuery,
+        routing_generation: u64,
     ) -> Result<(), PluginError> {
-        if prepared.routing_generation == self.routing_generation {
+        if routing_generation == self.routing_generation {
             return Ok(());
         }
         Err(PluginError::Conflict(
             "il routing degli indici è cambiato durante la query".into(),
         ))
+    }
+
+    pub(crate) fn routing_generation(&self) -> u64 {
+        self.routing_generation
     }
 
     /// Le quattro query composte dal `Workspace` possono seguire la fast-path

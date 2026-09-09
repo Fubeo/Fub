@@ -244,8 +244,8 @@ impl VaultSession {
         // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
         // La prepare alza `closed` e accoda il terminale; il drain ripristina
         // sempre tabella, attore e flag prima che la finalize ritiri i provider.
-        // Questo non rivendica le altre callback di chiusura: flush/close degli
-        // indici e `Plugin::deactivate` restano nel seguito sincrono censito.
+        // Il seguito usa token propri anche per flush, deactivate e close;
+        // nessuna di queste callback conserva il guard del workspace.
         let _closing_turn = workspace.write_turn();
         let prepared = match workspace.write() {
             Ok(mut ws) => ws.prepare_close(),
@@ -261,35 +261,34 @@ impl VaultSession {
             errors.push(and);
         }
 
-        // Dopo la prepare non ci sono uscite anticipate: anche un errore del
-        // drain viene raccolto prima di tentare l'epilogo. Se è il registry a
-        // essere avvelenato, i corpi host non sono più affidabili e il loro
-        // `Plugin::deactivate` viene saltato; il workspace è però sano, quindi
-        // il kernel deve comunque ritirare provider e dichiarazioni. Se invece
-        // è morto il workspace stesso, la politica di `Custody` ne vieta il
-        // recupero: provare la presa registra l'errore, ma non può finalizzare
-        // uno stato lasciato a metà. In quel ramo il token viene abbandonato e
-        // la custodia resta esplicitamente irrecuperabile.
-        let finalized = match workspace.write() {
-            Ok(mut ws) => match registry.write() {
-                Ok(mut reg) => {
-                    Some(ws.finish_close_with(prepared, |workspace, id| reg.stop(workspace, id)))
-                }
-                Err(and) => {
-                    errors.push(and);
-                    Some(ws.finish_close_with(prepared, |_, _| Vec::new()))
-                }
-            },
-            Err(and) => {
-                errors.push(and);
-                None
-            }
+        // Flush globale, corpi plugin e indici sono callback distinte. Ogni
+        // errore viene raccolto, senza saltare il resto del teardown.
+        match crate::teardown::flush_indexes(&workspace) {
+            Ok(and) => errors.extend(and),
+            Err(and) => errors.push(and),
+        }
+        let plugins = match workspace.read() {
+            Ok(ws) => ws.closing_plugins(&prepared),
+            Err(error) => Err(error),
         };
-        if let Some(result) = finalized {
-            match result {
-                Ok(close_errors) => errors.extend(close_errors),
-                Err((_prepared, and)) => errors.push(and),
+        match plugins {
+            Ok(plugins) => {
+                for id in plugins {
+                    match crate::teardown::unmount(&workspace, &registry, &id) {
+                        Ok(and) => errors.extend(and),
+                        Err(and) => errors.push(and),
+                    }
+                }
             }
+            Err(error) => errors.push(error),
+        }
+        match workspace.write() {
+            Ok(mut ws) => {
+                if let Err((_prepared, error)) = ws.finish_detached_close(prepared) {
+                    errors.push(error);
+                }
+            }
+            Err(error) => errors.push(error),
         }
         errors
     }
@@ -1030,6 +1029,41 @@ impl Host {
                 format!("`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento").into(),
             ));
         }
+        if !enabled {
+            // Il permesso di shutdown è posseduto, quindi anche il guard della
+            // mappa sessioni termina prima della callback del plugin.
+            let (workspace, registry, _shutdown) = self.with_session(vault, |session| {
+                (
+                    session.workspace.clone(),
+                    session.registry.clone(),
+                    session.runner.shutdown_bundle(id),
+                )
+            })?;
+            // Un registry irrecuperabile viene rifiutato prima di persistere
+            // la scelta, come nel percorso sincrono precedente.
+            drop(registry.read()?);
+            let _turn = workspace.write_turn();
+            let (deferred, persisted) = {
+                let mut ws = workspace.write()?;
+                let deferred = ws.defer_event_dispatch();
+                let mut disabled = crate::settings::disabled_plugins(&ws);
+                disabled.retain(|other| other != id);
+                disabled.push(id.to_string());
+                disabled.sort();
+                let persisted = ws.set_setting(
+                    crate::settings::PLUGINS_DISABLED,
+                    fub_abi::settings::SettingValue::List(disabled),
+                );
+                (deferred, persisted)
+            };
+            let outcome =
+                persisted.and_then(|()| crate::teardown::unmount(&workspace, &registry, id));
+            workspace.write()?.restore_event_dispatch(deferred);
+            drain_events(&workspace)?;
+            return outcome;
+        }
+        // L'accensione usa ancora il mount sincrono. La migrazione di prepare,
+        // activate e registrazione è separata dal teardown qui staccato.
         self.with_session(vault, |session| {
             // **Prima i job, poi i prestiti**, e in quest'ordine soltanto.
             //
@@ -1085,10 +1119,7 @@ impl Host {
                 // non resta scritto che il componente è acceso»: non era vero
                 // nemmeno allora, perché all'avvio resta scritto eccome.
                 let mut disabled = crate::settings::disabled_plugins(ws);
-                disabled.retain(|d| d != id);
-                if !enabled {
-                    disabled.push(id.to_string());
-                }
+                disabled.retain(|other| other != id);
                 disabled.sort();
                 ws.set_setting(
                     crate::settings::PLUGINS_DISABLED,
