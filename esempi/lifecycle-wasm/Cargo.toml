@@ -1,0 +1,24 @@
+# Componente reale per il percorso di installazione e lifecycle di M5.
+# Workspace autonomo: il test lo compila a wasm32-wasip2, non per l'host.
+[workspace]
+
+[package]
+name = "lifecycle-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+senza-permessi = []
+abi-incompatibile = []
+trap-deactivate = []
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"
