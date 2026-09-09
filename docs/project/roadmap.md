@@ -13,12 +13,26 @@ flowchart LR
     NEXT --> LATER["Più avanti<br/>nuovi formati e servizi opt-in"]
 ```
 
+## Vincolo di integrazione
+
+La [governance corrente](status.md#governance-di-integrazione) mantiene in
+vigore il piano audit di `fix/audit-integration`: prima di G15/GO non si
+integra in `main`, neppure una PR M5 o documentale verde. I candidati vanno
+riconciliati con il lavoro audit e certificati nuovamente dopo l'integrazione.
+Questa roadmap stabilisce l'ordine del lavoro, non deroga ai gate audit.
+
 ## Ora
+
+### Riconciliare le linee prima di M5
+
+Adattare #23 al lifecycle audit e ai confini senza callback sotto il lock del
+workspace; poi riallineare #24 al risultato effettivo. Preservare il lavoro
+esclusivo di entrambe le linee. Non ritirare il piano audit per aggirare G15.
 
 ### Completare M5
 
 La CI di riferimento di `main` è tornata verde dopo la correzione dei blocchi
-Markdown in #22; il runtime WASM resta la prima priorità operativa.
+Markdown in #22; il runtime WASM segue la riconciliazione delle linee.
 
 - discovery e installazione di un componente;
 - proxy dei provider richiesti da casi reali;
@@ -28,7 +42,9 @@ Markdown in #22; il runtime WASM resta la prima priorità operativa.
 Issue: [#8](https://github.com/Fubeo/Fub/issues/8) e
 [#10](https://github.com/Fubeo/Fub/issues/10). La
 [PR #23](https://github.com/Fubeo/Fub/pull/23) è il primo incremento nativo in
-revisione, non il completamento della milestone.
+revisione, ancora draft per l'adattamento audit, non il completamento della
+milestone. Installazione, consenso, inventario e abilitazione persistenti nel
+percorso prodotto restano distinti dal banco di sviluppo.
 
 ### Stabilizzare i dati
 
@@ -79,12 +95,22 @@ Issue: [#13](https://github.com/Fubeo/Fub/issues/13).
 
 ### Prima release
 
+Prima della release va decisa esplicitamente la classificazione di
+[#9](https://github.com/Fubeo/Fub/issues/9): blocker da completare oppure
+lavoro successivo con motivazione. La collocazione fra le direzioni future
+non è, da sola, un'accettazione del rischio della sincronizzazione esistente.
+
 - installazione verificata;
 - changelog e versioni coerenti;
 - WIT e schemi controllati;
 - SBOM e audit;
 - artifact per le piattaforme supportate;
-- documentazione di avvio provata da una macchina pulita.
+- documentazione di avvio provata da una macchina pulita;
+- matrice audit G14 e G15/GO sullo stesso candidato, prima del merge finale.
+
+Versione, tag e distribuzione seguono le
+[regole correnti](../development/versioning-and-releases.md), non una nuova
+policy implicita introdotta dalla roadmap.
 
 ## Più avanti
 

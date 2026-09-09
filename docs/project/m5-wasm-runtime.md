@@ -3,6 +3,12 @@
 > **Stato aggiornato per:** `main` al commit
 > `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, 9 settembre 2026.
 
+## Gate di integrazione
+
+Vale la [governance audit](status.md#governance-di-integrazione): nessun merge
+in `main` prima di G15/GO. Un incremento M5 verificato su una branch non
+certifica il suo port nella linea audit né completa la milestone.
+
 ## Obiettivo
 
 Dimostrare che un componente WASM può usare gli stessi trait dei provider
@@ -86,9 +92,19 @@ Manca su `main` un percorso supportato che:
 
 La [PR #23](https://github.com/Fubeo/Fub/pull/23) propone discovery da directory
 esplicita, un componente costruito dai sorgenti, prova del lifecycle nativo e
-rilascio dell'istanza dopo attivazione fallita. Questo incremento è in revisione
-e non è incluso nella sezione consegnata. L'installazione e il consenso nel
-client desktop restano distinti dal banco di sviluppo.
+rilascio dell'istanza dopo attivazione fallita. La CI sul candidato `66141ad`
+è conclusa con successo, ma la PR resta draft per l'adattamento ai confini
+audit: il banco non deve chiamare il guest sotto `Custody<Workspace>` e deve
+preservare il lifecycle esplicito `BundleMount` già presente in quella linea.
+L'incremento non è incluso nella sezione consegnata.
+
+L'installazione e il consenso nel desktop restano distinti dal banco di
+sviluppo. #8 richiede ancora posizione controllata dalla shell, inventario,
+consenso e scelta enabled/disabled persistenti, discovery all'avvio,
+installazione e rimozione sicure, collisioni, restart e rollback. Componente
+installato, dati persistenti del plugin, scelta di abilitazione e istanza
+montata restano separati. `.fub/plugins/` non è una directory di eseguibili e
+la rimozione del componente non cancella implicitamente dati autorevoli.
 
 ## Criteri di completamento
 

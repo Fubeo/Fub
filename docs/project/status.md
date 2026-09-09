@@ -3,6 +3,27 @@
 > **Stato aggiornato per:** `main` al commit
 > `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, 9 settembre 2026.
 
+## Governance di integrazione
+
+Il piano `PIANO-AZIONE-FUB-AUDIT-2026-09-01.md` della linea
+`fix/audit-integration` resta operativo. La roadmap non lo ritira e il verde
+di una PR basata su `main` non costituisce un'autorizzazione al merge.
+
+**NOT READY FOR PHASE 9 — NON MERGIARE IN `main`.**
+
+La riconciliazione del 9 settembre ha confrontato `main` indicato sopra con
+`fix/audit-integration` a `1b1187065e65b8ebec72996adc700c95208ff0a3`:
+l'antenato comune è `96eba1695bcb8b92af3cd8e70c1b085f10e849c9` e la linea
+audit conserva 284 commit assenti da `main`. I due commit esclusivi di `main`
+comprendono la correzione #22 e il suo merge: vanno preservati, non riaperti
+come un nuovo bug.
+
+Gli incrementi vengono riconciliati e verificati sulla linea audit, senza
+sovrascriverne i contratti. Il passaggio a `main` richiede G0–G14 e un G15/GO
+esplicito sul candidato corrente, seguito dalla verifica dello SHA integrato.
+Il piano audit non è completato: la matrice conserva finding senza evidenza
+finale. Nessun gate viene spuntato per effetto di questo riallineamento.
+
 ## Release corrente
 
 Fub non ha ancora pubblicato un tag. Il workspace e la shell dichiarano
@@ -71,8 +92,10 @@ Il verde automatico non sostituisce queste evidenze.
 - esempio non banale.
 
 La [PR #23](https://github.com/Fubeo/Fub/pull/23) propone il primo incremento
-nativo di discovery e lifecycle. È lavoro separato da questo stato di `main`:
-non viene contato come consegnato prima di revisione, verifiche e merge.
+nativo di discovery e lifecycle. La CI del suo candidato `66141ad` è conclusa
+con successo, ma la PR resta draft: il banco deve usare i confini di mount e
+invocazione della linea audit senza callback sotto `Custody<Workspace>`.
+Non è una capacità consegnata su `main` e non chiude #8.
 
 Issue:
 
@@ -101,21 +124,26 @@ fasi 5–10: l'estrazione iniziale non va ripetuta.
 
 ## Bloccato
 
-Nessun blocco globale impedisce di compilare o testare il workspace. Le aree
-future restano fuori dal prodotto finché non hanno contratto, implementazione e
-prova.
+Il merge in `main` è bloccato dal gate audit, non dal semplice stato della
+CI M5. La PR #23 richiede inoltre l'adattamento al lifecycle `BundleMount`
+della linea audit. Compilazione e test possono proseguire su branch dedicate;
+non certificano automaticamente un candidato ottenuto integrando due linee.
 
 ## Prossimi passi
 
-1. chiudere il percorso M5 dimostrato dalle issue #8 e #10;
-2. completare ripristino atomico e backup/restore #5/#7;
-3. separare la Graph View soltanto con benchmark e test #6/#12;
-4. proseguire dalla fase 5 del
+1. riconciliare #23 e #24 nella linea audit e verificare il nuovo candidato;
+2. chiudere il percorso prodotto M5 delle issue #8 e #10;
+3. completare ripristino atomico e backup/restore #5/#7;
+4. separare e misurare la Graph View con #12/#6;
+5. completare le evidenze manuali e ripetibili di #17;
+6. proseguire dalle fasi 5–10 del
    [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md),
-   tracciato in #11;
-5. chiudere le decisioni sui temi #13;
-6. preparare la prima release dopo il ciclo completo di compatibilità,
-   supply chain e installazione.
+   tracciato in #11, senza rifare le fasi 0–4;
+7. completare il contratto dei temi #13;
+8. decidere esplicitamente se #9 blocca la prima release e verificarla oppure
+   motivarne il rinvio senza chiuderla artificialmente;
+9. preparare la prima release secondo le regole di versionamento correnti e
+   completare G14/G15 prima di autorizzare il merge finale in `main`.
 
 ## Fonti
 
