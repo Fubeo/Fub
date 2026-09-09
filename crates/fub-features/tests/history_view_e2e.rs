@@ -22,6 +22,7 @@ use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
 use fub_abi::traits::ViewInstance;
 use fub_abi::ui::{ActionRef, UiAction, UiKind, UiNode, ViewUpdate};
+use fub_abi::PluginError;
 use fub_features::versioning::{HistoryView, VersioningCommands, HISTORY_VIEW, VERSION_RESTORE};
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
@@ -230,6 +231,59 @@ fn last_ts(tree: &UiNode) -> u64 {
         .get("ts")
         .and_then(|v| v.as_u64())
         .expect("l'azione porta il suo istante")
+}
+
+#[test]
+fn a_corrupt_snapshot_never_reaches_the_document_or_the_index() {
+    let vault = Vault::new();
+    let mut ws = vault.open();
+    ws.write_document(&DocId::new("Uno.md"), "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, "Uno.md");
+    ws.write_document(&DocId::new("Uno.md"), "com'ora\n", WriteBase::Dictated)
+        .expect("riscritta");
+    let ts = last_ts(&ws.render_view(&instance()).unwrap());
+
+    let store = vault.root.join(".fub").join("plugins").join(VERSIONING_ID);
+    let index = store.join("versions.json");
+    let index_before = std::fs::read(&index).expect("indice delle versioni");
+    let snapshot = std::fs::read_dir(&store)
+        .expect("spazio del versioning")
+        .find_map(|entry| {
+            let path =
+                Utf8PathBuf::from_path_buf(entry.expect("voce dello store").path()).expect("utf8");
+            let candidate = path.join(format!("{ts}.md"));
+            candidate.is_file().then_some(candidate)
+        })
+        .expect("snapshot selezionato");
+
+    let original = std::fs::read(&snapshot).expect("snapshot leggibile");
+    assert_eq!(original, b"com'era\n");
+    assert_eq!(original.len(), b"falsata\n".len());
+    std::fs::write(&snapshot, b"falsata\n").expect("corruzione controllata");
+
+    let error = ws
+        .invoke_command(
+            VERSION_RESTORE,
+            serde_json::json!({ "doc": "Uno.md", "ts": ts }),
+            fub_abi::command::InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect_err("uno snapshot corrotto deve essere rifiutato");
+    assert!(
+        matches!(&error, PluginError::Internal(_)),
+        "il guasto dello snapshot è tipizzato: {error:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "com'ora\n",
+        "il documento corrente resta autorevole"
+    );
+    assert_eq!(
+        std::fs::read(&index).unwrap(),
+        index_before,
+        "un ripristino rifiutato non riscrive l'indice delle versioni"
+    );
 }
 
 #[test]

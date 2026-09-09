@@ -110,6 +110,7 @@ pub const VERSIONING_ID: &str = "fub.versioning";
 const NO_VERSIONS: &str = "no_versions";
 const NO_SUCH_VERSION: &str = "no_such_version";
 const CONTENT_GONE: &str = "content_gone";
+const CONTENT_MISMATCH: &str = "content_mismatch";
 const UNREADABLE: &str = "unreadable";
 const METADATA_UNWRITABLE: &str = "meta_unwritable";
 const INDEX_UNWRITABLE: &str = "index_unwritable";
@@ -169,6 +170,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(NO_VERSIONS, "Nessuna versione di {doc}.")
             .with(NO_SUCH_VERSION, "La versione del {when} di {doc} non c'è.")
             .with(CONTENT_GONE, "Il contenuto di {path} è sparito.")
+            .with(
+                CONTENT_MISMATCH,
+                "Lo snapshot {path} non corrisponde all'indice delle versioni.",
+            )
             .with(UNREADABLE, "{path} non si legge: {reason}")
             .with(
                 METADATA_UNWRITABLE,
@@ -214,6 +219,10 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(NO_VERSIONS, "No version of {doc}.")
             .with(NO_SUCH_VERSION, "There is no version of {doc} from {when}.")
             .with(CONTENT_GONE, "The content of {path} is gone.")
+            .with(
+                CONTENT_MISMATCH,
+                "Snapshot {path} does not match the versions index.",
+            )
             .with(UNREADABLE, "{path} cannot be read: {reason}")
             .with(
                 METADATA_UNWRITABLE,
@@ -1688,12 +1697,12 @@ fn version_source_doc(
     ts: u64,
     host: &dyn ReadApi,
 ) -> Result<String, PluginError> {
-    if !doc.versions.iter().any(|v| v.ts == ts) {
-        return Err(PluginError::NotFound(Text::message(
+    let version = doc.versions.iter().find(|v| v.ts == ts).ok_or_else(|| {
+        PluginError::NotFound(Text::message(
             NO_SUCH_VERSION,
             vec![Arg::timestamp(WHEN, ts), Arg::text(DOC, id.as_str())],
-        )));
-    }
+        ))
+    })?;
     let path = blob(&doc.dir, &snapshot_name(ts, id.as_str()));
     let bytes = host.data_read(&path)?.ok_or_else(|| {
         PluginError::Internal(Text::message(
@@ -1701,6 +1710,12 @@ fn version_source_doc(
             vec![Arg::text(PATH, path.clone())],
         ))
     })?;
+    if bytes.len() as u64 != version.size || Fnv1a::hash(&bytes) != version.hash {
+        return Err(PluginError::Internal(Text::message(
+            CONTENT_MISMATCH,
+            vec![Arg::text(PATH, path)],
+        )));
+    }
     String::from_utf8(bytes).map_err(|and| {
         PluginError::Internal(Text::message(
             UNREADABLE,

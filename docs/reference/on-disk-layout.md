@@ -84,7 +84,12 @@ essere eliminata e ricostruita dai documenti.
 ```
 
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
-autorevoli: eliminarli perde la memoria delle versioni.
+autorevoli: eliminarli perde la memoria delle versioni. Ogni `VersionRef`
+nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
+La lettura per anteprima o `version.restore` confronta entrambe con i byte dello
+snapshot prima di decodificarlo come UTF-8. Se anche una sola non corrisponde,
+l'operazione restituisce un errore interno localizzato senza scrivere il
+documento corrente o l'indice.
 
 Quindi `.fub/plugins/` non è né tutta cache né tutto dato autorevole.
 
