@@ -244,8 +244,8 @@ impl VaultSession {
         // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
         // La prepare alza `closed` e accoda il terminale; il drain ripristina
         // sempre tabella, attore e flag prima che la finalize ritiri i provider.
-        // Questo non rivendica le altre callback di chiusura: flush/close degli
-        // indici e `Plugin::deactivate` restano nel seguito sincrono censito.
+        // Il seguito usa token propri anche per flush, deactivate e close;
+        // nessuna di queste callback conserva il guard del workspace.
         let _closing_turn = workspace.write_turn();
         let prepared = match workspace.write() {
             Ok(mut ws) => ws.prepare_close(),
@@ -261,35 +261,34 @@ impl VaultSession {
             errors.push(and);
         }
 
-        // Dopo la prepare non ci sono uscite anticipate: anche un errore del
-        // drain viene raccolto prima di tentare l'epilogo. Se è il registry a
-        // essere avvelenato, i corpi host non sono più affidabili e il loro
-        // `Plugin::deactivate` viene saltato; il workspace è però sano, quindi
-        // il kernel deve comunque ritirare provider e dichiarazioni. Se invece
-        // è morto il workspace stesso, la politica di `Custody` ne vieta il
-        // recupero: provare la presa registra l'errore, ma non può finalizzare
-        // uno stato lasciato a metà. In quel ramo il token viene abbandonato e
-        // la custodia resta esplicitamente irrecuperabile.
-        let finalized = match workspace.write() {
-            Ok(mut ws) => match registry.write() {
-                Ok(mut reg) => {
-                    Some(ws.finish_close_with(prepared, |workspace, id| reg.stop(workspace, id)))
-                }
-                Err(and) => {
-                    errors.push(and);
-                    Some(ws.finish_close_with(prepared, |_, _| Vec::new()))
-                }
-            },
-            Err(and) => {
-                errors.push(and);
-                None
-            }
+        // Flush globale, corpi plugin e indici sono callback distinte. Ogni
+        // errore viene raccolto, senza saltare il resto del teardown.
+        match crate::teardown::flush_indexes(&workspace) {
+            Ok(and) => errors.extend(and),
+            Err(and) => errors.push(and),
+        }
+        let plugins = match workspace.read() {
+            Ok(ws) => ws.closing_plugins(&prepared),
+            Err(error) => Err(error),
         };
-        if let Some(result) = finalized {
-            match result {
-                Ok(close_errors) => errors.extend(close_errors),
-                Err((_prepared, and)) => errors.push(and),
+        match plugins {
+            Ok(plugins) => {
+                for id in plugins {
+                    match crate::teardown::unmount(&workspace, &registry, &id) {
+                        Ok(and) => errors.extend(and),
+                        Err(and) => errors.push(and),
+                    }
+                }
             }
+            Err(error) => errors.push(error),
+        }
+        match workspace.write() {
+            Ok(mut ws) => {
+                if let Err((_prepared, error)) = ws.finish_detached_close(prepared) {
+                    errors.push(error);
+                }
+            }
+            Err(error) => errors.push(error),
         }
         errors
     }
@@ -1030,83 +1029,58 @@ impl Host {
                 format!("`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento").into(),
             ));
         }
+        if !enabled {
+            // Il permesso di shutdown è posseduto, quindi anche il guard della
+            // mappa sessioni termina prima della callback del plugin.
+            let (workspace, registry, _shutdown) = self.with_session(vault, |session| {
+                (
+                    session.workspace.clone(),
+                    session.registry.clone(),
+                    session.runner.shutdown_bundle(id),
+                )
+            })?;
+            // Un registry irrecuperabile viene rifiutato prima di persistere
+            // la scelta, come nel percorso sincrono precedente.
+            drop(registry.read()?);
+            let _turn = workspace.write_turn();
+            let (deferred, persisted) = {
+                let mut ws = workspace.write()?;
+                let deferred = ws.defer_event_dispatch();
+                let mut disabled = crate::settings::disabled_plugins(&ws);
+                disabled.retain(|other| other != id);
+                disabled.push(id.to_string());
+                disabled.sort();
+                let persisted = ws.set_setting(
+                    crate::settings::PLUGINS_DISABLED,
+                    fub_abi::settings::SettingValue::List(disabled),
+                );
+                (deferred, persisted)
+            };
+            let outcome =
+                persisted.and_then(|()| crate::teardown::unmount(&workspace, &registry, id));
+            workspace.write()?.restore_event_dispatch(deferred);
+            drain_events(&workspace)?;
+            return outcome;
+        }
+        // L'accensione usa ancora il mount sincrono. La migrazione di prepare,
+        // activate e registrazione è separata dal teardown qui staccato.
         self.with_session(vault, |session| {
-            // **Prima i job, poi i prestiti**, e in quest'ordine soltanto.
-            //
-            // Chi esegue un job tiene una copia del bundle finché il job dura
-            // ([`BundleRegistry::body`]), e `Plugin::deactivate` vuole essere
-            // solo: spegnere un componente con un suo job in volo saltava il
-            // commiato e lo diceva in un errore. Aspettarlo qui è la stessa
-            // regola con cui si chiude un vault — chi spegne aspetta chi
-            // lavora ([0032](../../../docs/decisions/0183-composizione-host-kernel.md))
-            // — applicata a un componente invece che a tutti.
-            //
-            // E **prima** dei due prestiti, non dopo: un job dentro `run_job`
-            // chiede il workspace per riconsegnare il proprio esito, e
-            // aspettarlo tenendoglielo sarebbe aspettare sé stessi. Il permesso
-            // si dichiara per primo anche perché cada per ultimo: finché vive,
-            // nessun job di quel bundle riparte da dietro.
-            let _shutdown = (!enabled).then(|| session.runner.shutdown_bundle(id));
             with_event_drain(&session.workspace, |ws| {
                 let mut registry = session.registry.write()?;
-
-                // **La domanda mal posta si respinge prima di toccare qualunque
-                // cosa.** Accendere un id che nessuno conosce non è un guasto a
-                // metà strada: è un id scritto male, e la risposta è la stessa che
-                // dà [`BundleRegistry::enable`] — solo, arriva *prima* della
-                // scrittura invece che dopo. È l'unico pezzo di `enable` che non
-                // ha bisogno del workspace per rispondere, ed è quello che va
-                // portato davanti al punto di non ritorno: ciò che resta dietro è
-                // il montaggio, che il workspace lo tocca per forza.
-                if enabled && !registry.knows(id) {
+                if !registry.knows(id) {
                     return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
                 }
-
-                // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
-                // mano perché le due memorie non sono la copia di un file (quelle
-                // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
-                // *montaggio*, che è il registry più il kernel.
-                //
-                // Nel verso dello spegnimento l'ordine è gratis e non c'è niente da
-                // scambiare: `unmount` **non fallisce** — raccoglie i guasti del
-                // commiato e li rende, ma smonta comunque — quindi la mossa che può
-                // andare storta è una sola ed è la scrittura, e sta davanti. Se non
-                // riesce non è stato smontato niente: il vuoto fra le due metà non
-                // è più esprimibile.
-                //
-                // Nel verso dell'accensione, invece, di mosse che possono fallire
-                // ne restano due (la scrittura e il montaggio) e l'ordine è una
-                // scelta. Va così, e non al contrario, per due ragioni. La prima:
-                // `plugins.disabled` è ciò che l'utente **vuole**, non lo specchio
-                // di ciò che è montato — non a caso non è `program_writable`. La
-                // seconda: «scritto come acceso, non montato» non è uno stato
-                // inventato qui, è quello che ogni avvio produce quando un bundle
-                // non si monta (`mount.rs`: l'errore si scrive nel log e si tira
-                // avanti), quindi è uno stato che il resto del programma sa già
-                // abitare, e il prossimo avvio ci riprova. Lo stato opposto —
-                // montato adesso, spento nel file — nessun avvio lo sa produrre, e
-                // si disfa da sé alla prima riapertura senza dire niente. Il
-                // commento che stava qui prometteva che «se il montaggio fallisce
-                // non resta scritto che il componente è acceso»: non era vero
-                // nemmeno allora, perché all'avvio resta scritto eccome.
+                // La scelta persistente è autorevole anche se il mount fallisce:
+                // il prossimo avvio la ritenta, come nel percorso di startup.
                 let mut disabled = crate::settings::disabled_plugins(ws);
-                disabled.retain(|d| d != id);
-                if !enabled {
-                    disabled.push(id.to_string());
-                }
+                disabled.retain(|other| other != id);
                 disabled.sort();
                 ws.set_setting(
                     crate::settings::PLUGINS_DISABLED,
                     fub_abi::settings::SettingValue::List(disabled),
                 )?;
-
-                let mut errors = Vec::new();
-                if enabled {
-                    registry.enable(ws, id).map_err(PluginError::from)?;
-                } else {
-                    errors.extend(registry.unmount(ws, id));
-                }
-                Ok(errors)
+                registry.enable(ws, id).map_err(PluginError::from)?;
+                Ok(Vec::new())
             })?
         })?
     }
