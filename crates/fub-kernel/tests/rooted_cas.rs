@@ -88,3 +88,45 @@ fn missing_target_with_a_fresh_lock_has_one_winner() {
 fn missing_target_with_a_reused_lock_has_one_winner() {
     exercise(false, true);
 }
+
+#[test]
+fn reusing_a_lock_preserves_its_identity_and_contents() {
+    let temp = tempfile::tempdir().expect("directory CAS");
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).expect("root UTF-8");
+    let storage = RootedFsStorage::open(&root).expect("handle della root");
+    let path = root.join("target.txt");
+    let lock = root.join(".target.txt.lock");
+    std::fs::write(&lock, b"stable lock").expect("lock esistente");
+    let identity = storage.file_identity(&lock).expect("identità del lock");
+
+    assert!(matches!(
+        storage.write_if_unchanged(&path, None, b"first"),
+        Ok(ConditionalWrite::Written(_))
+    ));
+    assert!(matches!(
+        storage.write_if_unchanged(&path, Some(b"first"), b"second"),
+        Ok(ConditionalWrite::Written(_))
+    ));
+    assert_eq!(storage.read(&lock).unwrap(), b"stable lock");
+    assert_eq!(storage.file_identity(&lock).unwrap(), identity);
+    assert_eq!(storage.read(&path).unwrap(), b"second");
+}
+
+#[test]
+fn a_lock_that_cannot_be_opened_does_not_change_the_target() {
+    let temp = tempfile::tempdir().expect("directory CAS");
+    let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).expect("root UTF-8");
+    let storage = RootedFsStorage::open(&root).expect("handle della root");
+    let path = root.join("target.txt");
+    storage.write(&path, b"base").expect("target iniziale");
+    std::fs::create_dir(root.join(".target.txt.lock")).expect("lock non regolare");
+
+    let error = storage
+        .write_if_unchanged(&path, Some(b"base"), b"must-not-appear")
+        .expect_err("un lock non apribile deve impedire il CAS");
+    assert!(
+        error.raw_os_error().is_some(),
+        "errore I/O originale: {error:?}"
+    );
+    assert_eq!(storage.read(&path).unwrap(), b"base");
+}

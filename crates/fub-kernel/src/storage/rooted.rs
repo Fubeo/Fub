@@ -324,15 +324,24 @@ impl RootedFsStorage {
         let lock_abs = parent.join(format!(".{name}.lock"));
         let lock_rel = self.rel_buf(&lock_abs)?;
         let mut options = OpenOptions::new();
-        options.write(true).create(true);
-        let lock = self
-            .dir
-            .open_with(&lock_rel, &options)
-            .inspect_err(|error| {
-                tracing::error!(target: "fub.storage", %path, %error,
-                    operation = "open_lock", "apertura del lock fallita");
-            })?
-            .into_std();
+        options.write(true).create_new(true);
+        // La creazione concorrente non esclusiva del lock nuovo può restituire
+        // ENOENT su macOS. Si elegge invece un creatore con create_new: soltanto
+        // AlreadyExists autorizza ad aprire il lock pubblicato dall'altro writer.
+        // Il file resta stabile: non si tronca, sostituisce o rimuove al rilascio.
+        // Nessun retry su NotFound o sugli altri errori del filesystem.
+        let lock = match self.dir.open_with(&lock_rel, &options) {
+            Ok(lock) => Ok(lock),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => self
+                .dir
+                .open_with(&lock_rel, OpenOptions::new().write(true)),
+            Err(error) => Err(error),
+        }
+        .inspect_err(|error| {
+            tracing::error!(target: "fub.storage", %path, %error,
+                operation = "open_lock", "apertura del lock fallita");
+        })?
+        .into_std();
         // `File::lock` è disponibile dal MSRV 1.89. Per il backend di
         // produzione il lock è parte della promessa CAS: se non si può
         // acquisire, l'operazione fallisce invece di degradare in best-effort.
