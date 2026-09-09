@@ -31,11 +31,16 @@ fn select(directory: &Utf8Path, selected: &str) -> Result<WasmBundle, String> {
 
 fn run(args: &[String]) -> Result<(), String> {
     let [vault, directory, selected, command] = args else {
-        return Err("uso: installed-plugin <vault> <directory-plugin> <id-plugin> <id-comando>".into());
+        return Err(
+            "uso: installed-plugin <vault> <directory-plugin> <id-plugin> <id-comando>".into(),
+        );
     };
     let bundle = select(Utf8Path::new(directory), selected)?;
     let manifest = bundle.manifest();
-    eprintln!("Plugin richiesto: {}; permessi: {:?}", manifest.id, manifest.permissions);
+    eprintln!(
+        "Plugin richiesto: {}; permessi: {:?}",
+        manifest.id, manifest.permissions
+    );
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1);
@@ -52,7 +57,9 @@ fn run(args: &[String]) -> Result<(), String> {
                 return Err(format!("id già occupato nell'host: {selected}"));
             }
             registry.remember(Arc::new(bundle));
-            registry.enable(&mut ws, selected).map_err(|e| e.to_string())?;
+            registry
+                .enable(&mut ws, selected)
+                .map_err(|e| e.to_string())?;
             let outcome = ws.invoke_command(
                 command,
                 serde_json::json!({}),

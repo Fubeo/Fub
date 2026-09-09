@@ -129,7 +129,10 @@ fn installed_component_is_discovered_invoked_reopened_and_removed() {
             Arc::downgrade(&registry.body(ID).expect("plugin attivo"))
         });
         host.close();
-        assert!(released.upgrade().is_none(), "la sessione rilascia il plugin");
+        assert!(
+            released.upgrade().is_none(),
+            "la sessione rilascia il plugin"
+        );
     }
 
     // La rimozione avviene a sessione chiusa. Non cancella dati del plugin o
