@@ -315,19 +315,37 @@ impl RootedFsStorage {
     }
 
     fn with_lock<T>(&self, path: &Utf8Path, f: impl FnOnce() -> io::Result<T>) -> io::Result<T> {
-        self.create_parent(path)?;
+        self.create_parent(path).inspect_err(|error| {
+            tracing::error!(target: "fub.storage", %path, %error,
+                operation = "create_parent", "preparazione del lock fallita");
+        })?;
         let parent = path.parent().unwrap_or(&self.root);
         let name = path.file_name().unwrap_or("senza-nome");
         let lock_abs = parent.join(format!(".{name}.lock"));
         let lock_rel = self.rel_buf(&lock_abs)?;
         let mut options = OpenOptions::new();
         options.write(true).create(true);
-        let lock = self.dir.open_with(&lock_rel, &options)?.into_std();
+        let lock = self
+            .dir
+            .open_with(&lock_rel, &options)
+            .inspect_err(|error| {
+                tracing::error!(target: "fub.storage", %path, %error,
+                    operation = "open_lock", "apertura del lock fallita");
+            })?
+            .into_std();
         // `File::lock` è disponibile dal MSRV 1.89. Per il backend di
         // produzione il lock è parte della promessa CAS: se non si può
         // acquisire, l'operazione fallisce invece di degradare in best-effort.
-        lock.lock()?;
-        f()
+        lock.lock().inspect_err(|error| {
+            tracing::error!(target: "fub.storage", %path, %error,
+                operation = "acquire_lock", "acquisizione del lock fallita");
+        })?;
+        // Il log distingue il guasto del lock da quello della transazione,
+        // senza sostituire l'errore I/O né perdere kind e raw_os_error.
+        f().inspect_err(|error| {
+            tracing::error!(target: "fub.storage", %path, %error,
+                operation = "locked_operation", "operazione sotto lock fallita");
+        })
     }
 
     fn current_bytes(&self, path: &Utf8Path) -> io::Result<Option<Vec<u8>>> {

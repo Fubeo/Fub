@@ -7,26 +7,35 @@
 use std::sync::Barrier;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_kernel::log::captured_default;
 use fub_kernel::{ConditionalWrite, RootedFsStorage, VaultStorage};
 
 fn race(left: &RootedFsStorage, right: &RootedFsStorage, path: &Utf8Path, expected: Option<&[u8]>) {
     let start = Barrier::new(2);
-    let outcomes = std::thread::scope(|scope| {
+    let [(left_result, left_log), (right_result, right_log)] = std::thread::scope(|scope| {
         let worker = scope.spawn(|| {
-            start.wait();
-            left.write_if_unchanged(path, expected, b"left")
+            captured_default(|| {
+                start.wait();
+                left.write_if_unchanged(path, expected, b"left")
+            })
         });
-        start.wait();
-        let right = right.write_if_unchanged(path, expected, b"right");
+        let right = captured_default(|| {
+            start.wait();
+            right.write_if_unchanged(path, expected, b"right")
+        });
         // Raccoglie entrambi gli esiti prima di qualsiasi asserzione: un errore
         // I/O non perde il secondo risultato e non lascia un worker non atteso.
         let left = worker.join().expect("panic nel worker CAS");
         [left, right]
     });
+    let outcomes = [left_result, right_result];
     let expected_bytes: &[u8] = match &outcomes {
         [Ok(ConditionalWrite::Written(_)), Ok(ConditionalWrite::Changed)] => b"left",
         [Ok(ConditionalWrite::Changed), Ok(ConditionalWrite::Written(_))] => b"right",
-        _ => panic!("CAS su {path}: atteso un solo vincitore, esiti {outcomes:?}"),
+        _ => panic!(
+            "CAS su {path}: atteso un solo vincitore, esiti {outcomes:?}; \
+             log sinistro {left_log:?}; log destro {right_log:?}"
+        ),
     };
     assert_eq!(
         left.read(path).expect("rilettura del risultato CAS"),
