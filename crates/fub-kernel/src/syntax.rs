@@ -141,6 +141,15 @@ impl SyntaxRegistry {
     /// viene informato.
     pub fn register(&mut self, rule: Box<dyn SyntaxRule>) -> Result<(), SyntaxConflict> {
         let spec = rule.spec();
+        self.register_prepared(spec, &mut Some(rule))
+    }
+
+    /// Admission uses captured data; rejection retains ownership in the caller.
+    pub(crate) fn register_prepared(
+        &mut self,
+        spec: SyntaxRuleSpec,
+        rule: &mut Option<Box<dyn SyntaxRule>>,
+    ) -> Result<(), SyntaxConflict> {
         if OptionMap::ns_of(&spec.id).is_none() {
             return Err(SyntaxConflict::UnnamespacedId(spec.id));
         }
@@ -182,7 +191,7 @@ impl SyntaxRegistry {
             at,
             Registered {
                 spec,
-                rule: Arc::from(rule),
+                rule: Arc::from(rule.take().expect("prepared rule owns its provider")),
             },
         );
         self.publish_snapshot();
@@ -196,13 +205,15 @@ impl SyntaxRegistry {
     /// che continuasse a tenere `mermaid` su markdown impedirebbe a chiunque di
     /// prenderla, compresa sé stessa se la si riaccendesse.
     pub fn remove(&mut self, id: &str) -> bool {
-        let Some(at) = self.rules.iter().position(|r| r.spec.id == id) else {
-            return false;
-        };
-        self.rules.remove(at);
+        self.take(id).is_some()
+    }
+
+    pub(crate) fn take(&mut self, id: &str) -> Option<Arc<dyn SyntaxRule>> {
+        let at = self.rules.iter().position(|r| r.spec.id == id)?;
+        let registered = self.rules.remove(at);
         self.claims.retain(|_, owner| owner != id);
         self.publish_snapshot();
-        true
+        Some(registered.rule)
     }
 
     pub fn is_empty(&self) -> bool {

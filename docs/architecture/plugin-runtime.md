@@ -19,6 +19,51 @@ flowchart LR
 Un bundle fornisce manifest, fiducia, plugin e registrazioni. Il registry monta
 le registrazioni e conserva l'ownership necessaria allo smontaggio.
 
+La dichiarazione di un provider è codice esterno: `commands`, `views`,
+`interests` e `targets` devono essere chiamati fuori da `Custody<Workspace>`.
+`PreparedRegistration` conserva provider e dichiarazioni in un token opaco;
+`Workspace::commit_registration` applica namespace, collisioni e fiducia host
+senza richiamare il provider. Un rifiuto lascia il provider nel token, da
+distruggere dopo aver rilasciato la guardia. Il token è consumabile una sola
+volta. La porta copre comandi, view, import, export, handler, sintassi e renderer.
+La cattura conserva il corpo fuori dalla rete di panic della dichiarazione:
+anche un errore di `Drop` successivo viene isolato, senza un doppio panic.
+
+Per gli indici, `PreparedIndexRegistration` separa cattura delle rotte,
+ammissione, attivazione esterna e pubblicazione. Il commit riconvalida le rotte;
+un rifiuto mantiene il corpo per `dispose_uncommitted` fuori dalla guardia.
+L'errore recuperabile `RegistryError::Activate` conserva la semantica esistente:
+l'indice è pubblicato e deve ricostruire lo stato derivato.
+
+Il composition root espone alla closure del bundle un `Registrar` stretto, non
+il workspace. Il registrar porta un `RegistrationPermit` opaco legato
+all'identità del workspace, all'owner e alla generazione della dichiarazione:
+ogni pubblicazione riconvalida il permesso, quindi un mount ritirato o un owner
+dichiarato di nuovo non può pubblicare un risultato vecchio. `BundleRegistry`
+mantiene un turno di scrittura attraverso le fasi del mount o dello smontaggio,
+ma prende le guardie solo per applicare stato già preparato. Preparazione,
+attivazione, registrazione, disattivazione, chiusura degli indici e ultimi
+`Drop` girano fuori dalle guardie di workspace e registry. Il teardown marca
+l'owner in ritiro ed estrae gli indici, li chiude con un `JobHost`, poi estrae
+gli altri provider e ritira la dichiarazione in una sola breve mutazione. Gli
+owner estratti vengono distrutti soltanto dopo aver rilasciato la guardia.
+
+Il default-deny creato durante il mount restituisce una ricevuta della precisa
+scrittura machine-scoped nell'istanza `MachineSettings` condivisa dai vault del
+processo. Il rollback rimuove il valore solo se quella revisione è ancora
+corrente: una scrittura successiva, anche `false → true → false`, non viene
+confusa con il valore provvisorio del mount. Il formato persistente non acquista
+un contatore o un token di transazione.
+
+Resta un confine esplicito nelle view. Durante la registrazione
+`PreparedRegistration::views` cattura fuori guardia anche `interests` per
+l'istanza unica; un panic fallisce la registrazione e non viene sostituito da un
+default. Per un'istanza parametrica `ViewProvider::interests` resta però
+non-fallibile: un futuro proxy WASM che possa produrre trap non ha oggi un
+canale di errore tipizzato. Risolverlo richiede un cambiamento del contratto
+Rust e WIT; finché quel contratto non nasce da un caso reale, il runtime non
+inventa un fallback e non modifica l'ABI.
+
 ## Provider nativo
 
 Un provider nativo implementa il trait Rust direttamente. Il composition root

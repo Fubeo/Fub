@@ -48,6 +48,11 @@
 //! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
 //! [`Workspace::reindex`].
 
+mod registration;
+pub use registration::{
+    PreparedIndexRegistration, PreparedPluginDeactivation, PreparedRegistration, RegistrationPermit,
+};
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -477,6 +482,10 @@ pub const INDEX_JOB: &str = "vault.index";
 /// *Il disco, e come ciò che ci sta sopra diventa un modello* (§8.1): il
 pub type BeforeWriteHook =
     Arc<dyn Fn(&mut dyn HostApi, &DocId) -> std::result::Result<(), PluginError> + Send + Sync>;
+
+/// Receipt for the exact machine-setting write that materialized default deny.
+/// It can only undo that write while it is still the latest write to the key.
+pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
 
 /// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
 ///
@@ -1780,20 +1789,10 @@ impl Workspace {
         provider: Box<dyn ServiceProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let provides = self
-            .providers
-            .plugins
-            .get(&plugin)
-            .map(|and| and.manifest.provides.clone())
-            .ok_or_else(|| RegistryError::UnknownPlugin(plugin.clone()))?;
-        if provides.is_empty() {
-            return Err(RegistryError::NothingProvided(plugin));
-        }
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Service, &provides);
-        self.providers.services.push((plugin, Arc::from(provider)));
-        Ok(())
+        let permit = self.registration_permit(&plugin)?;
+        let provides = self.registration_services(&permit)?;
+        let mut prepared = PreparedRegistration::service(provides, provider);
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -2354,14 +2353,9 @@ impl Workspace {
         handler: Box<dyn EventHandler>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::EventHandler, &[])?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::EventHandler, &[]);
-        self.providers.handlers.push((plugin, handler));
-        Ok(())
+        let mut prepared = PreparedRegistration::event_handler(handler);
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     /// chiamata.
@@ -2545,22 +2539,19 @@ impl Workspace {
         index: Box<dyn IndexProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        // regola del §7.4 vale per loro come per gli id di view: chi rivendica
-        // `acme:tasks` deve essere `acme`. Le rotte del contratto invece non
-        // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
-        // loro conflitto lo vede la tabella delle rotte.
-        // Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
-        let namespaces = plugins::custom_namespaces(&index.routes());
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Index, &namespaces)?;
-        self.indexes
-            .declare(&plugin, index.as_ref())
-            .map_err(RegistryError::Route)?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Index, &namespaces);
-        self.activate_index(plugin, index)
+        let mut prepared =
+            PreparedIndexRegistration::new(index).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.admit_index_registration(&permit, &prepared)?;
+        self.with_provider_call(|ws| {
+            let mut host = ws.host_for(&plugin, InvokeMode::Apply);
+            // The token retains the outcome for publication, including the
+            // established recoverable RegistryError::Activate case.
+            let _ = prepared.activate(&mut host);
+        });
+        let result = self.commit_index_registration(&permit, &mut prepared);
+        self.dispatch_pending();
+        result
     }
 
     /// domande.
@@ -5598,35 +5589,9 @@ impl Workspace {
         rule: Box<dyn SyntaxRule>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let spec = rule.spec();
-        let id = spec.id;
-        // propria — «serve un `ns:nome`», senza sapere di chi — e chiedeva un
-        // namespace anche al core mentre non chiedeva a nessuno che fosse il
-        // *suo*. Adesso passa di qui come le altre.
-        // E vale anche per i `custom_kind` che la regola si impegna a emettere:
-        self.providers.plugins.admit(
-            &plugin,
-            RegistrationKind::Syntax,
-            std::slice::from_ref(&id),
-        )?;
-        // sono nomi che entrano nel modello, e senza questa riga un terzo
-        // dichiara `callout` e si fa disegnare dal core. Non passano da `admit`
-        // perché produrre lo stesso kind in due non è una contesa — è come si
-        // scrivono due dialetti della stessa famiglia.
-        // Registra chi disegna un `custom_kind` (§3.2).
-        self.providers
-            .plugins
-            .check_names(&plugin, &spec.produces)?;
-        self.docs
-            .syntax
-            .register(rule)
-            .map_err(RegistryError::Syntax)?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
-        self.projection_generation = self.projection_generation.wrapping_add(1);
-        self.syntax_generation = self.syntax_generation.wrapping_add(1);
-        Ok(())
+        let mut prepared = PreparedRegistration::syntax(rule).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -5642,24 +5607,10 @@ impl Workspace {
         renderer: Box<dyn CustomRenderer>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let id = renderer.spec().id;
-        self.providers.plugins.admit(
-            &plugin,
-            RegistrationKind::Renderer,
-            std::slice::from_ref(&id),
-        )?;
-        let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
-        self.docs
-            .renderers
-            .register(trust, renderer)
-            .map_err(RegistryError::Renderer)?;
-        self.providers.plugins.record(
-            &plugin,
-            RegistrationKind::Renderer,
-            std::slice::from_ref(&id),
-        );
-        self.projection_generation = self.projection_generation.wrapping_add(1);
-        Ok(())
+        let mut prepared =
+            PreparedRegistration::renderer(renderer).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -6290,7 +6241,11 @@ impl Workspace {
         plugin: impl Into<String>,
         provider: Box<dyn ViewProvider>,
     ) -> std::result::Result<(), RegistryError> {
-        self.mount_views(plugin.into(), provider, false)
+        let plugin = plugin.into();
+        let mut prepared =
+            PreparedRegistration::views(provider).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     /// di view.
@@ -6643,44 +6598,10 @@ impl Workspace {
         provider: Box<dyn CommandProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let specs = provider.commands();
-        let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Command, &ids)?;
-        // fabbricata qui e non chiesta a chi registra. Chiederla avrebbe voluto
-        // dire che un comando con la scorciatoia riconfigurabile è un comando il
-        // cui autore si è ricordato di dichiararne una — cioè la proprietà che
-        // interessa affidata alla diligenza, mentre l'utente che vuole
-        // rimappare *quel* comando non ha modo di sapere perché non può.
-        //
-        // Va **dopo** `admit` e prima di `record`: `admit` è ciò che verifica
-        // che quegli id siano nominabili da questo plugin, e sintetizzare una
-        // chiave dal nome di un comando che il registro sta per rifiutare
-        // vorrebbe dire dichiarare l'impostazione di un comando che non
-        // esisterà.
-        // La firma resta `Box` — è quella degli altri `register_*`, e chi
-        let keys = self.keybinding_specs(&specs);
-        if let Err(why) = self
-            .settings
-            .write()
-            .expect("store di configurazione")
-            .declare(&plugin, &keys)
-        {
-            return Err(RegistryError::Setting(why));
-        }
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Command, &ids);
-        // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
-        // `run_command` rientra nel registro mentre il registro è in uso).
-        // Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
-        self.providers.commands.push(RegisteredCommand {
-            id: plugin,
-            specs,
-            provider: Arc::from(provider),
-        });
-        Ok(())
+        let mut prepared =
+            PreparedRegistration::commands(provider).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -7330,14 +7251,9 @@ impl Workspace {
         p: Box<dyn ImportProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Import, &[])?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Import, &[]);
-        self.providers.imports.push((plugin, p));
-        Ok(())
+        let mut prepared = PreparedRegistration::import(p);
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -7350,15 +7266,9 @@ impl Workspace {
         p: Box<dyn ExportProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let ids: Vec<String> = p.targets().into_iter().map(|t| t.id).collect();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Export, &ids)?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Export, &ids);
-        self.providers.exports.push((plugin, p));
-        Ok(())
+        let mut prepared = PreparedRegistration::export(p).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     /// tutta insieme (decisione 0102).
@@ -8231,6 +8141,45 @@ impl Workspace {
             .reset(key)?;
         self.announce_setting(key, scope);
         Ok(())
+    }
+
+    /// Writes a machine-scoped permission denial only while no machine choice
+    /// exists, returning the exact write receipt needed by rollback.
+    pub fn initialize_permission_denial(
+        &mut self,
+        key: &str,
+    ) -> std::result::Result<Option<PermissionInitialization>, PluginError> {
+        if fub_abi::settings::permission_of_key(key).is_none() {
+            return Err(PluginError::BadArgs(
+                format!("`{key}` is not a permission setting").into(),
+            ));
+        }
+        let receipt = self
+            .settings
+            .read()
+            .expect("store di configurazione")
+            .initialize_machine_default_tracked(key, SettingValue::Toggle(false))?;
+        if receipt.is_some() {
+            self.announce_setting(key, SettingScope::Machine);
+        }
+        Ok(receipt.map(PermissionInitialization))
+    }
+
+    /// Undoes only the exact default-deny write represented by `receipt`.
+    /// A later write, including an ABA write back to `false`, is preserved.
+    pub fn rollback_permission_denial(
+        &mut self,
+        receipt: &PermissionInitialization,
+    ) -> std::result::Result<bool, PluginError> {
+        let reset = self
+            .settings
+            .read()
+            .expect("store di configurazione")
+            .rollback_machine_if_current(&receipt.0)?;
+        if reset {
+            self.announce_setting(receipt.0.key(), SettingScope::Machine);
+        }
+        Ok(reset)
     }
 
     fn announce_setting(&mut self, key: &str, scope: SettingScope) {

@@ -1047,21 +1047,16 @@ impl Host {
             // si dichiara per primo anche perché cada per ultimo: finché vive,
             // nessun job di quel bundle riparte da dietro.
             let _shutdown = (!enabled).then(|| session.runner.shutdown_bundle(id));
+            // Include la preferenza persistente nello stesso turno del mount:
+            // due toggle concorrenti non possono riordinare la scrittura e il
+            // lifecycle pur lasciando libere le guardie durante codice esterno.
+            let _workspace_turn = session.workspace.write_turn();
+            let _registry_turn = session.registry.write_turn();
+            if enabled && !session.registry.read()?.knows(id) {
+                return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
+            }
+
             with_event_drain(&session.workspace, |ws| {
-                let mut registry = session.registry.write()?;
-
-                // **La domanda mal posta si respinge prima di toccare qualunque
-                // cosa.** Accendere un id che nessuno conosce non è un guasto a
-                // metà strada: è un id scritto male, e la risposta è la stessa che
-                // dà [`BundleRegistry::enable`] — solo, arriva *prima* della
-                // scrittura invece che dopo. È l'unico pezzo di `enable` che non
-                // ha bisogno del workspace per rispondere, ed è quello che va
-                // portato davanti al punto di non ritorno: ciò che resta dietro è
-                // il montaggio, che il workspace lo tocca per forza.
-                if enabled && !registry.knows(id) {
-                    return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
-                }
-
                 // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
                 // mano perché le due memorie non sono la copia di un file (quelle
                 // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
@@ -1100,14 +1095,24 @@ impl Host {
                     fub_abi::settings::SettingValue::List(disabled),
                 )?;
 
-                let mut errors = Vec::new();
-                if enabled {
-                    registry.enable(ws, id).map_err(PluginError::from)?;
-                } else {
-                    errors.extend(registry.unmount(ws, id));
-                }
-                Ok(errors)
-            })?
+                Ok::<_, PluginError>(())
+            })??;
+
+            if enabled {
+                crate::registry::BundleRegistry::enable_guarded(
+                    &session.registry,
+                    &session.workspace,
+                    id,
+                )
+                .map_err(PluginError::from)?;
+                Ok(Vec::new())
+            } else {
+                Ok(crate::registry::BundleRegistry::unmount_guarded(
+                    &session.registry,
+                    &session.workspace,
+                    id,
+                ))
+            }
         })?
     }
 

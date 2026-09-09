@@ -13,8 +13,8 @@ use fub_abi::traits::{
 };
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
-use fub_host::registry::{Bundle, BundleError, BundleRegistry, OnlyProviders};
-use fub_kernel::{Trust, Workspace};
+use fub_host::registry::{Bundle, BundleError, BundleRegistry, OnlyProviders, Registrar};
+use fub_kernel::Trust;
 use fub_testkit::{Bench, Mounted};
 
 fn vault() -> Mounted {
@@ -158,25 +158,21 @@ impl Bundle for BundleSpy {
         })
     }
 
-    fn register(&self, ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
         let mut failures = Vec::new();
-        if let Err(error) =
-            ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id)))
+        if let Err(error) = registrar.register_command_provider(Box::new(GreetingProvider(self.id)))
         {
             failures.push(format!("command: {error}"));
         }
-        if let Err(error) = ws.register_event_handler(
-            self.id,
-            Box::new(EventRecorder {
-                id: self.id,
-                journal: self.journal.clone(),
-            }),
-        ) {
+        if let Err(error) = registrar.register_event_handler(Box::new(EventRecorder {
+            id: self.id,
+            journal: self.journal.clone(),
+        })) {
             failures.push(format!("handler: {error}"));
         }
         if self.loses_a_piece {
             if let Err(error) =
-                ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id)))
+                registrar.register_command_provider(Box::new(GreetingProvider(self.id)))
             {
                 failures.push(format!("command: {error}"));
             }
@@ -227,7 +223,7 @@ impl Bundle for DependencyBundle {
         OnlyProviders::boxed(self.manifest())
     }
 
-    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }
@@ -254,7 +250,7 @@ impl Bundle for PermissionBundle {
         OnlyProviders::boxed(self.manifest())
     }
 
-    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }

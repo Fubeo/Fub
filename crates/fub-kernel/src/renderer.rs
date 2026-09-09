@@ -97,6 +97,16 @@ impl RendererRegistry {
         renderer: Box<dyn CustomRenderer>,
     ) -> Result<(), RendererConflict> {
         let spec = renderer.spec();
+        self.register_prepared(trust, spec, &mut Some(renderer))
+    }
+
+    /// Admission uses captured data; rejection retains ownership in the caller.
+    pub(crate) fn register_prepared(
+        &mut self,
+        trust: Trust,
+        spec: CustomRendererSpec,
+        renderer: &mut Option<Box<dyn CustomRenderer>>,
+    ) -> Result<(), RendererConflict> {
         if OptionMap::ns_of(&spec.id).is_none() {
             return Err(RendererConflict::UnnamespacedId(spec.id));
         }
@@ -122,7 +132,11 @@ impl RendererRegistry {
         self.renderers.push(Registered {
             spec,
             trust,
-            renderer: std::sync::Arc::from(renderer),
+            renderer: std::sync::Arc::from(
+                renderer
+                    .take()
+                    .expect("prepared renderer owns its provider"),
+            ),
         });
         Ok(())
     }
@@ -134,17 +148,19 @@ impl RendererRegistry {
     /// terzo di cinque sposta il quarto e il quinto, e una mappa aggiustata a
     /// mano è il modo in cui un blocco finisce disegnato dal renderer sbagliato.
     pub fn remove(&mut self, id: &str) -> bool {
-        let Some(at) = self.renderers.iter().position(|r| r.spec.id == id) else {
-            return false;
-        };
-        self.renderers.remove(at);
+        self.take(id).is_some()
+    }
+
+    pub(crate) fn take(&mut self, id: &str) -> Option<std::sync::Arc<dyn CustomRenderer>> {
+        let at = self.renderers.iter().position(|r| r.spec.id == id)?;
+        let registered = self.renderers.remove(at);
         self.by_kind.clear();
         for (at, registered) in self.renderers.iter().enumerate() {
             for kind in &registered.spec.kinds {
                 self.by_kind.insert(kind.clone(), at);
             }
         }
-        true
+        Some(registered.renderer)
     }
 
     pub fn is_empty(&self) -> bool {

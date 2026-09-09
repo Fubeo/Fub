@@ -80,6 +80,21 @@ impl<T> ProviderTable<T> {
         self.entries.retain(keep);
     }
 
+    /// Removes matching entries without dropping them in the registry.
+    pub(crate) fn extract(&mut self, mut take: impl FnMut(&T) -> bool) -> Vec<T> {
+        let mut kept = Vec::with_capacity(self.entries.len());
+        let mut removed = Vec::new();
+        for entry in std::mem::take(&mut self.entries) {
+            if take(&entry) {
+                removed.push(entry);
+            } else {
+                kept.push(entry);
+            }
+        }
+        self.entries = kept;
+        removed
+    }
+
     /// Estrae le voci, lasciando la tabella vuota: il primo passo del prestito.
     pub(crate) fn take(&mut self) -> Vec<T> {
         std::mem::take(&mut self.entries)

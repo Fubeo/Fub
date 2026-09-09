@@ -26,12 +26,12 @@ use fub_format_markdown::{MarkdownExport, MarkdownImport, MarkdownProvider};
 use fub_kernel::RegistryError;
 use fub_kernel::{FormatRegistry, MachineSettings, SystemLocale, Trust, ViewStates, Workspace};
 
-use crate::registry::{Bundle, BundleRegistry, OnlyProviders};
+use crate::registry::{Bundle, BundleRegistry, OnlyProviders, Registrar};
+#[cfg(feature = "versioning")]
+use crate::settings::versioning_settings;
 use crate::settings::{
     catalog_assembled, core_catalog_assembled, core_settings, disabled_plugins, CORE_ID,
 };
-#[cfg(feature = "versioning")]
-use crate::settings::{versioning_enabled, versioning_settings};
 
 const MARKDOWN_ID: &str = "fub.markdown";
 const COMMANDS_SERVICE: &str = "fub.commands";
@@ -54,14 +54,14 @@ struct CoreBundle {
     provides: Vec<&'static str>,
     requires: Vec<&'static str>,
     #[allow(clippy::type_complexity)]
-    register: Box<dyn Fn(&mut Workspace) -> Vec<String> + Send + Sync>,
+    register: Box<dyn Fn(&mut Registrar<'_>) -> Vec<String> + Send + Sync>,
 }
 
 impl CoreBundle {
     fn new(
         id: &'static str,
         name: &'static str,
-        register: impl Fn(&mut Workspace) -> Vec<String> + Send + Sync + 'static,
+        register: impl Fn(&mut Registrar<'_>) -> Vec<String> + Send + Sync + 'static,
     ) -> Self {
         Self {
             id,
@@ -114,8 +114,8 @@ impl Bundle for CoreBundle {
         OnlyProviders::boxed(self.manifest())
     }
 
-    fn register(&self, ws: &mut Workspace) -> Vec<String> {
-        (self.register)(ws)
+    fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
+        (self.register)(registrar)
     }
 }
 
@@ -186,8 +186,8 @@ pub fn mount(
             let view = feature.view;
             let commands = feature.commands;
             irregular = Some(
-                CoreBundle::new(feature.id, feature.name, move |ws| {
-                    register_versioning(ws, &store, view, commands)
+                CoreBundle::new(feature.id, feature.name, move |registrar| {
+                    register_versioning(registrar, &store, view, commands)
                 })
                 .configuring(versioning_settings()),
             );
@@ -204,13 +204,13 @@ pub fn mount(
             let view = feature.view;
             let commands = feature.commands;
             let id = feature.id;
-            CoreBundle::new(id, feature.name, move |ws| {
+            CoreBundle::new(id, feature.name, move |registrar| {
                 let mut failures = Vec::new();
                 if let Some(build) = view {
-                    failures.extend(register_view(ws, id, build()));
+                    failures.extend(register_view(registrar, build()));
                 }
                 if let Some(build) = commands {
-                    failures.extend(register_commands(ws, id, build()));
+                    failures.extend(register_commands(registrar, build()));
                 }
                 failures
             })
@@ -294,17 +294,17 @@ pub fn mount(
 }
 
 #[cfg(feature = "search")]
-fn register_search(ws: &mut Workspace) -> Vec<String> {
-    let index = match ws
-        .plugin_data_dir(SEARCH_ID)
-        .and_then(|dir| SearchIndex::open(&dir))
-    {
+fn register_search(registrar: &mut Registrar<'_>) -> Vec<String> {
+    let index = match registrar.plugin_data_dir().and_then(|dir| {
+        SearchIndex::open(&dir)
+            .map_err(|error| fub_abi::PluginError::Internal(error.to_string().into()))
+    }) {
         Ok(index) => index,
         Err(error) => return vec![format!("search index unavailable: {error}")],
     };
     let settings = index.settings_handler();
-    match ws.register_index_provider(SEARCH_ID, Box::new(index)) {
-        Ok(()) => match ws.register_event_handler(SEARCH_ID, Box::new(settings)) {
+    match registrar.register_index_provider(Box::new(index)) {
+        Ok(()) => match registrar.register_event_handler(Box::new(settings)) {
             Ok(()) => Vec::new(),
             Err(error) => vec![format!(
                 "search index: field weights will not update while vault is open: {error}"
@@ -322,39 +322,40 @@ fn register_search(ws: &mut Workspace) -> Vec<String> {
 
 #[cfg(feature = "versioning")]
 fn register_versioning(
-    ws: &mut Workspace,
+    registrar: &mut Registrar<'_>,
     external_store: &Custody<Option<VersionStore>>,
     view: Option<fn() -> Box<dyn fub_abi::ViewProvider>>,
     commands: Option<fn() -> Box<dyn fub_abi::traits::CommandProvider>>,
 ) -> Vec<String> {
-    if !versioning_enabled(ws) {
+    if !matches!(
+        registrar.setting(crate::settings::VERSIONING_ENABLED),
+        Ok(fub_abi::settings::SettingValue::Toggle(true))
+    ) {
         return Vec::new();
     }
 
-    let opened = match ws.with_host(VERSIONING_ID, VersionStore::open) {
+    let opened = match registrar.with_host(VersionStore::open) {
         Ok(opened) => opened,
         Err(error) => return vec![format!("versioning unavailable: {error}")],
     };
     let hook_store = opened.clone();
-    if let Err(error) = ws.register_event_handler(
-        VERSIONING_ID,
-        Box::new(VersioningHandler::new(opened.clone())),
-    ) {
+    if let Err(error) =
+        registrar.register_event_handler(Box::new(VersioningHandler::new(opened.clone())))
+    {
         return vec![format!("versioning not registered: {error}")];
     }
-    ws.set_before_write_hook(Some((
-        VERSIONING_ID.to_string(),
-        Arc::new(move |host, id| {
-            VersioningHandler::new(hook_store.clone()).photograph_if_unversioned(host, id)
-        }),
-    )));
+    if let Err(error) = registrar.set_before_write_hook(Arc::new(move |host, id| {
+        VersioningHandler::new(hook_store.clone()).photograph_if_unversioned(host, id)
+    })) {
+        return vec![format!("versioning hook not registered: {error}")];
+    }
 
     let mut failures = Vec::new();
     if let Some(build) = view {
-        failures.extend(register_view(ws, VERSIONING_ID, build()));
+        failures.extend(register_view(registrar, build()));
     }
     if let Some(build) = commands {
-        failures.extend(register_commands(ws, VERSIONING_ID, build()));
+        failures.extend(register_commands(registrar, build()));
     }
     if !failures.is_empty() {
         return failures;
@@ -372,55 +373,49 @@ fn register_versioning(
 }
 
 fn register_view(
-    ws: &mut Workspace,
-    id: &str,
+    registrar: &mut Registrar<'_>,
     provider: Box<dyn fub_abi::ViewProvider>,
 ) -> Vec<String> {
-    match ws.register_view_provider(id, provider) {
+    match registrar.register_view_provider(provider) {
         Ok(()) => Vec::new(),
         Err(error) => vec![format!("view not registered: {error}")],
     }
 }
 
-fn register_maintenance(ws: &mut Workspace) -> Vec<String> {
-    register_commands(
-        ws,
-        fub_kernel::maintenance::MAINTENANCE_ID,
-        Box::new(fub_kernel::maintenance::Maintenance),
-    )
+fn register_maintenance(registrar: &mut Registrar<'_>) -> Vec<String> {
+    register_commands(registrar, Box::new(fub_kernel::maintenance::Maintenance))
 }
 
-fn register_markdown_transfer(ws: &mut Workspace) -> Vec<String> {
+fn register_markdown_transfer(registrar: &mut Registrar<'_>) -> Vec<String> {
     let mut failures = Vec::new();
-    if let Err(error) = ws.register_import_provider(MARKDOWN_ID, MarkdownImport::boxed()) {
+    if let Err(error) = registrar.register_import_provider(MarkdownImport::boxed()) {
         failures.push(format!("markdown import not registered: {error}"));
     }
-    if let Err(error) = ws.register_export_provider(MARKDOWN_ID, MarkdownExport::boxed()) {
+    if let Err(error) = registrar.register_export_provider(MarkdownExport::boxed()) {
         failures.push(format!("markdown export not registered: {error}"));
     }
     failures
 }
 
 fn register_commands(
-    ws: &mut Workspace,
-    id: &str,
+    registrar: &mut Registrar<'_>,
     provider: Box<dyn fub_abi::traits::CommandProvider>,
 ) -> Vec<String> {
-    match ws.register_command_provider(id, provider) {
+    match registrar.register_command_provider(provider) {
         Ok(()) => Vec::new(),
         Err(error) => vec![format!("commands not registered: {error}")],
     }
 }
 
 #[cfg(feature = "blocks")]
-fn register_blocks(ws: &mut Workspace) -> Vec<String> {
+fn register_blocks(registrar: &mut Registrar<'_>) -> Vec<String> {
     let mut failures = Vec::new();
     for rule in [
         Box::new(DiagramRule) as Box<dyn fub_abi::custom::SyntaxRule>,
         Box::new(MathRule),
         Box::new(HighlightRule),
     ] {
-        if let Err(error) = ws.register_syntax_rule(BLOCKS_ID, rule) {
+        if let Err(error) = registrar.register_syntax_rule(rule) {
             failures.push(format!("syntax rule not grafted: {error}"));
         }
     }
@@ -428,7 +423,7 @@ fn register_blocks(ws: &mut Workspace) -> Vec<String> {
         Box::new(DiagramRenderer) as Box<dyn fub_abi::custom::CustomRenderer>,
         Box::new(MathRenderer),
     ] {
-        if let Err(error) = ws.register_custom_renderer(BLOCKS_ID, renderer) {
+        if let Err(error) = registrar.register_custom_renderer(renderer) {
             failures.push(format!("renderer not registered: {error}"));
         }
     }

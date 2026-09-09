@@ -231,24 +231,22 @@ impl Indexes {
         }
     }
 
-    /// Un indice in più, con ciò che ha dichiarato di servire.
-    pub(crate) fn declare(
+    /// Un indice in più, con le rotte già dichiarate fuori dal workspace.
+    pub(crate) fn declare_routes(
         &mut self,
         id: &str,
-        index: &dyn IndexProvider,
+        routes: &[fub_abi::traits::QueryRoute],
     ) -> Result<Target, RouteConflict> {
         let target = Target::Provider(self.providers.len());
-        self.routes
-            .declare(target, &index.routes())
-            .map_err(|mut c| {
-                c.challenger = id.to_string();
-                c
-            })?;
+        self.routes.declare(target, routes).map_err(|mut c| {
+            c.challenger = id.to_string();
+            c
+        })?;
         self.routing_generation = self.routing_generation.wrapping_add(1);
         Ok(target)
     }
 
-    /// Come [`declare`](Indexes::declare), ma **sostituendo** chi rivendicava le
+    /// Come [`declare_routes`](Indexes::declare_routes), ma **sostituendo** chi rivendicava le
     /// stesse famiglie. È l'operazione che il dispatch per tentativi faceva
     /// senza dirlo (vinceva chi si era registrato prima, e nessuno lo sapeva):
     /// resta possibile, ma adesso chi la vuole la chiede per nome.
