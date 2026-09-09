@@ -64,7 +64,7 @@ pub(crate) fn query_workspace(
         return workspace.read()?.query_index(query);
     };
 
-    let result = prepared.query(workspace, query.clone())?;
+    let completed = prepared.invoke(workspace, query.clone())?;
     let workspace = workspace.read()?;
-    workspace.finish_detached_index_query(&prepared, &query, result)
+    workspace.finish_detached_index_query(completed, &query)
 }

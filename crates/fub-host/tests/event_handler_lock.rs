@@ -935,11 +935,17 @@ fn every_background_event_source_keeps_the_detached_host_drain() {
 
     let watcher = compact(include_str!("../src/watcher.rs"));
     assert!(
-        !watcher.contains("self.workspace.write()"),
-        "watcher mutations and failure notices must all use with_event_drain"
+        watcher.contains("letremoval={letmutws=self.workspace.write()?;")
+            && watcher.contains(
+                "ifletSome(removal)=removal{letcompleted=removal.invoke();ifletErr((error,_))="
+            )
+            && watcher.contains("finish_document_removal(completed)"),
+        "watcher removals must prepare under custody, invoke outside it and then finalize"
     );
     assert!(
-        watcher.matches("with_event_drain(&self.workspace").count() >= 4,
-        "batch, catch-up, flush and watcher death each need a detached drain"
+        watcher.matches(".apply_prepared(").count() >= 2
+            && watcher.matches("with_event_drain(&self.workspace").count() >= 2
+            && watcher.contains("drain_events(&self.workspace)"),
+        "batch and catch-up must use the prepared boundary; flush and watcher death need detached drains"
     );
 }

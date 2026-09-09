@@ -48,6 +48,12 @@
 //! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
 //! [`Workspace::reindex`].
 
+mod removal;
+pub use removal::{
+    CompletedDocumentDeletion, CompletedDocumentRemoval, PreparedDocumentDeletion,
+    PreparedDocumentRemoval,
+};
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -100,8 +106,8 @@ use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
 use crate::index::plan::{QueryCore, QueryPlan};
 use crate::index::{
     feed_handles as feed_index_handles, reconcile_handles as reconcile_index_handles,
-    up_to_date_handles as up_to_date_index_handles, Indexes, PreparedIndexQuery,
-    SharedIndexProvider,
+    release_handles as release_index_handles, up_to_date_handles as up_to_date_index_handles,
+    CompletedIndexQuery, Indexes, PreparedIndexQuery, SharedIndexProvider,
 };
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
@@ -659,7 +665,7 @@ pub struct PreparedLocalProjection {
     parser: PreparedParse,
     renderers: crate::renderer::RendererRegistry,
     kind: LocalProjectionKind,
-    routing: PreparedIndexQuery,
+    routing_generation: u64,
     projection_generation: u64,
 }
 
@@ -698,7 +704,7 @@ pub struct CompletedLocalProjection {
     resolved_page: Option<String>,
     source_revision: Revision,
     result: IndexResult,
-    routing: PreparedIndexQuery,
+    routing_generation: u64,
     projection_generation: u64,
 }
 
@@ -715,7 +721,7 @@ impl PreparedLocalProjection {
             parser,
             renderers,
             kind,
-            routing,
+            routing_generation,
             projection_generation,
         } = self;
         let model = parser.invoke(source).map_err(PluginError::from)?;
@@ -747,7 +753,7 @@ impl PreparedLocalProjection {
             resolved_page,
             source_revision,
             result,
-            routing,
+            routing_generation,
             projection_generation,
         })
     }
@@ -788,16 +794,35 @@ pub struct PreparedVaultScan {
 
 /// La risposta degli indici alla scansione, pronta per la finalizzazione.
 pub struct CompletedVaultScan {
-    prepared: PreparedVaultScan,
+    folders: Vec<String>,
+    entries: Vec<VaultEntry>,
+    documents: Vec<VaultEntry>,
+    known_entries: Vec<Option<StoredEntry>>,
+    assets: Vec<VaultEntry>,
     up_to_date: BTreeSet<DocId>,
 }
 
 impl PreparedVaultScan {
     /// Esegue soltanto `IndexProvider::up_to_date`, sugli handle staccati.
     pub fn invoke(self) -> CompletedVaultScan {
-        let up_to_date = up_to_date_index_handles(&self.providers, &self.documents);
+        let PreparedVaultScan {
+            folders,
+            entries,
+            documents,
+            known_entries,
+            assets,
+            providers,
+        } = self;
+        let mut up_to_date = up_to_date_index_handles(&providers, &documents);
+        if release_index_handles(providers).is_err() {
+            up_to_date.clear();
+        }
         CompletedVaultScan {
-            prepared: self,
+            folders,
+            entries,
+            documents,
+            known_entries,
+            assets,
             up_to_date,
         }
     }
@@ -824,17 +849,25 @@ impl PreparedIndexBatchCheck {
     /// Attraversa il solo confine degli indici. Il chiamante deve aver già
     /// rilasciato qualunque guardia di `Custody<Workspace>`.
     pub fn invoke(self) -> CheckedIndexBatch {
-        let documents: Vec<VaultEntry> = self
-            .entries
+        let PreparedIndexBatchCheck {
+            seen,
+            entries,
+            discarded,
+            providers,
+        } = self;
+        let documents: Vec<VaultEntry> = entries
             .iter()
             .filter(|pending| pending.entry.kind == EntryKind::Document)
             .map(|pending| pending.entry.clone())
             .collect();
-        let already = up_to_date_index_handles(&self.providers, &documents);
+        let mut already = up_to_date_index_handles(&providers, &documents);
+        if release_index_handles(providers).is_err() {
+            already.clear();
+        }
         CheckedIndexBatch {
-            seen: self.seen,
-            entries: self.entries,
-            discarded: self.discarded,
+            seen,
+            entries,
+            discarded,
             already,
         }
     }
@@ -913,19 +946,32 @@ pub struct PreparedIndexFinish {
 }
 
 pub struct CompletedIndexFinish {
-    prepared: PreparedIndexFinish,
+    work: Indexing,
+    graph: BuiltGraph,
     external_losses: Vec<IndexLoss>,
 }
 
 impl PreparedIndexFinish {
     pub fn invoke(self) -> CompletedIndexFinish {
-        let external_losses = if self.work.finished() {
-            reconcile_index_handles(&self.providers, &self.ids)
+        let PreparedIndexFinish {
+            work,
+            graph,
+            ids,
+            providers,
+        } = self;
+        let mut external_losses = if work.finished() {
+            reconcile_index_handles(&providers, &ids)
         } else {
             Vec::new()
         };
+        if let Err(error) = release_index_handles(providers) {
+            if let Some(id) = ids.into_iter().next() {
+                external_losses.push(IndexLoss::new(id, error));
+            }
+        }
         CompletedIndexFinish {
-            prepared: self,
+            work,
+            graph,
             external_losses,
         }
     }
@@ -939,8 +985,16 @@ pub struct PreparedIndexBatchFeed {
 
 impl PreparedIndexBatchFeed {
     pub fn invoke_indexes(mut self) -> Self {
+        let providers = std::mem::take(&mut self.providers);
         self.losses
-            .extend(feed_index_handles(&self.providers, &self.models));
+            .extend(feed_index_handles(&providers, &self.models));
+        if let Err(error) = release_index_handles(providers) {
+            self.losses.extend(
+                self.models
+                    .iter()
+                    .map(|model| IndexLoss::new(model.id.clone(), error.clone())),
+            );
+        }
         self
     }
 }
@@ -1105,10 +1159,15 @@ impl PreparedEventDelivery {
 
 impl PreparedDocumentFeed {
     pub fn invoke_indexes(mut self) -> Self {
+        let providers = std::mem::take(&mut self.providers);
         self.losses.extend(feed_index_handles(
-            &self.providers,
+            &providers,
             std::slice::from_ref(&self.model),
         ));
+        if let Err(error) = release_index_handles(providers) {
+            self.losses
+                .push(IndexLoss::new(self.model.id.clone(), error));
+        }
         self
     }
 }
@@ -2780,15 +2839,11 @@ impl Workspace {
     /// esterne sono tornate. Nessuna callback provider gira in questa fase.
     pub fn finalize_scan_vault(&mut self, completed: CompletedVaultScan) -> Indexing {
         let CompletedVaultScan {
-            prepared:
-                PreparedVaultScan {
-                    folders,
-                    entries,
-                    documents,
-                    known_entries,
-                    assets,
-                    providers: _,
-                },
+            folders,
+            entries,
+            documents,
+            known_entries,
+            assets,
             up_to_date,
         } = completed;
 
@@ -3199,13 +3254,8 @@ impl Workspace {
     /// tornato. Questa fase non attraversa codice esterno.
     pub fn finalize_finish_index(&mut self, completed: CompletedIndexFinish) -> Opening {
         let CompletedIndexFinish {
-            prepared:
-                PreparedIndexFinish {
-                    work,
-                    graph,
-                    ids: _,
-                    providers: _,
-                },
+            work,
+            graph,
             external_losses,
         } = completed;
         if graph.epoch == self.indexes.core.graph_epoch {
@@ -3523,6 +3573,7 @@ impl Workspace {
         id: &DocId,
         base: WriteBase,
     ) -> Result<PreparedDocumentWrite> {
+        self.indexes.ensure_mutation_available()?;
         let (id, existed, from, expected_source) = match base {
             WriteBase::DescendsFrom(expected) => {
                 let current = crate::error::optional(self.docs.vault.read(id))?;
@@ -3597,6 +3648,7 @@ impl Workspace {
         model: DocumentModel,
         before_write: std::result::Result<(), PluginError>,
     ) -> Result<PreparedDocumentFeed> {
+        self.indexes.ensure_mutation_available()?;
         let PreparedDocumentWrite {
             id,
             existed,
@@ -3711,6 +3763,7 @@ impl Workspace {
         source: &str,
         expected_source: Option<&str>,
     ) -> Result<Revision> {
+        self.indexes.ensure_mutation_available()?;
         let model = self.docs.parse(id, source)?;
         if let Some((plugin, hook)) = self.before_write.clone() {
             let mut host = self.host_for(&plugin, InvokeMode::Apply);
@@ -3745,6 +3798,7 @@ impl Workspace {
         expected_source: Option<&str>,
         model: DocumentModel,
     ) -> Result<Revision> {
+        self.indexes.ensure_mutation_available()?;
         let placed = if let Some(expected) = expected_source {
             self.docs
                 .vault
@@ -4444,19 +4498,18 @@ impl Workspace {
 
     // La nota con il focus non esiste più: `active_context` non deve
     pub fn remove_document(&mut self, id: &DocId) {
-        if self.indexes.core.contains(id) {
-            // continuare a nominarla alle view (né tenerne una selezione).
-            // Crea una nota vuota e restituisce il suo [`DocId`].
-            self.session.invalidate(id, ContextChange::Gone);
-            self.indexes.core.remove_entry(id);
-            let lost = self.indexes.on_documents_removed(std::slice::from_ref(id));
-            self.report_losses(lost);
-            if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-                self.indexes.core.rebuild_graph();
+        match self.prepare_document_removal(id) {
+            Ok(Some(prepared)) => {
+                let completed = prepared.invoke();
+                if let Err((error, _)) = self.finish_document_removal(completed) {
+                    self.report_trouble(Severity::Warning, Some(id.clone()), error, None);
+                }
+                self.dispatch_pending();
             }
-            self.emit_event(Event::DocumentRemoved { id: id.clone() });
-            self.emit_event(Event::IndexUpdated);
-            self.dispatch_pending();
+            Ok(None) => {}
+            Err(error) => {
+                self.report_trouble(Severity::Warning, Some(id.clone()), error.into(), None)
+            }
         }
     }
 
@@ -4567,11 +4620,21 @@ impl Workspace {
     /// [`remove_document`]: Workspace::remove_document
     // **E la bozza non salvata se ne va con la nota** (§15.2). Sta qui per
     pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
+        self.indexes.ensure_mutation_available()?;
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
         let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
         self.remove_document(id);
+        Ok(self.finish_deleted_document(id, trashed, sidecar_fault))
+    }
+
+    fn finish_deleted_document(
+        &mut self,
+        id: &DocId,
+        trashed: DocId,
+        sidecar_fault: Option<KernelError>,
+    ) -> DocId {
         // la ragione per cui `migrate_side_data` la fa seguire una rinomina —
         // una bozza è indicizzata per `DocId`, e un `DocId` che non nomina più
         // niente è una bozza che nessuna vista raggiunge — ma con la risposta
@@ -4617,7 +4680,7 @@ impl Workspace {
                 None,
             );
         }
-        Ok(trashed)
+        trashed
     }
 
     /// Ripristina una voce del cestino e restituisce il [`DocId`] con cui è
@@ -4647,6 +4710,7 @@ impl Workspace {
     /// [`Vault::restore_trashed`]: crate::Vault::restore_trashed
     // `entry.original` nasce da un basename o dal sidecar scritto dal
     pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
+        self.indexes.ensure_mutation_available()?;
         let entry = self
             .docs
             .vault
@@ -4762,6 +4826,7 @@ impl Workspace {
     /// Adesso è un `batch-ended` solo, con dentro l'elenco.
     // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
     pub fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<()> {
+        self.indexes.ensure_mutation_available()?;
         self.batch(|ws| ws.rename_document_in_batch(from, to))
     }
 
@@ -6008,7 +6073,7 @@ impl Workspace {
             parser,
             renderers: self.docs.renderers.clone(),
             kind,
-            routing: self.indexes.prepare_query(),
+            routing_generation: self.indexes.routing_generation(),
             projection_generation: self.projection_generation,
         }))
     }
@@ -6022,7 +6087,8 @@ impl Workspace {
         &self,
         completed: CompletedLocalProjection,
     ) -> std::result::Result<IndexResult, PluginError> {
-        self.indexes.ensure_query_is_current(&completed.routing)?;
+        self.indexes
+            .ensure_query_is_current(completed.routing_generation)?;
         if completed.projection_generation != self.projection_generation {
             return Err(PluginError::Conflict(
                 "la pipeline di proiezione è cambiata durante la query".into(),
@@ -6069,13 +6135,13 @@ impl Workspace {
     /// alcun provider.
     pub fn finish_detached_index_query(
         &self,
-        prepared: &PreparedIndexQuery,
+        completed: CompletedIndexQuery,
         query: &IndexQuery,
-        result: IndexResult,
     ) -> std::result::Result<IndexResult, PluginError> {
-        self.indexes.ensure_query_is_current(prepared)?;
+        self.indexes
+            .ensure_query_is_current(completed.routing_generation)?;
         let needles = occurrences::wanted(query);
-        Ok(match result {
+        Ok(match completed.result {
             IndexResult::Documents(page) if !needles.is_empty() => {
                 IndexResult::Documents(self.locate(page, &needles))
             }
