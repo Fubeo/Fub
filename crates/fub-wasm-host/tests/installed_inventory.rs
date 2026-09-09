@@ -442,7 +442,9 @@ fn replacing_the_config_name_does_not_redirect_an_open_store() {
     assert!(store.load(&record).is_ok());
 }
 
-#[cfg(unix)]
+// Darwin rejects non-UTF-8 path components before the store can observe them.
+// Exercise this boundary on a platform whose filesystem API accepts raw bytes.
+#[cfg(target_os = "linux")]
 #[test]
 fn an_unrelated_non_utf8_sibling_cannot_prevent_installing_the_chosen_file() {
     use std::os::unix::ffi::OsStrExt;
