@@ -465,18 +465,20 @@ impl ExternalSync {
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
     fn flush(&mut self) {
+        let Ok(flush_errors) = crate::teardown::flush_indexes(&self.workspace) else {
+            return;
+        };
+        if flush_errors.is_empty() {
+            return;
+        }
+        for error in &flush_errors {
+            tracing::warn!(target: "fub.host", "flush index: {error}");
+        }
         let _ = with_event_drain(&self.workspace, |ws| {
-            let flush_errors = ws.flush_indexes();
-            if flush_errors.is_empty() {
-                return;
-            }
-            for and in &flush_errors {
-                tracing::warn!(target: "fub.host", "flush index: {and}");
-            }
-            for and in flush_errors {
+            for error in flush_errors {
                 ws.report_host_trouble(
                     Severity::Warning,
-                    PluginError::Internal(format!("flush index: {and}").into()),
+                    PluginError::Internal(format!("flush index: {error}").into()),
                 );
             }
         });

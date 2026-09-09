@@ -599,16 +599,9 @@ impl Shared {
         let opening = with_event_drain(&self.workspace, |ws| {
             ws.finalize_finish_index(completed_finish)
         })?;
-        // **Il flush degli indici è una fase sua** (difetto 0113), come la
-        // terza fase di `ExternalSync::batch`: un prestito esclusivo separato
-        // da quello della chiusura dell'indicizzazione. Fra i due prestiti il
-        // lucchetto si rilascia, e un lettore concorrente non aspetta la somma
-        // delle fasi — riconciliazione, ricongiungimento, flush, anagrafe —
-        // ma la sola che sta correndo. Il flush tocca solo gli indici e il
-        // disco, non lo stato condiviso del workspace.
-        with_event_drain(&self.workspace, |ws| {
-            let _ = ws.flush_indexes();
-        })?;
+        // Il flush è una fase esterna separata: il token conserva gli indici,
+        // mentre i lettori e la re-entry possono progredire senza guard Workspace.
+        let _ = crate::teardown::flush_indexes(&self.workspace)?;
         // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
         // entrambe sotto prestito condiviso.**
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo

@@ -134,17 +134,20 @@ impl RendererRegistry {
     /// terzo di cinque sposta il quarto e il quinto, e una mappa aggiustata a
     /// mano è il modo in cui un blocco finisce disegnato dal renderer sbagliato.
     pub fn remove(&mut self, id: &str) -> bool {
-        let Some(at) = self.renderers.iter().position(|r| r.spec.id == id) else {
-            return false;
-        };
-        self.renderers.remove(at);
+        self.take(id).is_some()
+    }
+
+    /// Ritira il renderer lasciando il disposer all'orchestratore fuori lock.
+    pub(crate) fn take(&mut self, id: &str) -> Option<std::sync::Arc<dyn CustomRenderer>> {
+        let at = self.renderers.iter().position(|r| r.spec.id == id)?;
+        let retired = self.renderers.remove(at);
         self.by_kind.clear();
         for (at, registered) in self.renderers.iter().enumerate() {
             for kind in &registered.spec.kinds {
                 self.by_kind.insert(kind.clone(), at);
             }
         }
-        true
+        Some(retired.renderer)
     }
 
     pub fn is_empty(&self) -> bool {

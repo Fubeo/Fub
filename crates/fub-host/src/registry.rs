@@ -475,6 +475,12 @@ impl BundleRegistry {
             .map(|bundle| Arc::clone(&bundle.plugin))
     }
 
+    /// Estrae il corpo senza chiamarlo e senza mantenere il guard del registry.
+    pub(crate) fn prepare_stop(&mut self, id: &str) -> Option<StoppedBundle> {
+        let at = self.mounted.iter().position(|bundle| bundle.id == id)?;
+        Some(StoppedBundle(self.mounted.remove(at)))
+    }
+
     /// Ferma solo il corpo del plugin, lasciando ancora vivi host e provider.
     pub fn stop(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
         let Some(at) = self.mounted.iter().position(|bundle| bundle.id == id) else {
@@ -505,6 +511,27 @@ impl BundleRegistry {
 
     pub fn close(&mut self, ws: &mut Workspace) -> Vec<PluginError> {
         ws.close_with(|ws, id| self.stop(ws, id))
+    }
+}
+
+/// Corpo esclusivo del teardown, posseduto dall'orchestratore fuori dai lock.
+pub(crate) struct StoppedBundle(MountedBundle);
+
+impl StoppedBundle {
+    pub(crate) fn invoke(&mut self, host: &mut dyn HostApi) -> Vec<PluginError> {
+        let id = &self.0.id;
+        let outcome = match Arc::get_mut(&mut self.0.plugin) {
+            Some(plugin) => fub_kernel::safety::external(
+                &format!("Plugin::deactivate of `{id}`"),
+                |message| PluginError::Internal(message.into()),
+                || plugin.deactivate(host),
+            ),
+            None => Err(PluginError::Internal(
+                format!("`{id}` still has an in-flight job: its `deactivate` was not called")
+                    .into(),
+            )),
+        };
+        outcome.err().into_iter().collect()
     }
 }
 

@@ -105,6 +105,8 @@ pub struct Registration {
 
 /// Un plugin dichiarato, con ciò che ha dichiarato e ciò che ha registrato.
 pub struct PluginEntry {
+    /// Identità di questa dichiarazione: un remount dello stesso id è diverso.
+    pub(crate) generation: std::sync::Arc<()>,
     pub manifest: PluginManifest,
     pub trust: Trust,
     /// La politica già calcolata: è ciò che ogni host di questo plugin monta
@@ -282,6 +284,7 @@ impl PluginRegistry {
         }
         let granted = Granted::new(&manifest.id, &manifest.permissions, trust);
         self.entries.push(PluginEntry {
+            generation: std::sync::Arc::new(()),
             manifest,
             trust,
             granted,

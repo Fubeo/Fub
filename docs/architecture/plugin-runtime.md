@@ -87,6 +87,37 @@ model; non offre esecuzione concorrente dentro l'istanza.
 Le host function che accodano lavoro non lo eseguono immediatamente durante la
 chiamata guest.
 
+## Disabilitazione e chiusura
+
+Il toggle utente e la chiusura della sessione preparano il teardown sotto lock,
+eseguono `Plugin::deactivate` e `IndexProvider::flush/close` fuori dai guard di
+workspace e registry, poi finalizzano sotto lock. Il proxy `JobHost` acquisisce
+il workspace per una capacità alla volta e riusa il `Guard` del kernel.
+
+Il token identifica workspace e generazione della dichiarazione: un risultato
+obsoleto non ritira un nuovo plugin con lo stesso id. Errori e panic delle
+callback vengono raccolti senza saltare le callback di chiusura successive.
+Il corpo vede ancora provider e capacità vivi; successivamente vengono ritirate
+le rotte degli indici, chiusi gli indici e rimossa la dichiarazione. I dati
+persistenti del plugin restano conservati. I disposer del corpo e degli indici
+vengono isolati fuori lock; gli altri provider e gli hook dell'owner vengono
+estratti durante la finalizzazione e distrutti singolarmente dopo il rilascio
+del guard. Un panic del disposer non salta le risorse successive.
+
+Il flush di fine indicizzazione e quello del watcher usano la stessa porta
+staccata: gli snapshot degli indici vengono rilasciati fuori guard anche quando
+la finalizzazione rileva un provider ritirato.
+
+La sessione ferma watcher e job, consegna `VaultClosed`, esegue il flush globale
+e smonta i plugin in ordine inverso. L'anagrafe viene persistita per ultima.
+La disabilitazione persiste prima la scelta e rinvia gli eventi fino al termine
+dello smontaggio. La chiusura consegna invece gli eventi di `deactivate` mentre
+le registrazioni del plugin sono ancora disponibili.
+
+Questa separazione riguarda il teardown delle porte host. Il mount, il suo
+rollback e le chiamate dirette del registry restano percorsi sincroni: non
+costituiscono una prova del contratto completo sulle callback fuori lock.
+
 ## UI non fidata
 
 `UiNode` contiene forme riservate al codice fidato, come HTML o webview. Il

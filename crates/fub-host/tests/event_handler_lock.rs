@@ -914,9 +914,8 @@ fn every_background_event_source_keeps_the_detached_host_drain() {
     assert!(
         session.contains("letprepared=matchworkspace.write(){Ok(mutws)=>ws.prepare_close(),")
             && session.contains("ifletErr(and)=drain_events(&workspace)")
-            && session
-                .contains("ws.finish_close_with(prepared,|workspace,id|reg.stop(workspace,id))",)
-            && session.contains("ws.finish_close_with(prepared,|_,_|Vec::new())")
+            && session.contains("crate::teardown::unmount(&workspace,&registry,&id)")
+            && session.contains("ws.finish_detached_close(prepared)")
             && !session
                 .contains("ifletErr(and)=drain_events(&workspace){errors.push(and);returnerrors;"),
         "VaultClosed must be drained after prepare and before provider retirement"
@@ -929,7 +928,9 @@ fn every_background_event_source_keeps_the_detached_host_drain() {
         "job completion and timers must use with_event_drain"
     );
     assert!(
-        runner.matches("with_event_drain(&self.workspace").count() >= 7,
+        runner.matches("with_event_drain(&self.workspace").count() >= 6
+            && runner.contains("crate::teardown::flush_indexes(&self.workspace)?")
+            && !runner.contains("ws.flush_indexes()"),
         "opening progress, completion, refusal, timers and index finalization need detached drains"
     );
 
@@ -939,7 +940,9 @@ fn every_background_event_source_keeps_the_detached_host_drain() {
         "watcher mutations and failure notices must all use with_event_drain"
     );
     assert!(
-        watcher.matches("with_event_drain(&self.workspace").count() >= 4,
+        watcher.matches("with_event_drain(&self.workspace").count() >= 4
+            && watcher.contains("crate::teardown::flush_indexes(&self.workspace)")
+            && !watcher.contains("ws.flush_indexes()"),
         "batch, catch-up, flush and watcher death each need a detached drain"
     );
 }

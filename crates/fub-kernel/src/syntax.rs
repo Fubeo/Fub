@@ -196,13 +196,16 @@ impl SyntaxRegistry {
     /// che continuasse a tenere `mermaid` su markdown impedirebbe a chiunque di
     /// prenderla, compresa sé stessa se la si riaccendesse.
     pub fn remove(&mut self, id: &str) -> bool {
-        let Some(at) = self.rules.iter().position(|r| r.spec.id == id) else {
-            return false;
-        };
-        self.rules.remove(at);
+        self.take(id).is_some()
+    }
+
+    /// Ritira la regola senza eseguire il suo disposer sotto il guard host.
+    pub(crate) fn take(&mut self, id: &str) -> Option<Arc<dyn SyntaxRule>> {
+        let at = self.rules.iter().position(|r| r.spec.id == id)?;
+        let registered = self.rules.remove(at);
         self.claims.retain(|_, owner| owner != id);
         self.publish_snapshot();
-        true
+        Some(registered.rule)
     }
 
     pub fn is_empty(&self) -> bool {

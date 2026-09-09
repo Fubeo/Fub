@@ -95,6 +95,7 @@ pub mod runner;
 pub mod session;
 pub mod settings;
 pub mod shell;
+mod teardown;
 pub mod theme;
 pub mod vaults;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
