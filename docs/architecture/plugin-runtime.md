@@ -59,7 +59,7 @@ Resta un confine esplicito nelle view. Durante la registrazione
 `PreparedRegistration::views` cattura fuori guardia anche `interests` per
 l'istanza unica; un panic fallisce la registrazione e non viene sostituito da un
 default. Per un'istanza parametrica `ViewProvider::interests` resta però
-non-fallibile: un futuro proxy WASM che possa produrre trap non ha oggi un
+non-fallibile: un proxy WASM che possa produrre trap non dispone di un
 canale di errore tipizzato. Risolverlo richiede un cambiamento del contratto
 Rust e WIT; finché quel contratto non nasce da un caso reale, il runtime non
 inventa un fallback e non modifica l'ABI.
