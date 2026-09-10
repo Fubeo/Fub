@@ -20,7 +20,7 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
@@ -29,7 +29,8 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, VaultEntry};
 use fub_abi::{Event, FormatProvider, Revision, WriteBase};
 use fub_host::{Custody, ExternalChange, ExternalSync};
-use fub_kernel::{FormatRegistry, SyncPlan, Workspace};
+use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
+use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, SyncPlan, Workspace};
 
 /// Il cancello che rende **osservabile** una lettura lenta senza dormire.
 ///
@@ -90,6 +91,68 @@ impl FormatProvider for Slow {
     }
     fn serialize(&self, m: &DocumentModel) -> Result<String, FormatError> {
         Ok(m.text.clone())
+    }
+}
+
+/// Un supporto che rende osservabile la camminata di `catch_up`.
+///
+/// Il cancello vive precisamente su `list`: bloccare il parse proverebbe
+/// soltanto la fase già coperta dal banco del lotto, non la scansione che
+/// precede i piani.
+struct BlockingListStorage {
+    inner: MemStorage,
+    gate: Arc<Gate>,
+}
+
+impl BlockingListStorage {
+    fn new(gate: Arc<Gate>) -> Self {
+        Self {
+            inner: MemStorage::new(),
+            gate,
+        }
+    }
+}
+
+impl VaultStorage for BlockingListStorage {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.inner.read(path)
+    }
+
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.gate.traverse();
+        self.inner.list(dir)
+    }
+
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
     }
 }
 
@@ -182,6 +245,64 @@ fn who_reads_enters_while_the_batch_reads_the_disk() {
         entry(&bench.ws.read().unwrap(), &DocId::new("nota.md")).fingerprint,
         Some(Revision::of("after\n")),
         "the batch read and parsed, but applied nothing"
+    );
+}
+
+/// **La stessa proprietà comprende la camminata di apertura.**
+///
+/// Il supporto si ferma dentro `VaultStorage::list`, non dentro un formato:
+/// quando il canale segnala l'ingresso, `catch_up` sta certamente scandendo il
+/// vault e il prestito condiviso deve essere ancora disponibile.
+#[test]
+fn who_reads_enters_while_catch_up_scans_the_vault() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let gate: Arc<Gate> = Arc::default();
+    let storage = Arc::new(BlockingListStorage::new(Arc::clone(&gate)));
+    storage
+        .write(&root.join("nota.md"), b"before\n")
+        .expect("seed");
+
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(Slow(Arc::default())))
+        .expect("no conflict");
+    let mut ws = Workspace::on(
+        &root,
+        formats,
+        storage.clone() as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("the vault opens");
+    ws.reindex().expect("initial scan");
+    let ws = Custody::new("the catch-up vault", ws);
+
+    storage
+        .write(&root.join("nota.md"), b"after\n")
+        .expect("external write");
+    let (inside, via) = gate.arm();
+    let catch_up = {
+        let ws = ws.clone();
+        std::thread::spawn(move || ExternalSync::new(ws).catch_up())
+    };
+
+    inside.recv().expect("catch-up enters VaultStorage::list");
+    let read_result = ws.try_read();
+    assert!(
+        read_result.is_some(),
+        "the workspace is not borrowable while catch-up scans the vault"
+    );
+    assert!(read_result
+        .expect("the shared borrow is there")
+        .render_preview(&DocId::new("nota.md"))
+        .is_ok());
+    via.send(()).expect("the scan can finish");
+    catch_up.join().expect("catch-up finishes");
+
+    assert_eq!(
+        entry(&ws.read().unwrap(), &DocId::new("nota.md")).fingerprint,
+        Some(Revision::of("after\n")),
+        "catch-up scanned the vault but applied nothing"
     );
 }
 

@@ -512,37 +512,43 @@ impl ExternalSync {
     /// dopo su un path già allineato non trova niente da fare (l'impronta è la
     /// stessa, difetto 0196).
     ///
-    /// Le tre fasi sono quelle di [`batch`](ExternalSync::batch): leggere e
-    /// parsare sotto prestito condiviso, mutare sotto quello esclusivo, rendere
-    /// durevole da sé. Anche un vault senza rilevatore la chiama: la finestra
-    /// c'è per ogni fabbrica, e ciò che il rilevatore avrebbe visto se fosse
-    /// stato acceso lo vede il workspace stesso.
+    /// La scansione, la lettura, il parse e i feed agli indici attraversano
+    /// soltanto token owned fuori da `Custody`; sotto prestito restano le
+    /// fotografie e le brevi mutazioni del core. Anche un vault senza
+    /// rilevatore la chiama: la finestra c'è per ogni fabbrica, e ciò che il
+    /// rilevatore avrebbe visto se fosse stato acceso lo vede il workspace.
     pub fn catch_up(&mut self) {
         let Some(_operation) = self.lifecycle.enter() else {
             return;
         };
         let _phase = tracing::info_span!(target: "fub.opening", "catch_up").entered();
-        // Fase 1 — i piani, sotto prestito condiviso. Come in `batch`, un piano
-        // `None` sta per i rami che non leggono niente (un file sparito, un
-        // path di un'altra specie, una lettura fallita): la fase 2 li rifà per
-        // intero, dove stavano già.
-        let prepared = {
+        // Fase 1a — soltanto handle e cache owned sotto prestito condiviso.
+        let scan = {
             let Ok(ws) = self.workspace.read() else {
                 return;
             };
-            ws.plan_catch_up()
+            ws.prepare_catch_up()
         };
-        if prepared.is_empty() {
+        // Fase 1b — camminata e filtro delle impronte fuori da Custody.
+        let snapshot = scan.invoke();
+        // Fase 1c — piani puri sullo stato corrente del kernel.
+        let plans = {
+            let Ok(ws) = self.workspace.read() else {
+                return;
+            };
+            ws.plan_catch_up(snapshot)
+        };
+        if plans.is_empty() {
             return;
         }
-        if self
-            .apply_prepared(
-                prepared
-                    .into_iter()
-                    .map(|(path, plan)| (ExternalChange::Touched(path), plan)),
+        // Fase 1d — stat-read-stat e Format/Syntax fuori da Custody.
+        let prepared = plans.into_iter().map(|(path, plan)| {
+            (
+                ExternalChange::Touched(path),
+                plan.map(SyncPlan::invoke),
             )
-            .is_err()
-        {
+        });
+        if self.apply_batch_prepared(prepared).is_err() {
             return;
         }
         // Fase 3 — la durevolezza.
@@ -589,31 +595,6 @@ impl ExternalSync {
             }
         }
         self.workspace.write()?.restore_event_dispatch(deferred);
-        drain_events(&self.workspace)
-    }
-
-    /// Percorso storico della riconciliazione d'apertura. Il slice detached di
-    /// questo cambiamento riguarda soltanto i lotti consegnati dal watcher.
-    fn apply_prepared(
-        &self,
-        changes: impl IntoIterator<Item = (ExternalChange, Option<ParsedChange>)>,
-    ) -> Result<(), PluginError> {
-        let _turn = self.workspace.write_turn();
-        let deferred = self.workspace.write()?.defer_event_dispatch();
-        {
-            let mut ws = self.workspace.write()?;
-            for (change, plan) in changes {
-                match change {
-                    ExternalChange::Touched(path) => {
-                        let _ = ws.sync_path_prepared(&path, plan);
-                    }
-                    ExternalChange::Renamed { from, to } => {
-                        let _ = ws.sync_renamed_path(&from, &to);
-                    }
-                }
-            }
-            ws.restore_event_dispatch(deferred);
-        }
         drain_events(&self.workspace)
     }
 

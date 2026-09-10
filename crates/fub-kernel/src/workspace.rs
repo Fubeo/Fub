@@ -301,6 +301,23 @@ pub struct SyncPlan {
     action: SyncPlanAction,
 }
 
+/// Fotografia owned necessaria a confrontare il disco dopo l'avvio del watcher.
+///
+/// Il workspace la prepara senza I/O; [`PreparedCatchUp::invoke`] cammina il
+/// vault e verifica le impronte dopo che la guardia di [`Workspace`] è caduta.
+pub struct PreparedCatchUp {
+    vault: crate::Vault,
+    entries: BTreeMap<DocId, VaultEntry>,
+}
+
+/// Candidati prodotti dalla scansione detached della riconciliazione d'apertura.
+///
+/// I campi restano chiusi: soltanto [`Workspace::plan_catch_up`] può trasformare
+/// questa fotografia in piani legati allo stato corrente del workspace.
+pub struct CatchUpSnapshot {
+    candidates: BTreeMap<DocId, Utf8PathBuf>,
+}
+
 /// Esito già invocato della fase detached di una sincronizzazione esterna.
 ///
 /// Questo tipo non espone `invoke`: non può quindi essere confuso con il piano
@@ -400,6 +417,49 @@ impl SyncPlan {
             }
         };
         ParsedChange { snapshot, state }
+    }
+}
+
+impl PreparedCatchUp {
+    /// Cammina e legge il vault senza conservare alcun prestito del workspace.
+    ///
+    /// Soltanto un `size + mtime` uguale rende il file eleggibile al salto, e
+    /// l'impronta sui byte decide poi se è davvero rimasto uguale. Un metadato
+    /// diverso o una lettura fallita resta candidato.
+    pub fn invoke(self) -> CatchUpSnapshot {
+        let PreparedCatchUp { vault, entries } = self;
+        let Ok(scanned) = vault.scan() else {
+            return CatchUpSnapshot {
+                candidates: BTreeMap::new(),
+            };
+        };
+        let mut candidates = BTreeMap::new();
+        let mut on_disk = BTreeSet::new();
+        for file in scanned.files {
+            let unchanged = entries
+                .get(&file.id)
+                .filter(|entry| entry.size == file.size && entry.mtime == file.mtime)
+                .and_then(|entry| entry.fingerprint.as_ref())
+                .is_some_and(|fingerprint| {
+                    vault
+                        .read_bytes(&file.id)
+                        .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
+                });
+            on_disk.insert(file.id.clone());
+            if !unchanged {
+                candidates.insert(file.id.clone(), vault.root().join(file.id.as_str()));
+            }
+        }
+        for id in entries.keys() {
+            if on_disk.contains(id) {
+                continue;
+            }
+            let path = vault.root().join(id.as_str());
+            if !vault.is_ignored(&path) {
+                candidates.insert(id.clone(), path);
+            }
+        }
+        CatchUpSnapshot { candidates }
     }
 }
 
@@ -4525,6 +4585,14 @@ impl Workspace {
             return None;
         }
         let id = self.docs.vault.doc_id_for_path(abs).ok()?;
+        self.plan_sync_known(abs.to_owned(), id)
+    }
+
+    /// Compone un piano da un'identità già recintata e filtrata.
+    ///
+    /// Non interroga il vault: la riconciliazione d'apertura usa questa metà
+    /// dopo che la propria scansione detached ha deciso i candidati.
+    fn plan_sync_known(&self, path: Utf8PathBuf, id: DocId) -> Option<SyncPlan> {
         let ext = extension_of(&id).unwrap_or_default();
         let entry = self.indexes.core.entries.get(&id).cloned();
         let seen = entry.as_ref().and_then(|entry| entry.fingerprint.clone());
@@ -4544,7 +4612,7 @@ impl Workspace {
         Some(SyncPlan {
             snapshot: SyncSnapshot {
                 workspace_id: self.workspace_id,
-                path: abs.to_owned(),
+                path,
                 id,
                 seen,
                 entry,
@@ -4793,11 +4861,11 @@ impl Workspace {
     ///
     /// L'insieme è **il disco adesso più l'anagrafe della scansione**: un file
     /// nuovo c'è solo nel disco, uno sparito solo nell'anagrafe, uno riscritto
-    /// sta in entrambi con numeri diversi. Chi è rimasto com'era — stessi
-    /// `size` e `mtime` della camminata di scansione — non si legge: è il salto
-    /// che la cache dei metadati compra (§14.1), e senza di esso ogni apertura
-    /// rileggerebbe il vault intero per dire che non è cambiato niente. Un
-    /// lotto del rilevatore che arrivasse dopo su un path già allineato non
+    /// sta in entrambi. `size` e `mtime` sono il filtro economico; quando
+    /// combaciano, l'impronta dei byte chiude la finestra delle riscritture
+    /// della stessa lunghezza nello stesso millisecondo. Solo chi supera
+    /// entrambi i confronti viene saltato.
+    /// Un lotto del rilevatore che arrivasse dopo su un path già allineato non
     /// trova niente da fare: l'impronta in anagrafe è la stessa, e
     /// `sync_path_prepared` risponde senza parsare (difetto 0196).
     ///
@@ -4805,46 +4873,30 @@ impl Workspace {
     /// applica lo fa sotto quello esclusivo: è la regola della
     /// [0119](../../../docs/decisions/README.md)
     /// sull'unico sito che le mancava.
-    // La camminata è quella della scansione — stessa politica di
-    pub fn plan_catch_up(&self) -> Vec<(Utf8PathBuf, Option<ParsedChange>)> {
-        // esclusione, stesse specie: elenca i file, non li apre.
-        // Ciò che l'anagrafe aveva e il disco non ha più: un file sparito
-        let Ok(scanned) = self.docs.vault.scan() else {
-            return Vec::new();
-        };
-        let mut paths: BTreeSet<Utf8PathBuf> = BTreeSet::new();
-        let mut on_the_disk: BTreeSet<DocId> = BTreeSet::new();
-        for file in scanned.files {
-            let unchanged = self
-                .indexes
-                .core
-                .entries
-                .get(&file.id)
-                .filter(|entry| entry.size == file.size && entry.mtime == file.mtime)
-                .and_then(|entry| entry.fingerprint.as_ref())
-                .is_some_and(|fingerprint| {
-                    self.docs
-                        .vault
-                        .read_bytes(&file.id)
-                        .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
-                });
-            on_the_disk.insert(file.id.clone());
-            if !unchanged {
-                paths.insert(self.root().join(file.id.as_str()));
-            }
+    /// Cattura sotto prestito soltanto handle e anagrafe owned.
+    ///
+    /// La scansione non parte finché il chiamante non invoca il token dopo
+    /// aver rilasciato il workspace.
+    pub fn prepare_catch_up(&self) -> PreparedCatchUp {
+        PreparedCatchUp {
+            vault: self.docs.vault.clone(),
+            entries: self.indexes.core.entries.clone(),
         }
-        // nella finestra si toglie, e `plan_sync` risponde `None` per lui —
-        // chi applica rifà la strada intera, che è dove lo sparito si toglie.
-        // Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
-        for id in self.indexes.core.entries.keys() {
-            if !on_the_disk.contains(id) {
-                paths.insert(self.root().join(id.as_str()));
-            }
-        }
-        paths
+    }
+
+    /// Crea i piani dai candidati di una scansione già completata.
+    ///
+    /// Questa fase è pura rispetto al vault: non cammina, non apre, non fa
+    /// `stat` e non ricalcola la politica di esclusione.
+    pub fn plan_catch_up(
+        &self,
+        snapshot: CatchUpSnapshot,
+    ) -> Vec<(Utf8PathBuf, Option<SyncPlan>)> {
+        snapshot
+            .candidates
             .into_iter()
-            .map(|path| {
-                let plan = self.plan_sync(&path).map(SyncPlan::invoke);
+            .map(|(id, path)| {
+                let plan = self.plan_sync_known(path.clone(), id);
                 (path, plan)
             })
             .collect()

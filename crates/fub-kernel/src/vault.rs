@@ -252,6 +252,7 @@ pub struct Scan {
     pub temporary_remaining_back: Vec<Utf8PathBuf>,
 }
 
+#[derive(Clone)]
 pub struct Vault {
     root: Utf8PathBuf,
     /// Il supporto (§15.1). È un `Arc` e non un campo per valore perché lo
