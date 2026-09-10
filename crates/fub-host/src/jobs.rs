@@ -584,8 +584,8 @@ impl VaultStructure for JobHost {
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
         let prepared = {
+            let _turn = workspace.write_turn();
             let ws = workspace.read()?;
             let prepared = ws
                 .prepare_document_restore(entry, to)
@@ -607,6 +607,7 @@ impl VaultStructure for JobHost {
                 target.as_str(),
                 || format!("restoring to `{target}`"),
             )?;
+            drop(ws);
             prepared
         };
         let completed = prepared.invoke().map_err(PluginError::from)?;
