@@ -301,14 +301,67 @@ impl VaultSession {
     }
 }
 
-/// I vault aperti, **in ordine d'uso**.
+/// Uno slot pubblicato per una radice.
+///
+/// `Closing` resta nella mappa per tutta la durata del teardown: è il confine
+/// atomico che impedisce a un'apertura concorrente di montare una seconda
+/// sessione sulla stessa radice.
+enum SessionSlot {
+    Open(VaultSession),
+    Closing(Arc<ClosingToken>),
+}
+
+/// Identità opaca di una singola chiusura.
+struct ClosingToken;
+
+/// Possesso esclusivo del teardown di una sessione.
+///
+/// Il marker viene ritirato da `Drop`, quindi anche un panic proveniente da un
+/// provider non lascia la radice permanentemente in chiusura. L'identità evita
+/// che una chiusura vecchia possa rimuovere lo slot di un'operazione successiva.
+struct CloseClaim<'a> {
+    sessions: &'a Custody<Sessions>,
+    root: Utf8PathBuf,
+    token: Arc<ClosingToken>,
+    session: Option<VaultSession>,
+}
+
+impl CloseClaim<'_> {
+    fn close(mut self) -> Vec<PluginError> {
+        self.session
+            .take()
+            .expect("una pretesa di chiusura possiede la sessione")
+            .close()
+    }
+}
+
+impl Drop for CloseClaim<'_> {
+    fn drop(&mut self) {
+        let Ok(mut sessions) = self.sessions.write() else {
+            return;
+        };
+        let owned = matches!(
+            sessions.slots.get(&self.root),
+            Some(SessionSlot::Closing(token)) if Arc::ptr_eq(token, &self.token)
+        );
+        if owned {
+            sessions.slots.remove(&self.root);
+        }
+    }
+}
+
+fn closing_conflict(root: &Utf8Path) -> PluginError {
+    PluginError::Conflict(format!("Il vault su {root} è in chiusura.").into())
+}
+
+/// I vault aperti, **in ordine d'uso**, e quelli il cui teardown è in corso.
 ///
 /// Il vault "corrente" è **della shell**: serve a chi non ne nomina uno, e non
-/// è un'assunzione del backend. Chi chiude il corrente ne lascia un altro
-/// corrente se ce n'è, e nessuno se non ce n'è.
+/// è un'assunzione del backend. Uno slot `Closing` non è più aperto e non può
+/// quindi essere corrente, ma resta pubblicato finché il teardown termina.
 #[derive(Default)]
 struct Sessions {
-    open: BTreeMap<Utf8PathBuf, VaultSession>,
+    slots: BTreeMap<Utf8PathBuf, SessionSlot>,
     /// Quanti «diventa corrente» sono passati di qui. È un **contatore** e non
     /// un orologio: la domanda è *chi è stato usato dopo chi*, e a un ordine
     /// non serve sapere che ore erano — un orologio di sistema, che può
@@ -317,33 +370,30 @@ struct Sessions {
 }
 
 impl Sessions {
-    /// **Il vault corrente**: il più recente fra gli aperti.
-    ///
-    /// È un'espressione e non un campo, ed è la differenza che conta: un campo
-    /// va tenuto allineato alla mappa, e chi lo aggiornava lo faceva con un
-    /// criterio suo — chiudendo il corrente toccava al primo path in ordine,
-    /// che è l'ordine della [`BTreeMap`] e non una politica che qualcuno abbia
-    /// scelto. Qui chi non è aperto non può essere corrente, e chi chiude il
-    /// corrente lascia il posto al più recente di chi resta senza che nessuno
-    /// scelga niente.
+    /// **Il vault corrente**: il più recente fra quelli ancora aperti.
     fn current(&self) -> Option<&Utf8PathBuf> {
-        self.open
+        self.slots
             .iter()
+            .filter_map(|(root, slot)| match slot {
+                SessionSlot::Open(session) => Some((root, session)),
+                SessionSlot::Closing(_) => None,
+            })
             .max_by_key(|(_, session)| session.used)
             .map(|(root, _)| root)
     }
 
-    /// Questo vault è il più recente. `false` se non è aperto — ed è la
-    /// risposta di chi lo chiede per un path che nessuno ha aperto.
-    fn make_current(&mut self, root: &Utf8Path) -> bool {
+    /// Questo vault è il più recente. `Ok(false)` se non è aperto; una
+    /// chiusura ancora in corso resta invece un conflitto osservabile.
+    fn make_current(&mut self, root: &Utf8Path) -> Result<bool, PluginError> {
         self.usi += 1;
         let usi = self.usi;
-        match self.open.get_mut(root) {
-            Some(session) => {
+        match self.slots.get_mut(root) {
+            Some(SessionSlot::Open(session)) => {
                 session.used = usi;
-                true
+                Ok(true)
             }
-            None => false,
+            Some(SessionSlot::Closing(_)) => Err(closing_conflict(root)),
+            None => Ok(false),
         }
     }
 }
@@ -644,7 +694,11 @@ impl Host {
 
         let already_open = {
             let sessions = self.sessions.read()?;
-            sessions.open.get(&root).map(info_of).transpose()?
+            match sessions.slots.get(&root) {
+                Some(SessionSlot::Open(session)) => Some(info_of(session)?),
+                Some(SessionSlot::Closing(_)) => return Err(closing_conflict(&root)),
+                None => None,
+            }
         };
         let info = match already_open {
             Some(info) => info,
@@ -823,25 +877,34 @@ impl Host {
         // ha tolto il tutto-o-niente, non la sincronia.
         let (info, loser) = {
             let mut sessions = self.sessions.write()?;
-            let loser = if sessions.open.contains_key(&root) {
-                // Ha vinto l'altro: la sessione buona è la sua — riaprire un
-                // vault già aperto non lo riapre, e vale anche quando il
-                // "già" è di un istante fa.
-                Some(session)
-            } else {
-                sessions.open.insert(root.clone(), session);
-                None
-            };
-            let winner = sessions.open.get(&root).expect("appena inserita, o già lì");
-            let info = info_of(winner)?;
-            (info, loser)
+            match sessions.slots.get(&root) {
+                Some(SessionSlot::Open(winner)) => {
+                    // Ha vinto l'altro: la sessione buona è la sua — riaprire
+                    // un vault già aperto non lo rimonta.
+                    (info_of(winner), Some(session))
+                }
+                Some(SessionSlot::Closing(_)) => {
+                    // La pubblicazione ha perso contro una chiusura iniziata
+                    // mentre il mount era in corso. Il marker non si sovrascrive.
+                    (Err(closing_conflict(&root)), Some(session))
+                }
+                None => {
+                    sessions
+                        .slots
+                        .insert(root.clone(), SessionSlot::Open(session));
+                    let Some(SessionSlot::Open(winner)) = sessions.slots.get(&root) else {
+                        unreachable!("la sessione appena inserita è aperta")
+                    };
+                    (info_of(winner), None)
+                }
+            }
         };
-        // Chiudere sta **fuori** dal lock delle sessioni, per la stessa ragione
-        // di [`close_vault`](Host::close_vault): chiudere chiama i provider.
+        // Chiudere la sessione perdente sta **fuori** dal lock delle sessioni,
+        // anche quando ha perso contro un marker di chiusura.
         if let Some(loser) = loser {
             loser.close();
         }
-        Ok(info)
+        info
     }
 
     /// **Un vault diventa il corrente**, e questa è l'unica riga che lo dice.
@@ -866,7 +929,7 @@ impl Host {
     /// un elenco di recenti pieno di cartelle che non aprono è peggio di un
     /// elenco vuoto.
     fn become_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        if !self.sessions.write()?.make_current(root) {
+        if !self.sessions.write()?.make_current(root)? {
             return Err(PluginError::NotFound(
                 format!("Nessun vault aperto su {root}.").into(),
             ));
@@ -927,7 +990,7 @@ impl Host {
     fn knows(&self, root: &Utf8Path) -> bool {
         self.sessions
             .read()
-            .is_ok_and(|sessions| sessions.open.contains_key(root))
+            .is_ok_and(|sessions| sessions.slots.contains_key(root))
             || self.vaults.knows(root)
     }
 
@@ -1557,23 +1620,35 @@ impl Host {
         // nome dato questa riga chiede al disco: e il lock che ferma ogni
         // comando dell'host non attraversa una domanda al filesystem.
         let root = self.key(root)?;
+        let token = Arc::new(ClosingToken);
         let session = {
             let mut sessions = self.sessions.write()?;
-            let Some(session) = sessions.open.remove(&root) else {
+            let Some(slot) = sessions.slots.get_mut(&root) else {
                 return Err(PluginError::NotFound(
                     format!("Nessun vault aperto su {root}.").into(),
                 ));
             };
-            // Chi è corrente adesso non si decide qui, e non c'era modo di
-            // deciderlo bene: il corrente è il più recente degli aperti, e
-            // togliere una sessione dalla mappa toglie con lei il suo posto
-            // nell'ordine. Prima toccava al primo path in ordine — l'ordine
-            // della `BTreeMap`, che nessuno aveva scelto come politica.
-            session
+            match slot {
+                SessionSlot::Open(_) => {
+                    let SessionSlot::Open(session) =
+                        std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
+                    else {
+                        unreachable!("lo slot verificato era aperto")
+                    };
+                    session
+                }
+                SessionSlot::Closing(_) => return Err(closing_conflict(&root)),
+            }
         };
-        // Fuori dal lock delle sessioni: chiudere chiama i provider, e un
-        // provider che chiedesse un altro vault si troverebbe davanti sé stesso.
-        Ok(session.close())
+        // Il claim conserva il marker, ma non la guardia della mappa: watcher,
+        // runner e provider terminano tutti fuori dal lock delle sessioni.
+        Ok(CloseClaim {
+            sessions: &self.sessions,
+            root,
+            token,
+            session: Some(session),
+        }
+        .close())
     }
 
     /// Chiude **tutti** i vault aperti: è ciò che fa chi spegne l'app.
@@ -1586,21 +1661,38 @@ impl Host {
     /// L'ordine che conta è dentro ciascuno — l'inverso della dichiarazione dei
     /// suoi plugin — e lo tiene [`Workspace::close`].
     pub fn close(&self) -> Vec<PluginError> {
-        let sessions = {
-            // La mappa non è più leggibile: non si sa più *cosa* chiudere, e
-            // rispondere con un elenco vuoto vorrebbe dire «chiuso tutto».
+        let claimed = {
             let mut sessions = match self.sessions.write() {
                 Ok(sessions) => sessions,
                 Err(and) => return vec![and],
             };
-            // Svuotare la mappa è già «non c'è più un corrente»: non c'è un
-            // secondo campo da azzerare, e quindi non c'è modo di scordarselo.
-            std::mem::take(&mut sessions.open)
+            let mut claimed = Vec::new();
+            for (root, slot) in &mut sessions.slots {
+                if matches!(slot, SessionSlot::Open(_)) {
+                    let token = Arc::new(ClosingToken);
+                    let SessionSlot::Open(session) =
+                        std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
+                    else {
+                        unreachable!("lo slot verificato era aperto")
+                    };
+                    claimed.push((root.clone(), token, session));
+                }
+            }
+            claimed
         };
-        sessions
-            .into_values()
-            .flat_map(VaultSession::close)
-            .collect()
+        let claimed: Vec<_> = claimed
+            .into_iter()
+            .map(|(root, token, session)| CloseClaim {
+                sessions: &self.sessions,
+                root,
+                token,
+                session: Some(session),
+            })
+            .collect();
+        // Costruire prima tutti i claim è parte della garanzia di unwind: se
+        // una chiusura panica, gli elementi non ancora visitati vengono
+        // comunque lasciati cadere e ritirano ciascuno il proprio marker.
+        claimed.into_iter().flat_map(CloseClaim::close).collect()
     }
 
     /// I vault aperti, in ordine di path.
@@ -1611,7 +1703,14 @@ impl Host {
         // ancora, che è niente.
         self.sessions
             .read()
-            .map(|s| s.open.keys().cloned().collect())
+            .map(|s| {
+                s.slots
+                    .iter()
+                    .filter_map(|(root, slot)| {
+                        matches!(slot, SessionSlot::Open(_)).then(|| root.clone())
+                    })
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -1657,10 +1756,13 @@ impl Host {
                 .cloned()
                 .ok_or_else(|| PluginError::NotFound("Nessun vault aperto.".into()))?,
         };
-        let session = sessions.open.get(&key).ok_or_else(|| {
-            PluginError::NotFound(format!("Nessun vault aperto su {key}.").into())
-        })?;
-        Ok(f(session))
+        match sessions.slots.get(&key) {
+            Some(SessionSlot::Open(session)) => Ok(f(session)),
+            Some(SessionSlot::Closing(_)) => Err(closing_conflict(&key)),
+            None => Err(PluginError::NotFound(
+                format!("Nessun vault aperto su {key}.").into(),
+            )),
+        }
     }
 
     /// Come [`with_session`](Host::with_session), per chi **dentro** la sessione
@@ -2299,9 +2401,13 @@ mod vanished_session_key_tests {
 
         {
             let mut sessions = host.sessions.write().expect("sessions");
-            let mut session = sessions.open.remove(&live).expect("the live session");
+            let Some(SessionSlot::Open(mut session)) = sessions.slots.remove(&live) else {
+                panic!("the live session is open")
+            };
             session.root = vanished.clone();
-            sessions.open.insert(vanished.clone(), session);
+            sessions
+                .slots
+                .insert(vanished.clone(), SessionSlot::Open(session));
         }
 
         assert_eq!(

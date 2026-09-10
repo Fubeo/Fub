@@ -35,6 +35,53 @@ impl Drop for Live {
     }
 }
 
+struct ClosingGate {
+    watching: Arc<AtomicBool>,
+    entered: Option<std::sync::mpsc::Sender<()>>,
+    release: Option<std::sync::mpsc::Receiver<()>>,
+}
+
+impl VaultWatcher for ClosingGate {
+    fn is_watching(&self) -> bool {
+        self.watching.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for ClosingGate {
+    fn drop(&mut self) {
+        if let (Some(entered), Some(release)) = (self.entered.take(), self.release.take()) {
+            entered.send(()).expect("the close observer is alive");
+            release
+                .recv_timeout(TIMEOUT)
+                .expect("the test releases watcher teardown");
+        }
+        self.watching.store(false, Ordering::Relaxed);
+    }
+}
+
+struct ClosingGateFactory {
+    starts: Arc<AtomicUsize>,
+    entered: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+    release: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+}
+
+impl WatcherFactory for ClosingGateFactory {
+    fn start(
+        &self,
+        _root: &Utf8Path,
+        _workspace: Custody<Workspace>,
+        watching: Arc<AtomicBool>,
+    ) -> Result<Box<dyn VaultWatcher>, String> {
+        watching.store(true, Ordering::Relaxed);
+        self.starts.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(ClosingGate {
+            watching,
+            entered: self.entered.lock().expect("entered gate").take(),
+            release: self.release.lock().expect("release gate").take(),
+        }))
+    }
+}
+
 #[derive(Clone, Copy)]
 enum FirstCall {
     Succeeds,
@@ -154,6 +201,78 @@ fn close_with_timeout(host: Arc<Host>) -> Vec<PluginError> {
         });
     call.join().expect("closing thread joins");
     result
+}
+
+#[test]
+fn opening_the_same_root_conflicts_while_teardown_owns_the_slot() {
+    let (_dir, root) = root();
+    let starts = Arc::new(AtomicUsize::new(0));
+    let (entered_tx, entered_rx) = channel();
+    let (release_tx, release_rx) = channel();
+    let host = Arc::new(
+        Host::new().with_watcher(Box::new(ClosingGateFactory {
+            starts: Arc::clone(&starts),
+            entered: Mutex::new(Some(entered_tx)),
+            release: Mutex::new(Some(release_rx)),
+        })),
+    );
+    host.open(&root).expect("the first session opens");
+    host.wait_indexed(None).expect("initial indexing finishes");
+    assert_eq!(host.current().as_deref(), Some(root.as_path()));
+
+    let closing_host = Arc::clone(&host);
+    let closing_root = root.clone();
+    let closing = std::thread::spawn(move || closing_host.close_vault(&closing_root));
+    entered_rx
+        .recv_timeout(TIMEOUT)
+        .expect("watcher teardown reaches its gate");
+
+    let opening_host = Arc::clone(&host);
+    let opening_root = root.clone();
+    let (opened_tx, opened_rx) = channel();
+    let opening = std::thread::spawn(move || {
+        opened_tx
+            .send(opening_host.open(&opening_root))
+            .expect("the opening observer is alive");
+    });
+    let outcome = opened_rx
+        .recv_timeout(TIMEOUT)
+        .expect("open does not wait for the sessions lock");
+    assert!(
+        matches!(&outcome, Err(PluginError::Conflict(message))
+            if message.contains("chiusura")),
+        "the closing marker rejects a second mount: {outcome:?}"
+    );
+    opening.join().expect("conflicting opening joins");
+    assert_eq!(
+        starts.load(Ordering::SeqCst),
+        1,
+        "a conflicting open must not start another watcher"
+    );
+    let repeated_close = host.close_vault(&root);
+    assert!(
+        matches!(&repeated_close, Err(PluginError::Conflict(message))
+            if message.contains("chiusura")),
+        "the marker cannot be claimed twice: {repeated_close:?}"
+    );
+
+    release_tx.send(()).expect("release watcher teardown");
+    assert!(
+        closing
+            .join()
+            .expect("closing thread joins")
+            .expect("the claimed session closes")
+            .is_empty()
+    );
+
+    host.open(&root).expect("the root reopens after teardown");
+    assert_eq!(starts.load(Ordering::SeqCst), 2);
+    assert_eq!(host.current().as_deref(), Some(root.as_path()));
+    assert!(
+        host.close_vault(&root)
+            .expect("the reopened session closes")
+            .is_empty()
+    );
 }
 
 #[test]
