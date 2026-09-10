@@ -645,7 +645,7 @@ fn a_restore_target_cannot_escape_the_vault() {
     // Poco dopo il watcher riferisce che `Idea.txt` non c'è più (vero) e che in
     // `.trash/` è comparso qualcosa (vero, e non sono fatti suoi).
     let err = restore_document(&mut ws, &trashed, Some(DocId::new("../outside.txt"))).unwrap_err();
-    assert!(err.to_string().contains("nome non valido"), "{err}");
+    assert!(matches!(err, PluginError::BadArgs(_)), "{err}");
     assert!(fx.exists(".trash/Idea.txt"), "the trash entry did not move");
     assert!(!fx.root.parent().unwrap().join("outside.txt").exists());
 }
