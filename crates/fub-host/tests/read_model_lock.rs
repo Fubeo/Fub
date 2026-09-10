@@ -24,9 +24,10 @@ use fub_abi::format::{
 };
 use fub_abi::model::{Block, DocId, DocumentModel};
 use fub_abi::options::{permission, syntax};
+use fub_abi::settings::{SettingSpec, SettingValue};
 use fub_abi::traits::{
     DataRead, DataWrite, HostQuery, IndexQuery, IndexResult, PluginManifest, PluginPermissions,
-    VaultRead, VaultStructure,
+    SettingsRead, SettingsWrite, VaultRead, VaultStructure,
 };
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
@@ -85,6 +86,7 @@ enum Stage {
     DataList,
     DataWrite,
     DataRemove,
+    SettingsWrite,
 }
 
 struct BlockingRestoreStorage {
@@ -99,6 +101,7 @@ struct BlockingRestoreStorage {
     release: Mutex<mpsc::Receiver<()>>,
     data_probe: Mutex<Option<(Stage, Utf8PathBuf)>>,
     data_hits: AtomicUsize,
+    workspace_probe: Mutex<Option<Custody<Workspace>>>,
 }
 
 impl BlockingRestoreStorage {
@@ -148,7 +151,11 @@ impl BlockingRestoreStorage {
                 self.read_hits.fetch_add(1, Ordering::SeqCst);
             }
             Stage::Parse | Stage::Syntax => unreachable!("storage stage"),
-            Stage::DataRead | Stage::DataList | Stage::DataWrite | Stage::DataRemove => {}
+            Stage::DataRead
+            | Stage::DataList
+            | Stage::DataWrite
+            | Stage::DataRemove
+            | Stage::SettingsWrite => {}
         }
         if self.blocking.load(Ordering::SeqCst) {
             self.entered
@@ -167,6 +174,7 @@ impl BlockingRestoreStorage {
                 | Stage::DataList
                 | Stage::DataWrite
                 | Stage::DataRemove
+                | Stage::SettingsWrite
         ) {
             self.armed.store(false, Ordering::SeqCst);
         }
@@ -193,6 +201,16 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        if let Some(workspace) = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .cloned()
+        {
+            assert_workspace_is_free(&workspace, "VaultStorage during JobHost setting I/O");
+        }
+        self.observe_data(Stage::SettingsWrite, path);
         self.inner.update(path, merge)
     }
 
@@ -519,6 +537,7 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        workspace_probe: Mutex::new(None),
     });
     let parses = Arc::new(AtomicUsize::new(0));
     let mut formats = FormatRegistry::new();
@@ -665,6 +684,7 @@ fn job_data_io_runs_without_workspace_guards_and_denial_precedes_storage() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        workspace_probe: Mutex::new(None),
     });
     let mut workspace = Workspace::on(
         &root,
@@ -717,6 +737,80 @@ fn job_data_io_runs_without_workspace_guards_and_denial_precedes_storage() {
         storage.data_hits.load(Ordering::SeqCst),
         0,
         "DryRun is rejected before cache namespace and marker I/O"
+    );
+}
+
+#[test]
+fn job_setting_write_runs_without_workspace_guards() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let storage = Arc::new(BlockingRestoreStorage {
+        inner: FsStorage,
+        trash_dir: root.join(".trash"),
+        source: Mutex::new(None),
+        armed: AtomicBool::new(false),
+        blocking: AtomicBool::new(false),
+        list_hits: AtomicUsize::new(0),
+        read_hits: AtomicUsize::new(0),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+        data_probe: Mutex::new(None),
+        data_hits: AtomicUsize::new(0),
+        workspace_probe: Mutex::new(None),
+    });
+    let key = format!("{PLUGIN}:enabled");
+    let mut workspace = Workspace::on(
+        &root,
+        FormatRegistry::new(),
+        storage.clone(),
+        MachineSettings::in_memory(),
+    )
+    .expect("workspace opens");
+    workspace
+        .register_plugin(
+            PluginManifest::core(PLUGIN, "Detached setting I/O").configuring(vec![
+                SettingSpec::toggle(&key, "Enabled", true).program_writable(),
+            ]),
+            Trust::Community,
+        )
+        .expect("setting caller declares");
+    let workspace = Custody::new("the detached setting workspace", workspace);
+    *storage
+        .workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+    storage.arm_data(Stage::SettingsWrite, root.join(".fub/settings.json"), true);
+
+    let workspace_for_call = workspace.clone();
+    let key_for_call = key.clone();
+    let worker = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, PLUGIN)
+            .set_setting(&key_for_call, SettingValue::Toggle(false))
+    });
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("setting I/O entered"),
+        Stage::SettingsWrite
+    );
+    // La prova delle due guardie gira sul thread che possiede il writer turn:
+    // così misura il lock del workspace, non la serializzazione fra writer.
+    release_tx.send(()).expect("release setting I/O");
+    worker
+        .join()
+        .expect("setting I/O thread does not panic")
+        .expect("setting I/O succeeds");
+    *storage
+        .workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+    assert_eq!(
+        JobHost::new(workspace, PLUGIN)
+            .setting(&key)
+            .expect("setting remains readable"),
+        SettingValue::Toggle(false)
     );
 }
 

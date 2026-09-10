@@ -268,6 +268,42 @@ impl JobHost {
         workspace.prepare_plugin_data_io(&self.plugin, path)
     }
 
+    fn mutate_setting_detached(
+        &mut self,
+        key: &str,
+        value: Option<SettingValue>,
+        action: impl Into<String>,
+    ) -> Result<(), PluginError> {
+        self.stopped()?;
+        let action = action.into();
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_family(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::SettingsWrite,
+                    || action.clone(),
+                )?;
+            }
+            authorize_family(
+                &ws.granted_policy(&self.plugin),
+                Capability::SettingsWrite,
+                || action,
+            )?;
+            ws.prepare_program_setting_mutation(key, value)?
+        };
+        let applied = prepared.invoke()?;
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_setting_mutation_deferred(applied)
+        };
+        finish_events(&workspace, deferred)
+    }
+
     fn write_document_detached(
         &mut self,
         id: &DocId,
@@ -813,11 +849,11 @@ impl SettingsRead for JobHost {
 
 impl SettingsWrite for JobHost {
     fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
-        self.write_result(|h| h.set_setting(key, value.clone()))
+        self.mutate_setting_detached(key, Some(value), format!("writing setting `{key}`"))
     }
 
     fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.reset_setting(key))
+        self.mutate_setting_detached(key, None, format!("resetting setting `{key}`"))
     }
 }
 

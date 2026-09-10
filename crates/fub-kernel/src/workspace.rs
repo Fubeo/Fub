@@ -2068,6 +2068,41 @@ const TIMER_CURSORS_FILE: &str = "timers.json";
 /// scambiarla per dati.
 const PLUGIN_CACHE_MARK: &str = ".fub-cache-root";
 
+enum SettingMutation {
+    Set(SettingValue),
+    Reset,
+}
+
+/// Mutazione di configurazione validata che può persistere fuori dalla
+/// custodia del workspace.
+pub struct PreparedSettingMutation {
+    settings: SharedSettings,
+    key: String,
+    scope: SettingScope,
+    mutation: SettingMutation,
+}
+
+/// Esito persistito che autorizza il solo epilogo in memoria.
+pub struct AppliedSettingMutation {
+    key: String,
+    scope: SettingScope,
+}
+
+impl PreparedSettingMutation {
+    pub fn invoke(self) -> std::result::Result<AppliedSettingMutation, PluginError> {
+        let mut settings = self.settings.write().expect("store di configurazione");
+        let scope = match self.mutation {
+            SettingMutation::Set(value) => settings.set(&self.key, value)?,
+            SettingMutation::Reset => settings.reset(&self.key)?,
+        };
+        debug_assert_eq!(scope, self.scope);
+        Ok(AppliedSettingMutation {
+            key: self.key,
+            scope,
+        })
+    }
+}
+
 /// Token owned per l'I/O dello spazio dati di un plugin.
 ///
 /// Il workspace valida e congela radici e path; ogni domanda al supporto,
@@ -9545,6 +9580,57 @@ impl Workspace {
             .read()
             .expect("store di configurazione")
             .effective(key)
+    }
+
+    /// Valida schema e scrivibilità prima di staccare la persistenza dal
+    /// workspace. Il token conserva soltanto dati owned e lo store condiviso.
+    pub fn prepare_program_setting_mutation(
+        &self,
+        key: &str,
+        value: Option<SettingValue>,
+    ) -> std::result::Result<PreparedSettingMutation, PluginError> {
+        let scope = {
+            let settings = self.settings.read().expect("store di configurazione");
+            let spec = settings.spec(key).ok_or_else(|| {
+                PluginError::BadArgs(format!("nobody declared setting `{key}`").into())
+            })?;
+            if !spec.program_writable {
+                return Err(PluginError::PermissionDenied(
+                    format!(
+                        "setting `{key}` was not declared writable by a \
+                         program: the person looking at it is the one who changes it"
+                    )
+                    .into(),
+                ));
+            }
+            if let Some(value) = value.as_ref() {
+                if let Some(why) = spec.kind.rejects(value) {
+                    return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
+                }
+            }
+            spec.scope
+        };
+        Ok(PreparedSettingMutation {
+            settings: Arc::clone(&self.settings),
+            key: key.to_owned(),
+            scope,
+            mutation: match value {
+                Some(value) => SettingMutation::Set(value),
+                None => SettingMutation::Reset,
+            },
+        })
+    }
+
+    /// Annuncia una mutazione già persistita, rimandando ogni callback a dopo
+    /// il rilascio della custodia.
+    pub fn finish_setting_mutation_deferred(
+        &mut self,
+        applied: AppliedSettingMutation,
+    ) -> DeferredEvents<()> {
+        let deferred = self.defer_event_dispatch();
+        self.announce_setting(&applied.key, applied.scope);
+        self.restore_event_dispatch(deferred);
+        DeferredEvents::outcome(())
     }
 
     /// fatto che riguarda chi la legge, e senza l'evento un interruttore
