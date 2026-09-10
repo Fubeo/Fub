@@ -240,7 +240,6 @@ impl Workspace {
                 completed.source_revision,
                 None,
                 journal,
-                false,
             )),
             None => {
                 let kind = self

@@ -279,6 +279,7 @@ fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
         .invoke();
     b.ws.sync_path_prepared(&b.root.join("a.txt"), Some(plan))
         .expect("la partenza: il file non c'è più");
+    let _first_window = events(&rx);
 
     // Finestra 2: l'arrivo, con un piano vero.
     let plan = b
@@ -316,13 +317,21 @@ fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
     // vista: il gemello a vault chiuso lo emette (workspace.rs, il precedente
     // del rejoin), e chi ascolta non deve distinguere i due casi.
     let seen = events(&rx);
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(
+                &notice.event,
+                Event::DocumentRenamed { from, to }
+                    if from.as_str() == "a.txt" && to.as_str() == "b.txt"
+            ))
+            .count(),
+        1,
+        "l'accoppiamento annuncia esattamente una rinomina: {seen:?}"
+    );
     assert!(
-        seen.iter().any(|n| matches!(
-            &n.event,
-            Event::DocumentRenamed { from, to }
-                if from.as_str() == "a.txt" && to.as_str() == "b.txt"
-        )),
-        "l'accoppiamento ha annunciato la rinomina: {seen:?}"
+        seen.iter()
+            .all(|notice| !matches!(&notice.event, Event::DocumentChanged { .. })),
+        "l'arrivo rinominato non viene annunciato anche come modifica: {seen:?}"
     );
 }
 

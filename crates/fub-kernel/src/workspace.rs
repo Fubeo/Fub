@@ -314,19 +314,14 @@ pub struct PreparedExternalDocumentRename {
     storage: Arc<dyn crate::storage::VaultStorage>,
     parser: PreparedParse,
     source_kind: SourceKind,
-    organization: Arc<OrganizationStore>,
-    drafts: Arc<Drafts>,
-    doc_data_roots: Vec<Utf8PathBuf>,
+    side_data: PreparedRenameSideData,
 }
 
 /// Destinazione già letta e parsata fuori dal workspace.
 pub struct ParsedExternalDocumentRename {
     snapshot: ExternalRenameSnapshot,
     state: ParsedExternalDocumentState,
-    organization: Arc<OrganizationStore>,
-    drafts: Arc<Drafts>,
-    storage: Arc<dyn crate::storage::VaultStorage>,
-    doc_data_roots: Vec<Utf8PathBuf>,
+    side_data: PreparedRenameSideData,
 }
 
 enum ParsedExternalDocumentState {
@@ -339,16 +334,31 @@ enum ParsedExternalDocumentState {
     Stale,
 }
 
+/// Handle owned per spostare i dati autorevoli di una rinomina fuori dal
+/// workspace.
+struct PreparedRenameSideData {
+    from: DocId,
+    to: DocId,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Errori recuperabili prodotti dalla migrazione detached dei side-data.
+struct CompletedRenameSideData {
+    from: DocId,
+    to: DocId,
+    errors: Vec<String>,
+}
+
 /// Core della rinomina già installato, callback e side-data ancora detached.
 pub struct PendingExternalDocumentRename {
     snapshot: ExternalRenameSnapshot,
     installed: VaultEntry,
     removal: PreparedDocumentRemoval,
     feed: PreparedDocumentFeed,
-    organization: Arc<OrganizationStore>,
-    drafts: Arc<Drafts>,
-    storage: Arc<dyn crate::storage::VaultStorage>,
-    doc_data_roots: Vec<Utf8PathBuf>,
+    side_data: PreparedRenameSideData,
 }
 
 /// Callback e side-data completati, pronto per l'unico epilogo.
@@ -357,7 +367,7 @@ pub struct CompletedExternalDocumentRename {
     installed: VaultEntry,
     removal: CompletedDocumentRemoval,
     feed: PreparedDocumentFeed,
-    doc_data_errors: Vec<String>,
+    side_data: CompletedRenameSideData,
 }
 
 /// Prima fase owned della migrazione d'identità di un asset.
@@ -490,6 +500,11 @@ enum PendingSyncState {
         feed: Box<PreparedDocumentFeed>,
         previous_provider_call: bool,
     },
+    Rename {
+        feed: Box<PreparedDocumentFeed>,
+        previous_provider_call: bool,
+        side_data: PreparedRenameSideData,
+    },
     Removal(PreparedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
     Unchanged(crate::storage::Stat),
@@ -499,6 +514,11 @@ enum CompletedSyncState {
     Feed {
         feed: Box<PreparedDocumentFeed>,
         previous_provider_call: bool,
+    },
+    Rename {
+        feed: Box<PreparedDocumentFeed>,
+        previous_provider_call: bool,
+        side_data: CompletedRenameSideData,
     },
     Removal(CompletedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
@@ -547,9 +567,7 @@ impl PreparedExternalDocumentRename {
             storage,
             parser,
             source_kind,
-            organization,
-            drafts,
-            doc_data_roots,
+            side_data,
         } = self;
         let state = match storage.stat(&snapshot.to_path) {
             Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
@@ -607,11 +625,32 @@ impl PreparedExternalDocumentRename {
         ParsedExternalDocumentRename {
             snapshot,
             state,
+            side_data,
+        }
+    }
+}
+
+impl PreparedRenameSideData {
+    fn invoke(self) -> CompletedRenameSideData {
+        let PreparedRenameSideData {
+            from,
+            to,
             organization,
             drafts,
             storage,
             doc_data_roots,
+        } = self;
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            organization.warn(format!(
+                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {error}"
+            ));
         }
+        let mut errors =
+            crate::docdata::migrate_data(storage.as_ref(), &doc_data_roots, &from, &to);
+        if let Err(error) = drafts.migrate(&from, &to) {
+            errors.push(format!("bozza non migrata: {error}"));
+        }
+        CompletedRenameSideData { from, to, errors }
     }
 }
 
@@ -623,36 +662,14 @@ impl PendingExternalDocumentRename {
             installed,
             removal,
             feed,
-            organization,
-            drafts,
-            storage,
-            doc_data_roots,
+            side_data,
         } = self;
-        let removal = removal.invoke();
-        let feed = feed.invoke_indexes();
-        if let Err(error) =
-            organization.migrate(snapshot.from_id.as_str(), snapshot.to_id.as_str())
-        {
-            organization.warn(format!(
-                "l'organizzazione di {} non ha potuto seguire la rinomina in {}: {error}",
-                snapshot.from_id, snapshot.to_id
-            ));
-        }
-        let mut doc_data_errors = crate::docdata::migrate_data(
-            storage.as_ref(),
-            &doc_data_roots,
-            &snapshot.from_id,
-            &snapshot.to_id,
-        );
-        if let Err(error) = drafts.migrate(&snapshot.from_id, &snapshot.to_id) {
-            doc_data_errors.push(format!("bozza non migrata: {error}"));
-        }
         CompletedExternalDocumentRename {
             snapshot,
             installed,
-            removal,
-            feed,
-            doc_data_errors,
+            removal: removal.invoke(),
+            feed: feed.invoke_indexes(),
+            side_data: side_data.invoke(),
         }
     }
 }
@@ -770,6 +787,15 @@ impl PendingSyncChange {
             } => CompletedSyncState::Feed {
                 feed: Box::new((*feed).invoke_indexes()),
                 previous_provider_call,
+            },
+            PendingSyncState::Rename {
+                feed,
+                previous_provider_call,
+                side_data,
+            } => CompletedSyncState::Rename {
+                feed: Box::new((*feed).invoke_indexes()),
+                previous_provider_call,
+                side_data: side_data.invoke(),
             },
             PendingSyncState::Removal(removal) => {
                 CompletedSyncState::Removal(removal.invoke())
@@ -4737,7 +4763,6 @@ impl Workspace {
     /// all'esito, e non deve tornare a chiederle (difetto 0179, vedi
     /// [`set_entry`](Workspace::set_entry)). `None` per chi porta dentro un
     /// cambiamento che non ha fatto lui.
-    // Una rinomina esterna spezzata dal debounce arriva come «sparito» e
     fn prepare_ingest_model(
         &mut self,
         id: &DocId,
@@ -4745,37 +4770,7 @@ impl Workspace {
         fingerprint: Revision,
         placed: Option<(u64, u64)>,
         journal: JournalOp,
-        detect_external_rename: bool,
     ) -> PreparedDocumentFeed {
-        // poi «nato» (difetto 0198). Se il nato ha l'impronta di chi è appena
-        // sparito, è la stessa nota: lo stato attaccato la segue. Uno a uno e
-        // per impronta, come la 0099; se `id` è già in anagrafe non è una
-        // rinomina (0135).
-        // **E poi si dice**, con lo stesso evento della rinomina
-        if detect_external_rename && !self.indexes.core.metas.contains_key(id) {
-            if let Some((from, fp)) = self.last_removed.take() {
-                if from != *id && fp == fingerprint {
-                    self.migrate_side_data(&from, id);
-                    // vista: chi tiene stato per-documento fuori dallo spazio
-                    // dichiarato — il versioning, che ha uno store suo perché
-                    // deve sopravvivere alla cancellazione (0044) — non ha
-                    // altro modo di saperlo, e senza l'evento la sua storia si
-                    // spezza in due chiavi. È il gemello del rejoin a vault
-                    // chiuso (il precedente qui sotto, ~7093-7106), che però
-                    // passa da `as_actor(Actor::Kernel, …)` perché lì non c'è
-                    // un rilevatore: qui l'attore è chi ha visto — il batch del
-                    // rilevatore — e l'evento esce dal suo frame, come ogni
-                    // altro di questo ingest.
-                    // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
-                    self.emit_event(Event::DocumentRenamed {
-                        from,
-                        to: id.clone(),
-                    });
-                } else if from != *id {
-                    self.last_removed = Some((from, fp));
-                }
-            }
-        }
         // di un documento appena scritto sono cambiate, e una voce ferma a
         // prima direbbe che il file è quello di ieri — a chi la interroga
         // adesso, e alla prossima apertura, che sull'anagrafe decide cosa
@@ -4828,7 +4823,6 @@ impl Workspace {
                 from: None,
                 to: Revision::of(""),
             },
-            true,
         );
         let pending = pending.invoke_indexes();
         self.finish_index_feed(pending);
@@ -5016,6 +5010,7 @@ impl Workspace {
             let Ok(parser) = self.docs.prepare_parse(&to_id) else {
                 return fallback(false);
             };
+            let side_data = self.prepare_rename_side_data(&from_id, &to_id);
             return ExternalRenamePlan::Document(PreparedExternalDocumentRename {
                 snapshot: ExternalRenameSnapshot {
                     workspace_id: self.workspace_id,
@@ -5031,9 +5026,7 @@ impl Workspace {
                 storage: Arc::clone(self.docs.vault.storage()),
                 parser,
                 source_kind: descriptor.source,
-                organization: Arc::clone(&self.organization),
-                drafts: Arc::clone(&self.drafts),
-                doc_data_roots: self.docs.plugin_data_roots(),
+                side_data,
             });
         }
 
@@ -5091,10 +5084,7 @@ impl Workspace {
         let ParsedExternalDocumentRename {
             snapshot,
             state,
-            organization,
-            drafts,
-            storage,
-            doc_data_roots,
+            side_data,
         } = parsed;
         let (model, fingerprint, stat) = match state {
             ParsedExternalDocumentState::Ready {
@@ -5164,10 +5154,7 @@ impl Workspace {
             installed,
             removal,
             feed,
-            organization,
-            drafts,
-            storage,
-            doc_data_roots,
+            side_data,
         }))
     }
 
@@ -5182,12 +5169,15 @@ impl Workspace {
             installed,
             removal,
             feed,
-            doc_data_errors,
+            side_data,
         } = completed;
         let removal_losses = match self.finish_document_rename_removal(removal) {
             Ok(losses) => losses,
             Err(_) => return false,
         };
+        self.report_losses(removal_losses);
+        self.report_losses(feed.losses);
+        self.report_rename_side_data(side_data);
         if self.indexes.core.entries.contains_key(&snapshot.from_id)
             || self.indexes.core.entries.get(&snapshot.to_id) != Some(&installed)
             || self.entry_fingerprint(&snapshot.to_id) != installed.fingerprint
@@ -5197,16 +5187,8 @@ impl Workspace {
         {
             return false;
         }
-        self.report_losses(removal_losses);
-        self.report_losses(feed.losses);
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
             self.indexes.core.rebuild_graph();
-        }
-        for error in doc_data_errors {
-            self.doc_data_warnings.push(format!(
-                "lo stato di {} non ha potuto seguire la rinomina in {} — {error}",
-                snapshot.from_id, snapshot.to_id
-            ));
         }
         let outcome: Result<bool> = Ok(true);
         self.notes_sync(&snapshot.to_path, &outcome);
@@ -5438,6 +5420,38 @@ impl Workspace {
                     stat,
                 } => {
                     self.indexes.ensure_mutation_available()?;
+                    let renamed_from = if snapshot.entry.is_none()
+                        && !self.indexes.core.metas.contains_key(&snapshot.id)
+                    {
+                        match self.last_removed.take() {
+                            Some((from, removed_fingerprint))
+                                if from != snapshot.id && removed_fingerprint == fingerprint =>
+                            {
+                                Some(from)
+                            }
+                            Some(candidate) => {
+                                self.last_removed = Some(candidate);
+                                None
+                            }
+                            None => None,
+                        }
+                    } else {
+                        None
+                    };
+                    let side_data = renamed_from
+                        .as_ref()
+                        .map(|from| self.prepare_rename_side_data(from, &snapshot.id));
+                    let journal = renamed_from
+                        .as_ref()
+                        .map(|from| JournalOp::Renamed {
+                            from: from.clone(),
+                            to: snapshot.id.clone(),
+                        })
+                        .unwrap_or_else(|| JournalOp::Written {
+                            doc: snapshot.id.clone(),
+                            from: snapshot.seen.clone(),
+                            to: Revision::of(""),
+                        });
                     let previous_provider_call = self.dispatch.enter_provider_call();
                     let feed = self.as_actor(Actor::Watcher, |ws| {
                         let feed = ws.prepare_ingest_model(
@@ -5445,23 +5459,37 @@ impl Workspace {
                             *model,
                             fingerprint,
                             Some((stat.size, stat.mtime)),
-                            JournalOp::Written {
-                                doc: snapshot.id.clone(),
-                                from: snapshot.seen.clone(),
-                                to: Revision::of(""),
-                            },
-                            true,
+                            journal,
                         );
-                        ws.announce_index_feed(&feed);
+                        if let Some(from) = &renamed_from {
+                            ws.session
+                                .invalidate(from, ContextChange::Renamed(snapshot.id.clone()));
+                            ws.record(JournalOp::Renamed {
+                                from: from.clone(),
+                                to: snapshot.id.clone(),
+                            });
+                            ws.emit_event(Event::DocumentRenamed {
+                                from: from.clone(),
+                                to: snapshot.id.clone(),
+                            });
+                            ws.emit_event(Event::IndexUpdated);
+                        } else {
+                            ws.announce_index_feed(&feed);
+                        }
                         feed
                     });
-                    Ok(Some(PendingSyncChange {
-                        snapshot,
-                        state: PendingSyncState::Feed {
+                    let state = match side_data {
+                        Some(side_data) => PendingSyncState::Rename {
+                            feed: Box::new(feed),
+                            previous_provider_call,
+                            side_data,
+                        },
+                        None => PendingSyncState::Feed {
                             feed: Box::new(feed),
                             previous_provider_call,
                         },
-                    }))
+                    };
+                    Ok(Some(PendingSyncChange { snapshot, state }))
                 }
                 ParsedChangeState::Missing => {
                     let removal = self
@@ -5520,6 +5548,24 @@ impl Workspace {
                     && self.entry_fingerprint(&snapshot.id).as_ref() == Some(&feed.revision);
                 self.as_actor(Actor::Watcher, |ws| {
                     ws.finish_sync_index_feed(*feed, current)
+                });
+                Ok(current)
+            }
+            CompletedSyncState::Rename {
+                feed,
+                previous_provider_call,
+                side_data,
+            } => {
+                self.dispatch
+                    .restore_provider_call(previous_provider_call);
+                let current = self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                    == Some(&snapshot.id)
+                    && snapshot.routing_generation == self.indexes.routing_generation()
+                    && snapshot.syntax_generation == self.syntax_generation
+                    && self.entry_fingerprint(&snapshot.id).as_ref() == Some(&feed.revision);
+                self.as_actor(Actor::Watcher, |ws| {
+                    ws.report_rename_side_data(side_data);
+                    ws.finish_sync_index_feed(*feed, current);
                 });
                 Ok(current)
             }
@@ -6438,6 +6484,7 @@ impl Workspace {
         }
         // sparizione, e portarci lo stato vorrebbe dire metterlo sotto una
         // chiave che la prima raccolta spazza: sotto quella vecchia almeno
+
         // resta finché il file può tornare.
         // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
         if !self.docs.vault.exists(&to_id) {
@@ -6450,6 +6497,26 @@ impl Workspace {
             ));
         }
         self.migrate_doc_data(&from_id, &to_id);
+    }
+
+    fn prepare_rename_side_data(&self, from: &DocId, to: &DocId) -> PreparedRenameSideData {
+        PreparedRenameSideData {
+            from: from.clone(),
+            to: to.clone(),
+            organization: Arc::clone(&self.organization),
+            drafts: Arc::clone(&self.drafts),
+            storage: Arc::clone(self.docs.vault.storage()),
+            doc_data_roots: self.docs.plugin_data_roots(),
+        }
+    }
+
+    fn report_rename_side_data(&mut self, completed: CompletedRenameSideData) {
+        for error in completed.errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato di {} non ha potuto seguire la rinomina in {} — {error}",
+                completed.from, completed.to
+            ));
+        }
     }
 
     fn migrate_side_data(&mut self, from: &DocId, to: &DocId) {
