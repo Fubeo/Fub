@@ -115,7 +115,7 @@ pub use viewstate::ViewStates;
 pub use workspace::{
     new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
     ExternalRenamePlan, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange,
-    ParsedExternalAssetRename, ParsedExternalRename, PendingExternalAssetRename, PendingSyncChange,
-    PreparedCatchUp, PreparedExternalAssetRename, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB,
-    MAIN_PANE,
+    ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
+    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedExplicitRename,
+    PreparedExternalAssetRename, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, MAIN_PANE,
 };
