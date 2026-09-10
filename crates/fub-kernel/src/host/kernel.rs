@@ -191,19 +191,26 @@ impl VaultStructure for KernelHost<'_> {
         self.ws.delete_document(&id).map_err(PluginError::from)
     }
 
-    fn restore_document(
-        &mut self,
-        _entry: &DocId,
-        _to: Option<DocId>,
-    ) -> Result<DocId, PluginError> {
-        // Il trait ABI è sincrono, ma un ripristino attraversa parser e indici.
-        // `KernelHost` vive dentro un prestito di `Workspace`: offrirlo qui
-        // renderebbe inevitabile richiamare provider sotto quella guardia.
-        // I caller di processo usano `JobHost`, che orchestra lo stesso
-        // protocollo staged rilasciando `Custody<Workspace>` fra le fasi.
-        Err(PluginError::Internal(
-            "restore_document richiede un host proprietario staccato".into(),
-        ))
+    fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
+        let prepared = self
+            .ws
+            .prepare_document_restore(entry, to)
+            .map_err(PluginError::from)?;
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let pending = self
+            .ws
+            .commit_document_restore(completed)
+            .map_err(|failure| {
+                let (error, _) = *failure;
+                error
+            })?;
+        let pending = pending.invoke_indexes();
+        self.ws
+            .finish_document_restore(pending)
+            .map_err(|failure| {
+                let (error, _) = *failure;
+                error
+            })
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
