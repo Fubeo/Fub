@@ -582,7 +582,16 @@ impl ExternalSync {
             ws.prepare_catch_up()
         };
         // Fase 1b — camminata e filtro delle impronte fuori da Custody.
-        let snapshot = scan.invoke();
+        let snapshot = match scan.invoke() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                if let Ok(mut ws) = self.workspace.write() {
+                    ws.note_catch_up_failure(error);
+                }
+                let _ = drain_events(&self.workspace);
+                return;
+            }
+        };
         // Fase 1c — piani puri sullo stato corrente del kernel.
         let plans = {
             let Ok(ws) = self.workspace.read() else {

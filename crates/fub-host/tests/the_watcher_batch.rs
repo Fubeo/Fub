@@ -17,6 +17,7 @@
 //! nella fase 1 di `ExternalSync::batch` compila, passa ogni test funzionale e
 //! non si vede in nessuna diff che non sia questa.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -103,6 +104,7 @@ impl FormatProvider for Slow {
 struct BlockingListStorage {
     inner: MemStorage,
     gate: Arc<Gate>,
+    fail: AtomicBool,
 }
 
 impl BlockingListStorage {
@@ -110,6 +112,7 @@ impl BlockingListStorage {
         Self {
             inner: MemStorage::new(),
             gate,
+            fail: AtomicBool::new(false),
         }
     }
 }
@@ -144,6 +147,12 @@ impl VaultStorage for BlockingListStorage {
     }
 
     fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        if self.fail.load(Ordering::Relaxed) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "catch-up list denied",
+            ));
+        }
         self.gate.traverse();
         self.inner.list(dir)
     }
@@ -304,6 +313,30 @@ fn who_reads_enters_while_catch_up_scans_the_vault() {
         entry(&ws.read().unwrap(), &DocId::new("nota.md")).fingerprint,
         Some(Revision::of("after\n")),
         "catch-up scanned the vault but applied nothing"
+    );
+
+    let failures = ws.read().unwrap().bus().subscribe();
+    storage.fail.store(true, Ordering::Relaxed);
+    ExternalSync::new(ws.clone()).catch_up();
+    let status = match ws
+        .read()
+        .unwrap()
+        .query_index(IndexQuery::VaultStatus)
+    {
+        Ok(IndexResult::VaultStatus(status)) => status,
+        other => panic!("expected vault status, got {other:?}"),
+    };
+    assert_eq!(
+        status.sync_failures, 1,
+        "a failed catch-up scan must be observable in vault status"
+    );
+    assert_eq!(
+        failures
+            .try_iter()
+            .filter(|notice| matches!(&notice.event, Event::Trouble { .. }))
+            .count(),
+        1,
+        "one failed scan must be reported exactly once"
     );
 }
 

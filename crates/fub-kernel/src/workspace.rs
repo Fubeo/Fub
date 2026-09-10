@@ -476,9 +476,10 @@ enum ParsedChangeState {
     Ready {
         model: Box<DocumentModel>,
         fingerprint: Revision,
+        stat: crate::storage::Stat,
     },
     Entry(Option<crate::storage::Stat>),
-    Unchanged,
+    Unchanged(crate::storage::Stat),
     Missing,
     Unstable,
     Failed(KernelError),
@@ -488,12 +489,14 @@ enum PendingSyncState {
     Feed(Box<PreparedDocumentFeed>),
     Removal(PreparedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
+    Unchanged(crate::storage::Stat),
 }
 
 enum CompletedSyncState {
     Feed(Box<PreparedDocumentFeed>),
     Removal(CompletedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
+    Unchanged(crate::storage::Stat),
 }
 
 impl SyncPlan {
@@ -717,13 +720,9 @@ impl PreparedCatchUp {
     /// Soltanto un `size + mtime` uguale rende il file eleggibile al salto, e
     /// l'impronta sui byte decide poi se è davvero rimasto uguale. Un metadato
     /// diverso o una lettura fallita resta candidato.
-    pub fn invoke(self) -> CatchUpSnapshot {
+    pub fn invoke(self) -> Result<CatchUpSnapshot> {
         let PreparedCatchUp { vault, entries } = self;
-        let Ok(scanned) = vault.scan() else {
-            return CatchUpSnapshot {
-                candidates: BTreeMap::new(),
-            };
-        };
+        let scanned = vault.scan()?;
         let mut candidates = BTreeMap::new();
         let mut on_disk = BTreeSet::new();
         for file in scanned.files {
@@ -750,7 +749,7 @@ impl PreparedCatchUp {
                 candidates.insert(id.clone(), path);
             }
         }
-        CatchUpSnapshot { candidates }
+        Ok(CatchUpSnapshot { candidates })
     }
 }
 
@@ -766,6 +765,7 @@ impl PendingSyncChange {
                 CompletedSyncState::Removal(removal.invoke())
             }
             PendingSyncState::Entry(stat) => CompletedSyncState::Entry(stat),
+            PendingSyncState::Unchanged(stat) => CompletedSyncState::Unchanged(stat),
         };
         CompletedSyncChange { snapshot, state }
     }
@@ -815,7 +815,7 @@ fn invoke_sync_read(
     }
     let fingerprint = Revision::of_bytes(&bytes);
     if already_ingested && snapshot.seen.as_ref() == Some(&fingerprint) {
-        return ParsedChangeState::Unchanged;
+        return ParsedChangeState::Unchanged(after);
     }
     let source = match source_kind {
         SourceKind::Text => match fub_abi::rules::text_policy::decode(&bytes) {
@@ -841,6 +841,7 @@ fn invoke_sync_read(
         Ok(model) => ParsedChangeState::Ready {
             model: Box::new(model),
             fingerprint,
+            stat: after,
         },
         Err(error) => ParsedChangeState::Failed(error),
     }
@@ -5356,14 +5357,18 @@ impl Workspace {
             }
             let ParsedChange { snapshot, state } = parsed;
             match state {
-                ParsedChangeState::Ready { model, fingerprint } => {
+                ParsedChangeState::Ready {
+                    model,
+                    fingerprint,
+                    stat,
+                } => {
                     self.indexes.ensure_mutation_available()?;
                     let feed = self.as_actor(Actor::Watcher, |ws| {
                         ws.prepare_ingest_model(
                             &snapshot.id,
                             *model,
                             fingerprint,
-                            None,
+                            Some((stat.size, stat.mtime)),
                             JournalOp::Written {
                                 doc: snapshot.id.clone(),
                                 from: snapshot.seen.clone(),
@@ -5391,7 +5396,11 @@ impl Workspace {
                     state: PendingSyncState::Entry(stat),
                 })),
                 ParsedChangeState::Failed(error) => Err(error),
-                ParsedChangeState::Unchanged | ParsedChangeState::Unstable => Ok(None),
+                ParsedChangeState::Unchanged(stat) => Ok(Some(PendingSyncChange {
+                    snapshot,
+                    state: PendingSyncState::Unchanged(stat),
+                })),
+                ParsedChangeState::Unstable => Ok(None),
             }
         })();
         self.notes_sync(abs, &outcome);
@@ -5471,6 +5480,27 @@ impl Workspace {
                     });
                     true
                 })
+            }
+            CompletedSyncState::Unchanged(stat) => {
+                if snapshot.workspace_id != self.workspace_id
+                    || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                        != Some(&snapshot.id)
+                    || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
+                    || snapshot.syntax_generation != self.syntax_generation
+                    || snapshot.routing_generation != self.indexes.routing_generation()
+                {
+                    return Ok(false);
+                }
+                let Some(fingerprint) = snapshot.seen else {
+                    return Ok(false);
+                };
+                self.set_entry(
+                    &snapshot.id,
+                    stat.size,
+                    stat.mtime,
+                    Some(fingerprint),
+                );
+                Ok(false)
             }
         }
     }
@@ -5601,6 +5631,14 @@ impl Workspace {
             ws.report_trouble(Severity::Warning, subject, reason, None);
             ws.dispatch_pending();
         });
+    }
+
+    /// Registra un fallimento della scansione detached di catch-up sulle stesse
+    /// superfici delle sincronizzazioni per-path.
+    pub fn note_catch_up_failure(&mut self, error: KernelError) {
+        let root = self.docs.vault.root().to_owned();
+        let outcome: Result<()> = Err(error);
+        self.notes_sync(&root, &outcome);
     }
 
     fn sync_path_here(&mut self, abs: &Utf8Path) -> Result<bool> {
