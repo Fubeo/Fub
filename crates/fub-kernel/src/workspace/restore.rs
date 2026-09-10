@@ -7,7 +7,7 @@ enum RestoreContent {
     Document {
         source: DocumentSource,
         revision: Revision,
-        parser: PreparedParse,
+        parser: Box<PreparedParse>,
     },
     Attachment {
         revision: Revision,
@@ -64,7 +64,11 @@ impl PreparedDocumentRestore {
                 source,
                 revision,
                 parser,
-            } => (Some(source.kind()), revision, Some(parser.invoke(source)?)),
+            } => (
+                Some(source.kind()),
+                revision,
+                Some((*parser).invoke(source)?),
+            ),
             RestoreContent::Attachment { revision } => (None, revision, None),
         };
         Ok(CompletedDocumentRestore {
@@ -131,7 +135,7 @@ impl Workspace {
                 RestoreContent::Document {
                     source,
                     revision,
-                    parser,
+                    parser: Box::new(parser),
                 }
             }
             None => RestoreContent::Attachment {
