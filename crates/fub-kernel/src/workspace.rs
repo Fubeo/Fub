@@ -307,17 +307,17 @@ pub struct SyncPlan {
 /// invocarli. [`PreparedExplicitRename::invoke`] esegue lo stat-read-stat e il
 /// parse senza prendere in prestito il workspace.
 #[must_use = "la rinomina preparata deve essere invocata e committata"]
-pub(crate) struct PreparedExplicitRename {
+pub struct PreparedExplicitRename {
     snapshot: ExplicitRenameSnapshot,
     storage: Arc<dyn crate::storage::VaultStorage>,
     parser: PreparedParse,
     source_kind: SourceKind,
-    rewrites: Vec<(DocId, EditRequest)>,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
 }
 
 /// Sorgente stabile e modello già parsato, ancora da riconvalidare nel core.
 #[must_use = "la rinomina parsata deve essere committata"]
-pub(crate) struct ParsedExplicitRename {
+pub struct ParsedExplicitRename {
     snapshot: ExplicitRenameSnapshot,
     model: DocumentModel,
     fingerprint: Revision,
@@ -328,12 +328,26 @@ pub(crate) struct ParsedExplicitRename {
 struct ExplicitRenameSnapshot {
     workspace_id: u64,
     from_path: Utf8PathBuf,
+    to_path: Utf8PathBuf,
     from: DocId,
     to: DocId,
     from_entry: VaultEntry,
     to_entry: Option<VaultEntry>,
     syntax_generation: u64,
     routing_generation: u64,
+}
+
+struct PreparedExplicitLinkRewrite {
+    source_path: Utf8PathBuf,
+    destination: DocId,
+    edits: Vec<PreparedExplicitLinkEdit>,
+}
+
+struct PreparedExplicitLinkEdit {
+    span: Span,
+    written: String,
+    replacement: String,
+    from_end: bool,
 }
 
 /// Routing owned di una rinomina consegnata dal watcher.
@@ -586,9 +600,10 @@ impl SyncPlan {
 }
 
 impl PreparedExplicitRename {
-    /// Legge una sola versione stabile della sorgente e la parsa con l'identità
-    /// di destinazione già risolta durante la preparazione.
-    pub(crate) fn invoke(self) -> Result<ParsedExplicitRename> {
+    /// Verifica la collisione sul disco, legge una sola versione stabile della
+    /// sorgente, la parsa col nuovo id e costruisce le richieste CAS dei
+    /// backlink. Tutto avviene senza un prestito del workspace.
+    pub fn invoke(self) -> Result<ParsedExplicitRename> {
         let PreparedExplicitRename {
             snapshot,
             storage,
@@ -596,6 +611,11 @@ impl PreparedExplicitRename {
             source_kind,
             rewrites,
         } = self;
+        let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
+        if !same_file && storage.exists(&snapshot.to_path) {
+            return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
+        }
+
         let path = snapshot.from_path.clone();
         let before = storage.stat(&path).map_err(|source| KernelError::Io {
             path: path.clone(),
@@ -631,6 +651,40 @@ impl PreparedExplicitRename {
             SourceKind::Bytes => DocumentSource::Bytes(bytes),
         };
         let model = parser.invoke(source)?;
+
+        let rewrites = rewrites
+            .into_iter()
+            .filter_map(|prepared| {
+                let bytes = storage.read(&prepared.source_path).ok()?;
+                let source = fub_abi::rules::text_policy::decode(&bytes).ok()?;
+                let mut edits = Vec::new();
+                for prepared_edit in prepared.edits {
+                    let Some(slice) = source.get(prepared_edit.span.start..prepared_edit.span.end)
+                    else {
+                        continue;
+                    };
+                    let found = if prepared_edit.from_end {
+                        slice.rfind(&prepared_edit.written)
+                    } else {
+                        slice.find(&prepared_edit.written)
+                    };
+                    let Some(relative) = found else {
+                        continue;
+                    };
+                    let start = prepared_edit.span.start + relative;
+                    edits.push(TextEdit::replace(
+                        Span::new(start, start + prepared_edit.written.len()),
+                        prepared_edit.replacement,
+                    ));
+                }
+                (!edits.is_empty()).then(|| {
+                    (
+                        prepared.destination,
+                        EditRequest::new(Revision::of(source), edits),
+                    )
+                })
+            })
+            .collect();
         Ok(ParsedExplicitRename {
             snapshot,
             model,
@@ -6288,34 +6342,42 @@ impl Workspace {
             return Err(KernelError::NotFound(from.to_string()));
         }
 
-        let prepared = self.prepare_explicit_rename(from, to)?;
+        let prepared = self
+            .prepare_explicit_rename(from, to)?
+            .expect("il documento è già stato classificato");
         let parsed = prepared.invoke()?;
-        self.commit_explicit_rename(parsed)
+        self.commit_explicit_rename_in_batch(parsed)
     }
 
-    /// Fotografa core, routing e pipeline di parse senza leggere il vault né
-    /// invocare provider. Il piano dei backlink nasce col vecchio nome ancora
-    /// risolvibile.
-    pub(crate) fn prepare_explicit_rename(
+    /// Classifica e fotografa core, routing e pipeline di parse senza I/O né
+    /// callback. `None` conserva i due percorsi che non hanno lavoro detached:
+    /// no-op e rinomina di una voce non-documento.
+    pub fn prepare_explicit_rename(
         &self,
         from: &DocId,
         to: &DocId,
-    ) -> Result<PreparedExplicitRename> {
-        let same_file = self.docs.vault.same_file(from, to);
-        let to_entry = self.indexes.core.entries.get(to).cloned();
-        if to_entry.is_some()
-            || self.indexes.core.metas.contains_key(to)
-            || (!same_file && self.docs.vault.exists(to))
-        {
+    ) -> Result<Option<PreparedExplicitRename>> {
+        let to = new_doc_id(to.as_str())?;
+        if from == &to {
+            return Ok(None);
+        }
+        if !self.indexes.core.metas.contains_key(from) {
+            if self.indexes.core.entries.contains_key(from) {
+                return Ok(None);
+            }
+            return Err(KernelError::NotFound(from.to_string()));
+        }
+        let to_entry = self.indexes.core.entries.get(&to).cloned();
+        if to_entry.is_some() || self.indexes.core.metas.contains_key(&to) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
-        let ext = extension_of(to).unwrap_or_default();
+        let ext = extension_of(&to).unwrap_or_default();
         let descriptor = self
             .docs
             .registry
             .descriptor_for_ext(&ext)
             .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
-        let parser = self.docs.prepare_parse(to)?;
+        let parser = self.docs.prepare_parse(&to)?;
         let from_entry = self
             .indexes
             .core
@@ -6323,10 +6385,11 @@ impl Workspace {
             .get(from)
             .cloned()
             .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
-        Ok(PreparedExplicitRename {
+        Ok(Some(PreparedExplicitRename {
             snapshot: ExplicitRenameSnapshot {
                 workspace_id: self.workspace_id,
                 from_path: self.docs.vault.path_for(from)?,
+                to_path: self.docs.vault.path_for(&to)?,
                 from: from.clone(),
                 to: to.clone(),
                 from_entry,
@@ -6337,14 +6400,19 @@ impl Workspace {
             storage: Arc::clone(self.docs.vault.storage()),
             parser,
             source_kind: descriptor.source,
-            rewrites: self.link_rewrite_plan(from, to),
-        })
+            rewrites: self.prepare_explicit_link_rewrites(from, &to),
+        }))
+    }
+
+    /// Applica una rinomina invocata fuori dal workspace dentro un unico lotto.
+    pub fn commit_explicit_rename(&mut self, parsed: ParsedExplicitRename) -> Result<()> {
+        self.batch(|workspace| workspace.commit_explicit_rename_in_batch(parsed))
     }
 
     /// Riconvalida integralmente la fotografia prima della prima mutazione,
     /// quindi conserva l'ordine storico side-data → file → core → journal →
     /// backlink → `IndexUpdated`.
-    pub(crate) fn commit_explicit_rename(&mut self, parsed: ParsedExplicitRename) -> Result<()> {
+    fn commit_explicit_rename_in_batch(&mut self, parsed: ParsedExplicitRename) -> Result<()> {
         let ParsedExplicitRename {
             snapshot,
             model,
@@ -6922,11 +6990,10 @@ impl Workspace {
     /// link, mai il resto del documento (heading `#...`, blocco `^...`, alias
     /// `|label` e formattazione restano intatti).
     ///
-    /// Il piano è fatto di [`EditRequest`], non di sorgenti intere: è lo stesso
-    /// calcolo di prima — gli span dei link li dava già il modello — detto nella
-    /// forma che il contratto ora ha (decisione 0008). La `base` di ognuna è la revisione
-    /// del sorgente **letto qui**, ed è ciò che impedisce che una riscrittura
-    /// arrivata nel frattempo venga cancellata dal piano.
+    /// La prepare conserva span, testo atteso e sostituzione senza leggere
+    /// sorgenti. L'`invoke` owned legge ciascuna sorgente e costruisce
+    /// l'[`EditRequest`] con la revisione CAS osservata in quel momento, così
+    /// una scrittura successiva non viene cancellata dal piano.
     ///
     /// Vale per **entrambe le specie di link**, e la seconda ha un caso in più
     /// della prima. Un wikilink si rompe solo se si sposta il suo bersaglio; un
@@ -6936,43 +7003,13 @@ impl Workspace {
     /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
     /// nuova — e non solo quando linka se stesso.
     // Nuovo riferimento: il nome pagina se nessun altro documento lo
-    fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
+    fn prepare_explicit_link_rewrites(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Vec<PreparedExplicitLinkRewrite> {
         let from_name = resolution_key(from.page_name());
         let from_path = resolution_key(&strip_ext(from.as_str()));
-
-        // contende, altrimenti il path senza estensione, altrimenti il path
-        // intero.
-        //
-        // **La terza forma esiste perché la seconda non è «sempre univoca»**,
-        // come questo commento ha dichiarato fino alla
-        // [0107](../../../docs/decisions/0192-impostazioni-locale-e-temi.md): la
-        // chiave di `path_index` è `resolution_key(strip_ext(…))`, quindi
-        // `sub/Nota.md` e `sub/nota.txt` la condividono. E qui non si sta
-        // scegliendo cosa mostrare a schermo: si sta **scrivendo su disco nei
-        // documenti di terzi**, cioè producendo il riferimento che un altro
-        // programma leggerà fra un anno.
-        //
-        // **La prova non si può fare qui**, ed è stato misurato provandoci: la
-        // strada onesta sarebbe chiedere al grafo se il riferimento scelto torna
-        // davvero a `to`, ma questo piano si calcola *prima* che il rename sia
-        // applicato — il grafo conosce ancora `from` e non ha mai sentito
-        // nominare `to`. Ogni candidato risulterebbe sbagliato, e la
-        // riscrittura scriverebbe sempre la forma più lunga. Quindi resta una
-        // regola; ciò che cambia è che adesso la seconda condizione la si
-        // **verifica** invece di affermarla.
-        // **`metas` e non `entries`, ed è la scelta giusta** (difetto 0059, che
-        // affermava il contrario). La gemella qui accanto — `entry_rewrite_plan`,
-        // che sposta un allegato — cerca gli omonimi nell'anagrafe, e la
-        // differenza fra le due non è una svista: **ogni piano cerca l'omonimia
-        // nel registro che il proprio risolutore legge**. Un wikilink verso un
-        // allegato lo risolve la chiave dei nomi dell'anagrafe, che porta il
-        // nome del file **con l'estensione** (`![[foto.png]]`, mai `[[foto]]`),
-        // quindi un allegato non contende mai un *nome pagina*; e dove le due
-        // stringhe coincidono davvero — un file senza estensione — chi risolve
-        // prova il grafo per primo e ripiega sull'anagrafe solo se lì non ha
-        // trovato niente. Allargare la ricerca a `entries` scriverebbe il path
-        // intero dentro i documenti di terzi per un'ambiguità che non esiste.
-        // La stessa domanda sul path senza estensione, che è la chiave di
         let to_name = to.page_name();
         let ambiguous = self
             .indexes
@@ -6980,10 +7017,6 @@ impl Workspace {
             .metas
             .keys()
             .any(|id| id != from && resolution_key(id.page_name()) == resolution_key(to_name));
-        // `path_index`: `sub/Nota.md` e `sub/nota.txt` la condividono, quindi
-        // due file possono contenderselo esattamente come si contendono un
-        // nome. Dove anche questa è contesa si scrive il path **intero**.
-        // Le note che linkano `from`, **una volta ciascuna**: chi lo cita tre
         let to_path_key = resolution_key(&strip_ext(to.as_str()));
         let path_ambiguous = self
             .indexes
@@ -6999,54 +7032,32 @@ impl Workspace {
             to.as_str().to_string()
         };
 
-        // volte va riscritto una volta sola, e il filtro per-link qui sotto
-        // cammina già tutti i suoi link. Prima questo era un `.map().collect()`
-        // in un `BTreeSet` costruito qui: adesso l'insieme lo dice la firma.
-        // Il self-link è escluso dai backlink per scelta, ma al rename va
         let mut sources: BTreeSet<DocId> =
             self.indexes.core.graph.linked(from, LinkDirection::Inbound);
-        // riscritto come gli altri: `[[Nota]]` dentro la nota stessa resterebbe
-        // dangling — e verrebbe dirottato da chi ricreasse il vecchio nome. Ai
-        // link markdown serve comunque (vedi la nota sopra: sposta la
-        // sorgente), quindi `from` entra sempre e sarà il filtro per-link a
-        // dire se c'è davvero qualcosa da riscrivere.
-        // `from_end` è la direzione in cui cercare il riferimento
         sources.insert(from.clone());
 
-        let mut plan = Vec::new();
-        for src in sources {
-            let Some(metadata) = self.indexes.core.metas.get(&src) else {
+        let mut prepared = Vec::new();
+        for source in sources {
+            let Some(metadata) = self.indexes.core.metas.get(&source) else {
                 continue;
             };
-            let Ok(source_text) = self.docs.vault.read(&src) else {
-                continue;
-            };
-            let mut edits: Vec<TextEdit> = Vec::new();
+            let mut edits = Vec::new();
             for link in &metadata.links {
-                // dentro lo span, e non è una preferenza: in `[[Nota|Nota]]` la
-                // pagina è la **prima** delle due occorrenze, in
-                // `[Nota.md](Nota.md)` la destinazione è la **seconda**. Chi
-                // sbaglia direzione riscrive l'etichetta e lascia il link rotto.
-                // Riscrivi solo se il link puntava davvero a `from`
                 let (written, replacement, from_end) = match &link.target {
                     LinkTarget::Wiki { page, .. } => {
-                        // (non a un omonimo) e ci arrivava per nome o per path
-                        // — mai per alias.
-                        // La sorgente rinominata vive ormai al path nuovo: la sua
                         let key = resolution_key(page);
                         let by_name = key == from_name;
                         let by_path =
                             key == from_path || resolution_key(&strip_ext(&key)) == from_path;
-                        if !(by_name || by_path) {
+                        if !(by_name || by_path)
+                            || self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from)
+                        {
                             continue;
                         }
-                        if self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from) {
-                            continue;
-                        }
-                        (page.as_str(), new_ref.clone(), false)
+                        (page.clone(), new_ref.clone(), false)
                     }
                     LinkTarget::Path(written) => {
-                        let Some(new_target) = self.rebased_path_link(from, to, &src, written)
+                        let Some(new_target) = self.rebased_path_link(from, to, &source, written)
                         else {
                             continue;
                         };
@@ -7055,39 +7066,31 @@ impl Workspace {
                         if rewritten == *written {
                             continue;
                         }
-                        (written.as_str(), rewritten, true)
+                        (written.clone(), rewritten, true)
                     }
                     LinkTarget::Url(_) => continue,
                 };
-                let Some(slice) = source_text.get(link.span.start..link.span.end) else {
-                    continue;
-                };
-                let found = if from_end {
-                    slice.rfind(written)
-                } else {
-                    slice.find(written)
-                };
-                let Some(rel) = found else {
-                    continue;
-                };
-                let start = link.span.start + rel;
-                edits.push(TextEdit::replace(
-                    Span::new(start, start + written.len()),
+                edits.push(PreparedExplicitLinkEdit {
+                    span: link.span.clone(),
+                    written,
                     replacement,
-                ));
+                    from_end,
+                });
             }
             if edits.is_empty() {
                 continue;
             }
-            // riscrittura va applicata lì — e la base resta valida, perché un
-            // rename sposta il file senza toccarne il contenuto. È una proprietà
-            // della revisione-impronta: un contatore per-documento, qui, avrebbe
-            // detto che il documento è cambiato.
-            // La destinazione che il link markdown `written`, scritto dentro `src`,
-            let dest = if &src == from { to.clone() } else { src };
-            plan.push((dest, EditRequest::new(Revision::of(&source_text), edits)));
+            let Ok(source_path) = self.docs.vault.path_for(&source) else {
+                continue;
+            };
+            let destination = if &source == from { to.clone() } else { source };
+            prepared.push(PreparedExplicitLinkRewrite {
+                source_path,
+                destination,
+                edits,
+            });
         }
-        plan
+        prepared
     }
 
     /// deve avere dopo il rename `from` → `to`; `None` se non va toccato.
