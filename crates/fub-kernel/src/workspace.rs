@@ -2068,6 +2068,107 @@ const TIMER_CURSORS_FILE: &str = "timers.json";
 /// scambiarla per dati.
 const PLUGIN_CACHE_MARK: &str = ".fub-cache-root";
 
+/// Token owned per l'I/O dello spazio dati di un plugin.
+///
+/// Il workspace valida e congela radici e path; ogni domanda al supporto,
+/// inclusa la scelta fra namespace canonico e legacy e il marcatore cache,
+/// avviene soltanto quando il token viene invocato.
+pub struct PreparedPluginDataIo {
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    canonical_root: Utf8PathBuf,
+    cache_root: Utf8PathBuf,
+    cache_mark: Utf8PathBuf,
+    canonical_path: Utf8PathBuf,
+    cache_path: Utf8PathBuf,
+}
+
+impl PreparedPluginDataIo {
+    fn authoritative_uses_canonical(&self) -> bool {
+        self.storage.exists(&self.canonical_root)
+            || !self.storage.exists(&self.cache_root)
+            || self.storage.exists(&self.cache_mark)
+    }
+
+    fn authoritative_path(&self) -> &Utf8Path {
+        if self.authoritative_uses_canonical() {
+            &self.canonical_path
+        } else {
+            &self.cache_path
+        }
+    }
+
+    pub fn read_authoritative(self) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        let path = self.authoritative_path();
+        match self.storage.read(path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(PluginError::Internal(format!("{path}: {error}").into())),
+        }
+    }
+
+    pub fn list_authoritative(self) -> Vec<String> {
+        let (root, dir) = if self.authoritative_uses_canonical() {
+            (&self.canonical_root, &self.canonical_path)
+        } else {
+            (&self.cache_root, &self.cache_path)
+        };
+        let mut paths = Vec::new();
+        collect_data_files(self.storage.as_ref(), root, dir, &mut paths);
+        paths.sort_unstable();
+        paths
+    }
+
+    pub fn read_cache(self) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        match self.storage.read(&self.cache_path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(PluginError::Internal(
+                format!("{}: {error}", self.cache_path).into(),
+            )),
+        }
+    }
+
+    pub fn write_authoritative(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        let path = self.authoritative_path();
+        self.storage
+            .write(path, bytes)
+            .map(|_| ())
+            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+    }
+
+    pub fn remove_authoritative(self) -> std::result::Result<(), PluginError> {
+        let path = self.authoritative_path();
+        match self.storage.remove(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(PluginError::Io(format!("{path}: {error}").into())),
+        }
+    }
+
+    pub fn write_cache(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        if !self.authoritative_uses_canonical() {
+            self.storage
+                .rename(&self.cache_root, &self.canonical_root)
+                .map_err(|error| {
+                    PluginError::Io(
+                        format!(
+                            "migrazione `{}` → `{}`: {error}",
+                            self.cache_root, self.canonical_root
+                        )
+                        .into(),
+                    )
+                })?;
+        }
+        self.storage
+            .write_derived(&self.cache_mark, b"cache\n")
+            .map_err(|error| PluginError::Io(format!("{}: {error}", self.cache_mark).into()))?;
+        self.storage
+            .write(&self.cache_path, bytes)
+            .map(|_| ())
+            .map_err(|error| PluginError::Io(format!("{}: {error}", self.cache_path).into()))
+    }
+}
+
 impl Workspace {
     /// popolato, e **senza livello macchina**: le impostazioni di macchina
     /// vivono in memoria e non toccano il disco.
@@ -10309,6 +10410,30 @@ impl Workspace {
         } else {
             self.plugin_cache_path(plugin, rel)
         }
+    }
+
+    /// Congela supporto, namespace e path validati per una singola operazione
+    /// `data_*`; il token non esegue I/O finché non viene invocato.
+    pub fn prepare_plugin_data_io(
+        &self,
+        plugin: &str,
+        rel: &str,
+    ) -> std::result::Result<PreparedPluginDataIo, PluginError> {
+        let canonical_root = self.plugin_data_root(plugin);
+        let cache_root = self.plugin_cache_root(plugin);
+        let canonical_path = self.plugin_data_path(plugin, rel)?;
+        let relative = canonical_path
+            .strip_prefix(&canonical_root)
+            .map_err(|_| PluginError::Internal("cache path outside plugin root".into()))?;
+        let cache_path = cache_root.join(relative);
+        Ok(PreparedPluginDataIo {
+            storage: Arc::clone(self.storage()),
+            cache_mark: cache_root.join(PLUGIN_CACHE_MARK),
+            canonical_root,
+            cache_root,
+            canonical_path,
+            cache_path,
+        })
     }
 
     /// Prima di `cache_write`: se il vecchio albero è ancora autorevole, lo

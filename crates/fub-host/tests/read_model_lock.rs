@@ -25,8 +25,8 @@ use fub_abi::format::{
 use fub_abi::model::{Block, DocId, DocumentModel};
 use fub_abi::options::{permission, syntax};
 use fub_abi::traits::{
-    HostQuery, IndexQuery, IndexResult, PluginManifest, PluginPermissions, VaultRead,
-    VaultStructure,
+    DataRead, DataWrite, HostQuery, IndexQuery, IndexResult, PluginManifest, PluginPermissions,
+    VaultRead, VaultStructure,
 };
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
@@ -81,6 +81,10 @@ enum Stage {
     Syntax,
     TrashList,
     SourceRead,
+    DataRead,
+    DataList,
+    DataWrite,
+    DataRemove,
 }
 
 struct BlockingRestoreStorage {
@@ -93,6 +97,8 @@ struct BlockingRestoreStorage {
     read_hits: AtomicUsize,
     entered: mpsc::SyncSender<Stage>,
     release: Mutex<mpsc::Receiver<()>>,
+    data_probe: Mutex<Option<(Stage, Utf8PathBuf)>>,
+    data_hits: AtomicUsize,
 }
 
 impl BlockingRestoreStorage {
@@ -107,6 +113,32 @@ impl BlockingRestoreStorage {
         self.armed.store(true, Ordering::SeqCst);
     }
 
+    fn arm_data(&self, stage: Stage, path: Utf8PathBuf, blocking: bool) {
+        *self
+            .data_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((stage, path));
+        self.data_hits.store(0, Ordering::SeqCst);
+        self.blocking.store(blocking, Ordering::SeqCst);
+        self.armed.store(true, Ordering::SeqCst);
+    }
+
+    fn observe_data(&self, stage: Stage, path: &Utf8Path) {
+        if !self.armed.load(Ordering::SeqCst) {
+            return;
+        }
+        self.data_hits.fetch_add(1, Ordering::SeqCst);
+        let matches = self
+            .data_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .is_some_and(|probe| probe == &(stage, path.to_owned()));
+        if matches {
+            self.traverse(stage);
+        }
+    }
+
     fn traverse(&self, stage: Stage) {
         match stage {
             Stage::TrashList => {
@@ -116,18 +148,26 @@ impl BlockingRestoreStorage {
                 self.read_hits.fetch_add(1, Ordering::SeqCst);
             }
             Stage::Parse | Stage::Syntax => unreachable!("storage stage"),
+            Stage::DataRead | Stage::DataList | Stage::DataWrite | Stage::DataRemove => {}
         }
         if self.blocking.load(Ordering::SeqCst) {
             self.entered
                 .send(stage)
-                .expect("restore probe observes I/O");
+                .expect("storage probe observes I/O");
             self.release
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
                 .recv_timeout(TIMEOUT)
-                .expect("restore I/O probe is released");
+                .expect("storage I/O probe is released");
         }
-        if stage == Stage::SourceRead {
+        if matches!(
+            stage,
+            Stage::SourceRead
+                | Stage::DataRead
+                | Stage::DataList
+                | Stage::DataWrite
+                | Stage::DataRemove
+        ) {
             self.armed.store(false, Ordering::SeqCst);
         }
     }
@@ -135,6 +175,7 @@ impl BlockingRestoreStorage {
 
 impl VaultStorage for BlockingRestoreStorage {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        self.observe_data(Stage::DataRead, path);
         let source = self
             .source
             .lock()
@@ -147,6 +188,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.observe_data(Stage::DataWrite, path);
         self.inner.write(path, bytes)
     }
 
@@ -167,10 +209,12 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.observe_data(Stage::DataRemove, path);
         self.inner.remove(path)
     }
 
     fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.observe_data(Stage::DataList, dir);
         if self.armed.load(Ordering::SeqCst) && dir == self.trash_dir {
             self.traverse(Stage::TrashList);
         }
@@ -178,6 +222,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.observe_data(Stage::DataRead, path);
         self.inner.stat(path)
     }
 
@@ -472,6 +517,8 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         read_hits: AtomicUsize::new(0),
         entered: entered_tx,
         release: Mutex::new(release_rx),
+        data_probe: Mutex::new(None),
+        data_hits: AtomicUsize::new(0),
     });
     let parses = Arc::new(AtomicUsize::new(0));
     let mut formats = FormatRegistry::new();
@@ -560,6 +607,116 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         parses.load(Ordering::SeqCst),
         parses_before,
         "a denied explicit target never reaches the parser"
+    );
+}
+fn assert_data_storage_detached(
+    workspace: &Custody<Workspace>,
+    storage: &Arc<BlockingRestoreStorage>,
+    entered: &mpsc::Receiver<Stage>,
+    release: &mpsc::SyncSender<()>,
+    stage: Stage,
+    path: Utf8PathBuf,
+) {
+    storage.arm_data(stage, path, true);
+    let workspace_for_call = workspace.clone();
+    let worker = std::thread::spawn(move || {
+        let mut host = JobHost::new(workspace_for_call, PLUGIN);
+        match stage {
+            Stage::DataRead => {
+                assert_eq!(host.data_read("read.bin")?, Some(b"read".to_vec()));
+                Ok(())
+            }
+            Stage::DataList => {
+                assert!(host.data_list("")?.contains(&"read.bin".to_string()));
+                Ok(())
+            }
+            Stage::DataWrite => host.data_write("write.bin", b"write"),
+            Stage::DataRemove => host.data_remove("remove.bin"),
+            _ => unreachable!("JobHost data stage"),
+        }
+    });
+    assert_eq!(
+        entered.recv_timeout(TIMEOUT).expect("data I/O entered"),
+        stage
+    );
+    assert_workspace_is_free(workspace, "VaultStorage during JobHost data I/O");
+    release.send(()).expect("release data I/O");
+    worker
+        .join()
+        .expect("data I/O thread does not panic")
+        .expect("data I/O succeeds");
+}
+
+#[test]
+fn job_data_io_runs_without_workspace_guards_and_denial_precedes_storage() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let storage = Arc::new(BlockingRestoreStorage {
+        inner: FsStorage,
+        trash_dir: root.join(".trash"),
+        source: Mutex::new(None),
+        armed: AtomicBool::new(false),
+        blocking: AtomicBool::new(false),
+        list_hits: AtomicUsize::new(0),
+        read_hits: AtomicUsize::new(0),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+        data_probe: Mutex::new(None),
+        data_hits: AtomicUsize::new(0),
+    });
+    let mut workspace = Workspace::on(
+        &root,
+        FormatRegistry::new(),
+        storage.clone(),
+        MachineSettings::in_memory(),
+    )
+    .expect("workspace opens");
+    workspace
+        .register_plugin(
+            PluginManifest::core(PLUGIN, "Detached data I/O"),
+            Trust::Community,
+        )
+        .expect("data caller declares");
+    let workspace = Custody::new("the detached data workspace", workspace);
+    let canonical = root.join(".fub/plugins").join(PLUGIN);
+    let cache = root.join(".fub/data/plugins").join(PLUGIN);
+    let mut seed = JobHost::new(workspace.clone(), PLUGIN);
+    seed.data_write("read.bin", b"read").expect("seed data");
+    seed.data_write("remove.bin", b"remove")
+        .expect("seed removable data");
+
+    for (stage, path) in [
+        (Stage::DataRead, canonical.join("read.bin")),
+        (Stage::DataList, canonical.clone()),
+        (Stage::DataWrite, canonical.join("write.bin")),
+        (Stage::DataRemove, canonical.join("remove.bin")),
+    ] {
+        assert_data_storage_detached(&workspace, &storage, &entered_rx, &release_tx, stage, path);
+    }
+
+    storage.arm_data(Stage::DataRead, canonical.join("denied.bin"), false);
+    assert!(matches!(
+        JobHost::new(workspace.clone(), "unknown").data_read("denied.bin"),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(
+        storage.data_hits.load(Ordering::SeqCst),
+        0,
+        "an unknown caller reaches no storage operation"
+    );
+    storage.arm_data(Stage::DataWrite, cache.join("dry-run.bin"), false);
+    assert!(matches!(
+        JobHost::new(workspace, PLUGIN)
+            .in_mode(InvokeMode::DryRun)
+            .cache_write("dry-run.bin", b"forbidden"),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(
+        storage.data_hits.load(Ordering::SeqCst),
+        0,
+        "DryRun is rejected before cache namespace and marker I/O"
     );
 }
 

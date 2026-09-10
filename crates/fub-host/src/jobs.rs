@@ -73,7 +73,7 @@ use fub_abi::traits::{
 };
 use fub_abi::{Event, PluginError};
 use fub_kernel::host::{authorize_path, Capability, Guard, Policy};
-use fub_kernel::workspace::{DeferredEvents, EventDrain};
+use fub_kernel::workspace::{DeferredEvents, EventDrain, PreparedPluginDataIo};
 use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -239,6 +239,33 @@ impl JobHost {
     ) -> Result<R, PluginError> {
         self.stopped()?;
         self.writing(f)?
+    }
+
+    fn prepare_data_io(
+        &self,
+        capability: Capability,
+        path: &str,
+        action: impl Into<String>,
+    ) -> Result<PreparedPluginDataIo, PluginError> {
+        let action = action.into();
+        let workspace = self.workspace.read()?;
+        if self.mode == InvokeMode::DryRun && capability == Capability::DataWrite {
+            authorize_path(
+                &ReadOnly {
+                    why: "simulazione del comando",
+                },
+                capability,
+                path,
+                || action.clone(),
+            )?;
+        }
+        authorize_path(
+            &workspace.granted_policy(&self.plugin),
+            capability,
+            path,
+            || action,
+        )?;
+        workspace.prepare_plugin_data_io(&self.plugin, path)
     }
 
     fn write_document_detached(
@@ -688,29 +715,73 @@ impl VaultStructure for JobHost {
 
 impl DataRead for JobHost {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.read_result(|h| h.data_read(path))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("empty blob name".into()));
+        }
+        self.prepare_data_io(Capability::DataRead, path, format!("reading blob `{path}`"))?
+            .read_authoritative()
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        self.read_result(|h| h.data_list(prefix))
+        self.stopped()?;
+        Ok(self
+            .prepare_data_io(Capability::DataRead, prefix, "listing blobs")?
+            .list_authoritative())
     }
 
     fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.read_result(|h| h.cache_read(path))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("empty cache blob name".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataRead,
+            path,
+            format!("reading cache blob `{path}`"),
+        )?
+        .read_cache()
     }
 }
 
 impl DataWrite for JobHost {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.write_result(|h| h.data_write(path, bytes))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataWrite,
+            path,
+            format!("writing blob `{path}`"),
+        )?
+        .write_authoritative(bytes)
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.data_remove(path))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataWrite,
+            path,
+            format!("removing blob `{path}`"),
+        )?
+        .remove_authoritative()
     }
 
     fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.write_result(|h| h.cache_write(path, bytes))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome della cache vuoto".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataWrite,
+            path,
+            format!("writing cache blob `{path}`"),
+        )?
+        .write_cache(bytes)
     }
 }
 
