@@ -3686,6 +3686,19 @@ impl Workspace {
         })
     }
 
+    /// Prepara una creazione senza attraversare parser o hook esterni.
+    ///
+    /// Il nome nasce in questa operazione, quindi applica anche la portabilità
+    /// stretta e rifiuta una destinazione già occupata prima di restituire il
+    /// token staccato.
+    pub fn prepare_document_creation(&self, id: &DocId) -> Result<PreparedDocumentWrite> {
+        let id = new_doc_id(id.as_str())?;
+        if self.is_taken(&id) {
+            return Err(KernelError::AlreadyExists(id.to_string()));
+        }
+        self.prepare_document_write(&id, WriteBase::Dictated)
+    }
+
     /// Finalizza una scrittura già parsata. La CAS resta qui, sotto il writer
     /// turn, quindi il tempo passato nel provider non allarga la finestra fra
     /// expected e write per gli altri writer Fub.

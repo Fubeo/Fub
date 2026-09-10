@@ -228,6 +228,65 @@ impl JobHost {
         self.writing(f)?
     }
 
+    fn write_document_detached(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+        capability: Capability,
+        action: &str,
+        require_new: bool,
+    ) -> Result<Revision, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    capability,
+                    id.as_str(),
+                    || format!("{action} `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                capability,
+                id.as_str(),
+                || format!("{action} `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            if require_new {
+                ws.prepare_document_creation(&id)
+                    .map_err(PluginError::from)?
+            } else {
+                ws.prepare_document_write(&id, base)
+                    .map_err(PluginError::from)?
+            }
+        };
+        let model = prepared.parse(source).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_write(prepared, source, model, before_write)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_write_deferred(pending)
+        };
+        finish_events(&workspace, deferred)
+    }
+
     /// Una lettura: prestito **condiviso**, e N job che leggono non si aspettano
     /// né fra loro né con le view che disegnano.
     ///
@@ -384,37 +443,7 @@ impl VaultWrite for JobHost {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.stopped()?;
-        let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
-        let prepared = {
-            let ws = workspace.read()?;
-            let policy = ws.granted_policy(&self.plugin);
-            authorize_path(&policy, Capability::VaultWrite, id.as_str(), || {
-                format!("writing `{id}`")
-            })?;
-            let id = fenced_doc_id(id)?;
-            ws.prepare_document_write(&id, base)
-                .map_err(PluginError::from)?
-        };
-        let model = prepared.parse(source).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = self.for_provider(owner, InvokeMode::Apply);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
-        let pending = {
-            let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
-        };
-        let pending = pending.invoke_indexes();
-        let deferred = {
-            let mut ws = workspace.write()?;
-            ws.finish_document_write_deferred(pending)
-        };
-        finish_events(&workspace, deferred)
+        self.write_document_detached(id, source, base, Capability::VaultWrite, "writing", false)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
@@ -477,7 +506,15 @@ impl VaultWrite for JobHost {
 
 impl VaultStructure for JobHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.create_document(id, source))
+        self.write_document_detached(
+            id,
+            source,
+            WriteBase::Dictated,
+            Capability::VaultStructure,
+            "creating",
+            true,
+        )
+        .map(drop)
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {

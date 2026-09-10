@@ -6,7 +6,7 @@ use fub_abi::edit::{EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest, QueryRoute,
-    VaultEntry, VaultWrite,
+    VaultEntry, VaultStructure, VaultWrite,
 };
 use fub_abi::PluginError;
 use fub_host::{Host, JobHost, NoWatcher};
@@ -14,6 +14,7 @@ use fub_kernel::Trust;
 
 const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
 const EDIT_FEED_LOCK_PLUGIN: &str = "fub.audit-index-edit-feed";
+const CREATE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-create-feed";
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -174,5 +175,50 @@ fn an_edit_feed_runs_without_holding_the_workspace_lock() {
     assert_eq!(
         std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),
         "# Note 0 edited\n"
+    );
+}
+
+#[test]
+fn a_create_feed_runs_without_holding_the_workspace_lock() {
+    let v = vault();
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("the initial indexing finishes before the create probe");
+    let ws = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature(CREATE_FEED_LOCK_PLUGIN, "Audit detached create feed")
+            .expect("create owner declares");
+        w.register_index_provider(
+            CREATE_FEED_LOCK_PLUGIN,
+            Box::new(IndexFeedLockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("index probe registers");
+    }
+
+    let mut job = JobHost::new(ws.clone(), CREATE_FEED_LOCK_PLUGIN);
+    let call =
+        std::thread::spawn(move || job.create_document(&DocId::new("Created.md"), "# Created\n"));
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("IndexProvider::on_documents_indexed entered for create");
+    let reader_progressed = ws.try_read().is_some();
+    release_tx.send(()).expect("release create index feed");
+    let outcome = call.join().expect("create thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "JobHost::create_document held Custody<Workspace> across IndexProvider::on_documents_indexed"
+    );
+    outcome.expect("create completes after index feed");
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Created.md")).unwrap(),
+        "# Created\n"
     );
 }
