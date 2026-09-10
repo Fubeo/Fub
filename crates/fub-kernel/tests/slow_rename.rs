@@ -170,15 +170,13 @@ fn a_rename_split_carries_behind_draft_and_data() {
 /// debounce** (difetto 0198): il caso che il presidio qui sopra non copre.
 ///
 /// Là le due metà si chiamano con `sync_path`, che è la porta del kernel; qui
-/// si chiamano con le **fasi di un lotto del rilevatore** — `plan_sync` sotto
-/// prestito condiviso e `sync_path_prepared` sotto quello esclusivo, che è
-/// ciò che `ExternalSync::batch` fa davvero. La differenza non è di forma: la
-/// partenza, che in un lotto vero è un `Touched` su un path sparito, esce da
-/// `plan_sync` come `None` — «non c'è niente da preparare» — e tocca a
-/// `sync_path_prepared` rifare la strada intera, che è il ramo in cui il
-/// documento si toglie e l'impronta si ricorda. Se l'accoppiamento vivesse
-/// solo nel ramo «piano pronto», la rinomina spezzata resterebbe spezzata
-/// proprio quando il debounce la spezza.
+/// si chiamano con le **fasi di un lotto del rilevatore** — `plan_sync`
+/// fotografa un piano owned, `ParsedChange::invoke` classifica il path fuori
+/// dal workspace e `sync_path_prepared` riconvalida sotto quello esclusivo.
+/// La partenza, che in un lotto vero è un `Touched` su un path sparito, diventa
+/// una rimozione preparata senza rifare I/O sotto il prestito esclusivo. Se
+/// l'accoppiamento vivesse solo nel ramo «file letto», la rinomina spezzata
+/// resterebbe spezzata proprio quando il debounce la spezza.
 ///
 /// L'arrivo è il lotto **dopo**: un `Touched` su un path che è comparso, con
 /// un piano vero. L'impronta è la stessa di chi è appena sparito, e la bozza,
@@ -198,15 +196,14 @@ fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
 
     std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
 
-    // Finestra 1: la partenza. Il path non esiste più, quindi `plan_sync` non
-    // ha niente da preparare — è il ramo che in `ExternalSync::batch` rifà la
-    // strada intera sotto il prestito esclusivo.
-    let plan = b.ws.plan_sync(&b.root.join("a.txt"));
-    assert!(
-        plan.is_none(),
-        "un path sparito non ha un piano: è il ramo che la fase 2 rifà per intero"
-    );
-    b.ws.sync_path_prepared(&b.root.join("a.txt"), plan)
+    // Finestra 1: la preparazione non consulta il disco; l'invoke detached
+    // classifica il path sparito e la finalizzazione lo rimuove senza fallback.
+    let plan = b
+        .ws
+        .plan_sync(&b.root.join("a.txt"))
+        .expect("il path del documento noto ha una preparazione owned")
+        .invoke();
+    b.ws.sync_path_prepared(&b.root.join("a.txt"), Some(plan))
         .expect("la partenza: il file non c'è più");
 
     // Finestra 2: l'arrivo, con un piano vero.

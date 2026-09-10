@@ -96,26 +96,21 @@ impl Workspace {
         }))
     }
 
-    /// Il watcher usa questa porta soltanto per un documento già scomparso.
-    /// Gli altri casi conservano il proprio percorso di sincronizzazione.
+    /// Prepara la rimozione che una lettura detached ha già classificato come
+    /// path sparito. Non consulta il filesystem: identità e fingerprint sono
+    /// stati riconvalidati dal finalizzatore del piano watcher.
     pub fn prepare_sync_document_removal(
         &mut self,
-        abs: &Utf8Path,
+        id: &DocId,
     ) -> Result<Option<PreparedDocumentRemoval>> {
-        if self.docs.vault.is_ignored(abs) || abs.exists() {
-            return Ok(None);
-        }
-        let Ok(id) = self.docs.vault.doc_id_for_path(abs) else {
-            return Ok(None);
-        };
-        if !self.docs.has_provider_for(&id) || !self.indexes.core.contains(&id) {
+        if !self.docs.has_provider_for(id) || !self.indexes.core.contains(id) {
             return Ok(None);
         }
         self.indexes.ensure_mutation_available()?;
-        if let Some(fingerprint) = self.entry_fingerprint(&id) {
+        if let Some(fingerprint) = self.entry_fingerprint(id) {
             self.last_removed = Some((id.clone(), fingerprint));
         }
-        let mut prepared = self.prepare_document_removal(&id)?;
+        let mut prepared = self.prepare_document_removal(id)?;
         if let Some(prepared) = &mut prepared {
             prepared.watcher = true;
         }

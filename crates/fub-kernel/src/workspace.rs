@@ -73,7 +73,7 @@ use fub_abi::command::{
 use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::DocChanges;
-use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
+use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions, SourceKind};
 use fub_abi::locale::Locale;
 use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget, Span};
 use fub_abi::query::{Matches, QueryEvaluator, QueryPredicate};
@@ -291,36 +291,158 @@ impl Indexing {
     }
 }
 
-/// workspace.
+/// Piano owned di una sincronizzazione esterna.
 ///
-/// È il valore che permette a una sincronizzazione da fuori di stare nella
-/// forma della [decisione 0024](../../../docs/decisions/README.md):
-/// leggere e parsare sotto prestito condiviso
-/// ([`Workspace::plan_sync`]), mutare sotto quello esclusivo
-/// ([`Workspace::sync_path_prepared`]).
-///
-/// I campi sono chiusi apposta: fuori dal kernel non c'è niente da guardarci
-/// dentro, e ciò che si può fare con questo valore è **darlo a chi lo applica**.
-/// È anche ciò che lo rende un presidio invece di una comodità — chi tiene un
-/// `ParsedChange` in mano ha per forza già rilasciato il prestito condiviso,
-/// perché il tipo non ne porta con sé nessun pezzo.
-/// `None` quando il file letto porta **l'impronta che l'anagrafe ha già**:
+/// La preparazione fotografa soltanto stato del kernel e handle condivisi. La
+/// lettura `stat-read-stat` e il parse avvengono con [`ParsedChange::invoke`],
+/// senza conservare alcun prestito del workspace.
 pub struct ParsedChange {
-    id: DocId,
-    /// è la scrittura del kernel che rientra dal rilevatore, e non c'è niente
-    /// da parsare né da ingerire (difetto 0196, vedi
-    /// [`Workspace::already_ingested`]).
-    /// L'impronta del sorgente che è stato letto: è quella che finirà in
-    model: Option<DocumentModel>,
-    /// anagrafe.
-    /// L'impronta che l'anagrafe aveva **al momento del piano**. Vedi
-    fingerprint: Revision,
-    /// [`Workspace::sync_path_prepared`].
-    /// **Una fetta dell'apertura già letta e già parsata**, che aspetta di entrare
-    seen: Option<Revision>,
+    snapshot: SyncSnapshot,
+    state: ParsedChangeState,
 }
 
-/// nel workspace.
+struct SyncSnapshot {
+    workspace_id: u64,
+    path: Utf8PathBuf,
+    id: DocId,
+    seen: Option<Revision>,
+    syntax_generation: u64,
+    routing_generation: u64,
+}
+
+enum ParsedChangeState {
+    Read {
+        storage: Arc<dyn crate::storage::VaultStorage>,
+        parser: Box<PreparedParse>,
+        source_kind: SourceKind,
+        already_ingested: bool,
+    },
+    Ready {
+        model: Box<DocumentModel>,
+        fingerprint: Revision,
+    },
+    Unchanged,
+    Missing,
+    Unstable,
+    Failed(KernelError),
+    Feed(Box<PreparedDocumentFeed>),
+    Removal(PreparedDocumentRemoval),
+    CompletedRemoval(CompletedDocumentRemoval),
+}
+
+impl ParsedChange {
+    /// Esegue la sola fase esterna successiva: lettura+parse per un piano, feed
+    /// degli indici per un commit, oppure notifica di rimozione.
+    pub fn invoke(self) -> Self {
+        let ParsedChange { snapshot, state } = self;
+        let state = match state {
+            ParsedChangeState::Read {
+                storage,
+                parser,
+                source_kind,
+                already_ingested,
+            } => invoke_sync_read(
+                &snapshot,
+                storage.as_ref(),
+                *parser,
+                source_kind,
+                already_ingested,
+            ),
+            ParsedChangeState::Feed(feed) => {
+                ParsedChangeState::Feed(Box::new((*feed).invoke_indexes()))
+            }
+            ParsedChangeState::Removal(removal) => {
+                ParsedChangeState::CompletedRemoval(removal.invoke())
+            }
+            other => other,
+        };
+        ParsedChange { snapshot, state }
+    }
+}
+
+fn invoke_sync_read(
+    snapshot: &SyncSnapshot,
+    storage: &dyn crate::storage::VaultStorage,
+    parser: PreparedParse,
+    source_kind: SourceKind,
+    already_ingested: bool,
+) -> ParsedChangeState {
+    let before = match storage.stat(&snapshot.path) {
+        Ok(stat) if stat.is_file() => stat,
+        Ok(_) => return ParsedChangeState::Unstable,
+        Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
+        Err(source) => {
+            return ParsedChangeState::Failed(KernelError::Io {
+                path: snapshot.path.clone(),
+                source,
+            })
+        }
+    };
+    let bytes = match storage.read(&snapshot.path) {
+        Ok(bytes) => bytes,
+        Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
+        Err(source) => {
+            return ParsedChangeState::Failed(KernelError::Io {
+                path: snapshot.path.clone(),
+                source,
+            })
+        }
+    };
+    let after = match storage.stat(&snapshot.path) {
+        Ok(stat) if stat.is_file() => stat,
+        Ok(_) => return ParsedChangeState::Unstable,
+        Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
+        Err(source) => {
+            return ParsedChangeState::Failed(KernelError::Io {
+                path: snapshot.path.clone(),
+                source,
+            })
+        }
+    };
+    if before != after {
+        return ParsedChangeState::Unstable;
+    }
+    let fingerprint = Revision::of_bytes(&bytes);
+    if already_ingested && snapshot.seen.as_ref() == Some(&fingerprint) {
+        return ParsedChangeState::Unchanged;
+    }
+    let source = match source_kind {
+        SourceKind::Text => match fub_abi::rules::text_policy::decode(&bytes) {
+            Ok(text) => DocumentSource::Text(text.to_string()),
+            Err(at) => {
+                return ParsedChangeState::Failed(KernelError::Io {
+                    path: snapshot.path.clone(),
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "il file non è UTF-8: il primo byte non valido è a {at} \
+                             (0x{:02X}), su {} byte in tutto",
+                            bytes.get(at).copied().unwrap_or(0),
+                            bytes.len()
+                        ),
+                    ),
+                })
+            }
+        },
+        SourceKind::Bytes => DocumentSource::Bytes(bytes),
+    };
+    match parser.invoke(source) {
+        Ok(model) => ParsedChangeState::Ready {
+            model: Box::new(model),
+            fingerprint,
+        },
+        Err(error) => ParsedChangeState::Failed(error),
+    }
+}
+
+fn sync_path_is_absent(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+    ) || matches!(error.raw_os_error(), Some(2 | 3 | 123))
+}
+
+/// Una fetta dell'apertura già letta e parsata, che aspetta di entrare nel workspace.
 ///
 /// È il [`ParsedChange`] di un lotto invece che di un file, e il nome dice la
 /// parentela apposta: la forma è la stessa della
@@ -4333,57 +4455,43 @@ impl Workspace {
         outcome
     }
 
-    /// legge il file dal disco e lo parsa, sotto `&self`.
+    /// Prepara una lettura del watcher senza toccare filesystem o provider.
     ///
-    /// È la regola della
-    /// [decisione 0024](../../../docs/decisions/README.md)
-    /// applicata alla porta da cui il vault cambia da fuori: leggere e parsare
-    /// N file è l'I/O più lungo di un lotto del watcher, e chi legge — la
-    /// ricerca, il disegno dei pannelli — non ha niente a che farci. Il
-    /// chiamante prepara sotto prestito **condiviso** e applica con
-    /// [`sync_path_prepared`](Workspace::sync_path_prepared).
-    ///
-    /// `None` vuol dire «qui non c'è niente da preparare», e non è un
-    /// fallimento: un path ignorato, un file di un'altra specie, un file
-    /// sparito, una lettura che non è riuscita, o un file che sta ancora
-    /// cambiando sotto (difetto 0197: due `stat` discordi). In tutti i casi
-    /// [`sync_path_prepared`] rifà la strada intera sotto il prestito
-    /// esclusivo, che è dove quei rami stavano già — e dove un errore viene
-    /// registrato come sempre (§9.7). Un file instabile si rifiuta anche
-    /// là: ingerirlo a metà è il difetto, non una lettura da ritentare subito.
-    // L'eco della propria scrittura non si riparsa (§14.1, difetto 0196).
+    /// Il valore restituito possiede storage, parser e token di routing. Chi
+    /// chiama deve eseguire [`ParsedChange::invoke`] dopo aver rilasciato la
+    /// guardia del workspace.
     pub fn plan_sync(&self, abs: &Utf8Path) -> Option<ParsedChange> {
         if self.docs.vault.is_ignored(abs) {
             return None;
         }
         let id = self.docs.vault.doc_id_for_path(abs).ok()?;
         let ext = extension_of(&id).unwrap_or_default();
-        self.docs.registry.provider_for_ext(&ext)?;
-        if !abs.exists() {
-            return None;
-        }
-        let source = self.source_if_stable(&id).ok().flatten()?;
-        let fingerprint = Revision::of(&source);
-        // **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
-        let model = if self.already_ingested(&id, &fingerprint) {
-            None
-        } else {
-            Some(self.docs.parse_owned(&id, source).ok()?)
-        };
+        let descriptor = self.docs.registry.descriptor_for_ext(&ext)?;
+        let parser = self.docs.prepare_parse(&id).ok()?;
+        let seen = self.entry_fingerprint(&id);
         Some(ParsedChange {
-            seen: self.entry_fingerprint(&id),
-            fingerprint,
-            id,
-            model,
+            snapshot: SyncSnapshot {
+                workspace_id: self.workspace_id,
+                path: abs.to_owned(),
+                id: id.clone(),
+                seen,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            state: ParsedChangeState::Read {
+                storage: Arc::clone(self.docs.vault.storage()),
+                parser: Box::new(parser),
+                source_kind: descriptor.source,
+                already_ingested: self.indexes.core.metas.contains_key(&id),
+            },
         })
     }
 
-    /// dimensione o data cambiano in mezzo, qualcun altro sta ancora scrivendo
-    /// e questi byte sono una metà (difetto 0197). `None` non è un fallimento
-    /// — il debounce del rilevatore riproverà — ed è per questo che non si
-    /// aspetta: un `sleep` in un banco non è un segnale, e qui non ce n'è
-    /// bisogno, perché la prova è sui due numeri, non sul tempo.
-    /// **Questi byte sono già quelli che il kernel ha in memoria?**
+    /// Legge testo soltanto quando i due `stat` ai lati della lettura
+    /// combaciano. Il percorso sincrono legacy usa ancora questa porta.
+    ///
+    /// Se dimensione o data cambiano, qualcun altro sta ancora scrivendo e
+    /// questi byte sono una metà (difetto 0197).
     fn source_if_stable(&self, id: &DocId) -> Result<Option<String>> {
         let Some(before) = self.docs.vault.stat(id) else {
             return Ok(None);
@@ -4395,8 +4503,9 @@ impl Workspace {
         Ok((before == after).then_some(source))
     }
 
+    /// **Questi byte sono già quelli che il kernel ha in memoria?**
     ///
-    /// L'impronta in anagrafe è quella dell'ultimo sorgente ingerito, e se il
+    /// L'impronta in anagrafe è quella dell'ultimo sorgente ingerito: se il
     /// file sul disco ne porta una uguale non c'è niente da fare: il modello in
     /// cache è già quello che un parse rifarebbe identico.
     ///
@@ -4419,14 +4528,13 @@ impl Workspace {
     /// La cache dei metadati va **guardata insieme all'impronta**: un documento
     /// che sta in anagrafe ma non in cache — uno che alla scansione non si è
     /// potuto parsare — non è «già dentro», e va riprovato.
-    /// L'impronta che l'anagrafe attribuisce **adesso** a un documento: è ciò
     fn already_ingested(&self, id: &DocId, fingerprint: &Revision) -> bool {
         self.indexes.core.metas.contains_key(id)
             && self.entry_fingerprint(id).as_ref() == Some(fingerprint)
     }
 
-    /// che un piano si porta dietro per accorgersi di essere invecchiato.
-    /// [`sync_path`] con il lavoro di lettura **già fatto** da
+    /// L'impronta che un piano porta con sé per rilevare una mutazione
+    /// intervenuta prima della finalizzazione.
     fn entry_fingerprint(&self, id: &DocId) -> Option<Revision> {
         self.indexes
             .core
@@ -4435,47 +4543,113 @@ impl Workspace {
             .and_then(|and| and.fingerprint.clone())
     }
 
-    /// [`plan_sync`](Workspace::plan_sync).
+    /// Valida e applica al solo core un piano già invocato.
     ///
-    /// **Il piano dichiara cosa credeva di sapere, e chi applica lo verifica.**
-    /// Fra la fase condivisa e questa il prestito esclusivo è passato di mano, e
-    /// in mezzo può esserci stato un salvataggio dell'utente: applicare un
-    /// modello parsato *prima* di quella scrittura la cancellerebbe dalla
-    /// memoria del kernel, in silenzio. Il piano porta quindi l'impronta che
-    /// l'anagrafe aveva quando è stato fatto; se adesso è un'altra, il piano si
-    /// butta e si rifà la strada intera — che è ciò che il codice faceva sempre,
-    /// e qui succede solo nel caso raro.
-    // Il file può anche essere sparito nel frattempo: è un `stat`, non una
+    /// Nessun filesystem o provider viene attraversato qui. Un token stale,
+    /// una lettura instabile o un routing cambiato vengono scartati senza
+    /// fallback e senza eventi.
+    pub fn prepare_sync_path_prepared(
+        &mut self,
+        abs: &Utf8Path,
+        prepared: Option<ParsedChange>,
+    ) -> Result<Option<ParsedChange>> {
+        let Some(plan) = prepared else {
+            return Ok(None);
+        };
+        let plan = plan.invoke();
+        let outcome = (|| {
+            if plan.snapshot.workspace_id != self.workspace_id
+                || plan.snapshot.path != abs
+                || self.docs.vault.doc_id_for_path(abs).ok().as_ref()
+                    != Some(&plan.snapshot.id)
+                || self.entry_fingerprint(&plan.snapshot.id) != plan.snapshot.seen
+                || plan.snapshot.syntax_generation != self.syntax_generation
+                || plan.snapshot.routing_generation != self.indexes.routing_generation()
+            {
+                return Ok(None);
+            }
+            let ParsedChange { snapshot, state } = plan;
+            match state {
+                ParsedChangeState::Ready { model, fingerprint } => {
+                    self.indexes.ensure_mutation_available()?;
+                    let feed = self.as_actor(Actor::Watcher, |ws| {
+                        ws.prepare_ingest_model(
+                            &snapshot.id,
+                            *model,
+                            fingerprint,
+                            None,
+                            JournalOp::Written {
+                                doc: snapshot.id.clone(),
+                                from: snapshot.seen.clone(),
+                                to: Revision::of(""),
+                            },
+                            true,
+                        )
+                    });
+                    Ok(Some(ParsedChange {
+                        snapshot,
+                        state: ParsedChangeState::Feed(Box::new(feed)),
+                    }))
+                }
+                ParsedChangeState::Missing => {
+                    let removal = self
+                        .prepare_sync_document_removal(&snapshot.id)?
+                        .map(|removal| ParsedChange {
+                            snapshot,
+                            state: ParsedChangeState::Removal(removal),
+                        });
+                    Ok(removal)
+                }
+                ParsedChangeState::Failed(error) => Err(error),
+                ParsedChangeState::Unchanged | ParsedChangeState::Unstable => Ok(None),
+                ParsedChangeState::Read { .. }
+                | ParsedChangeState::Feed(_)
+                | ParsedChangeState::Removal(_)
+                | ParsedChangeState::CompletedRemoval(_) => Ok(None),
+            }
+        })();
+        self.notes_sync(abs, &outcome);
+        outcome
+    }
+
+    /// Chiude feed o rimozione dopo la callback esterna, accodando gli eventi.
+    pub fn finish_sync_path_prepared(
+        &mut self,
+        completed: ParsedChange,
+    ) -> std::result::Result<bool, PluginError> {
+        match completed.state {
+            ParsedChangeState::Feed(feed) => {
+                self.as_actor(Actor::Watcher, |ws| ws.finish_index_feed(*feed));
+                Ok(true)
+            }
+            ParsedChangeState::CompletedRemoval(removal) => {
+                self.finish_document_removal(removal).map(|()| true).map_err(
+                    |(error, _)| error,
+                )
+            }
+            _ => Ok(false),
+        }
+    }
+
+    /// Compatibilità dei chiamanti kernel sincroni. Il watcher di processo usa
+    /// le due porte separate sopra e non attraversa provider sotto `Custody`.
     pub fn sync_path_prepared(
         &mut self,
         abs: &Utf8Path,
         prepared: Option<ParsedChange>,
     ) -> Result<bool> {
-        let Some(plan) = prepared else {
-            return self.sync_path(abs);
-        };
-        // lettura, e il ramo che toglie un documento sta di là.
-        // Niente da parsare vuol dire niente da applicare: il piano ha
-        if self.entry_fingerprint(&plan.id) != plan.seen || !abs.exists() {
-            return self.sync_path(abs);
-        }
-        let ParsedChange {
-            id,
-            model,
-            fingerprint,
-            ..
-        } = plan;
-        // riconosciuto l'eco di una scrittura del kernel (difetto 0196).
-        // **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
-        let Some(model) = model else {
+        let Some(prepared) = self.prepare_sync_path_prepared(abs, prepared)? else {
             return Ok(false);
         };
-        let outcome = self.as_actor(Actor::Watcher, |ws| {
-            ws.ingest_model(&id, model, fingerprint, None);
-            ws.dispatch_pending();
-            Ok(true)
-        });
-        self.notes_sync(abs, &outcome);
+        let completed = prepared.invoke();
+        let outcome = match self.finish_sync_path_prepared(completed) {
+            Ok(changed) => Ok(changed),
+            Err(error) => {
+                self.report_host_trouble(Severity::Warning, error);
+                Ok(false)
+            }
+        };
+        self.dispatch_pending();
         outcome
     }
 
@@ -4544,7 +4718,7 @@ impl Workspace {
         paths
             .into_iter()
             .map(|path| {
-                let plan = self.plan_sync(&path);
+                let plan = self.plan_sync(&path).map(ParsedChange::invoke);
                 (path, plan)
             })
             .collect()
@@ -4587,7 +4761,7 @@ impl Workspace {
     ///
     /// [`report_losses`]: Workspace::report_losses
     /// La stessa sincronizzazione per un file che **non è un documento**: si
-    fn notes_sync(&mut self, abs: &Utf8Path, outcome: &Result<bool>) {
+    fn notes_sync<T>(&mut self, abs: &Utf8Path, outcome: &Result<T>) {
         let Err(and) = outcome else {
             return;
         };

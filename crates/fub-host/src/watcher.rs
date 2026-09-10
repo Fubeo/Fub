@@ -470,10 +470,7 @@ impl ExternalSync {
         if changes.is_empty() {
             return;
         }
-        // Fase 1 — il disco, sotto prestito condiviso. Un piano è `None` per i
-        // rami che non leggono niente (un path ignorato, un file di un'altra
-        // specie, un file sparito) e per una lettura che non è riuscita: la
-        // fase 2 li rifà per intero, dove stavano già.
+        // Fase 1a — soltanto stato del kernel e handle owned sotto read.
         let prepared: Vec<Option<ParsedChange>> = {
             let Ok(ws) = self.workspace.read() else {
                 return;
@@ -486,8 +483,12 @@ impl ExternalSync {
                 })
                 .collect()
         };
+        // Fase 1b — stat-read-stat e Format/Syntax fuori da Custody.
+        let prepared = prepared
+            .into_iter()
+            .map(|plan| plan.map(ParsedChange::invoke));
         if self
-            .apply_prepared(changes.iter().cloned().zip(prepared))
+            .apply_batch_prepared(changes.iter().cloned().zip(prepared))
             .is_err()
         {
             return;
@@ -548,30 +549,22 @@ impl ExternalSync {
         self.flush();
     }
 
-    // Il lotto conserva un solo drain, ma ogni rimozione lascia il guard prima
-    // di notificare gli indici. Il turno conserva la stessa unità di scrittura.
-    fn apply_prepared(
+    // Il lotto conserva un solo drain, ma ogni feed/rimozione lascia il guard
+    // prima di notificare gli indici. Il turno conserva la stessa unità di
+    // scrittura.
+    fn apply_batch_prepared(
         &self,
         changes: impl IntoIterator<Item = (ExternalChange, Option<ParsedChange>)>,
     ) -> Result<(), PluginError> {
         let _turn = self.workspace.write_turn();
         let deferred = self.workspace.write()?.defer_event_dispatch();
         for (change, plan) in changes {
-            let removal = {
+            let pending = {
                 let mut ws = self.workspace.write()?;
                 match change {
                     ExternalChange::Touched(path) => {
-                        match ws.prepare_sync_document_removal(&path) {
-                            Ok(Some(removal)) => Some(removal),
-                            Ok(None) => {
-                                let _ = ws.sync_path_prepared(&path, plan);
-                                None
-                            }
-                            Err(error) => {
-                                ws.report_host_trouble(Severity::Warning, error.into());
-                                None
-                            }
-                        }
+                        ws.prepare_sync_path_prepared(&path, plan)
+                            .unwrap_or_default()
                     }
                     ExternalChange::Renamed { from, to } => {
                         let _ = ws.sync_renamed_path(&from, &to);
@@ -579,9 +572,12 @@ impl ExternalSync {
                     }
                 }
             };
-            if let Some(removal) = removal {
-                let completed = removal.invoke();
-                if let Err((error, _)) = self.workspace.write()?.finish_document_removal(completed)
+            if let Some(pending) = pending {
+                let completed = pending.invoke();
+                if let Err(error) = self
+                    .workspace
+                    .write()?
+                    .finish_sync_path_prepared(completed)
                 {
                     self.workspace
                         .write()?
@@ -590,6 +586,31 @@ impl ExternalSync {
             }
         }
         self.workspace.write()?.restore_event_dispatch(deferred);
+        drain_events(&self.workspace)
+    }
+
+    /// Percorso storico della riconciliazione d'apertura. Il slice detached di
+    /// questo cambiamento riguarda soltanto i lotti consegnati dal watcher.
+    fn apply_prepared(
+        &self,
+        changes: impl IntoIterator<Item = (ExternalChange, Option<ParsedChange>)>,
+    ) -> Result<(), PluginError> {
+        let _turn = self.workspace.write_turn();
+        let deferred = self.workspace.write()?.defer_event_dispatch();
+        {
+            let mut ws = self.workspace.write()?;
+            for (change, plan) in changes {
+                match change {
+                    ExternalChange::Touched(path) => {
+                        let _ = ws.sync_path_prepared(&path, plan);
+                    }
+                    ExternalChange::Renamed { from, to } => {
+                        let _ = ws.sync_renamed_path(&from, &to);
+                    }
+                }
+            }
+            ws.restore_event_dispatch(deferred);
+        }
         drain_events(&self.workspace)
     }
 
