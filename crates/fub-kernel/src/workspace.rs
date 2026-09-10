@@ -546,6 +546,55 @@ impl PreparedCommand {
         })
     }
 }
+/// Stato owned di un annullamento fra un passo e il successivo.
+///
+/// Il token tiene aperti replay e batch senza prestare il [`Workspace`], così
+/// un host può eseguire provider, parser e indici dopo avere rilasciato il
+/// proprio guard. Va sempre riconsegnato a
+/// [`Workspace::finish_undo_replay_deferred`].
+pub struct UndoReplay {
+    entry: crate::undo::Entry,
+    next: usize,
+    done: usize,
+    failure: Option<Failure>,
+    before_replay: bool,
+    owns_batch: bool,
+}
+
+/// Epilogo di undo da completare soltanto dopo il drain degli eventi.
+pub struct DeferredUndo {
+    entry: crate::undo::Entry,
+    done: usize,
+    failure: Option<Failure>,
+    before_replay: bool,
+}
+
+impl UndoReplay {
+    /// Il prossimo passo, owned perché deve poter attraversare il confine del
+    /// guard del workspace.
+    pub fn next_step(&self) -> Option<UndoStep> {
+        if self.failure.is_some() {
+            return None;
+        }
+        self.entry.undo.steps.get(self.next).cloned()
+    }
+
+    /// Riconsegna l'esito del passo appena estratto.
+    pub fn finish_step(&mut self, outcome: std::result::Result<(), Failure>) {
+        debug_assert!(
+            self.failure.is_none() && self.next < self.entry.undo.steps.len(),
+            "un esito di undo deve seguire un passo preparato"
+        );
+        match outcome {
+            Ok(()) => {
+                self.done += 1;
+                self.next += 1;
+            }
+            Err(failure) => self.failure = Some(failure),
+        }
+    }
+}
+
 
 /// Una chiamata a [`ServiceProvider`] preparata sotto lock e invocabile
 /// senza tenere `Custody<Workspace>`.
@@ -7259,71 +7308,104 @@ impl Workspace {
     /// niente è ancora «fallito», che è la promessa che
     /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
     /// faceva già.
-    // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
-    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Undone>, PluginError> {
-        let Some(entry) = self.undo.pop() else {
-            return Ok(None);
-        };
-        let count = entry.undo.steps.len();
-        // quaranta sorgenti è un gesto, quindi un `batch-ended` e un ridisegno.
-        // La bandiera dell'annullamento è un prestito e si chiude cadendo (vedi
-        // [`Riproduzione`]): su questo tratto passa tutto ciò che pania — un
-        // supporto che esplode invece di rispondere, una `expect` del kernel — e
-        // una riga di ripristino scritta dopo la chiamata la salterebbe.
-        // Niente è cambiato: resta un errore, ma la voce torna in pila. Il
-        let mut replay = Replay::open(self);
-        let batch_result = replay.batch(|ws| {
-            let mut done = 0usize;
-            for step in &entry.undo.steps {
-                let outcome = match step {
-                    UndoStep::Edit(planned) => ws
-                        .apply_edit(&planned.doc, planned.edit.clone())
-                        .map(|_| ())
-                        .map_err(|and| Failure::of(planned.doc.clone(), and.into())),
-                    UndoStep::Command { command, args } => ws
-                        .invoke_command_here(command, args.clone(), InvokeMode::Apply)
-                        .map(|_| ())
-                        .map_err(Failure::other),
-                };
-                match outcome {
-                    Ok(()) => done += 1,
-                    Err(failure) => return (done, Some(failure)),
-                }
-            }
-            (done, None)
-        });
-        drop(replay);
+    pub fn prepare_undo_replay(&mut self) -> Option<UndoReplay> {
+        let entry = self.undo.pop()?;
+        Some(UndoReplay {
+            entry,
+            next: 0,
+            done: 0,
+            failure: None,
+            before_replay: self.undo.begin_replay(),
+            owns_batch: self.dispatch.open_batch(),
+        })
+    }
 
-        let (done, failure) = batch_result;
-        let Some(failure) = failure else {
-            return Ok(Some(Undone {
+    /// Chiude il batch senza chiamare handler. Replay resta attivo nel token:
+    /// come nella via sincrona, verrà ripristinato soltanto dopo che gli eventi
+    /// del batch sono stati consegnati.
+    pub fn finish_undo_replay_deferred(&mut self, replay: UndoReplay) -> DeferredUndo {
+        let UndoReplay {
+            entry,
+            done,
+            failure,
+            before_replay,
+            owns_batch,
+            ..
+        } = replay;
+        if owns_batch {
+            self.dispatch.close_batch();
+        }
+        DeferredUndo {
+            entry,
+            done,
+            failure,
+            before_replay,
+        }
+    }
+
+    /// Ripristina replay e produce lo stesso esito per il driver diretto e per
+    /// quello staccato. Va chiamato dopo il drain degli eventi.
+    pub fn finish_undo_replay(
+        &mut self,
+        deferred: DeferredUndo,
+    ) -> std::result::Result<Option<Undone>, PluginError> {
+        let DeferredUndo {
+            entry,
+            done,
+            failure,
+            before_replay,
+        } = deferred;
+        let count = entry.undo.steps.len();
+        self.undo.end_replay(before_replay);
+
+        match failure {
+            None => Ok(Some(Undone {
                 label: entry.undo.label,
                 operation: entry.partial,
                 replay: None,
-            }));
-        };
-        // conflitto può essere transitorio e chi riprova deve ritrovare lo stesso
-        // annullamento invece di una pila vuota. `replay` è già caduto, quindi
-        // `UndoStack::push` non scarta la voce come riproduzione ricorsiva.
-        // Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
-        if done == 0 {
-            let error = failure.error;
-            self.undo.push(entry.undo, entry.partial);
-            return Err(error);
+            })),
+            Some(failure) if done == 0 => {
+                let error = failure.error;
+                self.undo.push(entry.undo, entry.partial);
+                Err(error)
+            }
+            Some(failure) => Ok(Some(Undone {
+                label: entry.undo.label,
+                operation: entry.partial,
+                replay: Partial::of(count, done, vec![failure]),
+            })),
         }
-        Ok(Some(Undone {
-            label: entry.undo.label,
-            operation: entry.partial,
-            replay: Partial::of(count, done, vec![failure]),
-        }))
     }
+
+    /// Via sincrona del kernel: guida lo stesso token usato dagli host che
+    /// devono rilasciare il workspace fra un passo e l'altro.
+    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Undone>, PluginError> {
+        let Some(mut replay) = self.prepare_undo_replay() else {
+            return Ok(None);
+        };
+        while let Some(step) = replay.next_step() {
+            let outcome = match step {
+                UndoStep::Edit(planned) => self
+                    .apply_edit(&planned.doc, planned.edit)
+                    .map(|_| ())
+                    .map_err(|and| Failure::of(planned.doc, and.into())),
+                UndoStep::Command { command, args } => self
+                    .invoke_command_here(&command, args, InvokeMode::Apply)
+                    .map(|_| ())
+                    .map_err(Failure::other),
+            };
+            replay.finish_step(outcome);
+        }
+        let deferred = self.finish_undo_replay_deferred(replay);
+        self.dispatch_pending();
+        self.finish_undo_replay(deferred)
+    }
+
 
     // --- import ed export ---------------------------------------------------
     fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
         self.providers.command_owner(command)
     }
-
-    //
     // Il kernel non sa cosa sia un formato di scambio: sa scegliere chi lo sa e
     // prestargli le capacità. Vedi `fub_abi::transfer`.
     /// Registra un [`ImportProvider`] sotto un id. L'ordine di registrazione è
@@ -9404,58 +9486,6 @@ impl Drop for Batch<'_> {
     }
 }
 
-///
-/// È il [`Lotto`] applicato all'altra bandiera che [`Workspace::undo_last`]
-/// alzava a mano: `replaying` dice *annullare non è annullabile*, e finché è
-/// alzata ogni [`UndoStack::push`] viene scartata. Il ripristino era una riga
-/// **dopo** la chiamata, e su quella riga passa tutto ciò che pania — un
-/// supporto che esplode invece di rispondere, una `expect` del kernel: la
-/// bandiera restava alzata, e da lì in poi nessuna operazione entrava più in
-/// pila. Ctrl-Z smetteva di funzionare per sempre, in silenzio, e chi lo premeva
-/// leggeva «non c'è niente da annullare» avendo appena scritto.
-///
-/// La ragione per cui non era già un `Drop` era vera e la risposta è
-/// nell'oggetto prestato: un guardiano sulla **pila** avrebbe tenuto occupato
-/// `self.undo` per tutta la durata delle scritture, che passano dal workspace
-/// intero. Questo presta il **workspace**, come `Lotto`, e non toglie niente a
-/// nessuno.
-/// Com'era la bandiera prima: un annullamento annidato non spegne quello di
-struct Replay<'w> {
-    ws: &'w mut Workspace,
-    /// fuori uscendo.
-    // Niente ramo per `std::thread::panicking()`, ed è la differenza con
-    before: bool,
-}
-
-impl<'w> Replay<'w> {
-    fn open(ws: &'w mut Workspace) -> Self {
-        let before = ws.undo.begin_replay();
-        Replay { ws, before }
-    }
-}
-
-impl Drop for Replay<'_> {
-    fn drop(&mut self) {
-        // `Lotto`: qui non si chiama nessuno, si rimette a posto un `bool` di
-        // questo oggetto. Non c'è un secondo panico da temere.
-        // questo oggetto. Non c'è un secondo panico da temere.
-        self.ws.undo.end_replay(self.before);
-    }
-}
-
-impl std::ops::Deref for Replay<'_> {
-    type Target = Workspace;
-
-    fn deref(&self) -> &Workspace {
-        self.ws
-    }
-}
-
-impl std::ops::DerefMut for Replay<'_> {
-    fn deref_mut(&mut self) -> &mut Workspace {
-        self.ws
-    }
-}
 
 impl std::ops::Deref for Batch<'_> {
     type Target = Workspace;

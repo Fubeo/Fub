@@ -56,7 +56,7 @@ use std::sync::Arc;
 use crate::custody::Custody;
 use crate::query::query_workspace;
 
-use fub_abi::command::{CommandOutcome, InvokeMode};
+use fub_abi::command::{CommandOutcome, Failure, InvokeMode, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
@@ -72,7 +72,7 @@ use fub_abi::traits::{
     ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{Event, PluginError};
-use fub_kernel::host::{authorize_path, Capability, Guard};
+use fub_kernel::host::{authorize_path, Capability, Guard, Policy};
 use fub_kernel::workspace::{DeferredEvents, EventDrain};
 use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 
@@ -287,6 +287,51 @@ impl JobHost {
         finish_events(&workspace, deferred)
     }
 
+    fn apply_edit_detached(
+        &mut self,
+        id: &DocId,
+        request: EditRequest,
+    ) -> Result<EditReport, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            let id = fenced_doc_id(id)?;
+            ws.prepare_document_write(&id, WriteBase::DescendsFrom(request.base.clone()))
+                .map_err(PluginError::from)?
+        };
+        let source = prepared
+            .expected_source()
+            .expect("DescendsFrom keeps the verified source");
+        let (next, report) = request.apply_to(source).map_err(|error| match error {
+            PluginError::Conflict(_) => PluginError::Conflict(id.to_string().into()),
+            other => PluginError::BadArgs(format!("{id}: {other}").into()),
+        })?;
+        if report.is_empty() {
+            return Ok(report);
+        }
+        let model = prepared.parse(&next).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let base = request.base;
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_edit_deferred(pending, report)
+        };
+        finish_events(&workspace, deferred)
+    }
+
     /// Una lettura: prestito **condiviso**, e N job che leggono non si aspettano
     /// né fra loro né con le view che disegnano.
     ///
@@ -448,10 +493,8 @@ impl VaultWrite for JobHost {
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
         self.stopped()?;
-        let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
-        let prepared = {
-            let ws = workspace.read()?;
+        {
+            let ws = self.workspace.read()?;
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
                     &ReadOnly {
@@ -468,39 +511,8 @@ impl VaultWrite for JobHost {
                 id.as_str(),
                 || format!("editing `{id}`"),
             )?;
-            let id = fenced_doc_id(id)?;
-            ws.prepare_document_write(&id, WriteBase::DescendsFrom(request.base.clone()))
-                .map_err(PluginError::from)?
-        };
-        let source = prepared
-            .expected_source()
-            .expect("DescendsFrom keeps the verified source");
-        let (next, report) = request.apply_to(source).map_err(|error| match error {
-            PluginError::Conflict(_) => PluginError::Conflict(id.to_string().into()),
-            other => PluginError::BadArgs(format!("{id}: {other}").into()),
-        })?;
-        if report.is_empty() {
-            return Ok(report);
         }
-        let model = prepared.parse(&next).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = self.for_provider(owner, InvokeMode::Apply);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
-        let base = request.base;
-        let pending = {
-            let mut ws = workspace.write()?;
-            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
-                .map_err(PluginError::from)?
-        };
-        let pending = pending.invoke_indexes();
-        let deferred = {
-            let mut ws = workspace.write()?;
-            ws.finish_document_edit_deferred(pending, report)
-        };
-        finish_events(&workspace, deferred)
+        self.apply_edit_detached(id, request)
     }
 }
 
@@ -807,10 +819,61 @@ impl HostCommands for JobHost {
         finish_events(&workspace, deferred)?
     }
 
-    /// Come sopra, e per la stessa ragione: annullare è scrivere, quindi entra
-    /// nel giro sincrono invece di portarsi via il vault.
+    /// L'annullamento tiene replay e batch nel token del kernel, ma non il
+    /// prestito del workspace. Ogni passo attraversa così lo stesso percorso
+    /// staccato della capacità corrispondente.
     fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
-        self.write_result(|h| h.undo_last())
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+
+        {
+            let ws = workspace.read()?;
+            let policy = ws.granted_policy(&self.plugin);
+            for capability in std::iter::once(Capability::Commands)
+                .chain(Capability::ALL.into_iter().filter(|cap| cap.writes_the_vault()))
+            {
+                if let Some(why) = policy.denies(capability) {
+                    return Err(PluginError::PermissionDenied(
+                        format!("undoing: {why}").into(),
+                    ));
+                }
+            }
+        }
+        if self.mode.is_dry_run() {
+            return Err(PluginError::PermissionDenied(
+                "undo: a simulation does not write".into(),
+            ));
+        }
+
+        let Some(mut replay) = ({
+            let mut ws = workspace.write()?;
+            ws.prepare_undo_replay()
+        }) else {
+            return Ok(None);
+        };
+
+        while let Some(step) = replay.next_step() {
+            let outcome = match step {
+                UndoStep::Edit(planned) => self
+                    .apply_edit_detached(&planned.doc, planned.edit)
+                    .map(|_| ())
+                    .map_err(|and| Failure::of(planned.doc, and)),
+                UndoStep::Command { command, args } => self
+                    .run_command(&command, args)
+                    .map(|_| ())
+                    .map_err(Failure::other),
+            };
+            replay.finish_step(outcome);
+        }
+
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_undo_replay_deferred(replay)
+        };
+        drain_events(&workspace)?;
+        let mut ws = workspace.write()?;
+        ws.finish_undo_replay(deferred)
     }
 }
 
