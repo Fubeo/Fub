@@ -24,6 +24,7 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
+use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
 use fub_kernel::{
@@ -179,11 +180,12 @@ fn a_watcher_rename_carries_identity_once() {
     b.attach_data("a.txt");
     b.ws.set_active_document(Some(DocId::new("a.txt")));
     let rx = b.ws.bus().subscribe();
-
-    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
+    let to = b.root.join("nested/b.txt");
+    std::fs::create_dir_all(to.parent().expect("cartella destinazione")).expect("cartella");
+    std::fs::rename(b.root.join("a.txt"), &to).expect("rinomina sul disco");
     let prepared = match b
         .ws
-        .plan_external_rename(&b.root.join("a.txt"), &b.root.join("b.txt"))
+        .plan_external_rename(&b.root.join("a.txt"), &to)
     {
         ExternalRenamePlan::Document(plan) => plan,
         _ => panic!("la rinomina documento nota deve avere la rotta staged"),
@@ -195,16 +197,39 @@ fn a_watcher_rename_carries_identity_once() {
         .expect("prepare")
         .expect("fotografia corrente");
     let completed = pending.invoke();
-    assert!(b.ws.finish_external_document_rename(completed));
 
+    let other_dir = tempfile::tempdir().expect("secondo tempdir");
+    let other_root =
+        Utf8PathBuf::from_path_buf(other_dir.path().to_path_buf()).expect("seconda radice utf8");
+    let mut other = Workspace::new(&other_root, registry()).expect("secondo workspace");
+    let completed = match other.finish_external_document_rename(completed) {
+        Err((_error, completed)) => completed,
+        Ok(outcome) => panic!("il workspace sbagliato ha consumato il token: {outcome}"),
+    };
+    assert!(
+        b.ws.finish_external_document_rename(completed)
+            .expect("il proprietario recupera il token"),
+        "la fotografia resta corrente"
+    );
+
+    let renamed = DocId::new("nested/b.txt");
     assert!(!b.ws.documents().contains(&DocId::new("a.txt")));
-    assert!(b.ws.documents().contains(&DocId::new("b.txt")));
-    assert_eq!(b.draft_of("b.txt").as_deref(), Some("testo non salvato"));
+    assert!(b.ws.documents().contains(&renamed));
+    assert_eq!(
+        b.draft_of(renamed.as_str()).as_deref(),
+        Some("testo non salvato")
+    );
     assert!(b.draft_of("a.txt").is_none());
-    assert_eq!(b.data_of("b.txt").as_deref(), Some("i dati di a.txt"));
+    assert_eq!(
+        b.data_of(renamed.as_str()).as_deref(),
+        Some("i dati di a.txt")
+    );
     assert!(b.data_of("a.txt").is_none());
     assert_eq!(
-        b.ws.organization().icons.get("b.txt").map(String::as_str),
+        b.ws.organization()
+            .icons
+            .get(renamed.as_str())
+            .map(String::as_str),
         Some("📌")
     );
     assert!(
@@ -213,7 +238,21 @@ fn a_watcher_rename_carries_identity_once() {
     );
     assert_eq!(
         b.ws.active_document().as_ref().map(DocId::as_str),
-        Some("b.txt")
+        Some("nested/b.txt")
+    );
+    let IndexResult::Folders(folders) = b
+        .ws
+        .query_index(IndexQuery::Folders {
+            under: None,
+            page: None,
+        })
+        .expect("indice cartelle")
+    else {
+        panic!("risposta cartelle");
+    };
+    assert!(
+        folders.items.iter().any(|folder| folder.path == "nested"),
+        "la prepare registra la cartella d'arrivo"
     );
 
     let seen = events(&rx);

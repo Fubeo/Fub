@@ -34,7 +34,10 @@ use fub_abi::traits::{
 use fub_abi::{Event, FormatProvider, PluginError, Revision, WriteBase};
 use fub_host::{Custody, ExternalChange, ExternalSync};
 use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
-use fub_kernel::{data_root, FormatRegistry, MachineSettings, MemStorage, Workspace};
+use fub_kernel::{
+    data_root, ExternalRenamePlan, FormatRegistry, MachineSettings, MemStorage,
+    ParsedExternalRename, Workspace,
+};
 
 /// Il cancello che rende **osservabile** una lettura lenta senza dormire.
 ///
@@ -520,12 +523,12 @@ fn watcher_ignore_preflight_releases_custody_before_folder_stat() {
     }
 }
 
-/// **Il fatto Touched precede anche una scrittura che supera il suo feed.**
+/// **Il fatto Renamed precede anche una scrittura che supera il suo feed.**
 ///
 /// Il provider trattiene la callback con un canale mentre il core committa una
-/// revisione più nuova dello stesso documento. Il completamento vecchio deve
-/// recuperare frame e perdita senza applicare il proprio epilogo sul modello
-/// nuovo; l'evento già accodato resta prima di quelli prodotti dopo il rientro.
+/// revisione più nuova sotto l'identità d'arrivo. Il completamento vecchio deve
+/// recuperare frame e perdita senza applicare il proprio grafo sul modello
+/// nuovo; il fatto di rename già accodato resta prima di quelli del rientro.
 #[test]
 fn a_completed_feed_does_not_announce_over_a_newer_write() {
     const INDEX: &str = "test.watcher-feed-reentry";
@@ -546,23 +549,29 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
         .expect("index provider registers");
     }
 
-    let id = DocId::new("nota.md");
-    let path = bench.root.join("nota.md");
+    let from_id = DocId::new("nota.md");
+    let id = DocId::new("moved/nota.md");
+    let from = bench.root.join(from_id.as_str());
+    let to = bench.root.join(id.as_str());
+    std::fs::create_dir_all(to.parent().expect("rename parent")).expect("rename directory");
     let events = bench.ws.read().expect("the vault is alive").bus().subscribe();
-    std::fs::write(&path, "from outside\n").expect("external write");
-    let plan = bench
+    std::fs::rename(&from, &to).expect("external rename");
+    let prepared = match bench
         .ws
         .read()
         .expect("the vault is alive")
-        .plan_sync(&path)
-        .expect("there was a document to prepare");
-    let parsed = plan.invoke();
+        .plan_external_rename(&from, &to)
+    {
+        ExternalRenamePlan::Document(prepared) => prepared,
+        _ => panic!("the known document has a staged rename"),
+    };
+    let parsed = prepared.invoke();
     let pending = bench
         .ws
         .write()
         .expect("the vault is alive")
-        .prepare_sync_path_prepared(&path, Some(parsed))
-        .expect("the parsed change is valid")
+        .prepare_external_document_rename(parsed)
+        .expect("the parsed rename is valid")
         .expect("the feed is pending");
 
     let (inside, via) = gate.arm();
@@ -592,8 +601,8 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
     {
         let mut ws = bench.ws.write().expect("the vault is alive");
         assert!(
-            matches!(ws.finish_sync_path_prepared(completed), Ok(false)),
-            "the stale feed must be a no-op"
+            matches!(ws.finish_external_document_rename(completed), Ok(false)),
+            "the stale rename epilogue must be a no-op"
         );
     }
 
@@ -606,6 +615,10 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
         .expect("the newer feed finalizes");
 
     let mut ws = bench.ws.write().expect("the vault is alive");
+    assert!(
+        !ws.documents().contains(&from_id),
+        "the stale epilogue did not resurrect the source identity"
+    );
     assert_eq!(
         entry(&ws, &id).fingerprint,
         Some(Revision::of("from user\n")),
@@ -617,6 +630,9 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
         .try_iter()
         .filter(|notice| {
             matches!(
+                &notice.event,
+                Event::DocumentRenamed { from, to } if from == &from_id && to == &id
+            ) || matches!(
                 &notice.event,
                 Event::DocumentChanged { id: changed, .. } if changed == &id
             ) || matches!(
@@ -630,7 +646,7 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
         .map(|notice| notice.event)
         .collect();
     assert_eq!(observed.len(), 3, "fact, loss and newer fact survive");
-    assert!(matches!(observed[0], Event::DocumentChanged { .. }));
+    assert!(matches!(observed[0], Event::DocumentRenamed { .. }));
     assert!(matches!(observed[1], Event::Trouble { .. }));
     assert!(matches!(observed[2], Event::DocumentChanged { .. }));
 }
@@ -699,22 +715,65 @@ fn a_providerless_entry_survives_the_watcher_batch() {
     let old_data = plugin_root.join(doc_data::path(&id, "thumbnail.bin"));
     std::fs::create_dir_all(old_data.parent().expect("data parent")).expect("data directory");
     std::fs::write(&old_data, b"preview").expect("asset side data");
-    let before_rename = entry(&bench.ws.read().unwrap(), &id);
     let renamed_path = bench.root.join("media/foto.png");
     let renamed_id = DocId::new("media/foto.png");
     std::fs::create_dir_all(renamed_path.parent().expect("asset parent"))
         .expect("asset directory");
     std::fs::rename(&path, &renamed_path).expect("asset renamed");
-    sync.batch(&[ExternalChange::Renamed {
-        from: path.clone(),
-        to: renamed_path.clone(),
-    }]);
+    let prepared = match bench
+        .ws
+        .read()
+        .unwrap()
+        .plan_external_rename(&path, &renamed_path)
+    {
+        ExternalRenamePlan::Asset(prepared) => prepared,
+        _ => panic!("the providerless rename has an asset plan"),
+    };
+    let renamed_bytes = b"bytes written after the rename plan";
+    std::fs::write(&renamed_path, renamed_bytes).expect("asset changes after planning");
+    let parsed = match prepared.invoke() {
+        ParsedExternalRename::Asset(parsed) => parsed,
+        _ => panic!("the stable destination remains an asset rename"),
+    };
+    let pending = bench
+        .ws
+        .write()
+        .unwrap()
+        .prepare_external_asset_rename(parsed)
+        .expect("the verified asset rename is current");
+    let completed = pending.invoke();
+    assert!(
+        bench
+            .ws
+            .write()
+            .unwrap()
+            .finish_external_asset_rename(completed)
+            .expect("the token returns to its owner"),
+        "the asset rename remains current"
+    );
 
     let after_rename = entry(&bench.ws.read().unwrap(), &renamed_id);
-    assert_eq!(after_rename.kind, before_rename.kind);
-    assert_eq!(after_rename.size, before_rename.size);
-    assert_eq!(after_rename.fingerprint, before_rename.fingerprint);
+    assert_eq!(after_rename.kind, EntryKind::Asset);
+    assert_eq!(after_rename.size, renamed_bytes.len() as u64);
+    assert_eq!(
+        after_rename.fingerprint,
+        Some(Revision::of_bytes(renamed_bytes)),
+        "the destination fingerprint comes from the detached read, not the source entry"
+    );
     let ws = bench.ws.read().unwrap();
+    let IndexResult::Folders(folders) = ws
+        .query_index(IndexQuery::Folders {
+            under: None,
+            page: None,
+        })
+        .expect("the folder index responds")
+    else {
+        panic!("expected folders");
+    };
+    assert!(
+        folders.items.iter().any(|folder| folder.path == "media"),
+        "the asset prepare records destination folders"
+    );
     assert_eq!(
         ws.organization()
             .icons

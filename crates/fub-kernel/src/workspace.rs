@@ -388,6 +388,7 @@ pub enum ParsedExternalRename {
 pub struct ParsedExternalAssetRename {
     snapshot: ExternalRenameSnapshot,
     stat: crate::storage::Stat,
+    fingerprint: Revision,
     organization: Arc<OrganizationStore>,
     storage: Arc<dyn crate::storage::VaultStorage>,
     doc_data_roots: Vec<Utf8PathBuf>,
@@ -675,8 +676,9 @@ impl PendingExternalDocumentRename {
 }
 
 impl PreparedExternalAssetRename {
-    /// Verifica la destinazione e, se non è un file, invoca i due piani
-    /// per-path già fotografati. Tutto il filesystem resta fuori da Custody.
+    /// Verifica la destinazione con stat-read-stat e, se non è un file stabile,
+    /// invoca i due piani per-path già fotografati. Tutto il filesystem resta
+    /// fuori da Custody.
     pub fn invoke(self) -> ParsedExternalRename {
         let PreparedExternalAssetRename {
             snapshot,
@@ -685,17 +687,30 @@ impl PreparedExternalAssetRename {
             doc_data_roots,
             fallback,
         } = self;
-        match storage.stat(&snapshot.to_path) {
-            Ok(stat) if stat.is_file() => {
+        let verified = match storage.stat(&snapshot.to_path) {
+            Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
+                Ok(bytes) => match storage.stat(&snapshot.to_path) {
+                    Ok(after) if after.is_file() && before == after => {
+                        Some((after, Revision::of_bytes(&bytes)))
+                    }
+                    _ => None,
+                },
+                Err(_) => None,
+            },
+            _ => None,
+        };
+        match verified {
+            Some((stat, fingerprint)) => {
                 ParsedExternalRename::Asset(ParsedExternalAssetRename {
                     snapshot,
                     stat,
+                    fingerprint,
                     organization,
                     storage,
                     doc_data_roots,
                 })
             }
-            _ => ParsedExternalRename::Sync(
+            None => ParsedExternalRename::Sync(
                 fallback
                     .into_iter()
                     .map(|(path, plan)| (path, plan.map(SyncPlan::invoke)))
@@ -5128,6 +5143,7 @@ impl Workspace {
             mtime: stat.mtime,
             fingerprint: Some(fingerprint.clone()),
         };
+        self.indexes.core.ensure_folders_of(&snapshot.to_id);
         self.indexes.core.set_entry(installed.clone());
         let losses = self
             .indexes
@@ -5149,6 +5165,17 @@ impl Workspace {
             &snapshot.from_id,
             ContextChange::Renamed(snapshot.to_id.clone()),
         );
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.record(JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::DocumentRenamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::IndexUpdated);
+        });
         Ok(Some(PendingExternalDocumentRename {
             snapshot,
             installed,
@@ -5158,12 +5185,20 @@ impl Workspace {
         }))
     }
 
-    /// Finalizza perdite, grafo, journal ed eventi se il core è ancora quello
-    /// installato dal token.
+    /// Recupera sempre frame, perdite e warning; grafo e note di sync seguono
+    /// il token soltanto se il core installato è ancora corrente.
     pub fn finish_external_document_rename(
         &mut self,
         completed: CompletedExternalDocumentRename,
-    ) -> bool {
+    ) -> std::result::Result<bool, (PluginError, CompletedExternalDocumentRename)> {
+        if completed.snapshot.workspace_id != self.workspace_id {
+            return Err((
+                PluginError::Conflict(
+                    "la rinomina documento appartiene a un altro workspace".into(),
+                ),
+                completed,
+            ));
+        }
         let CompletedExternalDocumentRename {
             snapshot,
             installed,
@@ -5173,38 +5208,39 @@ impl Workspace {
         } = completed;
         let removal_losses = match self.finish_document_rename_removal(removal) {
             Ok(losses) => losses,
-            Err(_) => return false,
+            Err(removal) => {
+                return Err((
+                    PluginError::Conflict(
+                        "la rimozione della rinomina appartiene a un altro workspace".into(),
+                    ),
+                    CompletedExternalDocumentRename {
+                        snapshot,
+                        installed,
+                        removal,
+                        feed,
+                        side_data,
+                    },
+                ));
+            }
         };
         self.report_losses(removal_losses);
         self.report_losses(feed.losses);
         self.report_rename_side_data(side_data);
-        if self.indexes.core.entries.contains_key(&snapshot.from_id)
-            || self.indexes.core.entries.get(&snapshot.to_id) != Some(&installed)
-            || self.entry_fingerprint(&snapshot.to_id) != installed.fingerprint
-            || !self.indexes.core.metas.contains_key(&snapshot.to_id)
-            || snapshot.syntax_generation != self.syntax_generation
-            || snapshot.routing_generation != self.indexes.routing_generation()
-        {
-            return false;
+        let current = !self.indexes.core.entries.contains_key(&snapshot.from_id)
+            && self.indexes.core.entries.get(&snapshot.to_id) == Some(&installed)
+            && self.entry_fingerprint(&snapshot.to_id) == installed.fingerprint
+            && self.indexes.core.metas.contains_key(&snapshot.to_id)
+            && snapshot.syntax_generation == self.syntax_generation
+            && snapshot.routing_generation == self.indexes.routing_generation();
+        if !current {
+            return Ok(false);
         }
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
             self.indexes.core.rebuild_graph();
         }
         let outcome: Result<bool> = Ok(true);
         self.notes_sync(&snapshot.to_path, &outcome);
-        self.as_actor(Actor::Watcher, |ws| {
-            ws.record(JournalOp::Renamed {
-                from: snapshot.from_id.clone(),
-                to: snapshot.to_id.clone(),
-            });
-            ws.emit_event(Event::DocumentRenamed {
-                from: snapshot.from_id,
-                to: snapshot.to_id,
-            });
-            ws.emit_event(Event::IndexUpdated);
-            ws.dispatch_pending();
-        });
-        true
+        Ok(true)
     }
 
     /// Applica soltanto al core un asset già osservato sul path d'arrivo.
@@ -5216,6 +5252,7 @@ impl Workspace {
         let ParsedExternalAssetRename {
             snapshot,
             stat,
+            fingerprint,
             organization,
             storage,
             doc_data_roots,
@@ -5229,6 +5266,7 @@ impl Workspace {
                 != Some(&snapshot.to_id)
             || current_from != Some(&snapshot.from_entry)
             || current_to != snapshot.to_entry.as_ref()
+            || snapshot.from_entry.fingerprint != self.entry_fingerprint(&snapshot.from_id)
             || self.indexes.core.metas.contains_key(&snapshot.to_id)
             || snapshot.syntax_generation != self.syntax_generation
             || snapshot.routing_generation != self.indexes.routing_generation()
@@ -5240,11 +5278,22 @@ impl Workspace {
             kind: snapshot.from_entry.kind,
             size: stat.size,
             mtime: stat.mtime,
-            fingerprint: snapshot.from_entry.fingerprint.clone(),
+            fingerprint: Some(fingerprint),
         };
         self.as_actor(Actor::Watcher, |ws| {
             ws.indexes.core.remove_entry(&snapshot.from_id);
+            ws.indexes.core.ensure_folders_of(&snapshot.to_id);
             ws.indexes.core.set_entry(installed.clone());
+            ws.record(JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::EntryRenamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+                kind: installed.kind,
+            });
+            ws.emit_event(Event::IndexUpdated);
         });
         Some(PendingExternalAssetRename {
             snapshot,
@@ -5255,45 +5304,37 @@ impl Workspace {
         })
     }
 
-    /// Finalizza una rinomina asset solo se la voce installata è ancora quella
-    /// preparata, poi emette l'unico evento d'identità.
+    /// Recupera sempre i warning detached; l'epilogo derivato resta subordinato
+    /// all'identità installata dal token.
     pub fn finish_external_asset_rename(
         &mut self,
         completed: CompletedExternalAssetRename,
-    ) -> bool {
+    ) -> std::result::Result<bool, (PluginError, CompletedExternalAssetRename)> {
+        if completed.snapshot.workspace_id != self.workspace_id {
+            return Err((
+                PluginError::Conflict(
+                    "la rinomina asset appartiene a un altro workspace".into(),
+                ),
+                completed,
+            ));
+        }
         let CompletedExternalAssetRename {
             snapshot,
             installed,
             doc_data_errors,
         } = completed;
-        if snapshot.workspace_id != self.workspace_id
-            || self.indexes.core.entries.contains_key(&snapshot.from_id)
-            || self.indexes.core.entries.get(&snapshot.to_id) != Some(&installed)
-            || snapshot.syntax_generation != self.syntax_generation
-            || snapshot.routing_generation != self.indexes.routing_generation()
-        {
-            return false;
-        }
         for error in doc_data_errors {
             self.doc_data_warnings.push(format!(
                 "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
                 snapshot.from_id, snapshot.to_id
             ));
         }
-        self.as_actor(Actor::Watcher, |ws| {
-            ws.record(JournalOp::Renamed {
-                from: snapshot.from_id.clone(),
-                to: snapshot.to_id.clone(),
-            });
-            ws.emit_event(Event::EntryRenamed {
-                from: snapshot.from_id,
-                to: snapshot.to_id,
-                kind: installed.kind,
-            });
-            ws.emit_event(Event::IndexUpdated);
-            ws.dispatch_pending();
-        });
-        true
+        let current = !self.indexes.core.entries.contains_key(&snapshot.from_id)
+            && self.indexes.core.entries.get(&snapshot.to_id) == Some(&installed)
+            && self.entry_fingerprint(&snapshot.to_id) == installed.fingerprint
+            && snapshot.syntax_generation == self.syntax_generation
+            && snapshot.routing_generation == self.indexes.routing_generation();
+        Ok(current)
     }
 
     /// Compone un piano da un'identità già recintata e filtrata.

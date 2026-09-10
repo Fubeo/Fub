@@ -760,20 +760,21 @@ impl ExternalSync {
                         let pending = self
                             .workspace
                             .write()?
-                            .prepare_sync_path_prepared(&path, parsed)
-                            .unwrap_or_default();
-                        if let Some(pending) = pending {
-                            let completed = pending.invoke();
-                            let outcome = self
-                                .workspace
-                                .write()?
-                                .finish_sync_path_prepared(completed);
-                            if let Err((error, _completed)) = outcome {
-                                self.workspace.write()?.report_host_trouble(
-                                    Severity::Warning,
-                                    error,
-                                );
-                                return Ok(());
+                            .prepare_sync_path_prepared(&path, parsed)?;
+                        let Some(pending) = pending else {
+                            continue;
+                        };
+                        let completed = pending.invoke();
+                        match self
+                            .workspace
+                            .write()?
+                            .finish_sync_path_prepared(completed)
+                        {
+                            Ok(true) => {}
+                            Ok(false) => continue,
+                            Err((error, completed)) => {
+                                drop(completed);
+                                return Err(error);
                             }
                         }
                     }
@@ -782,12 +783,21 @@ impl ExternalSync {
                             .workspace
                             .write()?
                             .prepare_external_asset_rename(parsed);
-                        if let Some(pending) = pending {
-                            let completed = pending.invoke();
-                            let _ = self
-                                .workspace
-                                .write()?
-                                .finish_external_asset_rename(completed);
+                        let Some(pending) = pending else {
+                            continue;
+                        };
+                        let completed = pending.invoke();
+                        match self
+                            .workspace
+                            .write()?
+                            .finish_external_asset_rename(completed)
+                        {
+                            Ok(true) => {}
+                            Ok(false) => continue,
+                            Err((error, completed)) => {
+                                drop(completed);
+                                return Err(error);
+                            }
                         }
                     }
                     InvokedWatcherChange::Document(parsed) => {
@@ -795,12 +805,21 @@ impl ExternalSync {
                             .workspace
                             .write()?
                             .prepare_external_document_rename(parsed)?;
-                        if let Some(pending) = pending {
-                            let completed = pending.invoke();
-                            let _ = self
-                                .workspace
-                                .write()?
-                                .finish_external_document_rename(completed);
+                        let Some(pending) = pending else {
+                            continue;
+                        };
+                        let completed = pending.invoke();
+                        match self
+                            .workspace
+                            .write()?
+                            .finish_external_document_rename(completed)
+                        {
+                            Ok(true) => {}
+                            Ok(false) => continue,
+                            Err((error, completed)) => {
+                                drop(completed);
+                                return Err(error);
+                            }
                         }
                     }
                 }
