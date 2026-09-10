@@ -741,6 +741,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
         .unwrap()
         .prepare_external_asset_rename(parsed)
         .expect("the verified asset rename is current");
+    let completed = pending.invoke();
     let result = bench
         .ws
         .write()
@@ -872,7 +873,7 @@ fn a_prepare_error_does_not_silence_the_next_watcher_batch() {
         .write()
         .expect("the vault is alive")
         .finish_sync_path_prepared(completed);
-    let Ok(()) = result else {
+    let Ok(true) = result else {
         panic!("the trigger feed finishes");
     };
 
