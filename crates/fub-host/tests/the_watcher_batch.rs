@@ -17,7 +17,7 @@
 //! nella fase 1 di `ExternalSync::batch` compila, passa ogni test funzionale e
 //! non si vede in nessuna diff che non sia questa.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 
@@ -197,6 +197,60 @@ impl IndexProvider for ReentrantFeedIndex {
 
     fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
         Err(PluginError::Unserved("feed-only test index".into()))
+    }
+}
+
+/// Osserva il feed che rende necessario il flush e verifica che la callback
+/// durevole non rientri mentre il workspace è in prestito.
+struct PartialBatchIndex {
+    workspace: Custody<Workspace>,
+    feeds: Arc<AtomicUsize>,
+    flushes: Arc<AtomicUsize>,
+}
+
+impl IndexProvider for PartialBatchIndex {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, documents: &[DocumentModel]) -> Vec<IndexLoss> {
+        self.feeds.fetch_add(documents.len(), Ordering::SeqCst);
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        assert!(
+            self.workspace.try_read().is_some(),
+            "il flush ha conservato il prestito esclusivo del workspace"
+        );
+        assert!(
+            self.workspace.try_write().is_some(),
+            "il flush non è interamente fuori da Custody"
+        );
+        self.flushes.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+
+    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved(
+            "feed-only partial batch index".into(),
+        ))
     }
 }
 
@@ -461,6 +515,116 @@ fn who_reads_enters_while_catch_up_scans_the_vault() {
         "one failed scan must be reported exactly once"
     );
 }
+#[derive(Clone, Copy, Debug)]
+enum PartialSyncPath {
+    Batch,
+    CatchUp,
+}
+
+/// Un primo documento valido committa core e feed; il secondo, ordinato dopo,
+/// fallisce sul testo UTF-8. Il feed già staged deve essere flushato una volta
+/// senza coprire la diagnosi che ha interrotto l'applicazione.
+#[test]
+fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
+    const INDEX: &str = "test.watcher-partial-flush";
+
+    for path in [PartialSyncPath::Batch, PartialSyncPath::CatchUp] {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        let mut formats = FormatRegistry::new();
+        formats
+            .register(Box::new(Slow(Arc::default())))
+            .expect("no conflict");
+        let mut workspace = Workspace::new(&root, formats).expect("the vault opens");
+        workspace.reindex().expect("initial empty scan");
+        let workspace = Custody::new("the partial watcher vault", workspace);
+        let feeds = Arc::new(AtomicUsize::new(0));
+        let flushes = Arc::new(AtomicUsize::new(0));
+        {
+            let mut ws = workspace.write().expect("the vault is alive");
+            ws.register_core_feature(INDEX, "Watcher partial flush probe")
+                .expect("index owner declares");
+            ws.register_index_provider(
+                INDEX,
+                Box::new(PartialBatchIndex {
+                    workspace: workspace.clone(),
+                    feeds: Arc::clone(&feeds),
+                    flushes: Arc::clone(&flushes),
+                }),
+            )
+            .expect("index provider registers");
+        }
+
+        // L'ordine lessicografico rende anche catch_up deterministico; batch
+        // riceve esplicitamente lo stesso ordine valid-before-invalid.
+        let good = root.join("a-good.md");
+        let bad = root.join("z-bad.md");
+        std::fs::write(&good, "indicizzabile\n").expect("valid external document");
+        std::fs::write(&bad, [0xff]).expect("invalid UTF-8 external document");
+        let events = workspace
+            .read()
+            .expect("the vault is alive")
+            .bus()
+            .subscribe();
+
+        let mut sync = ExternalSync::new(workspace.clone());
+        match path {
+            PartialSyncPath::Batch => sync.batch(&[
+                ExternalChange::Touched(good.clone()),
+                ExternalChange::Touched(bad),
+            ]),
+            PartialSyncPath::CatchUp => sync.catch_up(),
+        }
+
+        assert_eq!(
+            entry(&workspace.read().unwrap(), &DocId::new("a-good.md")).fingerprint,
+            Some(Revision::of("indicizzabile\n")),
+            "{path:?} did not retain the successful prefix"
+        );
+        assert_eq!(
+            feeds.load(Ordering::SeqCst),
+            1,
+            "{path:?} did not feed exactly the successful prefix"
+        );
+        assert_eq!(
+            flushes.load(Ordering::SeqCst),
+            1,
+            "{path:?} skipped or repeated the staged flush after the later error"
+        );
+
+        let status = match workspace
+            .read()
+            .unwrap()
+            .query_index(IndexQuery::VaultStatus)
+        {
+            Ok(IndexResult::VaultStatus(status)) => status,
+            other => panic!("expected vault status, got {other:?}"),
+        };
+        assert_eq!(status.sync_failures, 1, "{path:?} lost the apply error");
+        let original = status.last_sync_error.expect("the apply error is retained");
+        assert!(
+            original.to_lowercase().contains("utf-8"),
+            "{path:?} replaced the original invalid UTF-8 error: {original}"
+        );
+        let trouble: Vec<_> = events
+            .try_iter()
+            .filter_map(|notice| match notice.event {
+                Event::Trouble { error, .. } => Some(error.to_string()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            trouble.len(),
+            1,
+            "{path:?} must report only the original apply error: {trouble:?}"
+        );
+        assert!(
+            trouble[0].to_lowercase().contains("utf-8"),
+            "{path:?} reported a replacement error: {trouble:?}"
+        );
+    }
+}
+
 /// Il ramo folder-only di `is_ignored` può chiedere uno `stat`: anche quel
 /// preflight deve vivere interamente fuori da `Custody`, per `Touched` e
 /// `Renamed`.

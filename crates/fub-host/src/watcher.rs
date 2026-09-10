@@ -602,6 +602,11 @@ impl Drop for EventDispatchGuard {
     }
 }
 
+struct BatchApply {
+    outcome: Result<(), PluginError>,
+    mutated: bool,
+}
+
 pub struct ExternalSync {
     workspace: Custody<Workspace>,
     lifecycle: Arc<SyncLifecycle>,
@@ -669,11 +674,15 @@ impl ExternalSync {
         };
         // Fase 1d — stat/read/parse e side-data restano fuori da Custody.
         let invoked = planned.into_iter().flat_map(PlannedWatcherChange::invoke);
-        if self.apply_batch_prepared(invoked).is_err() {
-            return;
-        }
-        // Fase 3 — la durevolezza.
-        self.flush();
+        let BatchApply { outcome, mutated } = self.apply_batch_prepared(invoked);
+        // Fase 3 — la durevolezza è un finally soltanto dopo una mutazione:
+        // un errore di prepare pulito non ha feed staged da flushare.
+        let flushed = if outcome.is_ok() || mutated {
+            self.flush()
+        } else {
+            Ok(())
+        };
+        let _ = outcome.and(flushed);
     }
 
     /// **Il primo lotto del rilevatore, calcolato per differenza** (§15.7).
@@ -733,11 +742,15 @@ impl ExternalSync {
         let prepared = plans
             .into_iter()
             .map(|(path, plan)| InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke)));
-        if self.apply_batch_prepared(prepared).is_err() {
-            return;
-        }
-        // Fase 3 — la durevolezza.
-        self.flush();
+        let BatchApply { outcome, mutated } = self.apply_batch_prepared(prepared);
+        // Fase 3 — come per un lotto notificato, i feed già riusciti vanno resi
+        // durevoli anche se un piano successivo ha fallito.
+        let flushed = if outcome.is_ok() || mutated {
+            self.flush()
+        } else {
+            Ok(())
+        };
+        let _ = outcome.and(flushed);
     }
 
     // Il lotto conserva un solo drain, ma ogni feed/rimozione lascia il guard
@@ -746,9 +759,18 @@ impl ExternalSync {
     fn apply_batch_prepared(
         &self,
         changes: impl IntoIterator<Item = InvokedWatcherChange>,
-    ) -> Result<(), PluginError> {
+    ) -> BatchApply {
         let _turn = self.workspace.write_turn();
-        let dispatch = EventDispatchGuard::new(&self.workspace)?;
+        let dispatch = match EventDispatchGuard::new(&self.workspace) {
+            Ok(dispatch) => dispatch,
+            Err(error) => {
+                return BatchApply {
+                    outcome: Err(error),
+                    mutated: false,
+                };
+            }
+        };
+        let mut mutated = false;
         let outcome = (|| {
             for change in changes {
                 match change {
@@ -762,7 +784,7 @@ impl ExternalSync {
                         };
                         let completed = pending.invoke();
                         match self.workspace.write()?.finish_sync_path_prepared(completed) {
-                            Ok(true) => {}
+                            Ok(true) => mutated = true,
                             Ok(false) => continue,
                             Err((error, completed)) => {
                                 drop(completed);
@@ -784,7 +806,7 @@ impl ExternalSync {
                             .write()?
                             .finish_external_asset_rename(completed)
                         {
-                            Ok(true) => {}
+                            Ok(true) => mutated = true,
                             Ok(false) => continue,
                             Err((error, completed)) => {
                                 drop(completed);
@@ -806,7 +828,7 @@ impl ExternalSync {
                             .write()?
                             .finish_external_document_rename(completed)
                         {
-                            Ok(true) => {}
+                            Ok(true) => mutated = true,
                             Ok(false) => continue,
                             Err((error, completed)) => {
                                 drop(completed);
@@ -820,7 +842,10 @@ impl ExternalSync {
         })();
         let restored = dispatch.restore();
         let drained = drain_events(&self.workspace);
-        outcome.and(restored).and(drained)
+        BatchApply {
+            outcome: outcome.and(restored).and(drained),
+            mutated,
+        }
     }
 
     /// Fine del lotto: è il punto tranquillo in cui rendere durevoli gli indici.
@@ -831,12 +856,10 @@ impl ExternalSync {
     /// perdita che l'utente ha il diritto di sapere: chi cerca, fino alla
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
-    fn flush(&mut self) {
-        let Ok(flush_errors) = crate::teardown::flush_indexes(&self.workspace) else {
-            return;
-        };
+    fn flush(&mut self) -> Result<(), PluginError> {
+        let flush_errors = crate::teardown::flush_indexes(&self.workspace)?;
         if flush_errors.is_empty() {
-            return;
+            return Ok(());
         }
         for error in &flush_errors {
             tracing::warn!(target: "fub.host", "flush index: {error}");
@@ -849,6 +872,7 @@ impl ExternalSync {
                 );
             }
         });
+        Ok(())
     }
 
     /// **Il rilevamento è finito, e da adesso si vede** (§9.7). Un errore del
