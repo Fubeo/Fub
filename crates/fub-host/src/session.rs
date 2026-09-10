@@ -437,6 +437,36 @@ fn with_read_version_host<R>(
     Ok(workspace.with_read_host(VERSIONING_ID, f))
 }
 
+/// Esegue una mutazione dell'organizzazione dopo avere estratto lo store owned:
+/// il sidecar non attraversa mai il prestito di `Custody<Workspace>`.
+fn update_organization<R>(
+    workspace: &Custody<Workspace>,
+    update: impl FnOnce(&fub_kernel::OrganizationStore) -> Result<R, String>,
+) -> Result<R, PluginError> {
+    let store = {
+        let workspace = workspace.read()?;
+        workspace.organization_store()
+    };
+    update(&store).map_err(|error| PluginError::Io(error.into()))
+}
+
+/// Salva lo stato di vista dopo avere estratto path e store owned dal workspace.
+fn update_view_state(
+    workspace: &Custody<Workspace>,
+    owner: &str,
+    instance: &str,
+    key: &str,
+    value: Option<serde_json::Value>,
+) -> Result<(), PluginError> {
+    let (root, states) = {
+        let workspace = workspace.read()?;
+        (workspace.root().to_string(), workspace.view_states())
+    };
+    states
+        .set(&root, owner, instance, key, value)
+        .map_err(|error| PluginError::Io(error.into()))
+}
+
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
     ///
@@ -1877,11 +1907,8 @@ impl Host {
         key: &str,
         value: Option<serde_json::Value>,
     ) -> Result<(), PluginError> {
-        self.read_workspace(vault, |workspace| {
-            workspace
-                .set_view_state(owner, instance, key, value)
-                .map_err(|error| PluginError::Io(error.into()))
-        })
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_view_state(&workspace, owner, instance, key, value)
     }
 
     /// Accesso al workspace soltanto nei build di debug, per i banchi interni.
@@ -2013,13 +2040,8 @@ impl Host {
         path: &str,
         icon: Option<String>,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_icon(path, icon.clone())
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_icon(path, icon))
     }
 
     /// Appunta o spunta una nota.
@@ -2029,13 +2051,8 @@ impl Host {
         id: &str,
         pinned: bool,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_pinned(id, pinned)
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_pinned(id, pinned))
     }
 
     /// Registra o toglie una cartella dagli spazi.
@@ -2045,13 +2062,8 @@ impl Host {
         path: &str,
         is_space: bool,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_space(path, is_space)
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_space(path, is_space))
     }
 
     /// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
@@ -2061,13 +2073,8 @@ impl Host {
         folder: &str,
         names: Vec<String>,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_order(folder, names.clone())
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_order(folder, names))
     }
 }
 
@@ -2134,6 +2141,138 @@ fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
 /// questa riga sarebbe una seconda idea di cosa sia un id accettabile.
 pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
     fub_kernel::valid_doc_id(raw).map_err(PluginError::from)
+}
+#[cfg(test)]
+mod side_data_lock_tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
+    use fub_kernel::{FormatRegistry, MemStorage};
+
+    use super::*;
+
+    struct BlockingUpdateStorage {
+        inner: MemStorage,
+        entered: mpsc::SyncSender<()>,
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+
+    impl VaultStorage for BlockingUpdateStorage {
+        fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+            self.inner.read(path)
+        }
+
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+            self.inner.write(path, bytes)
+        }
+
+        fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+            self.entered
+                .send(())
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            self.release
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .recv()
+                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            self.inner.update(path, merge)
+        }
+
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.inner.append(path, bytes)
+        }
+
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.inner.rename(from, to)
+        }
+
+        fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.inner.rename_no_replace(from, to)
+        }
+
+        fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove(path)
+        }
+
+        fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+            self.inner.list(dir)
+        }
+
+        fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+            self.inner.stat(path)
+        }
+
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove_empty_dir(dir)
+        }
+    }
+
+    #[test]
+    fn host_side_data_update_releases_workspace_custody_during_storage_io() {
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let storage = Arc::new(BlockingUpdateStorage {
+            inner: MemStorage::new(),
+            entered: entered_tx,
+            release: Mutex::new(release_rx),
+        });
+        let root = Utf8PathBuf::from("/side-data-lock-test");
+        let workspace = Workspace::on(
+            &root,
+            FormatRegistry::new(),
+            Arc::clone(&storage) as Arc<dyn VaultStorage>,
+            MachineSettings::in_memory(),
+        )
+        .expect("the workspace opens on the blocking storage");
+        let workspace = Custody::new("the side-data test workspace", workspace);
+        let worker_workspace = workspace.clone();
+        let worker = std::thread::spawn(move || {
+            update_organization(&worker_workspace, |store| {
+                store.set_icon("Nota.md", Some("📌".into()))
+            })
+        });
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("the organization update reaches storage");
+        let read = workspace.try_read();
+        let read_progressed = read.is_some();
+        drop(read);
+        let write = workspace.try_write();
+        let write_progressed = write.is_some();
+        drop(write);
+        release_tx.send(()).expect("the storage update resumes");
+
+        worker
+            .join()
+            .expect("the host-side update thread does not panic")
+            .expect("the organization update succeeds");
+        assert!(
+            read_progressed,
+            "Host side-data I/O retained a write guard on Custody<Workspace>"
+        );
+        assert!(
+            write_progressed,
+            "Host side-data I/O retained a read or write guard on Custody<Workspace>"
+        );
+
+        let reopened = Workspace::on(
+            &root,
+            FormatRegistry::new(),
+            storage as Arc<dyn VaultStorage>,
+            MachineSettings::in_memory(),
+        )
+        .expect("the persisted organization reopens");
+        assert_eq!(
+            reopened
+                .organization()
+                .icons
+                .get("Nota.md")
+                .map(String::as_str),
+            Some("📌")
+        );
+    }
 }
 
 #[cfg(test)]

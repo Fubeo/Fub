@@ -9805,6 +9805,11 @@ impl Workspace {
     pub fn organization(&self) -> fub_abi::organization::Organization {
         self.organization.snapshot()
     }
+    /// Lo store owned dell'organizzazione, per i confini host che devono
+    /// rilasciare il prestito del workspace prima della persistenza.
+    pub fn organization_store(&self) -> Arc<OrganizationStore> {
+        Arc::clone(&self.organization)
+    }
 
     /// Appunta o spunta una nota.
     pub fn set_icon(&self, path: &str, icon: Option<String>) -> std::result::Result<(), String> {
