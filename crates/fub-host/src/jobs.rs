@@ -667,10 +667,17 @@ impl VaultStructure for JobHost {
         };
         if let Some(prepared) = prepared {
             let parsed = prepared.invoke().map_err(PluginError::from)?;
-            let pending = {
+            let committed = {
                 let mut ws = workspace.write()?;
                 ws.commit_explicit_rename(parsed)
-                    .map_err(PluginError::from)?
+                    .map_err(|failure| *failure)
+            };
+            let pending = match committed {
+                Ok(pending) => pending,
+                Err((error, parsed)) => {
+                    parsed.rollback().map_err(PluginError::from)?;
+                    return Err(PluginError::from(error));
+                }
             };
             let completed = pending.invoke().invoke_rewrites(|source, request| {
                 self.apply_edit_detached_inner(source, request.clone())

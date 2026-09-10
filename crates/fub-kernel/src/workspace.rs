@@ -313,16 +313,19 @@ pub struct PreparedExplicitRename {
     parser: PreparedParse,
     source_kind: SourceKind,
     rewrites: Vec<PreparedExplicitLinkRewrite>,
+    side_data: PreparedRenameSideData,
 }
 
 /// Sorgente stabile e modello già parsato, ancora da riconvalidare nel core.
 #[must_use = "la rinomina parsata deve essere committata"]
 pub struct ParsedExplicitRename {
     snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
     model: DocumentModel,
     fingerprint: Revision,
     stat: crate::storage::Stat,
     rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedRenameSideData,
 }
 /// Core della rinomina esplicita già installato, con gli handle degli indici
 /// ancora da invocare fuori dal workspace.
@@ -330,6 +333,7 @@ pub struct ParsedExplicitRename {
 pub struct PendingExplicitRename {
     identity: PendingIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedRenameSideData,
     owns_batch: bool,
 }
 
@@ -337,6 +341,7 @@ pub struct PendingExplicitRename {
 pub struct CompletedExplicitRename {
     identity: CompletedIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedRenameSideData,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
 }
@@ -433,6 +438,7 @@ struct CompletedRenameSideData {
     from: DocId,
     to: DocId,
     errors: Vec<String>,
+    rollback: Option<PreparedRenameSideData>,
 }
 
 /// Core della rinomina già installato, callback e side-data ancora detached.
@@ -634,9 +640,9 @@ impl SyncPlan {
 }
 
 impl PreparedExplicitRename {
-    /// Verifica la collisione sul disco, legge una sola versione stabile della
-    /// sorgente, la parsa col nuovo id e costruisce le richieste CAS dei
-    /// backlink. Tutto avviene senza un prestito del workspace.
+    /// Legge e parsa una versione stabile della sorgente, costruisce le
+    /// richieste CAS dei backlink, poi migra i side-data e infine sposta il
+    /// file. Tutto avviene senza un prestito del workspace.
     pub fn invoke(self) -> Result<ParsedExplicitRename> {
         let PreparedExplicitRename {
             snapshot,
@@ -644,11 +650,8 @@ impl PreparedExplicitRename {
             parser,
             source_kind,
             rewrites,
+            side_data,
         } = self;
-        let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
-        if !same_file && storage.exists(&snapshot.to_path) {
-            return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
-        }
 
         let path = snapshot.from_path.clone();
         let before = storage.stat(&path).map_err(|source| KernelError::Io {
@@ -719,13 +722,95 @@ impl PreparedExplicitRename {
                 })
             })
             .collect();
+
+        let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
+        if !same_file && storage.exists(&snapshot.to_path) {
+            return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
+        }
+        let side_data = side_data.invoke();
+        if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
+            let rollback_errors = side_data.rollback();
+            let source = if rollback_errors.is_empty() {
+                source
+            } else {
+                std::io::Error::new(
+                    source.kind(),
+                    format!(
+                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                )
+            };
+            return Err(KernelError::Io {
+                path: snapshot.from_path,
+                source,
+            });
+        }
         Ok(ParsedExplicitRename {
             snapshot,
+            storage,
             model,
             fingerprint,
             stat: after,
             rewrites,
+            side_data,
         })
+    }
+}
+impl ParsedExplicitRename {
+    /// Annulla una mossa che il workspace ha rifiutato al commit. Il token è
+    /// one-shot e riporta il file indietro soltanto se la destinazione contiene
+    /// ancora esattamente i byte mossi da questa invocazione.
+    pub fn rollback(self) -> Result<()> {
+        let ParsedExplicitRename {
+            snapshot,
+            storage,
+            fingerprint,
+            side_data,
+            ..
+        } = self;
+        let before = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let bytes = storage
+            .read(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let after = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        if !before.is_file() || before != after || Revision::of_bytes(&bytes) != fingerprint {
+            return Err(KernelError::Stale(snapshot.to.to_string()));
+        }
+        storage
+            .rename_no_replace(&snapshot.to_path, &snapshot.from_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let rollback_errors = side_data.rollback();
+        if rollback_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(KernelError::Io {
+                path: snapshot.from_path,
+                source: std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "il file è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                ),
+            })
+        }
     }
 }
 impl PendingExplicitRename {
@@ -735,6 +820,7 @@ impl PendingExplicitRename {
         CompletedExplicitRename {
             identity: self.identity.invoke(),
             rewrites: self.rewrites,
+            side_data: self.side_data,
             owns_batch: self.owns_batch,
             rewrite_failures: Vec::new(),
         }
@@ -845,6 +931,14 @@ impl PreparedExternalDocumentRename {
 
 impl PreparedRenameSideData {
     fn invoke(self) -> CompletedRenameSideData {
+        let rollback = PreparedRenameSideData {
+            from: self.to.clone(),
+            to: self.from.clone(),
+            organization: Arc::clone(&self.organization),
+            drafts: Arc::clone(&self.drafts),
+            storage: Arc::clone(&self.storage),
+            doc_data_roots: self.doc_data_roots.clone(),
+        };
         let PreparedRenameSideData {
             from,
             to,
@@ -863,7 +957,42 @@ impl PreparedRenameSideData {
         if let Err(error) = drafts.migrate(&from, &to) {
             errors.push(format!("bozza non migrata: {error}"));
         }
-        CompletedRenameSideData { from, to, errors }
+        CompletedRenameSideData {
+            from,
+            to,
+            errors,
+            rollback: Some(rollback),
+        }
+    }
+}
+
+impl CompletedRenameSideData {
+    fn rollback(mut self) -> Vec<String> {
+        let Some(rollback) = self.rollback.take() else {
+            return vec!["ricevuta di rollback già consumata".into()];
+        };
+        let PreparedRenameSideData {
+            from,
+            to,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = rollback;
+        let mut errors = Vec::new();
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            errors.push(format!("organizzazione non ripristinata: {error}"));
+        }
+        errors.extend(crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &from,
+            &to,
+        ));
+        if let Err(error) = drafts.migrate(&from, &to) {
+            errors.push(format!("bozza non ripristinata: {error}"));
+        }
+        errors
     }
 }
 
@@ -6424,7 +6553,14 @@ impl Workspace {
             .prepare_explicit_rename(from, to)?
             .expect("il documento è già stato classificato");
         let parsed = prepared.invoke()?;
-        let pending = self.commit_explicit_rename(parsed)?;
+        let pending = match self.commit_explicit_rename(parsed) {
+            Ok(pending) => pending,
+            Err(failure) => {
+                let (error, parsed) = *failure;
+                parsed.rollback()?;
+                return Err(error);
+            }
+        };
         let completed = pending
             .invoke()
             .invoke_rewrites(|source, request| self.apply_edit(source, request.clone()).map(drop));
@@ -6486,49 +6622,45 @@ impl Workspace {
             parser,
             source_kind: descriptor.source,
             rewrites: self.prepare_explicit_link_rewrites(from, &to),
+            side_data: self.prepare_rename_side_data(from, &to),
         }))
     }
 
-    /// Applica il file e il solo core della rinomina. Gli handle owned e il
-    /// frame del lotto restano nel token fino al finalizzatore.
+    /// Riconvalida il solo core della rinomina. Il file e i side-data sono già
+    /// stati mossi dal token detached; in caso di rifiuto il chiamante recupera
+    /// lo stesso token per il rollback fuori dal guard.
     pub fn commit_explicit_rename(
         &mut self,
         parsed: ParsedExplicitRename,
-    ) -> Result<PendingExplicitRename> {
+    ) -> std::result::Result<PendingExplicitRename, Box<(KernelError, ParsedExplicitRename)>> {
         let owns_batch = self.dispatch.open_batch();
         match self.commit_explicit_rename_in_batch(parsed) {
             Ok(mut pending) => {
                 pending.owns_batch = owns_batch;
                 Ok(pending)
             }
-            Err(error) => {
+            Err(failure) => {
                 if owns_batch {
                     self.dispatch.close_batch();
                 }
-                Err(error)
+                Err(failure)
             }
         }
     }
 
-    /// Riconvalida integralmente la fotografia prima della prima mutazione,
-    /// quindi conserva l'ordine storico side-data → file → core.
+    /// Riconvalida integralmente workspace, generazioni, fotografia del core e
+    /// contenuto del token prima della prima mutazione autorevole. Non consulta
+    /// lo storage.
     fn commit_explicit_rename_in_batch(
         &mut self,
         parsed: ParsedExplicitRename,
-    ) -> Result<PendingExplicitRename> {
-        let ParsedExplicitRename {
-            snapshot,
-            model,
-            fingerprint,
-            stat,
-            rewrites,
-        } = parsed;
-        let same_file = self.docs.vault.same_file(&snapshot.from, &snapshot.to);
+    ) -> std::result::Result<PendingExplicitRename, Box<(KernelError, ParsedExplicitRename)>> {
+        let snapshot = &parsed.snapshot;
         let current_from = self.indexes.core.entries.get(&snapshot.from);
         let current_to = self.indexes.core.entries.get(&snapshot.to);
-        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&fingerprint)
-            && snapshot.from_entry.size == stat.size
-            && snapshot.from_entry.mtime == stat.mtime;
+        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&parsed.fingerprint)
+            && snapshot.from_entry.size == parsed.stat.size
+            && snapshot.from_entry.mtime == parsed.stat.mtime;
         if snapshot.workspace_id != self.workspace_id
             || current_from != Some(&snapshot.from_entry)
             || current_to != snapshot.to_entry.as_ref()
@@ -6536,23 +6668,34 @@ impl Workspace {
             || self.indexes.core.metas.contains_key(&snapshot.to)
             || snapshot.syntax_generation != self.syntax_generation
             || snapshot.routing_generation != self.indexes.routing_generation()
-            || model.id != snapshot.to
+            || parsed.model.id != snapshot.to
             || !source_matches
-            || (!same_file && self.docs.vault.exists(&snapshot.to))
         {
-            return Err(KernelError::Stale(snapshot.from.to_string()));
+            return Err(Box::new((
+                KernelError::Stale(snapshot.from.to_string()),
+                parsed,
+            )));
+        }
+        if let Err(error) = self.indexes.ensure_mutation_available() {
+            return Err(Box::new((error, parsed)));
         }
 
-        self.indexes.ensure_mutation_available()?;
-        self.migrate_side_data(&snapshot.from, &snapshot.to);
-        self.docs
-            .vault
-            .rename_no_replace(&snapshot.from, &snapshot.to)?;
-        let identity =
-            self.migrate_identity_core(&snapshot.from, &snapshot.to, model, fingerprint)?;
+        let ParsedExplicitRename {
+            snapshot,
+            storage: _,
+            model,
+            fingerprint,
+            stat: _,
+            rewrites,
+            side_data,
+        } = parsed;
+        let identity = self
+            .migrate_identity_core(&snapshot.from, &snapshot.to, model, fingerprint)
+            .expect("la fotografia del core è stata appena riconvalidata");
         Ok(PendingExplicitRename {
             identity,
             rewrites,
+            side_data,
             owns_batch: false,
         })
     }
@@ -6575,6 +6718,7 @@ impl Workspace {
         let CompletedExplicitRename {
             identity,
             rewrites: _,
+            side_data,
             owns_batch,
             rewrite_failures,
         } = completed;
@@ -6583,6 +6727,7 @@ impl Workspace {
         if self.finish_identity_migration(identity).is_err() {
             unreachable!("l'identità è già stata legata a questo workspace");
         }
+        self.report_rename_side_data(side_data);
         self.record(JournalOp::Renamed {
             from: from.clone(),
             to: to.clone(),

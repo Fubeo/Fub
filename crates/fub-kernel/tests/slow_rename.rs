@@ -405,6 +405,7 @@ struct Order {
     doc_from: Utf8PathBuf,
     data_from: Utf8PathBuf,
     data_to: Utf8PathBuf,
+    fail_document_rename: bool,
 }
 
 impl VaultStorage for Order {
@@ -434,6 +435,12 @@ impl VaultStorage for Order {
                 !self.inner.exists(&self.data_from),
                 "e non devono più stare sotto la chiave vecchia"
             );
+            if self.fail_document_rename {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "guasto forzato del rename",
+                ));
+            }
         }
         self.inner.rename_no_replace(from, to)
     }
@@ -451,8 +458,15 @@ impl VaultStorage for Order {
     }
 }
 
-#[test]
-fn the_internal_rename_migrates_data_before_moving_the_file() {
+struct InternalRenameFixture {
+    _dir: tempfile::TempDir,
+    root: Utf8PathBuf,
+    ws: Workspace,
+    data_from: Utf8PathBuf,
+    data_to: Utf8PathBuf,
+}
+
+fn internal_rename_fixture(fail_document_rename: bool) -> InternalRenameFixture {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     std::fs::write(root.join("a.txt"), "il contenuto\n").unwrap();
@@ -474,21 +488,98 @@ fn the_internal_rename_migrates_data_before_moving_the_file() {
         doc_from: root.join("a.txt"),
         data_from: data_from.clone(),
         data_to: data_to.clone(),
+        fail_document_rename,
     });
     let mut ws =
         Workspace::on(&root, registry(), support, MachineSettings::in_memory()).expect("apertura");
     ws.reindex().expect("reindex");
     std::fs::create_dir_all(&data_from).unwrap();
     std::fs::write(data_from.join("annotazione"), "i dati di a.txt").unwrap();
+    InternalRenameFixture {
+        _dir: dir,
+        root,
+        ws,
+        data_from,
+        data_to,
+    }
+}
 
-    ws.rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
+#[test]
+fn the_internal_rename_migrates_data_before_moving_the_file() {
+    let mut fixture = internal_rename_fixture(false);
+
+    fixture
+        .ws
+        .rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
         .expect("rinomina");
 
     assert_eq!(
-        std::fs::read_to_string(data_to.join("annotazione"))
+        std::fs::read_to_string(fixture.data_to.join("annotazione"))
             .ok()
             .as_deref(),
         Some("i dati di a.txt")
     );
-    assert!(!data_from.exists(), "la chiave vecchia è vuota");
+    assert!(!fixture.data_from.exists(), "la chiave vecchia è vuota");
+}
+
+#[test]
+fn a_failed_file_move_rolls_side_data_back_without_a_rename_fact() {
+    let mut fixture = internal_rename_fixture(true);
+    let rx = fixture.ws.bus().subscribe();
+
+    assert!(fixture
+        .ws
+        .rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .is_err());
+
+    assert!(fixture.root.join("a.txt").exists());
+    assert!(!fixture.root.join("b.txt").exists());
+    assert_eq!(
+        std::fs::read_to_string(fixture.data_from.join("annotazione"))
+            .ok()
+            .as_deref(),
+        Some("i dati di a.txt")
+    );
+    assert!(!fixture.data_to.exists());
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
+}
+
+#[test]
+fn a_stale_commit_rolls_the_invoked_move_back_without_a_rename_fact() {
+    let mut fixture = internal_rename_fixture(false);
+    let prepared = fixture
+        .ws
+        .prepare_explicit_rename(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .expect("prepare")
+        .expect("documento");
+    let parsed = prepared.invoke().expect("invoke detached");
+    fixture
+        .ws
+        .sync_path(&fixture.root.join("a.txt"))
+        .expect("il core cambia dopo l'invoke");
+    let rx = fixture.ws.bus().subscribe();
+
+    let parsed = match fixture.ws.commit_explicit_rename(parsed) {
+        Err(failure) => {
+            let (_error, parsed) = *failure;
+            parsed
+        }
+        Ok(_) => panic!("la fotografia stale non può essere committata"),
+    };
+    parsed.rollback().expect("rollback detached");
+
+    assert!(fixture.root.join("a.txt").exists());
+    assert!(!fixture.root.join("b.txt").exists());
+    assert_eq!(
+        std::fs::read_to_string(fixture.data_from.join("annotazione"))
+            .ok()
+            .as_deref(),
+        Some("i dati di a.txt")
+    );
+    assert!(!fixture.data_to.exists());
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
 }
