@@ -301,6 +301,41 @@ pub struct SyncPlan {
     action: SyncPlanAction,
 }
 
+/// Lettura e parse owned di una rinomina esplicita di documento.
+///
+/// La preparazione fotografa il core e risolve provider e sintassi senza
+/// invocarli. [`PreparedExplicitRename::invoke`] esegue lo stat-read-stat e il
+/// parse senza prendere in prestito il workspace.
+#[must_use = "la rinomina preparata deve essere invocata e committata"]
+pub(crate) struct PreparedExplicitRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    parser: PreparedParse,
+    source_kind: SourceKind,
+    rewrites: Vec<(DocId, EditRequest)>,
+}
+
+/// Sorgente stabile e modello già parsato, ancora da riconvalidare nel core.
+#[must_use = "la rinomina parsata deve essere committata"]
+pub(crate) struct ParsedExplicitRename {
+    snapshot: ExplicitRenameSnapshot,
+    model: DocumentModel,
+    fingerprint: Revision,
+    stat: crate::storage::Stat,
+    rewrites: Vec<(DocId, EditRequest)>,
+}
+
+struct ExplicitRenameSnapshot {
+    workspace_id: u64,
+    from_path: Utf8PathBuf,
+    from: DocId,
+    to: DocId,
+    from_entry: VaultEntry,
+    to_entry: Option<VaultEntry>,
+    syntax_generation: u64,
+    routing_generation: u64,
+}
+
 /// Routing owned di una rinomina consegnata dal watcher.
 pub enum ExternalRenamePlan {
     Asset(PreparedExternalAssetRename),
@@ -547,6 +582,62 @@ impl SyncPlan {
             }
         };
         ParsedChange { snapshot, state }
+    }
+}
+
+impl PreparedExplicitRename {
+    /// Legge una sola versione stabile della sorgente e la parsa con l'identità
+    /// di destinazione già risolta durante la preparazione.
+    pub(crate) fn invoke(self) -> Result<ParsedExplicitRename> {
+        let PreparedExplicitRename {
+            snapshot,
+            storage,
+            parser,
+            source_kind,
+            rewrites,
+        } = self;
+        let path = snapshot.from_path.clone();
+        let before = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if !before.is_file() {
+            return Err(KernelError::NotFound(snapshot.from.to_string()));
+        }
+        let bytes = storage.read(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let after = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if !after.is_file() || before != after {
+            return Err(KernelError::Stale(snapshot.from.to_string()));
+        }
+        let fingerprint = Revision::of_bytes(&bytes);
+        let source = match source_kind {
+            SourceKind::Text => {
+                let text =
+                    fub_abi::rules::text_policy::decode(&bytes).map_err(|at| KernelError::Io {
+                        path: path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("il file non è UTF-8: il primo byte non valido è a {at}"),
+                        ),
+                    })?;
+                DocumentSource::Text(text.to_string())
+            }
+            SourceKind::Bytes => DocumentSource::Bytes(bytes),
+        };
+        let model = parser.invoke(source)?;
+        Ok(ParsedExplicitRename {
+            snapshot,
+            model,
+            fingerprint,
+            stat: after,
+            rewrites,
+        })
     }
 }
 
@@ -6183,114 +6274,127 @@ impl Workspace {
     }
 
     fn rename_document_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
-        // file fuori dal vault. E la destinazione di un rename è un nome che
-        // **nasce**, quindi vale la tolleranza stretta del §15.5: rinominare
-        // *verso* `CON.md` è creare un file che su Windows non si apre, mentre
-        // rinominare *via da* `CON.md` è precisamente il modo di sistemarlo — ed
-        // è per questo che qui si valida `to` e non `from`.
-        // Non è un documento, ma il vault potrebbe conoscerlo lo stesso
+        // La destinazione nasce: vale la validazione stretta del §15.5. La
+        // sorgente invece può essere proprio un nome storico che si sta
+        // correggendo.
         let to = &new_doc_id(to.as_str())?;
         if from == to {
             return Ok(());
         }
         if !self.indexes.core.metas.contains_key(from) {
-            // (§14.1): spostare un allegato è la stessa operazione, con una
-            // coda diversa — non c'è niente da riparsare, e i riferimenti che
-            // lo seguono sono quelli che lo mostrano.
-            // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
             if self.indexes.core.entries.contains_key(from) {
                 return self.rename_entry_in_batch(from, to);
             }
             return Err(KernelError::NotFound(from.to_string()));
         }
-        // case-insensitive (macOS/Windows) `vault.exists(to)` vede lo STESSO
-        // file, non una collisione — e il check sul disco va saltato **perché è
-        // lo stesso file**, non perché i due nomi si somiglino. La differenza
-        // non è di stile: là dove il filesystem il caso lo distingue, `Nota.md`
-        // è un omonimo vero, e saltare il check lo seppelliva senza dire niente
-        // (0182). Chi risponde è il supporto, l'unico che lo sappia.
-        // Il piano di riscrittura va calcolato PRIMA di toccare il grafo:
+
+        let prepared = self.prepare_explicit_rename(from, to)?;
+        let parsed = prepared.invoke()?;
+        self.commit_explicit_rename(parsed)
+    }
+
+    /// Fotografa core, routing e pipeline di parse senza leggere il vault né
+    /// invocare provider. Il piano dei backlink nasce col vecchio nome ancora
+    /// risolvibile.
+    pub(crate) fn prepare_explicit_rename(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<PreparedExplicitRename> {
         let same_file = self.docs.vault.same_file(from, to);
-        if self.indexes.core.metas.contains_key(to) || (!same_file && self.docs.vault.exists(to)) {
+        let to_entry = self.indexes.core.entries.get(to).cloned();
+        if to_entry.is_some()
+            || self.indexes.core.metas.contains_key(to)
+            || (!same_file && self.docs.vault.exists(to))
+        {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
         let ext = extension_of(to).unwrap_or_default();
-        if self.docs.registry.provider_for_ext(&ext).is_none() {
-            return Err(KernelError::NoProvider(ext));
+        let descriptor = self
+            .docs
+            .registry
+            .descriptor_for_ext(&ext)
+            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        let parser = self.docs.prepare_parse(to)?;
+        let from_entry = self
+            .indexes
+            .core
+            .entries
+            .get(from)
+            .cloned()
+            .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
+        Ok(PreparedExplicitRename {
+            snapshot: ExplicitRenameSnapshot {
+                workspace_id: self.workspace_id,
+                from_path: self.docs.vault.path_for(from)?,
+                from: from.clone(),
+                to: to.clone(),
+                from_entry,
+                to_entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            storage: Arc::clone(self.docs.vault.storage()),
+            parser,
+            source_kind: descriptor.source,
+            rewrites: self.link_rewrite_plan(from, to),
+        })
+    }
+
+    /// Riconvalida integralmente la fotografia prima della prima mutazione,
+    /// quindi conserva l'ordine storico side-data → file → core → journal →
+    /// backlink → `IndexUpdated`.
+    pub(crate) fn commit_explicit_rename(&mut self, parsed: ParsedExplicitRename) -> Result<()> {
+        let ParsedExplicitRename {
+            snapshot,
+            model,
+            fingerprint,
+            stat,
+            rewrites,
+        } = parsed;
+        let same_file = self.docs.vault.same_file(&snapshot.from, &snapshot.to);
+        let current_from = self.indexes.core.entries.get(&snapshot.from);
+        let current_to = self.indexes.core.entries.get(&snapshot.to);
+        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&fingerprint)
+            && snapshot.from_entry.size == stat.size
+            && snapshot.from_entry.mtime == stat.mtime;
+        if snapshot.workspace_id != self.workspace_id
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || !self.indexes.core.metas.contains_key(&snapshot.from)
+            || self.indexes.core.metas.contains_key(&snapshot.to)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+            || model.id != snapshot.to
+            || !source_matches
+            || (!same_file && self.docs.vault.exists(&snapshot.to))
+        {
+            return Err(KernelError::Stale(snapshot.from.to_string()));
         }
 
-        // serve la risoluzione con il vecchio nome ancora in vigore.
-        // **Ciò che può fallire va prima di ciò che non si disfa.** Leggere e
-        let plan = self.link_rewrite_plan(from, to);
-
-        // parsare stanno qui e non dopo la `rename` per la ragione per cui ci
-        // stanno in `write_source` e in `restore_document`: un errore di parse —
-        // un provider che rifiuta quel testo, un file sparito nella finestra —
-        // risaliva con `?` **a rename avvenuta**, e allora il disco aveva il
-        // nome nuovo, la memoria il vecchio (nessun `migrate_identity`), il
-        // registro non aveva la riga `Renamed`, e chi aveva chiamato riceveva un
-        // `Err` per un'operazione che sul disco era successa. Un secondo
-        // tentativo rispondeva `NotFound(from)`, e la nota spariva dalla vista
-        // fino alla riapertura del vault.
-        //
-        // Si legge `from` e si parsa **col nome nuovo**: i byte sono gli stessi
-        // — una rinomina non li tocca — e il nome serve al parse per risolvere i
-        // link relativi, che devono essere quelli di dove il documento sta per
-        // andare.
-        // I dati per-documento si spostano **prima** del file (difetto 0168),
-        let source = self.docs.vault.read(from)?;
-        let revision = Revision::of(&source);
-        let model = self.docs.parse_owned(to, source)?;
-        // mentre `from` è ancora vivo: un crash fra le due lasciava il file al
-        // nome nuovo e i dati sotto la chiave vecchia, dove la prima `collect`
-        // li spazza. La seconda `migrate_side_data` dentro `migrate_identity`
-        // è un no-op — la bozza a `from` non c'è più (`drafts.migrate` torna
-        // `Ok(())`). `sync_renamed_path_here` resta migrate-dopo: là il file
-        // è già a `to`. Il registro `Renamed` resta dopo la mutazione del
-        // file (0067).
-        // La riga del rename va **prima** di quelle delle sorgenti riscritte:
-        self.migrate_side_data(from, to);
-        self.docs.vault.rename_no_replace(from, to)?;
-        self.migrate_identity(from, to, model, revision);
-        // sono tutte dentro lo stesso lotto, e chi le ripercorre all'indietro le
-        // trova nell'ordine in cui `UndoStep` le vuole (0045: i passi sono in
-        // ordine di esecuzione, e chi esegue non riordina).
-        // Il piano si applica TUTTO, anche se una sorgente fallisce: abortire
+        self.migrate_side_data(&snapshot.from, &snapshot.to);
+        self.docs
+            .vault
+            .rename_no_replace(&snapshot.from, &snapshot.to)?;
+        self.migrate_identity(&snapshot.from, &snapshot.to, model, fingerprint);
         self.record(JournalOp::Renamed {
-            from: from.clone(),
-            to: to.clone(),
+            from: snapshot.from.clone(),
+            to: snapshot.to.clone(),
         });
 
-        // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
-        // retry. Gli errori si accumulano per-sorgente e arrivano in coda.
-        // `apply_edit` riparsa, aggiorna il grafo ed emette gli eventi come
-        let mut failed: Vec<String> = Vec::new();
-        for (src, request) in plan {
-            // ogni scrittura — con in più la base: se qualcuno ha riscritto una
-            // di queste sorgenti da quando il piano è stato calcolato, quella
-            // riscrittura non viene cancellata in silenzio, il suo link resta
-            // vecchio e il fallimento è nominato qui sotto.
-            // Dentro il lotto questo `index-updated` non esce: diventa il
-            if let Err(and) = self.apply_edit(&src, request) {
-                failed.push(format!("{src}: {and}"));
+        let mut failed = Vec::new();
+        for (src, request) in rewrites {
+            if let Err(error) = self.apply_edit(&src, request) {
+                failed.push(format!("{src}: {error}"));
             }
         }
-        // `batch-ended` che la chiusura emette. Resta scritto qui perché il
-        // rename **ha** aggiornato l'indice, e chi legge questo metodo non deve
-        // dedurlo dal fatto che è avvolto in un lotto.
-        // Il lotto non annulla: le sorgenti riscritte restano riscritte anche
         self.emit_event(Event::IndexUpdated);
         self.dispatch_pending();
-        // se una è fallita, ed è la scelta giusta *per il rename* — abortire a
-        // metà lascerebbe link misti senza possibilità di retry. Chi vuole il
-        // contrario (import, migrazioni) vuole il registro delle mutazioni, che
-        // adesso c'è (0067) e di questo lotto tiene i confini — non un campo in
-        // più qui.
-        // Sposta un file che **non è un documento**, e porta i riferimenti con sé
-        if !failed.is_empty() {
-            return Err(KernelError::LinkRewrite(failed.join("; ")));
+        if failed.is_empty() {
+            Ok(())
+        } else {
+            Err(KernelError::LinkRewrite(failed.join("; ")))
         }
-        Ok(())
     }
 
     /// (§14.1).
