@@ -42,8 +42,9 @@ pub struct CompletedDocumentRestore {
 pub struct PendingDocumentRestore {
     workspace_id: u64,
     trash_id: DocId,
-    original: DocId,
     target: DocId,
+    routing_generation: u64,
+    previous_provider_call: Option<bool>,
     feed: Option<PreparedDocumentFeed>,
 }
 
@@ -226,14 +227,20 @@ impl Workspace {
             trash: completed.entry.id.clone(),
             doc: completed.target.clone(),
         };
-        let feed = match completed.model {
-            Some(model) => Some(self.prepare_ingest_model(
-                &completed.target,
-                model,
-                completed.source_revision,
-                None,
-                journal,
-            )),
+        let routing_generation = self.indexes.routing_generation();
+        let (feed, previous_provider_call) = match completed.model {
+            Some(model) => {
+                let previous_provider_call = self.dispatch.enter_provider_call();
+                let feed = self.prepare_ingest_model(
+                    &completed.target,
+                    model,
+                    completed.source_revision,
+                    None,
+                    journal,
+                );
+                self.announce_index_feed(&feed);
+                (Some(feed), Some(previous_provider_call))
+            }
             None => {
                 let kind = self
                     .touch_entry(&completed.target, None)
@@ -243,14 +250,22 @@ impl Workspace {
                     kind,
                 });
                 self.emit_event(Event::IndexUpdated);
-                None
+                (None, None)
             }
         };
+        if completed.target != completed.entry.original {
+            self.migrate_doc_data(&completed.entry.original, &completed.target);
+            self.emit_event(Event::DocumentRenamed {
+                from: completed.entry.original,
+                to: completed.target.clone(),
+            });
+        }
         Ok(PendingDocumentRestore {
             workspace_id: completed.workspace_id,
             trash_id: completed.entry.id,
-            original: completed.entry.original,
             target: completed.target,
+            routing_generation,
+            previous_provider_call,
             feed,
         })
     }
@@ -271,20 +286,27 @@ impl Workspace {
         }
         let PendingDocumentRestore {
             trash_id,
-            original,
             target,
+            routing_generation,
+            previous_provider_call,
             feed,
             ..
         } = pending;
         if let Some(feed) = feed {
-            self.finish_index_feed(feed);
-        }
-        if target != original {
-            self.migrate_doc_data(&original, &target);
-            self.emit_event(Event::DocumentRenamed {
-                from: original,
-                to: target.clone(),
-            });
+            if let Some(previous_provider_call) = previous_provider_call {
+                self.dispatch
+                    .restore_provider_call(previous_provider_call);
+            }
+            let path = self.root().join(target.as_str());
+            let current_revision = self
+                .docs
+                .vault
+                .read_bytes(&target)
+                .map(|source| Revision::of_bytes(&source));
+            let current = self.docs.vault.doc_id_for_path(&path).ok().as_ref() == Some(&target)
+                && current_revision.ok().as_ref() == Some(&feed.revision)
+                && routing_generation == self.indexes.routing_generation();
+            self.finish_sync_index_feed(feed, current);
         }
         Ok(DeferredEvents {
             outcome: target.clone(),

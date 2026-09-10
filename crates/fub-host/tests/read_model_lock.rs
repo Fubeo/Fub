@@ -332,13 +332,7 @@ fn restore_releases_both_workspace_guards_for_format_parse() {
             .expect("restore parse entered"),
         Stage::Parse
     );
-    // Il turno di scrittura resta intenzionalmente prenotato per impedire che
-    // un'altra mutazione scavalchi il commit. La guardia del workspace invece
-    // deve essere libera mentre il parser esterno gira.
-    assert!(
-        workspace.try_read().is_some(),
-        "restore FormatProvider::parse held a write guard on Custody<Workspace>"
-    );
+    assert_workspace_is_free(&workspace, "restore FormatProvider::parse");
     parse_release.send(()).expect("release restore parse");
     let restored = call
         .join()

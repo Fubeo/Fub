@@ -1,18 +1,19 @@
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::edit::{EditRequest, Revision, TextEdit, WriteBase};
+use fub_abi::event::{EventKind, EventMask, Notice};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
-    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest, QueryRoute,
-    VaultEntry, VaultStructure, VaultWrite,
+    EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest,
+    QueryRoute, VaultEntry, VaultStructure, VaultWrite,
 };
-use fub_abi::PluginError;
-use fub_features::TRASH_RESTORE;
-use fub_host::{Host, JobHost, NoWatcher};
-use fub_kernel::Trust;
+use fub_abi::{Event, PluginError};
+use fub_host::{Custody, Host, JobHost, NoWatcher};
+use fub_kernel::journal::JournalOp;
+use fub_kernel::{Subscription, Trust, Workspace};
 
 const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
 const EDIT_FEED_LOCK_PLUGIN: &str = "fub.audit-index-edit-feed";
@@ -77,6 +78,128 @@ impl IndexProvider for IndexFeedLockProbe {
 
     fn up_to_date(&self, _: &[VaultEntry]) -> Vec<DocId> {
         Vec::new()
+    }
+}
+
+#[derive(Debug)]
+struct RestoreObservation {
+    read_free: bool,
+    write_free: bool,
+    fact_before_callback: bool,
+    handler_deferred: bool,
+    newer_write: Result<(), PluginError>,
+}
+
+struct RestoreReentryProbe {
+    workspace: Custody<Workspace>,
+    root: Utf8PathBuf,
+    events: Arc<Mutex<Subscription>>,
+    observed: std::sync::mpsc::SyncSender<RestoreObservation>,
+    handled: Arc<AtomicBool>,
+    called: bool,
+}
+
+impl IndexProvider for RestoreReentryProbe {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
+        if self.called || models.iter().all(|model| model.id.as_str() != "Note 0.md") {
+            return Vec::new();
+        }
+        self.called = true;
+        let events: Vec<_> = self
+            .events
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .try_iter()
+            .map(|notice| notice.event)
+            .collect();
+        let fact = events
+            .iter()
+            .position(|event| {
+                matches!(event, Event::DocumentChanged { id, .. } if id.as_str() == "Note 0.md")
+            });
+        let index = events
+            .iter()
+            .position(|event| matches!(event, Event::IndexUpdated));
+        let read = self.workspace.try_read();
+        let read_free = read.is_some();
+        drop(read);
+        let write = self.workspace.try_write();
+        let write_free = write.is_some();
+        drop(write);
+        let newer_write = std::fs::write(
+            self.root.join("Note 0.md"),
+            "# Newer from re-entry\n",
+        )
+        .map_err(|error| PluginError::Internal(error.to_string().into()));
+        let handler_deferred = !self.handled.load(Ordering::SeqCst);
+        let _ = self.observed.send(RestoreObservation {
+            read_free,
+            write_free,
+            fact_before_callback: matches!((fact, index), (Some(fact), Some(index)) if fact < index),
+            handler_deferred,
+            newer_write: newer_write.map(drop),
+        });
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved("feed-only restore probe".into()))
+    }
+
+    fn up_to_date(&self, _: &[VaultEntry]) -> Vec<DocId> {
+        Vec::new()
+    }
+}
+
+struct RestoreDrainProbe {
+    handled: Arc<AtomicBool>,
+    delivered: std::sync::mpsc::SyncSender<()>,
+    done: bool,
+}
+
+impl EventHandler for RestoreDrainProbe {
+    fn subscribed(&self) -> EventMask {
+        EventMask::of([EventKind::DocumentChanged])
+    }
+
+    fn handle(&mut self, notice: &Notice, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        if !self.done
+            && matches!(
+                &notice.event,
+                Event::DocumentChanged { id, .. } if id.as_str() == "Note 0.md"
+            )
+        {
+            self.done = true;
+            self.handled.store(true, Ordering::SeqCst);
+            self.delivered
+                .send(())
+                .map_err(|_| PluginError::Internal("restore drain probe disappeared".into()))?;
+        }
+        Ok(())
     }
 }
 
@@ -227,63 +350,101 @@ fn a_create_feed_runs_without_holding_the_workspace_lock() {
 }
 
 #[test]
-fn a_restore_feed_runs_without_holding_the_workspace_lock() {
+fn a_restore_feed_is_reentry_safe_and_finishes_once() {
     let v = vault();
     let host = Host::new().with_watcher(Box::new(NoWatcher));
     host.open(&v.root).expect("the vault opens");
     host.wait_indexed(None)
         .expect("the initial indexing finishes before the restore probe");
-    let ws = host.debug_workspace(None).expect("debug custody");
+    let workspace = host.debug_workspace(None).expect("debug custody");
     {
-        let mut w = ws.write().expect("the vault is alive");
-        w.register_core_feature(RESTORE_FEED_LOCK_PLUGIN, "Audit detached restore feed")
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(RESTORE_FEED_LOCK_PLUGIN, "Audit detached restore feed")
             .expect("restore owner declares");
     }
-    let trashed = JobHost::new(ws.clone(), RESTORE_FEED_LOCK_PLUGIN)
+    let trash = JobHost::new(workspace.clone(), RESTORE_FEED_LOCK_PLUGIN)
         .trash_document(&DocId::new("Note 0.md"))
         .expect("seed note enters trash");
-    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
-    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    let events = Arc::new(Mutex::new(
+        workspace
+            .read()
+            .expect("the vault is alive")
+            .bus()
+            .subscribe(),
+    ));
+    let handled = Arc::new(AtomicBool::new(false));
+    let (observed_tx, observed_rx) = std::sync::mpsc::sync_channel(1);
+    let (delivered_tx, delivered_rx) = std::sync::mpsc::sync_channel(1);
     {
-        let mut w = ws.write().expect("the vault is alive");
-        w.register_index_provider(
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_event_handler(
             RESTORE_FEED_LOCK_PLUGIN,
-            Box::new(IndexFeedLockProbe {
-                entered: entered_tx,
-                release: Mutex::new(release_rx),
+            Box::new(RestoreDrainProbe {
+                handled: Arc::clone(&handled),
+                delivered: delivered_tx,
+                done: false,
             }),
         )
-        .expect("index probe registers");
-    }
-
-    let entry = trashed.clone();
-    let call = std::thread::spawn(move || {
-        host.invoke_user_command(
-            None,
-            TRASH_RESTORE,
-            serde_json::json!({ "entry": entry.as_str() }),
-            InvokeMode::Apply,
+        .expect("restore event probe registers");
+        ws.register_index_provider(
+            RESTORE_FEED_LOCK_PLUGIN,
+            Box::new(RestoreReentryProbe {
+                workspace: workspace.clone(),
+                root: v.root.clone(),
+                events: Arc::clone(&events),
+                observed: observed_tx,
+                handled: Arc::clone(&handled),
+                called: false,
+            }),
         )
-    });
-    entered_rx
-        .recv_timeout(Duration::from_secs(10))
-        .expect("IndexProvider::on_documents_indexed entered for restore");
-    let reader_progressed = ws.try_read().is_some();
-    release_tx.send(()).expect("release restore index feed");
-    let outcome = call.join().expect("restore thread does not panic");
+        .expect("restore index probe registers");
+    }
+    events
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .try_iter()
+        .for_each(drop);
 
-    assert!(
-        reader_progressed,
-        "CoreCommands::trash.restore held Custody<Workspace> across IndexProvider::on_documents_indexed"
-    );
+    let workspace_for_restore = workspace.clone();
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel(1);
+    let worker = std::thread::spawn(move || {
+        let outcome = JobHost::new(workspace_for_restore, RESTORE_FEED_LOCK_PLUGIN)
+            .restore_document(&trash, None);
+        let _ = done_tx.send(outcome);
+    });
+    let observation = observed_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("restore index callback completes its re-entry");
+    assert!(observation.read_free && observation.write_free, "{observation:?}");
+    assert!(observation.fact_before_callback, "{observation:?}");
+    assert!(observation.handler_deferred, "{observation:?}");
+    observation
+        .newer_write
+        .expect("the index callback writes a newer target");
     assert_eq!(
-        outcome.expect("restore completes after index feed").effect,
-        CommandEffect::Navigate {
-            doc: DocId::new("Note 0.md"),
-        }
+        done_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("restore finalizer completes")
+            .expect("restore succeeds"),
+        DocId::new("Note 0.md")
     );
+    worker.join().expect("restore thread does not panic");
+    delivered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("the recovered provider frame drains the outer fact");
     assert_eq!(
         std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),
-        "# Note 0\n"
+        "# Newer from re-entry\n",
+        "the stale outer feed does not overwrite the re-entrant write"
     );
+    let restored = workspace
+        .read()
+        .expect("the vault is alive")
+        .journal()
+        .expect("journal is readable")
+        .records
+        .into_iter()
+        .filter(|record| matches!(record.op, JournalOp::Restored { .. }))
+        .count();
+    assert_eq!(restored, 1, "the restore journal fact is appended once");
 }

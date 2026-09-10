@@ -585,7 +585,6 @@ impl VaultStructure for JobHost {
         self.stopped()?;
         let workspace = self.workspace.clone();
         let prepared = {
-            let _turn = workspace.write_turn();
             let ws = workspace.read()?;
             let prepared = ws
                 .prepare_document_restore(entry, to)
