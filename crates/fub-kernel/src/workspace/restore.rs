@@ -5,13 +5,10 @@ use super::*;
 
 enum RestoreContent {
     Document {
-        source: DocumentSource,
-        revision: Revision,
+        source_kind: fub_abi::format::SourceKind,
         parser: Box<PreparedParse>,
     },
-    Attachment {
-        revision: Revision,
-    },
+    Attachment,
 }
 
 /// Ripristino risolto fino al confine del parser.
@@ -23,6 +20,7 @@ pub struct PreparedDocumentRestore {
     workspace_id: u64,
     entry: TrashEntry,
     target: DocId,
+    documents: crate::documents::DocumentStoreHandle,
     content: RestoreContent,
 }
 
@@ -54,25 +52,37 @@ impl PreparedDocumentRestore {
         &self.target
     }
 
-    /// Esegue soltanto il parser e le regole sintattiche esterne.
+    /// Legge la sorgente e invoca parser e sintassi usando soltanto handle
+    /// owned: nessuna guardia del workspace attraversa questa fase.
     pub fn invoke(self) -> Result<CompletedDocumentRestore> {
         let PreparedDocumentRestore {
             workspace_id,
             entry,
             target,
+            documents,
             content,
         } = self;
         let (source_kind, source_revision, model) = match content {
             RestoreContent::Document {
-                source,
-                revision,
+                source_kind,
                 parser,
-            } => (
-                Some(source.kind()),
-                revision,
-                Some((*parser).invoke(source)?),
+            } => {
+                let source = match source_kind {
+                    fub_abi::format::SourceKind::Text => {
+                        DocumentSource::Text(documents.read(&entry.id)?)
+                    }
+                    fub_abi::format::SourceKind::Bytes => {
+                        DocumentSource::Bytes(documents.read_bytes(&entry.id)?)
+                    }
+                };
+                let revision = Revision::of_bytes(source.bytes());
+                (Some(source_kind), revision, Some((*parser).invoke(source)?))
+            }
+            RestoreContent::Attachment => (
+                None,
+                Revision::of_bytes(&documents.read_bytes(&entry.id)?),
+                None,
             ),
-            RestoreContent::Attachment { revision } => (None, revision, None),
         };
         Ok(CompletedDocumentRestore {
             workspace_id,
@@ -94,13 +104,22 @@ impl PendingDocumentRestore {
 }
 
 impl Workspace {
-    /// Risolve voce, destinazione e parser senza eseguire callback esterne.
+    /// Prepara una camminata owned del cestino. La closure esegue il solo I/O
+    /// quando il chiamante ha già rilasciato l'eventuale guardia.
+    #[doc(hidden)]
+    pub fn detached_trash_listing(
+        &self,
+    ) -> impl FnOnce() -> Result<Vec<TrashEntry>> + Send + 'static {
+        let documents = self.docs.detached();
+        move || documents.list_trash()
+    }
+
+    /// Risolve voce, destinazione e parser per il percorso sincrono storico.
     pub fn prepare_document_restore(
         &self,
         trash_id: &DocId,
         to: Option<DocId>,
     ) -> Result<PreparedDocumentRestore> {
-        self.indexes.ensure_mutation_available()?;
         let entry = self
             .docs
             .vault
@@ -108,45 +127,35 @@ impl Workspace {
             .into_iter()
             .find(|entry| &entry.id == trash_id)
             .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
-        let target = match to {
-            Some(to) => new_doc_id(to.as_str())?,
-            None => entry.original.clone(),
-        };
+        let target = to.unwrap_or_else(|| entry.original.clone());
+        self.prepare_listed_document_restore(entry, target)
+    }
+
+    /// Prepara una voce già elencata senza altro I/O né callback esterne.
+    #[doc(hidden)]
+    pub fn prepare_listed_document_restore(
+        &self,
+        entry: TrashEntry,
+        target: DocId,
+    ) -> Result<PreparedDocumentRestore> {
+        self.indexes.ensure_mutation_available()?;
+        let target = new_doc_id(target.as_str())?;
         if self.is_taken(&target) {
             return Err(KernelError::AlreadyExists(target.to_string()));
         }
-        let ext = extension_of(&target).unwrap_or_default();
-        let content = match self.docs.registry.provider_for_ext(&ext) {
-            Some(_) => {
-                let descriptor = self
-                    .docs
-                    .registry
-                    .descriptor_for_ext(&ext)
-                    .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
-                let source = match descriptor.source {
-                    fub_abi::format::SourceKind::Text => {
-                        DocumentSource::Text(self.docs.vault.read(trash_id)?)
-                    }
-                    fub_abi::format::SourceKind::Bytes => {
-                        DocumentSource::Bytes(self.docs.vault.read_bytes(trash_id)?)
-                    }
-                };
-                let revision = Revision::of_bytes(source.bytes());
-                let parser = self.docs.prepare_parse(&target)?;
-                RestoreContent::Document {
-                    source,
-                    revision,
-                    parser: Box::new(parser),
-                }
-            }
-            None => RestoreContent::Attachment {
-                revision: Revision::of_bytes(&self.docs.vault.read_bytes(trash_id)?),
+        let documents = self.docs.detached();
+        let content = match documents.prepare_parse_with_kind(&target)? {
+            Some((source_kind, parser)) => RestoreContent::Document {
+                source_kind,
+                parser: Box::new(parser),
             },
+            None => RestoreContent::Attachment,
         };
         Ok(PreparedDocumentRestore {
             workspace_id: self.workspace_id,
             entry,
             target,
+            documents,
             content,
         })
     }

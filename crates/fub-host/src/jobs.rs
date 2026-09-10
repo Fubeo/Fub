@@ -597,7 +597,7 @@ impl VaultStructure for JobHost {
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
-        let prepared = {
+        let (policy, list_trash) = {
             let ws = workspace.read()?;
             let policy = ws.granted_policy(&self.plugin);
             if self.mode == InvokeMode::DryRun {
@@ -612,15 +612,36 @@ impl VaultStructure for JobHost {
             authorize_family(&policy, Capability::VaultStructure, || {
                 format!("restoring `{entry}`")
             })?;
-            let target = match to {
-                Some(target) => target,
-                None => ws
-                    .with_read_host(&self.plugin, |host| host.list_trash())?
-                    .into_iter()
-                    .find(|candidate| &candidate.id == entry)
-                    .map(|candidate| candidate.original)
-                    .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?,
-            };
+            if let Some(target) = to.as_ref() {
+                if self.mode == InvokeMode::DryRun {
+                    authorize_path(
+                        &ReadOnly {
+                            why: "simulazione del comando",
+                        },
+                        Capability::VaultStructure,
+                        target.as_str(),
+                        || format!("restoring to `{target}`"),
+                    )?;
+                }
+                authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
+                    format!("restoring to `{target}`")
+                })?;
+            }
+            authorize_family(&policy, Capability::VaultRead, || "listing trash".into())?;
+            (policy, ws.detached_trash_listing())
+        };
+        let listed = list_trash()
+            .map_err(PluginError::from)?
+            .into_iter()
+            .filter(|candidate| {
+                policy
+                    .denies_path(Capability::VaultRead, candidate.original.as_str())
+                    .is_none()
+            })
+            .find(|candidate| &candidate.id == entry)
+            .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?;
+        let target = to.unwrap_or_else(|| listed.original.clone());
+        if listed.original == target {
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
                     &ReadOnly {
@@ -634,7 +655,10 @@ impl VaultStructure for JobHost {
             authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
                 format!("restoring to `{target}`")
             })?;
-            ws.prepare_document_restore(entry, Some(target))
+        }
+        let prepared = {
+            let ws = workspace.read()?;
+            ws.prepare_listed_document_restore(listed, target)
                 .map_err(PluginError::from)?
         };
         let completed = prepared.invoke().map_err(PluginError::from)?;

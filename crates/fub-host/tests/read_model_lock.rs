@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::InvokeMode;
 use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
@@ -31,7 +31,8 @@ use fub_abi::traits::{
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, JobHost};
-use fub_kernel::{FormatRegistry, Trust, Workspace};
+use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
+use fub_kernel::{FormatRegistry, MachineSettings, Trust, Workspace};
 
 const PLUGIN: &str = "fub.audit-model-lock";
 const CUSTOM_KIND: &str = "fub.audit-model-lock:block";
@@ -78,6 +79,111 @@ fn assert_workspace_is_free(workspace: &Custody<Workspace>, callback: &str) {
 enum Stage {
     Parse,
     Syntax,
+    TrashList,
+    SourceRead,
+}
+
+struct BlockingRestoreStorage {
+    inner: FsStorage,
+    trash_dir: Utf8PathBuf,
+    source: Mutex<Option<Utf8PathBuf>>,
+    armed: AtomicBool,
+    blocking: AtomicBool,
+    list_hits: AtomicUsize,
+    read_hits: AtomicUsize,
+    entered: mpsc::SyncSender<Stage>,
+    release: Mutex<mpsc::Receiver<()>>,
+}
+
+impl BlockingRestoreStorage {
+    fn arm(&self, source: Utf8PathBuf, blocking: bool) {
+        *self
+            .source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(source);
+        self.list_hits.store(0, Ordering::SeqCst);
+        self.read_hits.store(0, Ordering::SeqCst);
+        self.blocking.store(blocking, Ordering::SeqCst);
+        self.armed.store(true, Ordering::SeqCst);
+    }
+
+    fn traverse(&self, stage: Stage) {
+        match stage {
+            Stage::TrashList => {
+                self.list_hits.fetch_add(1, Ordering::SeqCst);
+            }
+            Stage::SourceRead => {
+                self.read_hits.fetch_add(1, Ordering::SeqCst);
+            }
+            Stage::Parse | Stage::Syntax => unreachable!("storage stage"),
+        }
+        if self.blocking.load(Ordering::SeqCst) {
+            self.entered
+                .send(stage)
+                .expect("restore probe observes I/O");
+            self.release
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .recv_timeout(TIMEOUT)
+                .expect("restore I/O probe is released");
+        }
+        if stage == Stage::SourceRead {
+            self.armed.store(false, Ordering::SeqCst);
+        }
+    }
+}
+
+impl VaultStorage for BlockingRestoreStorage {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        let source = self
+            .source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if self.armed.load(Ordering::SeqCst) && source.as_deref() == Some(path) {
+            self.traverse(Stage::SourceRead);
+        }
+        self.inner.read(path)
+    }
+
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+
+    fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        if self.armed.load(Ordering::SeqCst) && dir == self.trash_dir {
+            self.traverse(Stage::TrashList);
+        }
+        self.inner.list(dir)
+    }
+
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
 }
 
 struct BlockingFormat {
@@ -344,6 +450,116 @@ fn restore_releases_both_workspace_guards_for_format_parse() {
     assert_eq!(
         std::fs::read_to_string(vault.root.join("Note.md")).unwrap(),
         "# Restored\n"
+    );
+}
+
+#[test]
+fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::create_dir(root.join("notes")).expect("notes folder");
+    let original = DocId::new("notes/Note.md");
+    std::fs::write(root.join(original.as_str()), "# Detached\n").expect("seed note");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let storage = Arc::new(BlockingRestoreStorage {
+        inner: FsStorage,
+        trash_dir: root.join(".trash"),
+        source: Mutex::new(None),
+        armed: AtomicBool::new(false),
+        blocking: AtomicBool::new(false),
+        list_hits: AtomicUsize::new(0),
+        read_hits: AtomicUsize::new(0),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+    });
+    let parses = Arc::new(AtomicUsize::new(0));
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(CountingFormat {
+            parses: Arc::clone(&parses),
+        }))
+        .expect("format registers");
+    let mut workspace = Workspace::on(
+        &root,
+        formats,
+        storage.clone(),
+        MachineSettings::in_memory(),
+    )
+    .expect("workspace opens");
+    let mut permissions = PluginPermissions::of(&[]);
+    permissions
+        .granted
+        .set(permission::READ_VAULT, serde_json::json!(["notes/"]));
+    permissions
+        .granted
+        .set(permission::WRITE_VAULT, serde_json::json!(["notes/"]));
+    workspace
+        .register_plugin(
+            PluginManifest::new(PLUGIN, "Detached restore").granting(permissions),
+            Trust::Community,
+        )
+        .expect("restore caller declares");
+    workspace.reindex().expect("seed note enters workspace");
+    let trash_id = workspace
+        .delete_document(&original)
+        .expect("seed note enters trash");
+    let workspace = Custody::new("the detached restore workspace", workspace);
+    storage.arm(root.join(trash_id.as_str()), true);
+
+    let workspace_for_call = workspace.clone();
+    let call = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, PLUGIN).restore_document(&trash_id, None)
+    });
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("trash listing entered"),
+        Stage::TrashList
+    );
+    assert_workspace_is_free(&workspace, "VaultStorage::list during restore");
+    release_tx.send(()).expect("release trash listing");
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("trash source read entered"),
+        Stage::SourceRead
+    );
+    assert_workspace_is_free(&workspace, "VaultStorage::read during restore");
+    release_tx.send(()).expect("release trash source read");
+    assert_eq!(
+        call.join()
+            .expect("restore thread does not panic")
+            .expect("restore succeeds"),
+        original
+    );
+
+    let denied_entry = workspace
+        .write()
+        .expect("workspace remains alive")
+        .delete_document(&original)
+        .expect("restored note enters trash again");
+    storage.arm(root.join(denied_entry.as_str()), false);
+    let parses_before = parses.load(Ordering::SeqCst);
+    assert!(matches!(
+        JobHost::new(workspace, PLUGIN)
+            .restore_document(&denied_entry, Some(DocId::new("outside/Note.md"))),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(
+        storage.list_hits.load(Ordering::SeqCst),
+        0,
+        "a denied explicit target is rejected before listing trash"
+    );
+    assert_eq!(
+        storage.read_hits.load(Ordering::SeqCst),
+        0,
+        "a denied explicit target is rejected before reading its source"
+    );
+    assert_eq!(
+        parses.load(Ordering::SeqCst),
+        parses_before,
+        "a denied explicit target never reaches the parser"
     );
 }
 

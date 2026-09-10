@@ -91,6 +91,41 @@ impl PreparedParse {
         )?)
     }
 }
+/// Handle owned per le sole letture di una preparazione staccata.
+///
+/// Clona gli handle condivisi e la fotografia delle sintassi, non lo stato
+/// mutabile del [`Workspace`](crate::Workspace).
+pub(crate) struct DocumentStoreHandle {
+    vault: Vault,
+    registry: Arc<FormatRegistry>,
+    syntax: SyntaxRegistry,
+}
+
+impl DocumentStoreHandle {
+    pub(crate) fn list_trash(&self) -> Result<Vec<TrashEntry>> {
+        self.vault.list_trash()
+    }
+
+    pub(crate) fn read(&self, id: &DocId) -> Result<String> {
+        self.vault.read(id)
+    }
+
+    pub(crate) fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
+        self.vault.read_bytes(id)
+    }
+
+    pub(crate) fn prepare_parse_with_kind(
+        &self,
+        id: &DocId,
+    ) -> Result<Option<(fub_abi::format::SourceKind, PreparedParse)>> {
+        let ext = extension_of(id).unwrap_or_default();
+        let Some(descriptor) = self.registry.descriptor_for_ext(&ext) else {
+            return Ok(None);
+        };
+        let source = descriptor.source;
+        prepare_parse(&self.registry, &self.syntax, id).map(|parser| Some((source, parser)))
+    }
+}
 
 pub struct DocumentStore {
     /// I byte sul disco. `pub(crate)` e non dietro accessori perché le
@@ -135,6 +170,14 @@ impl DocumentStore {
             renderers: RendererRegistry::new(),
         })
     }
+    /// Fotografia owned delle sole dipendenze necessarie alle letture staccate.
+    pub(crate) fn detached(&self) -> DocumentStoreHandle {
+        DocumentStoreHandle {
+            vault: self.vault.clone(),
+            registry: Arc::clone(&self.registry),
+            syntax: self.syntax.clone(),
+        }
+    }
 
     /// La radice del vault.
     pub fn root(&self) -> &Utf8Path {
@@ -159,22 +202,7 @@ impl DocumentStore {
     /// Risolve il parser senza eseguire callback. Il descriptor viene dalla
     /// cache del registro, le regole sono una fotografia condivisa.
     pub(crate) fn prepare_parse(&self, id: &DocId) -> Result<PreparedParse> {
-        let ext = extension_of(id).unwrap_or_default();
-        let provider = self
-            .registry
-            .provider_arc_for_ext(&ext)
-            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
-        let descriptor = self
-            .registry
-            .descriptor_for_ext(&ext)
-            .cloned()
-            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
-        Ok(PreparedParse {
-            id: id.clone(),
-            descriptor,
-            provider,
-            syntax: self.syntax.clone(),
-        })
+        prepare_parse(&self.registry, &self.syntax, id)
     }
 
     // --- cestino -----------------------------------------------------------
@@ -394,6 +422,27 @@ impl DocumentStore {
         }
         roots
     }
+}
+
+fn prepare_parse(
+    registry: &FormatRegistry,
+    syntax: &SyntaxRegistry,
+    id: &DocId,
+) -> Result<PreparedParse> {
+    let ext = extension_of(id).unwrap_or_default();
+    let provider = registry
+        .provider_arc_for_ext(&ext)
+        .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+    let descriptor = registry
+        .descriptor_for_ext(&ext)
+        .cloned()
+        .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+    Ok(PreparedParse {
+        id: id.clone(),
+        descriptor,
+        provider,
+        syntax: syntax.clone(),
+    })
 }
 
 fn ensure_model_identity(requested: &DocId, returned: &DocId) -> Result<()> {
