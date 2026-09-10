@@ -1288,12 +1288,13 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // cui `match` esaustivo obbliga una famiglia nuova a dichiararsi. Così
         // il giorno che il vault avesse una terza specie di scrittura, questo
         // cancello la eredita senza che nessuno se ne debba ricordare.
-        // Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
-        // posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
+        // L'undo non nomina un documento: uno scope di path non può quindi
+        // provarne la copertura e deve fallire chiuso prima di avviare il replay.
         self.check(Capability::Commands, || "undoing".into())?;
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
         }
+        authorize_path(&self.policy, Capability::VaultWrite, "", || "undoing".into())?;
         self.inner.undo_last()
     }
 }
@@ -1658,6 +1659,49 @@ mod tests {
                 "the rename".into(),
             ))))
         }
+    }
+    struct CountsUndoes(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+    impl HostCommands for CountsUndoes {
+        fn run_command(
+            &mut self,
+            _command: &str,
+            _args: serde_json::Value,
+        ) -> Result<CommandOutcome, PluginError> {
+            unreachable!("no bench in this module invokes a command")
+        }
+
+        fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(Undone::whole(fub_abi::text::Text::Literal(
+                "the replacement".into(),
+            ))))
+        }
+    }
+
+    #[test]
+    fn a_path_scoped_writer_cannot_start_a_global_undo() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut permissions = PluginPermissions::of(&[
+            permission::RUN_COMMAND,
+            permission::WRITE_VAULT,
+        ]);
+        permissions
+            .granted
+            .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+        let policy = Granted::new("scoped", &permissions, Trust::Community);
+        let mut guard = Guard::new(CountsUndoes(std::sync::Arc::clone(&calls)), policy);
+
+        let err = guard
+            .undo_last()
+            .expect_err("a public-only writer cannot undo a vault-wide entry");
+
+        assert!(matches!(err, PluginError::PermissionDenied(_)));
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the path gate runs before the wrapped host can pop or replay"
+        );
     }
 
     /// La voce in cima alla pila può essere l'inverso di una rinomina, di una

@@ -841,6 +841,7 @@ impl HostCommands for JobHost {
                     ));
                 }
             }
+            authorize_path(&policy, Capability::VaultWrite, "", || "undoing".into())?;
         }
         if self.mode.is_dry_run() {
             return Err(PluginError::PermissionDenied(

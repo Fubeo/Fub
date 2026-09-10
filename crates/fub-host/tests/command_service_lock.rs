@@ -641,3 +641,92 @@ fn a_service_panic_is_converted_and_the_next_call_still_works() {
         "the service panic must become a qualified provider error: {failed:?}"
     );
 }
+
+#[test]
+fn a_scoped_job_cannot_partially_replay_a_global_undo() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8 vault path");
+    std::fs::create_dir(root.join("public")).expect("public folder");
+    std::fs::create_dir(root.join("secret")).expect("secret folder");
+    let public = root.join("public/Note.md");
+    let secret = root.join("secret/Note.md");
+    std::fs::write(&public, "before public\n").expect("public note");
+    std::fs::write(&secret, "before secret\n").expect("secret note");
+
+    let mut formats = fub_kernel::FormatRegistry::new();
+    formats
+        .register(fub_format_markdown::MarkdownProvider::boxed())
+        .expect("markdown format registers");
+    let mut workspace = Workspace::new(&root, formats).expect("workspace opens");
+    workspace
+        .register_plugin(
+            PluginManifest::core(fub_features::COMMANDS_ID, fub_features::COMMANDS_ID)
+                .speaking("it", fub_features::commands::catalog()),
+            Trust::Core,
+        )
+        .expect("core commands declare");
+    workspace
+        .register_command_provider(
+            fub_features::COMMANDS_ID,
+            Box::new(fub_features::CoreCommands),
+        )
+        .expect("core commands register");
+
+    let mut permissions = fub_abi::traits::PluginPermissions::of(&[
+        permission::RUN_COMMAND,
+        permission::WRITE_VAULT,
+    ]);
+    permissions
+        .granted
+        .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+    workspace
+        .register_plugin(
+            PluginManifest::new(CALLER, "Scoped undo caller").granting(permissions),
+            Trust::Community,
+        )
+        .expect("scoped caller declares");
+    workspace.reindex().expect("seed notes enter the workspace");
+    workspace
+        .invoke_command(
+            fub_features::VAULT_REPLACE,
+            serde_json::json!({
+                "find": "before",
+                "replace": "after",
+                "docs": ["public/Note.md", "secret/Note.md"],
+            }),
+            InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect("the user seeds a two-document undo");
+    assert_eq!(std::fs::read_to_string(&public).unwrap(), "after public\n");
+    assert_eq!(std::fs::read_to_string(&secret).unwrap(), "after secret\n");
+
+    let workspace = Custody::new("the scoped undo workspace", workspace);
+    let error = JobHost::new(workspace.clone(), CALLER)
+        .undo_last()
+        .expect_err("a public-only caller cannot begin a vault-wide undo");
+    assert!(matches!(error, PluginError::PermissionDenied(_)));
+    assert_eq!(
+        std::fs::read_to_string(&public).unwrap(),
+        "after public\n",
+        "the allowed first replay step must not run"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&secret).unwrap(),
+        "after secret\n",
+        "the denied replay step must not be reached"
+    );
+
+    workspace
+        .write()
+        .expect("workspace is alive")
+        .invoke_command(
+            fub_features::VAULT_UNDO,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect("the denied call left the undo entry available");
+    assert_eq!(std::fs::read_to_string(public).unwrap(), "before public\n");
+    assert_eq!(std::fs::read_to_string(secret).unwrap(), "before secret\n");
+}
