@@ -301,6 +301,68 @@ pub struct SyncPlan {
     action: SyncPlanAction,
 }
 
+/// Routing owned di una rinomina consegnata dal watcher.
+///
+/// Il solo ramo legacy conserva la vecchia porta sincrona dei documenti. Gli
+/// altri rami portano già con sé i piani per-path oppure il token asset, così
+/// dopo la fotografia non si deve più interrogare il workspace per decidere.
+pub enum ExternalRenamePlan {
+    Asset(PreparedExternalAssetRename),
+    LegacyDocument,
+    Sync(Vec<(Utf8PathBuf, Option<SyncPlan>)>),
+}
+
+/// Prima fase owned della migrazione d'identità di un asset.
+pub struct PreparedExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    organization: Arc<OrganizationStore>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+    fallback: Vec<(Utf8PathBuf, Option<SyncPlan>)>,
+}
+
+/// Esito detached della prima fase di una rinomina asset.
+pub enum ParsedExternalRename {
+    Asset(ParsedExternalAssetRename),
+    Sync(Vec<(Utf8PathBuf, Option<ParsedChange>)>),
+}
+
+pub struct ParsedExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    stat: crate::storage::Stat,
+    organization: Arc<OrganizationStore>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Core già migrato, side-data ancora da spostare fuori dal workspace.
+pub struct PendingExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    organization: Arc<OrganizationStore>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Side-data già migrato, pronto per l'unica finalizzazione e notifica.
+pub struct CompletedExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    doc_data_errors: Vec<String>,
+}
+
+struct ExternalRenameSnapshot {
+    workspace_id: u64,
+    from_path: Utf8PathBuf,
+    to_path: Utf8PathBuf,
+    from_id: DocId,
+    to_id: DocId,
+    from_entry: VaultEntry,
+    to_entry: Option<VaultEntry>,
+    syntax_generation: u64,
+    routing_generation: u64,
+}
+
 /// Fotografia owned necessaria a confrontare il disco dopo l'avvio del watcher.
 ///
 /// Il workspace la prepara senza I/O; [`PreparedCatchUp::invoke`] cammina il
@@ -417,6 +479,69 @@ impl SyncPlan {
             }
         };
         ParsedChange { snapshot, state }
+    }
+}
+
+impl PreparedExternalAssetRename {
+    /// Verifica la destinazione e, se non è un file, invoca i due piani
+    /// per-path già fotografati. Tutto il filesystem resta fuori da Custody.
+    pub fn invoke(self) -> ParsedExternalRename {
+        let PreparedExternalAssetRename {
+            snapshot,
+            storage,
+            organization,
+            doc_data_roots,
+            fallback,
+        } = self;
+        match storage.stat(&snapshot.to_path) {
+            Ok(stat) if stat.is_file() => {
+                ParsedExternalRename::Asset(ParsedExternalAssetRename {
+                    snapshot,
+                    stat,
+                    organization,
+                    storage,
+                    doc_data_roots,
+                })
+            }
+            _ => ParsedExternalRename::Sync(
+                fallback
+                    .into_iter()
+                    .map(|(path, plan)| (path, plan.map(SyncPlan::invoke)))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl PendingExternalAssetRename {
+    /// Migra i dati autorevoli dell'asset senza detenere il workspace.
+    pub fn invoke(self) -> CompletedExternalAssetRename {
+        let PendingExternalAssetRename {
+            snapshot,
+            installed,
+            organization,
+            storage,
+            doc_data_roots,
+        } = self;
+        if let Err(error) =
+            organization.migrate(snapshot.from_id.as_str(), snapshot.to_id.as_str())
+        {
+            organization.warn(format!(
+                "l'organizzazione di {} non ha potuto seguire la rinomina in {}: {error}",
+                snapshot.from_id, snapshot.to_id
+            ));
+        }
+        let doc_data_errors = crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &snapshot.from_id,
+            &snapshot.to_id,
+        );
+        CompletedExternalAssetRename {
+            snapshot,
+            installed,
+            doc_data_errors,
+        }
     }
 }
 
@@ -4586,6 +4711,193 @@ impl Workspace {
         }
         let id = self.docs.vault.doc_id_for_path(abs).ok()?;
         self.plan_sync_known(abs.to_owned(), id)
+    }
+
+    /// Classifica una rinomina esterna usando soltanto la fotografia del core,
+    /// i path recintati e le generazioni di routing.
+    ///
+    /// Una sola rotta resta sincrona: documento noto verso identità documento
+    /// libera. Un asset provider-less porta invece handle owned; ogni caso
+    /// ambiguo degrada agli stessi piani `Touched` della consegna ordinaria.
+    pub fn plan_external_rename(
+        &self,
+        from: &Utf8Path,
+        to: &Utf8Path,
+    ) -> ExternalRenamePlan {
+        let fallback = |only_to: bool| {
+            let paths = if only_to {
+                vec![to.to_owned()]
+            } else {
+                vec![from.to_owned(), to.to_owned()]
+            };
+            ExternalRenamePlan::Sync(
+                paths
+                    .into_iter()
+                    .map(|path| {
+                        let plan = self.plan_sync(&path);
+                        (path, plan)
+                    })
+                    .collect(),
+            )
+        };
+        let identity = |path: &Utf8Path| {
+            (!self.docs.vault.is_ignored(path))
+                .then(|| self.docs.vault.doc_id_for_path(path).ok())
+                .flatten()
+        };
+        let (Some(from_id), Some(to_id)) = (identity(from), identity(to)) else {
+            return fallback(false);
+        };
+        if from_id == to_id {
+            return fallback(true);
+        }
+
+        let from_entry = self.indexes.core.entries.get(&from_id).cloned();
+        let to_entry = self.indexes.core.entries.get(&to_id).cloned();
+        let destination_free =
+            to_entry.is_none() && !self.indexes.core.metas.contains_key(&to_id);
+        let from_document = self.indexes.core.metas.contains_key(&from_id);
+        let to_has_provider = self
+            .docs
+            .registry
+            .provider_for_ext(&extension_of(&to_id).unwrap_or_default())
+            .is_some();
+        let to_kind =
+            media::kind_of_ext(&to_id, |ext| self.docs.registry.has_doc_ext(ext));
+        if from_document && destination_free && to_has_provider {
+            return ExternalRenamePlan::LegacyDocument;
+        }
+
+        let from_has_provider = self
+            .docs
+            .registry
+            .provider_for_ext(&extension_of(&from_id).unwrap_or_default())
+            .is_some();
+        let Some(from_entry) = from_entry else {
+            return fallback(false);
+        };
+        if !destination_free
+            || from_entry.kind != EntryKind::Asset
+            || from_has_provider
+            || to_has_provider
+            || to_kind != EntryKind::Asset
+        {
+            return fallback(false);
+        }
+
+        let fallback_plans = [from.to_owned(), to.to_owned()]
+            .into_iter()
+            .map(|path| {
+                let plan = self.plan_sync(&path);
+                (path, plan)
+            })
+            .collect();
+        ExternalRenamePlan::Asset(PreparedExternalAssetRename {
+            snapshot: ExternalRenameSnapshot {
+                workspace_id: self.workspace_id,
+                from_path: from.to_owned(),
+                to_path: to.to_owned(),
+                from_id,
+                to_id,
+                from_entry,
+                to_entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            storage: Arc::clone(self.docs.vault.storage()),
+            organization: Arc::clone(&self.organization),
+            doc_data_roots: self.docs.plugin_data_roots(),
+            fallback: fallback_plans,
+        })
+    }
+
+    /// Applica soltanto al core un asset già osservato sul path d'arrivo.
+    /// Nessun filesystem, sidecar o provider viene attraversato qui.
+    pub fn prepare_external_asset_rename(
+        &mut self,
+        parsed: ParsedExternalAssetRename,
+    ) -> Option<PendingExternalAssetRename> {
+        let ParsedExternalAssetRename {
+            snapshot,
+            stat,
+            organization,
+            storage,
+            doc_data_roots,
+        } = parsed;
+        let current_from = self.indexes.core.entries.get(&snapshot.from_id);
+        let current_to = self.indexes.core.entries.get(&snapshot.to_id);
+        if snapshot.workspace_id != self.workspace_id
+            || self.docs.vault.doc_id_for_path(&snapshot.from_path).ok().as_ref()
+                != Some(&snapshot.from_id)
+            || self.docs.vault.doc_id_for_path(&snapshot.to_path).ok().as_ref()
+                != Some(&snapshot.to_id)
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || self.indexes.core.metas.contains_key(&snapshot.to_id)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+        {
+            return None;
+        }
+        let installed = VaultEntry {
+            id: snapshot.to_id.clone(),
+            kind: snapshot.from_entry.kind,
+            size: stat.size,
+            mtime: stat.mtime,
+            fingerprint: snapshot.from_entry.fingerprint.clone(),
+        };
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.indexes.core.remove_entry(&snapshot.from_id);
+            ws.indexes.core.set_entry(installed.clone());
+        });
+        Some(PendingExternalAssetRename {
+            snapshot,
+            installed,
+            organization,
+            storage,
+            doc_data_roots,
+        })
+    }
+
+    /// Finalizza una rinomina asset solo se la voce installata è ancora quella
+    /// preparata, poi emette l'unico evento d'identità.
+    pub fn finish_external_asset_rename(
+        &mut self,
+        completed: CompletedExternalAssetRename,
+    ) -> bool {
+        let CompletedExternalAssetRename {
+            snapshot,
+            installed,
+            doc_data_errors,
+        } = completed;
+        if snapshot.workspace_id != self.workspace_id
+            || self.indexes.core.entries.contains_key(&snapshot.from_id)
+            || self.indexes.core.entries.get(&snapshot.to_id) != Some(&installed)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+        {
+            return false;
+        }
+        for error in doc_data_errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
+                snapshot.from_id, snapshot.to_id
+            ));
+        }
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.record(JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::EntryRenamed {
+                from: snapshot.from_id,
+                to: snapshot.to_id,
+                kind: installed.kind,
+            });
+            ws.emit_event(Event::IndexUpdated);
+            ws.dispatch_pending();
+        });
+        true
     }
 
     /// Compone un piano da un'identità già recintata e filtrata.

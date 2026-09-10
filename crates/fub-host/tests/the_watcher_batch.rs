@@ -26,11 +26,12 @@ use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel};
+use fub_abi::rules::doc_data;
 use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, VaultEntry};
 use fub_abi::{Event, FormatProvider, Revision, WriteBase};
 use fub_host::{Custody, ExternalChange, ExternalSync};
 use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, MemStorage, SyncPlan, Workspace};
+use fub_kernel::{data_root, FormatRegistry, MachineSettings, MemStorage, SyncPlan, Workspace};
 
 /// Il cancello che rende **osservabile** una lettura lenta senza dormire.
 ///
@@ -407,14 +408,75 @@ fn a_providerless_entry_survives_the_watcher_batch() {
         "an unchanged entry is a no-op"
     );
 
-    std::fs::remove_file(&path).expect("asset removed");
-    sync.batch(&[ExternalChange::Touched(path)]);
+    bench
+        .ws
+        .write()
+        .unwrap()
+        .set_icon(id.as_str(), Some("📌".into()))
+        .expect("asset organization");
+    let plugin_root = data_root(&bench.root).join("plugins").join("test.asset");
+    let old_data = plugin_root.join(doc_data::path(&id, "thumbnail.bin"));
+    std::fs::create_dir_all(old_data.parent().expect("data parent")).expect("data directory");
+    std::fs::write(&old_data, b"preview").expect("asset side data");
+    let before_rename = entry(&bench.ws.read().unwrap(), &id);
+    let renamed_path = bench.root.join("media/foto.png");
+    let renamed_id = DocId::new("media/foto.png");
+    std::fs::create_dir_all(renamed_path.parent().expect("asset parent"))
+        .expect("asset directory");
+    std::fs::rename(&path, &renamed_path).expect("asset renamed");
+    sync.batch(&[ExternalChange::Renamed {
+        from: path.clone(),
+        to: renamed_path.clone(),
+    }]);
+
+    let after_rename = entry(&bench.ws.read().unwrap(), &renamed_id);
+    assert_eq!(after_rename.kind, before_rename.kind);
+    assert_eq!(after_rename.size, before_rename.size);
+    assert_eq!(after_rename.fingerprint, before_rename.fingerprint);
+    let ws = bench.ws.read().unwrap();
+    assert_eq!(
+        ws.organization()
+            .icons
+            .get(renamed_id.as_str())
+            .map(String::as_str),
+        Some("📌"),
+        "organization follows the asset identity"
+    );
+    drop(ws);
+    let new_data = plugin_root.join(doc_data::path(&renamed_id, "thumbnail.bin"));
+    assert_eq!(
+        std::fs::read(&new_data).ok().as_deref(),
+        Some(&b"preview"[..]),
+        "per-document side data follows the asset identity"
+    );
+    assert!(!old_data.exists(), "the old side-data key is gone");
+    let renamed_events: Vec<_> = events
+        .try_iter()
+        .filter(|notice| {
+            matches!(
+                &notice.event,
+                Event::EntryRenamed {
+                    from,
+                    to,
+                    kind: EntryKind::Asset
+                } if from == &id && to == &renamed_id
+            )
+        })
+        .collect();
+    assert_eq!(
+        renamed_events.len(),
+        1,
+        "an asset identity rename emits EntryRenamed exactly once"
+    );
+
+    std::fs::remove_file(&renamed_path).expect("asset removed");
+    sync.batch(&[ExternalChange::Touched(renamed_path)]);
     assert_eq!(
         events
             .try_iter()
             .filter(|notice| matches!(
                 &notice.event,
-                Event::EntryRemoved { id: removed, kind: EntryKind::Asset } if removed == &id
+                Event::EntryRemoved { id: removed, kind: EntryKind::Asset } if removed == &renamed_id
             ))
             .count(),
         1,

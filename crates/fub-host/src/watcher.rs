@@ -26,7 +26,10 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
-use fub_kernel::{ParsedChange, SyncPlan, Workspace};
+use fub_kernel::{
+    ExternalRenamePlan, ParsedChange, ParsedExternalAssetRename, ParsedExternalRename,
+    PreparedExternalAssetRename, SyncPlan, Workspace,
+};
 
 use crate::custody::{Custody, WriteTurn};
 use crate::jobs::{drain_events, with_event_drain};
@@ -441,6 +444,40 @@ impl Drop for SyncOperation {
 /// dal prestito esclusivo. Ciò che si compra tenendola in una fase sua è che
 /// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
 /// si rilascia, e i lettori in coda passano.
+enum PlannedWatcherChange {
+    Sync(Utf8PathBuf, Option<SyncPlan>),
+    Asset(PreparedExternalAssetRename),
+    LegacyDocument { from: Utf8PathBuf, to: Utf8PathBuf },
+}
+
+enum InvokedWatcherChange {
+    Sync(Utf8PathBuf, Option<ParsedChange>),
+    Asset(ParsedExternalAssetRename),
+    LegacyDocument { from: Utf8PathBuf, to: Utf8PathBuf },
+}
+
+impl PlannedWatcherChange {
+    fn invoke(self) -> Vec<InvokedWatcherChange> {
+        match self {
+            PlannedWatcherChange::Sync(path, plan) => {
+                vec![InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke))]
+            }
+            PlannedWatcherChange::Asset(plan) => match plan.invoke() {
+                ParsedExternalRename::Asset(parsed) => {
+                    vec![InvokedWatcherChange::Asset(parsed)]
+                }
+                ParsedExternalRename::Sync(changes) => changes
+                    .into_iter()
+                    .map(|(path, parsed)| InvokedWatcherChange::Sync(path, parsed))
+                    .collect(),
+            },
+            PlannedWatcherChange::LegacyDocument { from, to } => {
+                vec![InvokedWatcherChange::LegacyDocument { from, to }]
+            }
+        }
+    }
+}
+
 pub struct ExternalSync {
     workspace: Custody<Workspace>,
     lifecycle: Arc<SyncLifecycle>,
@@ -470,27 +507,42 @@ impl ExternalSync {
         if changes.is_empty() {
             return;
         }
-        // Fase 1a — soltanto stato del kernel e handle owned sotto read.
-        let prepared: Vec<Option<SyncPlan>> = {
+        // Fase 1a — routing e handle owned, senza I/O, sotto read.
+        let planned = {
             let Ok(ws) = self.workspace.read() else {
                 return;
             };
             changes
                 .iter()
-                .map(|change| match change {
-                    ExternalChange::Touched(path) => ws.plan_sync(path),
-                    ExternalChange::Renamed { .. } => None,
+                .flat_map(|change| match change {
+                    ExternalChange::Touched(path) => {
+                        vec![PlannedWatcherChange::Sync(path.clone(), ws.plan_sync(path))]
+                    }
+                    ExternalChange::Renamed { from, to } => {
+                        match ws.plan_external_rename(from, to) {
+                            ExternalRenamePlan::Asset(plan) => {
+                                vec![PlannedWatcherChange::Asset(plan)]
+                            }
+                            ExternalRenamePlan::LegacyDocument => {
+                                vec![PlannedWatcherChange::LegacyDocument {
+                                    from: from.clone(),
+                                    to: to.clone(),
+                                }]
+                            }
+                            ExternalRenamePlan::Sync(plans) => plans
+                                .into_iter()
+                                .map(|(path, plan)| PlannedWatcherChange::Sync(path, plan))
+                                .collect(),
+                        }
+                    }
                 })
-                .collect()
+                .collect::<Vec<_>>()
         };
-        // Fase 1b — stat-read-stat e Format/Syntax fuori da Custody.
-        let prepared = prepared
+        // Fase 1b — stat/read/parse e side-data restano fuori da Custody.
+        let invoked = planned
             .into_iter()
-            .map(|plan| plan.map(SyncPlan::invoke));
-        if self
-            .apply_batch_prepared(changes.iter().cloned().zip(prepared))
-            .is_err()
-        {
+            .flat_map(PlannedWatcherChange::invoke);
+        if self.apply_batch_prepared(invoked).is_err() {
             return;
         }
         // Fase 3 — la durevolezza.
@@ -543,10 +595,7 @@ impl ExternalSync {
         }
         // Fase 1d — stat-read-stat e Format/Syntax fuori da Custody.
         let prepared = plans.into_iter().map(|(path, plan)| {
-            (
-                ExternalChange::Touched(path),
-                plan.map(SyncPlan::invoke),
-            )
+            InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke))
         });
         if self.apply_batch_prepared(prepared).is_err() {
             return;
@@ -560,37 +609,52 @@ impl ExternalSync {
     // scrittura.
     fn apply_batch_prepared(
         &self,
-        changes: impl IntoIterator<Item = (ExternalChange, Option<ParsedChange>)>,
+        changes: impl IntoIterator<Item = InvokedWatcherChange>,
     ) -> Result<(), PluginError> {
         let _turn = self.workspace.write_turn();
         let deferred = self.workspace.write()?.defer_event_dispatch();
-        for (change, plan) in changes {
-            let pending = {
-                let mut ws = self.workspace.write()?;
-                match change {
-                    ExternalChange::Touched(path) => {
-                        ws.prepare_sync_path_prepared(&path, plan)
-                            .unwrap_or_default()
-                    }
-                    ExternalChange::Renamed { from, to } => {
-                        let _ = ws.sync_renamed_path(&from, &to);
-                        None
+        for change in changes {
+            match change {
+                InvokedWatcherChange::Sync(path, parsed) => {
+                    let pending = self
+                        .workspace
+                        .write()?
+                        .prepare_sync_path_prepared(&path, parsed)
+                        .unwrap_or_default();
+                    if let Some(pending) = pending {
+                        let completed = pending.invoke();
+                        let outcome = self
+                            .workspace
+                            .write()?
+                            .finish_sync_path_prepared(completed);
+                        if let Err((error, _completed)) = outcome {
+                            {
+                                let mut ws = self.workspace.write()?;
+                                ws.restore_event_dispatch(deferred);
+                                ws.report_host_trouble(Severity::Warning, error);
+                            }
+                            return drain_events(&self.workspace);
+                        }
                     }
                 }
-            };
-            if let Some(pending) = pending {
-                let completed = pending.invoke();
-                let outcome = self
-                    .workspace
-                    .write()?
-                    .finish_sync_path_prepared(completed);
-                if let Err((error, _completed)) = outcome {
-                    {
-                        let mut ws = self.workspace.write()?;
-                        ws.restore_event_dispatch(deferred);
-                        ws.report_host_trouble(Severity::Warning, error);
+                InvokedWatcherChange::Asset(parsed) => {
+                    let pending = self
+                        .workspace
+                        .write()?
+                        .prepare_external_asset_rename(parsed);
+                    if let Some(pending) = pending {
+                        let completed = pending.invoke();
+                        let _ = self
+                            .workspace
+                            .write()?
+                            .finish_external_asset_rename(completed);
                     }
-                    return drain_events(&self.workspace);
+                }
+                InvokedWatcherChange::LegacyDocument { from, to } => {
+                    // Unico residuo sincrono: il prossimo slice sostituirà la
+                    // migrazione d'identità dei documenti, senza confonderla
+                    // con asset e fallback già detached.
+                    let _ = self.workspace.write()?.sync_renamed_path(&from, &to);
                 }
             }
         }
