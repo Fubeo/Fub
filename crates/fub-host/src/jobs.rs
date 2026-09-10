@@ -81,9 +81,9 @@ use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 ///
 /// Si costruisce sul thread che esegue il job e si passa a
 /// [`Plugin::run_job`](fub_abi::traits::Plugin::run_job). Le capacità sono
-/// quelle del plugin e non quelle di chi esegue: la politica del §7.3 sta
-/// davanti come in ogni altro prestito, perché a metterla è il kernel dentro
-/// `with_host`/`with_read_host`, non questo tipo.
+/// quelle del plugin e non quelle di chi esegue: le porte normali ricevono il
+/// `Guard` del kernel, mentre le callback staccate rileggono la stessa policy
+/// prima della preparazione.
 ///
 /// # Cosa costa
 ///
@@ -205,6 +205,19 @@ impl JobHost {
             ));
         }
         Ok(())
+    }
+
+    /// Applica la policy corrente del caller prima di staccare una callback dal
+    /// workspace. La decisione resta quella unica di [`Policy`].
+    fn authorize_caller(
+        &self,
+        capability: Capability,
+        action: impl FnOnce() -> String,
+    ) -> Result<(), PluginError> {
+        let policy = self.workspace.read()?.granted_policy(&self.plugin);
+        // Comandi e servizi non hanno uno scope di path: l'helper condiviso
+        // applica quindi soltanto il cancello della famiglia.
+        authorize_path(&policy, capability, "", action)
     }
 
     /// Una lettura che può **rifiutare**: prima la bandiera, poi il prestito.
@@ -784,6 +797,7 @@ impl HostCommands for JobHost {
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
         self.stopped()?;
+        self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
         let mut prepared = {
@@ -969,6 +983,9 @@ impl HostServices for JobHost {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
         self.stopped()?;
+        self.authorize_caller(Capability::Services, || {
+            format!("calling `{service}.{method}`")
+        })?;
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
         let mut prepared = {

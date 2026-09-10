@@ -29,6 +29,7 @@ use std::time::{Duration, Instant};
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::model::DocId;
+use fub_abi::options::permission;
 use fub_abi::traits::{
     CommandProvider, HostApi, HostCommands, HostServices, PluginManifest, ServiceProvider,
 };
@@ -166,6 +167,39 @@ impl ServiceProvider for BlockingService {
     }
 }
 
+struct CountingProvider(Arc<AtomicUsize>);
+
+impl CommandProvider for CountingProvider {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(COMMAND, "Caller policy probe")
+            .with_scope(CommandScope::read_only())]
+    }
+
+    fn invoke(
+        &self,
+        _: &str,
+        _: serde_json::Value,
+        _: InvokeMode,
+        _: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(CommandOutcome::done())
+    }
+}
+
+impl ServiceProvider for CountingProvider {
+    fn call(
+        &self,
+        _: &str,
+        _: &str,
+        _: serde_json::Value,
+        _: &mut dyn HostApi,
+    ) -> Result<serde_json::Value, PluginError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(serde_json::json!({ "called": true }))
+    }
+}
+
 fn boundary(
     workspace: &Custody<Workspace>,
 ) -> (
@@ -293,6 +327,83 @@ fn assert_workspace_reusable(workspace: &Custody<Workspace>) {
         0,
         "a provider panic outside the guard must not poison the custody"
     );
+}
+
+#[test]
+fn undeclared_and_ungranted_job_hosts_do_not_invoke_commands() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(COMMAND_OWNER, "Audit command boundary")
+            .expect("command owner declares");
+        ws.register_command_provider(COMMAND_OWNER, Box::new(CountingProvider(calls.clone())))
+            .expect("command provider registers");
+    }
+
+    let mut job = JobHost::new(workspace.clone(), CALLER);
+    assert!(matches!(
+        job.run_command(COMMAND, serde_json::Value::Null),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    workspace
+        .write()
+        .expect("the vault is alive")
+        .register_plugin(
+            PluginManifest::new(CALLER, "Audit boundary caller"),
+            Trust::Community,
+        )
+        .expect("caller declares without grants");
+    let denied = job.run_command(COMMAND, serde_json::Value::Null);
+    assert!(
+        matches!(&denied, Err(PluginError::PermissionDenied(message))
+            if message.to_string().contains(permission::RUN_COMMAND)),
+        "the missing command grant must be reported: {denied:?}"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn undeclared_and_ungranted_job_hosts_do_not_invoke_services() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_plugin(
+            PluginManifest::core(SERVICE_OWNER, "Audit service boundary").providing(&[SERVICE]),
+            Trust::Core,
+        )
+        .expect("service owner declares");
+        ws.register_service_provider(SERVICE_OWNER, Box::new(CountingProvider(calls.clone())))
+            .expect("service provider registers");
+    }
+
+    let mut job = JobHost::new(workspace.clone(), CALLER);
+    assert!(matches!(
+        job.call_service(SERVICE, "probe", serde_json::Value::Null),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    workspace
+        .write()
+        .expect("the vault is alive")
+        .register_plugin(
+            PluginManifest::new(CALLER, "Audit boundary caller"),
+            Trust::Community,
+        )
+        .expect("caller declares without grants");
+    let denied = job.call_service(SERVICE, "probe", serde_json::Value::Null);
+    assert!(
+        matches!(&denied, Err(PluginError::PermissionDenied(message))
+            if message.to_string().contains(permission::CALL_SERVICE)),
+        "the missing service grant must be reported: {denied:?}"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
 #[test]
