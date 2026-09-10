@@ -25,6 +25,7 @@ use fub_abi::model::{Block, DocId, DocumentModel};
 use fub_abi::options::{permission, syntax};
 use fub_abi::traits::{
     HostQuery, IndexQuery, IndexResult, PluginManifest, PluginPermissions, VaultRead,
+    VaultStructure,
 };
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
@@ -267,6 +268,54 @@ fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
         .expect("model read succeeds");
     call.join().expect("completed model thread does not panic");
     assert_eq!(model.id, DocId::new("Note.md"));
+}
+
+#[test]
+fn restore_releases_both_workspace_guards_for_format_parse() {
+    let vault = vault("# Restored\n");
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        ..
+    } = blocking_workspace(&vault);
+    let trash_id = {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.reindex().expect("seed note enters the workspace");
+        ws.delete_document(&DocId::new("Note.md"))
+            .expect("seed note enters trash")
+    };
+    armed.store(true, Ordering::SeqCst);
+
+    let workspace_for_call = workspace.clone();
+    let call = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, PLUGIN).restore_document(&trash_id, None)
+    });
+    assert_eq!(
+        entered
+            .recv_timeout(TIMEOUT)
+            .expect("restore parse entered"),
+        Stage::Parse
+    );
+    // Il turno di scrittura resta intenzionalmente prenotato per impedire che
+    // un'altra mutazione scavalchi il commit. La guardia del workspace invece
+    // deve essere libera mentre il parser esterno gira.
+    assert!(
+        workspace.try_read().is_some(),
+        "restore FormatProvider::parse held a write guard on Custody<Workspace>"
+    );
+    parse_release.send(()).expect("release restore parse");
+    let restored = call
+        .join()
+        .expect("restore thread does not panic")
+        .expect("restore succeeds");
+
+    assert_eq!(restored, DocId::new("Note.md"));
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Note.md")).unwrap(),
+        "# Restored\n"
+    );
 }
 
 #[test]

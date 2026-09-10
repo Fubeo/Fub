@@ -15,6 +15,7 @@ use fub_kernel::Trust;
 const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
 const EDIT_FEED_LOCK_PLUGIN: &str = "fub.audit-index-edit-feed";
 const CREATE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-create-feed";
+const RESTORE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-restore-feed";
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -220,5 +221,60 @@ fn a_create_feed_runs_without_holding_the_workspace_lock() {
     assert_eq!(
         std::fs::read_to_string(v.root.join("Created.md")).unwrap(),
         "# Created\n"
+    );
+}
+
+#[test]
+fn a_restore_feed_runs_without_holding_the_workspace_lock() {
+    let v = vault();
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("the initial indexing finishes before the restore probe");
+    let ws = host.debug_workspace(None).expect("debug custody");
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_core_feature(RESTORE_FEED_LOCK_PLUGIN, "Audit detached restore feed")
+            .expect("restore owner declares");
+    }
+    let trashed = JobHost::new(ws.clone(), RESTORE_FEED_LOCK_PLUGIN)
+        .trash_document(&DocId::new("Note 0.md"))
+        .expect("seed note enters trash");
+    let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+    let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+    {
+        let mut w = ws.write().expect("the vault is alive");
+        w.register_index_provider(
+            RESTORE_FEED_LOCK_PLUGIN,
+            Box::new(IndexFeedLockProbe {
+                entered: entered_tx,
+                release: Mutex::new(release_rx),
+            }),
+        )
+        .expect("index probe registers");
+    }
+
+    let workspace_for_call = ws.clone();
+    let call = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, RESTORE_FEED_LOCK_PLUGIN).restore_document(&trashed, None)
+    });
+    entered_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("IndexProvider::on_documents_indexed entered for restore");
+    let reader_progressed = ws.try_read().is_some();
+    release_tx.send(()).expect("release restore index feed");
+    let outcome = call.join().expect("restore thread does not panic");
+
+    assert!(
+        reader_progressed,
+        "JobHost::restore_document held Custody<Workspace> across IndexProvider::on_documents_indexed"
+    );
+    assert_eq!(
+        outcome.expect("restore completes after index feed"),
+        DocId::new("Note 0.md")
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),
+        "# Note 0\n"
     );
 }

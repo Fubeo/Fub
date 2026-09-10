@@ -17,6 +17,9 @@ use fub_kernel::workspace::{
 };
 use fub_kernel::{RegistryError, Trust, Workspace};
 
+#[cfg(feature = "search")]
+use fub_features::SEARCH_ID;
+
 use crate::{Custody, JobHost};
 
 /// Di che famiglia è un bundle nell'inventario.
@@ -227,9 +230,14 @@ impl Registrar<'_> {
         committed
     }
 
-    pub fn plugin_data_dir(&self) -> Result<camino::Utf8PathBuf, PluginError> {
-        let owner = self.owner().to_owned();
-        self.with_read(|workspace| workspace.plugin_data_dir(&owner))
+    /// Opens the one native filesystem gap required by Tantivy's mmap index.
+    ///
+    /// Keep this surface search-specific: a generic bundle data-directory
+    /// accessor would silently grant every native bundle ambient filesystem
+    /// access outside `VaultStorage`.
+    #[cfg(feature = "search")]
+    pub(crate) fn search_data_dir(&self) -> Result<camino::Utf8PathBuf, PluginError> {
+        self.with_read(|workspace| workspace.plugin_data_dir(SEARCH_ID))
             .map_err(|error| PluginError::Internal(error.to_string().into()))?
     }
 

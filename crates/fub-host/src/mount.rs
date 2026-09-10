@@ -295,7 +295,7 @@ pub fn mount(
 
 #[cfg(feature = "search")]
 fn register_search(registrar: &mut Registrar<'_>) -> Vec<String> {
-    let index = match registrar.plugin_data_dir().and_then(|dir| {
+    let index = match registrar.search_data_dir().and_then(|dir| {
         SearchIndex::open(&dir)
             .map_err(|error| fub_abi::PluginError::Internal(error.to_string().into()))
     }) {

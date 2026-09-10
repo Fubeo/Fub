@@ -463,9 +463,9 @@ fn a_full_vault_on_a_storage_that_is_not_the_disk() {
 /// parentesi, come in questo doc.
 const CALLERS: &[(&str, &str, &str)] = &[
     (
-        "crates/fub-host/src/mount.rs",
+        "crates/fub-host/src/registry.rs",
         "SEARCH_ID",
-        "the search mount: the only native provider that mmaps (today)",
+        "the search-only registrar capability: the only native provider that mmaps (today)",
     ),
     (
         "crates/fub-features/tests/data_channel_e2e.rs",

@@ -153,6 +153,12 @@ Il flush di fine indicizzazione e quello del watcher usano la stessa porta
 staccata: gli snapshot degli indici vengono rilasciati fuori guard anche quando
 la finalizzazione rileva un provider ritirato.
 
+Anche scrittura, edit, creazione e ripristino dal cestino separano la mutazione
+autorevole dall'alimentazione degli indici. Il ripristino risolve e fotografa il
+parser, lo esegue senza guardia, poi riconvalida voce, destinazione e revisione
+prima della singola mossa dal cestino; gli indici ricevono il modello soltanto
+dopo il commit e fuori da `Custody<Workspace>`.
+
 La sessione ferma watcher e job, consegna `VaultClosed`, esegue il flush globale
 e smonta i plugin in ordine inverso. L'anagrafe viene persistita per ultima.
 La disabilitazione persiste prima la scelta e rinvia gli eventi fino al termine

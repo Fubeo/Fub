@@ -557,7 +557,66 @@ impl VaultStructure for JobHost {
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        self.write_result(|h| h.restore_document(entry, to))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    entry.as_str(),
+                    || format!("restoring `{entry}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                entry.as_str(),
+                || format!("restoring `{entry}`"),
+            )?;
+            if let Some(to) = &to {
+                if self.mode == InvokeMode::DryRun {
+                    authorize_path(
+                        &ReadOnly {
+                            why: "simulazione del comando",
+                        },
+                        Capability::VaultStructure,
+                        to.as_str(),
+                        || format!("restoring to `{to}`"),
+                    )?;
+                }
+                authorize_path(
+                    &ws.granted_policy(&self.plugin),
+                    Capability::VaultStructure,
+                    to.as_str(),
+                    || format!("restoring to `{to}`"),
+                )?;
+            }
+            ws.prepare_document_restore(entry, to)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_restore(completed).map_err(|failure| {
+                let (error, _) = *failure;
+                error
+            })?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_restore_deferred(pending)
+                .map_err(|failure| {
+                    let (error, _) = *failure;
+                    error
+                })?
+        };
+        finish_events(&workspace, deferred)
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {

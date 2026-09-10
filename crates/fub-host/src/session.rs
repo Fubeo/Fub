@@ -1694,6 +1694,19 @@ impl Host {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        self.write_document_in(workspace, id, source, base)
+    }
+
+    /// Scrive sul vault già risolto dal chiamante. Le operazioni composte
+    /// (come il ripristino di una versione) usano questa porta per non
+    /// risolvere due volte il vault corrente fra lettura e scrittura.
+    fn write_document_in(
+        &self,
+        workspace: Custody<Workspace>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
@@ -1947,10 +1960,15 @@ impl Host {
         id: &DocId,
         ts: u64,
     ) -> Result<String, PluginError> {
-        let store = self.versions(vault)?;
-        self.read_workspace(vault, |workspace| {
-            workspace.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
-        })
+        let (workspace, store) = self.in_session(vault, |session| {
+            let store = session
+                .versions
+                .clone()
+                .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
+            Ok((session.workspace.clone(), store))
+        })?;
+        let workspace = workspace.read()?;
+        workspace.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
@@ -1963,10 +1981,20 @@ impl Host {
         id: &DocId,
         ts: u64,
     ) -> Result<(), PluginError> {
-        let source = self.read_version(vault, id, ts)?;
+        let (workspace, store) = self.in_session(vault, |session| {
+            let store = session
+                .versions
+                .clone()
+                .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
+            Ok((session.workspace.clone(), store))
+        })?;
+        let source = {
+            let ws = workspace.read()?;
+            ws.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))?
+        };
         // **Detta**, come l'importer (§18.1): un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce **apposta**.
-        self.write_document(vault, id, &source, WriteBase::Dictated)
+        self.write_document_in(workspace, id, &source, WriteBase::Dictated)
             .map(|_| ())
     }
 
