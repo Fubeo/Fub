@@ -319,6 +319,73 @@ fn restore_releases_both_workspace_guards_for_format_parse() {
 }
 
 #[test]
+fn a_stale_restore_result_moves_nothing_and_records_no_fact() {
+    let vault = vault("# Before\n");
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        ..
+    } = blocking_workspace(&vault);
+    let trash_id = {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.reindex().expect("seed note enters the workspace");
+        ws.delete_document(&DocId::new("Note.md"))
+            .expect("seed note enters trash")
+    };
+    let journal_before = workspace
+        .read()
+        .expect("the vault is alive")
+        .journal()
+        .expect("journal is readable")
+        .records
+        .len();
+    armed.store(true, Ordering::SeqCst);
+
+    let workspace_for_call = workspace.clone();
+    let entry = trash_id.clone();
+    let call = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, PLUGIN).restore_document(&entry, None)
+    });
+    assert_eq!(
+        entered
+            .recv_timeout(TIMEOUT)
+            .expect("restore parse entered"),
+        Stage::Parse
+    );
+    assert_workspace_is_free(&workspace, "stale restore FormatProvider::parse");
+    std::fs::write(vault.root.join(trash_id.as_str()), "# After\n")
+        .expect("concurrent trash change");
+    parse_release.send(()).expect("release restore parse");
+
+    let error = call
+        .join()
+        .expect("restore thread does not panic")
+        .expect_err("the stale parse result is rejected");
+    assert!(matches!(error, PluginError::Conflict(_)), "{error}");
+    assert!(
+        !vault.root.join("Note.md").exists(),
+        "a stale result did not move the trash entry"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join(trash_id.as_str())).unwrap(),
+        "# After\n"
+    );
+    assert_eq!(
+        workspace
+            .read()
+            .expect("the vault is alive")
+            .journal()
+            .expect("journal is readable")
+            .records
+            .len(),
+        journal_before,
+        "a rejected stale result is not a Restored fact"
+    );
+}
+
+#[test]
 fn a_model_from_a_changed_source_is_rejected_as_stale_and_the_workspace_is_reusable() {
     let vault = vault("```audit-model\nbefore\n```\n");
     let BlockingWorkspace {

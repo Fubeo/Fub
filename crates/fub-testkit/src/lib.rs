@@ -54,6 +54,29 @@ pub mod format;
 
 pub use format::{SampleExtractor, SampleText};
 
+/// Esegue nei test il protocollo staged del ripristino su un `Workspace`
+/// posseduto direttamente, quindi senza una `Custody` da attraversare.
+///
+/// I percorsi di produzione delegano invece all'owner host, che rilascia ogni
+/// guardia fra queste stesse fasi.
+pub fn restore_document(
+    workspace: &mut Workspace,
+    entry: &DocId,
+    to: Option<DocId>,
+) -> Result<DocId, PluginError> {
+    let prepared = workspace
+        .prepare_document_restore(entry, to)
+        .map_err(PluginError::from)?;
+    let completed = prepared.invoke().map_err(PluginError::from)?;
+    let pending = workspace
+        .commit_document_restore(completed)
+        .map_err(|failure| (*failure).0)?;
+    let pending = pending.invoke_indexes();
+    workspace
+        .finish_document_restore(pending)
+        .map_err(|failure| (*failure).0)
+}
+
 /// Il registro degli eventi visti da [`Mounted::events`], condiviso con la spia.
 type Record = Arc<Mutex<Vec<Event>>>;
 

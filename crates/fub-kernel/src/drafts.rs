@@ -342,7 +342,7 @@ impl Drafts {
     ///
     /// # Due file: una mossa sola
     ///
-    /// È la riga di `restore_from_trash`, e per la stessa ragione: *non è un
+    /// È la riga del ripristino dal cestino, e per la stessa ragione: *non è un
     /// `write` seguito da un `remove`, quella forma ha un istante in cui la
     /// nota sta in due posti, e un guasto lì dentro ce la lascia*. Qui la
     /// migrazione aggiornava anche il campo `doc` del record, quindi erano due

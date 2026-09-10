@@ -4812,138 +4812,23 @@ impl Workspace {
         trashed
     }
 
-    /// Ripristina una voce del cestino e restituisce il [`DocId`] con cui è
+    /// Elenca il contenuto del cestino, inclusi allegati e voci straniere.
+    ///
+    /// Il ripristino non ha un gemello sincrono su `Workspace`: parser e indici
+    /// devono attraversare il protocollo staged di `workspace::restore`, così
+    /// l'host può invocarli dopo aver rilasciato `Custody<Workspace>`.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
         self.docs.vault.list_trash()
     }
 
-    /// tornata nel vault: il nome originale nella radice, oppure `to` se il
-    /// chiamante ne ha scelto un altro (è il caso in cui il path è di nuovo
-    /// occupato e l'app ha chiesto all'utente).
-    ///
-    /// Il ripristino è l'**inverso esatto** della cancellazione: una mossa sola
-    /// sul disco ([`Vault::restore_trashed`]), e poi la stessa coda che segue
-    /// ogni scrittura — parse, grafo, indici, eventi. Non è un `write` seguito
-    /// da un `remove`: quella forma ha un istante in cui la nota sta in due
-    /// posti, e un guasto lì dentro ce la lascia.
-    ///
-    /// Ciò che torna può **non essere un documento**: nel cestino ci finiscono
-    /// anche gli allegati — è condiviso con Obsidian (D1) e
-    /// [`list_trash`](Vault::list_trash) li elenca apposta — e per restituire un
-    /// `.png` non serve né un provider né che i byte siano UTF-8. Pretenderli
-    /// sarebbe il difetto, com'è per
-    /// [`rename_entry_in_batch`](Workspace::rename_entry_in_batch): la coda di
-    /// un allegato è quella di un documento per sottrazione, non un secondo
-    /// percorso.
-    ///
-    /// [`Vault::restore_trashed`]: crate::Vault::restore_trashed
-    // `entry.original` nasce da un basename o dal sidecar scritto dal
-    pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
-        self.indexes.ensure_mutation_available()?;
-        let entry = self
-            .docs
-            .vault
-            .list_trash()?
-            .into_iter()
-            .find(|and| &and.id == trash_id)
-            .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
-        // vault, ed è sano per costruzione; il `to` del chiamante invece
-        // arriva dall'IPC e va validato.
-        //
-        // Le due strade fanno **due domande diverse**, ed è la distinzione del
-        // §15.5 letta sul cestino. Senza `to` non nasce nessun nome: ne torna
-        // uno che c'era, e va giudicato col solo recinto — una nota che si
-        // chiamava `CON.md` prima di finire nel cestino deve poter tornare, e
-        // sarebbe un modo curioso di perdere un file, rifiutarsi di restituirlo
-        // per un nome che il vault conteneva già. Con `to` invece il nome
-        // **nasce adesso**: `to` è opzionale proprio perché è il caso in cui il
-        // path d'origine era occupato e l'utente ne ha digitato un altro, cioè
-        // Fub sta scegliendo dove mettere un file. Finché anche questa strada
-        // chiedeva il solo recinto, un ripristino poteva atterrare su
-        // `.nascosta/Nota.md` — legale su ogni filesystem, saltato dalla
-        // scansione — e la nota tornava invisibile a chi l'aveva ripristinata,
-        // con la sua voce fantasma in anagrafe. Era il difetto 0186.
-        // Il modello si costruisce **prima** di muovere il file, per la ragione
-        let original = entry.original.clone();
-        let target = match to {
-            Some(to) => new_doc_id(to.as_str())?,
-            None => entry.original,
-        };
-        if self.indexes.core.metas.contains_key(&target) || self.docs.vault.exists(&target) {
-            return Err(KernelError::AlreadyExists(target.to_string()));
-        }
-        // di `write_source`: il parse è puro, e farlo dopo lascerebbe il disco
-        // avanti rispetto a modelli, grafo e indici davanti a un chiamante che
-        // riceve `Err`.
-        //
-        // Nessun provider per questa estensione non è un errore: è un allegato,
-        // e la sua coda è questa per sottrazione — niente lettura, niente parse,
-        // niente modello da mettere in cache.
-        // **Una** mossa sul disco, e il cestino lascia andare la voce con tutto
-        let ext = extension_of(&target).unwrap_or_default();
-        let model = match self.docs.registry.provider_for_ext(&ext) {
-            Some(_) => {
-                let source = self.docs.vault.read(trash_id)?;
-                let revision = Revision::of(&source);
-                Some((self.docs.parse_owned(&target, source)?, revision))
-            }
-            None => None,
-        };
-
-        // ciò che teneva per lei.
-        // L'impronta di un allegato non c'è, come per ogni voce che
-        self.docs.vault.restore_trashed(trash_id, &target)?;
-        match model {
-            Some((model, revision)) => self.ingest_model(&target, model, revision, None),
-            None => {
-                // nessuno parsa: l'anagrafe la ricava dal disco.
-                // Se il ripristino approda su un path diverso dall'origine (il path
-                let kind = self
-                    .touch_entry(&target, None)
-                    .unwrap_or(EntryKind::Unknown);
-                self.emit_event(Event::EntryChanged {
-                    id: target.clone(),
-                    kind,
-                });
-                self.emit_event(Event::IndexUpdated);
-            }
-        }
-        self.dispatch_pending();
-        self.record(JournalOp::Restored {
-            trash: trash_id.clone(),
-            doc: target.clone(),
-        });
-        // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
-        // per-documento — storia del versioning, meta del frontend — vive
-        // ancora sotto la chiave d'origine: è un rename a tutti gli effetti,
-        // anche se il documento non era indicizzato, e chi tiene stato migra
-        // la chiave sull'evento.
-        // Lo stato per-documento segue la chiave anche qui, e va fatto nel
-        if target != original {
-            // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
-            // la coda ha un budget e può troncare (decisione 0034), e chi tiene
-            // stato autorevole non può dipendere da una consegna best-effort.
-            // Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
-            self.migrate_doc_data(&original, &target);
-            self.emit_event(Event::DocumentRenamed {
-                from: original,
-                to: target.clone(),
-            });
-            self.dispatch_pending();
-        }
-        Ok(target)
-    }
-
-    /// non sono più recuperabili, e chi chiama deve poterlo dire.
-    /// Rinomina/sposta un documento **preservando l'identità**: file sul disco,
+    /// Svuota il cestino e restituisce quante voci non sono più recuperabili.
     pub fn empty_trash(&mut self) -> Result<usize> {
         self.docs.vault.empty_trash()
     }
 
-    /// modello, grafo, e riscrittura chirurgica dei wikilink entranti che
-    /// puntavano al vecchio nome o path (stile Obsidian). I link per **alias**
-    /// non vengono toccati: l'alias vive nel frontmatter del documento e
-    /// sopravvive al rename.
+    /// Rinomina o sposta un documento preservandone identità, modello, grafo e
+    /// wikilink entranti. I link per alias non vengono toccati: l'alias vive nel
+    /// frontmatter del documento e sopravvive al rename.
     ///
     /// Emette [`Event::DocumentRenamed`] (non `Removed`+`Changed`): chi tiene
     /// stato per-documento migra la chiave.
@@ -5531,7 +5416,7 @@ impl Workspace {
         // una nota che sul disco non esiste, e che ad aprirla dà un errore,
         // fino alla riapertura.
         //
-        // È la regola che `restore_from_trash` enuncia dal verso in cui la si
+        // È la regola che il ripristino staged enuncia dal verso in cui la si
         // può ancora rispettare — «il parse è puro, e farlo dopo lascerebbe il
         // disco avanti rispetto a modelli, grafo e indici davanti a un
         // chiamante che riceve `Err`» —: là si legge **prima** di muovere,

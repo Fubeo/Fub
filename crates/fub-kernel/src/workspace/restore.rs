@@ -21,8 +21,7 @@ enum RestoreContent {
 #[must_use = "il ripristino preparato deve essere parsato e finalizzato"]
 pub struct PreparedDocumentRestore {
     workspace_id: u64,
-    trash_id: DocId,
-    original: DocId,
+    entry: TrashEntry,
     target: DocId,
     content: RestoreContent,
 }
@@ -30,8 +29,7 @@ pub struct PreparedDocumentRestore {
 /// Esito del parser, ancora da riconvalidare e applicare al vault.
 pub struct CompletedDocumentRestore {
     workspace_id: u64,
-    trash_id: DocId,
-    original: DocId,
+    entry: TrashEntry,
     target: DocId,
     source_kind: Option<fub_abi::format::SourceKind>,
     source_revision: Revision,
@@ -54,8 +52,7 @@ impl PreparedDocumentRestore {
     pub fn invoke(self) -> Result<CompletedDocumentRestore> {
         let PreparedDocumentRestore {
             workspace_id,
-            trash_id,
-            original,
+            entry,
             target,
             content,
         } = self;
@@ -73,8 +70,7 @@ impl PreparedDocumentRestore {
         };
         Ok(CompletedDocumentRestore {
             workspace_id,
-            trash_id,
-            original,
+            entry,
             target,
             source_kind,
             source_revision,
@@ -106,10 +102,9 @@ impl Workspace {
             .into_iter()
             .find(|entry| &entry.id == trash_id)
             .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
-        let original = entry.original.clone();
         let target = match to {
             Some(to) => new_doc_id(to.as_str())?,
-            None => entry.original,
+            None => entry.original.clone(),
         };
         if self.is_taken(&target) {
             return Err(KernelError::AlreadyExists(target.to_string()));
@@ -144,8 +139,7 @@ impl Workspace {
         };
         Ok(PreparedDocumentRestore {
             workspace_id: self.workspace_id,
-            trash_id: trash_id.clone(),
-            original,
+            entry,
             target,
             content,
         })
@@ -174,22 +168,22 @@ impl Workspace {
         };
         let current = entries
             .into_iter()
-            .find(|entry| entry.id == completed.trash_id);
+            .find(|entry| entry.id == completed.entry.id);
         let Some(current) = current else {
             return Err(Box::new((
-                PluginError::NotFound(completed.trash_id.to_string().into()),
+                PluginError::NotFound(completed.entry.id.to_string().into()),
                 completed,
             )));
         };
-        if current.original != completed.original {
+        if current != completed.entry {
             return Err(Box::new((
-                PluginError::Conflict(completed.trash_id.to_string().into()),
+                PluginError::Conflict(completed.entry.id.to_string().into()),
                 completed,
             )));
         }
         if self.is_taken(&completed.target) {
             return Err(Box::new((
-                PluginError::Conflict(completed.target.to_string().into()),
+                PluginError::AlreadyExists(completed.target.to_string().into()),
                 completed,
             )));
         }
@@ -197,12 +191,12 @@ impl Workspace {
             Some(fub_abi::format::SourceKind::Text) => self
                 .docs
                 .vault
-                .read(&completed.trash_id)
+                .read(&completed.entry.id)
                 .map(|source| Revision::of_bytes(source.as_bytes())),
             Some(fub_abi::format::SourceKind::Bytes) | None => self
                 .docs
                 .vault
-                .read_bytes(&completed.trash_id)
+                .read_bytes(&completed.entry.id)
                 .map(|source| Revision::of_bytes(&source)),
         };
         let current_revision = match current_revision {
@@ -211,7 +205,7 @@ impl Workspace {
         };
         if current_revision != completed.source_revision {
             return Err(Box::new((
-                PluginError::Conflict(completed.trash_id.to_string().into()),
+                PluginError::Conflict(completed.entry.id.to_string().into()),
                 completed,
             )));
         }
@@ -219,7 +213,7 @@ impl Workspace {
         if let Err(error) = self
             .docs
             .vault
-            .restore_trashed(&completed.trash_id, &completed.target)
+            .restore_trashed(&completed.entry.id, &completed.target)
         {
             return Err(Box::new((PluginError::from(error), completed)));
         }
@@ -231,7 +225,7 @@ impl Workspace {
             self.last_removed = None;
         }
         let journal = JournalOp::Restored {
-            trash: completed.trash_id.clone(),
+            trash: completed.entry.id.clone(),
             doc: completed.target.clone(),
         };
         let feed = match completed.model {
@@ -257,8 +251,8 @@ impl Workspace {
         };
         Ok(PendingDocumentRestore {
             workspace_id: completed.workspace_id,
-            trash_id: completed.trash_id,
-            original: completed.original,
+            trash_id: completed.entry.id,
+            original: completed.entry.original,
             target: completed.target,
             feed,
         })
@@ -303,6 +297,18 @@ impl Workspace {
                 doc: target,
             }),
         })
+    }
+
+    /// Chiude il ripristino staged dopo che l'host ha alimentato gli indici
+    /// fuori dalla propria guardia. Gli eventi precedono l'unica riga journal,
+    /// come nel percorso storico.
+    pub fn finish_document_restore(
+        &mut self,
+        pending: PendingDocumentRestore,
+    ) -> std::result::Result<DocId, Box<(PluginError, PendingDocumentRestore)>> {
+        let deferred = self.finish_document_restore_deferred(pending)?;
+        self.dispatch_pending();
+        Ok(self.finish_deferred_events(deferred))
     }
 }
 

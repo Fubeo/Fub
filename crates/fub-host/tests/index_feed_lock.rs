@@ -2,6 +2,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
+use fub_abi::command::{CommandEffect, InvokeMode};
 use fub_abi::edit::{EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
@@ -9,6 +10,7 @@ use fub_abi::traits::{
     VaultEntry, VaultStructure, VaultWrite,
 };
 use fub_abi::PluginError;
+use fub_features::TRASH_RESTORE;
 use fub_host::{Host, JobHost, NoWatcher};
 use fub_kernel::Trust;
 
@@ -254,9 +256,14 @@ fn a_restore_feed_runs_without_holding_the_workspace_lock() {
         .expect("index probe registers");
     }
 
-    let workspace_for_call = ws.clone();
+    let entry = trashed.clone();
     let call = std::thread::spawn(move || {
-        JobHost::new(workspace_for_call, RESTORE_FEED_LOCK_PLUGIN).restore_document(&trashed, None)
+        host.invoke_user_command(
+            None,
+            TRASH_RESTORE,
+            serde_json::json!({ "entry": entry.as_str() }),
+            InvokeMode::Apply,
+        )
     });
     entered_rx
         .recv_timeout(Duration::from_secs(10))
@@ -267,11 +274,13 @@ fn a_restore_feed_runs_without_holding_the_workspace_lock() {
 
     assert!(
         reader_progressed,
-        "JobHost::restore_document held Custody<Workspace> across IndexProvider::on_documents_indexed"
+        "CoreCommands::trash.restore held Custody<Workspace> across IndexProvider::on_documents_indexed"
     );
     assert_eq!(
-        outcome.expect("restore completes after index feed"),
-        DocId::new("Note 0.md")
+        outcome.expect("restore completes after index feed").effect,
+        CommandEffect::Navigate {
+            doc: DocId::new("Note 0.md"),
+        }
     );
     assert_eq!(
         std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),

@@ -9,8 +9,9 @@
 //! 2. `rename_document` prestato a un plugin è quello del kernel: riscrive i
 //!    backlink entranti. Non ce n'è una versione "nuda" al confine, e questo
 //!    test è il posto in cui si accorgerebbe chi ne aggiungesse una.
-//! 3. Il giro del cestino si chiude *attraverso il contratto*: cestina, elenca,
-//!    ripristina, svuota, senza mai toccare `Workspace` direttamente.
+//! 3. Il cestino attraversa il contratto per cestinare ed elencare; il
+//!    ripristino sincrono del `KernelHost` è chiuso perché non può staccare i
+//!    provider, mentre lo stesso protocollo staged completa il giro.
 //! 4. `run_command` compone: eredita il modo (una simulazione resta una
 //!    simulazione), eredita l'attore e il lotto, e rifiuta il giro nominandolo.
 
@@ -32,7 +33,7 @@ use fub_abi::options::syntax;
 use fub_abi::traits::{CommandProvider, HostApi};
 use fub_abi::FormatProvider;
 use fub_kernel::{FormatRegistry, Workspace};
-use fub_testkit::SampleText;
+use fub_testkit::{restore_document, SampleText};
 
 /// Come [`TestoDiProva`], ma ogni riga non vuota è un wikilink: basta a far
 /// esistere dei backlink da riscrivere, e non tira dentro il provider markdown
@@ -303,12 +304,12 @@ fn a_rename_through_the_boundary_is_one_batch_not_one_for_backlink() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn the_trash_round_trip_closes_without_touching_the_workspace() {
+fn the_trash_round_trip_uses_the_staged_restore_boundary() {
     let (_dir, mut ws) = vault_plain();
     ws.write_document(&DocId::new("nota.md"), "contenuto", WriteBase::Dictated)
         .expect("scrive");
 
-    let restored = ws.with_host("prova.plugin", |host| {
+    let entry = ws.with_host("prova.plugin", |host| {
         let destination = host
             .trash_document(&DocId::new("nota.md"))
             .expect("cestina");
@@ -329,11 +330,14 @@ fn the_trash_round_trip_closes_without_touching_the_workspace() {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].id, destination, "l'id con cui si ripristina");
         assert_eq!(entries[0].original.as_str(), "nota.md", "dove tornerebbe");
-
-        let entry = entries[0].id.clone();
-        host.restore_document(&entry, None).expect("ripristina")
+        assert!(matches!(
+            host.restore_document(&destination, None),
+            Err(PluginError::Internal(_))
+        ));
+        destination
     });
 
+    let restored = restore_document(&mut ws, &entry, None).expect("ripristina");
     assert_eq!(restored.as_str(), "nota.md");
     assert_eq!(
         ws.read_source(&DocId::new("nota.md")).expect("rileggibile"),
@@ -351,29 +355,28 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
     ws.write_document(&DocId::new("nota.md"), "vecchia", WriteBase::Dictated)
         .expect("scrive");
 
-    ws.with_host("prova.plugin", |host| {
+    let (entry, alternative) = ws.with_host("prova.plugin", |host| {
         let entry = host
             .trash_document(&DocId::new("nota.md"))
             .expect("cestina");
         // Qualcuno rioccupa il path mentre la nota è nel cestino.
         host.create_document(&DocId::new("nota.md"), "nuova")
             .expect("crea");
-
-        host.restore_document(&entry, None)
-            .expect_err("il path d'origine è occupato: si rifiuta, non si sovrascrive");
-        assert_eq!(
-            host.read_document(&DocId::new("nota.md")).expect("legge"),
-            "nuova"
-        );
-
-        // Chi chiama ha `free_name` e decide: è la stessa composizione di
-        // `create_document`, e il motivo per cui l'host non sceglie da sé.
         let alternative = host.free_name(&DocId::new("nota.md"));
-        let destination = host
-            .restore_document(&entry, Some(alternative.clone()))
-            .expect("ripristina sotto un altro nome");
-        assert_eq!(destination, alternative);
+        (entry, alternative)
     });
+
+    restore_document(&mut ws, &entry, None)
+        .expect_err("il path d'origine è occupato: si rifiuta, non si sovrascrive");
+    assert_eq!(
+        ws.read_source(&DocId::new("nota.md")).expect("legge"),
+        "nuova"
+    );
+
+    // Chi chiama ha `free_name` e decide: il kernel non sceglie da sé.
+    let destination = restore_document(&mut ws, &entry, Some(alternative.clone()))
+        .expect("ripristina sotto un altro nome");
+    assert_eq!(destination, alternative);
 }
 
 #[test]
