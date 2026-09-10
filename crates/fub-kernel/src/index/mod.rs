@@ -300,17 +300,6 @@ pub(crate) fn reconcile_handles(
     lost
 }
 
-fn feed_shared(
-    providers: &ProviderTable<(String, SharedIndexProvider)>,
-    models: &[DocumentModel],
-) -> Vec<IndexLoss> {
-    let handles: Vec<_> = providers
-        .iter()
-        .map(|(id, provider)| (id.clone(), Arc::clone(provider)))
-        .collect();
-    feed_handles(&handles, models)
-}
-
 pub(crate) struct Indexes {
     /// L'indice del kernel: metadati, tag, grafo. È `Target::Core` nella
     /// tabella, ed è registrato **per primo** — che è ciò che gli dà la
@@ -411,33 +400,6 @@ impl Indexes {
             self.providers.push(entry);
         }
         removed
-    }
-
-    /// Un lotto di documenti va all'indice del kernel e poi a tutti quelli
-    /// registrati, e ciò che nessuno ha preso **torna indietro** (§20.1).
-    ///
-    /// I registrati passano dalla rete contro i panici (§9.3): questo giro è
-    /// dentro **ogni scrittura**, cioè sotto il prestito esclusivo di chi ha
-    /// chiamato, e un indice che pania su un documento strano si porterebbe via
-    /// il vault invece che sé stesso. Un panico qui **è** una perdita, e adesso
-    /// si dice come si dice ogni altra: chi pania alimentando non ha preso
-    /// niente di ciò che gli era stato dato, quindi il lotto intero torna
-    /// indietro a suo nome. Prima si fermava e finiva su `stderr`, che è il
-    /// posto dove il §20.2 ha smesso di mandare le cose.
-    ///
-    /// L'indice del kernel **non** è in rete: se pania lui è un difetto del
-    /// kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault che
-    /// risponde a metà.
-    pub(crate) fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
-        let mut lost = self.core.on_documents_indexed(models);
-        lost.extend(feed_shared(&self.providers, models));
-        lost
-    }
-
-    pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
-        let mut lost = self.core.on_documents_removed(ids);
-        lost.extend(forget_handles(&self.feed_handles(), ids));
-        lost
     }
 
     pub(crate) fn ensure_mutation_available(&self) -> crate::error::Result<()> {
