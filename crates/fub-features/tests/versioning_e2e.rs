@@ -244,12 +244,7 @@ fn a_restore_under_a_new_name_migrates_the_history() {
     ws.write_document(&notes, "usurpatrice\n", WriteBase::Dictated)
         .unwrap();
 
-    let restored = restore_document(
-        &mut ws,
-        &trashed,
-        Some(DocId::new("Nota 1.md")),
-    )
-    .unwrap();
+    let restored = restore_document(&mut ws, &trashed, Some(DocId::new("Nota 1.md"))).unwrap();
 
     assert_eq!(restored, DocId::new("Nota 1.md"));
     // La storia della prima vita ha seguito la nota sul nuovo path (il

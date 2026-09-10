@@ -829,9 +829,11 @@ impl HostCommands for JobHost {
         {
             let ws = workspace.read()?;
             let policy = ws.granted_policy(&self.plugin);
-            for capability in std::iter::once(Capability::Commands)
-                .chain(Capability::ALL.into_iter().filter(|cap| cap.writes_the_vault()))
-            {
+            for capability in std::iter::once(Capability::Commands).chain(
+                Capability::ALL
+                    .into_iter()
+                    .filter(|cap| cap.writes_the_vault()),
+            ) {
                 if let Some(why) = policy.denies(capability) {
                     return Err(PluginError::PermissionDenied(
                         format!("undoing: {why}").into(),
@@ -877,9 +879,8 @@ impl HostCommands for JobHost {
                 .expect("un callback di undo gira senza il lock del workspace");
             ws.finish_undo_replay_deferred(replay)
         };
-        let drained = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            drain_events(&workspace)
-        }));
+        let drained =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drain_events(&workspace)));
         let outcome = {
             let mut ws = workspace
                 .write()

@@ -600,8 +600,7 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
     .expect("ricrea sullo stesso path");
 
     let entry = ws.list_trash().expect("cestino")[0].id.clone();
-    let and = restore_document(&mut ws, &entry, None)
-        .expect_err("il path originale è occupato");
+    let and = restore_document(&mut ws, &entry, None).expect_err("il path originale è occupato");
     assert!(
         matches!(and, PluginError::AlreadyExists(_)),
         "è la variante su cui il cestino rama, e senza la domanda torna sbagliata: {and}"
@@ -609,8 +608,7 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
 
     // E col nome che la shell propone, passa: l'altro capo dello stesso ramo.
     let free = ws.free_name(&DocId::new("Idee.md"));
-    restore_document(&mut ws, &entry, Some(free))
-        .expect("ripristina con un altro nome");
+    restore_document(&mut ws, &entry, Some(free)).expect("ripristina con un altro nome");
 }
 
 #[test]

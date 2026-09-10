@@ -205,12 +205,10 @@ impl VaultStructure for KernelHost<'_> {
                 error
             })?;
         let pending = pending.invoke_indexes();
-        self.ws
-            .finish_document_restore(pending)
-            .map_err(|failure| {
-                let (error, _) = *failure;
-                error
-            })
+        self.ws.finish_document_restore(pending).map_err(|failure| {
+            let (error, _) = *failure;
+            error
+        })
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {

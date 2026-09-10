@@ -608,7 +608,6 @@ impl UndoReplay {
     }
 }
 
-
 /// Una chiamata a [`ServiceProvider`] preparata sotto lock e invocabile
 /// senza tenere `Custody<Workspace>`.
 pub struct PreparedService {
@@ -7430,7 +7429,6 @@ impl Workspace {
         outcome
     }
 
-
     // --- import ed export ---------------------------------------------------
     fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
         self.providers.command_owner(command)
@@ -9514,7 +9512,6 @@ impl Drop for Batch<'_> {
         self.ws.end_batch();
     }
 }
-
 
 impl std::ops::Deref for Batch<'_> {
     type Target = Workspace;

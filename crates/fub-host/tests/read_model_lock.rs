@@ -159,7 +159,6 @@ impl FormatProvider for CountingFormat {
     }
 }
 
-
 struct BlockingSyntax {
     armed: Arc<AtomicBool>,
     entered: mpsc::SyncSender<Stage>,

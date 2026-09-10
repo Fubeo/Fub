@@ -171,8 +171,7 @@ struct CountingProvider(Arc<AtomicUsize>);
 
 impl CommandProvider for CountingProvider {
     fn commands(&self) -> Vec<CommandSpec> {
-        vec![CommandSpec::new(COMMAND, "Caller policy probe")
-            .with_scope(CommandScope::read_only())]
+        vec![CommandSpec::new(COMMAND, "Caller policy probe").with_scope(CommandScope::read_only())]
     }
 
     fn invoke(

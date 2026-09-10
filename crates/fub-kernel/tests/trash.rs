@@ -602,12 +602,8 @@ fn restoring_under_a_new_name_announces_the_identity_migration() {
     .unwrap();
 
     let events = ws.bus().subscribe();
-    let restored = restore_document(
-        &mut ws,
-        &trashed,
-        Some(DocId::new("projects/Note 1.txt")),
-    )
-    .unwrap();
+    let restored =
+        restore_document(&mut ws, &trashed, Some(DocId::new("projects/Note 1.txt"))).unwrap();
 
     assert_eq!(restored, DocId::new("projects/Note 1.txt"));
     // Il `to` arriva dall'IPC: un path che risale deve essere rifiutato, non
@@ -648,12 +644,7 @@ fn a_restore_target_cannot_escape_the_vault() {
 
     // Poco dopo il watcher riferisce che `Idea.txt` non c'è più (vero) e che in
     // `.trash/` è comparso qualcosa (vero, e non sono fatti suoi).
-    let err = restore_document(
-        &mut ws,
-        &trashed,
-        Some(DocId::new("../outside.txt")),
-    )
-    .unwrap_err();
+    let err = restore_document(&mut ws, &trashed, Some(DocId::new("../outside.txt"))).unwrap_err();
     assert!(err.to_string().contains("nome non valido"), "{err}");
     assert!(fx.exists(".trash/Idea.txt"), "the trash entry did not move");
     assert!(!fx.root.parent().unwrap().join("outside.txt").exists());
@@ -776,12 +767,8 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
 
     // legge e parsa la voce. Il supporto posa un concorrente al momento esatto
     // della mossa: deve restare intatto, e la voce deve restare nel cestino.
-    let brought_back = restore_document(
-        &mut ws,
-        &trashed,
-        Some(DocId::new("Idea (restored).txt")),
-    )
-    .unwrap();
+    let brought_back =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Idea (restored).txt"))).unwrap();
     assert_eq!(fx.read(brought_back.as_str()), "the old one");
 }
 

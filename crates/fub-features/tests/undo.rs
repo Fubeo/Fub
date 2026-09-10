@@ -43,8 +43,7 @@ impl Vault {
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws =
-            Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
+        let mut ws = Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.register_plugin(
             fub_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID)
                 .speaking("it", fub_features::commands::catalog()),
@@ -543,7 +542,6 @@ fn an_undo_that_stops_halfway_says_where_it_stopped() {
         "e quello caduto non ha cancellato il lavoro di chi ha scritto dopo"
     );
 }
-
 
 /// **Chi muore dentro un annullamento non porta via Ctrl-Z né gli eventi.**
 ///

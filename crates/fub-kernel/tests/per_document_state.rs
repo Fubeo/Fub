@@ -216,12 +216,8 @@ fn also_the_restore_on_a_other_path_and_a_rename() {
     // Qualcun altro riprende il path.
     notes(&mut ws, "Nota.md", "un'altra");
 
-    let returned = restore_document(
-        &mut ws,
-        &trashed,
-        Some(DocId::new("Nota 1.md")),
-    )
-    .expect("ripristino");
+    let returned =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Nota 1.md"))).expect("ripristino");
     assert_eq!(returned, DocId::new("Nota 1.md"));
 
     assert_eq!(
