@@ -284,6 +284,18 @@ fn run(ending: Ending, watcher: bool) {
             .count(),
         1
     );
+    let removed = events
+        .iter()
+        .position(|event| matches!(event, Event::DocumentRemoved { .. }))
+        .expect("la rimozione viene annunciata");
+    let indexed = events
+        .iter()
+        .position(|event| matches!(event, Event::IndexUpdated | Event::BatchEnded { .. }))
+        .expect("il completamento dell'indice viene annunciato");
+    assert!(
+        removed < indexed,
+        "la rimozione precede il completamento dell'indice: {events:?}"
+    );
     let losses = events
         .iter()
         .filter(|event| matches!(event, Event::Trouble { .. }))

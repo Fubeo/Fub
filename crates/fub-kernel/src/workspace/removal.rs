@@ -212,7 +212,8 @@ impl Workspace {
 
     /// Prepara la rimozione che una lettura detached ha già classificato come
     /// path sparito. Non consulta il filesystem: l'identità è stata
-    /// riconvalidata dal finalizzatore del piano watcher.
+    /// riconvalidata dal finalizzatore del piano watcher. Il fatto resta nel
+    /// token fino al ritorno degli indici esterni.
     pub fn prepare_sync_document_removal(
         &mut self,
         id: &DocId,
@@ -224,16 +225,12 @@ impl Workspace {
         let mut prepared = self.prepare_document_removal(id)?;
         if let Some(prepared) = &mut prepared {
             prepared.watcher = true;
-            self.as_actor(Actor::Watcher, |ws| {
-                ws.emit_event(Event::DocumentRemoved { id: id.clone() });
-                ws.emit_event(Event::IndexUpdated);
-            });
         }
         Ok(prepared)
     }
 
-    /// Chiude la callback della rimozione watcher senza riannunciare il fatto
-    /// già accodato dal commit. Il frame e le perdite appartengono comunque al
+    /// Chiude la callback della rimozione watcher e annuncia solo adesso il
+    /// fatto già committato. Il frame, il fatto e le perdite appartengono al
     /// token e vengono recuperati anche se nel frattempo il documento rinasce.
     pub(super) fn finish_sync_document_removal(
         &mut self,
@@ -247,7 +244,11 @@ impl Workspace {
         }
         self.dispatch
             .restore_provider_call(completed.previous_provider_call);
-        self.as_actor(Actor::Watcher, |ws| ws.report_losses(completed.losses));
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.emit_event(Event::DocumentRemoved { id: completed.id });
+            ws.emit_event(Event::IndexUpdated);
+            ws.report_losses(completed.losses);
+        });
         Ok(())
     }
 
