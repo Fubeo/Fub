@@ -380,6 +380,19 @@ impl JobHost {
     }
 }
 
+fn authorize_family<P: Policy>(
+    policy: &P,
+    capability: Capability,
+    action: impl FnOnce() -> String,
+) -> Result<(), PluginError> {
+    match policy.denies(capability) {
+        None => Ok(()),
+        Some(why) => Err(PluginError::PermissionDenied(
+            format!("{}: {why}", action()).into(),
+        )),
+    }
+}
+
 /// Esegue una mutazione di casa sotto guard, ma rimanda ogni dispatch fino a
 /// quando il guard è stato rilasciato. È la porta comune di sessione, watcher,
 /// runner e `JobHost` per gli ingressi che non hanno un epilogo preparato più
@@ -586,10 +599,28 @@ impl VaultStructure for JobHost {
         let workspace = self.workspace.clone();
         let prepared = {
             let ws = workspace.read()?;
-            let prepared = ws
-                .prepare_document_restore(entry, to)
-                .map_err(PluginError::from)?;
-            let target = prepared.target();
+            let policy = ws.granted_policy(&self.plugin);
+            if self.mode == InvokeMode::DryRun {
+                authorize_family(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    || format!("restoring `{entry}`"),
+                )?;
+            }
+            authorize_family(&policy, Capability::VaultStructure, || {
+                format!("restoring `{entry}`")
+            })?;
+            let target = match to {
+                Some(target) => target,
+                None => ws
+                    .with_read_host(&self.plugin, |host| host.list_trash())?
+                    .into_iter()
+                    .find(|candidate| &candidate.id == entry)
+                    .map(|candidate| candidate.original)
+                    .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?,
+            };
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
                     &ReadOnly {
@@ -600,14 +631,11 @@ impl VaultStructure for JobHost {
                     || format!("restoring to `{target}`"),
                 )?;
             }
-            authorize_path(
-                &ws.granted_policy(&self.plugin),
-                Capability::VaultStructure,
-                target.as_str(),
-                || format!("restoring to `{target}`"),
-            )?;
-            drop(ws);
-            prepared
+            authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
+                format!("restoring to `{target}`")
+            })?;
+            ws.prepare_document_restore(entry, Some(target))
+                .map_err(PluginError::from)?
         };
         let completed = prepared.invoke().map_err(PluginError::from)?;
         let pending = {

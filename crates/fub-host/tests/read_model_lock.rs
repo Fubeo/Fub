@@ -12,6 +12,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
+use fub_abi::command::InvokeMode;
 use fub_abi::custom::{
     CustomBlock, CustomRenderer, CustomRendererSpec, CustomRendering, SyntaxMatch, SyntaxProduct,
     SyntaxRule, SyntaxRuleSpec, SyntaxTrigger,
@@ -418,6 +419,8 @@ fn scoped_restore_authorizes_the_destination_before_parsing() {
         .expect("note enters trash for denied overrides");
     let outside = DocId::new("outside/Note.md");
     let before_denials = parses.load(Ordering::SeqCst);
+    std::fs::remove_file(root.join(denied_entry.as_str()))
+        .expect("remove the trash source behind the denied path");
     let direct_denied = workspace
         .write()
         .expect("workspace is alive")
@@ -436,11 +439,48 @@ fn scoped_restore_authorizes_the_destination_before_parsing() {
     assert_eq!(
         parses.load(Ordering::SeqCst),
         before_denials,
-        "neither denied path reaches the format parser"
+        "neither denied path reads the missing source or reaches the format parser"
     );
     assert!(!root.join(outside.as_str()).exists());
 
+    std::fs::create_dir(root.join("outside")).expect("outside folder");
+    let hidden = DocId::new("outside/Hidden.md");
+    std::fs::write(root.join(hidden.as_str()), "# Hidden\n").expect("seed hidden note");
+    let hidden_entry = {
+        let mut ws = workspace.write().expect("workspace is alive");
+        ws.reindex().expect("hidden note enters the workspace");
+        ws.delete_document(&hidden)
+            .expect("hidden note enters trash")
+    };
+    let before_hidden = parses.load(Ordering::SeqCst);
+    assert!(matches!(
+        workspace
+            .write()
+            .expect("workspace is alive")
+            .with_host(PLUGIN, |host| host.restore_document(&hidden_entry, None)),
+        Err(PluginError::NotFound(_))
+    ));
+    assert!(matches!(
+        JobHost::new(workspace.clone(), PLUGIN).restore_document(&hidden_entry, None),
+        Err(PluginError::NotFound(_))
+    ));
+    assert_eq!(
+        parses.load(Ordering::SeqCst),
+        before_hidden,
+        "an inferred destination outside the scoped trash view reaches neither source nor parser"
+    );
+    assert!(
+        root.join(hidden_entry.as_str()).exists(),
+        "the hidden trash entry remains untouched"
+    );
+
     let missing = DocId::new(".trash/missing.md");
+    assert!(matches!(
+        JobHost::new(workspace.clone(), PLUGIN)
+            .in_mode(InvokeMode::DryRun)
+            .restore_document(&missing, None),
+        Err(PluginError::PermissionDenied(_))
+    ));
     assert!(matches!(
         workspace
             .write()

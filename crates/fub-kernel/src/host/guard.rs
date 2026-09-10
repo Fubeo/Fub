@@ -957,22 +957,22 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        if let Some(target) = &to {
-            self.check_path(Capability::VaultStructure, target.as_str(), || {
-                format!("restoring to `{target}`")
-            })?;
-        } else if let Some(target) = self
-            .inner
-            .list_trash()?
-            .into_iter()
-            .find(|candidate| &candidate.id == entry)
-            .map(|candidate| candidate.original)
-        {
-            self.check_path(Capability::VaultStructure, target.as_str(), || {
-                format!("restoring to `{target}`")
-            })?;
-        }
-        self.inner.restore_document(entry, to)
+        self.check(Capability::VaultStructure, || {
+            format!("restoring `{entry}`")
+        })?;
+        let target = match to {
+            Some(target) => target,
+            None => self
+                .list_trash()?
+                .into_iter()
+                .find(|candidate| &candidate.id == entry)
+                .map(|candidate| candidate.original)
+                .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?,
+        };
+        self.check_path(Capability::VaultStructure, target.as_str(), || {
+            format!("restoring to `{target}`")
+        })?;
+        self.inner.restore_document(entry, Some(target))
     }
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
         self.check(Capability::VaultStructure, || "emptying trash".into())?;
