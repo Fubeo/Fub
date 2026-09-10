@@ -45,24 +45,66 @@ impl PreparedDocumentRemoval {
     }
 }
 
+#[must_use = "la cancellazione preparata deve essere invocata"]
 pub struct PreparedDocumentDeletion {
-    removal: PreparedDocumentRemoval,
-    trashed: DocId,
-    sidecar_fault: Option<KernelError>,
+    workspace_id: u64,
+    id: DocId,
+    entry: Option<VaultEntry>,
+    fingerprint: Option<Revision>,
+    trash: crate::vault::PreparedVaultTrash,
 }
 
+/// File già nel cestino, ma core e indici ancora intatti.
+#[must_use = "la cancellazione completata deve essere committata o annullata"]
 pub struct CompletedDocumentDeletion {
+    workspace_id: u64,
+    id: DocId,
+    entry: Option<VaultEntry>,
+    fingerprint: Option<Revision>,
+    trash: crate::vault::CompletedVaultTrash,
+}
+
+#[must_use = "gli indici della cancellazione devono essere invocati"]
+pub struct CommittedDocumentDeletion {
+    removal: PreparedDocumentRemoval,
+    trash: crate::vault::CompletedVaultTrash,
+}
+
+pub struct FinalizedDocumentDeletion {
     removal: CompletedDocumentRemoval,
-    trashed: DocId,
-    sidecar_fault: Option<KernelError>,
+    trash: crate::vault::CompletedVaultTrash,
 }
 
 impl PreparedDocumentDeletion {
-    pub fn invoke(self) -> CompletedDocumentDeletion {
-        CompletedDocumentDeletion {
+    /// Esegue soltanto la mossa sullo storage e il sidecar, senza workspace.
+    pub fn invoke(self) -> Result<CompletedDocumentDeletion> {
+        Ok(CompletedDocumentDeletion {
+            workspace_id: self.workspace_id,
+            id: self.id,
+            entry: self.entry,
+            fingerprint: self.fingerprint,
+            trash: self.trash.invoke()?,
+        })
+    }
+}
+
+impl CompletedDocumentDeletion {
+    /// Annulla una mossa che il workspace ha rifiutato al commit.
+    pub fn rollback(self) -> Result<()> {
+        self.trash.rollback()
+    }
+
+    pub fn trashed(&self) -> &DocId {
+        self.trash.trashed()
+    }
+}
+
+impl CommittedDocumentDeletion {
+    /// Notifica gli indici usando soltanto handle owned.
+    pub fn invoke(self) -> FinalizedDocumentDeletion {
+        FinalizedDocumentDeletion {
             removal: self.removal.invoke(),
-            trashed: self.trashed,
-            sidecar_fault: self.sidecar_fault,
+            trash: self.trash,
         }
     }
 }
@@ -216,39 +258,78 @@ impl Workspace {
         }
     }
 
-    pub fn prepare_document_deletion(&mut self, id: &DocId) -> Result<PreparedDocumentDeletion> {
+    /// Cattura il documento e prepara la mossa senza I/O né mutazioni del core.
+    pub fn prepare_document_deletion(&self, id: &DocId) -> Result<PreparedDocumentDeletion> {
         self.indexes.ensure_mutation_available()?;
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
-        let removal = self
-            .prepare_document_removal(id)?
-            .expect("il documento era presente");
         Ok(PreparedDocumentDeletion {
+            workspace_id: self.workspace_id,
+            id: id.clone(),
+            entry: self.indexes.core.entries.get(id).cloned(),
+            fingerprint: self.entry_fingerprint(id),
+            trash: self.docs.vault.prepare_trash(id)?,
+        })
+    }
+
+    /// Riconvalida workspace, core, sorgente mossa e destinazione prima di
+    /// iniziare la rimozione autorevole.
+    pub fn commit_document_deletion(
+        &mut self,
+        completed: CompletedDocumentDeletion,
+    ) -> std::result::Result<CommittedDocumentDeletion, Box<(KernelError, CompletedDocumentDeletion)>>
+    {
+        let current = completed.workspace_id == self.workspace_id
+            && completed.trash.original() == &completed.id
+            && self.indexes.core.metas.contains_key(&completed.id)
+            && self.indexes.core.entries.get(&completed.id) == completed.entry.as_ref()
+            && self.entry_fingerprint(&completed.id) == completed.fingerprint
+            && completed
+                .fingerprint
+                .as_ref()
+                .is_none_or(|revision| revision == completed.trash.revision())
+            && completed.trash.is_current();
+        if !current {
+            return Err(Box::new((
+                KernelError::Stale(completed.id.to_string()),
+                completed,
+            )));
+        }
+        if let Err(error) = self.indexes.ensure_mutation_available() {
+            return Err(Box::new((error, completed)));
+        }
+        let removal = match self.prepare_document_removal(&completed.id) {
+            Ok(Some(removal)) => removal,
+            Ok(None) => {
+                return Err(Box::new((
+                    KernelError::Stale(completed.id.to_string()),
+                    completed,
+                )))
+            }
+            Err(error) => return Err(Box::new((error, completed))),
+        };
+        Ok(CommittedDocumentDeletion {
             removal,
-            trashed,
-            sidecar_fault,
+            trash: completed.trash,
         })
     }
 
     pub fn finish_document_deletion(
         &mut self,
-        completed: CompletedDocumentDeletion,
-    ) -> std::result::Result<DocId, Box<(PluginError, CompletedDocumentDeletion)>> {
-        if completed.removal.workspace_id != self.workspace_id {
+        finalized: FinalizedDocumentDeletion,
+    ) -> std::result::Result<DocId, Box<(PluginError, FinalizedDocumentDeletion)>> {
+        if finalized.removal.workspace_id != self.workspace_id {
             return Err(Box::new((
                 PluginError::Conflict("la cancellazione appartiene a un altro workspace".into()),
-                completed,
+                finalized,
             )));
         }
-        let CompletedDocumentDeletion {
-            removal,
-            trashed,
-            sidecar_fault,
-        } = completed;
+        let FinalizedDocumentDeletion { removal, trash } = finalized;
         let id = removal.id.clone();
         self.apply_document_removal(removal);
+        self.dispatch_pending();
+        let (trashed, sidecar_fault) = trash.into_parts();
         Ok(self.finish_deleted_document(&id, trashed, sidecar_fault))
     }
 }
@@ -358,18 +439,29 @@ mod tests {
             .indexes
             .core
             .on_documents_indexed(&[DocumentModel::empty(id.clone())]);
-
-        let completed = first.prepare_document_deletion(&id).unwrap().invoke();
-        let (error, completed) = *second.finish_document_deletion(completed).err().unwrap();
-        assert!(matches!(error, PluginError::Conflict(_)));
-        assert!(first.dispatch.in_provider_call());
+        let completed = first
+            .prepare_document_deletion(&id)
+            .unwrap()
+            .invoke()
+            .unwrap();
+        let (error, completed) = *second.commit_document_deletion(completed).err().unwrap();
+        assert!(matches!(error, KernelError::Stale(_)));
+        assert!(!first.dispatch.in_provider_call());
         assert!(!second.dispatch.in_provider_call());
 
-        let trashed = match first.finish_document_deletion(completed) {
-            Ok(trashed) => trashed,
+        let committed = match first.commit_document_deletion(completed) {
+            Ok(committed) => committed,
             Err(failure) => {
                 let (error, _) = *failure;
                 panic!("il workspace originale deve accettare il token: {error}")
+            }
+        };
+        assert!(first.dispatch.in_provider_call());
+        let trashed = match first.finish_document_deletion(committed.invoke()) {
+            Ok(trashed) => trashed,
+            Err(failure) => {
+                let (error, _) = *failure;
+                panic!("il workspace originale deve finalizzare il token: {error}")
             }
         };
         assert!(!first.dispatch.in_provider_call());

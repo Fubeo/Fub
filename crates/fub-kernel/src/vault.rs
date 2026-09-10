@@ -6,6 +6,7 @@
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::edit::Revision;
 use fub_abi::rules::path_policy::Naming;
 use fub_abi::rules::{path_policy, text_policy};
 use fub_abi::DocId;
@@ -281,6 +282,94 @@ impl PreparedIgnoreCheck {
                 .unwrap_or(true)
     }
 }
+/// Cestino preparato senza eseguire I/O.
+///
+/// Possiede radice, storage e id: `invoke` può scegliere atomically il nome
+/// libero e spostare il file dopo che il chiamante ha rilasciato il workspace.
+#[must_use = "la cestinatura preparata deve essere invocata"]
+pub struct PreparedVaultTrash {
+    vault: Vault,
+    original: DocId,
+}
+
+/// File già spostato, ancora riconvalidabile o reversibile.
+///
+/// Il token conserva l'impronta dei byte mossi e l'identità filesystem quando
+/// disponibile. Un commit rifiutato può restituirlo al chiamante, che esegue
+/// [`rollback`](Self::rollback) senza alcun prestito del workspace.
+#[must_use = "una cestinatura completata deve essere committata o annullata"]
+pub struct CompletedVaultTrash {
+    vault: Vault,
+    original: DocId,
+    trashed: DocId,
+    revision: Revision,
+    identity: Option<FileIdentity>,
+    sidecar_fault: Option<KernelError>,
+}
+
+impl PreparedVaultTrash {
+    /// Sposta il file e scrive il sidecar usando soltanto stato owned.
+    pub fn invoke(self) -> Result<CompletedVaultTrash> {
+        let revision = Revision::of_bytes(&self.vault.read_bytes(&self.original)?);
+        let identity = self.vault.file_identity(&self.original);
+        let (trashed, sidecar_fault) = self.vault.trash_now(&self.original)?;
+        Ok(CompletedVaultTrash {
+            vault: self.vault,
+            original: self.original,
+            trashed,
+            revision,
+            identity,
+            sidecar_fault,
+        })
+    }
+}
+
+impl CompletedVaultTrash {
+    pub fn original(&self) -> &DocId {
+        &self.original
+    }
+
+    pub fn trashed(&self) -> &DocId {
+        &self.trashed
+    }
+
+    pub fn revision(&self) -> &Revision {
+        &self.revision
+    }
+
+    pub fn sidecar_fault(&self) -> Option<&KernelError> {
+        self.sidecar_fault.as_ref()
+    }
+
+    /// La sorgente è assente e la destinazione nomina ancora i byte mossi.
+    pub fn is_current(&self) -> bool {
+        if self.vault.exists(&self.original) {
+            return false;
+        }
+        if let Some(identity) = self.identity {
+            if self.vault.file_identity(&self.trashed) != Some(identity) {
+                return false;
+            }
+        }
+        self.vault
+            .read_bytes(&self.trashed)
+            .map(|bytes| Revision::of_bytes(&bytes) == self.revision)
+            .unwrap_or(false)
+    }
+
+    /// Rimette al suo posto il solo file che questo token ha spostato.
+    pub fn rollback(self) -> Result<()> {
+        if !self.is_current() {
+            return Err(KernelError::Stale(self.trashed.to_string()));
+        }
+        self.vault.restore_trashed(&self.trashed, &self.original)
+    }
+
+    pub(crate) fn into_parts(self) -> (DocId, Option<KernelError>) {
+        (self.trashed, self.sidecar_fault)
+    }
+}
+
 /// Sweep distruttivo del cestino preparato senza eseguire I/O.
 ///
 /// Possiede la fotografia del vault — radice e handle dello storage inclusi —
@@ -723,19 +812,21 @@ impl Vault {
 
     // --- cestino ----------------------------------------------------------
 
-    /// Sposta un documento nel cestino del vault e restituisce il [`DocId`] che
-    /// vi ha assunto.
-    ///
-    /// Il cestino è **piatto**, come quello di Obsidian: la cartella di
-    /// provenienza non sopravvive alla cancellazione (un ripristino riporta la
-    /// nota nella radice). È il prezzo di avere *un solo* cestino in un vault
-    /// condiviso fra le due app — vedi D1 — e il motivo per cui il nome
-    /// originale va ricavato dal nome del file, non dal suo path.
-    ///
-    /// Sulle collisioni non si sovrascrive e non si fallisce: il nome prende un
-    /// suffisso con l'istante della cancellazione (D2), e — se anche quello è
-    /// occupato, cioè due cancellazioni nello stesso secondo — un contatore.
+    /// Prepara una cestinatura owned senza interrogare lo storage.
+    pub fn prepare_trash(&self, id: &DocId) -> Result<PreparedVaultTrash> {
+        self.path_for(id)?;
+        Ok(PreparedVaultTrash {
+            vault: self.clone(),
+            original: id.clone(),
+        })
+    }
+
+    /// Sposta un documento nel cestino conservando la porta sincrona storica.
     pub fn trash(&self, id: &DocId) -> Result<(DocId, Option<KernelError>)> {
+        Ok(self.prepare_trash(id)?.invoke()?.into_parts())
+    }
+
+    fn trash_now(&self, id: &DocId) -> Result<(DocId, Option<KernelError>)> {
         let from = self.path_for(id)?;
         // La cartella del cestino non si crea qui: `VaultStorage::rename` crea
         // le cartelle di destinazione che mancano, e farlo una seconda volta

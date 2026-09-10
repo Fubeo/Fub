@@ -56,8 +56,8 @@ mod lifecycle;
 pub use lifecycle::{PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin};
 mod removal;
 pub use removal::{
-    CompletedDocumentDeletion, CompletedDocumentRemoval, PreparedDocumentDeletion,
-    PreparedDocumentRemoval,
+    CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
+    FinalizedDocumentDeletion, PreparedDocumentDeletion, PreparedDocumentRemoval,
 };
 mod restore;
 pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
@@ -6064,13 +6064,23 @@ impl Workspace {
     /// [`remove_document`]: Workspace::remove_document
     // **E la bozza non salvata se ne va con la nota** (§15.2). Sta qui per
     pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
-        self.indexes.ensure_mutation_available()?;
-        if !self.indexes.core.metas.contains_key(id) {
-            return Err(KernelError::NotFound(id.to_string()));
-        }
-        let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
-        self.remove_document(id);
-        Ok(self.finish_deleted_document(id, trashed, sidecar_fault))
+        let completed = self.prepare_document_deletion(id)?.invoke()?;
+        let committed = match self.commit_document_deletion(completed) {
+            Ok(committed) => committed,
+            Err(failure) => {
+                let (error, completed) = *failure;
+                if let Err(rollback) = completed.rollback() {
+                    return Err(rollback);
+                }
+                return Err(error);
+            }
+        };
+        let finalized = committed.invoke();
+        let trashed = match self.finish_document_deletion(finalized) {
+            Ok(trashed) => trashed,
+            Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
+        };
+        Ok(trashed)
     }
 
     fn finish_deleted_document(
