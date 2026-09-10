@@ -29,6 +29,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::custom::SyntaxForm;
+use fub_abi::edit::Revision;
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, SourceKind,
 };
@@ -112,6 +113,25 @@ impl DocumentStoreHandle {
 
     pub(crate) fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
         self.vault.read_bytes(id)
+    }
+    /// Osserva una revisione soltanto se metadati e identità del file restano
+    /// uguali ai due lati della lettura. Il chiamante può così riconvalidare un
+    /// feed senza tenere in prestito il workspace durante l'I/O.
+    pub(crate) fn observe_revision_stable(
+        &self,
+        id: &DocId,
+    ) -> Result<Option<(Revision, Option<crate::storage::FileIdentity>)>> {
+        let Some(before) = self.vault.stat(id) else {
+            return Ok(None);
+        };
+        let identity_before = self.vault.file_identity(id);
+        let revision = Revision::of_bytes(&self.vault.read_bytes(id)?);
+        let Some(after) = self.vault.stat(id) else {
+            return Ok(None);
+        };
+        let identity_after = self.vault.file_identity(id);
+        Ok((before == after && identity_before == identity_after)
+            .then_some((revision, identity_after)))
     }
 
     pub(crate) fn prepare_parse_with_kind(

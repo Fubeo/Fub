@@ -32,6 +32,7 @@ pub struct CompletedDocumentRestore {
     source_kind: Option<fub_abi::format::SourceKind>,
     source_revision: Revision,
     model: Option<DocumentModel>,
+    documents: crate::documents::DocumentStoreHandle,
 }
 
 /// Ripristino già committato sul disco e nel core, con gli indici esterni
@@ -41,6 +42,9 @@ pub struct PendingDocumentRestore {
     workspace_id: u64,
     trash_id: DocId,
     target: DocId,
+    documents: crate::documents::DocumentStoreHandle,
+    restored_identity: Option<crate::storage::FileIdentity>,
+    observed_target: Option<(Revision, Option<crate::storage::FileIdentity>)>,
     routing_generation: u64,
     previous_provider_call: Option<bool>,
     feed: Option<PreparedDocumentFeed>,
@@ -91,14 +95,29 @@ impl PreparedDocumentRestore {
             source_kind,
             source_revision,
             model,
+            documents,
         })
     }
 }
 
 impl PendingDocumentRestore {
-    /// Alimenta e rilascia gli indici senza prendere in prestito il workspace.
+    /// Alimenta e rilascia gli indici, poi osserva sul supporto la revisione
+    /// stabile della destinazione. Entrambe le operazioni avvengono senza
+    /// prendere in prestito il workspace.
     pub fn invoke_indexes(mut self) -> Self {
-        self.feed = self.feed.take().map(PreparedDocumentFeed::invoke_indexes);
+        if let Some(mut feed) = self.feed.take().map(PreparedDocumentFeed::invoke_indexes) {
+            self.observed_target = match self.documents.observe_revision_stable(&self.target) {
+                Ok(observed) => observed,
+                Err(error) => {
+                    feed.losses.push(IndexLoss::new(
+                        self.target.clone(),
+                        PluginError::from(error),
+                    ));
+                    None
+                }
+            };
+            self.feed = Some(feed);
+        }
         self
     }
 }
@@ -232,6 +251,7 @@ impl Workspace {
         {
             return Err(Box::new((PluginError::from(error), completed)));
         }
+        let restored_identity = self.docs.vault.file_identity(&completed.target);
         let journal = JournalOp::Restored {
             trash: completed.entry.id.clone(),
             doc: completed.target.clone(),
@@ -273,6 +293,9 @@ impl Workspace {
             workspace_id: completed.workspace_id,
             trash_id: completed.entry.id,
             target: completed.target,
+            documents: completed.documents,
+            restored_identity,
+            observed_target: None,
             routing_generation,
             previous_provider_call,
             feed,
@@ -299,20 +322,19 @@ impl Workspace {
             routing_generation,
             previous_provider_call,
             feed,
+            restored_identity,
+            observed_target,
             ..
         } = pending;
         if let Some(feed) = feed {
             if let Some(previous_provider_call) = previous_provider_call {
                 self.dispatch.restore_provider_call(previous_provider_call);
             }
-            let path = self.root().join(target.as_str());
-            let current_revision = self
-                .docs
-                .vault
-                .read_bytes(&target)
-                .map(|source| Revision::of_bytes(&source));
-            let current = self.docs.vault.doc_id_for_path(&path).ok().as_ref() == Some(&target)
-                && current_revision.ok().as_ref() == Some(&feed.revision)
+            let current = observed_target
+                .as_ref()
+                .is_some_and(|(revision, identity)| {
+                    revision == &feed.revision && identity == &restored_identity
+                })
                 && routing_generation == self.indexes.routing_generation();
             self.finish_sync_index_feed(feed, current);
         }

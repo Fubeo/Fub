@@ -105,6 +105,7 @@ struct BlockingRestoreStorage {
     release: Mutex<mpsc::Receiver<()>>,
     data_probe: Mutex<Option<(Stage, Utf8PathBuf)>>,
     data_hits: AtomicUsize,
+    data_skip: AtomicUsize,
     workspace_probe: Mutex<Option<Custody<Workspace>>>,
 }
 
@@ -121,11 +122,16 @@ impl BlockingRestoreStorage {
     }
 
     fn arm_data(&self, stage: Stage, path: Utf8PathBuf, blocking: bool) {
+        self.arm_data_after(stage, path, 0, blocking);
+    }
+
+    fn arm_data_after(&self, stage: Stage, path: Utf8PathBuf, skip: usize, blocking: bool) {
         *self
             .data_probe
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some((stage, path));
         self.data_hits.store(0, Ordering::SeqCst);
+        self.data_skip.store(skip, Ordering::SeqCst);
         self.blocking.store(blocking, Ordering::SeqCst);
         self.armed.store(true, Ordering::SeqCst);
     }
@@ -152,7 +158,14 @@ impl BlockingRestoreStorage {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .as_ref()
             .is_some_and(|probe| probe == &(stage, path.to_owned()));
-        if matches {
+        if matches
+            && self
+                .data_skip
+                .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |skip| {
+                    skip.checked_sub(1)
+                })
+                .is_err()
+        {
             self.traverse(stage);
         }
     }
@@ -196,7 +209,19 @@ impl BlockingRestoreStorage {
                 | Stage::DataRemove
                 | Stage::SettingsWrite
         ) {
-            self.armed.store(false, Ordering::SeqCst);
+            let data_probe_pending = self
+                .data_probe
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .is_some();
+            if stage == Stage::SourceRead && data_probe_pending {
+                *self
+                    .source
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+            } else {
+                self.armed.store(false, Ordering::SeqCst);
+            }
         }
     }
 }
@@ -294,7 +319,12 @@ impl VaultStorage for BlockingRestoreStorage {
 
     fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
         self.observe_data(Stage::DataList, dir);
-        if self.armed.load(Ordering::SeqCst) && dir == self.trash_dir {
+        let source_armed = self
+            .source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some();
+        if self.armed.load(Ordering::SeqCst) && source_armed && dir == self.trash_dir {
             self.assert_workspace_is_free("VaultStorage::list during empty_trash");
             self.traverse(Stage::TrashList);
         }
@@ -675,6 +705,7 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        data_skip: AtomicUsize::new(0),
         workspace_probe: Mutex::new(None),
     });
     let parses = Arc::new(AtomicUsize::new(0));
@@ -709,6 +740,9 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         .delete_document(&original)
         .expect("seed note enters trash");
     let workspace = Custody::new("the detached restore workspace", workspace);
+    // Preparazione, riconvalida e touch del core fanno tre stat del target; il
+    // quarto è la lettura stabile che segue il feed degli indici.
+    storage.arm_data_after(Stage::DataRead, root.join(original.as_str()), 3, true);
     storage.arm(root.join(trash_id.as_str()), true);
 
     let workspace_for_call = workspace.clone();
@@ -731,6 +765,17 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
     );
     assert_workspace_is_free(&workspace, "VaultStorage::read during restore");
     release_tx.send(()).expect("release trash source read");
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("post-feed target read entered"),
+        Stage::DataRead
+    );
+    assert_workspace_is_free(
+        &workspace,
+        "VaultStorage::read after the restore index feed",
+    );
+    release_tx.send(()).expect("release post-feed target read");
     assert_eq!(
         call.join()
             .expect("restore thread does not panic")
@@ -786,6 +831,7 @@ fn empty_trash_lists_and_removes_without_workspace_guards() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        data_skip: AtomicUsize::new(0),
         workspace_probe: Mutex::new(None),
     });
     let mut formats = FormatRegistry::new();
@@ -863,6 +909,7 @@ fn trash_storage_and_sidecars_run_without_workspace_guards() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        data_skip: AtomicUsize::new(0),
         workspace_probe: Mutex::new(None),
     });
     let mut formats = FormatRegistry::new();
@@ -981,6 +1028,7 @@ fn job_data_io_runs_without_workspace_guards_and_denial_precedes_storage() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        data_skip: AtomicUsize::new(0),
         workspace_probe: Mutex::new(None),
     });
     let mut workspace = Workspace::on(
@@ -1055,6 +1103,7 @@ fn job_setting_write_runs_without_workspace_guards() {
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
         data_hits: AtomicUsize::new(0),
+        data_skip: AtomicUsize::new(0),
         workspace_probe: Mutex::new(None),
     });
     let key = format!("{PLUGIN}:enabled");
