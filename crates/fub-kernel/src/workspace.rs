@@ -486,14 +486,20 @@ enum ParsedChangeState {
 }
 
 enum PendingSyncState {
-    Feed(Box<PreparedDocumentFeed>),
+    Feed {
+        feed: Box<PreparedDocumentFeed>,
+        previous_provider_call: bool,
+    },
     Removal(PreparedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
     Unchanged(crate::storage::Stat),
 }
 
 enum CompletedSyncState {
-    Feed(Box<PreparedDocumentFeed>),
+    Feed {
+        feed: Box<PreparedDocumentFeed>,
+        previous_provider_call: bool,
+    },
     Removal(CompletedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
     Unchanged(crate::storage::Stat),
@@ -758,9 +764,13 @@ impl PendingSyncChange {
     pub fn invoke(self) -> CompletedSyncChange {
         let PendingSyncChange { snapshot, state } = self;
         let state = match state {
-            PendingSyncState::Feed(feed) => {
-                CompletedSyncState::Feed(Box::new((*feed).invoke_indexes()))
-            }
+            PendingSyncState::Feed {
+                feed,
+                previous_provider_call,
+            } => CompletedSyncState::Feed {
+                feed: Box::new((*feed).invoke_indexes()),
+                previous_provider_call,
+            },
             PendingSyncState::Removal(removal) => {
                 CompletedSyncState::Removal(removal.invoke())
             }
@@ -4838,6 +4848,31 @@ impl Workspace {
         self.emit_event(Event::IndexUpdated);
     }
 
+    /// Accoda il fatto già committato prima che gli indici esterni possano
+    /// rientrare e produrre una modifica successiva dello stesso documento.
+    fn announce_index_feed(&mut self, pending: &PreparedDocumentFeed) {
+        self.emit_event(Event::DocumentChanged {
+            id: pending.id.clone(),
+            changes: Some(pending.changes.clone()),
+        });
+        self.emit_event(Event::IndexUpdated);
+    }
+
+    /// Chiude il solo feed watcher. Perdite e frame appartengono alla callback
+    /// e vanno sempre recuperati; grafo e sessione, invece, possono seguire il
+    /// risultato preparato soltanto finché quella revisione è ancora corrente.
+    fn finish_sync_index_feed(&mut self, pending: PreparedDocumentFeed, current: bool) {
+        self.report_losses(pending.losses);
+        if !current {
+            return;
+        }
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        self.session
+            .invalidate(&pending.id, ContextChange::Rewritten);
+    }
+
     /// esiste ed è un documento, aggiorna l'anagrafe se è un file di
     /// un'altra specie, toglie se è sparito. Restituisce `true` se qualcosa è
     /// cambiato. Path fuori dal vault o ignorati dal vault: nessun effetto.
@@ -5403,8 +5438,9 @@ impl Workspace {
                     stat,
                 } => {
                     self.indexes.ensure_mutation_available()?;
+                    let previous_provider_call = self.dispatch.enter_provider_call();
                     let feed = self.as_actor(Actor::Watcher, |ws| {
-                        ws.prepare_ingest_model(
+                        let feed = ws.prepare_ingest_model(
                             &snapshot.id,
                             *model,
                             fingerprint,
@@ -5415,11 +5451,16 @@ impl Workspace {
                                 to: Revision::of(""),
                             },
                             true,
-                        )
+                        );
+                        ws.announce_index_feed(&feed);
+                        feed
                     });
                     Ok(Some(PendingSyncChange {
                         snapshot,
-                        state: PendingSyncState::Feed(Box::new(feed)),
+                        state: PendingSyncState::Feed {
+                            feed: Box::new(feed),
+                            previous_provider_call,
+                        },
                     }))
                 }
                 ParsedChangeState::Missing => {
@@ -5456,23 +5497,34 @@ impl Workspace {
         &mut self,
         completed: CompletedSyncChange,
     ) -> std::result::Result<bool, (PluginError, CompletedSyncChange)> {
+        if completed.snapshot.workspace_id != self.workspace_id {
+            return Err((
+                PluginError::Conflict(
+                    "la sincronizzazione appartiene a un altro workspace".into(),
+                ),
+                completed,
+            ));
+        }
         let CompletedSyncChange { snapshot, state } = completed;
         match state {
-            CompletedSyncState::Feed(feed) => {
-                if snapshot.workspace_id != self.workspace_id
-                    || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
-                        != Some(&snapshot.id)
-                    || snapshot.routing_generation != self.indexes.routing_generation()
-                    || snapshot.syntax_generation != self.syntax_generation
-                    || self.entry_fingerprint(&snapshot.id).as_ref() != Some(&feed.revision)
-                {
-                    return Ok(false);
-                }
-                self.as_actor(Actor::Watcher, |ws| ws.finish_index_feed(*feed));
-                Ok(true)
+            CompletedSyncState::Feed {
+                feed,
+                previous_provider_call,
+            } => {
+                self.dispatch
+                    .restore_provider_call(previous_provider_call);
+                let current = self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                    == Some(&snapshot.id)
+                    && snapshot.routing_generation == self.indexes.routing_generation()
+                    && snapshot.syntax_generation == self.syntax_generation
+                    && self.entry_fingerprint(&snapshot.id).as_ref() == Some(&feed.revision);
+                self.as_actor(Actor::Watcher, |ws| {
+                    ws.finish_sync_index_feed(*feed, current)
+                });
+                Ok(current)
             }
             CompletedSyncState::Removal(removal) => {
-                match self.finish_document_removal(removal) {
+                match self.finish_sync_document_removal(removal) {
                     Ok(()) => Ok(true),
                     Err((error, removal)) => Err((
                         error,
@@ -5484,9 +5536,8 @@ impl Workspace {
                 }
             }
             CompletedSyncState::Entry(stat) => {
-                if snapshot.workspace_id != self.workspace_id
-                    || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
-                        != Some(&snapshot.id)
+                if self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                    != Some(&snapshot.id)
                     || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
                     || snapshot.syntax_generation != self.syntax_generation
                     || snapshot.routing_generation != self.indexes.routing_generation()
@@ -5522,9 +5573,8 @@ impl Workspace {
                 })
             }
             CompletedSyncState::Unchanged(stat) => {
-                if snapshot.workspace_id != self.workspace_id
-                    || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
-                        != Some(&snapshot.id)
+                if self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                    != Some(&snapshot.id)
                     || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
                     || snapshot.syntax_generation != self.syntax_generation
                     || snapshot.routing_generation != self.indexes.routing_generation()

@@ -150,8 +150,31 @@ impl Workspace {
         let mut prepared = self.prepare_document_removal(id)?;
         if let Some(prepared) = &mut prepared {
             prepared.watcher = true;
+            self.as_actor(Actor::Watcher, |ws| {
+                ws.emit_event(Event::DocumentRemoved { id: id.clone() });
+                ws.emit_event(Event::IndexUpdated);
+            });
         }
         Ok(prepared)
+    }
+
+    /// Chiude la callback della rimozione watcher senza riannunciare il fatto
+    /// già accodato dal commit. Il frame e le perdite appartengono comunque al
+    /// token e vengono recuperati anche se nel frattempo il documento rinasce.
+    pub(super) fn finish_sync_document_removal(
+        &mut self,
+        completed: CompletedDocumentRemoval,
+    ) -> std::result::Result<(), (PluginError, CompletedDocumentRemoval)> {
+        if completed.workspace_id != self.workspace_id {
+            return Err((
+                PluginError::Conflict("la rimozione appartiene a un altro workspace".into()),
+                completed,
+            ));
+        }
+        self.dispatch
+            .restore_provider_call(completed.previous_provider_call);
+        self.as_actor(Actor::Watcher, |ws| ws.report_losses(completed.losses));
+        Ok(())
     }
 
     /// Il token non ripristina metadati né provider. Se il documento è stato

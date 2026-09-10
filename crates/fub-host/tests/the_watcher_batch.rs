@@ -34,7 +34,7 @@ use fub_abi::traits::{
 use fub_abi::{Event, FormatProvider, PluginError, Revision, WriteBase};
 use fub_host::{Custody, ExternalChange, ExternalSync};
 use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
-use fub_kernel::{data_root, FormatRegistry, MachineSettings, MemStorage, SyncPlan, Workspace};
+use fub_kernel::{data_root, FormatRegistry, MachineSettings, MemStorage, Workspace};
 
 /// Il cancello che rende **osservabile** una lettura lenta senza dormire.
 ///
@@ -124,6 +124,56 @@ impl IndexProvider for PrepareErrorIndex {
             }]);
         }
         Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved("feed-only test index".into()))
+    }
+}
+
+/// Tiene aperto il primo feed mentre il test committa una revisione più nuova
+/// dello stesso documento, poi restituisce una perdita che il finalizzatore
+/// stale deve comunque riportare.
+struct ReentrantFeedIndex {
+    gate: Arc<Gate>,
+    lose_once: AtomicBool,
+}
+
+impl IndexProvider for ReentrantFeedIndex {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
+        self.gate.traverse();
+        if self.lose_once.swap(false, Ordering::SeqCst) {
+            vec![IndexLoss::new(
+                models[0].id.clone(),
+                PluginError::Io("perdita dal feed rientrante".into()),
+            )]
+        } else {
+            Vec::new()
+        }
     }
 
     fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
@@ -470,51 +520,119 @@ fn watcher_ignore_preflight_releases_custody_before_folder_stat() {
     }
 }
 
-/// **Anche il feed completato dichiara quale revisione ha indicizzato.**
+/// **Il fatto Touched precede anche una scrittura che supera il suo feed.**
 ///
-/// Fra la mutazione del core e la finalizzazione degli eventi il prestito è
-/// rilasciato per notificare i provider. Un salvataggio può quindi superare il
-/// feed già completato: il finalizzatore deve riconoscere la revisione stale e
-/// non annunciare come corrente la modifica precedente.
+/// Il provider trattiene la callback con un canale mentre il core committa una
+/// revisione più nuova dello stesso documento. Il completamento vecchio deve
+/// recuperare frame e perdita senza applicare il proprio epilogo sul modello
+/// nuovo; l'evento già accodato resta prima di quelli prodotti dopo il rientro.
 #[test]
 fn a_completed_feed_does_not_announce_over_a_newer_write() {
+    const INDEX: &str = "test.watcher-feed-reentry";
+
     let bench = bench();
+    let gate = Arc::new(Gate::default());
+    {
+        let mut ws = bench.ws.write().expect("the vault is alive");
+        ws.register_core_feature(INDEX, "Watcher feed reentry probe")
+            .expect("index owner declares");
+        ws.register_index_provider(
+            INDEX,
+            Box::new(ReentrantFeedIndex {
+                gate: gate.clone(),
+                lose_once: AtomicBool::new(true),
+            }),
+        )
+        .expect("index provider registers");
+    }
+
     let id = DocId::new("nota.md");
     let path = bench.root.join("nota.md");
+    let events = bench.ws.read().expect("the vault is alive").bus().subscribe();
     std::fs::write(&path, "from outside\n").expect("external write");
+    let plan = bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .plan_sync(&path)
+        .expect("there was a document to prepare");
+    let parsed = plan.invoke();
+    let pending = bench
+        .ws
+        .write()
+        .expect("the vault is alive")
+        .prepare_sync_path_prepared(&path, Some(parsed))
+        .expect("the parsed change is valid")
+        .expect("the feed is pending");
 
-    let plan = {
-        let ws = bench.ws.read().unwrap();
-        ws.plan_sync(&path)
+    let (inside, via) = gate.arm();
+    let invoking = std::thread::spawn(move || pending.invoke());
+    inside.recv().expect("the old feed entered the provider");
+
+    let newer = {
+        let prepared = bench
+            .ws
+            .write()
+            .expect("the vault is alive")
+            .prepare_document_write(&id, WriteBase::Dictated)
+            .expect("the newer write prepares");
+        let model = prepared
+            .parse("from user\n")
+            .expect("the newer source parses");
+        bench
+            .ws
+            .write()
+            .expect("the vault is alive")
+            .commit_document_write(prepared, "from user\n", model, Ok(()))
+            .expect("the newer write commits while the old provider is active")
     };
-    assert!(plan.is_some(), "there was a document to prepare");
-    let parsed = plan.map(SyncPlan::invoke);
-    let pending = {
-        let mut ws = bench.ws.write().unwrap();
-        ws.prepare_sync_path_prepared(&path, parsed)
-            .expect("the parsed change is valid")
-            .expect("the feed is pending")
-    };
 
-    let completed = pending.invoke();
-    let mut ws = bench.ws.write().unwrap();
-    ws.write_document(&id, "from user\n", WriteBase::Dictated)
-        .expect("the newer save succeeds");
-    let events = ws.bus().subscribe();
-    assert!(
-        matches!(ws.finish_sync_path_prepared(completed), Ok(false)),
-        "the stale feed must be a no-op"
-    );
+    via.send(()).expect("the old feed can finish");
+    let completed = invoking.join().expect("the old feed returns");
+    {
+        let mut ws = bench.ws.write().expect("the vault is alive");
+        assert!(
+            matches!(ws.finish_sync_path_prepared(completed), Ok(false)),
+            "the stale feed must be a no-op"
+        );
+    }
 
+    let newer = newer.invoke_indexes();
+    bench
+        .ws
+        .write()
+        .expect("the vault is alive")
+        .finalize_document_write(newer)
+        .expect("the newer feed finalizes");
+
+    let mut ws = bench.ws.write().expect("the vault is alive");
     assert_eq!(
         entry(&ws, &id).fingerprint,
         Some(Revision::of("from user\n")),
         "the stale feed replaced the newer core revision"
     );
-    assert!(
-        events.try_iter().next().is_none(),
-        "the stale feed emitted finalization events"
-    );
+    ws.deactivate_plugin(INDEX)
+        .expect("the stale owner restored the provider frame");
+    let observed: Vec<_> = events
+        .try_iter()
+        .filter(|notice| {
+            matches!(
+                &notice.event,
+                Event::DocumentChanged { id: changed, .. } if changed == &id
+            ) || matches!(
+                &notice.event,
+                Event::Trouble {
+                    subject: Some(changed),
+                    ..
+                } if changed == &id
+            )
+        })
+        .map(|notice| notice.event)
+        .collect();
+    assert_eq!(observed.len(), 3, "fact, loss and newer fact survive");
+    assert!(matches!(observed[0], Event::DocumentChanged { .. }));
+    assert!(matches!(observed[1], Event::Trouble { .. }));
+    assert!(matches!(observed[2], Event::DocumentChanged { .. }));
 }
 
 /// Un path senza `FormatProvider` attraversa le stesse tre fasi del documento:
