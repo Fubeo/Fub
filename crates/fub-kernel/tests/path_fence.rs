@@ -180,7 +180,10 @@ fn a_restore_does_not_land_where_the_scan_does_not_watch() {
     let err =
         restore_document(&mut ws, &trashed, Some(DocId::new(".nascosta/Idea.txt"))).unwrap_err();
 
-    assert!(err.to_string().contains("nome non valido"), "{err}");
+    assert!(
+        matches!(&err, fub_abi::PluginError::BadArgs(_)),
+        "errore inatteso: {err}"
+    );
     assert!(
         !bench.root.join(".nascosta").exists(),
         "niente è stato creato nella cartella nascosta"
