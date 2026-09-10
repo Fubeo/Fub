@@ -31,7 +31,7 @@ use fub_kernel::workspace::{
 };
 use fub_kernel::{
     ExternalRenamePlan, ParsedChange, ParsedExternalAssetRename, ParsedExternalRename,
-    PreparedExternalAssetRename, SyncPlan, Workspace,
+    PreparedExternalAssetRename, PreparedIgnoreCheck, SyncPlan, Workspace,
 };
 
 use crate::custody::{Custody, WriteTurn};
@@ -447,6 +447,89 @@ impl Drop for SyncOperation {
 /// dal prestito esclusivo. Ciò che si compra tenendola in una fase sua è che
 /// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
 /// si rilascia, e i lettori in coda passano.
+enum WatcherPreflight {
+    Sync {
+        path: Utf8PathBuf,
+        ignore: PreparedIgnoreCheck,
+    },
+    Rename {
+        from: Utf8PathBuf,
+        from_ignore: PreparedIgnoreCheck,
+        to: Utf8PathBuf,
+        to_ignore: PreparedIgnoreCheck,
+    },
+}
+
+enum PreflightedWatcherChange {
+    Sync {
+        path: Utf8PathBuf,
+        admitted: bool,
+    },
+    Rename {
+        from: Utf8PathBuf,
+        from_admitted: bool,
+        to: Utf8PathBuf,
+        to_admitted: bool,
+    },
+}
+
+impl WatcherPreflight {
+    fn invoke(self) -> PreflightedWatcherChange {
+        match self {
+            WatcherPreflight::Sync { path, ignore } => PreflightedWatcherChange::Sync {
+                path,
+                admitted: !ignore.invoke(),
+            },
+            WatcherPreflight::Rename {
+                from,
+                from_ignore,
+                to,
+                to_ignore,
+            } => PreflightedWatcherChange::Rename {
+                from,
+                from_admitted: !from_ignore.invoke(),
+                to,
+                to_admitted: !to_ignore.invoke(),
+            },
+        }
+    }
+}
+
+impl PreflightedWatcherChange {
+    fn plan(self, workspace: &Workspace) -> Vec<PlannedWatcherChange> {
+        match self {
+            PreflightedWatcherChange::Sync { path, admitted } => {
+                let plan = admitted
+                    .then(|| workspace.plan_sync_admitted(&path))
+                    .flatten();
+                vec![PlannedWatcherChange::Sync(path, plan)]
+            }
+            PreflightedWatcherChange::Rename {
+                from,
+                from_admitted,
+                to,
+                to_admitted,
+            } => match workspace.plan_external_rename_admitted(
+                &from,
+                from_admitted,
+                &to,
+                to_admitted,
+            ) {
+                ExternalRenamePlan::Asset(plan) => {
+                    vec![PlannedWatcherChange::Asset(plan)]
+                }
+                ExternalRenamePlan::Document(plan) => {
+                    vec![PlannedWatcherChange::Document(plan)]
+                }
+                ExternalRenamePlan::Sync(plans) => plans
+                    .into_iter()
+                    .map(|(path, plan)| PlannedWatcherChange::Sync(path, plan))
+                    .collect(),
+            },
+        }
+    }
+}
+
 enum PlannedWatcherChange {
     Sync(Utf8PathBuf, Option<SyncPlan>),
     Asset(PreparedExternalAssetRename),
@@ -510,35 +593,43 @@ impl ExternalSync {
         if changes.is_empty() {
             return;
         }
-        // Fase 1a — routing e handle owned, senza I/O, sotto read.
-        let planned = {
+        // Fase 1a — politica e handle owned, senza I/O, sotto read.
+        let preflights = {
             let Ok(ws) = self.workspace.read() else {
                 return;
             };
             changes
                 .iter()
-                .flat_map(|change| match change {
-                    ExternalChange::Touched(path) => {
-                        vec![PlannedWatcherChange::Sync(path.clone(), ws.plan_sync(path))]
-                    }
-                    ExternalChange::Renamed { from, to } => {
-                        match ws.plan_external_rename(from, to) {
-                            ExternalRenamePlan::Asset(plan) => {
-                                vec![PlannedWatcherChange::Asset(plan)]
-                            }
-                            ExternalRenamePlan::Document(plan) => {
-                                vec![PlannedWatcherChange::Document(plan)]
-                            }
-                            ExternalRenamePlan::Sync(plans) => plans
-                                .into_iter()
-                                .map(|(path, plan)| PlannedWatcherChange::Sync(path, plan))
-                                .collect(),
-                        }
-                    }
+                .map(|change| match change {
+                    ExternalChange::Touched(path) => WatcherPreflight::Sync {
+                        path: path.clone(),
+                        ignore: ws.prepare_is_ignored(path),
+                    },
+                    ExternalChange::Renamed { from, to } => WatcherPreflight::Rename {
+                        from: from.clone(),
+                        from_ignore: ws.prepare_is_ignored(from),
+                        to: to.clone(),
+                        to_ignore: ws.prepare_is_ignored(to),
+                    },
                 })
                 .collect::<Vec<_>>()
         };
-        // Fase 1b — stat/read/parse e side-data restano fuori da Custody.
+        // Fase 1b — l'eventuale stat file/cartella, fuori da Custody.
+        let preflighted = preflights
+            .into_iter()
+            .map(WatcherPreflight::invoke)
+            .collect::<Vec<_>>();
+        // Fase 1c — routing e piani puri sotto read, dai soli esiti del filtro.
+        let planned = {
+            let Ok(ws) = self.workspace.read() else {
+                return;
+            };
+            preflighted
+                .into_iter()
+                .flat_map(|change| change.plan(&ws))
+                .collect::<Vec<_>>()
+        };
+        // Fase 1d — stat/read/parse e side-data restano fuori da Custody.
         let invoked = planned
             .into_iter()
             .flat_map(PlannedWatcherChange::invoke);

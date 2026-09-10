@@ -131,7 +131,7 @@ use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
-use crate::vault::TrashEntry;
+use crate::vault::{PreparedIgnoreCheck, TrashEntry};
 use crate::viewstate::ViewStates;
 
 /// Identità process-local di un'istanza `Workspace`.
@@ -4867,51 +4867,88 @@ impl Workspace {
         outcome
     }
 
-    /// Prepara una lettura del watcher senza toccare filesystem o provider.
+    /// Cattura la politica e lo storage necessari al filtro di un path.
     ///
-    /// Il valore restituito possiede storage, parser e token di routing. Chi
-    /// chiama deve eseguire [`SyncPlan::invoke`] dopo aver rilasciato la
-    /// guardia del workspace.
+    /// Questa metà non fa I/O; il watcher invoca il token dopo aver rilasciato
+    /// `Custody`, quindi rientra con il solo esito.
+    pub fn prepare_is_ignored(&self, abs: &Utf8Path) -> PreparedIgnoreCheck {
+        self.docs.vault.prepare_is_ignored(abs)
+    }
+
+    /// Prepara una lettura del watcher conservando la porta sincrona storica.
+    ///
+    /// I chiamanti sotto `Custody` usano invece [`prepare_is_ignored`] e
+    /// [`plan_sync_admitted`], separando il possibile `stat` dalla
+    /// pianificazione pura.
     pub fn plan_sync(&self, abs: &Utf8Path) -> Option<SyncPlan> {
-        if self.docs.vault.is_ignored(abs) {
+        if self.prepare_is_ignored(abs).invoke() {
             return None;
         }
+        self.plan_sync_admitted(abs)
+    }
+
+    /// Prepara un path che il filtro owned ha già ammesso.
+    ///
+    /// Non interroga lo storage e non ricalcola la politica di esclusione.
+    pub fn plan_sync_admitted(&self, abs: &Utf8Path) -> Option<SyncPlan> {
         let id = self.docs.vault.doc_id_for_path(abs).ok()?;
         self.plan_sync_known(abs.to_owned(), id)
     }
 
-    /// Classifica una rinomina esterna usando soltanto la fotografia del core,
-    /// i path recintati e le generazioni di routing.
-    ///
-    /// Documenti e asset riconosciuti portano handle owned; ogni caso ambiguo
-    /// degrada agli stessi piani `Touched` della consegna ordinaria.
+    /// Classifica una rinomina esterna conservando la porta sincrona storica.
     pub fn plan_external_rename(
         &self,
         from: &Utf8Path,
         to: &Utf8Path,
     ) -> ExternalRenamePlan {
+        let from_admitted = !self.prepare_is_ignored(from).invoke();
+        let to_admitted = !self.prepare_is_ignored(to).invoke();
+        self.plan_external_rename_admitted(from, from_admitted, to, to_admitted)
+    }
+
+    /// Classifica una rinomina dai due esiti già valutati fuori da `Custody`.
+    ///
+    /// Documenti e asset riconosciuti portano handle owned; ogni caso ambiguo
+    /// degrada agli stessi piani `Touched` della consegna ordinaria. Questa
+    /// funzione non interroga lo storage né ricalcola il filtro.
+    pub fn plan_external_rename_admitted(
+        &self,
+        from: &Utf8Path,
+        from_admitted: bool,
+        to: &Utf8Path,
+        to_admitted: bool,
+    ) -> ExternalRenamePlan {
+        let sync_plan = |path: &Utf8Path, admitted: bool| {
+            admitted.then(|| self.plan_sync_admitted(path)).flatten()
+        };
         let fallback = |only_to: bool| {
             let paths = if only_to {
-                vec![to.to_owned()]
+                vec![(to.to_owned(), to_admitted)]
             } else {
-                vec![from.to_owned(), to.to_owned()]
+                vec![
+                    (from.to_owned(), from_admitted),
+                    (to.to_owned(), to_admitted),
+                ]
             };
             ExternalRenamePlan::Sync(
                 paths
                     .into_iter()
-                    .map(|path| {
-                        let plan = self.plan_sync(&path);
+                    .map(|(path, admitted)| {
+                        let plan = sync_plan(&path, admitted);
                         (path, plan)
                     })
                     .collect(),
             )
         };
-        let identity = |path: &Utf8Path| {
-            (!self.docs.vault.is_ignored(path))
+        let identity = |path: &Utf8Path, admitted: bool| {
+            admitted
                 .then(|| self.docs.vault.doc_id_for_path(path).ok())
                 .flatten()
         };
-        let (Some(from_id), Some(to_id)) = (identity(from), identity(to)) else {
+        let (Some(from_id), Some(to_id)) = (
+            identity(from, from_admitted),
+            identity(to, to_admitted),
+        ) else {
             return fallback(false);
         };
         if from_id == to_id {
@@ -4982,13 +5019,16 @@ impl Workspace {
             return fallback(false);
         }
 
-        let fallback_plans = [from.to_owned(), to.to_owned()]
-            .into_iter()
-            .map(|path| {
-                let plan = self.plan_sync(&path);
-                (path, plan)
-            })
-            .collect();
+        let fallback_plans = [
+            (from.to_owned(), from_admitted),
+            (to.to_owned(), to_admitted),
+        ]
+        .into_iter()
+        .map(|(path, admitted)| {
+            let plan = sync_plan(&path, admitted);
+            (path, plan)
+        })
+        .collect();
         ExternalRenamePlan::Asset(PreparedExternalAssetRename {
             snapshot: ExternalRenameSnapshot {
                 workspace_id: self.workspace_id,
@@ -5575,8 +5615,8 @@ impl Workspace {
         snapshot
             .candidates
             .into_iter()
-            .map(|(id, path)| {
-                let plan = self.plan_sync_known(path.clone(), id);
+            .map(|(_id, path)| {
+                let plan = self.plan_sync_admitted(&path);
                 (path, plan)
             })
             .collect()

@@ -96,14 +96,16 @@ impl FormatProvider for Slow {
     }
 }
 
-/// Un supporto che rende osservabile la camminata di `catch_up`.
+/// Un supporto che rende osservabili sia la camminata di `catch_up` sia lo
+/// `stat` discriminante del filtro watcher.
 ///
-/// Il cancello vive precisamente su `list`: bloccare il parse proverebbe
-/// soltanto la fase già coperta dal banco del lotto, non la scansione che
-/// precede i piani.
+/// I due cancelli sono separati: il primo prova la scansione, il secondo arma
+/// soltanto un path che combacia con una regola folder-only.
 struct BlockingListStorage {
     inner: MemStorage,
     gate: Arc<Gate>,
+    stat_gate: Arc<Gate>,
+    stat_path: Option<Utf8PathBuf>,
     fail: AtomicBool,
 }
 
@@ -112,8 +114,24 @@ impl BlockingListStorage {
         Self {
             inner: MemStorage::new(),
             gate,
+            stat_gate: Arc::default(),
+            stat_path: None,
             fail: AtomicBool::new(false),
         }
+    }
+
+    fn blocking_stat(gate: Arc<Gate>, stat_path: Utf8PathBuf) -> Self {
+        Self {
+            inner: MemStorage::new(),
+            gate,
+            stat_gate: Arc::default(),
+            stat_path: Some(stat_path),
+            fail: AtomicBool::new(false),
+        }
+    }
+
+    fn arm_stat(&self) -> (Receiver<()>, Sender<()>) {
+        self.stat_gate.arm()
     }
 }
 
@@ -158,6 +176,10 @@ impl VaultStorage for BlockingListStorage {
     }
 
     fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        let blocked = self.stat_path.as_deref() == Some(path);
+        if blocked {
+            self.stat_gate.traverse();
+        }
         self.inner.stat(path)
     }
 
@@ -338,6 +360,63 @@ fn who_reads_enters_while_catch_up_scans_the_vault() {
         1,
         "one failed scan must be reported exactly once"
     );
+}
+/// Il ramo folder-only di `is_ignored` può chiedere uno `stat`: anche quel
+/// preflight deve vivere interamente fuori da `Custody`, per `Touched` e
+/// `Renamed`.
+#[test]
+fn watcher_ignore_preflight_releases_custody_before_folder_stat() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let excluded = root.join("node_modules");
+    let storage = Arc::new(BlockingListStorage::blocking_stat(
+        Arc::default(),
+        excluded.clone(),
+    ));
+    let ws = Workspace::on(
+        &root,
+        FormatRegistry::new(),
+        storage.clone() as Arc<dyn VaultStorage>,
+        MachineSettings::in_memory(),
+    )
+    .expect("the vault opens");
+    let ws = Custody::new("the ignore-preflight vault", ws);
+
+    for (kind, change) in [
+        ("Touched", ExternalChange::Touched(excluded.clone())),
+        (
+            "Renamed",
+            ExternalChange::Renamed {
+                from: excluded.clone(),
+                to: root.join("ordinary"),
+            },
+        ),
+    ] {
+        let (inside, via) = storage.arm_stat();
+        let batch = {
+            let ws = ws.clone();
+            std::thread::spawn(move || ExternalSync::new(ws).batch(&[change]))
+        };
+
+        inside
+            .recv()
+            .expect("the ignore preflight enters VaultStorage::stat");
+        let read = ws.try_read();
+        assert!(
+            read.is_some(),
+            "the {kind} ignore preflight kept the workspace read-locked"
+        );
+        drop(read);
+        let write = ws.try_write();
+        assert!(
+            write.is_some(),
+            "the {kind} ignore preflight kept the workspace locked"
+        );
+        drop(write);
+
+        via.send(()).expect("the stat preflight can finish");
+        batch.join().expect("the watcher batch finishes");
+    }
 }
 
 /// **Anche il feed completato dichiara quale revisione ha indicizzato.**

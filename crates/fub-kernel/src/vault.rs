@@ -251,6 +251,37 @@ pub struct Scan {
     /// la scansione, non chi cammina.
     pub temporary_remaining_back: Vec<Utf8PathBuf>,
 }
+/// Valutazione owned del filtro di un path del watcher.
+///
+/// La cattura risolve la politica corrente e clona il solo handle dello
+/// storage; [`PreparedIgnoreCheck::invoke`] può così fare l'eventuale `stat`
+/// discriminante dopo che il chiamante ha rilasciato il workspace.
+pub struct PreparedIgnoreCheck {
+    abs: Utf8PathBuf,
+    rel: Option<Utf8PathBuf>,
+    policy: IgnorePolicy,
+    storage: Arc<dyn VaultStorage>,
+}
+
+impl PreparedIgnoreCheck {
+    /// Risponde con la stessa regola di [`Vault::is_ignored`], facendo qui
+    /// l'unico eventuale accesso allo storage.
+    pub fn invoke(self) -> bool {
+        let Some(rel) = self.rel else {
+            return false;
+        };
+        if self.policy.excludes_path(&rel, Kind::File) {
+            return true;
+        }
+        self.policy.excludes_path(&rel, Kind::Folder)
+            && self
+                .storage
+                .stat(&self.abs)
+                .map(|stat| stat.kind == EntryKind::Dir)
+                .unwrap_or(true)
+    }
+}
+
 
 #[derive(Clone)]
 pub struct Vault {
@@ -377,6 +408,20 @@ impl Vault {
         Ok(self.root.join(id.as_str()))
     }
 
+    /// Cattura una valutazione owned del filtro senza interrogare lo storage.
+    ///
+    /// Risolvere la politica sotto il proprietario conserva l'istante della
+    /// decisione; l'eventuale distinzione file/cartella resta invece a
+    /// [`PreparedIgnoreCheck::invoke`], fuori dalla guardia del workspace.
+    pub fn prepare_is_ignored(&self, abs: &Utf8Path) -> PreparedIgnoreCheck {
+        PreparedIgnoreCheck {
+            abs: abs.to_owned(),
+            rel: abs.strip_prefix(&self.root).ok().map(Utf8Path::to_owned),
+            policy: self.ignore_policy(),
+            storage: Arc::clone(&self.storage),
+        }
+    }
+
     /// Il path assoluto cade in una parte del vault che non va guardata?
     ///
     /// Vale per **ogni** componente, non solo per l'ultimo: un file dentro
@@ -388,37 +433,7 @@ impl Vault {
     /// regola viveva solo dentro la scansione, ogni file spostato nel cestino
     /// tornava dentro dalla porta di servizio del watcher.
     pub fn is_ignored(&self, abs: &Utf8Path) -> bool {
-        let Ok(rel) = abs.strip_prefix(&self.root) else {
-            return false;
-        };
-        let policy = self.ignore_policy();
-        if policy.excludes_path(rel, Kind::File) {
-            return true;
-        }
-        policy.excludes_path(rel, Kind::Folder) && self.is_folder(abs)
-    }
-
-    /// L'ultimo componente di un path è una cartella?
-    ///
-    /// Lo sa il supporto, e glielo si chiede **solo quando la risposta cambia
-    /// qualcosa**: cioè solo quando quel nome è dichiarato fra le cartelle
-    /// escluse, che è il solo ramo in cui le due specie non rispondono uguale.
-    /// Sul path di un evento qualunque del rilevatore questa domanda non si fa,
-    /// e la porta d'ingresso del watcher non paga una `stat` per file.
-    ///
-    /// Un path che non c'è più conta come cartella, ed è la scelta
-    /// conservativa detta: se quel nome è dichiarato escluso, ciò che è sparito
-    /// era quasi certamente la cartella dichiarata, e trattarlo come un file
-    /// vorrebbe dire far rientrare dalla porta del rilevatore proprio ciò che
-    /// la scansione tiene fuori — che è il difetto per cui [`is_ignored`]
-    /// esiste.
-    ///
-    /// [`is_ignored`]: Vault::is_ignored
-    fn is_folder(&self, abs: &Utf8Path) -> bool {
-        self.storage
-            .stat(abs)
-            .map(|stat| stat.kind == EntryKind::Dir)
-            .unwrap_or(true)
+        self.prepare_is_ignored(abs).invoke()
     }
 
     /// **Tutto** ciò che il vault contiene, in ordine: i file con dimensione e
