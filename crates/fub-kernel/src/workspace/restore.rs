@@ -48,6 +48,11 @@ pub struct PendingDocumentRestore {
 }
 
 impl PreparedDocumentRestore {
+    /// Destinazione nel vault risolta durante la preparazione.
+    pub fn target(&self) -> &DocId {
+        &self.target
+    }
+
     /// Esegue soltanto il parser e le regole sintattiche esterne.
     pub fn invoke(self) -> Result<CompletedDocumentRestore> {
         let PreparedDocumentRestore {

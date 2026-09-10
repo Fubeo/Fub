@@ -957,12 +957,19 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        self.check_path(Capability::VaultStructure, entry.as_str(), || {
-            format!("restoring `{entry}`")
-        })?;
-        if let Some(to) = &to {
-            self.check_path(Capability::VaultStructure, to.as_str(), || {
-                format!("restoring to `{to}`")
+        if let Some(target) = &to {
+            self.check_path(Capability::VaultStructure, target.as_str(), || {
+                format!("restoring to `{target}`")
+            })?;
+        } else if let Some(target) = self
+            .inner
+            .list_trash()?
+            .into_iter()
+            .find(|candidate| &candidate.id == entry)
+            .map(|candidate| candidate.original)
+        {
+            self.check_path(Capability::VaultStructure, target.as_str(), || {
+                format!("restoring to `{target}`")
             })?;
         }
         self.inner.restore_document(entry, to)

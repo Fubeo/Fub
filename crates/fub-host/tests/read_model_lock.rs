@@ -124,6 +124,41 @@ impl FormatProvider for BlockingFormat {
         MarkdownProvider::new().serialize(model)
     }
 }
+struct CountingFormat {
+    parses: Arc<AtomicUsize>,
+}
+
+impl FormatProvider for CountingFormat {
+    fn descriptor(&self) -> FormatDescriptor {
+        MarkdownProvider::new().descriptor()
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        MarkdownProvider::new().capabilities()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        context: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        self.parses.fetch_add(1, Ordering::SeqCst);
+        MarkdownProvider::new().parse(source, context)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        options: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        MarkdownProvider::new().render_html(model, options)
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        MarkdownProvider::new().serialize(model)
+    }
+}
+
 
 struct BlockingSyntax {
     armed: Arc<AtomicBool>,
@@ -316,6 +351,114 @@ fn restore_releases_both_workspace_guards_for_format_parse() {
         std::fs::read_to_string(vault.root.join("Note.md")).unwrap(),
         "# Restored\n"
     );
+}
+
+#[test]
+fn scoped_restore_authorizes_the_destination_before_parsing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::create_dir(root.join("notes")).expect("notes folder");
+    let original = DocId::new("notes/Note.md");
+    std::fs::write(root.join(original.as_str()), "# Scoped\n").expect("seed note");
+    let parses = Arc::new(AtomicUsize::new(0));
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(CountingFormat {
+            parses: Arc::clone(&parses),
+        }))
+        .expect("format registers");
+    let mut workspace = Workspace::new(&root, formats).expect("workspace opens");
+    let mut permissions = PluginPermissions::of(&[]);
+    permissions
+        .granted
+        .set(permission::READ_VAULT, serde_json::json!(["notes/"]));
+    permissions
+        .granted
+        .set(permission::WRITE_VAULT, serde_json::json!(["notes/"]));
+    workspace
+        .register_plugin(
+            PluginManifest::new(PLUGIN, "Scoped restore").granting(permissions),
+            Trust::Community,
+        )
+        .expect("scoped caller declares");
+    workspace.reindex().expect("seed note enters the workspace");
+    let workspace = Custody::new("the scoped restore workspace", workspace);
+
+    let direct_entry = workspace
+        .write()
+        .expect("workspace is alive")
+        .delete_document(&original)
+        .expect("seed note enters trash");
+    let before_direct = parses.load(Ordering::SeqCst);
+    let direct_restored = workspace
+        .write()
+        .expect("workspace is alive")
+        .with_host(PLUGIN, |host| {
+            let entries = host.list_trash().expect("scoped trash is visible");
+            assert_eq!(entries[0].id, direct_entry);
+            host.restore_document(&direct_entry, None)
+        })
+        .expect("direct guard restores to the visible original");
+    assert_eq!(direct_restored, original);
+    assert!(parses.load(Ordering::SeqCst) > before_direct);
+
+    let job_entry = workspace
+        .write()
+        .expect("workspace is alive")
+        .delete_document(&original)
+        .expect("restored note enters trash again");
+    let mut job = JobHost::new(workspace.clone(), PLUGIN);
+    assert_eq!(
+        job.list_trash().expect("job sees scoped trash")[0].id,
+        job_entry
+    );
+    assert_eq!(
+        job.restore_document(&job_entry, None)
+            .expect("job restores to the visible original"),
+        original
+    );
+
+    let denied_entry = workspace
+        .write()
+        .expect("workspace is alive")
+        .delete_document(&original)
+        .expect("note enters trash for denied overrides");
+    let outside = DocId::new("outside/Note.md");
+    let before_denials = parses.load(Ordering::SeqCst);
+    let direct_denied = workspace
+        .write()
+        .expect("workspace is alive")
+        .with_host(PLUGIN, |host| {
+            host.restore_document(&denied_entry, Some(outside.clone()))
+        });
+    assert!(matches!(
+        direct_denied,
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert!(matches!(
+        JobHost::new(workspace.clone(), PLUGIN)
+            .restore_document(&denied_entry, Some(outside.clone())),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(
+        parses.load(Ordering::SeqCst),
+        before_denials,
+        "neither denied path reaches the format parser"
+    );
+    assert!(!root.join(outside.as_str()).exists());
+
+    let missing = DocId::new(".trash/missing.md");
+    assert!(matches!(
+        workspace
+            .write()
+            .expect("workspace is alive")
+            .with_host(PLUGIN, |host| host.restore_document(&missing, None)),
+        Err(PluginError::NotFound(_))
+    ));
+    assert!(matches!(
+        JobHost::new(workspace, PLUGIN).restore_document(&missing, None),
+        Err(PluginError::NotFound(_))
+    ));
 }
 
 #[test]

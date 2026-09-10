@@ -587,42 +587,27 @@ impl VaultStructure for JobHost {
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
+            let prepared = ws
+                .prepare_document_restore(entry, to)
+                .map_err(PluginError::from)?;
+            let target = prepared.target();
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
                     &ReadOnly {
                         why: "simulazione del comando",
                     },
                     Capability::VaultStructure,
-                    entry.as_str(),
-                    || format!("restoring `{entry}`"),
+                    target.as_str(),
+                    || format!("restoring to `{target}`"),
                 )?;
             }
             authorize_path(
                 &ws.granted_policy(&self.plugin),
                 Capability::VaultStructure,
-                entry.as_str(),
-                || format!("restoring `{entry}`"),
+                target.as_str(),
+                || format!("restoring to `{target}`"),
             )?;
-            if let Some(to) = &to {
-                if self.mode == InvokeMode::DryRun {
-                    authorize_path(
-                        &ReadOnly {
-                            why: "simulazione del comando",
-                        },
-                        Capability::VaultStructure,
-                        to.as_str(),
-                        || format!("restoring to `{to}`"),
-                    )?;
-                }
-                authorize_path(
-                    &ws.granted_policy(&self.plugin),
-                    Capability::VaultStructure,
-                    to.as_str(),
-                    || format!("restoring to `{to}`"),
-                )?;
-            }
-            ws.prepare_document_restore(entry, to)
-                .map_err(PluginError::from)?
+            prepared
         };
         let completed = prepared.invoke().map_err(PluginError::from)?;
         let pending = {
