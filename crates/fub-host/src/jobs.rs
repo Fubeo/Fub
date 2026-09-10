@@ -368,9 +368,18 @@ impl JobHost {
         id: &DocId,
         request: EditRequest,
     ) -> Result<EditReport, PluginError> {
-        self.stopped()?;
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
+        self.apply_edit_detached_inner(id, request)
+    }
+
+    fn apply_edit_detached_inner(
+        &mut self,
+        id: &DocId,
+        request: EditRequest,
+    ) -> Result<EditReport, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
         let prepared = {
             let ws = workspace.read()?;
             let id = fenced_doc_id(id)?;
@@ -663,7 +672,10 @@ impl VaultStructure for JobHost {
                 ws.commit_explicit_rename(parsed)
                     .map_err(PluginError::from)?
             };
-            let completed = pending.invoke();
+            let completed = pending.invoke().invoke_rewrites(|source, request| {
+                self.apply_edit_detached_inner(source, request.clone())
+                    .map(drop)
+            });
             with_event_drain(&workspace, |ws| ws.finish_explicit_rename(completed))?
                 .map_err(|(error, _)| error)?
                 .map_err(PluginError::from)

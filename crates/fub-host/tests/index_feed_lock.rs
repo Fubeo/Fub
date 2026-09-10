@@ -5,21 +5,26 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fub_abi::edit::{EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::{EventKind, EventMask, Notice};
+use fub_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
+};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest,
     QueryRoute, VaultEntry, VaultStructure, VaultWrite,
 };
-use fub_abi::{Event, PluginError};
+use fub_abi::{Event, FormatError, FormatProvider, PluginError};
+use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, Host, JobHost, NoWatcher};
 use fub_kernel::journal::JournalOp;
-use fub_kernel::{Subscription, Trust, Workspace};
+use fub_kernel::{FormatRegistry, Subscription, Trust, Workspace};
 
 const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
 const EDIT_FEED_LOCK_PLUGIN: &str = "fub.audit-index-edit-feed";
 const CREATE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-create-feed";
 const RESTORE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-restore-feed";
 const RENAME_FEED_LOCK_PLUGIN: &str = "fub.audit-index-rename";
+const RENAME_BACKLINK_LOCK_PLUGIN: &str = "fub.audit-rename-backlink";
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -139,6 +144,126 @@ impl IndexProvider for RenameIndexProbe {
 
     fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
         Err(PluginError::Unserved("rename-only probe".into()))
+    }
+
+    fn up_to_date(&self, _: &[VaultEntry]) -> Vec<DocId> {
+        Vec::new()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BacklinkStage {
+    Parse,
+    BeforeWrite,
+    Index,
+}
+
+type WorkspaceSlot = Arc<Mutex<Option<Custody<Workspace>>>>;
+
+fn observe_backlink_stage(
+    workspace: &WorkspaceSlot,
+    observed: &std::sync::mpsc::SyncSender<(BacklinkStage, bool, bool)>,
+    stage: BacklinkStage,
+) {
+    let workspace = workspace
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .expect("backlink probe workspace installed")
+        .clone();
+    let read = workspace.try_read();
+    let read_free = read.is_some();
+    drop(read);
+    let write = workspace.try_write();
+    let write_free = write.is_some();
+    drop(write);
+    observed
+        .send((stage, read_free, write_free))
+        .expect("backlink observation receiver");
+}
+
+struct BacklinkFormatProbe {
+    armed: Arc<AtomicBool>,
+    workspace: WorkspaceSlot,
+    observed: std::sync::mpsc::SyncSender<(BacklinkStage, bool, bool)>,
+    markdown: MarkdownProvider,
+}
+
+impl FormatProvider for BacklinkFormatProbe {
+    fn descriptor(&self) -> FormatDescriptor {
+        self.markdown.descriptor()
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        self.markdown.capabilities()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        context: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        if self.armed.load(Ordering::SeqCst) && context.doc_id == "Backlink.md" {
+            observe_backlink_stage(&self.workspace, &self.observed, BacklinkStage::Parse);
+        }
+        self.markdown.parse(source, context)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        options: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        self.markdown.render_html(model, options)
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        self.markdown.serialize(model)
+    }
+}
+
+struct BacklinkIndexProbe {
+    workspace: WorkspaceSlot,
+    observed: std::sync::mpsc::SyncSender<(BacklinkStage, bool, bool)>,
+}
+
+impl IndexProvider for BacklinkIndexProbe {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
+        if models
+            .iter()
+            .any(|model| model.id.as_str() == "Backlink.md")
+        {
+            observe_backlink_stage(&self.workspace, &self.observed, BacklinkStage::Index);
+        }
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved("backlink-only probe".into()))
     }
 
     fn up_to_date(&self, _: &[VaultEntry]) -> Vec<DocId> {
@@ -349,6 +474,83 @@ fn rename_remove_and_feed_callbacks_run_without_the_workspace_lock() {
     assert_eq!(removal, (RenameCallback::Removal, true, true));
     assert_eq!(feed, (RenameCallback::Feed, true, true));
     assert!(v.root.join("Renamed.md").exists());
+}
+
+#[test]
+fn rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
+    let v = vault();
+    std::fs::write(v.root.join("Backlink.md"), "# Backlink\n[[Note 0]]\n").expect("seed backlink");
+    let armed = Arc::new(AtomicBool::new(false));
+    let workspace_slot: WorkspaceSlot = Arc::new(Mutex::new(None));
+    let (observed_tx, observed_rx) = std::sync::mpsc::sync_channel(3);
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(BacklinkFormatProbe {
+            armed: Arc::clone(&armed),
+            workspace: Arc::clone(&workspace_slot),
+            observed: observed_tx.clone(),
+            markdown: MarkdownProvider::new(),
+        }))
+        .expect("probe format registers");
+    let mut workspace = Workspace::new(&v.root, formats).expect("workspace opens");
+    workspace.reindex().expect("seed documents index");
+    workspace
+        .register_core_feature(
+            RENAME_BACKLINK_LOCK_PLUGIN,
+            "Audit detached backlink rewrite",
+        )
+        .expect("rename caller declares");
+    let workspace = Custody::new("rename backlink workspace", workspace);
+    *workspace_slot
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+    {
+        let mut ws = workspace.write().expect("workspace is alive");
+        ws.set_before_write_hook(Some((RENAME_BACKLINK_LOCK_PLUGIN.to_string(), {
+            let workspace_slot = Arc::clone(&workspace_slot);
+            let observed = observed_tx.clone();
+            Arc::new(move |host, id| {
+                let source = host.read_document(id)?;
+                if !source.contains("[[Note 0]]") {
+                    return Err(PluginError::Internal(
+                        "before-write re-entry read the wrong backlink source".into(),
+                    ));
+                }
+                observe_backlink_stage(&workspace_slot, &observed, BacklinkStage::BeforeWrite);
+                Ok(())
+            })
+        })));
+        ws.register_index_provider(
+            RENAME_BACKLINK_LOCK_PLUGIN,
+            Box::new(BacklinkIndexProbe {
+                workspace: Arc::clone(&workspace_slot),
+                observed: observed_tx,
+            }),
+        )
+        .expect("backlink index probe registers");
+    }
+    armed.store(true, Ordering::SeqCst);
+
+    JobHost::new(workspace, RENAME_BACKLINK_LOCK_PLUGIN)
+        .rename_document(&DocId::new("Note 0.md"), &DocId::new("Renamed.md"))
+        .expect("rename and backlink rewrite complete");
+
+    for expected in [
+        BacklinkStage::Parse,
+        BacklinkStage::BeforeWrite,
+        BacklinkStage::Index,
+    ] {
+        assert_eq!(
+            observed_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("backlink callback observed"),
+            (expected, true, true)
+        );
+    }
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Backlink.md")).unwrap(),
+        "# Backlink\n[[Renamed]]\n"
+    );
 }
 
 #[test]

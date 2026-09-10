@@ -338,6 +338,7 @@ pub struct CompletedExplicitRename {
     identity: CompletedIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
     owns_batch: bool,
+    rewrite_failures: Vec<String>,
 }
 
 struct PendingIdentityMigration {
@@ -728,13 +729,34 @@ impl PreparedExplicitRename {
     }
 }
 impl PendingExplicitRename {
-    /// Esegue soltanto le callback remove+feed usando handle owned.
+    /// Esegue le callback remove+feed usando handle owned, lasciando le
+    /// riscritture al chiamante.
     pub fn invoke(self) -> CompletedExplicitRename {
         CompletedExplicitRename {
             identity: self.identity.invoke(),
             rewrites: self.rewrites,
             owns_batch: self.owns_batch,
+            rewrite_failures: Vec::new(),
         }
+    }
+}
+
+impl CompletedExplicitRename {
+    /// Applica tutte le riscritture fuori dal workspace e conserva gli errori
+    /// qualificati con la sorgente per il finalizzatore.
+    pub fn invoke_rewrites<E>(
+        mut self,
+        mut apply: impl FnMut(&DocId, &EditRequest) -> std::result::Result<(), E>,
+    ) -> Self
+    where
+        E: std::fmt::Display,
+    {
+        for (source, request) in &self.rewrites {
+            if let Err(error) = apply(source, request) {
+                self.rewrite_failures.push(format!("{source}: {error}"));
+            }
+        }
+        self
     }
 }
 
@@ -6403,7 +6425,9 @@ impl Workspace {
             .expect("il documento è già stato classificato");
         let parsed = prepared.invoke()?;
         let pending = self.commit_explicit_rename(parsed)?;
-        let completed = pending.invoke();
+        let completed = pending
+            .invoke()
+            .invoke_rewrites(|source, request| self.apply_edit(source, request.clone()).map(drop));
         match self.finish_explicit_rename(completed) {
             Ok(outcome) => outcome,
             Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
@@ -6533,9 +6557,9 @@ impl Workspace {
         })
     }
 
-    /// Recupera frame e perdite, poi completa il lotto storico. Le riscritture
-    /// dei backlink restano sincrone: il loro confine è deliberatamente un
-    /// lavoro successivo.
+    /// Recupera frame e perdite, registra il fatto e completa il lotto storico.
+    /// Le riscritture sono già state invocate dal token senza trattenere un
+    /// prestito del workspace.
     pub fn finish_explicit_rename(
         &mut self,
         completed: CompletedExplicitRename,
@@ -6550,8 +6574,9 @@ impl Workspace {
         }
         let CompletedExplicitRename {
             identity,
-            rewrites,
+            rewrites: _,
             owns_batch,
+            rewrite_failures,
         } = completed;
         let from = identity.from.clone();
         let to = identity.to.clone();
@@ -6562,12 +6587,7 @@ impl Workspace {
             from: from.clone(),
             to: to.clone(),
         });
-        let mut failed = Vec::new();
-        for (src, request) in rewrites {
-            if let Err(error) = self.apply_edit(&src, request) {
-                failed.push(format!("{src}: {error}"));
-            }
-        }
+        let failed = rewrite_failures;
         self.emit_event(Event::IndexUpdated);
         if owns_batch {
             self.dispatch.close_batch();
