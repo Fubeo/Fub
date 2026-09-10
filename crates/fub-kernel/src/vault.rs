@@ -281,6 +281,21 @@ impl PreparedIgnoreCheck {
                 .unwrap_or(true)
     }
 }
+/// Sweep distruttivo del cestino preparato senza eseguire I/O.
+///
+/// Possiede la fotografia del vault — radice e handle dello storage inclusi —
+/// così il censimento e le rimozioni possono avvenire dopo che il chiamante ha
+/// rilasciato la custodia del [`Workspace`](crate::Workspace).
+pub struct PreparedTrashSweep {
+    vault: Vault,
+}
+
+impl PreparedTrashSweep {
+    /// Esegue l'algoritmo completo di [`Vault::empty_trash`] sul vault catturato.
+    pub fn invoke(self) -> Result<usize> {
+        self.vault.empty_trash()
+    }
+}
 
 #[derive(Clone)]
 pub struct Vault {
@@ -1021,6 +1036,13 @@ impl Vault {
             }
         }
         Ok(())
+    }
+
+    /// Cattura tutto ciò che serve allo sweep senza interrogare lo storage.
+    pub fn prepare_empty_trash(&self) -> PreparedTrashSweep {
+        PreparedTrashSweep {
+            vault: self.clone(),
+        }
     }
 
     /// Svuota il cestino e restituisce quante voci ha cancellato.

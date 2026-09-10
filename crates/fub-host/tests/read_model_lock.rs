@@ -81,6 +81,7 @@ enum Stage {
     Parse,
     Syntax,
     TrashList,
+    TrashRemove,
     SourceRead,
     DataRead,
     DataList,
@@ -125,6 +126,17 @@ impl BlockingRestoreStorage {
         self.blocking.store(blocking, Ordering::SeqCst);
         self.armed.store(true, Ordering::SeqCst);
     }
+    fn assert_workspace_is_free(&self, callback: &str) {
+        if let Some(workspace) = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .cloned()
+        {
+            assert_workspace_is_free(&workspace, callback);
+        }
+    }
 
     fn observe_data(&self, stage: Stage, path: &Utf8Path) {
         if !self.armed.load(Ordering::SeqCst) {
@@ -151,7 +163,8 @@ impl BlockingRestoreStorage {
                 self.read_hits.fetch_add(1, Ordering::SeqCst);
             }
             Stage::Parse | Stage::Syntax => unreachable!("storage stage"),
-            Stage::DataRead
+            Stage::TrashRemove
+            | Stage::DataRead
             | Stage::DataList
             | Stage::DataWrite
             | Stage::DataRemove
@@ -170,6 +183,7 @@ impl BlockingRestoreStorage {
         if matches!(
             stage,
             Stage::SourceRead
+                | Stage::TrashRemove
                 | Stage::DataRead
                 | Stage::DataList
                 | Stage::DataWrite
@@ -228,12 +242,22 @@ impl VaultStorage for BlockingRestoreStorage {
 
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
         self.observe_data(Stage::DataRemove, path);
+        let source = self
+            .source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if self.armed.load(Ordering::SeqCst) && source.as_deref() == Some(path) {
+            self.assert_workspace_is_free("VaultStorage::remove during empty_trash");
+            self.traverse(Stage::TrashRemove);
+        }
         self.inner.remove(path)
     }
 
     fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
         self.observe_data(Stage::DataList, dir);
         if self.armed.load(Ordering::SeqCst) && dir == self.trash_dir {
+            self.assert_workspace_is_free("VaultStorage::list during empty_trash");
             self.traverse(Stage::TrashList);
         }
         self.inner.list(dir)
@@ -627,6 +651,82 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         parses_before,
         "a denied explicit target never reaches the parser"
     );
+}
+
+#[test]
+fn empty_trash_lists_and_removes_without_workspace_guards() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Note.md"), "# Trash\n").expect("seed note");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let storage = Arc::new(BlockingRestoreStorage {
+        inner: FsStorage,
+        trash_dir: root.join(".trash"),
+        source: Mutex::new(None),
+        armed: AtomicBool::new(false),
+        blocking: AtomicBool::new(false),
+        list_hits: AtomicUsize::new(0),
+        read_hits: AtomicUsize::new(0),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+        data_probe: Mutex::new(None),
+        data_hits: AtomicUsize::new(0),
+        workspace_probe: Mutex::new(None),
+    });
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(MarkdownProvider::new()))
+        .expect("format registers");
+    let mut workspace = Workspace::on(
+        &root,
+        formats,
+        storage.clone(),
+        MachineSettings::in_memory(),
+    )
+    .expect("workspace opens");
+    workspace
+        .register_plugin(
+            PluginManifest::core(PLUGIN, "Detached empty trash"),
+            Trust::Community,
+        )
+        .expect("trash caller declares");
+    workspace.reindex().expect("seed note enters workspace");
+    let trash_id = workspace
+        .delete_document(&DocId::new("Note.md"))
+        .expect("seed note enters trash");
+    let trashed_path = root.join(trash_id.as_str());
+    let workspace = Custody::new("the detached trash workspace", workspace);
+    *storage
+        .workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+    storage.arm(trashed_path.clone(), true);
+
+    let workspace_for_call = workspace.clone();
+    let call = std::thread::spawn(move || JobHost::new(workspace_for_call, PLUGIN).empty_trash());
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("trash listing entered"),
+        Stage::TrashList
+    );
+    release_tx.send(()).expect("release trash listing");
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("trash removal entered"),
+        Stage::TrashRemove
+    );
+    release_tx.send(()).expect("release trash removal");
+
+    assert_eq!(
+        call.join()
+            .expect("empty trash thread does not panic")
+            .expect("empty trash succeeds"),
+        1
+    );
+    assert!(!trashed_path.exists());
 }
 fn assert_data_storage_detached(
     workspace: &Custody<Workspace>,

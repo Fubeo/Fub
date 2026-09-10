@@ -745,7 +745,31 @@ impl VaultStructure for JobHost {
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
-        self.write_result(|h| h.empty_trash())
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_family(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    || "emptying trash".into(),
+                )?;
+            }
+            authorize_family(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                || "emptying trash".into(),
+            )?;
+            ws.prepare_empty_trash()
+        };
+        prepared
+            .invoke()
+            .map(|count| count as u64)
+            .map_err(PluginError::from)
     }
 }
 

@@ -131,7 +131,7 @@ use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
-use crate::vault::{PreparedIgnoreCheck, TrashEntry};
+use crate::vault::{PreparedIgnoreCheck, PreparedTrashSweep, TrashEntry};
 use crate::viewstate::ViewStates;
 
 /// Identità process-local di un'istanza `Workspace`.
@@ -6134,6 +6134,11 @@ impl Workspace {
     /// l'host può invocarli dopo aver rilasciato `Custody<Workspace>`.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
         self.docs.vault.list_trash()
+    }
+
+    /// Prepara lo sweep del cestino senza accedere allo storage.
+    pub fn prepare_empty_trash(&self) -> PreparedTrashSweep {
+        self.docs.vault.prepare_empty_trash()
     }
 
     /// Svuota il cestino e restituisce quante voci non sono più recuperabili.
