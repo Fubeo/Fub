@@ -2246,6 +2246,7 @@ pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
 }
 #[cfg(test)]
 mod side_data_lock_tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::mpsc;
     use std::time::Duration;
 
@@ -2256,6 +2257,7 @@ mod side_data_lock_tests {
 
     struct BlockingUpdateStorage {
         inner: MemStorage,
+        armed: AtomicBool,
         entered: mpsc::SyncSender<()>,
         release: Mutex<mpsc::Receiver<()>>,
     }
@@ -2270,14 +2272,16 @@ mod side_data_lock_tests {
         }
 
         fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
-            self.entered
-                .send(())
-                .map_err(|error| std::io::Error::other(error.to_string()))?;
-            self.release
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .recv()
-                .map_err(|error| std::io::Error::other(error.to_string()))?;
+            if self.armed.load(Ordering::Acquire) {
+                self.entered
+                    .send(())
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+                self.release
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .recv()
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+            }
             self.inner.update(path, merge)
         }
 
@@ -2316,6 +2320,7 @@ mod side_data_lock_tests {
         let (release_tx, release_rx) = mpsc::sync_channel(1);
         let storage = Arc::new(BlockingUpdateStorage {
             inner: MemStorage::new(),
+            armed: AtomicBool::new(false),
             entered: entered_tx,
             release: Mutex::new(release_rx),
         });
@@ -2327,6 +2332,7 @@ mod side_data_lock_tests {
             MachineSettings::in_memory(),
         )
         .expect("the workspace opens on the blocking storage");
+        storage.armed.store(true, Ordering::Release);
         let workspace = Custody::new("the side-data test workspace", workspace);
         let worker_workspace = workspace.clone();
         let worker = std::thread::spawn(move || {
@@ -2350,6 +2356,7 @@ mod side_data_lock_tests {
             .join()
             .expect("the host-side update thread does not panic")
             .expect("the organization update succeeds");
+        storage.armed.store(false, Ordering::Release);
         assert!(
             read_progressed,
             "Host side-data I/O retained a write guard on Custody<Workspace>"
