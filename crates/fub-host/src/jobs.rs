@@ -418,7 +418,60 @@ impl VaultWrite for JobHost {
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        self.write_result(|h| h.apply_edit(id, request))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultWrite,
+                    id.as_str(),
+                    || format!("editing `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultWrite,
+                id.as_str(),
+                || format!("editing `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            ws.prepare_document_write(&id, WriteBase::DescendsFrom(request.base.clone()))
+                .map_err(PluginError::from)?
+        };
+        let source = prepared
+            .expected_source()
+            .expect("DescendsFrom keeps the verified source");
+        let (next, report) = request.apply_to(source).map_err(|error| match error {
+            PluginError::Conflict(_) => PluginError::Conflict(id.to_string().into()),
+            other => PluginError::BadArgs(format!("{id}: {other}").into()),
+        })?;
+        if report.is_empty() {
+            return Ok(report);
+        }
+        let model = prepared.parse(&next).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let base = request.base;
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_edit_deferred(pending, report)
+        };
+        finish_events(&workspace, deferred)
     }
 }
 

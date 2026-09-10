@@ -1188,6 +1188,14 @@ impl PreparedDocumentWrite {
         self.parser.invoke(DocumentSource::Text(source.to_string()))
     }
 
+    /// Il sorgente verificato da `WriteBase::DescendsFrom`.
+    ///
+    /// Serve al percorso host dell'edit: gli span vengono applicati e il
+    /// provider di formato viene chiamato dopo aver rilasciato il workspace.
+    pub fn expected_source(&self) -> Option<&str> {
+        self.expected_source.as_deref()
+    }
+
     pub fn before_write_owner(&self) -> Option<&str> {
         self.before_write.as_ref().map(|(owner, _)| owner.as_str())
     }
@@ -3741,6 +3749,27 @@ impl Workspace {
         })
     }
 
+    /// Come `commit_document_write`, conservando però la semantica di journal
+    /// dell'edit chirurgico invece di registrarlo come una scrittura generica.
+    pub fn commit_document_edit(
+        &mut self,
+        prepared: PreparedDocumentWrite,
+        source: &str,
+        model: DocumentModel,
+        before_write: std::result::Result<(), PluginError>,
+        base: Revision,
+        report: &EditReport,
+    ) -> Result<PreparedDocumentFeed> {
+        let mut pending = self.commit_document_write(prepared, source, model, before_write)?;
+        pending.journal = JournalOp::Edited {
+            doc: pending.id.clone(),
+            from: base,
+            to: pending.revision.clone(),
+            footprint: crate::journal::EditFootprint::of(&report.applied),
+        };
+        Ok(pending)
+    }
+
     /// Chiude la fase indici senza consegnare eventi. Il journal resta nel
     /// token e verrà registrato solo dopo il drain staccato.
     pub fn finish_document_write_deferred(
@@ -3752,6 +3781,22 @@ impl Workspace {
         self.finish_index_feed(pending);
         DeferredEvents {
             outcome: revision,
+            previous_actor: None,
+            journal: Some(journal),
+        }
+    }
+
+    /// Finalizza gli indici di un edit staccato e consegna il report originale
+    /// soltanto dopo il drain degli eventi.
+    pub fn finish_document_edit_deferred(
+        &mut self,
+        pending: PreparedDocumentFeed,
+        report: EditReport,
+    ) -> DeferredEvents<EditReport> {
+        let journal = pending.journal.clone();
+        self.finish_index_feed(pending);
+        DeferredEvents {
+            outcome: report,
             previous_actor: None,
             journal: Some(journal),
         }
