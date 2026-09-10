@@ -134,11 +134,8 @@ impl IndexProvider for RestoreReentryProbe {
         let write = self.workspace.try_write();
         let write_free = write.is_some();
         drop(write);
-        let newer_write = std::fs::write(
-            self.root.join("Note 0.md"),
-            "# Newer from re-entry\n",
-        )
-        .map_err(|error| PluginError::Internal(error.to_string().into()));
+        let newer_write = std::fs::write(self.root.join("Note 0.md"), "# Newer from re-entry\n")
+            .map_err(|error| PluginError::Internal(error.to_string().into()));
         let handler_deferred = !self.handled.load(Ordering::SeqCst);
         let _ = self.observed.send(RestoreObservation {
             read_free,
@@ -415,7 +412,10 @@ fn a_restore_feed_is_reentry_safe_and_finishes_once() {
     let observation = observed_rx
         .recv_timeout(Duration::from_secs(10))
         .expect("restore index callback completes its re-entry");
-    assert!(observation.read_free && observation.write_free, "{observation:?}");
+    assert!(
+        observation.read_free && observation.write_free,
+        "{observation:?}"
+    );
     assert!(observation.fact_before_callback, "{observation:?}");
     assert!(observation.handler_deferred, "{observation:?}");
     observation

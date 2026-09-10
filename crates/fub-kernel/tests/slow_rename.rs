@@ -293,10 +293,9 @@ fn same_bytes_in_two_watcher_windows_do_not_migrate_identity() {
     );
     assert!(b.data_of("b.txt").is_none());
     assert_eq!(b.data_of("a.txt").as_deref(), Some("i dati di a.txt"));
-    assert!(events(&rx).iter().all(|notice| !matches!(
-        &notice.event,
-        Event::DocumentRenamed { .. }
-    )));
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(&notice.event, Event::DocumentRenamed { .. })));
 }
 
 /// Più rimozioni e creazioni nello stesso scenario non si accoppiano per

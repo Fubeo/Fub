@@ -294,8 +294,7 @@ impl Workspace {
         } = pending;
         if let Some(feed) = feed {
             if let Some(previous_provider_call) = previous_provider_call {
-                self.dispatch
-                    .restore_provider_call(previous_provider_call);
+                self.dispatch.restore_provider_call(previous_provider_call);
             }
             let path = self.root().join(target.as_str());
             let current_revision = self

@@ -1294,7 +1294,9 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
         }
-        authorize_path(&self.policy, Capability::VaultWrite, "", || "undoing".into())?;
+        authorize_path(&self.policy, Capability::VaultWrite, "", || {
+            "undoing".into()
+        })?;
         self.inner.undo_last()
     }
 }
@@ -1682,10 +1684,8 @@ mod tests {
     #[test]
     fn a_path_scoped_writer_cannot_start_a_global_undo() {
         let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let mut permissions = PluginPermissions::of(&[
-            permission::RUN_COMMAND,
-            permission::WRITE_VAULT,
-        ]);
+        let mut permissions =
+            PluginPermissions::of(&[permission::RUN_COMMAND, permission::WRITE_VAULT]);
         permissions
             .granted
             .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));

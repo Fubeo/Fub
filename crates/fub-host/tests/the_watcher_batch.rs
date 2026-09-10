@@ -679,11 +679,13 @@ fn an_explicit_rename_batch_migrates_identity_exactly_once() {
     assert!(drafts.drafts.iter().all(|draft| draft.doc != from_id));
     let renamed = events
         .try_iter()
-        .filter(|notice| matches!(
-            &notice.event,
-            Event::DocumentRenamed { from, to }
-                if from == &from_id && to == &to_id
-        ))
+        .filter(|notice| {
+            matches!(
+                &notice.event,
+                Event::DocumentRenamed { from, to }
+                    if from == &from_id && to == &to_id
+            )
+        })
         .count();
     assert_eq!(renamed, 1);
 }

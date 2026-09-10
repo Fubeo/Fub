@@ -672,10 +672,8 @@ fn a_scoped_job_cannot_partially_replay_a_global_undo() {
         )
         .expect("core commands register");
 
-    let mut permissions = fub_abi::traits::PluginPermissions::of(&[
-        permission::RUN_COMMAND,
-        permission::WRITE_VAULT,
-    ]);
+    let mut permissions =
+        fub_abi::traits::PluginPermissions::of(&[permission::RUN_COMMAND, permission::WRITE_VAULT]);
     permissions
         .granted
         .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));

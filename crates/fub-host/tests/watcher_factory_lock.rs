@@ -38,7 +38,7 @@ impl Drop for Live {
 struct ClosingGate {
     watching: Arc<AtomicBool>,
     entered: Option<std::sync::mpsc::Sender<()>>,
-    release: Option<std::sync::mpsc::Receiver<()>>,
+    release: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
 }
 
 impl VaultWatcher for ClosingGate {
@@ -49,7 +49,8 @@ impl VaultWatcher for ClosingGate {
 
 impl Drop for ClosingGate {
     fn drop(&mut self) {
-        if let (Some(entered), Some(release)) = (self.entered.take(), self.release.take()) {
+        let release = self.release.get_mut().expect("release gate").take();
+        if let (Some(entered), Some(release)) = (self.entered.take(), release) {
             entered.send(()).expect("the close observer is alive");
             release
                 .recv_timeout(TIMEOUT)
@@ -77,7 +78,7 @@ impl WatcherFactory for ClosingGateFactory {
         Ok(Box::new(ClosingGate {
             watching,
             entered: self.entered.lock().expect("entered gate").take(),
-            release: self.release.lock().expect("release gate").take(),
+            release: Mutex::new(self.release.lock().expect("release gate").take()),
         }))
     }
 }
@@ -209,13 +210,11 @@ fn opening_the_same_root_conflicts_while_teardown_owns_the_slot() {
     let starts = Arc::new(AtomicUsize::new(0));
     let (entered_tx, entered_rx) = channel();
     let (release_tx, release_rx) = channel();
-    let host = Arc::new(
-        Host::new().with_watcher(Box::new(ClosingGateFactory {
-            starts: Arc::clone(&starts),
-            entered: Mutex::new(Some(entered_tx)),
-            release: Mutex::new(Some(release_rx)),
-        })),
-    );
+    let host = Arc::new(Host::new().with_watcher(Box::new(ClosingGateFactory {
+        starts: Arc::clone(&starts),
+        entered: Mutex::new(Some(entered_tx)),
+        release: Mutex::new(Some(release_rx)),
+    })));
     host.open(&root).expect("the first session opens");
     host.wait_indexed(None).expect("initial indexing finishes");
     assert_eq!(host.current().as_deref(), Some(root.as_path()));
@@ -240,8 +239,10 @@ fn opening_the_same_root_conflicts_while_teardown_owns_the_slot() {
         .expect("open does not wait for the sessions lock");
     assert!(
         matches!(&outcome, Err(PluginError::Conflict(message))
-            if message.contains("chiusura")),
-        "the closing marker rejects a second mount: {outcome:?}"
+            if message
+                .as_literal()
+                .is_some_and(|message| message.contains("chiusura"))),
+        "the closing marker rejects a second mount"
     );
     opening.join().expect("conflicting opening joins");
     assert_eq!(
@@ -252,27 +253,26 @@ fn opening_the_same_root_conflicts_while_teardown_owns_the_slot() {
     let repeated_close = host.close_vault(&root);
     assert!(
         matches!(&repeated_close, Err(PluginError::Conflict(message))
-            if message.contains("chiusura")),
-        "the marker cannot be claimed twice: {repeated_close:?}"
+            if message
+                .as_literal()
+                .is_some_and(|message| message.contains("chiusura"))),
+        "the marker cannot be claimed twice"
     );
 
     release_tx.send(()).expect("release watcher teardown");
-    assert!(
-        closing
-            .join()
-            .expect("closing thread joins")
-            .expect("the claimed session closes")
-            .is_empty()
-    );
+    assert!(closing
+        .join()
+        .expect("closing thread joins")
+        .expect("the claimed session closes")
+        .is_empty());
 
     host.open(&root).expect("the root reopens after teardown");
     assert_eq!(starts.load(Ordering::SeqCst), 2);
     assert_eq!(host.current().as_deref(), Some(root.as_path()));
-    assert!(
-        host.close_vault(&root)
-            .expect("the reopened session closes")
-            .is_empty()
-    );
+    assert!(host
+        .close_vault(&root)
+        .expect("the reopened session closes")
+        .is_empty());
 }
 
 #[test]
