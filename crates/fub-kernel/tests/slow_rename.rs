@@ -1,18 +1,14 @@
-//! **La rinomina che il debounce spezza, e quella che il crash può spezzare.**
+//! **L'identità segue solo una rinomina esplicita.**
 //!
-//! Due difetti, la stessa identità:
+//! Le notifiche `Touched` descrivono soltanto lo stato di un path. Anche quando
+//! una rimozione e una creazione hanno gli stessi byte, il kernel non può
+//! dedurne che siano lo stesso documento: bozza, organizzazione e dati
+//! per-documento restano sotto la chiave precedente. La rotta esplicita di
+//! rename, invece, migra quell'identità una volta sola.
 //!
-//! 1. **0198.** `changes()` accoppia solo `RenameMode::Both` nella stessa
-//!    finestra. Partenza e arrivo in due lotti arrivano come remove+add, e
-//!    senza l'accoppiamento per impronta la bozza e lo stato per-documento
-//!    restano sotto il nome morto.
-//! 2. **0168.** `rename_document` spostava il file e *poi* i dati: un crash
-//!    in mezzo lasciava il file al nome nuovo e i dati sotto la chiave vecchia,
-//!    dove la prima `collect` li spazza. Adesso i dati si spostano **prima**,
-//!    e il supporto di prova lo verifica nell'istante in cui il file si muove.
-//!
-//! Zero `sleep`. Il debounce è una finestra di chi osserva il filesystem; qui
-//! le due metà si chiamano in sequenza, che è ciò che due finestre producono.
+//! Il secondo presidio resta il difetto 0168: `rename_document` deve spostare i
+//! dati prima del file, così un crash fra le due operazioni non lascia il file
+//! al nome nuovo e i dati sotto quello vecchio.
 
 use std::sync::Arc;
 
@@ -127,43 +123,34 @@ fn events(rx: &Subscription) -> Vec<Notice> {
     seen
 }
 
-/// Le due metà di una rinomina esterna, come due lotti del rilevatore.
+/// Rimozione e creazione successiva con gli stessi byte sono due identità.
 #[test]
-fn a_rename_split_carries_behind_draft_and_data() {
+fn same_bytes_remove_then_create_does_not_migrate_identity() {
     let mut b = Bench::new();
     b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
         .expect("bozza");
     b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
     b.attach_data("a.txt");
 
-    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
+    let bytes = std::fs::read(b.root.join("a.txt")).expect("contenuto");
+    std::fs::remove_file(b.root.join("a.txt")).expect("rimozione");
     b.ws.sync_path(&b.root.join("a.txt"))
-        .expect("la partenza: il file non c'è più");
+        .expect("il path è sparito");
+    std::fs::write(b.root.join("b.txt"), bytes).expect("creazione successiva");
     b.ws.sync_path(&b.root.join("b.txt"))
-        .expect("l'arrivo: è comparso un file con la stessa impronta");
+        .expect("il nuovo path compare");
 
+    assert!(b.draft_of("b.txt").is_none());
     assert_eq!(
-        b.draft_of("b.txt").as_deref(),
-        Some("e questo non l'ho salvato"),
-        "la bozza ha seguito la nota"
+        b.draft_of("a.txt").as_deref(),
+        Some("e questo non l'ho salvato")
     );
-    assert!(
-        b.draft_of("a.txt").is_none(),
-        "e non è rimasta anche sotto il nome vecchio"
-    );
+    assert!(b.data_of("b.txt").is_none());
+    assert_eq!(b.data_of("a.txt").as_deref(), Some("i dati di a.txt"));
+    assert!(!b.ws.organization().icons.contains_key("b.txt"));
     assert_eq!(
-        b.data_of("b.txt").as_deref(),
-        Some("i dati di a.txt"),
-        "e lo spazio per-documento"
-    );
-    assert!(
-        b.data_of("a.txt").is_none(),
-        "che si è spostato, non copiato"
-    );
-    assert_eq!(
-        b.ws.organization().icons.get("b.txt").map(String::as_str),
-        Some("📌"),
-        "e l'icona, che passa dalla stessa funzione"
+        b.ws.organization().icons.get("a.txt").map(String::as_str),
+        Some("📌")
     );
 }
 
@@ -272,150 +259,82 @@ fn a_watcher_rename_carries_identity_once() {
     );
 }
 
-/// **La stessa rinomina, ma con partenza e arrivo in due finestre del
-/// debounce** (difetto 0198): il caso che il presidio qui sopra non copre.
-///
-/// Là le due metà si chiamano con `sync_path`, che è la porta del kernel; qui
-/// si chiamano con le **fasi di un lotto del rilevatore** — `plan_sync`
-/// fotografa un piano owned, `ParsedChange::invoke` classifica il path fuori
-/// dal workspace e `sync_path_prepared` riconvalida sotto quello esclusivo.
-/// La partenza, che in un lotto vero è un `Touched` su un path sparito, diventa
-/// una rimozione preparata senza rifare I/O sotto il prestito esclusivo. Se
-/// l'accoppiamento vivesse solo nel ramo «file letto», la rinomina spezzata
-/// resterebbe spezzata proprio quando il debounce la spezza.
-///
-/// L'arrivo è il lotto **dopo**: un `Touched` su un path che è comparso, con
-/// un piano vero. L'impronta è la stessa di chi è appena sparito, e la bozza,
-/// i dati per-documento e l'icona seguono la nota — come nel presidio
-/// stessa-finestra, che è il come.
+/// Anche attraverso le fasi detached di due lotti, gli stessi byte non
+/// trasformano due `Touched` in una rinomina.
 #[test]
-fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
+fn same_bytes_in_two_watcher_windows_do_not_migrate_identity() {
     let mut b = Bench::new();
     b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
         .expect("bozza");
-    b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
     b.attach_data("a.txt");
-    // Chi tiene stato per-documento fuori dallo spazio dichiarato — il
-    // versioning, che ha uno store suo — ascolta la rinomina: senza l'evento
-    // la storia si spezza in due chiavi.
     let rx = b.ws.bus().subscribe();
 
-    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
-
-    // Finestra 1: la preparazione non consulta il disco; l'invoke detached
-    // classifica il path sparito e la finalizzazione lo rimuove senza fallback.
+    let bytes = std::fs::read(b.root.join("a.txt")).expect("contenuto");
+    std::fs::remove_file(b.root.join("a.txt")).expect("rimozione");
     let plan =
         b.ws.plan_sync(&b.root.join("a.txt"))
-            .expect("il path del documento noto ha una preparazione owned")
+            .expect("piano di rimozione")
             .invoke();
     b.ws.sync_path_prepared(&b.root.join("a.txt"), Some(plan))
-        .expect("la partenza: il file non c'è più");
-    let _first_window = events(&rx);
+        .expect("primo lotto");
 
-    // Finestra 2: l'arrivo, con un piano vero.
+    std::fs::write(b.root.join("b.txt"), bytes).expect("creazione");
     let plan =
         b.ws.plan_sync(&b.root.join("b.txt"))
-            .expect("un piano")
+            .expect("piano di creazione")
             .invoke();
     b.ws.sync_path_prepared(&b.root.join("b.txt"), Some(plan))
-        .expect("l'arrivo: è comparso un file con la stessa impronta");
+        .expect("secondo lotto");
 
+    assert!(b.draft_of("b.txt").is_none());
     assert_eq!(
-        b.draft_of("b.txt").as_deref(),
-        Some("e questo non l'ho salvato"),
-        "la bozza ha seguito la nota anche attraverso due finestre"
+        b.draft_of("a.txt").as_deref(),
+        Some("e questo non l'ho salvato")
     );
-    assert!(
-        b.draft_of("a.txt").is_none(),
-        "e non è rimasta anche sotto il nome vecchio"
-    );
-    assert_eq!(
-        b.data_of("b.txt").as_deref(),
-        Some("i dati di a.txt"),
-        "e lo spazio per-documento"
-    );
-    assert!(
-        b.data_of("a.txt").is_none(),
-        "che si è spostato, non copiato"
-    );
-    assert_eq!(
-        b.ws.organization().icons.get("b.txt").map(String::as_str),
-        Some("📌"),
-        "e l'icona"
-    );
-    // E l'accoppiamento lo **dice**, con lo stesso evento della rinomina
-    // vista: il gemello a vault chiuso lo emette (workspace.rs, il precedente
-    // del rejoin), e chi ascolta non deve distinguere i due casi.
-    let seen = events(&rx);
-    assert_eq!(
-        seen.iter()
-            .filter(|notice| matches!(
-                &notice.event,
-                Event::DocumentRenamed { from, to }
-                    if from.as_str() == "a.txt" && to.as_str() == "b.txt"
-            ))
-            .count(),
-        1,
-        "l'accoppiamento annuncia esattamente una rinomina: {seen:?}"
-    );
-    assert!(
-        seen.iter()
-            .all(|notice| !matches!(&notice.event, Event::DocumentChanged { .. })),
-        "l'arrivo rinominato non viene annunciato anche come modifica: {seen:?}"
-    );
+    assert!(b.data_of("b.txt").is_none());
+    assert_eq!(b.data_of("a.txt").as_deref(), Some("i dati di a.txt"));
+    assert!(events(&rx).iter().all(|notice| !matches!(
+        &notice.event,
+        Event::DocumentRenamed { .. }
+    )));
 }
 
-/// **Un remove seguito a distanza da un add non correlato non diventa una
-/// rinomina** (difetto 0198, il falso positivo).
-///
-/// L'accoppiamento per impronta è la regola della 0099 vista dal rilevatore
-/// aperto, e la 0099 ha un bound: **uno solo**. Due sparizioni di fila
-/// tengono l'ultima — la prima non ha più un arrivo da aspettare, e un
-/// arrivo che arrivasse dopo sarebbe di un'altra mossa. Qui la prima
-/// sparizione è di `a.txt`; poi sparisce anche `b.txt`; poi compare `c.txt`
-/// con l'impronta di **`a`**. Se il posto non si consumasse, `c` erediterebbe
-/// la bozza di `a` — un contenuto identico non è una prova di identità quando
-/// in mezzo c'è stata un'altra sparizione.
+/// Più rimozioni e creazioni nello stesso scenario non si accoppiano per
+/// contenuto: senza un fatto di rename ogni nuova chiave resta nuova.
 #[test]
-fn a_remove_a_distance_from_a_add_not_related_not_pairs() {
+fn multiple_same_bytes_pairs_do_not_migrate_without_explicit_renames() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    std::fs::write(root.join("a.txt"), "il contenuto di a\n").unwrap();
-    std::fs::write(root.join("b.txt"), "il contenuto di b\n").unwrap();
+    std::fs::write(root.join("a.txt"), "contenuto a\n").unwrap();
+    std::fs::write(root.join("b.txt"), "contenuto b\n").unwrap();
     let mut ws = Workspace::new(&root, registry()).expect("apertura");
     ws.reindex().expect("reindex");
-    ws.save_draft(&DocId::new("a.txt"), "bozza di a", None)
+    ws.save_draft(&DocId::new("a.txt"), "bozza a", None)
         .expect("bozza a");
+    ws.save_draft(&DocId::new("b.txt"), "bozza b", None)
+        .expect("bozza b");
 
-    // Due sparizioni di fila: la prima non è più l'ultima.
     std::fs::remove_file(root.join("a.txt")).unwrap();
-    ws.sync_path(&root.join("a.txt")).expect("a sparisce");
     std::fs::remove_file(root.join("b.txt")).unwrap();
+    ws.sync_path(&root.join("a.txt")).expect("a sparisce");
     ws.sync_path(&root.join("b.txt")).expect("b sparisce");
-
-    // L'arrivo porta l'impronta di `a`, ma non è la stessa mossa: in mezzo
-    // c'è stata un'altra sparizione, e il posto di `a` si è consumato.
-    std::fs::write(root.join("c.txt"), "il contenuto di a\n").unwrap();
+    std::fs::write(root.join("c.txt"), "contenuto a\n").unwrap();
+    std::fs::write(root.join("d.txt"), "contenuto b\n").unwrap();
     ws.sync_path(&root.join("c.txt")).expect("c compare");
+    ws.sync_path(&root.join("d.txt")).expect("d compare");
 
-    assert!(
-        ws.drafts()
-            .expect("bozze")
+    let drafts = ws.drafts().expect("bozze");
+    let of = |doc: &str| {
+        drafts
             .drafts
             .iter()
-            .all(|d| d.doc.as_str() != "c.txt"),
-        "un contenuto identico a chi è sparito due mosse fa non eredita la bozza"
-    );
-    assert_eq!(
-        ws.drafts()
-            .expect("bozze")
-            .drafts
-            .iter()
-            .find(|d| d.doc.as_str() == "a.txt")
-            .map(|d| d.text.as_str()),
-        Some("bozza di a"),
-        "e la bozza resta sotto la chiave vecchia, dove il recupero la ritrova"
-    );
+            .find(|draft| draft.doc.as_str() == doc)
+            .map(|draft| draft.text.as_str())
+    };
+    assert_eq!(of("a.txt"), Some("bozza a"));
+    assert_eq!(of("b.txt"), Some("bozza b"));
+    assert_eq!(of("c.txt"), None);
+    assert_eq!(of("d.txt"), None);
 }
 
 /// Una destinazione già viva non è una rinomina (0135): i dati di chi sparisce

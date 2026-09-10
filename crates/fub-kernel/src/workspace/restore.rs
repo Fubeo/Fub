@@ -222,13 +222,6 @@ impl Workspace {
         {
             return Err(Box::new((PluginError::from(error), completed)));
         }
-        if self
-            .last_removed
-            .as_ref()
-            .is_some_and(|(removed, _)| removed == &completed.target)
-        {
-            self.last_removed = None;
-        }
         let journal = JournalOp::Restored {
             trash: completed.entry.id.clone(),
             doc: completed.target.clone(),

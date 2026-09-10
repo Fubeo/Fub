@@ -652,6 +652,42 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
     assert!(matches!(observed[2], Event::DocumentChanged { .. }));
 }
 
+/// Un accoppiamento già provato dal watcher entra nel batch come `Renamed` e
+/// migra l'identità una volta sola.
+#[test]
+fn an_explicit_rename_batch_migrates_identity_exactly_once() {
+    let bench = bench();
+    let from_id = DocId::new("nota.md");
+    let to_id = DocId::new("spostata.md");
+    let from = bench.root.join(from_id.as_str());
+    let to = bench.root.join(to_id.as_str());
+    {
+        let mut ws = bench.ws.write().expect("the vault is alive");
+        ws.save_draft(&from_id, "unsaved", None).expect("draft");
+    }
+    let events = bench.ws.read().unwrap().bus().subscribe();
+    std::fs::rename(&from, &to).expect("external rename");
+
+    ExternalSync::new(bench.ws.clone()).batch(&[ExternalChange::Renamed { from, to }]);
+
+    let ws = bench.ws.read().expect("the vault is alive");
+    let drafts = ws.drafts().expect("drafts");
+    assert!(drafts
+        .drafts
+        .iter()
+        .any(|draft| draft.doc == to_id && draft.text == "unsaved"));
+    assert!(drafts.drafts.iter().all(|draft| draft.doc != from_id));
+    let renamed = events
+        .try_iter()
+        .filter(|notice| matches!(
+            &notice.event,
+            Event::DocumentRenamed { from, to }
+                if from == &from_id && to == &to_id
+        ))
+        .count();
+    assert_eq!(renamed, 1);
+}
+
 /// Un path senza `FormatProvider` attraversa le stesse tre fasi del documento:
 /// lo `stat` avviene detached e la finalizzazione conserva l'anagrafe e gli
 /// eventi di creazione, modifica, no-op e rimozione.

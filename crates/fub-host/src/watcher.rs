@@ -882,6 +882,7 @@ pub use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
+    use std::collections::HashMap;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
@@ -967,14 +968,35 @@ mod notify_watcher {
 
     /// Il vocabolario di `notify` tradotto in quello del lotto.
     ///
-    /// Un rename accoppiato (`paths = [from, to]`) è una migrazione d'identità e
-    /// non remove+add; tutto il resto è un path toccato, e cosa gli sia successo
-    /// lo scopre il kernel guardando il disco.
+    /// `Both` porta già i due path ed è una migrazione esplicita. Due metà
+    /// `From`/`To` diventano una migrazione soltanto quando lo stesso tracker
+    /// non nullo identifica esattamente una partenza e un arrivo nel lotto.
+    /// Metà orfane, tracker assenti e tracker ambigui restano path toccati: i
+    /// byte uguali non sono una prova d'identità.
     fn changes(events: Vec<notify_debouncer_full::DebouncedEvent>) -> Vec<ExternalChange> {
+        let mut halves: HashMap<usize, (Option<usize>, Option<usize>, bool)> = HashMap::new();
+        for (index, event) in events.iter().enumerate() {
+            let slot = match &event.kind {
+                EventKind::Modify(ModifyKind::Name(RenameMode::From)) => 0,
+                EventKind::Modify(ModifyKind::Name(RenameMode::To)) => 1,
+                _ => continue,
+            };
+            let Some(tracker) = event.tracker() else {
+                continue;
+            };
+            let pair = halves.entry(tracker).or_default();
+            let occupied = if slot == 0 {
+                pair.0.replace(index).is_some()
+            } else {
+                pair.1.replace(index).is_some()
+            };
+            pair.2 |= occupied;
+        }
+
         let mut out = Vec::new();
-        for event in events {
+        for (index, event) in events.iter().enumerate() {
             if matches!(
-                event.kind,
+                &event.kind,
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both))
             ) && event.paths.len() == 2
             {
@@ -986,6 +1008,30 @@ mod notify_watcher {
                     continue;
                 }
             }
+
+            if matches!(
+                &event.kind,
+                EventKind::Modify(ModifyKind::Name(RenameMode::From | RenameMode::To))
+            ) {
+                if let Some((Some(from_index), Some(to_index), false)) =
+                    event.tracker().and_then(|tracker| halves.get(&tracker))
+                {
+                    let from = &events[*from_index];
+                    let to = &events[*to_index];
+                    if from.paths.len() == 1 && to.paths.len() == 1 {
+                        if let (Ok(from), Ok(to)) = (
+                            Utf8PathBuf::from_path_buf(from.paths[0].clone()),
+                            Utf8PathBuf::from_path_buf(to.paths[0].clone()),
+                        ) {
+                            if index == *from_index {
+                                out.push(ExternalChange::Renamed { from, to });
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
+
             for path in &event.paths {
                 if let Ok(p) = Utf8PathBuf::from_path_buf(path.clone()) {
                     out.push(ExternalChange::Touched(p));
@@ -1198,6 +1244,54 @@ mod notify_watcher {
             ] {
                 assert!(is_a_change_kind(&kind), "{kind:?} is a change");
             }
+        }
+
+        fn rename_half(
+            mode: RenameMode,
+            tracker: Option<usize>,
+            paths: &[&str],
+        ) -> notify_debouncer_full::DebouncedEvent {
+            let mut event = notify::Event::new(EventKind::Modify(ModifyKind::Name(mode)));
+            for path in paths {
+                event = event.add_path((*path).into());
+            }
+            if let Some(tracker) = tracker {
+                event = event.set_tracker(tracker);
+            }
+            notify_debouncer_full::DebouncedEvent::new(event, std::time::Instant::now())
+        }
+
+        #[test]
+        fn rename_halves_require_one_shared_tracker_in_the_same_batch() {
+            let changes = changes(vec![
+                rename_half(RenameMode::From, Some(7), &["tracked-from.md"]),
+                rename_half(RenameMode::To, Some(7), &["tracked-to.md"]),
+                rename_half(RenameMode::From, None, &["untracked-from.md"]),
+                rename_half(RenameMode::To, None, &["untracked-to.md"]),
+                rename_half(RenameMode::From, Some(9), &["ambiguous-a.md"]),
+                rename_half(RenameMode::From, Some(9), &["ambiguous-b.md"]),
+                rename_half(RenameMode::To, Some(9), &["ambiguous-to.md"]),
+                rename_half(RenameMode::Both, None, &["both-from.md", "both-to.md"]),
+            ]);
+
+            assert_eq!(
+                changes,
+                vec![
+                    ExternalChange::Renamed {
+                        from: "tracked-from.md".into(),
+                        to: "tracked-to.md".into(),
+                    },
+                    ExternalChange::Touched("untracked-from.md".into()),
+                    ExternalChange::Touched("untracked-to.md".into()),
+                    ExternalChange::Touched("ambiguous-a.md".into()),
+                    ExternalChange::Touched("ambiguous-b.md".into()),
+                    ExternalChange::Touched("ambiguous-to.md".into()),
+                    ExternalChange::Renamed {
+                        from: "both-from.md".into(),
+                        to: "both-to.md".into(),
+                    },
+                ]
+            );
         }
 
         /// caduta).

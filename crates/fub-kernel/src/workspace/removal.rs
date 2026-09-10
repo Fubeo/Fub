@@ -134,8 +134,8 @@ impl Workspace {
     }
 
     /// Prepara la rimozione che una lettura detached ha già classificato come
-    /// path sparito. Non consulta il filesystem: identità e fingerprint sono
-    /// stati riconvalidati dal finalizzatore del piano watcher.
+    /// path sparito. Non consulta il filesystem: l'identità è stata
+    /// riconvalidata dal finalizzatore del piano watcher.
     pub fn prepare_sync_document_removal(
         &mut self,
         id: &DocId,
@@ -144,9 +144,6 @@ impl Workspace {
             return Ok(None);
         }
         self.indexes.ensure_mutation_available()?;
-        if let Some(fingerprint) = self.entry_fingerprint(id) {
-            self.last_removed = Some((id.clone(), fingerprint));
-        }
         let mut prepared = self.prepare_document_removal(id)?;
         if let Some(prepared) = &mut prepared {
             prepared.watcher = true;

@@ -501,11 +501,6 @@ enum PendingSyncState {
         feed: Box<PreparedDocumentFeed>,
         previous_provider_call: bool,
     },
-    Rename {
-        feed: Box<PreparedDocumentFeed>,
-        previous_provider_call: bool,
-        side_data: PreparedRenameSideData,
-    },
     Removal(PreparedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
     Unchanged(crate::storage::Stat),
@@ -515,11 +510,6 @@ enum CompletedSyncState {
     Feed {
         feed: Box<PreparedDocumentFeed>,
         previous_provider_call: bool,
-    },
-    Rename {
-        feed: Box<PreparedDocumentFeed>,
-        previous_provider_call: bool,
-        side_data: CompletedRenameSideData,
     },
     Removal(CompletedDocumentRemoval),
     Entry(Option<crate::storage::Stat>),
@@ -798,15 +788,6 @@ impl PendingSyncChange {
             } => CompletedSyncState::Feed {
                 feed: Box::new((*feed).invoke_indexes()),
                 previous_provider_call,
-            },
-            PendingSyncState::Rename {
-                feed,
-                previous_provider_call,
-                side_data,
-            } => CompletedSyncState::Rename {
-                feed: Box::new((*feed).invoke_indexes()),
-                previous_provider_call,
-                side_data: side_data.invoke(),
             },
             PendingSyncState::Removal(removal) => CompletedSyncState::Removal(removal.invoke()),
             PendingSyncState::Entry(stat) => CompletedSyncState::Entry(stat),
@@ -2042,18 +2023,7 @@ pub struct Workspace {
     /// prestito esclusivo del workspace, e un suo errore ferma la scrittura:
     /// sovrascrivere senza che la fotografia sia riuscita sarebbe la finestra
     /// che questo meccanismo esiste per chiudere.
-    /// L'ultimo documento che il rilevatore ha visto sparire, con l'impronta
     before_write: Option<(String, BeforeWriteHook)>,
-    /// che aveva. Serve a ricongiungere una rinomina esterna spezzata dal
-    /// debounce (difetto 0198): partenza e arrivo in due finestre diverse
-    /// arrivano come remove+add, e senza questo accoppiamento la bozza e lo
-    /// stato per-documento restano sotto il nome morto.
-    ///
-    /// Uno solo, e per impronta: è la regola della 0099 vista dal rilevatore
-    /// aperto. Due sparizioni di fila tengono l'ultima; un arrivo con
-    /// impronta diversa non consuma il posto; nel dubbio non si accoppia.
-    /// Crea un workspace su una radice con un registry di provider già
-    last_removed: Option<(DocId, Revision)>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -2229,7 +2199,6 @@ impl Workspace {
             doc_data_warnings: Vec::new(),
             suspended_from_rejoin: BTreeSet::new(),
             before_write: None,
-            last_removed: None,
         })
     }
 
@@ -4373,13 +4342,6 @@ impl Workspace {
         } else {
             self.docs.vault.write(&id, source)?
         };
-        if self
-            .last_removed
-            .as_ref()
-            .is_some_and(|(removed, _)| removed == &id)
-        {
-            self.last_removed = None;
-        }
         let revision = Revision::of(source);
         let changes = self.indexes.core.changes_for(&model, &revision);
         self.set_entry(&id, placed.0, placed.1, Some(revision.clone()));
@@ -5466,38 +5428,6 @@ impl Workspace {
                     stat,
                 } => {
                     self.indexes.ensure_mutation_available()?;
-                    let renamed_from = if snapshot.entry.is_none()
-                        && !self.indexes.core.metas.contains_key(&snapshot.id)
-                    {
-                        match self.last_removed.take() {
-                            Some((from, removed_fingerprint))
-                                if from != snapshot.id && removed_fingerprint == fingerprint =>
-                            {
-                                Some(from)
-                            }
-                            Some(candidate) => {
-                                self.last_removed = Some(candidate);
-                                None
-                            }
-                            None => None,
-                        }
-                    } else {
-                        None
-                    };
-                    let side_data = renamed_from
-                        .as_ref()
-                        .map(|from| self.prepare_rename_side_data(from, &snapshot.id));
-                    let journal = renamed_from
-                        .as_ref()
-                        .map(|from| JournalOp::Renamed {
-                            from: from.clone(),
-                            to: snapshot.id.clone(),
-                        })
-                        .unwrap_or_else(|| JournalOp::Written {
-                            doc: snapshot.id.clone(),
-                            from: snapshot.seen.clone(),
-                            to: Revision::of(""),
-                        });
                     let previous_provider_call = self.dispatch.enter_provider_call();
                     let feed = self.as_actor(Actor::Watcher, |ws| {
                         let feed = ws.prepare_ingest_model(
@@ -5505,37 +5435,22 @@ impl Workspace {
                             *model,
                             fingerprint,
                             Some((stat.size, stat.mtime)),
-                            journal,
+                            JournalOp::Written {
+                                doc: snapshot.id.clone(),
+                                from: snapshot.seen.clone(),
+                                to: Revision::of(""),
+                            },
                         );
-                        if let Some(from) = &renamed_from {
-                            ws.session
-                                .invalidate(from, ContextChange::Renamed(snapshot.id.clone()));
-                            ws.record(JournalOp::Renamed {
-                                from: from.clone(),
-                                to: snapshot.id.clone(),
-                            });
-                            ws.emit_event(Event::DocumentRenamed {
-                                from: from.clone(),
-                                to: snapshot.id.clone(),
-                            });
-                            ws.emit_event(Event::IndexUpdated);
-                        } else {
-                            ws.announce_index_feed(&feed);
-                        }
+                        ws.announce_index_feed(&feed);
                         feed
                     });
-                    let state = match side_data {
-                        Some(side_data) => PendingSyncState::Rename {
-                            feed: Box::new(feed),
-                            previous_provider_call,
-                            side_data,
-                        },
-                        None => PendingSyncState::Feed {
+                    Ok(Some(PendingSyncChange {
+                        snapshot,
+                        state: PendingSyncState::Feed {
                             feed: Box::new(feed),
                             previous_provider_call,
                         },
-                    };
-                    Ok(Some(PendingSyncChange { snapshot, state }))
+                    }))
                 }
                 ParsedChangeState::Missing => {
                     let removal =
@@ -5596,28 +5511,6 @@ impl Workspace {
                     && self.entry_fingerprint(&snapshot.id).as_ref() == Some(&feed.revision);
                 self.as_actor(Actor::Watcher, |ws| {
                     ws.finish_sync_index_feed(*feed, current)
-                });
-                Ok(current)
-            }
-            CompletedSyncState::Rename {
-                feed,
-                previous_provider_call,
-                side_data,
-            } => {
-                self.dispatch.restore_provider_call(previous_provider_call);
-                let current = self
-                    .docs
-                    .vault
-                    .doc_id_for_path(&snapshot.path)
-                    .ok()
-                    .as_ref()
-                    == Some(&snapshot.id)
-                    && snapshot.routing_generation == self.indexes.routing_generation()
-                    && snapshot.syntax_generation == self.syntax_generation
-                    && self.entry_fingerprint(&snapshot.id).as_ref() == Some(&feed.revision);
-                self.as_actor(Actor::Watcher, |ws| {
-                    ws.report_rename_side_data(side_data);
-                    ws.finish_sync_index_feed(*feed, current);
                 });
                 Ok(current)
             }
@@ -5848,11 +5741,6 @@ impl Workspace {
         } else {
             self.as_actor(Actor::Watcher, |ws| {
                 let existed = ws.indexes.core.metas.contains_key(&id);
-                if existed {
-                    if let Some(fp) = ws.entry_fingerprint(&id) {
-                        ws.last_removed = Some((id.clone(), fp));
-                    }
-                }
                 ws.remove_document(&id);
                 Ok(existed)
             })
