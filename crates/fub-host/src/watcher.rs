@@ -26,7 +26,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
-use fub_kernel::{ParsedChange, Workspace};
+use fub_kernel::{ParsedChange, SyncPlan, Workspace};
 
 use crate::custody::{Custody, WriteTurn};
 use crate::jobs::{drain_events, with_event_drain};
@@ -471,7 +471,7 @@ impl ExternalSync {
             return;
         }
         // Fase 1a — soltanto stato del kernel e handle owned sotto read.
-        let prepared: Vec<Option<ParsedChange>> = {
+        let prepared: Vec<Option<SyncPlan>> = {
             let Ok(ws) = self.workspace.read() else {
                 return;
             };
@@ -486,7 +486,7 @@ impl ExternalSync {
         // Fase 1b — stat-read-stat e Format/Syntax fuori da Custody.
         let prepared = prepared
             .into_iter()
-            .map(|plan| plan.map(ParsedChange::invoke));
+            .map(|plan| plan.map(SyncPlan::invoke));
         if self
             .apply_batch_prepared(changes.iter().cloned().zip(prepared))
             .is_err()

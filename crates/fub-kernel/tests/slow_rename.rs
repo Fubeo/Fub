@@ -207,7 +207,11 @@ fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
         .expect("la partenza: il file non c'è più");
 
     // Finestra 2: l'arrivo, con un piano vero.
-    let plan = b.ws.plan_sync(&b.root.join("b.txt")).expect("un piano");
+    let plan = b
+        .ws
+        .plan_sync(&b.root.join("b.txt"))
+        .expect("un piano")
+        .invoke();
     b.ws.sync_path_prepared(&b.root.join("b.txt"), Some(plan))
         .expect("l'arrivo: è comparso un file con la stessa impronta");
 

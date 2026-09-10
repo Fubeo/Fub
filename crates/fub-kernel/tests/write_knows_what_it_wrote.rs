@@ -47,7 +47,7 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexQuery, IndexResult, VaultEntry};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
+use fub_kernel::{FormatRegistry, MachineSettings, Subscription, SyncPlan, Workspace};
 
 /// Il disco vero, con un quaderno accanto: **quali path si sono letti e quali
 /// si sono statati**.
@@ -354,7 +354,7 @@ fn an_echo_of_a_save_is_not_reparsed() {
     let _ = bench.events();
 
     // Le due fasi del lotto, come le fa `ExternalSync::batch`.
-    let plan = bench.ws.plan_sync(&notes);
+    let plan = bench.ws.plan_sync(&notes).map(SyncPlan::invoke);
     assert!(
         !bench
             .ws
@@ -428,7 +428,7 @@ fn someone_elses_write_still_enters() {
     let _ = bench.events();
 
     std::fs::write(&notes, "from outside\n").expect("external write");
-    let plan = bench.ws.plan_sync(&notes);
+    let plan = bench.ws.plan_sync(&notes).map(SyncPlan::invoke);
     assert!(
         bench
             .ws

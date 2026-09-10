@@ -113,6 +113,6 @@ pub use syntax::{SyntaxConflict, SyntaxRegistry, SyntaxSnapshot};
 pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange, Rejected,
-    Trust, Workspace, INDEX_JOB, MAIN_PANE,
+    new_doc_id, valid_doc_id, CompletedSyncChange, GraphUpdate, Indexing, Opening, ParsedBatch,
+    ParsedChange, PendingSyncChange, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, MAIN_PANE,
 };

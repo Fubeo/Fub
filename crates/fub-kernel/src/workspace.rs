@@ -294,11 +294,33 @@ impl Indexing {
 /// Piano owned di una sincronizzazione esterna.
 ///
 /// La preparazione fotografa soltanto stato del kernel e handle condivisi. La
-/// lettura `stat-read-stat` e il parse avvengono con [`ParsedChange::invoke`],
+/// lettura `stat-read-stat` e il parse avvengono con [`SyncPlan::invoke`],
 /// senza conservare alcun prestito del workspace.
+pub struct SyncPlan {
+    snapshot: SyncSnapshot,
+    action: SyncPlanAction,
+}
+
+/// Esito già invocato della fase detached di una sincronizzazione esterna.
+///
+/// Questo tipo non espone `invoke`: non può quindi essere confuso con il piano
+/// che ancora possiede I/O o parse da eseguire.
 pub struct ParsedChange {
     snapshot: SyncSnapshot,
     state: ParsedChangeState,
+}
+
+/// Mutazione preparata sotto il workspace, ma non ancora notificata agli
+/// indici esterni.
+pub struct PendingSyncChange {
+    snapshot: SyncSnapshot,
+    state: PendingSyncState,
+}
+
+/// Risultato di una mutazione dopo l'unica callback esterna necessaria.
+pub struct CompletedSyncChange {
+    snapshot: SyncSnapshot,
+    state: CompletedSyncState,
 }
 
 struct SyncSnapshot {
@@ -306,37 +328,53 @@ struct SyncSnapshot {
     path: Utf8PathBuf,
     id: DocId,
     seen: Option<Revision>,
+    entry: Option<VaultEntry>,
     syntax_generation: u64,
     routing_generation: u64,
 }
 
-enum ParsedChangeState {
-    Read {
+enum SyncPlanAction {
+    Parse {
         storage: Arc<dyn crate::storage::VaultStorage>,
         parser: Box<PreparedParse>,
         source_kind: SourceKind,
         already_ingested: bool,
     },
+    Stat {
+        storage: Arc<dyn crate::storage::VaultStorage>,
+    },
+}
+
+enum ParsedChangeState {
     Ready {
         model: Box<DocumentModel>,
         fingerprint: Revision,
     },
+    Entry(Option<crate::storage::Stat>),
     Unchanged,
     Missing,
     Unstable,
     Failed(KernelError),
-    Feed(Box<PreparedDocumentFeed>),
-    Removal(PreparedDocumentRemoval),
-    CompletedRemoval(CompletedDocumentRemoval),
 }
 
-impl ParsedChange {
-    /// Esegue la sola fase esterna successiva: lettura+parse per un piano, feed
-    /// degli indici per un commit, oppure notifica di rimozione.
-    pub fn invoke(self) -> Self {
-        let ParsedChange { snapshot, state } = self;
-        let state = match state {
-            ParsedChangeState::Read {
+enum PendingSyncState {
+    Feed(Box<PreparedDocumentFeed>),
+    Removal(PreparedDocumentRemoval),
+    Entry(Option<crate::storage::Stat>),
+}
+
+enum CompletedSyncState {
+    Feed(Box<PreparedDocumentFeed>),
+    Removal(CompletedDocumentRemoval),
+    Entry(Option<crate::storage::Stat>),
+}
+
+impl SyncPlan {
+    /// Esegue I/O e parse senza alcun prestito del workspace.
+    pub fn invoke(self) -> ParsedChange {
+        let SyncPlan { snapshot, action } = self;
+        let state = match action {
+            SyncPlanAction::Parse {
                 storage,
                 parser,
                 source_kind,
@@ -348,15 +386,37 @@ impl ParsedChange {
                 source_kind,
                 already_ingested,
             ),
-            ParsedChangeState::Feed(feed) => {
-                ParsedChangeState::Feed(Box::new((*feed).invoke_indexes()))
+            SyncPlanAction::Stat { storage } => {
+                let state = match storage.stat(&snapshot.path) {
+                    Ok(stat) if stat.is_file() => ParsedChangeState::Entry(Some(stat)),
+                    Ok(_) => ParsedChangeState::Entry(None),
+                    Err(error) if sync_path_is_absent(&error) => ParsedChangeState::Entry(None),
+                    Err(source) => ParsedChangeState::Failed(KernelError::Io {
+                        path: snapshot.path.clone(),
+                        source,
+                    }),
+                };
+                state
             }
-            ParsedChangeState::Removal(removal) => {
-                ParsedChangeState::CompletedRemoval(removal.invoke())
-            }
-            other => other,
         };
         ParsedChange { snapshot, state }
+    }
+}
+
+impl PendingSyncChange {
+    /// Esegue la sola callback esterna successiva alla mutazione del core.
+    pub fn invoke(self) -> CompletedSyncChange {
+        let PendingSyncChange { snapshot, state } = self;
+        let state = match state {
+            PendingSyncState::Feed(feed) => {
+                CompletedSyncState::Feed(Box::new((*feed).invoke_indexes()))
+            }
+            PendingSyncState::Removal(removal) => {
+                CompletedSyncState::Removal(removal.invoke())
+            }
+            PendingSyncState::Entry(stat) => CompletedSyncState::Entry(stat),
+        };
+        CompletedSyncChange { snapshot, state }
     }
 }
 
@@ -4458,32 +4518,40 @@ impl Workspace {
     /// Prepara una lettura del watcher senza toccare filesystem o provider.
     ///
     /// Il valore restituito possiede storage, parser e token di routing. Chi
-    /// chiama deve eseguire [`ParsedChange::invoke`] dopo aver rilasciato la
+    /// chiama deve eseguire [`SyncPlan::invoke`] dopo aver rilasciato la
     /// guardia del workspace.
-    pub fn plan_sync(&self, abs: &Utf8Path) -> Option<ParsedChange> {
+    pub fn plan_sync(&self, abs: &Utf8Path) -> Option<SyncPlan> {
         if self.docs.vault.is_ignored(abs) {
             return None;
         }
         let id = self.docs.vault.doc_id_for_path(abs).ok()?;
         let ext = extension_of(&id).unwrap_or_default();
-        let descriptor = self.docs.registry.descriptor_for_ext(&ext)?;
-        let parser = self.docs.prepare_parse(&id).ok()?;
-        let seen = self.entry_fingerprint(&id);
-        Some(ParsedChange {
-            snapshot: SyncSnapshot {
-                workspace_id: self.workspace_id,
-                path: abs.to_owned(),
-                id: id.clone(),
-                seen,
-                syntax_generation: self.syntax_generation,
-                routing_generation: self.indexes.routing_generation(),
-            },
-            state: ParsedChangeState::Read {
+        let entry = self.indexes.core.entries.get(&id).cloned();
+        let seen = entry.as_ref().and_then(|entry| entry.fingerprint.clone());
+        let action = if let Some(descriptor) = self.docs.registry.descriptor_for_ext(&ext) {
+            let parser = self.docs.prepare_parse(&id).ok()?;
+            SyncPlanAction::Parse {
                 storage: Arc::clone(self.docs.vault.storage()),
                 parser: Box::new(parser),
                 source_kind: descriptor.source,
                 already_ingested: self.indexes.core.metas.contains_key(&id),
+            }
+        } else {
+            SyncPlanAction::Stat {
+                storage: Arc::clone(self.docs.vault.storage()),
+            }
+        };
+        Some(SyncPlan {
+            snapshot: SyncSnapshot {
+                workspace_id: self.workspace_id,
+                path: abs.to_owned(),
+                id,
+                seen,
+                entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
             },
+            action,
         })
     }
 
@@ -4543,7 +4611,7 @@ impl Workspace {
             .and_then(|and| and.fingerprint.clone())
     }
 
-    /// Valida e applica al solo core un piano già invocato.
+    /// Valida e applica al solo core un risultato già invocato.
     ///
     /// Nessun filesystem o provider viene attraversato qui. Un token stale,
     /// una lettura instabile o un routing cambiato vengono scartati senza
@@ -4552,23 +4620,23 @@ impl Workspace {
         &mut self,
         abs: &Utf8Path,
         prepared: Option<ParsedChange>,
-    ) -> Result<Option<ParsedChange>> {
-        let Some(plan) = prepared else {
+    ) -> Result<Option<PendingSyncChange>> {
+        let Some(parsed) = prepared else {
             return Ok(None);
         };
-        let plan = plan.invoke();
         let outcome = (|| {
-            if plan.snapshot.workspace_id != self.workspace_id
-                || plan.snapshot.path != abs
+            if parsed.snapshot.workspace_id != self.workspace_id
+                || parsed.snapshot.path != abs
                 || self.docs.vault.doc_id_for_path(abs).ok().as_ref()
-                    != Some(&plan.snapshot.id)
-                || self.entry_fingerprint(&plan.snapshot.id) != plan.snapshot.seen
-                || plan.snapshot.syntax_generation != self.syntax_generation
-                || plan.snapshot.routing_generation != self.indexes.routing_generation()
+                    != Some(&parsed.snapshot.id)
+                || self.indexes.core.entries.get(&parsed.snapshot.id)
+                    != parsed.snapshot.entry.as_ref()
+                || parsed.snapshot.syntax_generation != self.syntax_generation
+                || parsed.snapshot.routing_generation != self.indexes.routing_generation()
             {
                 return Ok(None);
             }
-            let ParsedChange { snapshot, state } = plan;
+            let ParsedChange { snapshot, state } = parsed;
             match state {
                 ParsedChangeState::Ready { model, fingerprint } => {
                     self.indexes.ensure_mutation_available()?;
@@ -4586,48 +4654,85 @@ impl Workspace {
                             true,
                         )
                     });
-                    Ok(Some(ParsedChange {
+                    Ok(Some(PendingSyncChange {
                         snapshot,
-                        state: ParsedChangeState::Feed(Box::new(feed)),
+                        state: PendingSyncState::Feed(Box::new(feed)),
                     }))
                 }
                 ParsedChangeState::Missing => {
                     let removal = self
                         .prepare_sync_document_removal(&snapshot.id)?
-                        .map(|removal| ParsedChange {
+                        .map(|removal| PendingSyncChange {
                             snapshot,
-                            state: ParsedChangeState::Removal(removal),
+                            state: PendingSyncState::Removal(removal),
                         });
                     Ok(removal)
                 }
+                ParsedChangeState::Entry(stat) => Ok(Some(PendingSyncChange {
+                    snapshot,
+                    state: PendingSyncState::Entry(stat),
+                })),
                 ParsedChangeState::Failed(error) => Err(error),
                 ParsedChangeState::Unchanged | ParsedChangeState::Unstable => Ok(None),
-                ParsedChangeState::Read { .. }
-                | ParsedChangeState::Feed(_)
-                | ParsedChangeState::Removal(_)
-                | ParsedChangeState::CompletedRemoval(_) => Ok(None),
             }
         })();
         self.notes_sync(abs, &outcome);
         outcome
     }
 
-    /// Chiude feed o rimozione dopo la callback esterna, accodando gli eventi.
+    /// Chiude feed, rimozione o aggiornamento d'anagrafe dopo la fase detached.
     pub fn finish_sync_path_prepared(
         &mut self,
-        completed: ParsedChange,
+        completed: CompletedSyncChange,
     ) -> std::result::Result<bool, PluginError> {
-        match completed.state {
-            ParsedChangeState::Feed(feed) => {
+        let CompletedSyncChange { snapshot, state } = completed;
+        match state {
+            CompletedSyncState::Feed(feed) => {
                 self.as_actor(Actor::Watcher, |ws| ws.finish_index_feed(*feed));
                 Ok(true)
             }
-            ParsedChangeState::CompletedRemoval(removal) => {
-                self.finish_document_removal(removal).map(|()| true).map_err(
-                    |(error, _)| error,
-                )
+            CompletedSyncState::Removal(removal) => self
+                .finish_document_removal(removal)
+                .map(|()| true)
+                .map_err(|(error, _)| error),
+            CompletedSyncState::Entry(stat) => {
+                if snapshot.workspace_id != self.workspace_id
+                    || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                        != Some(&snapshot.id)
+                    || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
+                    || snapshot.syntax_generation != self.syntax_generation
+                    || snapshot.routing_generation != self.indexes.routing_generation()
+                {
+                    return Ok(false);
+                }
+                self.as_actor(Actor::Watcher, |ws| {
+                    let before = ws.indexes.core.entries.get(&snapshot.id).cloned();
+                    let Some(stat) = stat else {
+                        let Some(kind) = ws.indexes.core.remove_entry(&snapshot.id) else {
+                            return false;
+                        };
+                        ws.emit_event(Event::EntryRemoved {
+                            id: snapshot.id,
+                            kind,
+                        });
+                        return true;
+                    };
+                    let fingerprint = before.as_ref().and_then(|entry| {
+                        (entry.size == stat.size && entry.mtime == stat.mtime)
+                            .then(|| entry.fingerprint.clone())
+                            .flatten()
+                    });
+                    let kind = ws.set_entry(&snapshot.id, stat.size, stat.mtime, fingerprint);
+                    if ws.indexes.core.entries.get(&snapshot.id) == before.as_ref() {
+                        return false;
+                    }
+                    ws.emit_event(Event::EntryChanged {
+                        id: snapshot.id,
+                        kind,
+                    });
+                    true
+                })
             }
-            _ => Ok(false),
         }
     }
 
@@ -4718,7 +4823,7 @@ impl Workspace {
         paths
             .into_iter()
             .map(|path| {
-                let plan = self.plan_sync(&path).map(ParsedChange::invoke);
+                let plan = self.plan_sync(&path).map(SyncPlan::invoke);
                 (path, plan)
             })
             .collect()

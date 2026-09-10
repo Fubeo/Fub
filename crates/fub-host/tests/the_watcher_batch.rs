@@ -26,10 +26,10 @@ use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, ParseContext, RenderOptions,
 };
 use fub_abi::model::{DocId, DocumentModel};
-use fub_abi::traits::{IndexQuery, IndexResult, VaultEntry};
-use fub_abi::{FormatProvider, Revision, WriteBase};
+use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, VaultEntry};
+use fub_abi::{Event, FormatProvider, Revision, WriteBase};
 use fub_host::{Custody, ExternalChange, ExternalSync};
-use fub_kernel::{FormatRegistry, Workspace};
+use fub_kernel::{FormatRegistry, SyncPlan, Workspace};
 
 /// Il cancello che rende **osservabile** una lettura lenta senza dormire.
 ///
@@ -200,15 +200,18 @@ fn a_plan_aged_not_deletes_who_has_written_in_middle() {
     let path = bench.root.join("nota.md");
     std::fs::write(&path, "from outside\n").expect("external write");
 
-    let mut ws = bench.ws.write().unwrap();
-    // Fase 1: il piano legge «da fuori».
-    let plan = ws.plan_sync(&path);
+    let plan = {
+        let ws = bench.ws.read().unwrap();
+        ws.plan_sync(&path)
+    };
     assert!(plan.is_some(), "there was a document to prepare");
+    let parsed = plan.map(SyncPlan::invoke);
     // In mezzo, l'utente salva.
+    let mut ws = bench.ws.write().unwrap();
     ws.write_document(&id, "from user\n", WriteBase::Dictated)
         .expect("the save succeeds");
     // Fase 2: il piano è invecchiato e si butta.
-    ws.sync_path_prepared(&path, plan)
+    ws.sync_path_prepared(&path, parsed)
         .expect("synchronization succeeds anyway");
 
     assert_eq!(
@@ -216,5 +219,74 @@ fn a_plan_aged_not_deletes_who_has_written_in_middle() {
         Some(Revision::of("from user\n")),
         "a plan made before the save was applied after: the user write \
          vanished from kernel memory"
+    );
+}
+
+/// Un path senza `FormatProvider` attraversa le stesse tre fasi del documento:
+/// lo `stat` avviene detached e la finalizzazione conserva l'anagrafe e gli
+/// eventi di creazione, modifica, no-op e rimozione.
+#[test]
+fn a_providerless_entry_survives_the_watcher_batch() {
+    let bench = bench();
+    let path = bench.root.join("foto.png");
+    let id = DocId::new("foto.png");
+    let events = bench.ws.read().unwrap().bus().subscribe();
+    let mut sync = ExternalSync::new(bench.ws.clone());
+
+    std::fs::write(&path, b"one").expect("asset created");
+    sync.batch(&[ExternalChange::Touched(path.clone())]);
+    assert_eq!(entry(&bench.ws.read().unwrap(), &id).kind, EntryKind::Asset);
+    assert_eq!(
+        events
+            .try_iter()
+            .filter(|notice| matches!(
+                &notice.event,
+                Event::EntryChanged { id: changed, kind: EntryKind::Asset } if changed == &id
+            ))
+            .count(),
+        1,
+        "creation emits EntryChanged exactly once"
+    );
+
+    std::fs::write(&path, b"a longer asset").expect("asset changed");
+    sync.batch(&[ExternalChange::Touched(path.clone())]);
+    assert_eq!(
+        entry(&bench.ws.read().unwrap(), &id).size,
+        b"a longer asset".len() as u64
+    );
+    assert_eq!(
+        events
+            .try_iter()
+            .filter(|notice| matches!(
+                &notice.event,
+                Event::EntryChanged { id: changed, kind: EntryKind::Asset } if changed == &id
+            ))
+            .count(),
+        1,
+        "a metadata change emits EntryChanged exactly once"
+    );
+
+    sync.batch(&[ExternalChange::Touched(path.clone())]);
+    assert_eq!(
+        events
+            .try_iter()
+            .filter(|notice| matches!(&notice.event, Event::EntryChanged { id: changed, .. } if changed == &id))
+            .count(),
+        0,
+        "an unchanged entry is a no-op"
+    );
+
+    std::fs::remove_file(&path).expect("asset removed");
+    sync.batch(&[ExternalChange::Touched(path)]);
+    assert_eq!(
+        events
+            .try_iter()
+            .filter(|notice| matches!(
+                &notice.event,
+                Event::EntryRemoved { id: removed, kind: EntryKind::Asset } if removed == &id
+            ))
+            .count(),
+        1,
+        "removal emits EntryRemoved exactly once"
     );
 }
