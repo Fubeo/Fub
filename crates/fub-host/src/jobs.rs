@@ -853,27 +853,49 @@ impl HostCommands for JobHost {
             return Ok(None);
         };
 
-        while let Some(step) = replay.next_step() {
-            let outcome = match step {
-                UndoStep::Edit(planned) => self
-                    .apply_edit_detached(&planned.doc, planned.edit)
-                    .map(|_| ())
-                    .map_err(|and| Failure::of(planned.doc, and)),
-                UndoStep::Command { command, args } => self
-                    .run_command(&command, args)
-                    .map(|_| ())
-                    .map_err(Failure::other),
-            };
-            replay.finish_step(outcome);
+        let replayed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            while let Some(step) = replay.next_step() {
+                let outcome = match step {
+                    UndoStep::Edit(planned) => self
+                        .apply_edit_detached(&planned.doc, planned.edit)
+                        .map(|_| ())
+                        .map_err(|and| Failure::of(planned.doc, and)),
+                    UndoStep::Command { command, args } => self
+                        .run_command(&command, args)
+                        .map(|_| ())
+                        .map_err(Failure::other),
+                };
+                replay.finish_step(outcome);
+            }
+        }));
+        if replayed.is_err() {
+            replay.finish_unwind();
         }
 
         let deferred = {
-            let mut ws = workspace.write()?;
+            let mut ws = workspace
+                .write()
+                .expect("un callback di undo gira senza il lock del workspace");
             ws.finish_undo_replay_deferred(replay)
         };
-        drain_events(&workspace)?;
-        let mut ws = workspace.write()?;
-        ws.finish_undo_replay(deferred)
+        let drained = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            drain_events(&workspace)
+        }));
+        let outcome = {
+            let mut ws = workspace
+                .write()
+                .expect("il drain degli eventi gira senza il lock del workspace");
+            ws.finish_undo_replay(deferred)
+        };
+
+        if let Err(payload) = replayed {
+            std::panic::resume_unwind(payload);
+        }
+        match drained {
+            Err(payload) => std::panic::resume_unwind(payload),
+            Ok(Err(error)) => Err(error),
+            Ok(Ok(())) => outcome,
+        }
     }
 }
 

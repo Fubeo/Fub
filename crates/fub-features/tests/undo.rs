@@ -15,17 +15,16 @@
 use camino::Utf8PathBuf;
 use fub_abi::command::InvokeMode;
 use fub_abi::edit::WriteBase;
-use fub_abi::event::Actor;
+use fub_abi::event::{Actor, EventKind};
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
 use fub_features::{
     CoreCommands, COMMANDS_ID, NOTES_RENAME, NOTES_TRASH, VAULT_ARCHIVE, VAULT_REPLACE, VAULT_UNDO,
 };
 use fub_format_markdown::MarkdownProvider;
-use fub_kernel::{
-    DirEntry, FormatRegistry, FsStorage, MachineSettings, Stat, VaultStorage, Workspace,
-};
-use std::sync::{Arc, Mutex};
+use fub_kernel::{FormatRegistry, Workspace};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -40,24 +39,12 @@ impl Vault {
     }
 
     fn open(&self) -> Workspace {
-        self.open_on(None)
-    }
-
-    /// Lo stesso vault, col **supporto passato** invece del disco nudo (§15.1):
-    /// è l'unico modo di far esplodere qualcosa *dentro* un annullamento senza
-    /// costruire un'attesa.
-    fn open_on(&self, storage: Option<Arc<dyn VaultStorage>>) -> Workspace {
         let mut registry = FormatRegistry::new();
         registry
             .register(MarkdownProvider::boxed())
             .expect("nessun conflitto di estensioni");
-        let mut ws = match storage {
-            None => Workspace::new(&self.root, registry).expect("l'apertura del vault riesce"),
-            Some(storage) => {
-                Workspace::on(&self.root, registry, storage, MachineSettings::in_memory())
-                    .expect("l'apertura del vault riesce")
-            }
-        };
+        let mut ws =
+            Workspace::new(&self.root, registry).expect("l'apertura del vault riesce");
         ws.register_plugin(
             fub_abi::traits::PluginManifest::core(COMMANDS_ID, COMMANDS_ID)
                 .speaking("it", fub_features::commands::catalog()),
@@ -557,111 +544,17 @@ fn an_undo_that_stops_halfway_says_where_it_stopped() {
     );
 }
 
-/// Un supporto che **esplode** invece di rispondere, una volta sola e su un path
-/// che si sceglie.
+
+/// **Chi muore dentro un annullamento non porta via Ctrl-Z né gli eventi.**
 ///
-/// Serve perché un panico di un *plugin* qui non basta: quello lo prende la rete
-/// della `safety` e diventa un errore prima di arrivare a chi ha alzato la
-/// bandiera. Ciò che passa davvero su quella riga è ciò che rete non ha — il
-/// supporto, una `expect` del kernel — ed è quello che questo doppio fabbrica.
-struct SupportThatExplodes {
-    inner: FsStorage,
-    /// Il primo `write` o `rename` verso un path che contiene questo pezzo
-    /// esplode, e disarma: ciò che viene dopo il misfatto deve poter girare, o
-    /// non si potrebbe osservare niente.
-    explodes_on: Mutex<Option<String>>,
-}
-
-impl SupportThatExplodes {
-    /// Nasce **disarmato**: il vault va prima riempito, e un supporto che
-    /// esplode già durante l'apparecchiatura non farebbe vedere niente.
-    fn off() -> Arc<Self> {
-        Arc::new(SupportThatExplodes {
-            inner: FsStorage,
-            explodes_on: Mutex::new(None),
-        })
-    }
-
-    fn arm(&self, piece: &str) {
-        *self.explodes_on.lock().expect("l'innesco") = Some(piece.to_string());
-    }
-
-    fn maybe_explodes(&self, path: &camino::Utf8Path) {
-        let mut armed = self.explodes_on.lock().expect("l'innesco");
-        if armed.as_deref().is_some_and(|p| path.as_str().contains(p)) {
-            armed.take();
-            drop(armed);
-            panic!("il supporto è esploso su {path}");
-        }
-    }
-}
-
-impl VaultStorage for SupportThatExplodes {
-    fn read(&self, path: &camino::Utf8Path) -> std::io::Result<Vec<u8>> {
-        self.inner.read(path)
-    }
-    fn write(
-        &self,
-        path: &camino::Utf8Path,
-        bytes: &[u8],
-    ) -> std::io::Result<fub_kernel::storage::Stat> {
-        self.maybe_explodes(path);
-        self.inner.write(path, bytes)
-    }
-    fn update(
-        &self,
-        path: &camino::Utf8Path,
-        merge: fub_kernel::storage::Merge<'_>,
-    ) -> std::io::Result<()> {
-        self.maybe_explodes(path);
-        self.inner.update(path, merge)
-    }
-    fn append(&self, path: &camino::Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
-        self.inner.append(path, bytes)
-    }
-    fn rename(&self, from: &camino::Utf8Path, to: &camino::Utf8Path) -> std::io::Result<()> {
-        self.maybe_explodes(to);
-        self.inner.rename(from, to)
-    }
-    fn rename_no_replace(
-        &self,
-        from: &camino::Utf8Path,
-        to: &camino::Utf8Path,
-    ) -> std::io::Result<()> {
-        self.maybe_explodes(to);
-        self.inner.rename_no_replace(from, to)
-    }
-    fn remove(&self, path: &camino::Utf8Path) -> std::io::Result<()> {
-        self.inner.remove(path)
-    }
-    fn list(&self, dir: &camino::Utf8Path) -> std::io::Result<Vec<DirEntry>> {
-        self.inner.list(dir)
-    }
-    fn stat(&self, path: &camino::Utf8Path) -> std::io::Result<Stat> {
-        self.inner.stat(path)
-    }
-    fn remove_empty_dir(&self, dir: &camino::Utf8Path) -> std::io::Result<()> {
-        self.inner.remove_empty_dir(dir)
-    }
-}
-
-/// **Chi muore dentro un annullamento non porta via Ctrl-Z.**
-///
-/// È il difetto che il `Drop` di `Riproduzione` esiste per non avere: la
-/// bandiera `replaying` — quella che dice *annullare non è annullabile* — si
-/// rimetteva a posto su una riga **dopo** il giro dei passi, e un panico dentro
-/// quel giro la saltava. Da lì in poi ogni `undo.push` veniva scartata in
-/// silenzio: l'utente continuava a lavorare, premeva Ctrl-Z, e leggeva che non
-/// c'era niente da annullare avendo appena rinominato una nota.
-///
-/// Il panico si produce come lo produce la vita — un supporto che esplode a metà
-/// del passo — e l'hook tace per la sua durata, o una traccia stampata farebbe
-/// sembrare rotto un banco verde.
+/// Il gancio esplode proprio nel passo `Edit` dell'undo, fuori dalla rete che
+/// traduce i panici dei provider. Dopo che il panico è tornato al chiamante, il
+/// test usa soltanto superfici consumer: una nuova scrittura deve arrivare sul
+/// bus e una nuova operazione deve entrare nella pila e poterne uscire.
 #[test]
 fn a_panic_inside_a_undo_does_not_carries_via_the_stack() {
     let vault = Vault::new();
-    let support = SupportThatExplodes::off();
-    let mut ws = vault.open_on(Some(Arc::clone(&support) as Arc<dyn VaultStorage>));
+    let mut ws = vault.open();
     ws.write_document(&DocId::new("a.md"), "il gatto dorme\n", WriteBase::Dictated)
         .expect("scrive");
     fai(
@@ -669,34 +562,44 @@ fn a_panic_inside_a_undo_does_not_carries_via_the_stack() {
         VAULT_REPLACE,
         serde_json::json!({ "find": "gatto", "replace": "cane" }),
     );
-    support.arm("a.md");
+
+    let armed = Arc::new(AtomicBool::new(true));
+    let panic_once = Arc::clone(&armed);
+    ws.set_before_write_hook(Some((
+        COMMANDS_ID.to_string(),
+        Arc::new(move |_, id| {
+            if id == &DocId::new("a.md") && panic_once.swap(false, Ordering::SeqCst) {
+                panic!("il gancio before-write è esploso durante undo");
+            }
+            Ok(())
+        }),
+    )));
 
     // **Una sostituzione e non una rinomina**, e la differenza è tutto il banco:
-    // l'inverso di una rinomina è un `UndoStep::Command`, e un comando gira
-    // dentro la rete della `safety`, che il panico lo prende. L'inverso di una
-    // sostituzione è un `UndoStep::Edit`, cioè una scrittura del kernel senza
-    // rete — ed è là che il panico attraversa davvero il giro dei passi e esce
-    // da `undo_last` saltando ciò che viene dopo.
+    // l'inverso è un `UndoStep::Edit`, dunque attraversa il gancio di scrittura.
     let hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| cancels(&mut ws)));
     std::panic::set_hook(hook);
     assert!(outcome.is_err(), "il misfatto deve essere successo");
 
-    // La pila è di nuovo una pila: un'operazione qualunque ci entra, e Ctrl-Z la
-    // disfa.
+    let rx = ws.bus().subscribe();
     ws.write_document(&DocId::new("Dopo.md"), "un'altra\n", WriteBase::Dictated)
-        .expect("scrive");
+        .expect("scrive dopo il panico");
+
     fai(
         &mut ws,
         NOTES_TRASH,
         serde_json::json!({ "doc": "Dopo.md" }),
     );
+    assert!(
+        rx.try_iter()
+            .any(|notice| notice.kind() == EventKind::BatchEnded),
+        "il consumer non riceve la nuova modifica: il batch è rimasto aperto"
+    );
     cancels(&mut ws);
     assert!(
         exists(&ws, "Dopo.md"),
-        "la bandiera dell'annullamento è rimasta alzata: da qui in poi niente \
-         entra più in pila, Ctrl-Z non fa più niente per il resto della \
-         sessione, e nessuno dice perché"
+        "la nuova operazione non è entrata nella pila dopo il panico"
     );
 }

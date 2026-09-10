@@ -593,6 +593,19 @@ impl UndoReplay {
             Err(failure) => self.failure = Some(failure),
         }
     }
+
+    /// Registra nel token che il passo in corso è uscito per unwind.
+    ///
+    /// Il payload resta al driver, che lo riprenderà dopo l'epilogo. Qui serve
+    /// soltanto distinguere l'interruzione da un replay completo: se nessun
+    /// passo era riuscito, la normale chiusura rimette la voce in pila.
+    pub fn finish_unwind(&mut self) {
+        if self.failure.is_none() {
+            self.failure = Some(Failure::other(PluginError::Internal(
+                "undo interrotto da un panic".into(),
+            )));
+        }
+    }
 }
 
 
@@ -7383,22 +7396,38 @@ impl Workspace {
         let Some(mut replay) = self.prepare_undo_replay() else {
             return Ok(None);
         };
-        while let Some(step) = replay.next_step() {
-            let outcome = match step {
-                UndoStep::Edit(planned) => self
-                    .apply_edit(&planned.doc, planned.edit)
-                    .map(|_| ())
-                    .map_err(|and| Failure::of(planned.doc, and.into())),
-                UndoStep::Command { command, args } => self
-                    .invoke_command_here(&command, args, InvokeMode::Apply)
-                    .map(|_| ())
-                    .map_err(Failure::other),
-            };
-            replay.finish_step(outcome);
+        let replayed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            while let Some(step) = replay.next_step() {
+                let outcome = match step {
+                    UndoStep::Edit(planned) => self
+                        .apply_edit(&planned.doc, planned.edit)
+                        .map(|_| ())
+                        .map_err(|and| Failure::of(planned.doc, and.into())),
+                    UndoStep::Command { command, args } => self
+                        .invoke_command_here(&command, args, InvokeMode::Apply)
+                        .map(|_| ())
+                        .map_err(Failure::other),
+                };
+                replay.finish_step(outcome);
+            }
+        }));
+        if replayed.is_err() {
+            replay.finish_unwind();
         }
+
         let deferred = self.finish_undo_replay_deferred(replay);
-        self.dispatch_pending();
-        self.finish_undo_replay(deferred)
+        let dispatched = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.dispatch_pending();
+        }));
+        let outcome = self.finish_undo_replay(deferred);
+
+        if let Err(payload) = replayed {
+            std::panic::resume_unwind(payload);
+        }
+        if let Err(payload) = dispatched {
+            std::panic::resume_unwind(payload);
+        }
+        outcome
     }
 
 
