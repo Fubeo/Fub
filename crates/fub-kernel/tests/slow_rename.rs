@@ -23,7 +23,9 @@ use fub_abi::rules::doc_data;
 use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{ExternalRenamePlan, FormatRegistry, MachineSettings, Subscription, Workspace};
+use fub_kernel::{
+    ExternalRenamePlan, FormatRegistry, JournalOp, MachineSettings, Subscription, Workspace,
+};
 
 const PLUGIN: &str = "test.appiccicoso";
 
@@ -406,6 +408,7 @@ struct Order {
     data_from: Utf8PathBuf,
     data_to: Utf8PathBuf,
     fail_document_rename: bool,
+    fail_journal_append: bool,
 }
 
 impl VaultStorage for Order {
@@ -419,6 +422,12 @@ impl VaultStorage for Order {
         self.inner.update(path, merge)
     }
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        if self.fail_journal_append && path.file_name() == Some("journal.jsonl") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "guasto forzato del registro",
+            ));
+        }
         self.inner.append(path, bytes)
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
@@ -466,7 +475,10 @@ struct InternalRenameFixture {
     data_to: Utf8PathBuf,
 }
 
-fn internal_rename_fixture(fail_document_rename: bool) -> InternalRenameFixture {
+fn internal_rename_fixture(
+    fail_document_rename: bool,
+    fail_journal_append: bool,
+) -> InternalRenameFixture {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     std::fs::write(root.join("a.txt"), "il contenuto\n").unwrap();
@@ -489,6 +501,7 @@ fn internal_rename_fixture(fail_document_rename: bool) -> InternalRenameFixture 
         data_from: data_from.clone(),
         data_to: data_to.clone(),
         fail_document_rename,
+        fail_journal_append,
     });
     let mut ws =
         Workspace::on(&root, registry(), support, MachineSettings::in_memory()).expect("apertura");
@@ -506,7 +519,7 @@ fn internal_rename_fixture(fail_document_rename: bool) -> InternalRenameFixture 
 
 #[test]
 fn the_internal_rename_migrates_data_before_moving_the_file() {
-    let mut fixture = internal_rename_fixture(false);
+    let mut fixture = internal_rename_fixture(false, false);
 
     fixture
         .ws
@@ -524,7 +537,7 @@ fn the_internal_rename_migrates_data_before_moving_the_file() {
 
 #[test]
 fn a_failed_file_move_rolls_side_data_back_without_a_rename_fact() {
-    let mut fixture = internal_rename_fixture(true);
+    let mut fixture = internal_rename_fixture(true, false);
     let rx = fixture.ws.bus().subscribe();
 
     assert!(fixture
@@ -547,8 +560,47 @@ fn a_failed_file_move_rolls_side_data_back_without_a_rename_fact() {
 }
 
 #[test]
+fn a_failed_journal_append_does_not_roll_back_or_duplicate_the_rename() {
+    let mut fixture = internal_rename_fixture(false, true);
+    let rx = fixture.ws.bus().subscribe();
+
+    fixture
+        .ws
+        .rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .expect("la rinomina riuscita non dipende dal registro");
+
+    assert!(!fixture.root.join("a.txt").exists());
+    assert!(fixture.root.join("b.txt").exists());
+    assert!(
+        fixture
+            .ws
+            .journal()
+            .expect("lettura registro")
+            .records
+            .iter()
+            .all(|record| !matches!(record.op, JournalOp::Renamed { .. })),
+        "un append fallito non fabbrica un fatto"
+    );
+    let seen = events(&rx);
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(notice.event, Event::Trouble { .. }))
+            .count(),
+        1,
+        "il guasto del registro viene riportato una volta: {seen:?}"
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(notice.event, Event::DocumentRenamed { .. }))
+            .count(),
+        1,
+        "la rinomina riuscita resta un solo evento: {seen:?}"
+    );
+}
+
+#[test]
 fn a_stale_commit_rolls_the_invoked_move_back_without_a_rename_fact() {
-    let mut fixture = internal_rename_fixture(false);
+    let mut fixture = internal_rename_fixture(false, false);
     let prepared = fixture
         .ws
         .prepare_explicit_rename(&DocId::new("a.txt"), &DocId::new("b.txt"))

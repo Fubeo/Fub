@@ -334,6 +334,10 @@ pub struct PendingExplicitRename {
     identity: PendingIdentityMigration,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedRenameSideData,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+    from: DocId,
+    to: DocId,
     owns_batch: bool,
 }
 
@@ -344,6 +348,7 @@ pub struct CompletedExplicitRename {
     side_data: CompletedRenameSideData,
     owns_batch: bool,
     rewrite_failures: Vec<String>,
+    journal_fault: Option<String>,
 }
 
 struct PendingIdentityMigration {
@@ -814,15 +819,30 @@ impl ParsedExplicitRename {
     }
 }
 impl PendingExplicitRename {
-    /// Esegue le callback remove+feed usando handle owned, lasciando le
-    /// riscritture al chiamante.
+    /// Esegue le callback remove+feed e registra il fatto usando handle owned,
+    /// lasciando le riscritture al chiamante.
     pub fn invoke(self) -> CompletedExplicitRename {
+        let PendingExplicitRename {
+            identity,
+            rewrites,
+            side_data,
+            journal,
+            origin,
+            from,
+            to,
+            owns_batch,
+        } = self;
+        let identity = identity.invoke();
+        let journal_fault = journal
+            .append(origin, JournalOp::Renamed { from, to })
+            .err();
         CompletedExplicitRename {
-            identity: self.identity.invoke(),
-            rewrites: self.rewrites,
-            side_data: self.side_data,
-            owns_batch: self.owns_batch,
+            identity,
+            rewrites,
+            side_data,
+            owns_batch,
             rewrite_failures: Vec::new(),
+            journal_fault,
         }
     }
 }
@@ -6696,13 +6716,17 @@ impl Workspace {
             identity,
             rewrites,
             side_data,
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
+            from: snapshot.from,
+            to: snapshot.to,
             owns_batch: false,
         })
     }
 
-    /// Recupera frame e perdite, registra il fatto e completa il lotto storico.
-    /// Le riscritture sono già state invocate dal token senza trattenere un
-    /// prestito del workspace.
+    /// Recupera frame e perdite, riporta l'eventuale guasto del registro e
+    /// completa il lotto storico. Le riscritture e l'append sono già stati
+    /// invocati dal token senza trattenere un prestito del workspace.
     pub fn finish_explicit_rename(
         &mut self,
         completed: CompletedExplicitRename,
@@ -6721,17 +6745,20 @@ impl Workspace {
             side_data,
             owns_batch,
             rewrite_failures,
+            journal_fault,
         } = completed;
-        let from = identity.from.clone();
-        let to = identity.to.clone();
         if self.finish_identity_migration(identity).is_err() {
             unreachable!("l'identità è già stata legata a questo workspace");
         }
         self.report_rename_side_data(side_data);
-        self.record(JournalOp::Renamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
+        if let Some(and) = journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {and}").into()),
+                None,
+            );
+        }
         let failed = rewrite_failures;
         self.emit_event(Event::IndexUpdated);
         if owns_batch {
