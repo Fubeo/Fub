@@ -26,6 +26,9 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
+use fub_kernel::workspace::{
+    ParsedExternalDocumentRename, PreparedExternalDocumentRename,
+};
 use fub_kernel::{
     ExternalRenamePlan, ParsedChange, ParsedExternalAssetRename, ParsedExternalRename,
     PreparedExternalAssetRename, SyncPlan, Workspace,
@@ -447,13 +450,13 @@ impl Drop for SyncOperation {
 enum PlannedWatcherChange {
     Sync(Utf8PathBuf, Option<SyncPlan>),
     Asset(PreparedExternalAssetRename),
-    LegacyDocument { from: Utf8PathBuf, to: Utf8PathBuf },
+    Document(PreparedExternalDocumentRename),
 }
 
 enum InvokedWatcherChange {
     Sync(Utf8PathBuf, Option<ParsedChange>),
     Asset(ParsedExternalAssetRename),
-    LegacyDocument { from: Utf8PathBuf, to: Utf8PathBuf },
+    Document(ParsedExternalDocumentRename),
 }
 
 impl PlannedWatcherChange {
@@ -471,8 +474,8 @@ impl PlannedWatcherChange {
                     .map(|(path, parsed)| InvokedWatcherChange::Sync(path, parsed))
                     .collect(),
             },
-            PlannedWatcherChange::LegacyDocument { from, to } => {
-                vec![InvokedWatcherChange::LegacyDocument { from, to }]
+            PlannedWatcherChange::Document(plan) => {
+                vec![InvokedWatcherChange::Document(plan.invoke())]
             }
         }
     }
@@ -523,11 +526,8 @@ impl ExternalSync {
                             ExternalRenamePlan::Asset(plan) => {
                                 vec![PlannedWatcherChange::Asset(plan)]
                             }
-                            ExternalRenamePlan::LegacyDocument => {
-                                vec![PlannedWatcherChange::LegacyDocument {
-                                    from: from.clone(),
-                                    to: to.clone(),
-                                }]
+                            ExternalRenamePlan::Document(plan) => {
+                                vec![PlannedWatcherChange::Document(plan)]
                             }
                             ExternalRenamePlan::Sync(plans) => plans
                                 .into_iter()
@@ -650,11 +650,18 @@ impl ExternalSync {
                             .finish_external_asset_rename(completed);
                     }
                 }
-                InvokedWatcherChange::LegacyDocument { from, to } => {
-                    // Unico residuo sincrono: il prossimo slice sostituirà la
-                    // migrazione d'identità dei documenti, senza confonderla
-                    // con asset e fallback già detached.
-                    let _ = self.workspace.write()?.sync_renamed_path(&from, &to);
+                InvokedWatcherChange::Document(parsed) => {
+                    let pending = self
+                        .workspace
+                        .write()?
+                        .prepare_external_document_rename(parsed)?;
+                    if let Some(pending) = pending {
+                        let completed = pending.invoke();
+                        let _ = self
+                            .workspace
+                            .write()?
+                            .finish_external_document_rename(completed);
+                    }
                 }
             }
         }

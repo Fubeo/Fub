@@ -96,6 +96,43 @@ impl Workspace {
         }))
     }
 
+    /// Prima metà di un rename: rimuove il vecchio modello dal core senza
+    /// dichiarare sparito il contesto e senza emettere eventi di rimozione.
+    pub(super) fn prepare_document_rename_removal(
+        &mut self,
+        id: &DocId,
+    ) -> Result<Option<PreparedDocumentRemoval>> {
+        self.indexes.ensure_mutation_available()?;
+        if !self.indexes.core.contains(id) {
+            return Ok(None);
+        }
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        self.indexes.core.remove_entry(id);
+        self.indexes
+            .core
+            .on_documents_removed(std::slice::from_ref(id));
+        Ok(Some(PreparedDocumentRemoval {
+            workspace_id: self.workspace_id,
+            id: id.clone(),
+            providers: self.indexes.feed_handles(),
+            previous_provider_call,
+            watcher: true,
+        }))
+    }
+
+    /// Recupera le perdite del remove senza produrre `DocumentRemoved`.
+    pub(super) fn finish_document_rename_removal(
+        &mut self,
+        completed: CompletedDocumentRemoval,
+    ) -> std::result::Result<Vec<IndexLoss>, CompletedDocumentRemoval> {
+        if completed.workspace_id != self.workspace_id {
+            return Err(completed);
+        }
+        self.dispatch
+            .restore_provider_call(completed.previous_provider_call);
+        Ok(completed.losses)
+    }
+
     /// Prepara la rimozione che una lettura detached ha già classificato come
     /// path sparito. Non consulta il filesystem: identità e fingerprint sono
     /// stati riconvalidati dal finalizzatore del piano watcher.

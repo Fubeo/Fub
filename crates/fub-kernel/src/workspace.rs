@@ -302,14 +302,62 @@ pub struct SyncPlan {
 }
 
 /// Routing owned di una rinomina consegnata dal watcher.
-///
-/// Il solo ramo legacy conserva la vecchia porta sincrona dei documenti. Gli
-/// altri rami portano già con sé i piani per-path oppure il token asset, così
-/// dopo la fotografia non si deve più interrogare il workspace per decidere.
 pub enum ExternalRenamePlan {
     Asset(PreparedExternalAssetRename),
-    LegacyDocument,
+    Document(PreparedExternalDocumentRename),
     Sync(Vec<(Utf8PathBuf, Option<SyncPlan>)>),
+}
+
+/// Lettura e parse detached della destinazione di una rinomina documento.
+pub struct PreparedExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    parser: PreparedParse,
+    source_kind: SourceKind,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Destinazione già letta e parsata fuori dal workspace.
+pub struct ParsedExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    state: ParsedExternalDocumentState,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+enum ParsedExternalDocumentState {
+    Ready {
+        model: Box<DocumentModel>,
+        fingerprint: Revision,
+        stat: crate::storage::Stat,
+    },
+    Failed(KernelError),
+    Stale,
+}
+
+/// Core della rinomina già installato, callback e side-data ancora detached.
+pub struct PendingExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    removal: PreparedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Callback e side-data completati, pronto per l'unico epilogo.
+pub struct CompletedExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    removal: CompletedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+    doc_data_errors: Vec<String>,
 }
 
 /// Prima fase owned della migrazione d'identità di un asset.
@@ -479,6 +527,124 @@ impl SyncPlan {
             }
         };
         ParsedChange { snapshot, state }
+    }
+}
+
+impl PreparedExternalDocumentRename {
+    /// Esegue stat-read-stat e parse nella forma dichiarata dal formato.
+    pub fn invoke(self) -> ParsedExternalDocumentRename {
+        let PreparedExternalDocumentRename {
+            snapshot,
+            storage,
+            parser,
+            source_kind,
+            organization,
+            drafts,
+            doc_data_roots,
+        } = self;
+        let state = match storage.stat(&snapshot.to_path) {
+            Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
+                Ok(bytes) => match storage.stat(&snapshot.to_path) {
+                    Ok(after) if after.is_file() && before == after => {
+                        let fingerprint = Revision::of_bytes(&bytes);
+                        let source = match source_kind {
+                            SourceKind::Text => {
+                                match fub_abi::rules::text_policy::decode(&bytes) {
+                                    Ok(text) => Ok(DocumentSource::Text(text.to_string())),
+                                    Err(at) => Err(KernelError::Io {
+                                        path: snapshot.to_path.clone(),
+                                        source: std::io::Error::new(
+                                            std::io::ErrorKind::InvalidData,
+                                            format!(
+                                                "il file non è UTF-8: il primo byte non valido è a {at}"
+                                            ),
+                                        ),
+                                    }),
+                                }
+                            }
+                            SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
+                        };
+                        match source.and_then(|source| parser.invoke(source)) {
+                            Ok(model) => ParsedExternalDocumentState::Ready {
+                                model: Box::new(model),
+                                fingerprint,
+                                stat: after,
+                            },
+                            Err(error) => ParsedExternalDocumentState::Failed(error),
+                        }
+                    }
+                    Ok(_) => ParsedExternalDocumentState::Stale,
+                    Err(error) if sync_path_is_absent(&error) => {
+                        ParsedExternalDocumentState::Stale
+                    }
+                    Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                        path: snapshot.to_path.clone(),
+                        source,
+                    }),
+                },
+                Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
+                Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                }),
+            },
+            Ok(_) => ParsedExternalDocumentState::Stale,
+            Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
+            Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            }),
+        };
+        ParsedExternalDocumentRename {
+            snapshot,
+            state,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        }
+    }
+}
+
+impl PendingExternalDocumentRename {
+    /// Notifica remove+feed e migra i dati autorevoli senza detenere il workspace.
+    pub fn invoke(self) -> CompletedExternalDocumentRename {
+        let PendingExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = self;
+        let removal = removal.invoke();
+        let feed = feed.invoke_indexes();
+        if let Err(error) =
+            organization.migrate(snapshot.from_id.as_str(), snapshot.to_id.as_str())
+        {
+            organization.warn(format!(
+                "l'organizzazione di {} non ha potuto seguire la rinomina in {}: {error}",
+                snapshot.from_id, snapshot.to_id
+            ));
+        }
+        let mut doc_data_errors = crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &snapshot.from_id,
+            &snapshot.to_id,
+        );
+        if let Err(error) = drafts.migrate(&snapshot.from_id, &snapshot.to_id) {
+            doc_data_errors.push(format!("bozza non migrata: {error}"));
+        }
+        CompletedExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            doc_data_errors,
+        }
     }
 }
 
@@ -4716,9 +4882,8 @@ impl Workspace {
     /// Classifica una rinomina esterna usando soltanto la fotografia del core,
     /// i path recintati e le generazioni di routing.
     ///
-    /// Una sola rotta resta sincrona: documento noto verso identità documento
-    /// libera. Un asset provider-less porta invece handle owned; ogni caso
-    /// ambiguo degrada agli stessi piani `Touched` della consegna ordinaria.
+    /// Documenti e asset riconosciuti portano handle owned; ogni caso ambiguo
+    /// degrada agli stessi piani `Touched` della consegna ordinaria.
     pub fn plan_external_rename(
         &self,
         from: &Utf8Path,
@@ -4765,7 +4930,38 @@ impl Workspace {
         let to_kind =
             media::kind_of_ext(&to_id, |ext| self.docs.registry.has_doc_ext(ext));
         if from_document && destination_free && to_has_provider {
-            return ExternalRenamePlan::LegacyDocument;
+            let Some(from_entry) = from_entry.clone() else {
+                return fallback(false);
+            };
+            let Some(descriptor) = self
+                .docs
+                .registry
+                .descriptor_for_ext(&extension_of(&to_id).unwrap_or_default())
+            else {
+                return fallback(false);
+            };
+            let Ok(parser) = self.docs.prepare_parse(&to_id) else {
+                return fallback(false);
+            };
+            return ExternalRenamePlan::Document(PreparedExternalDocumentRename {
+                snapshot: ExternalRenameSnapshot {
+                    workspace_id: self.workspace_id,
+                    from_path: from.to_owned(),
+                    to_path: to.to_owned(),
+                    from_id,
+                    to_id,
+                    from_entry,
+                    to_entry,
+                    syntax_generation: self.syntax_generation,
+                    routing_generation: self.indexes.routing_generation(),
+                },
+                storage: Arc::clone(self.docs.vault.storage()),
+                parser,
+                source_kind: descriptor.source,
+                organization: Arc::clone(&self.organization),
+                drafts: Arc::clone(&self.drafts),
+                doc_data_roots: self.docs.plugin_data_roots(),
+            });
         }
 
         let from_has_provider = self
@@ -4809,6 +5005,148 @@ impl Workspace {
             doc_data_roots: self.docs.plugin_data_roots(),
             fallback: fallback_plans,
         })
+    }
+
+    /// Riconvalida la fotografia e installa remove+feed nel solo core.
+    pub fn prepare_external_document_rename(
+        &mut self,
+        parsed: ParsedExternalDocumentRename,
+    ) -> Result<Option<PendingExternalDocumentRename>> {
+        let ParsedExternalDocumentRename {
+            snapshot,
+            state,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = parsed;
+        let (model, fingerprint, stat) = match state {
+            ParsedExternalDocumentState::Ready {
+                model,
+                fingerprint,
+                stat,
+            } => (model, fingerprint, stat),
+            ParsedExternalDocumentState::Failed(error) => {
+                let outcome: Result<()> = Err(error);
+                self.notes_sync(&snapshot.to_path, &outcome);
+                return Ok(None);
+            }
+            ParsedExternalDocumentState::Stale => return Ok(None),
+        };
+        let current_from = self.indexes.core.entries.get(&snapshot.from_id);
+        let current_to = self.indexes.core.entries.get(&snapshot.to_id);
+        if snapshot.workspace_id != self.workspace_id
+            || self.docs.vault.doc_id_for_path(&snapshot.from_path).ok().as_ref()
+                != Some(&snapshot.from_id)
+            || self.docs.vault.doc_id_for_path(&snapshot.to_path).ok().as_ref()
+                != Some(&snapshot.to_id)
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || !self.indexes.core.metas.contains_key(&snapshot.from_id)
+            || self.indexes.core.metas.contains_key(&snapshot.to_id)
+            || snapshot.from_entry.fingerprint != self.entry_fingerprint(&snapshot.from_id)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+            || model.id != snapshot.to_id
+        {
+            return Ok(None);
+        }
+        let removal = self
+            .prepare_document_rename_removal(&snapshot.from_id)?
+            .expect("il documento riconvalidato esiste");
+        let changes = self.indexes.core.changes_for(&model, &fingerprint);
+        let installed = VaultEntry {
+            id: snapshot.to_id.clone(),
+            kind: EntryKind::Document,
+            size: stat.size,
+            mtime: stat.mtime,
+            fingerprint: Some(fingerprint.clone()),
+        };
+        self.indexes.core.set_entry(installed.clone());
+        let losses = self
+            .indexes
+            .core
+            .on_documents_indexed(std::slice::from_ref(&model));
+        let feed = PreparedDocumentFeed {
+            id: snapshot.to_id.clone(),
+            model: *model,
+            changes,
+            revision: fingerprint,
+            journal: JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            },
+            providers: self.indexes.feed_handles(),
+            losses,
+        };
+        self.session.invalidate(
+            &snapshot.from_id,
+            ContextChange::Renamed(snapshot.to_id.clone()),
+        );
+        Ok(Some(PendingExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        }))
+    }
+
+    /// Finalizza perdite, grafo, journal ed eventi se il core è ancora quello
+    /// installato dal token.
+    pub fn finish_external_document_rename(
+        &mut self,
+        completed: CompletedExternalDocumentRename,
+    ) -> bool {
+        let CompletedExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            doc_data_errors,
+        } = completed;
+        let removal_losses = match self.finish_document_rename_removal(removal) {
+            Ok(losses) => losses,
+            Err(_) => return false,
+        };
+        if self.indexes.core.entries.contains_key(&snapshot.from_id)
+            || self.indexes.core.entries.get(&snapshot.to_id) != Some(&installed)
+            || self.entry_fingerprint(&snapshot.to_id) != installed.fingerprint
+            || !self.indexes.core.metas.contains_key(&snapshot.to_id)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+        {
+            return false;
+        }
+        self.report_losses(removal_losses);
+        self.report_losses(feed.losses);
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        for error in doc_data_errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato di {} non ha potuto seguire la rinomina in {} — {error}",
+                snapshot.from_id, snapshot.to_id
+            ));
+        }
+        let outcome: Result<bool> = Ok(true);
+        self.notes_sync(&snapshot.to_path, &outcome);
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.record(JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::DocumentRenamed {
+                from: snapshot.from_id,
+                to: snapshot.to_id,
+            });
+            ws.emit_event(Event::IndexUpdated);
+            ws.dispatch_pending();
+        });
+        true
     }
 
     /// Applica soltanto al core un asset già osservato sul path d'arrivo.

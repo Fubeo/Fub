@@ -26,7 +26,9 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
+use fub_kernel::{
+    ExternalRenamePlan, FormatRegistry, MachineSettings, Subscription, Workspace,
+};
 
 const PLUGIN: &str = "test.appiccicoso";
 
@@ -163,6 +165,78 @@ fn a_rename_split_carries_behind_draft_and_data() {
         b.ws.organization().icons.get("b.txt").map(String::as_str),
         Some("📌"),
         "e l'icona, che passa dalla stessa funzione"
+    );
+}
+
+/// La rotta `Renamed` del watcher conserva l'identità senza eseguire le fasi
+/// detached sotto il workspace.
+#[test]
+fn a_watcher_rename_carries_identity_once() {
+    let mut b = Bench::new();
+    b.ws.save_draft(&DocId::new("a.txt"), "testo non salvato", None)
+        .expect("bozza");
+    b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
+    b.attach_data("a.txt");
+    b.ws.set_active_document(Some(DocId::new("a.txt")));
+    let rx = b.ws.bus().subscribe();
+
+    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
+    let prepared = match b
+        .ws
+        .plan_external_rename(&b.root.join("a.txt"), &b.root.join("b.txt"))
+    {
+        ExternalRenamePlan::Document(plan) => plan,
+        _ => panic!("la rinomina documento nota deve avere la rotta staged"),
+    };
+    let parsed = prepared.invoke();
+    let pending = b
+        .ws
+        .prepare_external_document_rename(parsed)
+        .expect("prepare")
+        .expect("fotografia corrente");
+    let completed = pending.invoke();
+    assert!(b.ws.finish_external_document_rename(completed));
+
+    assert!(!b.ws.documents().contains(&DocId::new("a.txt")));
+    assert!(b.ws.documents().contains(&DocId::new("b.txt")));
+    assert_eq!(b.draft_of("b.txt").as_deref(), Some("testo non salvato"));
+    assert!(b.draft_of("a.txt").is_none());
+    assert_eq!(b.data_of("b.txt").as_deref(), Some("i dati di a.txt"));
+    assert!(b.data_of("a.txt").is_none());
+    assert_eq!(
+        b.ws.organization().icons.get("b.txt").map(String::as_str),
+        Some("📌")
+    );
+    assert!(
+        !b.ws.organization().icons.contains_key("a.txt"),
+        "l'organizzazione non conserva la chiave vecchia"
+    );
+    assert_eq!(
+        b.ws.active_document().as_ref().map(DocId::as_str),
+        Some("b.txt")
+    );
+
+    let seen = events(&rx);
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(&notice.event, Event::DocumentRenamed { .. }))
+            .count(),
+        1,
+        "DocumentRenamed esce una volta: {seen:?}"
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(&notice.event, Event::IndexUpdated))
+            .count(),
+        1,
+        "IndexUpdated esce una volta: {seen:?}"
+    );
+    assert!(
+        seen.iter().all(|notice| !matches!(
+            &notice.event,
+            Event::DocumentRemoved { .. } | Event::DocumentChanged { .. }
+        )),
+        "nessun evento remove/change duplicato: {seen:?}"
     );
 }
 
