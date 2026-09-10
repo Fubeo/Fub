@@ -27,9 +27,7 @@ use fub_abi::rules::doc_data;
 use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{
-    ExternalRenamePlan, FormatRegistry, MachineSettings, Subscription, Workspace,
-};
+use fub_kernel::{ExternalRenamePlan, FormatRegistry, MachineSettings, Subscription, Workspace};
 
 const PLUGIN: &str = "test.appiccicoso";
 
@@ -183,19 +181,15 @@ fn a_watcher_rename_carries_identity_once() {
     let to = b.root.join("nested/b.txt");
     std::fs::create_dir_all(to.parent().expect("cartella destinazione")).expect("cartella");
     std::fs::rename(b.root.join("a.txt"), &to).expect("rinomina sul disco");
-    let prepared = match b
-        .ws
-        .plan_external_rename(&b.root.join("a.txt"), &to)
-    {
+    let prepared = match b.ws.plan_external_rename(&b.root.join("a.txt"), &to) {
         ExternalRenamePlan::Document(plan) => plan,
         _ => panic!("la rinomina documento nota deve avere la rotta staged"),
     };
     let parsed = prepared.invoke();
-    let pending = b
-        .ws
-        .prepare_external_document_rename(parsed)
-        .expect("prepare")
-        .expect("fotografia corrente");
+    let pending =
+        b.ws.prepare_external_document_rename(parsed)
+            .expect("prepare")
+            .expect("fotografia corrente");
     let completed = pending.invoke();
 
     let other_dir = tempfile::tempdir().expect("secondo tempdir");
@@ -240,9 +234,8 @@ fn a_watcher_rename_carries_identity_once() {
         b.ws.active_document().as_ref().map(DocId::as_str),
         Some("nested/b.txt")
     );
-    let IndexResult::Folders(folders) = b
-        .ws
-        .query_index(IndexQuery::Folders {
+    let IndexResult::Folders(folders) =
+        b.ws.query_index(IndexQuery::Folders {
             under: None,
             page: None,
         })
@@ -311,21 +304,19 @@ fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
 
     // Finestra 1: la preparazione non consulta il disco; l'invoke detached
     // classifica il path sparito e la finalizzazione lo rimuove senza fallback.
-    let plan = b
-        .ws
-        .plan_sync(&b.root.join("a.txt"))
-        .expect("il path del documento noto ha una preparazione owned")
-        .invoke();
+    let plan =
+        b.ws.plan_sync(&b.root.join("a.txt"))
+            .expect("il path del documento noto ha una preparazione owned")
+            .invoke();
     b.ws.sync_path_prepared(&b.root.join("a.txt"), Some(plan))
         .expect("la partenza: il file non c'è più");
     let _first_window = events(&rx);
 
     // Finestra 2: l'arrivo, con un piano vero.
-    let plan = b
-        .ws
-        .plan_sync(&b.root.join("b.txt"))
-        .expect("un piano")
-        .invoke();
+    let plan =
+        b.ws.plan_sync(&b.root.join("b.txt"))
+            .expect("un piano")
+            .invoke();
     b.ws.sync_path_prepared(&b.root.join("b.txt"), Some(plan))
         .expect("l'arrivo: è comparso un file con la stessa impronta");
 

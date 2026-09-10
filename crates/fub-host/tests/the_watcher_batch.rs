@@ -444,11 +444,7 @@ fn who_reads_enters_while_catch_up_scans_the_vault() {
     let failures = ws.read().unwrap().bus().subscribe();
     storage.fail.store(true, Ordering::Relaxed);
     ExternalSync::new(ws.clone()).catch_up();
-    let status = match ws
-        .read()
-        .unwrap()
-        .query_index(IndexQuery::VaultStatus)
-    {
+    let status = match ws.read().unwrap().query_index(IndexQuery::VaultStatus) {
         Ok(IndexResult::VaultStatus(status)) => status,
         other => panic!("expected vault status, got {other:?}"),
     };
@@ -554,7 +550,12 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
     let from = bench.root.join(from_id.as_str());
     let to = bench.root.join(id.as_str());
     std::fs::create_dir_all(to.parent().expect("rename parent")).expect("rename directory");
-    let events = bench.ws.read().expect("the vault is alive").bus().subscribe();
+    let events = bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .bus()
+        .subscribe();
     std::fs::rename(&from, &to).expect("external rename");
     let prepared = match bench
         .ws
@@ -717,8 +718,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
     std::fs::write(&old_data, b"preview").expect("asset side data");
     let renamed_path = bench.root.join("media/foto.png");
     let renamed_id = DocId::new("media/foto.png");
-    std::fs::create_dir_all(renamed_path.parent().expect("asset parent"))
-        .expect("asset directory");
+    std::fs::create_dir_all(renamed_path.parent().expect("asset parent")).expect("asset directory");
     std::fs::rename(&path, &renamed_path).expect("asset renamed");
     let prepared = match bench
         .ws
@@ -875,7 +875,12 @@ fn a_prepare_error_does_not_silence_the_next_watcher_batch() {
         .finish_sync_path_prepared(completed)
         .expect("the trigger feed finishes");
 
-    let events = bench.ws.read().expect("the vault is alive").bus().subscribe();
+    let events = bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .bus()
+        .subscribe();
     let asset = bench.root.join("after.png");
     let asset_id = DocId::new("after.png");
     std::fs::write(&asset, b"after").expect("second external write");

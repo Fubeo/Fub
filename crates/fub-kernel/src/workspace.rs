@@ -575,9 +575,10 @@ impl PreparedExternalDocumentRename {
                 Ok(bytes) => match storage.stat(&snapshot.to_path) {
                     Ok(after) if after.is_file() && before == after => {
                         let fingerprint = Revision::of_bytes(&bytes);
-                        let source = match source_kind {
-                            SourceKind::Text => {
-                                match fub_abi::rules::text_policy::decode(&bytes) {
+                        let source =
+                            match source_kind {
+                                SourceKind::Text => {
+                                    match fub_abi::rules::text_policy::decode(&bytes) {
                                     Ok(text) => Ok(DocumentSource::Text(text.to_string())),
                                     Err(at) => Err(KernelError::Io {
                                         path: snapshot.to_path.clone(),
@@ -589,9 +590,9 @@ impl PreparedExternalDocumentRename {
                                         ),
                                     }),
                                 }
-                            }
-                            SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
-                        };
+                                }
+                                SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
+                            };
                         match source.and_then(|source| parser.invoke(source)) {
                             Ok(model) => ParsedExternalDocumentState::Ready {
                                 model: Box::new(model),
@@ -602,9 +603,7 @@ impl PreparedExternalDocumentRename {
                         }
                     }
                     Ok(_) => ParsedExternalDocumentState::Stale,
-                    Err(error) if sync_path_is_absent(&error) => {
-                        ParsedExternalDocumentState::Stale
-                    }
+                    Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
                     Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
                         path: snapshot.to_path.clone(),
                         source,
@@ -700,16 +699,14 @@ impl PreparedExternalAssetRename {
             _ => None,
         };
         match verified {
-            Some((stat, fingerprint)) => {
-                ParsedExternalRename::Asset(ParsedExternalAssetRename {
-                    snapshot,
-                    stat,
-                    fingerprint,
-                    organization,
-                    storage,
-                    doc_data_roots,
-                })
-            }
+            Some((stat, fingerprint)) => ParsedExternalRename::Asset(ParsedExternalAssetRename {
+                snapshot,
+                stat,
+                fingerprint,
+                organization,
+                storage,
+                doc_data_roots,
+            }),
             None => ParsedExternalRename::Sync(
                 fallback
                     .into_iter()
@@ -730,8 +727,7 @@ impl PendingExternalAssetRename {
             storage,
             doc_data_roots,
         } = self;
-        if let Err(error) =
-            organization.migrate(snapshot.from_id.as_str(), snapshot.to_id.as_str())
+        if let Err(error) = organization.migrate(snapshot.from_id.as_str(), snapshot.to_id.as_str())
         {
             organization.warn(format!(
                 "l'organizzazione di {} non ha potuto seguire la rinomina in {}: {error}",
@@ -812,9 +808,7 @@ impl PendingSyncChange {
                 previous_provider_call,
                 side_data: side_data.invoke(),
             },
-            PendingSyncState::Removal(removal) => {
-                CompletedSyncState::Removal(removal.invoke())
-            }
+            PendingSyncState::Removal(removal) => CompletedSyncState::Removal(removal.invoke()),
             PendingSyncState::Entry(stat) => CompletedSyncState::Entry(stat),
             PendingSyncState::Unchanged(stat) => CompletedSyncState::Unchanged(stat),
         };
@@ -4940,11 +4934,7 @@ impl Workspace {
     }
 
     /// Classifica una rinomina esterna conservando la porta sincrona storica.
-    pub fn plan_external_rename(
-        &self,
-        from: &Utf8Path,
-        to: &Utf8Path,
-    ) -> ExternalRenamePlan {
+    pub fn plan_external_rename(&self, from: &Utf8Path, to: &Utf8Path) -> ExternalRenamePlan {
         let from_admitted = !self.prepare_is_ignored(from).invoke();
         let to_admitted = !self.prepare_is_ignored(to).invoke();
         self.plan_external_rename_admitted(from, from_admitted, to, to_admitted)
@@ -4989,10 +4979,9 @@ impl Workspace {
                 .then(|| self.docs.vault.doc_id_for_path(path).ok())
                 .flatten()
         };
-        let (Some(from_id), Some(to_id)) = (
-            identity(from, from_admitted),
-            identity(to, to_admitted),
-        ) else {
+        let (Some(from_id), Some(to_id)) =
+            (identity(from, from_admitted), identity(to, to_admitted))
+        else {
             return fallback(false);
         };
         if from_id == to_id {
@@ -5001,16 +4990,14 @@ impl Workspace {
 
         let from_entry = self.indexes.core.entries.get(&from_id).cloned();
         let to_entry = self.indexes.core.entries.get(&to_id).cloned();
-        let destination_free =
-            to_entry.is_none() && !self.indexes.core.metas.contains_key(&to_id);
+        let destination_free = to_entry.is_none() && !self.indexes.core.metas.contains_key(&to_id);
         let from_document = self.indexes.core.metas.contains_key(&from_id);
         let to_has_provider = self
             .docs
             .registry
             .provider_for_ext(&extension_of(&to_id).unwrap_or_default())
             .is_some();
-        let to_kind =
-            media::kind_of_ext(&to_id, |ext| self.docs.registry.has_doc_ext(ext));
+        let to_kind = media::kind_of_ext(&to_id, |ext| self.docs.registry.has_doc_ext(ext));
         if from_document && destination_free && to_has_provider {
             let Some(from_entry) = from_entry.clone() else {
                 return fallback(false);
@@ -5117,9 +5104,19 @@ impl Workspace {
         let current_from = self.indexes.core.entries.get(&snapshot.from_id);
         let current_to = self.indexes.core.entries.get(&snapshot.to_id);
         if snapshot.workspace_id != self.workspace_id
-            || self.docs.vault.doc_id_for_path(&snapshot.from_path).ok().as_ref()
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.from_path)
+                .ok()
+                .as_ref()
                 != Some(&snapshot.from_id)
-            || self.docs.vault.doc_id_for_path(&snapshot.to_path).ok().as_ref()
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.to_path)
+                .ok()
+                .as_ref()
                 != Some(&snapshot.to_id)
             || current_from != Some(&snapshot.from_entry)
             || current_to != snapshot.to_entry.as_ref()
@@ -5260,9 +5257,19 @@ impl Workspace {
         let current_from = self.indexes.core.entries.get(&snapshot.from_id);
         let current_to = self.indexes.core.entries.get(&snapshot.to_id);
         if snapshot.workspace_id != self.workspace_id
-            || self.docs.vault.doc_id_for_path(&snapshot.from_path).ok().as_ref()
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.from_path)
+                .ok()
+                .as_ref()
                 != Some(&snapshot.from_id)
-            || self.docs.vault.doc_id_for_path(&snapshot.to_path).ok().as_ref()
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.to_path)
+                .ok()
+                .as_ref()
                 != Some(&snapshot.to_id)
             || current_from != Some(&snapshot.from_entry)
             || current_to != snapshot.to_entry.as_ref()
@@ -5312,9 +5319,7 @@ impl Workspace {
     ) -> std::result::Result<bool, (PluginError, CompletedExternalAssetRename)> {
         if completed.snapshot.workspace_id != self.workspace_id {
             return Err((
-                PluginError::Conflict(
-                    "la rinomina asset appartiene a un altro workspace".into(),
-                ),
+                PluginError::Conflict("la rinomina asset appartiene a un altro workspace".into()),
                 completed,
             ));
         }
@@ -5444,8 +5449,7 @@ impl Workspace {
         let outcome = (|| {
             if parsed.snapshot.workspace_id != self.workspace_id
                 || parsed.snapshot.path != abs
-                || self.docs.vault.doc_id_for_path(abs).ok().as_ref()
-                    != Some(&parsed.snapshot.id)
+                || self.docs.vault.doc_id_for_path(abs).ok().as_ref() != Some(&parsed.snapshot.id)
                 || self.indexes.core.entries.get(&parsed.snapshot.id)
                     != parsed.snapshot.entry.as_ref()
                 || parsed.snapshot.syntax_generation != self.syntax_generation
@@ -5533,12 +5537,12 @@ impl Workspace {
                     Ok(Some(PendingSyncChange { snapshot, state }))
                 }
                 ParsedChangeState::Missing => {
-                    let removal = self
-                        .prepare_sync_document_removal(&snapshot.id)?
-                        .map(|removal| PendingSyncChange {
-                            snapshot,
-                            state: PendingSyncState::Removal(removal),
-                        });
+                    let removal =
+                        self.prepare_sync_document_removal(&snapshot.id)?
+                            .map(|removal| PendingSyncChange {
+                                snapshot,
+                                state: PendingSyncState::Removal(removal),
+                            });
                     Ok(removal)
                 }
                 ParsedChangeState::Entry(stat) => Ok(Some(PendingSyncChange {
@@ -5568,9 +5572,7 @@ impl Workspace {
     ) -> std::result::Result<bool, (PluginError, CompletedSyncChange)> {
         if completed.snapshot.workspace_id != self.workspace_id {
             return Err((
-                PluginError::Conflict(
-                    "la sincronizzazione appartiene a un altro workspace".into(),
-                ),
+                PluginError::Conflict("la sincronizzazione appartiene a un altro workspace".into()),
                 completed,
             ));
         }
@@ -5580,9 +5582,13 @@ impl Workspace {
                 feed,
                 previous_provider_call,
             } => {
-                self.dispatch
-                    .restore_provider_call(previous_provider_call);
-                let current = self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                self.dispatch.restore_provider_call(previous_provider_call);
+                let current = self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
                     == Some(&snapshot.id)
                     && snapshot.routing_generation == self.indexes.routing_generation()
                     && snapshot.syntax_generation == self.syntax_generation
@@ -5597,9 +5603,13 @@ impl Workspace {
                 previous_provider_call,
                 side_data,
             } => {
-                self.dispatch
-                    .restore_provider_call(previous_provider_call);
-                let current = self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                self.dispatch.restore_provider_call(previous_provider_call);
+                let current = self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
                     == Some(&snapshot.id)
                     && snapshot.routing_generation == self.indexes.routing_generation()
                     && snapshot.syntax_generation == self.syntax_generation
@@ -5623,7 +5633,12 @@ impl Workspace {
                 }
             }
             CompletedSyncState::Entry(stat) => {
-                if self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                if self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
                     != Some(&snapshot.id)
                     || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
                     || snapshot.syntax_generation != self.syntax_generation
@@ -5631,7 +5646,7 @@ impl Workspace {
                 {
                     return Ok(false);
                 }
-                self.as_actor(Actor::Watcher, |ws| {
+                Ok(self.as_actor(Actor::Watcher, |ws| {
                     let before = ws.indexes.core.entries.get(&snapshot.id).cloned();
                     let Some(stat) = stat else {
                         let Some(kind) = ws.indexes.core.remove_entry(&snapshot.id) else {
@@ -5657,10 +5672,15 @@ impl Workspace {
                         kind,
                     });
                     true
-                })
+                }))
             }
             CompletedSyncState::Unchanged(stat) => {
-                if self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                if self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
                     != Some(&snapshot.id)
                     || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
                     || snapshot.syntax_generation != self.syntax_generation
@@ -5671,12 +5691,7 @@ impl Workspace {
                 let Some(fingerprint) = snapshot.seen else {
                     return Ok(false);
                 };
-                self.set_entry(
-                    &snapshot.id,
-                    stat.size,
-                    stat.mtime,
-                    Some(fingerprint),
-                );
+                self.set_entry(&snapshot.id, stat.size, stat.mtime, Some(fingerprint));
                 Ok(false)
             }
         }
@@ -5745,10 +5760,7 @@ impl Workspace {
     ///
     /// Questa fase è pura rispetto al vault: non cammina, non apre, non fa
     /// `stat` e non ricalcola la politica di esclusione.
-    pub fn plan_catch_up(
-        &self,
-        snapshot: CatchUpSnapshot,
-    ) -> Vec<(Utf8PathBuf, Option<SyncPlan>)> {
+    pub fn plan_catch_up(&self, snapshot: CatchUpSnapshot) -> Vec<(Utf8PathBuf, Option<SyncPlan>)> {
         snapshot
             .candidates
             .into_iter()

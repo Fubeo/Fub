@@ -26,9 +26,7 @@ use std::sync::{Arc, Condvar, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
-use fub_kernel::workspace::{
-    ParsedExternalDocumentRename, PreparedExternalDocumentRename,
-};
+use fub_kernel::workspace::{ParsedExternalDocumentRename, PreparedExternalDocumentRename};
 use fub_kernel::{
     ExternalRenamePlan, ParsedChange, ParsedExternalAssetRename, ParsedExternalRename,
     PreparedExternalAssetRename, PreparedIgnoreCheck, SyncPlan, Workspace,
@@ -670,9 +668,7 @@ impl ExternalSync {
                 .collect::<Vec<_>>()
         };
         // Fase 1d — stat/read/parse e side-data restano fuori da Custody.
-        let invoked = planned
-            .into_iter()
-            .flat_map(PlannedWatcherChange::invoke);
+        let invoked = planned.into_iter().flat_map(PlannedWatcherChange::invoke);
         if self.apply_batch_prepared(invoked).is_err() {
             return;
         }
@@ -734,9 +730,9 @@ impl ExternalSync {
             return;
         }
         // Fase 1d — stat-read-stat e Format/Syntax fuori da Custody.
-        let prepared = plans.into_iter().map(|(path, plan)| {
-            InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke))
-        });
+        let prepared = plans
+            .into_iter()
+            .map(|(path, plan)| InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke)));
         if self.apply_batch_prepared(prepared).is_err() {
             return;
         }
@@ -765,11 +761,7 @@ impl ExternalSync {
                             continue;
                         };
                         let completed = pending.invoke();
-                        match self
-                            .workspace
-                            .write()?
-                            .finish_sync_path_prepared(completed)
-                        {
+                        match self.workspace.write()?.finish_sync_path_prepared(completed) {
                             Ok(true) => {}
                             Ok(false) => continue,
                             Err((error, completed)) => {

@@ -282,7 +282,6 @@ impl PreparedIgnoreCheck {
     }
 }
 
-
 #[derive(Clone)]
 pub struct Vault {
     root: Utf8PathBuf,
