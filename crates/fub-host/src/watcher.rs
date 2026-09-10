@@ -22,7 +22,7 @@
 //! (`IndexQuery::VaultStatus`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
@@ -310,6 +310,85 @@ pub enum ExternalChange {
     Renamed { from: Utf8PathBuf, to: Utf8PathBuf },
 }
 
+/// Ciclo di vita condiviso fra il debouncer e il sincronizzatore.
+///
+/// Il contatore permette al proprietario del watcher di chiudere gli ingressi
+/// e aspettare le sole operazioni già accettate. La `Condvar` rilascia il mutex
+/// mentre aspetta.
+struct SyncLifecycle {
+    state: Mutex<SyncLifecycleState>,
+    settled: Condvar,
+}
+
+struct SyncLifecycleState {
+    accepting: bool,
+    in_flight: usize,
+}
+
+impl SyncLifecycle {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(SyncLifecycleState {
+                accepting: true,
+                in_flight: 0,
+            }),
+            settled: Condvar::new(),
+        }
+    }
+
+    fn enter(self: &Arc<Self>) -> Option<SyncOperation> {
+        let mut state = self.state.lock().unwrap_or_else(|and| and.into_inner());
+        if !state.accepting {
+            return None;
+        }
+        state.in_flight += 1;
+        Some(SyncOperation {
+            lifecycle: Arc::clone(self),
+        })
+    }
+
+    fn invalidate_and_wait(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|and| and.into_inner());
+        state.accepting = false;
+        self.settled.notify_all();
+        while state.in_flight != 0 {
+            state = self
+                .settled
+                .wait(state)
+                .unwrap_or_else(|and| and.into_inner());
+        }
+    }
+
+    #[cfg(test)]
+    fn wait_until_invalidated(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|and| and.into_inner());
+        while state.accepting {
+            state = self
+                .settled
+                .wait(state)
+                .unwrap_or_else(|and| and.into_inner());
+        }
+    }
+}
+
+struct SyncOperation {
+    lifecycle: Arc<SyncLifecycle>,
+}
+
+impl Drop for SyncOperation {
+    fn drop(&mut self) {
+        let mut state = self
+            .lifecycle
+            .state
+            .lock()
+            .unwrap_or_else(|and| and.into_inner());
+        state.in_flight -= 1;
+        if state.in_flight == 0 {
+            self.lifecycle.settled.notify_all();
+        }
+    }
+}
+
 /// Chi porta nel workspace ciò che è cambiato da fuori, **un lotto alla volta**.
 ///
 /// # Perché è un tipo e non una funzione
@@ -325,6 +404,12 @@ pub enum ExternalChange {
 /// già dovuto scrivere in prosa una volta. Qui la dice il prestito: da un
 /// `&mut ExternalSync` non se ne ricava un secondo, quindi due lotti sullo
 /// stesso sincronizzatore non compilano.
+///
+/// # Ciclo di vita
+///
+/// Lo shutdown impedisce nuovi ingressi e aspetta quelli già in volo senza
+/// conservare il mutex durante l'attesa. Un lotto accettato completa tutte le
+/// sue fasi, compreso il flush, prima che il teardown possa tornare.
 ///
 /// # Le tre fasi, e perché sono tre
 ///
@@ -358,11 +443,19 @@ pub enum ExternalChange {
 /// si rilascia, e i lettori in coda passano.
 pub struct ExternalSync {
     workspace: Custody<Workspace>,
+    lifecycle: Arc<SyncLifecycle>,
 }
 
 impl ExternalSync {
     pub fn new(workspace: Custody<Workspace>) -> Self {
-        ExternalSync { workspace }
+        ExternalSync {
+            workspace,
+            lifecycle: Arc::new(SyncLifecycle::new()),
+        }
+    }
+
+    fn lifecycle(&self) -> Arc<SyncLifecycle> {
+        Arc::clone(&self.lifecycle)
     }
 
     /// Applica un lotto di cambiamenti. Vedi le tre fasi nel doc del tipo.
@@ -371,6 +464,9 @@ impl ExternalSync {
     /// porta, una volta sola. Ciò che si perde è il rilevamento — cioè un
     /// derivato — su un vault che è già irrecuperabile.
     pub fn batch(&mut self, changes: &[ExternalChange]) {
+        let Some(_operation) = self.lifecycle.enter() else {
+            return;
+        };
         if changes.is_empty() {
             return;
         }
@@ -421,6 +517,9 @@ impl ExternalSync {
     /// c'è per ogni fabbrica, e ciò che il rilevatore avrebbe visto se fosse
     /// stato acceso lo vede il workspace stesso.
     pub fn catch_up(&mut self) {
+        let Some(_operation) = self.lifecycle.enter() else {
+            return;
+        };
         let _phase = tracing::info_span!(target: "fub.opening", "catch_up").entered();
         // Fase 1 — i piani, sotto prestito condiviso. Come in `batch`, un piano
         // `None` sta per i rami che non leggono niente (un file sparito, un
@@ -565,7 +664,7 @@ mod notify_watcher {
     use notify::{RecommendedWatcher, RecursiveMode};
     use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 
-    use super::{ExternalChange, ExternalSync, VaultWatcher, WatcherFactory};
+    use super::{ExternalChange, ExternalSync, SyncLifecycle, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
     pub struct NotifyWatcher;
@@ -591,6 +690,7 @@ mod notify_watcher {
         debouncer: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
         /// La bandiera del kernel, che questo debouncer possiede finché è vivo.
         watching: Arc<AtomicBool>,
+        lifecycle: Arc<SyncLifecycle>,
     }
 
     impl VaultWatcher for Debounced {
@@ -606,28 +706,18 @@ mod notify_watcher {
         /// sessione che non guarda più niente, che è la stessa bugia di prima
         /// spostata di un momento (§9.7).
         ///
-        /// L'altra metà è la 0159. Distruggere il debouncer *non lo aspettava*:
-        /// il suo `Drop` alza una bandiera di stop e torna, e il thread che
-        /// consegna i lotti la legge al giro dopo — se in quel momento sta
-        /// dentro un lotto, lo finisce. Solo che «finire un lotto» qui vuol dire
-        /// [`ExternalSync::batch`](super::ExternalSync::batch): prendere il
-        /// workspace in scrittura e rendere durevoli gli indici. Chi chiudeva un
-        /// vault tornava quindi con una scrittura ancora in volo verso `.fub/`,
-        /// che è precisamente ciò che l'ordine di `VaultSession::close` — «prima
-        /// smette di guardare» — dichiara di impedire: la dichiarazione c'era, e
-        /// la riga che la teneva non la teneva. `stop` invece **aspetta** il
-        /// thread, e al ritorno di questa riga nessuno sta più scrivendo là
-        /// dentro.
-        ///
-        /// Si paga con l'attesa di un tick — un quarto dei 300 ms del debounce,
-        /// cioè 75 — più il lotto in corso, una volta per chiusura di vault. Non
-        /// è un'attesa che si toglie andando più veloci: è il tempo che ci mette
-        /// a essere vero ciò che la chiusura dice di sé.
+        /// L'altra metà è la 0159. Prima lo shutdown dipendeva soltanto dal
+        /// comportamento interno del debouncer. Adesso chiude gli ingressi di
+        /// [`ExternalSync`] e aspetta che le consegne già accettate completino
+        /// anche la propria durevolezza; solo dopo ferma il worker e abbassa la
+        /// bandiera. La `Condvar` rilascia il proprio mutex mentre aspetta,
+        /// quindi un lotto in volo può uscire e notificare la chiusura.
         fn drop(&mut self) {
+            self.lifecycle.invalidate_and_wait();
             if let Some(debouncer) = self.debouncer.take() {
                 debouncer.stop();
             }
-            self.watching.store(false, Ordering::Relaxed);
+            self.watching.store(false, Ordering::Release);
         }
     }
 
@@ -699,6 +789,7 @@ mod notify_watcher {
             // in cui l'ordine dei lotti smette di dipendere da quanti thread
             // `notify` decide di usare (vedi il doc di `ExternalSync`).
             let mut sync = ExternalSync::new(workspace);
+            let lifecycle = sync.lifecycle();
             let mut debouncer = new_debouncer(
                 Duration::from_millis(300),
                 None,
@@ -730,6 +821,9 @@ mod notify_watcher {
                         sync.batch(&changes(events));
                     }
                     Err(errors) => {
+                        let Some(_operation) = sync.lifecycle.enter() else {
+                            return;
+                        };
                         // Il rilevamento è finito, e da adesso si vede (§9.7):
                         // il perché sta sul metodo che lo racconta.
                         failed.store(false, Ordering::Relaxed);
@@ -753,6 +847,7 @@ mod notify_watcher {
             Ok(Box::new(Debounced {
                 debouncer: Some(debouncer),
                 watching,
+                lifecycle,
             }))
         }
     }
@@ -771,33 +866,31 @@ mod notify_watcher {
         /// partito continuava per conto suo a sincronizzare e a scrivere indici
         /// dentro un vault chiuso.
         ///
-        /// Qui la consegna dura, e chi lascia andare il rilevatore la trova
-        /// finita. Rimesso il `drop` che non aspetta, la riga nomina il difetto.
-        ///
-        /// Gli eventi li fa il filesystem, perché è il solo modo di far partire
-        /// una consegna vera; non è però un banco di **quanto ci mette**: la
-        /// scrittura si ripete finché la consegna non è partita, e ciò che si
-        /// pretende è un ordine fra due fatti, non un tempo (§23.16).
+        /// Qui una consegna — riuscita o fallita — resta aperta su un canale.
+        /// Il teardown raggiunge deterministicamente l'invalidazione e non può
+        /// tornare né abbassare `watching` finché il test non la libera. Nessuno
+        /// `sleep` trasforma il tempo della macchina in un segnale.
         #[test]
         fn dropping_the_watcher_waits_for_the_in_flight_delivery() {
             let dir = tempfile::tempdir().expect("a folder to watch");
-            let (sender, receiver) = std::sync::mpsc::channel();
+            let (inside_tx, inside_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let lifecycle = Arc::new(SyncLifecycle::new());
+            let callback_lifecycle = Arc::clone(&lifecycle);
+            let observed_lifecycle = Arc::clone(&lifecycle);
             let delivered = Arc::new(AtomicBool::new(false));
-            let batch_done = delivered.clone();
+            let batch_done = Arc::clone(&delivered);
             let mut debouncer = new_debouncer(
                 Duration::from_millis(20),
                 None,
-                move |result: DebounceEventResult| {
-                    if result.is_err() {
+                move |_result: DebounceEventResult| {
+                    let Some(operation) = callback_lifecycle.enter() else {
                         return;
-                    }
-                    let _ = sender.send(());
-                    // Ciò che un lotto vero fa qui è `ExternalSync::batch`: il
-                    // workspace in scrittura e gli indici resi durevoli. Quanto
-                    // duri non conta, conta che stia ancora durando.
-                    // **L'anello che si chiudeva.** Questi sono gli eventi che inotify
-                    std::thread::sleep(Duration::from_millis(300));
+                    };
+                    inside_tx.send(()).expect("the test waits for the callback");
+                    release_rx.recv().expect("the test releases the callback");
                     batch_done.store(true, Ordering::SeqCst);
+                    drop(operation);
                 },
             )
             .expect("the debouncer starts");
@@ -807,35 +900,38 @@ mod notify_watcher {
             let watching = Arc::new(AtomicBool::new(true));
             let watcher = Debounced {
                 debouncer: Some(debouncer),
-                watching: watching.clone(),
+                watching: Arc::clone(&watching),
+                lifecycle,
             };
 
-            let mut started = false;
-            for n in 0..100 {
-                std::fs::write(dir.path().join(format!("note-{n}.md")), b"hello")
-                    .expect("a file that changes");
-                if receiver.recv_timeout(Duration::from_millis(100)).is_ok() {
-                    started = true;
-                    break;
-                }
-            }
-            assert!(
-                started,
-                "the watcher never delivered: without a batch in flight \
-                 this test proves nothing"
-            );
+            std::fs::write(dir.path().join("note.md"), b"hello").expect("a file that changes");
+            inside_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("the watcher enters its callback");
 
-            drop(watcher);
+            let (stopped_tx, stopped_rx) = std::sync::mpsc::channel();
+            let stopping = std::thread::spawn(move || {
+                drop(watcher);
+                stopped_tx.send(()).expect("the test waits for teardown");
+            });
+            observed_lifecycle.wait_until_invalidated();
+            assert!(
+                stopped_rx.try_recv().is_err() && watching.load(Ordering::Acquire),
+                "teardown returned or lowered watching while a callback was still in flight"
+            );
+            release_tx.send(()).expect("the callback can finish");
+            stopped_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("teardown finishes after the callback");
+            stopping.join().expect("teardown does not panic");
 
             assert!(
                 delivered.load(Ordering::SeqCst),
-                "the vault closed with a batch still in flight: in a moment it \
-                 will take the workspace for writing and make indices durable \
-                 inside a vault nobody watches any more"
+                "the vault closed with a batch still in flight"
             );
             assert!(
-                !watching.load(Ordering::Relaxed),
-                "the one that stopped watching did not say so"
+                !watching.load(Ordering::Acquire),
+                "the watcher lowered its flag before teardown completed"
             );
         }
 
