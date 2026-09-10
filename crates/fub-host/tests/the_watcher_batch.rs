@@ -741,16 +741,15 @@ fn a_providerless_entry_survives_the_watcher_batch() {
         .unwrap()
         .prepare_external_asset_rename(parsed)
         .expect("the verified asset rename is current");
-    let completed = pending.invoke();
-    assert!(
-        bench
-            .ws
-            .write()
-            .unwrap()
-            .finish_external_asset_rename(completed)
-            .expect("the token returns to its owner"),
-        "the asset rename remains current"
-    );
+    let result = bench
+        .ws
+        .write()
+        .unwrap()
+        .finish_external_asset_rename(completed);
+    let Ok(rename_is_current) = result else {
+        panic!("the token returns to its owner");
+    };
+    assert!(rename_is_current, "the asset rename remains current");
 
     let after_rename = entry(&bench.ws.read().unwrap(), &renamed_id);
     assert_eq!(after_rename.kind, EntryKind::Asset);
@@ -868,12 +867,14 @@ fn a_prepare_error_does_not_silence_the_next_watcher_batch() {
 
     std::fs::rename(&from, &to).expect("external document rename");
     let completed = pending.invoke();
-    bench
+    let result = bench
         .ws
         .write()
         .expect("the vault is alive")
-        .finish_sync_path_prepared(completed)
-        .expect("the trigger feed finishes");
+        .finish_sync_path_prepared(completed);
+    let Ok(()) = result else {
+        panic!("the trigger feed finishes");
+    };
 
     let events = bench
         .ws

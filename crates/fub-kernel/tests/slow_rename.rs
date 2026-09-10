@@ -200,11 +200,11 @@ fn a_watcher_rename_carries_identity_once() {
         Err((_error, completed)) => completed,
         Ok(outcome) => panic!("il workspace sbagliato ha consumato il token: {outcome}"),
     };
-    assert!(
-        b.ws.finish_external_document_rename(completed)
-            .expect("il proprietario recupera il token"),
-        "la fotografia resta corrente"
-    );
+    let result = b.ws.finish_external_document_rename(completed);
+    let Ok(rename_is_current) = result else {
+        panic!("il proprietario recupera il token");
+    };
+    assert!(rename_is_current, "la fotografia resta corrente");
 
     let renamed = DocId::new("nested/b.txt");
     assert!(!b.ws.documents().contains(&DocId::new("a.txt")));
