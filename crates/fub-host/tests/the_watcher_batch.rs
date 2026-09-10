@@ -28,8 +28,10 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
-use fub_abi::traits::{EntryKind, IndexQuery, IndexResult, VaultEntry};
-use fub_abi::{Event, FormatProvider, Revision, WriteBase};
+use fub_abi::traits::{
+    EntryKind, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute, VaultEntry,
+};
+use fub_abi::{Event, FormatProvider, PluginError, Revision, WriteBase};
 use fub_host::{Custody, ExternalChange, ExternalSync};
 use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
 use fub_kernel::{data_root, FormatRegistry, MachineSettings, MemStorage, SyncPlan, Workspace};
@@ -93,6 +95,55 @@ impl FormatProvider for Slow {
     }
     fn serialize(&self, m: &DocumentModel) -> Result<String, FormatError> {
         Ok(m.text.clone())
+    }
+}
+
+/// Entra nel watcher mentre questo indice sta ricevendo un feed: la prepare
+/// della rinomina incontra intenzionalmente il divieto di rientro dell'indice.
+struct PrepareErrorIndex {
+    workspace: Custody<Workspace>,
+    from: Utf8PathBuf,
+    to: Utf8PathBuf,
+    armed: AtomicBool,
+}
+
+impl IndexProvider for PrepareErrorIndex {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, _: &[DocumentModel]) -> Vec<IndexLoss> {
+        if self.armed.swap(false, Ordering::SeqCst) {
+            ExternalSync::new(self.workspace.clone()).batch(&[ExternalChange::Renamed {
+                from: self.from.clone(),
+                to: self.to.clone(),
+            }]);
+        }
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved("feed-only test index".into()))
     }
 }
 
@@ -593,5 +644,74 @@ fn a_providerless_entry_survives_the_watcher_batch() {
             .count(),
         1,
         "removal emits EntryRemoved exactly once"
+    );
+}
+
+/// Un errore della prepare non può lasciare il dispatch del watcher sospeso:
+/// il lotto seguente deve rendere visibile il proprio evento.
+#[test]
+fn a_prepare_error_does_not_silence_the_next_watcher_batch() {
+    const INDEX: &str = "test.watcher-prepare-error";
+
+    let bench = bench();
+    let from = bench.root.join("nota.md");
+    let to = bench.root.join("spostata.md");
+    {
+        let mut ws = bench.ws.write().expect("the vault is alive");
+        ws.register_core_feature(INDEX, "Watcher prepare error probe")
+            .expect("index owner declares");
+        ws.register_index_provider(
+            INDEX,
+            Box::new(PrepareErrorIndex {
+                workspace: bench.ws.clone(),
+                from: from.clone(),
+                to: to.clone(),
+                armed: AtomicBool::new(true),
+            }),
+        )
+        .expect("prepare error index registers");
+    }
+
+    let trigger = bench.root.join("trigger.md");
+    std::fs::write(&trigger, "trigger\n").expect("trigger write");
+    let plan = bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .plan_sync(&trigger)
+        .expect("the trigger needs a feed");
+    let parsed = plan.invoke();
+    let pending = bench
+        .ws
+        .write()
+        .expect("the vault is alive")
+        .prepare_sync_path_prepared(&trigger, Some(parsed))
+        .expect("the trigger prepare succeeds")
+        .expect("the trigger feed is pending");
+
+    std::fs::rename(&from, &to).expect("external document rename");
+    let completed = pending.invoke();
+    bench
+        .ws
+        .write()
+        .expect("the vault is alive")
+        .finish_sync_path_prepared(completed)
+        .expect("the trigger feed finishes");
+
+    let events = bench.ws.read().expect("the vault is alive").bus().subscribe();
+    let asset = bench.root.join("after.png");
+    let asset_id = DocId::new("after.png");
+    std::fs::write(&asset, b"after").expect("second external write");
+    ExternalSync::new(bench.ws.clone()).batch(&[ExternalChange::Touched(asset)]);
+
+    assert!(
+        events.try_iter().any(|notice| matches!(
+            notice.event,
+            Event::EntryChanged {
+                id,
+                kind: EntryKind::Asset
+            } if id == asset_id
+        )),
+        "the prepare error left dispatch deferred and silenced the next batch"
     );
 }

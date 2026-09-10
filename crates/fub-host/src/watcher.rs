@@ -564,6 +564,46 @@ impl PlannedWatcherChange {
     }
 }
 
+/// Ripristina sempre il frame di dispatch aperto dal lotto, anche se una fase
+/// preparata restituisce un errore o propaga un panico. Il distruttore prende
+/// soltanto il breve prestito necessario al kernel: il drain, che può invocare
+/// provider, resta esplicitamente fuori.
+struct EventDispatchGuard {
+    workspace: Custody<Workspace>,
+    deferred: Option<fub_kernel::workspace::EventDispatchDeferral>,
+}
+
+impl EventDispatchGuard {
+    fn new(workspace: &Custody<Workspace>) -> Result<Self, PluginError> {
+        let deferred = workspace.write()?.defer_event_dispatch();
+        Ok(Self {
+            workspace: workspace.clone(),
+            deferred: Some(deferred),
+        })
+    }
+
+    fn restore(mut self) -> Result<(), PluginError> {
+        let mut workspace = self.workspace.write()?;
+        workspace.restore_event_dispatch(
+            self.deferred
+                .take()
+                .expect("il guard di dispatch è ancora armato"),
+        );
+        Ok(())
+    }
+}
+
+impl Drop for EventDispatchGuard {
+    fn drop(&mut self) {
+        let Some(deferred) = self.deferred.take() else {
+            return;
+        };
+        if let Ok(mut workspace) = self.workspace.write() {
+            workspace.restore_event_dispatch(deferred);
+        }
+    }
+}
+
 pub struct ExternalSync {
     workspace: Custody<Workspace>,
     lifecycle: Arc<SyncLifecycle>,
@@ -712,61 +752,64 @@ impl ExternalSync {
         changes: impl IntoIterator<Item = InvokedWatcherChange>,
     ) -> Result<(), PluginError> {
         let _turn = self.workspace.write_turn();
-        let deferred = self.workspace.write()?.defer_event_dispatch();
-        for change in changes {
-            match change {
-                InvokedWatcherChange::Sync(path, parsed) => {
-                    let pending = self
-                        .workspace
-                        .write()?
-                        .prepare_sync_path_prepared(&path, parsed)
-                        .unwrap_or_default();
-                    if let Some(pending) = pending {
-                        let completed = pending.invoke();
-                        let outcome = self
+        let dispatch = EventDispatchGuard::new(&self.workspace)?;
+        let outcome = (|| {
+            for change in changes {
+                match change {
+                    InvokedWatcherChange::Sync(path, parsed) => {
+                        let pending = self
                             .workspace
                             .write()?
-                            .finish_sync_path_prepared(completed);
-                        if let Err((error, _completed)) = outcome {
-                            {
-                                let mut ws = self.workspace.write()?;
-                                ws.restore_event_dispatch(deferred);
-                                ws.report_host_trouble(Severity::Warning, error);
+                            .prepare_sync_path_prepared(&path, parsed)
+                            .unwrap_or_default();
+                        if let Some(pending) = pending {
+                            let completed = pending.invoke();
+                            let outcome = self
+                                .workspace
+                                .write()?
+                                .finish_sync_path_prepared(completed);
+                            if let Err((error, _completed)) = outcome {
+                                self.workspace.write()?.report_host_trouble(
+                                    Severity::Warning,
+                                    error,
+                                );
+                                return Ok(());
                             }
-                            return drain_events(&self.workspace);
+                        }
+                    }
+                    InvokedWatcherChange::Asset(parsed) => {
+                        let pending = self
+                            .workspace
+                            .write()?
+                            .prepare_external_asset_rename(parsed);
+                        if let Some(pending) = pending {
+                            let completed = pending.invoke();
+                            let _ = self
+                                .workspace
+                                .write()?
+                                .finish_external_asset_rename(completed);
+                        }
+                    }
+                    InvokedWatcherChange::Document(parsed) => {
+                        let pending = self
+                            .workspace
+                            .write()?
+                            .prepare_external_document_rename(parsed)?;
+                        if let Some(pending) = pending {
+                            let completed = pending.invoke();
+                            let _ = self
+                                .workspace
+                                .write()?
+                                .finish_external_document_rename(completed);
                         }
                     }
                 }
-                InvokedWatcherChange::Asset(parsed) => {
-                    let pending = self
-                        .workspace
-                        .write()?
-                        .prepare_external_asset_rename(parsed);
-                    if let Some(pending) = pending {
-                        let completed = pending.invoke();
-                        let _ = self
-                            .workspace
-                            .write()?
-                            .finish_external_asset_rename(completed);
-                    }
-                }
-                InvokedWatcherChange::Document(parsed) => {
-                    let pending = self
-                        .workspace
-                        .write()?
-                        .prepare_external_document_rename(parsed)?;
-                    if let Some(pending) = pending {
-                        let completed = pending.invoke();
-                        let _ = self
-                            .workspace
-                            .write()?
-                            .finish_external_document_rename(completed);
-                    }
-                }
             }
-        }
-        self.workspace.write()?.restore_event_dispatch(deferred);
-        drain_events(&self.workspace)
+            Ok(())
+        })();
+        let restored = dispatch.restore();
+        let drained = drain_events(&self.workspace);
+        outcome.and(restored).and(drained)
     }
 
     /// Fine del lotto: è il punto tranquillo in cui rendere durevoli gli indici.
