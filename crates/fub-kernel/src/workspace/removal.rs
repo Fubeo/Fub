@@ -52,6 +52,9 @@ pub struct PreparedDocumentDeletion {
     entry: Option<VaultEntry>,
     fingerprint: Option<Revision>,
     trash: crate::vault::PreparedVaultTrash,
+    drafts: Arc<Drafts>,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
 }
 
 /// File già nel cestino, ma core e indici ancora intatti.
@@ -62,17 +65,26 @@ pub struct CompletedDocumentDeletion {
     entry: Option<VaultEntry>,
     fingerprint: Option<Revision>,
     trash: crate::vault::CompletedVaultTrash,
+    drafts: Arc<Drafts>,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
 }
 
 #[must_use = "gli indici della cancellazione devono essere invocati"]
 pub struct CommittedDocumentDeletion {
     removal: PreparedDocumentRemoval,
     trash: crate::vault::CompletedVaultTrash,
+    drafts: Arc<Drafts>,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
 }
 
 pub struct FinalizedDocumentDeletion {
     removal: CompletedDocumentRemoval,
-    trash: crate::vault::CompletedVaultTrash,
+    trashed: DocId,
+    sidecar_fault: Option<KernelError>,
+    draft_fault: Option<String>,
+    journal_fault: Option<String>,
 }
 
 impl PreparedDocumentDeletion {
@@ -84,6 +96,9 @@ impl PreparedDocumentDeletion {
             entry: self.entry,
             fingerprint: self.fingerprint,
             trash: self.trash.invoke()?,
+            drafts: self.drafts,
+            journal: self.journal,
+            origin: self.origin,
         })
     }
 }
@@ -102,9 +117,29 @@ impl CompletedDocumentDeletion {
 impl CommittedDocumentDeletion {
     /// Notifica gli indici usando soltanto handle owned.
     pub fn invoke(self) -> FinalizedDocumentDeletion {
+        let id = self.removal.id.clone();
+        let (trashed, sidecar_fault) = self.trash.into_parts();
+        let draft_fault = self
+            .drafts
+            .discard(&id)
+            .err()
+            .map(|error| error.to_string());
+        let journal_fault = self
+            .journal
+            .append(
+                self.origin,
+                JournalOp::Trashed {
+                    doc: id,
+                    trash: trashed.clone(),
+                },
+            )
+            .err();
         FinalizedDocumentDeletion {
             removal: self.removal.invoke(),
-            trash: self.trash,
+            trashed,
+            sidecar_fault,
+            draft_fault,
+            journal_fault,
         }
     }
 }
@@ -270,6 +305,9 @@ impl Workspace {
             entry: self.indexes.core.entries.get(id).cloned(),
             fingerprint: self.entry_fingerprint(id),
             trash: self.docs.vault.prepare_trash(id)?,
+            drafts: Arc::clone(&self.drafts),
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
         })
     }
 
@@ -312,6 +350,9 @@ impl Workspace {
         Ok(CommittedDocumentDeletion {
             removal,
             trash: completed.trash,
+            drafts: completed.drafts,
+            journal: completed.journal,
+            origin: completed.origin,
         })
     }
 
@@ -325,12 +366,17 @@ impl Workspace {
                 finalized,
             )));
         }
-        let FinalizedDocumentDeletion { removal, trash } = finalized;
+        let FinalizedDocumentDeletion {
+            removal,
+            trashed,
+            sidecar_fault,
+            draft_fault,
+            journal_fault,
+        } = finalized;
         let id = removal.id.clone();
         self.apply_document_removal(removal);
         self.dispatch_pending();
-        let (trashed, sidecar_fault) = trash.into_parts();
-        Ok(self.finish_deleted_document(&id, trashed, sidecar_fault))
+        Ok(self.finish_deleted_document(&id, trashed, sidecar_fault, draft_fault, journal_fault))
     }
 }
 

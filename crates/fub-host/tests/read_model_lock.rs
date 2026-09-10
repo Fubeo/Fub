@@ -82,6 +82,9 @@ enum Stage {
     Syntax,
     TrashList,
     TrashRemove,
+    TrashRename,
+    DraftDiscard,
+    JournalAppend,
     SourceRead,
     DataRead,
     DataList,
@@ -163,7 +166,10 @@ impl BlockingRestoreStorage {
                 self.read_hits.fetch_add(1, Ordering::SeqCst);
             }
             Stage::Parse | Stage::Syntax => unreachable!("storage stage"),
-            Stage::TrashRemove
+            Stage::TrashRename
+            | Stage::DraftDiscard
+            | Stage::JournalAppend
+            | Stage::TrashRemove
             | Stage::DataRead
             | Stage::DataList
             | Stage::DataWrite
@@ -229,10 +235,33 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        let probing = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some();
+        if probing && path.file_name() == Some("journal.jsonl") {
+            self.assert_workspace_is_free("VaultStorage::append during trash");
+            self.traverse(Stage::JournalAppend);
+        }
         self.inner.append(path, bytes)
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        let source = self
+            .source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        let probing = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some();
+        if probing && source.as_deref() == Some(from) {
+            self.assert_workspace_is_free("VaultStorage::rename during trash");
+            self.traverse(Stage::TrashRename);
+        }
         self.inner.rename(from, to)
     }
 
@@ -241,6 +270,15 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        let probing = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some();
+        if probing && path.parent().and_then(Utf8Path::file_name) == Some("drafts") {
+            self.assert_workspace_is_free("VaultStorage::remove draft during trash");
+            self.traverse(Stage::DraftDiscard);
+        }
         self.observe_data(Stage::DataRemove, path);
         let source = self
             .source
@@ -727,6 +765,89 @@ fn empty_trash_lists_and_removes_without_workspace_guards() {
         1
     );
     assert!(!trashed_path.exists());
+}
+
+#[test]
+fn trash_storage_and_sidecars_run_without_workspace_guards() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let id = DocId::new("Note.md");
+    std::fs::write(root.join(id.as_str()), "# Trash\n").expect("seed note");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let storage = Arc::new(BlockingRestoreStorage {
+        inner: FsStorage,
+        trash_dir: root.join(".trash"),
+        source: Mutex::new(None),
+        armed: AtomicBool::new(false),
+        blocking: AtomicBool::new(false),
+        list_hits: AtomicUsize::new(0),
+        read_hits: AtomicUsize::new(0),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+        data_probe: Mutex::new(None),
+        data_hits: AtomicUsize::new(0),
+        workspace_probe: Mutex::new(None),
+    });
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(MarkdownProvider::new()))
+        .expect("format registers");
+    let mut workspace = Workspace::on(
+        &root,
+        formats,
+        storage.clone(),
+        MachineSettings::in_memory(),
+    )
+    .expect("workspace opens");
+    workspace
+        .register_plugin(
+            PluginManifest::core(PLUGIN, "Detached document trash"),
+            Trust::Community,
+        )
+        .expect("trash caller declares");
+    workspace.reindex().expect("seed note enters workspace");
+    workspace
+        .save_draft(&id, "# Unsaved\n", None)
+        .expect("seed draft");
+    let workspace = Custody::new("the detached document trash workspace", workspace);
+    *storage
+        .workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+    storage.arm(root.join(id.as_str()), true);
+
+    let workspace_for_call = workspace.clone();
+    let id_for_call = id.clone();
+    let call = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, PLUGIN).trash_document(&id_for_call)
+    });
+    for stage in [
+        Stage::SourceRead,
+        Stage::TrashRename,
+        Stage::DraftDiscard,
+        Stage::JournalAppend,
+    ] {
+        assert_eq!(
+            entered_rx
+                .recv_timeout(TIMEOUT)
+                .expect("trash callback entered"),
+            stage
+        );
+        release_tx.send(()).expect("release trash callback");
+    }
+    let trashed = call
+        .join()
+        .expect("trash thread does not panic")
+        .expect("trash succeeds");
+    assert!(root.join(trashed.as_str()).exists());
+    assert!(workspace
+        .read()
+        .expect("workspace remains alive")
+        .drafts()
+        .expect("drafts remain readable")
+        .drafts
+        .is_empty());
 }
 fn assert_data_storage_detached(
     workspace: &Custody<Workspace>,

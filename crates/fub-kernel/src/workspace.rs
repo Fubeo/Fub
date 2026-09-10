@@ -1990,7 +1990,7 @@ pub struct Workspace {
     /// classe: l'anagrafe è l'unico stato di questa lista che si può buttare
     /// senza perdere niente, il registro è quello che non si rifà da niente.
     /// **Ciò che l'utente ha scritto e non ha salvato** (§15.2): le bozze.
-    journal: Journal,
+    journal: Arc<Journal>,
     ///
     /// Sta accanto al registro e ne condivide la classe — autorevole, non si
     /// rifà da niente — ed è il suo opposto per verso: il registro conserva ciò
@@ -2330,7 +2330,7 @@ impl Workspace {
             // col root: ciò che è successo a queste note viaggia con queste
             // note.
             // Aggancia lo stato di vista della macchina (§11.2).
-            journal: Journal::open(root, storage),
+            journal: Arc::new(Journal::open(root, storage)),
             drafts,
             doc_data_warnings: Vec::new(),
             suspended_from_rejoin: BTreeSet::new(),
@@ -6088,6 +6088,8 @@ impl Workspace {
         id: &DocId,
         trashed: DocId,
         sidecar_fault: Option<KernelError>,
+        draft_fault: Option<String>,
+        journal_fault: Option<String>,
     ) -> DocId {
         // la ragione per cui `migrate_side_data` la fa seguire una rinomina —
         // una bozza è indicizzata per `DocId`, e un `DocId` che non nomina più
@@ -6104,16 +6106,22 @@ impl Workspace {
         // percorso del **watcher**, che reagisce a un file sparito dal disco per
         // mano d'altri — ed è precisamente il momento in cui la bozza è l'unica
         // copia di ciò che si era scritto, quindi lì non si tocca.
-        // Il sidecar del cestino non si è scritto: la cancellazione è riuscita
-        if let Err(and) = self.drafts.discard(id) {
+        // I callback di storage per bozza e registro sono già avvenuti dal
+        // finalizzatore owned. Qui si trasformano soltanto i loro esiti in
+        // avvisi e fatti del workspace.
+        if let Some(and) = draft_fault {
             self.organization.warn(format!(
                 "la bozza non salvata di {id} è rimasta dietro alla nota cestinata: {and}"
             ));
         }
-        self.record(JournalOp::Trashed {
-            doc: id.clone(),
-            trash: trashed.clone(),
-        });
+        if let Some(and) = journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {and}").into()),
+                None,
+            );
+        }
         // ma chi ripristina questa voce tornerà nel posto sbagliato. È la
         // perdita di un dato autorevole (0052 la conta come `Failure`), e
         // `delete_document` è il primo chiamante con il workspace in mano —

@@ -627,7 +627,7 @@ impl VaultStructure for JobHost {
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
         let prepared = {
-            let mut ws = workspace.write()?;
+            let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
                     &ReadOnly {
@@ -648,8 +648,21 @@ impl VaultStructure for JobHost {
             ws.prepare_document_deletion(&id)
                 .map_err(PluginError::from)?
         };
-        let completed = prepared.invoke();
-        with_event_drain(&workspace, |ws| ws.finish_document_deletion(completed))?.map_err(
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let committed = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_deletion(completed)
+                .map_err(|failure| *failure)
+        };
+        let committed = match committed {
+            Ok(committed) => committed,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(PluginError::from(error));
+            }
+        };
+        let finalized = committed.invoke();
+        with_event_drain(&workspace, |ws| ws.finish_document_deletion(finalized))?.map_err(
             |failure| {
                 let (error, _) = *failure;
                 error
