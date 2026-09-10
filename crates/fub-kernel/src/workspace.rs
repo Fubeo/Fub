@@ -4898,11 +4898,12 @@ impl Workspace {
     /// si parsa lasciava la cache, il grafo e l'indice fermi a *prima*, per
     /// sempre, senza che niente lo dicesse. Adesso lo dice
     /// [`IndexQuery::VaultStatus`].
-    /// **La metà di [`sync_path`] che non ha bisogno del prestito esclusivo**:
+    /// La porta sincrona orchestra lo stesso protocollo staged del watcher:
+    /// pianifica senza I/O, invoca il piano detached e applica il risultato
+    /// attraverso l'unico percorso che gestisce feed, rimozioni e rinomine.
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
-        let outcome = self.sync_path_here(abs);
-        self.notes_sync(abs, &outcome);
-        outcome
+        let prepared = self.plan_sync(abs).map(SyncPlan::invoke);
+        self.sync_path_prepared(abs, prepared)
     }
 
     /// Cattura la politica e lo storage necessari al filtro di un path.
