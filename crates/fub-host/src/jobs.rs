@@ -658,9 +658,15 @@ impl VaultStructure for JobHost {
         };
         if let Some(prepared) = prepared {
             let parsed = prepared.invoke().map_err(PluginError::from)?;
-            with_event_drain(&workspace, |ws| {
-                ws.commit_explicit_rename(parsed).map_err(PluginError::from)
-            })?
+            let pending = {
+                let mut ws = workspace.write()?;
+                ws.commit_explicit_rename(parsed)
+                    .map_err(PluginError::from)?
+            };
+            let completed = pending.invoke();
+            with_event_drain(&workspace, |ws| ws.finish_explicit_rename(completed))?
+                .map_err(|(error, _)| error)?
+                .map_err(PluginError::from)
         } else {
             with_event_drain(&workspace, |ws| {
                 ws.rename_document(&from, &to).map_err(PluginError::from)

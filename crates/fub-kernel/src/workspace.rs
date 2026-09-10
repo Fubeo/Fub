@@ -324,6 +324,39 @@ pub struct ParsedExplicitRename {
     stat: crate::storage::Stat,
     rewrites: Vec<(DocId, EditRequest)>,
 }
+/// Core della rinomina esplicita già installato, con gli handle degli indici
+/// ancora da invocare fuori dal workspace.
+#[must_use = "gli indici della rinomina devono essere invocati e finalizzati"]
+pub struct PendingExplicitRename {
+    identity: PendingIdentityMigration,
+    rewrites: Vec<(DocId, EditRequest)>,
+    owns_batch: bool,
+}
+
+/// Callback degli indici concluse, pronto per l'epilogo sotto guard.
+pub struct CompletedExplicitRename {
+    identity: CompletedIdentityMigration,
+    rewrites: Vec<(DocId, EditRequest)>,
+    owns_batch: bool,
+}
+
+struct PendingIdentityMigration {
+    workspace_id: u64,
+    from: DocId,
+    to: DocId,
+    installed: VaultEntry,
+    removal: PreparedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+}
+
+struct CompletedIdentityMigration {
+    workspace_id: u64,
+    from: DocId,
+    to: DocId,
+    installed: VaultEntry,
+    removal: CompletedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+}
 
 struct ExplicitRenameSnapshot {
     workspace_id: u64,
@@ -692,6 +725,29 @@ impl PreparedExplicitRename {
             stat: after,
             rewrites,
         })
+    }
+}
+impl PendingExplicitRename {
+    /// Esegue soltanto le callback remove+feed usando handle owned.
+    pub fn invoke(self) -> CompletedExplicitRename {
+        CompletedExplicitRename {
+            identity: self.identity.invoke(),
+            rewrites: self.rewrites,
+            owns_batch: self.owns_batch,
+        }
+    }
+}
+
+impl PendingIdentityMigration {
+    fn invoke(self) -> CompletedIdentityMigration {
+        CompletedIdentityMigration {
+            workspace_id: self.workspace_id,
+            from: self.from,
+            to: self.to,
+            installed: self.installed,
+            removal: self.removal.invoke(),
+            feed: self.feed.invoke_indexes(),
+        }
     }
 }
 
@@ -6346,7 +6402,12 @@ impl Workspace {
             .prepare_explicit_rename(from, to)?
             .expect("il documento è già stato classificato");
         let parsed = prepared.invoke()?;
-        self.commit_explicit_rename_in_batch(parsed)
+        let pending = self.commit_explicit_rename(parsed)?;
+        let completed = pending.invoke();
+        match self.finish_explicit_rename(completed) {
+            Ok(outcome) => outcome,
+            Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
+        }
     }
 
     /// Classifica e fotografa core, routing e pipeline di parse senza I/O né
@@ -6404,15 +6465,33 @@ impl Workspace {
         }))
     }
 
-    /// Applica una rinomina invocata fuori dal workspace dentro un unico lotto.
-    pub fn commit_explicit_rename(&mut self, parsed: ParsedExplicitRename) -> Result<()> {
-        self.batch(|workspace| workspace.commit_explicit_rename_in_batch(parsed))
+    /// Applica il file e il solo core della rinomina. Gli handle owned e il
+    /// frame del lotto restano nel token fino al finalizzatore.
+    pub fn commit_explicit_rename(
+        &mut self,
+        parsed: ParsedExplicitRename,
+    ) -> Result<PendingExplicitRename> {
+        let owns_batch = self.dispatch.open_batch();
+        match self.commit_explicit_rename_in_batch(parsed) {
+            Ok(mut pending) => {
+                pending.owns_batch = owns_batch;
+                Ok(pending)
+            }
+            Err(error) => {
+                if owns_batch {
+                    self.dispatch.close_batch();
+                }
+                Err(error)
+            }
+        }
     }
 
     /// Riconvalida integralmente la fotografia prima della prima mutazione,
-    /// quindi conserva l'ordine storico side-data → file → core → journal →
-    /// backlink → `IndexUpdated`.
-    fn commit_explicit_rename_in_batch(&mut self, parsed: ParsedExplicitRename) -> Result<()> {
+    /// quindi conserva l'ordine storico side-data → file → core.
+    fn commit_explicit_rename_in_batch(
+        &mut self,
+        parsed: ParsedExplicitRename,
+    ) -> Result<PendingExplicitRename> {
         let ParsedExplicitRename {
             snapshot,
             model,
@@ -6440,16 +6519,49 @@ impl Workspace {
             return Err(KernelError::Stale(snapshot.from.to_string()));
         }
 
+        self.indexes.ensure_mutation_available()?;
         self.migrate_side_data(&snapshot.from, &snapshot.to);
         self.docs
             .vault
             .rename_no_replace(&snapshot.from, &snapshot.to)?;
-        self.migrate_identity(&snapshot.from, &snapshot.to, model, fingerprint);
-        self.record(JournalOp::Renamed {
-            from: snapshot.from.clone(),
-            to: snapshot.to.clone(),
-        });
+        let identity =
+            self.migrate_identity_core(&snapshot.from, &snapshot.to, model, fingerprint)?;
+        Ok(PendingExplicitRename {
+            identity,
+            rewrites,
+            owns_batch: false,
+        })
+    }
 
+    /// Recupera frame e perdite, poi completa il lotto storico. Le riscritture
+    /// dei backlink restano sincrone: il loro confine è deliberatamente un
+    /// lavoro successivo.
+    pub fn finish_explicit_rename(
+        &mut self,
+        completed: CompletedExplicitRename,
+    ) -> std::result::Result<Result<()>, (PluginError, CompletedExplicitRename)> {
+        if completed.identity.workspace_id != self.workspace_id {
+            return Err((
+                PluginError::Conflict(
+                    "la rinomina esplicita appartiene a un altro workspace".into(),
+                ),
+                completed,
+            ));
+        }
+        let CompletedExplicitRename {
+            identity,
+            rewrites,
+            owns_batch,
+        } = completed;
+        let from = identity.from.clone();
+        let to = identity.to.clone();
+        if self.finish_identity_migration(identity).is_err() {
+            unreachable!("l'identità è già stata legata a questo workspace");
+        }
+        self.record(JournalOp::Renamed {
+            from: from.clone(),
+            to: to.clone(),
+        });
         let mut failed = Vec::new();
         for (src, request) in rewrites {
             if let Err(error) = self.apply_edit(&src, request) {
@@ -6457,11 +6569,13 @@ impl Workspace {
             }
         }
         self.emit_event(Event::IndexUpdated);
-        self.dispatch_pending();
+        if owns_batch {
+            self.dispatch.close_batch();
+        }
         if failed.is_empty() {
-            Ok(())
+            Ok(Ok(()))
         } else {
-            Err(KernelError::LinkRewrite(failed.join("; ")))
+            Ok(Err(KernelError::LinkRewrite(failed.join("; "))))
         }
     }
 
@@ -6636,13 +6750,88 @@ impl Workspace {
         plan
     }
 
-    /// modelli, documento attivo, grafo, indici, evento [`Event::DocumentRenamed`].
-    ///
-    /// È il tratto comune di [`rename_document`](Workspace::rename_document)
-    /// (che prima sposta il file) e di
-    /// [`sync_renamed_path`](Workspace::sync_renamed_path) (dove il file lo ha
-    /// già spostato qualcun altro).
-    // L'anagrafe migra come tutto il resto: la chiave è il path, e il path
+    /// Installa il cambio d'identità nel core e fotografa gli handle esterni
+    /// senza invocare alcun `IndexProvider`.
+    fn migrate_identity_core(
+        &mut self,
+        from: &DocId,
+        to: &DocId,
+        model: DocumentModel,
+        fingerprint: Revision,
+    ) -> Result<PendingIdentityMigration> {
+        let removal = self
+            .prepare_document_rename_removal(from)?
+            .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
+        let changes = self.indexes.core.changes_for(&model, &fingerprint);
+        self.touch_entry(to, Some(fingerprint.clone()));
+        let installed = self
+            .indexes
+            .core
+            .entries
+            .get(to)
+            .cloned()
+            .expect("touch_entry installa l'identità");
+        let losses = self
+            .indexes
+            .core
+            .on_documents_indexed(std::slice::from_ref(&model));
+        let feed = PreparedDocumentFeed {
+            id: to.clone(),
+            model,
+            changes,
+            revision: fingerprint,
+            journal: JournalOp::Renamed {
+                from: from.clone(),
+                to: to.clone(),
+            },
+            providers: self.indexes.feed_handles(),
+            losses,
+        };
+        self.session
+            .invalidate(from, ContextChange::Renamed(to.clone()));
+        Ok(PendingIdentityMigration {
+            workspace_id: self.workspace_id,
+            from: from.clone(),
+            to: to.clone(),
+            installed,
+            removal,
+            feed,
+        })
+    }
+
+    fn finish_identity_migration(
+        &mut self,
+        completed: CompletedIdentityMigration,
+    ) -> std::result::Result<bool, CompletedIdentityMigration> {
+        if completed.workspace_id != self.workspace_id {
+            return Err(completed);
+        }
+        let CompletedIdentityMigration {
+            from,
+            to,
+            installed,
+            removal,
+            feed,
+            ..
+        } = completed;
+        let removal_losses = match self.finish_document_rename_removal(removal) {
+            Ok(losses) => losses,
+            Err(_) => unreachable!("la rimozione condivide l'identità del workspace"),
+        };
+        self.report_losses(removal_losses);
+        self.report_losses(feed.losses);
+        let current = !self.indexes.core.entries.contains_key(&from)
+            && self.indexes.core.entries.get(&to) == Some(&installed)
+            && self.entry_fingerprint(&to) == installed.fingerprint
+            && self.indexes.core.metas.contains_key(&to);
+        if current && self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        self.emit_event(Event::DocumentRenamed { from, to });
+        Ok(current)
+    }
+
+    /// Percorso sincrono usato dal watcher storico.
     fn migrate_identity(
         &mut self,
         from: &DocId,
@@ -6650,36 +6839,14 @@ impl Workspace {
         model: DocumentModel,
         fingerprint: Revision,
     ) {
-        // è cambiato.
-        // La nota aperta segue il rename anche qui: senza, `active_context`
-        self.indexes.core.remove_entry(from);
-        self.touch_entry(to, Some(fingerprint));
-        // risponderebbe col path vecchio e outline/backlink si svuoterebbero
-        // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
-        // vale anche per i rename non innescati da lei.
-        // Per ogni indice — quello del kernel compreso — il rename è
-        self.session
-            .invalidate(from, ContextChange::Renamed(to.clone()));
+        let pending = self
+            .migrate_identity_core(from, to, model, fingerprint)
+            .expect("la rinomina ha già validato l'identità");
         self.migrate_side_data(from, to);
-        // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
-        // tiene stato *per-documento* invece migra la chiave sull'evento
-        // `DocumentRenamed`.)
-        // Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
-        let lost = self
-            .indexes
-            .on_documents_removed(std::slice::from_ref(from));
-        self.report_losses(lost);
-        let lost = self
-            .indexes
-            .on_documents_indexed(std::slice::from_ref(&model));
-        self.report_losses(lost);
-        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-            self.indexes.core.rebuild_graph();
+        let completed = pending.invoke();
+        if self.finish_identity_migration(completed).is_err() {
+            unreachable!("la migrazione appartiene a questo workspace");
         }
-        self.emit_event(Event::DocumentRenamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
     }
 
     /// non è il documento**: l'organizzazione del kernel, lo spazio

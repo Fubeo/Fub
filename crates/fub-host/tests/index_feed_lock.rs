@@ -19,6 +19,7 @@ const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
 const EDIT_FEED_LOCK_PLUGIN: &str = "fub.audit-index-edit-feed";
 const CREATE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-create-feed";
 const RESTORE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-restore-feed";
+const RENAME_FEED_LOCK_PLUGIN: &str = "fub.audit-index-rename";
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -74,6 +75,70 @@ impl IndexProvider for IndexFeedLockProbe {
 
     fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
         Err(PluginError::Unserved("feed-only probe".into()))
+    }
+
+    fn up_to_date(&self, _: &[VaultEntry]) -> Vec<DocId> {
+        Vec::new()
+    }
+}
+#[derive(Debug, PartialEq, Eq)]
+enum RenameCallback {
+    Removal,
+    Feed,
+}
+
+struct RenameIndexProbe {
+    workspace: Custody<Workspace>,
+    observed: std::sync::mpsc::SyncSender<(RenameCallback, bool, bool)>,
+}
+
+impl RenameIndexProbe {
+    fn observe(&self, callback: RenameCallback) {
+        let read = self.workspace.try_read();
+        let read_free = read.is_some();
+        drop(read);
+        let write = self.workspace.try_write();
+        let write_free = write.is_some();
+        drop(write);
+        self.observed
+            .send((callback, read_free, write_free))
+            .expect("rename observation receiver");
+    }
+}
+
+impl IndexProvider for RenameIndexProbe {
+    fn routes(&self) -> Vec<QueryRoute> {
+        Vec::new()
+    }
+
+    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, _: &[DocumentModel]) -> Vec<IndexLoss> {
+        self.observe(RenameCallback::Feed);
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        self.observe(RenameCallback::Removal);
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
+        Err(PluginError::Unserved("rename-only probe".into()))
     }
 
     fn up_to_date(&self, _: &[VaultEntry]) -> Vec<DocId> {
@@ -247,6 +312,43 @@ fn an_index_feed_runs_without_holding_the_workspace_lock() {
         "Host::write_document held Custody<Workspace> across IndexProvider::on_documents_indexed"
     );
     outcome.expect("write completes after index feed");
+}
+#[test]
+fn rename_remove_and_feed_callbacks_run_without_the_workspace_lock() {
+    let v = vault();
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("the initial indexing finishes before the rename probe");
+    let workspace = host.debug_workspace(None).expect("debug custody");
+    let (observed_tx, observed_rx) = std::sync::mpsc::sync_channel(2);
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(RENAME_FEED_LOCK_PLUGIN, "Audit detached rename indexes")
+            .expect("rename owner declares");
+        ws.register_index_provider(
+            RENAME_FEED_LOCK_PLUGIN,
+            Box::new(RenameIndexProbe {
+                workspace: workspace.clone(),
+                observed: observed_tx,
+            }),
+        )
+        .expect("rename probe registers");
+    }
+
+    JobHost::new(workspace, RENAME_FEED_LOCK_PLUGIN)
+        .rename_document(&DocId::new("Note 0.md"), &DocId::new("Renamed.md"))
+        .expect("rename completes");
+
+    let removal = observed_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("remove callback observed");
+    let feed = observed_rx
+        .recv_timeout(Duration::from_secs(10))
+        .expect("feed callback observed");
+    assert_eq!(removal, (RenameCallback::Removal, true, true));
+    assert_eq!(feed, (RenameCallback::Feed, true, true));
+    assert!(v.root.join("Renamed.md").exists());
 }
 
 #[test]
