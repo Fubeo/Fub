@@ -315,6 +315,8 @@ struct BlockingFormat {
     armed: Arc<AtomicBool>,
     entered: mpsc::SyncSender<Stage>,
     release: Mutex<mpsc::Receiver<()>>,
+    workspace_probe: Arc<Mutex<Option<Custody<Workspace>>>>,
+    stale_during_parse: Arc<AtomicBool>,
 }
 
 impl FormatProvider for BlockingFormat {
@@ -331,6 +333,22 @@ impl FormatProvider for BlockingFormat {
         source: &DocumentSource,
         context: &ParseContext,
     ) -> Result<DocumentModel, FormatError> {
+        let workspace = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .as_ref()
+            .cloned();
+        if let Some(workspace) = workspace {
+            assert_workspace_is_free(&workspace, "FormatProvider::parse during rename");
+            if self.stale_during_parse.swap(false, Ordering::SeqCst) {
+                workspace
+                    .try_write()
+                    .expect("the parser callback can re-enter the workspace")
+                    .register_syntax_rule(PLUGIN, Box::new(LaterSyntax))
+                    .expect("the parser callback changes the syntax generation");
+            }
+        }
         if self.armed.load(Ordering::SeqCst) {
             self.entered
                 .send(Stage::Parse)
@@ -440,6 +458,8 @@ struct BlockingWorkspace {
     entered: mpsc::Receiver<Stage>,
     parse_release: mpsc::SyncSender<()>,
     syntax_release: mpsc::SyncSender<()>,
+    format_workspace_probe: Arc<Mutex<Option<Custody<Workspace>>>>,
+    stale_during_parse: Arc<AtomicBool>,
 }
 
 fn blocking_workspace(vault: &Vault) -> BlockingWorkspace {
@@ -447,12 +467,16 @@ fn blocking_workspace(vault: &Vault) -> BlockingWorkspace {
     let (parse_release_tx, parse_release_rx) = mpsc::sync_channel(1);
     let (syntax_release_tx, syntax_release_rx) = mpsc::sync_channel(1);
     let armed = Arc::new(AtomicBool::new(false));
+    let format_workspace_probe = Arc::new(Mutex::new(None));
+    let stale_during_parse = Arc::new(AtomicBool::new(false));
     let mut formats = FormatRegistry::new();
     formats
         .register(Box::new(BlockingFormat {
             armed: Arc::clone(&armed),
             entered: entered_tx.clone(),
             release: Mutex::new(parse_release_rx),
+            workspace_probe: Arc::clone(&format_workspace_probe),
+            stale_during_parse: Arc::clone(&stale_during_parse),
         }))
         .expect("format registers");
     let mut workspace = Workspace::new(&vault.root, formats).expect("workspace opens");
@@ -478,6 +502,8 @@ fn blocking_workspace(vault: &Vault) -> BlockingWorkspace {
         entered: entered_rx,
         parse_release: parse_release_tx,
         syntax_release: syntax_release_tx,
+        format_workspace_probe,
+        stale_during_parse,
     }
 }
 
@@ -524,6 +550,7 @@ fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
         entered,
         parse_release,
         syntax_release,
+        ..
     } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
@@ -534,6 +561,55 @@ fn job_host_releases_both_workspace_guards_for_model_parse_and_syntax() {
         .expect("model read succeeds");
     call.join().expect("completed model thread does not panic");
     assert_eq!(model.id, DocId::new("Note.md"));
+}
+
+#[test]
+fn rename_parse_is_detached_and_a_stale_source_is_not_moved() {
+    let vault = vault("# Original\n");
+    let BlockingWorkspace {
+        workspace,
+        armed,
+        entered,
+        parse_release,
+        format_workspace_probe,
+        stale_during_parse,
+        ..
+    } = blocking_workspace(&vault);
+    workspace
+        .write()
+        .expect("the vault is alive")
+        .reindex()
+        .expect("seed note enters the workspace");
+    *format_workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+    stale_during_parse.store(true, Ordering::SeqCst);
+    armed.store(true, Ordering::SeqCst);
+
+    let workspace_for_call = workspace.clone();
+    let call = std::thread::spawn(move || {
+        JobHost::new(workspace_for_call, PLUGIN)
+            .rename_document(&DocId::new("Note.md"), &DocId::new("Renamed.md"))
+    });
+    assert_eq!(
+        entered.recv_timeout(TIMEOUT).expect("rename parse entered"),
+        Stage::Parse
+    );
+    parse_release.send(()).expect("release rename parse");
+    let outcome = call.join().expect("rename thread does not panic");
+    *format_workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
+
+    assert!(matches!(outcome, Err(PluginError::Conflict(_))));
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Note.md")).unwrap(),
+        "# Original\n"
+    );
+    assert!(
+        !vault.root.join("Renamed.md").exists(),
+        "a stale parse must not move the source"
+    );
 }
 
 #[test]
@@ -1258,6 +1334,7 @@ fn a_model_from_a_changed_source_is_rejected_as_stale_and_the_workspace_is_reusa
         entered,
         parse_release,
         syntax_release,
+        ..
     } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
@@ -1292,6 +1369,7 @@ fn a_model_from_a_removed_source_is_rejected_as_stale_and_the_workspace_is_reusa
         entered,
         parse_release,
         syntax_release,
+        ..
     } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
@@ -1355,6 +1433,7 @@ fn a_model_from_a_changed_syntax_pipeline_is_rejected_as_stale() {
         entered,
         parse_release,
         syntax_release,
+        ..
     } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());
@@ -1406,6 +1485,7 @@ fn a_renderer_change_is_compatible_with_a_model_read() {
         entered,
         parse_release,
         syntax_release,
+        ..
     } = blocking_workspace(&vault);
     armed.store(true, Ordering::SeqCst);
     let (call, done) = start_read(workspace.clone());

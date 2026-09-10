@@ -619,7 +619,53 @@ impl VaultStructure for JobHost {
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
-        self.write_result(|h| h.rename_document(from, to))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let (from, to, prepared) = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    from.as_str(),
+                    || format!("renaming `{from}`"),
+                )?;
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    to.as_str(),
+                    || format!("renaming to `{to}`"),
+                )?;
+            }
+            let policy = ws.granted_policy(&self.plugin);
+            authorize_path(&policy, Capability::VaultStructure, from.as_str(), || {
+                format!("renaming `{from}`")
+            })?;
+            authorize_path(&policy, Capability::VaultStructure, to.as_str(), || {
+                format!("renaming to `{to}`")
+            })?;
+            let from = fenced_doc_id(from)?;
+            let to = fenced_doc_id(to)?;
+            let prepared = ws
+                .prepare_explicit_rename(&from, &to)
+                .map_err(PluginError::from)?;
+            (from, to, prepared)
+        };
+        if let Some(prepared) = prepared {
+            let parsed = prepared.invoke().map_err(PluginError::from)?;
+            with_event_drain(&workspace, |ws| {
+                ws.commit_explicit_rename(parsed).map_err(PluginError::from)
+            })?
+        } else {
+            with_event_drain(&workspace, |ws| {
+                ws.rename_document(&from, &to).map_err(PluginError::from)
+            })?
+        }
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
