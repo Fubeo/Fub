@@ -4681,20 +4681,41 @@ impl Workspace {
     }
 
     /// Chiude feed, rimozione o aggiornamento d'anagrafe dopo la fase detached.
+    ///
+    /// Un errore conserva il token completo: in particolare una rimozione
+    /// consegnata al workspace sbagliato deve poter tornare al proprietario,
+    /// che è l'unico autorizzato a ripristinarne il frame provider.
     pub fn finish_sync_path_prepared(
         &mut self,
         completed: CompletedSyncChange,
-    ) -> std::result::Result<bool, PluginError> {
+    ) -> std::result::Result<bool, (PluginError, CompletedSyncChange)> {
         let CompletedSyncChange { snapshot, state } = completed;
         match state {
             CompletedSyncState::Feed(feed) => {
+                if snapshot.workspace_id != self.workspace_id
+                    || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
+                        != Some(&snapshot.id)
+                    || snapshot.routing_generation != self.indexes.routing_generation()
+                    || snapshot.syntax_generation != self.syntax_generation
+                    || self.entry_fingerprint(&snapshot.id).as_ref() != Some(&feed.revision)
+                {
+                    return Ok(false);
+                }
                 self.as_actor(Actor::Watcher, |ws| ws.finish_index_feed(*feed));
                 Ok(true)
             }
-            CompletedSyncState::Removal(removal) => self
-                .finish_document_removal(removal)
-                .map(|()| true)
-                .map_err(|(error, _)| error),
+            CompletedSyncState::Removal(removal) => {
+                match self.finish_document_removal(removal) {
+                    Ok(()) => Ok(true),
+                    Err((error, removal)) => Err((
+                        error,
+                        CompletedSyncChange {
+                            snapshot,
+                            state: CompletedSyncState::Removal(removal),
+                        },
+                    )),
+                }
+            }
             CompletedSyncState::Entry(stat) => {
                 if snapshot.workspace_id != self.workspace_id
                     || self.docs.vault.doc_id_for_path(&snapshot.path).ok().as_ref()
@@ -4749,7 +4770,7 @@ impl Workspace {
         let completed = prepared.invoke();
         let outcome = match self.finish_sync_path_prepared(completed) {
             Ok(changed) => Ok(changed),
-            Err(error) => {
+            Err((error, _completed)) => {
                 self.report_host_trouble(Severity::Warning, error);
                 Ok(false)
             }

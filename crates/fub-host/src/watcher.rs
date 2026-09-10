@@ -574,14 +574,17 @@ impl ExternalSync {
             };
             if let Some(pending) = pending {
                 let completed = pending.invoke();
-                if let Err(error) = self
+                let outcome = self
                     .workspace
                     .write()?
-                    .finish_sync_path_prepared(completed)
-                {
-                    self.workspace
-                        .write()?
-                        .report_host_trouble(Severity::Warning, error);
+                    .finish_sync_path_prepared(completed);
+                if let Err((error, _completed)) = outcome {
+                    {
+                        let mut ws = self.workspace.write()?;
+                        ws.restore_event_dispatch(deferred);
+                        ws.report_host_trouble(Severity::Warning, error);
+                    }
+                    return drain_events(&self.workspace);
                 }
             }
         }

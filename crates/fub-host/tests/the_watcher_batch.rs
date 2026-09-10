@@ -185,16 +185,14 @@ fn who_reads_enters_while_the_batch_reads_the_disk() {
     );
 }
 
-/// **Il piano dichiara cosa credeva di sapere, e chi applica lo verifica.**
+/// **Anche il feed completato dichiara quale revisione ha indicizzato.**
 ///
-/// È il prezzo della fase in più: fra il parse e l'applicazione il prestito
-/// esclusivo passa di mano, e in mezzo può entrarci un salvataggio dell'utente.
-/// Applicare il modello parsato *prima* di quella scrittura la cancellerebbe
-/// dalla memoria del kernel — sul disco resterebbe, in anagrafe e negli indici
-/// no, e nessuno se ne accorgerebbe fino alla riapertura.
-/// no, e nessuno se ne accorgerebbe fino alla riapertura.
+/// Fra la mutazione del core e la finalizzazione degli eventi il prestito è
+/// rilasciato per notificare i provider. Un salvataggio può quindi superare il
+/// feed già completato: il finalizzatore deve riconoscere la revisione stale e
+/// non annunciare come corrente la modifica precedente.
 #[test]
-fn a_plan_aged_not_deletes_who_has_written_in_middle() {
+fn a_completed_feed_does_not_announce_over_a_newer_write() {
     let bench = bench();
     let id = DocId::new("nota.md");
     let path = bench.root.join("nota.md");
@@ -206,19 +204,31 @@ fn a_plan_aged_not_deletes_who_has_written_in_middle() {
     };
     assert!(plan.is_some(), "there was a document to prepare");
     let parsed = plan.map(SyncPlan::invoke);
-    // In mezzo, l'utente salva.
+    let pending = {
+        let mut ws = bench.ws.write().unwrap();
+        ws.prepare_sync_path_prepared(&path, parsed)
+            .expect("the parsed change is valid")
+            .expect("the feed is pending")
+    };
+
+    let completed = pending.invoke();
     let mut ws = bench.ws.write().unwrap();
     ws.write_document(&id, "from user\n", WriteBase::Dictated)
-        .expect("the save succeeds");
-    // Fase 2: il piano è invecchiato e si butta.
-    ws.sync_path_prepared(&path, parsed)
-        .expect("synchronization succeeds anyway");
+        .expect("the newer save succeeds");
+    let events = ws.bus().subscribe();
+    assert!(
+        matches!(ws.finish_sync_path_prepared(completed), Ok(false)),
+        "the stale feed must be a no-op"
+    );
 
     assert_eq!(
         entry(&ws, &id).fingerprint,
         Some(Revision::of("from user\n")),
-        "a plan made before the save was applied after: the user write \
-         vanished from kernel memory"
+        "the stale feed replaced the newer core revision"
+    );
+    assert!(
+        events.try_iter().next().is_none(),
+        "the stale feed emitted finalization events"
     );
 }
 

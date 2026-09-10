@@ -247,24 +247,47 @@ mod tests {
     }
 
     #[test]
-    fn wrong_workspace_returns_the_token_without_resetting_either_frame() {
-        let (_first, mut first) = workspace();
-        let (_second, mut second) = workspace();
+    fn wrong_workspace_returns_the_whole_sync_token_without_resetting_either_frame() {
+        let (first_root, mut first) = workspace();
+        let (_second_root, mut second) = workspace();
         let id = DocId::new("Note.md");
         first
             .indexes
             .core
             .on_documents_indexed(&[DocumentModel::empty(id.clone())]);
-        let completed = first
+        let snapshot = SyncSnapshot {
+            workspace_id: first.workspace_id,
+            path: Utf8PathBuf::from_path_buf(first_root.path().join(id.as_str())).unwrap(),
+            id: id.clone(),
+            seen: first.entry_fingerprint(&id),
+            entry: first.indexes.core.entries.get(&id).cloned(),
+            syntax_generation: first.syntax_generation,
+            routing_generation: first.indexes.routing_generation(),
+        };
+        let removal = first
             .prepare_document_removal(&id)
             .unwrap()
             .unwrap()
             .invoke();
-        let (error, completed) = second.finish_document_removal(completed).err().unwrap();
+        let completed = CompletedSyncChange {
+            snapshot,
+            state: CompletedSyncState::Removal(removal),
+        };
+
+        let (error, completed) = match second.finish_sync_path_prepared(completed) {
+            Err(failure) => failure,
+            Ok(_) => panic!("il workspace sbagliato non deve consumare il token"),
+        };
         assert!(matches!(error, PluginError::Conflict(_)));
+        assert_eq!(completed.snapshot.workspace_id, first.workspace_id);
         assert!(first.dispatch.in_provider_call());
         assert!(!second.dispatch.in_provider_call());
-        assert!(first.finish_document_removal(completed).is_ok());
+
+        let removal = match completed.state {
+            CompletedSyncState::Removal(removal) => removal,
+            _ => panic!("il token deve conservare la rimozione completata"),
+        };
+        assert!(first.finish_document_removal(removal).is_ok());
         assert!(!first.dispatch.in_provider_call());
     }
 
