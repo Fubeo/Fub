@@ -2606,7 +2606,9 @@ impl PreparedDocumentWrite {
         host: &mut dyn HostApi,
     ) -> std::result::Result<(), PluginError> {
         match &self.before_write {
-            Some((_, hook)) => hook(host, &self.id),
+            Some((owner, hook)) => {
+                crate::safety::calling_callback(owner, "BeforeWriteHook", || hook(host, &self.id))
+            }
             None => Ok(()),
         }
     }
@@ -5391,7 +5393,9 @@ impl Workspace {
         let model = self.docs.parse(id, source)?;
         if let Some((plugin, hook)) = self.before_write.clone() {
             let mut host = self.host_for(&plugin, InvokeMode::Apply);
-            if let Err(and) = hook(&mut host, id) {
+            if let Err(and) =
+                crate::safety::calling_callback(&plugin, "BeforeWriteHook", || hook(&mut host, id))
+            {
                 return Err(Self::before_write_error(id, and));
             }
         }

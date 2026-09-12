@@ -565,6 +565,136 @@ fn asset_rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
     );
 }
 
+#[test]
+fn a_panicking_before_write_finishes_the_staged_asset_rename_once() {
+    let v = vault();
+    std::fs::write(v.root.join("photo.png"), b"PNG").expect("seed asset");
+    std::fs::write(
+        v.root.join("Backlink.md"),
+        "# Backlink\n![photo](photo.png)\n",
+    )
+    .expect("seed backlink");
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(MarkdownProvider::new()))
+        .expect("markdown format registers");
+    let mut workspace = Workspace::new(&v.root, formats).expect("workspace opens");
+    workspace.reindex().expect("seed documents index");
+    workspace
+        .register_core_feature(
+            RENAME_BACKLINK_LOCK_PLUGIN,
+            "Audit panicking backlink rewrite",
+        )
+        .expect("rename caller declares");
+    workspace.set_before_write_hook(Some((
+        RENAME_BACKLINK_LOCK_PLUGIN.to_string(),
+        Arc::new(|_, _| panic!("before-write probe")),
+    )));
+    let workspace = Custody::new("panicking backlink workspace", workspace);
+    let events = workspace
+        .read()
+        .expect("workspace is alive")
+        .bus()
+        .subscribe();
+
+    let rename_error = JobHost::new(workspace.clone(), RENAME_BACKLINK_LOCK_PLUGIN)
+        .rename_document(&DocId::new("photo.png"), &DocId::new("media/photo.png"))
+        .expect_err("the rename reports its failed backlink rewrite");
+    let rename_message = rename_error.to_string();
+    assert!(
+        matches!(rename_error, PluginError::Io(_))
+            && rename_message.contains("rename riuscito")
+            && rename_message.contains(RENAME_BACKLINK_LOCK_PLUGIN)
+            && rename_message.contains("BeforeWriteHook")
+            && rename_message.contains("before-write probe"),
+        "the caught hook panic preserves LinkRewrite semantics: {rename_message}"
+    );
+    assert!(!v.root.join("photo.png").exists());
+    assert_eq!(
+        std::fs::read(v.root.join("media/photo.png")).unwrap(),
+        b"PNG"
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Backlink.md")).unwrap(),
+        "# Backlink\n![photo](photo.png)\n",
+        "the failed backlink rewrite remains unapplied"
+    );
+
+    let notices: Vec<_> = events.try_iter().collect();
+    assert_eq!(
+        notices
+            .iter()
+            .filter(|notice| matches!(
+                &notice.event,
+                Event::EntryRenamed { from, to, .. }
+                    if from.as_str() == "photo.png" && to.as_str() == "media/photo.png"
+            ))
+            .count(),
+        1,
+        "the successful asset move emits one real rename fact: {notices:?}"
+    );
+    assert_eq!(
+        notices
+            .iter()
+            .filter(|notice| matches!(notice.event, Event::BatchEnded { .. }))
+            .count(),
+        1,
+        "the partial rename still closes exactly one batch: {notices:?}"
+    );
+    let renamed = workspace
+        .read()
+        .expect("workspace is alive")
+        .journal()
+        .expect("journal is readable")
+        .records
+        .into_iter()
+        .filter(|record| {
+            matches!(
+                record.op,
+                JournalOp::Renamed { ref from, ref to }
+                    if from.as_str() == "photo.png" && to.as_str() == "media/photo.png"
+            )
+        })
+        .count();
+    assert_eq!(renamed, 1, "the asset rename is journaled once");
+
+    let original = std::fs::read_to_string(v.root.join("Note 0.md")).unwrap();
+    let write_error = JobHost::new(workspace.clone(), RENAME_BACKLINK_LOCK_PLUGIN)
+        .write_document(
+            &DocId::new("Note 0.md"),
+            "# must not be written\n",
+            WriteBase::Dictated,
+        )
+        .expect_err("the normal write catches the same hook panic");
+    assert!(
+        write_error
+            .to_string()
+            .contains(RENAME_BACKLINK_LOCK_PLUGIN)
+            && write_error.to_string().contains("BeforeWriteHook")
+    );
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),
+        original,
+        "a caught normal write panic does not mutate the file"
+    );
+
+    workspace
+        .write()
+        .expect("workspace remains usable")
+        .set_before_write_hook(None);
+    JobHost::new(workspace, RENAME_BACKLINK_LOCK_PLUGIN)
+        .write_document(
+            &DocId::new("Note 0.md"),
+            "# subsequent command\n",
+            WriteBase::Dictated,
+        )
+        .expect("a subsequent command completes");
+    assert_eq!(
+        std::fs::read_to_string(v.root.join("Note 0.md")).unwrap(),
+        "# subsequent command\n"
+    );
+}
+
 /// Il rebuild attraversa lo stesso driver staccato sia dall'ingresso utente sia
 /// da `HostApi::run_command`: il canale vede l'indice sul primo e parser+indice
 /// sul secondo, con entrambe le guardie disponibili dentro ogni callback.
