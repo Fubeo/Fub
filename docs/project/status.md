@@ -1,7 +1,7 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** candidato locale G3 al commit
-> `e8428be9729fd2489bbf00e445329d27ec74bb58`, 12 settembre 2026.
+> **Stato aggiornato per:** chiusura G3 sul commit
+> `f626dfca8a3c5271f64ec14368e10d09af8f937d`, 12 settembre 2026.
 
 ## Governance di integrazione
 
@@ -21,21 +21,15 @@ come un nuovo bug.
 Gli incrementi vengono riconciliati e verificati sulla linea audit, senza
 sovrascriverne i contratti. Il passaggio a `main` richiede G0–G14 e un G15/GO
 esplicito sul candidato corrente, seguito dalla verifica dello SHA integrato.
-Il piano audit non è completato: le spunte G3 riportano prove locali sul
-candidato, non chiudono il gate né i finding ancora privi di evidenza finale.
+`ARCH-001` e G3 sono chiusi, ma il piano audit non è completato e i finding
+ancora privi di evidenza finale restano aperti.
 
-## Candidato G3 della linea audit
+## G3 chiuso sulla linea audit
 
 La [PR #32](https://github.com/Fubeo/Fub/pull/32) è **OPEN, DRAFT**, con base
 `fix/audit-integration` e head `fix/lifecycle-mount-detached`. Dopo il fetch del
-12 settembre, `origin/main` è
-`cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, la base remota è
-`7efc4375a7167ea3df5070673c6c2163a758a0f2` e l'head remoto della PR è
-`356c2920d9bbefeecd30317e6ec2a9cabb8cbb46`. Il candidato locale
-`work/g3-integration` è
-`e8428be9729fd2489bbf00e445329d27ec74bb58`: **2 commit avanti e 0 indietro**,
-quindi il delta è pubblicabile con un normale fast-forward dopo l'integrazione
-del nuovo commit documentale. Nessun push o merge è implicito in questo stato.
+12 settembre, l'head remoto esatto è
+`f626dfca8a3c5271f64ec14368e10d09af8f937d`.
 
 Il candidato completa il distacco verificato delle callback di produzione:
 ripristino staged con mossa e rollback fuori custodia; rename esplicita di
@@ -46,27 +40,22 @@ dal panic prima di ogni scrittura. Mount, rollback, teardown e chiamate dirette
 del registry fanno parte del call graph finale verificato, non sono più
 un'eccezione dichiarata.
 
-Le due run sullo stesso head remoto `356c2920…` sono fallite per due sole
-osservazioni non bloccanti e racy nei test:
+Resta registrata la storia delle due run fallite sul precedente head remoto
+`356c2920d9bbefeecd30317e6ec2a9cabb8cbb46`: la
+[run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
+fallì soltanto nel job macOS `103590610888`, dove
+`an_action_from_a_replaced_view_provider_is_rejected_as_stale` scadde in attesa
+del vecchio provider. La
+[run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
+fallì soltanto nel job Ubuntu `103590603150`, dove
+`opening_runner_flush_releases_custody_and_allows_host_reentry` perse
+l'asserzione finale `try_write`. Tutti gli altri sette job di ciascuna run
+erano verdi. Erano due osservazioni non bloccanti e racy nei test, non una
+violazione del confine di custodia: `ca0896ca` sincronizza le osservazioni
+concorrenti e `e8428be9` mantiene il turno di scrittura durante la verifica
+finale del flush. I fix sono test-only e non ampliano timeout.
 
-- la [run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
-  è fallita soltanto nel job macOS `103590610888`: timeout di
-  `an_action_from_a_replaced_view_provider_is_rejected_as_stale` in attesa
-  dell'ingresso del vecchio provider;
-- la [run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
-  è fallita soltanto nel job Ubuntu `103590603150`:
-  `opening_runner_flush_releases_custody_and_allows_host_reentry` ha perso
-  l'asserzione finale one-shot `try_write`.
-
-Tutti gli altri job delle due run sono verdi, inclusi Windows, fmt/Clippy,
-documentazione, invarianti, client, supply chain e il job dell'altro sistema
-Unix. `ca0896ca` sincronizza le osservazioni concorrenti e sostituisce nel
-provider stale l'accesso non bloccante con quello bloccante, governato dal
-watchdog esistente; `e8428be9` mantiene il turno di scrittura durante la
-verifica finale del flush. I due fix sono test-only, non ampliano timeout e non
-segnalano una violazione del confine di custodia.
-
-Sul commit `e8428be9…` sono verdi:
+Sul genitore di codice `e8428be9729fd2489bbf00e445329d27ec74bb58` sono verdi:
 
 - `cargo +1.89 fmt --all -- --check`;
 - Clippy dell'intero workspace, tutti i target, con `-D warnings`;
@@ -76,14 +65,25 @@ La revisione finale del call graph e le ultime suite complete di `fub-kernel`
 (800 test in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36
 eseguibili, 2 ignorati) risalgono all'antenato di codice `1b0f13f…`; kernel e
 feature non sono stati rieseguiti dopo i fix host-only e non vanno attribuiti a
-`e8428be9…`.
+`e8428be9…` o `f626dfca…`.
 
-Le run su `356c2920…` non includono i due fix e non possono certificare il
-candidato locale. Dopo questo aggiornamento documentale serve un push ordinario
-e una nuova CI completa sul nuovo SHA pubblicato. Fino a tutti i job
-obbligatori verdi sul medesimo SHA, la PR resta draft, `ARCH-001` è
-**`CANDIDATE/CI_PENDING`**, G3 non è `CLOSED`, nessuna issue si chiude e
-G15/GO resta aperto.
+I fix e la documentazione sono confluiti nello stesso SHA remoto esatto
+`f626dfca8a3c5271f64ec14368e10d09af8f937d`, certificato da:
+
+- [run CI PR 34709566271](https://github.com/Fubeo/Fub/actions/runs/34709566271):
+  `completed/success`, 8 job su 8;
+- [run CI push 34709564735](https://github.com/Fubeo/Fub/actions/runs/34709564735):
+  `completed/success`, 8 job su 8;
+- [run NPM PR 34709566259](https://github.com/Fubeo/Fub/actions/runs/34709566259):
+  `completed/success`;
+- [run NPM push 34709564653](https://github.com/Fubeo/Fub/actions/runs/34709564653):
+  `completed/success`.
+
+Al controllo finale le run aperte su quello SHA sono 0. Questa evidenza chiude
+`ARCH-001` e G3. Il nuovo commit solo documentale che registra la chiusura deve
+ricevere a sua volta una CI completa verde sul proprio SHA prima che la PR #32
+diventi ready o che lo stato finale sia pubblicato. Nessuna issue viene chiusa,
+G15/GO resta aperto e non è autorizzato alcun merge in `main`.
 
 Il rischio residuo reale è il rollback di una rename in concorrenza con un
 processo esterno: `VaultStorage` non offre rename condizionale né reservation.
@@ -157,11 +157,12 @@ Il verde automatico non sostituisce queste evidenze.
 - discovery, installazione e teardown end-to-end;
 - esempio non banale.
 
-La PR #32 contiene il candidato locale del lifecycle conforme al confine G3,
-ma non è una capacità consegnata su `main` e non chiude #8. Dopo il verde della
-CI sullo SHA finale e la chiusura reale di G3, il prossimo incremento è #8:
-inventory e installazione end-to-end conformi, senza eseguibili in
-`.fub/plugins`.
+La PR #32 contiene il lifecycle conforme al confine G3, ma non è una capacità
+consegnata su `main` e non chiude #8. Il prossimo incremento funzionale è lo
+slice 1 di #8: portare semanticamente dalla PR #30 l'inventario installato,
+adattandolo alla linea G3 corrente e mantenendo gli eseguibili fuori da
+`.fub/plugins`. Non eseguire merge né cherry-pick dell'intera PR #30; #8 e #10
+restano aperte.
 
 Issue:
 
@@ -190,19 +191,19 @@ fasi 5–10: l'estrazione iniziale non va ripetuta.
 
 ## Bloccato
 
-Il merge in `main` è bloccato dal gate audit. Il candidato G3 è
-`CANDIDATE/CI_PENDING`: fmt, Clippy workspace e suite host sono verdi localmente
-su `e8428be9…`, ma soltanto tutti i job obbligatori verdi sullo stesso SHA
-finale possono consentire la chiusura di G3. Anche allora servono i gate
-successivi e G15/GO esplicito.
+Il merge in `main` resta bloccato dai gate audit successivi. `ARCH-001` e G3
+sono `CLOSED` su `f626dfca…`; il commit solo documentale che registra la
+chiusura richiede ancora la propria CI completa prima che la PR #32 possa
+diventare ready. #8, #10, G14 e G15/GO restano aperti.
 
 ## Prossimi passi
 
-1. integrare questo commit documentale sopra `e8428be9…`, pubblicare l'head
-   risultante sulla PR #32 con push ordinario e attendere una nuova CI completa
-   sul medesimo SHA;
-2. solo dopo quel verde, chiudere realmente G3 e passare a #8 per inventory e
-   installazione end-to-end conformi; quindi completare #10;
+1. integrare e pubblicare con push ordinario questo commit solo documentale
+   sopra `f626dfca…`, quindi attendere una CI completa verde sul suo SHA prima
+   di rendere la PR #32 ready;
+2. avviare lo slice 1 di #8 con un port semantico dell'inventario installato
+   dalla PR #30 sulla linea G3 corrente, senza merge o cherry-pick dell'intera
+   PR; mantenere aperte #8 e #10;
 3. completare ripristino atomico e backup/restore #5/#7;
 4. separare e misurare la Graph View con #12/#6;
 5. completare le evidenze manuali e ripetibili di #17;
