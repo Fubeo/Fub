@@ -163,7 +163,9 @@ fn exercise(path: Path) {
         completed,
         nested,
     });
-    let host = Host::new().with_watcher(Box::new(InstallingWatcher(probe.clone())));
+    let host = Host::new()
+        .with_job_threads(1)
+        .with_watcher(Box::new(InstallingWatcher(probe.clone())));
     host.open(&root).expect("open vault");
     if !is_runner {
         host.wait_indexed(None)
