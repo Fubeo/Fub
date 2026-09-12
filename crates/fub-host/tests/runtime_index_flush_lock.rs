@@ -164,8 +164,8 @@ fn exercise(path: Path) {
         nested,
     });
     let host = Host::new().with_watcher(Box::new(InstallingWatcher(probe.clone())));
+    host.open(&root).expect("open vault");
     if !is_runner {
-        host.open(&root).expect("open vault");
         host.wait_indexed(None)
             .expect("runner finishes before arming watcher probe");
         std::fs::write(root.join("External.md"), "# External\n").expect("real external change");
@@ -174,9 +174,7 @@ fn exercise(path: Path) {
     let (done_tx, done_rx) = mpsc::channel();
     let worker = std::thread::spawn(move || {
         let result = match path {
-            Path::Runner | Path::RunnerReentry => {
-                host.open(&root).and_then(|_| host.wait_indexed(None))
-            }
+            Path::Runner | Path::RunnerReentry => host.wait_indexed(None),
             Path::WatcherBatch | Path::WatcherCatchUp => {
                 let workspace = host.debug_workspace(None).expect("opened workspace");
                 let mut watcher = ExternalSync::new(workspace);
