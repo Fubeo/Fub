@@ -28,29 +28,31 @@ Dopo il fetch del 12 settembre 2026:
 - [PR #32](https://github.com/Fubeo/Fub/pull/32): **OPEN, DRAFT**, base
   `fix/audit-integration`, head `fix/lifecycle-mount-detached`;
 - head remoto della PR #32:
-  `a8d5771402f1b8ef682ee5807e5732c16a329289`;
+  `356c2920d9bbefeecd30317e6ec2a9cabb8cbb46`;
 - branch locale di consegna: `work/g3-integration`, HEAD
-  `a0b77232972a0e5f7c316d0585d460c326fd9d07`;
+  `e8428be9729fd2489bbf00e445329d27ec74bb58`;
 - intervallo locale non pubblicato:
-  `a8d5771402f1b8ef682ee5807e5732c16a329289..a0b77232972a0e5f7c316d0585d460c326fd9d07`;
-- divergenza: **3 commit avanti, 0 indietro**; il delta è fast-forward.
+  `356c2920d9bbefeecd30317e6ec2a9cabb8cbb46..e8428be9729fd2489bbf00e445329d27ec74bb58`;
+- divergenza: **2 commit avanti, 0 indietro**; il delta è fast-forward.
 
 Rifetcha questi riferimenti prima della pubblicazione. Gli SHA sono uno snapshot
 per rilevare drift, non istruzioni di reset. Se l'head remoto della PR non è più
-`a8d57714…`, confronta la storia e integra soltanto se il nuovo head è
+`356c2920…`, confronta la storia e integra soltanto se il nuovo head è
 compatibile.
 
 ## Candidato e fix locali
 
-L'head remoto `a8d57714` contiene già il candidato di codice fino a `1b0f13f1`
-e il primo commit documentale. I tre commit locali successivi, tutti limitati a
-`fub-host`, sono:
+L'head remoto contiene già i precedenti fix del candidato e il loro
+aggiornamento documentale. La sequenza rilevante è:
 
-| Commit | Origine | Correzione |
+| Commit | Stato | Origine e correzione |
 |---|---|---|
-| `7e3719f2` | CI 34706406133: Clippy `large_enum_variant` nel watcher | riduce la variante documentale |
-| `27808660` | successivo Clippy locale con Rust `1.89`: import inutilizzato | rimuove l'import dal test |
-| `a0b77232` | test watcher macOS/Windows: radice canonica confrontata con path non canonico | canonicalizza la radice nel test |
+| `7e3719f2` | remoto | CI 34706406133: riduce la variante documentale segnalata da Clippy |
+| `27808660` | remoto | rimuove l'import inutilizzato emerso dal Clippy locale con Rust `1.89` |
+| `a0b77232` | remoto | canonicalizza nel test watcher la radice confrontata su macOS/Windows |
+| `356c2920` | remoto | aggiorna i documenti e avvia le due run CI successive |
+| `ca0896ca` | locale | sincronizza le osservazioni concorrenti nei test stale/flush |
+| `e8428be9` | locale | mantiene il turno nella verifica finale del flush |
 
 Il comportamento G3 risultante comprende:
 
@@ -75,12 +77,13 @@ flush e panic di `BeforeWrite` oltre il confine di scrittura.
 
 ## Prove sul candidato
 
-Sul commit locale `a0b77232972a0e5f7c316d0585d460c326fd9d07`:
+Sul commit locale `e8428be9729fd2489bbf00e445329d27ec74bb58`:
 
 - `cargo +1.89 fmt --all -- --check`: **PASS**;
 - Clippy workspace, tutti i target, `-D warnings`, Rust `1.89`: **PASS**;
 - `fub-host`: 334 test verdi in 42 eseguibili;
-- i tre fix rispetto all'head remoto toccano soltanto `fub-host`.
+- `git diff --check` e stato finale della validazione: **PASS/pulito**;
+- i due fix rispetto all'head remoto toccano soltanto test di `fub-host`.
 
 Sul commit antenato `1b0f13f125450b98170cf4ae17acc0b163506007`:
 
@@ -89,29 +92,48 @@ Sul commit antenato `1b0f13f125450b98170cf4ae17acc0b163506007`:
 - kernel: 800 test verdi in 62 eseguibili, 1 ignorato;
 - features: 350 test verdi in 36 eseguibili, 2 ignorati.
 
-Kernel e feature non sono stati rieseguiti dopo i tre fix host-only: questi
-risultati non vanno attribuiti ad `a0b77232…`.
+Kernel e feature non sono stati rieseguiti dopo i fix host-only: questi
+risultati non vanno attribuiti a `e8428be9…`.
 
-La [run CI 34706406133](https://github.com/Fubeo/Fub/actions/runs/34706406133)
-su `a8d57714…` è **FAILURE**: rustfmt era passato, mentre Clippy aveva rilevato
-la variante grande corretta da `7e3719f2`. Nessuna CI certifica ancora i tre fix
-locali né il nuovo commit documentale. Per questo `ARCH-001` resta
-**`CANDIDATE/CI_PENDING`** e G3 non è `CLOSED`.
+Le due run sullo stesso head remoto `356c2920…` sono **FAILURE**, ma ciascuna
+ha un solo job fallito:
+
+- la [run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
+  fallisce soltanto nel job macOS `103590610888`; il test
+  `an_action_from_a_replaced_view_provider_is_rejected_as_stale` scade
+  aspettando l'ingresso del vecchio provider;
+- la [run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
+  fallisce soltanto nel job Ubuntu `103590603150`; il test
+  `opening_runner_flush_releases_custody_and_allows_host_reentry` perde
+  l'asserzione finale one-shot `try_write`.
+
+Tutti gli altri job delle due run sono verdi: Windows, fmt/Clippy,
+documentazione, invarianti, client, supply chain e il job dell'altro sistema
+Unix. Le cause radice sono due osservazioni non bloccanti racy, non una
+violazione del confine di custodia. `ca0896ca` sincronizza le asserzioni e usa
+nel provider stale l'accesso bloccante, lasciando al watchdog esistente la
+diagnosi di un vero deadlock; `e8428be9` conserva esplicitamente il turno di
+scrittura durante la verifica finale del flush. I fix sono test-only e non
+ampliano alcun timeout.
+
+Le run su `356c2920…` non includono questi fix e non possono certificare il
+candidato locale. `ARCH-001` resta **`CANDIDATE/CI_PENDING`** e G3 non è
+`CLOSED`.
 
 ## Azione successiva esatta
 
-1. Integra con fast-forward o cherry-pick pulito questo nuovo commit
-   documentale sopra `work/g3-integration` a `a0b77232…`.
-2. Rifetcha la PR #32 e verifica che `a8d57714...HEAD` sia ancora un
+1. Integra con fast-forward o cherry-pick pulito questo commit documentale sopra
+   `work/g3-integration` a `e8428be9…`.
+2. Rifetcha la PR #32 e verifica che `356c2920...HEAD` sia ancora un
    fast-forward; in caso di drift incompatibile fermati senza reset o force.
 3. Pubblica l'HEAD risultante su `fix/lifecycle-mount-detached` con push
    ordinario, mai force-push.
 4. Attendi una nuova CI completa della
    [PR #32](https://github.com/Fubeo/Fub/actions?query=branch%3Afix%2Flifecycle-mount-detached)
-   e accetta esclusivamente tutti i job obbligatori verdi sullo stesso SHA
+   e accetta esclusivamente tutti i job obbligatori verdi sullo stesso nuovo SHA
    appena pubblicato.
 5. Soltanto dopo quel verde aggiorna lo stato da `CANDIDATE/CI_PENDING` e valuta
-   la chiusura reale di G3. Non riusare la run fallita sul commit precedente.
+   la chiusura reale di G3. Non riusare le run fallite su `356c2920…`.
 6. Dopo G3, il prossimo lavoro è #8: integrare inventory e installazione
    end-to-end conformi, senza eseguibili in `.fub/plugins`; segue #10.
 
@@ -124,7 +146,7 @@ il filesystem una transazione globale. Questo rischio resta esplicito.
 
 Restano intenzionalmente pendenti:
 
-- CI completa sul nuovo SHA che include i tre fix e la documentazione;
+- CI completa sul nuovo SHA che include i due fix e la documentazione;
 - chiusura di `ARCH-001` e G3;
 - pubblicazione del nuovo HEAD e merge della PR #32;
 - chiusura di qualunque issue;

@@ -1,7 +1,7 @@
 # Stato del progetto
 
 > **Stato aggiornato per:** candidato locale G3 al commit
-> `a0b77232972a0e5f7c316d0585d460c326fd9d07`, 12 settembre 2026.
+> `e8428be9729fd2489bbf00e445329d27ec74bb58`, 12 settembre 2026.
 
 ## Governance di integrazione
 
@@ -31,9 +31,9 @@ La [PR #32](https://github.com/Fubeo/Fub/pull/32) è **OPEN, DRAFT**, con base
 12 settembre, `origin/main` è
 `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, la base remota è
 `7efc4375a7167ea3df5070673c6c2163a758a0f2` e l'head remoto della PR è
-`a8d5771402f1b8ef682ee5807e5732c16a329289`. Il candidato locale
+`356c2920d9bbefeecd30317e6ec2a9cabb8cbb46`. Il candidato locale
 `work/g3-integration` è
-`a0b77232972a0e5f7c316d0585d460c326fd9d07`: **3 commit avanti e 0 indietro**,
+`e8428be9729fd2489bbf00e445329d27ec74bb58`: **2 commit avanti e 0 indietro**,
 quindi il delta è pubblicabile con un normale fast-forward dopo l'integrazione
 del nuovo commit documentale. Nessun push o merge è implicito in questo stato.
 
@@ -46,15 +46,27 @@ dal panic prima di ogni scrittura. Mount, rollback, teardown e chiamate dirette
 del registry fanno parte del call graph finale verificato, non sono più
 un'eccezione dichiarata.
 
-La [run CI 34706406133](https://github.com/Fubeo/Fub/actions/runs/34706406133)
-su `a8d57714…` è fallita: rustfmt era passato, mentre Clippy aveva segnalato
-`large_enum_variant` nel watcher. Il commit `7e3719f2` riduce la variante
-documentale; il successivo controllo locale con Rust `1.89` ha trovato un
-import inutilizzato nel test, rimosso da `27808660`; `a0b77232` corregge infine
-il test watcher che su macOS/Windows confrontava la radice canonica con un path
-non canonico. La vecchia run non certifica nessuno di questi tre fix.
+Le due run sullo stesso head remoto `356c2920…` sono fallite per due sole
+osservazioni non bloccanti e racy nei test:
 
-Sul commit `a0b77232…` sono verdi:
+- la [run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
+  è fallita soltanto nel job macOS `103590610888`: timeout di
+  `an_action_from_a_replaced_view_provider_is_rejected_as_stale` in attesa
+  dell'ingresso del vecchio provider;
+- la [run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
+  è fallita soltanto nel job Ubuntu `103590603150`:
+  `opening_runner_flush_releases_custody_and_allows_host_reentry` ha perso
+  l'asserzione finale one-shot `try_write`.
+
+Tutti gli altri job delle due run sono verdi, inclusi Windows, fmt/Clippy,
+documentazione, invarianti, client, supply chain e il job dell'altro sistema
+Unix. `ca0896ca` sincronizza le osservazioni concorrenti e sostituisce nel
+provider stale l'accesso non bloccante con quello bloccante, governato dal
+watchdog esistente; `e8428be9` mantiene il turno di scrittura durante la
+verifica finale del flush. I due fix sono test-only, non ampliano timeout e non
+segnalano una violazione del confine di custodia.
+
+Sul commit `e8428be9…` sono verdi:
 
 - `cargo +1.89 fmt --all -- --check`;
 - Clippy dell'intero workspace, tutti i target, con `-D warnings`;
@@ -63,13 +75,15 @@ Sul commit `a0b77232…` sono verdi:
 La revisione finale del call graph e le ultime suite complete di `fub-kernel`
 (800 test in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36
 eseguibili, 2 ignorati) risalgono all'antenato di codice `1b0f13f…`; kernel e
-feature non sono stati rieseguiti dopo i tre fix host-only e non vanno
-attribuiti ad `a0b77232…`.
+feature non sono stati rieseguiti dopo i fix host-only e non vanno attribuiti a
+`e8428be9…`.
 
-La matrice CI completa resta in attesa del nuovo SHA che includerà anche questo
-aggiornamento documentale. Fino a tutti i job obbligatori verdi sul medesimo
-SHA, la PR resta draft, `ARCH-001` è **`CANDIDATE/CI_PENDING`**, G3 non è
-`CLOSED`, nessuna issue si chiude e G15/GO resta aperto.
+Le run su `356c2920…` non includono i due fix e non possono certificare il
+candidato locale. Dopo questo aggiornamento documentale serve un push ordinario
+e una nuova CI completa sul nuovo SHA pubblicato. Fino a tutti i job
+obbligatori verdi sul medesimo SHA, la PR resta draft, `ARCH-001` è
+**`CANDIDATE/CI_PENDING`**, G3 non è `CLOSED`, nessuna issue si chiude e
+G15/GO resta aperto.
 
 Il rischio residuo reale è il rollback di una rename in concorrenza con un
 processo esterno: `VaultStorage` non offre rename condizionale né reservation.
@@ -178,13 +192,13 @@ fasi 5–10: l'estrazione iniziale non va ripetuta.
 
 Il merge in `main` è bloccato dal gate audit. Il candidato G3 è
 `CANDIDATE/CI_PENDING`: fmt, Clippy workspace e suite host sono verdi localmente
-su `a0b77232…`, ma soltanto tutti i job obbligatori verdi sullo stesso SHA
+su `e8428be9…`, ma soltanto tutti i job obbligatori verdi sullo stesso SHA
 finale possono consentire la chiusura di G3. Anche allora servono i gate
 successivi e G15/GO esplicito.
 
 ## Prossimi passi
 
-1. integrare il nuovo commit documentale sopra `a0b77232…`, pubblicare l'head
+1. integrare questo commit documentale sopra `e8428be9…`, pubblicare l'head
    risultante sulla PR #32 con push ordinario e attendere una nuova CI completa
    sul medesimo SHA;
 2. solo dopo quel verde, chiudere realmente G3 e passare a #8 per inventory e

@@ -1024,9 +1024,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Sul candidato di codice `1b0f13f125450b98170cf4ae17acc0b163506007`
 la revisione finale del call graph di produzione che attraversa
-`Custody<Workspace>` è `PASS`. I tre fix host-only successivi portano l'HEAD
-locale a `a0b77232972a0e5f7c316d0585d460c326fd9d07` senza modificare quel call
-graph. Per ogni callsite è stato verificato che:
+`Custody<Workspace>` è `PASS`. I fix host-only integrati fino all'HEAD locale
+`e8428be9729fd2489bbf00e445329d27ec74bb58` non modificano quel call graph.
+Per ogni callsite è stato verificato che:
 
 - [x] il guard termina prima della callback;
 - [x] il proxy non espone il workspace generico;
@@ -1053,23 +1053,40 @@ le spunte seguenti, ma non la chiusura di G3:
 - [x] commit semantici ispezionati;
 - [x] `ARCH-001` aggiornato nella matrice.
 
-Su `a0b77232972a0e5f7c316d0585d460c326fd9d07`,
+Su `e8428be9729fd2489bbf00e445329d27ec74bb58`,
 `cargo +1.89 fmt --all -- --check`, Clippy dell'intero workspace con tutti i
 target e `-D warnings`, e la suite completa `fub-host` (334 test in 42
 eseguibili) sono verdi. Le ultime esecuzioni complete di `fub-kernel` (800 test
 in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36 eseguibili, 2
 ignorati) risalgono al candidato antenato `1b0f13f…`: non sono state rieseguite
-dopo i tre fix limitati all'host e non vanno attribuite ad `a0b77232…`.
+dopo i fix limitati all'host e non vanno attribuite a `e8428be9…`.
 
-La [run CI 34706406133](https://github.com/Fubeo/Fub/actions/runs/34706406133)
-su `a8d5771402f1b8ef682ee5807e5732c16a329289` non è verde: rustfmt era passato,
-ma Clippy aveva rilevato `large_enum_variant` nel watcher. Il commit `7e3719f2`
-ha ridotto la variante; il successivo Clippy locale con Rust `1.89` ha esposto
-un import inutilizzato nel test, rimosso da `27808660`; il fallimento del test
-watcher su macOS/Windows dovuto al confronto con una radice non canonica è
-corretto da `a0b77232`. Nessuna CI certifica ancora questo HEAD locale né il
-successivo commit documentale: la matrice resta in attesa di una nuova run sullo
-stesso SHA pubblicato.
+Le due run sullo stesso head remoto
+`356c2920d9bbefeecd30317e6ec2a9cabb8cbb46` sono entrambe **FAILURE**, ciascuna
+per una sola osservazione di test racy:
+
+- la [run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
+  è fallita soltanto nel job macOS `103590610888`, dove
+  `an_action_from_a_replaced_view_provider_is_rejected_as_stale` è scaduto
+  aspettando l'ingresso del vecchio provider; gli altri sette job sono verdi;
+- la [run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
+  è fallita soltanto nel job Ubuntu `103590603150`, dove
+  `opening_runner_flush_releases_custody_and_allows_host_reentry` ha perso
+  l'asserzione non bloccante finale `try_write`; gli altri sette job sono verdi.
+
+In entrambe le run sono quindi verdi Windows, fmt/Clippy, documentazione,
+invarianti, client, supply chain e il job dell'altro sistema Unix. Le cause
+radice sono osservazioni non bloccanti che potevano perdere una gara, non
+violazioni del confine di custodia. `ca0896ca` sincronizza le asserzioni
+concorrenti e usa l'accesso bloccante nel provider stale, lasciando al watchdog
+esistente la diagnosi di un vero deadlock; `e8428be9` conserva esplicitamente il
+turno di scrittura durante la verifica finale del flush. Sono modifiche
+test-only e non ampliano alcun timeout.
+
+Le run su `356c2920…` non possono certificare né `ca0896ca` né `e8428be9`, e
+quindi non certificano il candidato locale. Dopo l'integrazione di questo
+aggiornamento documentale serve un push ordinario e una nuova CI completa:
+tutti i job obbligatori devono essere verdi sul medesimo nuovo SHA pubblicato.
 
 Il rischio residuo reale non viene nascosto: il rollback di una rename può
 correre contro un processo esterno, perché `VaultStorage` non offre rename
@@ -2682,7 +2699,7 @@ Compilare una riga per ogni ID.
 
 | ID | Specifica ricostruita | Stato iniziale | Commit | Test/guardia | Docs | Rischio | CI |
 |---|---|---|---|---|---|---|---|
-| ARCH-001 | provider fuori lock con prepare/call/finalize | `CANDIDATE/CI_PENDING` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...` | call graph production `Custody` PASS; kernel 800/62 +1 ignorato; host 334/42; features 350/36 +2 ignorati | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni; Clippy locale limitato da 3 lint preesistenti | CI completa richiesta sullo SHA documentato |
+| ARCH-001 | provider fuori lock con prepare/call/finalize | `CANDIDATE/CI_PENDING` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...`, `ca0896ca...`, `e8428be9...` | call graph production `Custody` PASS; su `e8428be9` fmt, Clippy workspace e host 334/42 PASS; kernel 800/62 +1 ignorato e features 350/36 +2 ignorati sull'antenato `1b0f13f` | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni | run PR `34707687690` e push `34707684943` su `356c2920` fallite per due osservazioni test racy corrette localmente; nuova CI completa richiesta sul medesimo SHA pubblicato |
 | ARCH-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-004 | servizi indipendenti progrediscono sotto write lock Workspace | `OPEN/REASSESS` |  | progresso |  |  |  |
