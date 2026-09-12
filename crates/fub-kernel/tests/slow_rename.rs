@@ -186,7 +186,10 @@ fn a_watcher_rename_carries_identity_once() {
         Utf8PathBuf::from_path_buf(other_dir.path().to_path_buf()).expect("seconda radice utf8");
     let mut other = Workspace::new(&other_root, registry()).expect("secondo workspace");
     let completed = match other.finish_external_document_rename(completed) {
-        Err((_error, completed)) => completed,
+        Err(failure) => {
+            let (_error, completed) = *failure;
+            completed
+        }
         Ok(outcome) => panic!("il workspace sbagliato ha consumato il token: {outcome}"),
     };
     let result = b.ws.finish_external_document_rename(completed);

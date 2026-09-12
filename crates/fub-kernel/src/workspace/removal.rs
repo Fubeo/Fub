@@ -459,7 +459,7 @@ mod tests {
             state: CompletedSyncState::Removal(removal),
         };
 
-        let (error, completed) = match second.finish_sync_path_prepared(completed) {
+        let (error, completed) = *match second.finish_sync_path_prepared(completed) {
             Err(failure) => failure,
             Ok(_) => panic!("il workspace sbagliato non deve consumare il token"),
         };

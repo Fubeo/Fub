@@ -941,7 +941,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
         .ws
         .write()
         .unwrap()
-        .prepare_external_asset_rename(parsed)
+        .prepare_external_asset_rename(*parsed)
         .expect("the verified asset rename is current");
     let completed = pending.invoke();
     let result = bench

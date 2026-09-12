@@ -514,10 +514,10 @@ impl PreflightedWatcherChange {
                 to_admitted,
             ) {
                 ExternalRenamePlan::Asset(plan) => {
-                    vec![PlannedWatcherChange::Asset(plan)]
+                    vec![PlannedWatcherChange::Asset(*plan)]
                 }
                 ExternalRenamePlan::Document(plan) => {
-                    vec![PlannedWatcherChange::Document(plan)]
+                    vec![PlannedWatcherChange::Document(*plan)]
                 }
                 ExternalRenamePlan::Sync(plans) => plans
                     .into_iter()
@@ -548,7 +548,7 @@ impl PlannedWatcherChange {
             }
             PlannedWatcherChange::Asset(plan) => match plan.invoke() {
                 ParsedExternalRename::Asset(parsed) => {
-                    vec![InvokedWatcherChange::Asset(parsed)]
+                    vec![InvokedWatcherChange::Asset(*parsed)]
                 }
                 ParsedExternalRename::Sync(changes) => changes
                     .into_iter()
@@ -786,7 +786,8 @@ impl ExternalSync {
                         match self.workspace.write()?.finish_sync_path_prepared(completed) {
                             Ok(true) => mutated = true,
                             Ok(false) => continue,
-                            Err((error, completed)) => {
+                            Err(failure) => {
+                                let (error, completed) = *failure;
                                 drop(completed);
                                 return Err(error);
                             }
@@ -808,7 +809,8 @@ impl ExternalSync {
                         {
                             Ok(true) => mutated = true,
                             Ok(false) => continue,
-                            Err((error, completed)) => {
+                            Err(failure) => {
+                                let (error, completed) = *failure;
                                 drop(completed);
                                 return Err(error);
                             }
@@ -830,7 +832,8 @@ impl ExternalSync {
                         {
                             Ok(true) => mutated = true,
                             Ok(false) => continue,
-                            Err((error, completed)) => {
+                            Err(failure) => {
+                                let (error, completed) = *failure;
                                 drop(completed);
                                 return Err(error);
                             }

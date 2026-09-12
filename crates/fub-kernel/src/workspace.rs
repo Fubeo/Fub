@@ -396,8 +396,8 @@ struct PreparedExplicitLinkEdit {
 
 /// Routing owned di una rinomina consegnata dal watcher.
 pub enum ExternalRenamePlan {
-    Asset(PreparedExternalAssetRename),
-    Document(PreparedExternalDocumentRename),
+    Asset(Box<PreparedExternalAssetRename>),
+    Document(Box<PreparedExternalDocumentRename>),
     Sync(Vec<(Utf8PathBuf, Option<SyncPlan>)>),
 }
 
@@ -475,7 +475,7 @@ pub struct PreparedExternalAssetRename {
 
 /// Esito detached della prima fase di una rinomina asset.
 pub enum ParsedExternalRename {
-    Asset(ParsedExternalAssetRename),
+    Asset(Box<ParsedExternalAssetRename>),
     Sync(Vec<(Utf8PathBuf, Option<ParsedChange>)>),
 }
 
@@ -627,18 +627,15 @@ impl SyncPlan {
                 source_kind,
                 already_ingested,
             ),
-            SyncPlanAction::Stat { storage } => {
-                let state = match storage.stat(&snapshot.path) {
-                    Ok(stat) if stat.is_file() => ParsedChangeState::Entry(Some(stat)),
-                    Ok(_) => ParsedChangeState::Entry(None),
-                    Err(error) if sync_path_is_absent(&error) => ParsedChangeState::Entry(None),
-                    Err(source) => ParsedChangeState::Failed(KernelError::Io {
-                        path: snapshot.path.clone(),
-                        source,
-                    }),
-                };
-                state
-            }
+            SyncPlanAction::Stat { storage } => match storage.stat(&snapshot.path) {
+                Ok(stat) if stat.is_file() => ParsedChangeState::Entry(Some(stat)),
+                Ok(_) => ParsedChangeState::Entry(None),
+                Err(error) if sync_path_is_absent(&error) => ParsedChangeState::Entry(None),
+                Err(source) => ParsedChangeState::Failed(KernelError::Io {
+                    path: snapshot.path.clone(),
+                    source,
+                }),
+            },
         };
         ParsedChange { snapshot, state }
     }
@@ -807,13 +804,10 @@ impl ParsedExplicitRename {
         } else {
             Err(KernelError::Io {
                 path: snapshot.from_path,
-                source: std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!(
-                        "il file è stato ripristinato, ma il rollback dei side-data è fallito: {}",
-                        rollback_errors.join("; ")
-                    ),
-                ),
+                source: std::io::Error::other(format!(
+                    "il file è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                    rollback_errors.join("; ")
+                )),
             })
         }
     }
@@ -1061,14 +1055,16 @@ impl PreparedExternalAssetRename {
             _ => None,
         };
         match verified {
-            Some((stat, fingerprint)) => ParsedExternalRename::Asset(ParsedExternalAssetRename {
-                snapshot,
-                stat,
-                fingerprint,
-                organization,
-                storage,
-                doc_data_roots,
-            }),
+            Some((stat, fingerprint)) => {
+                ParsedExternalRename::Asset(Box::new(ParsedExternalAssetRename {
+                    snapshot,
+                    stat,
+                    fingerprint,
+                    organization,
+                    storage,
+                    doc_data_roots,
+                }))
+            }
             None => ParsedExternalRename::Sync(
                 fallback
                     .into_iter()
@@ -5484,7 +5480,7 @@ impl Workspace {
                 return fallback(false);
             };
             let side_data = self.prepare_rename_side_data(&from_id, &to_id);
-            return ExternalRenamePlan::Document(PreparedExternalDocumentRename {
+            return ExternalRenamePlan::Document(Box::new(PreparedExternalDocumentRename {
                 snapshot: ExternalRenameSnapshot {
                     workspace_id: self.workspace_id,
                     from_path: from.to_owned(),
@@ -5500,7 +5496,7 @@ impl Workspace {
                 parser,
                 source_kind: descriptor.source,
                 side_data,
-            });
+            }));
         }
 
         let from_has_provider = self
@@ -5530,7 +5526,7 @@ impl Workspace {
             (path, plan)
         })
         .collect();
-        ExternalRenamePlan::Asset(PreparedExternalAssetRename {
+        ExternalRenamePlan::Asset(Box::new(PreparedExternalAssetRename {
             snapshot: ExternalRenameSnapshot {
                 workspace_id: self.workspace_id,
                 from_path: from.to_owned(),
@@ -5546,7 +5542,7 @@ impl Workspace {
             organization: Arc::clone(&self.organization),
             doc_data_roots: self.docs.plugin_data_roots(),
             fallback: fallback_plans,
-        })
+        }))
     }
 
     /// Riconvalida la fotografia e installa remove+feed nel solo core.
@@ -5658,14 +5654,14 @@ impl Workspace {
     pub fn finish_external_document_rename(
         &mut self,
         completed: CompletedExternalDocumentRename,
-    ) -> std::result::Result<bool, (PluginError, CompletedExternalDocumentRename)> {
+    ) -> std::result::Result<bool, Box<(PluginError, CompletedExternalDocumentRename)>> {
         if completed.snapshot.workspace_id != self.workspace_id {
-            return Err((
+            return Err(Box::new((
                 PluginError::Conflict(
                     "la rinomina documento appartiene a un altro workspace".into(),
                 ),
                 completed,
-            ));
+            )));
         }
         let CompletedExternalDocumentRename {
             snapshot,
@@ -5677,7 +5673,7 @@ impl Workspace {
         let removal_losses = match self.finish_document_rename_removal(removal) {
             Ok(losses) => losses,
             Err(removal) => {
-                return Err((
+                return Err(Box::new((
                     PluginError::Conflict(
                         "la rimozione della rinomina appartiene a un altro workspace".into(),
                     ),
@@ -5688,7 +5684,7 @@ impl Workspace {
                         feed,
                         side_data,
                     },
-                ));
+                )));
             }
         };
         self.report_losses(removal_losses);
@@ -5787,12 +5783,12 @@ impl Workspace {
     pub fn finish_external_asset_rename(
         &mut self,
         completed: CompletedExternalAssetRename,
-    ) -> std::result::Result<bool, (PluginError, CompletedExternalAssetRename)> {
+    ) -> std::result::Result<bool, Box<(PluginError, CompletedExternalAssetRename)>> {
         if completed.snapshot.workspace_id != self.workspace_id {
-            return Err((
+            return Err(Box::new((
                 PluginError::Conflict("la rinomina asset appartiene a un altro workspace".into()),
                 completed,
-            ));
+            )));
         }
         let CompletedExternalAssetRename {
             snapshot,
@@ -5993,12 +5989,12 @@ impl Workspace {
     pub fn finish_sync_path_prepared(
         &mut self,
         completed: CompletedSyncChange,
-    ) -> std::result::Result<bool, (PluginError, CompletedSyncChange)> {
+    ) -> std::result::Result<bool, Box<(PluginError, CompletedSyncChange)>> {
         if completed.snapshot.workspace_id != self.workspace_id {
-            return Err((
+            return Err(Box::new((
                 PluginError::Conflict("la sincronizzazione appartiene a un altro workspace".into()),
                 completed,
-            ));
+            )));
         }
         let CompletedSyncChange { snapshot, state } = completed;
         match state {
@@ -6025,13 +6021,13 @@ impl Workspace {
             CompletedSyncState::Removal(removal) => {
                 match self.finish_sync_document_removal(removal) {
                     Ok(()) => Ok(true),
-                    Err((error, removal)) => Err((
+                    Err((error, removal)) => Err(Box::new((
                         error,
                         CompletedSyncChange {
                             snapshot,
                             state: CompletedSyncState::Removal(removal),
                         },
-                    )),
+                    ))),
                 }
             }
             CompletedSyncState::Entry(stat) => {
@@ -6112,7 +6108,8 @@ impl Workspace {
         let completed = prepared.invoke();
         let outcome = match self.finish_sync_path_prepared(completed) {
             Ok(changed) => Ok(changed),
-            Err((error, _completed)) => {
+            Err(failure) => {
+                let (error, _completed) = *failure;
                 self.report_host_trouble(Severity::Warning, error);
                 Ok(false)
             }
@@ -6165,8 +6162,8 @@ impl Workspace {
     pub fn plan_catch_up(&self, snapshot: CatchUpSnapshot) -> Vec<(Utf8PathBuf, Option<SyncPlan>)> {
         snapshot
             .candidates
-            .into_iter()
-            .map(|(_id, path)| {
+            .into_values()
+            .map(|path| {
                 let plan = self.plan_sync_admitted(&path);
                 (path, plan)
             })
@@ -6441,9 +6438,7 @@ impl Workspace {
             Ok(committed) => committed,
             Err(failure) => {
                 let (error, completed) = *failure;
-                if let Err(rollback) = completed.rollback() {
-                    return Err(rollback);
-                }
+                completed.rollback()?;
                 return Err(error);
             }
         };
@@ -6730,14 +6725,14 @@ impl Workspace {
     pub fn finish_explicit_rename(
         &mut self,
         completed: CompletedExplicitRename,
-    ) -> std::result::Result<Result<()>, (PluginError, CompletedExplicitRename)> {
+    ) -> std::result::Result<Result<()>, Box<(PluginError, CompletedExplicitRename)>> {
         if completed.identity.workspace_id != self.workspace_id {
-            return Err((
+            return Err(Box::new((
                 PluginError::Conflict(
                     "la rinomina esplicita appartiene a un altro workspace".into(),
                 ),
                 completed,
-            ));
+            )));
         }
         let CompletedExplicitRename {
             identity,
@@ -6994,9 +6989,9 @@ impl Workspace {
     fn finish_identity_migration(
         &mut self,
         completed: CompletedIdentityMigration,
-    ) -> std::result::Result<bool, CompletedIdentityMigration> {
+    ) -> std::result::Result<bool, Box<CompletedIdentityMigration>> {
         if completed.workspace_id != self.workspace_id {
-            return Err(completed);
+            return Err(Box::new(completed));
         }
         let CompletedIdentityMigration {
             from,
@@ -7430,7 +7425,7 @@ impl Workspace {
                     LinkTarget::Url(_) => continue,
                 };
                 edits.push(PreparedExplicitLinkEdit {
-                    span: link.span.clone(),
+                    span: link.span,
                     written,
                     replacement,
                     from_end,

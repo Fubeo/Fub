@@ -684,7 +684,7 @@ impl VaultStructure for JobHost {
                     .map(drop)
             });
             with_event_drain(&workspace, |ws| ws.finish_explicit_rename(completed))?
-                .map_err(|(error, _)| error)?
+                .map_err(|failure| failure.0)?
                 .map_err(PluginError::from)
         } else {
             with_event_drain(&workspace, |ws| {
