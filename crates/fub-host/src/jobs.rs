@@ -596,12 +596,11 @@ pub(crate) fn run_detached_rebuild_index(
         })())
     };
 
-    let outcome = {
+    let deferred = {
         let mut ws = workspace.write()?;
         ws.finish_maintenance_rebuild(prepared, rebuilding)
     };
-    drain_events(workspace)?;
-    outcome
+    finish_events(workspace, deferred)?
 }
 
 // Le dodici famiglie. Sono righe di delega e nessuna decisione: ogni

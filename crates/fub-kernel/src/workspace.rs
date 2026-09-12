@@ -8920,7 +8920,7 @@ impl Workspace {
         &mut self,
         prepared: PreparedMaintenanceRebuild,
         opening: Option<std::result::Result<Opening, PluginError>>,
-    ) -> std::result::Result<CommandOutcome, PluginError> {
+    ) -> DeferredEvents<std::result::Result<CommandOutcome, PluginError>> {
         let outcome = match opening {
             Some(Ok(opening)) => Ok(self.rebuild_index_outcome(opening)),
             Some(Err(error)) => Err(error),
@@ -8948,12 +8948,13 @@ impl Workspace {
         if prepared.owns_batch {
             self.dispatch.close_batch();
         }
-        if let Some(previous_actor) = prepared.previous_actor {
-            self.dispatch.restore_actor(previous_actor);
-        }
         self.dispatch
             .restore_dispatch(prepared.previous_dispatch_deferral);
-        result
+        DeferredEvents {
+            outcome: result,
+            previous_actor: prepared.previous_actor,
+            journal: None,
+        }
     }
 
     /// Chiude il frame del comando senza consegnare eventi. L'attore precedente
