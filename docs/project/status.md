@@ -1,7 +1,8 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** chiusura G3 sul commit
-> `f626dfca8a3c5271f64ec14368e10d09af8f937d`, 12 settembre 2026.
+> **Stato aggiornato per:** fix test-only locale
+> `c8980cecb99b56979ec054c9c117c87efa5f5bc5`, 12 settembre 2026;
+> chiusura G3 con provenienza su `f626dfca8a3c5271f64ec14368e10d09af8f937d`.
 
 ## Governance di integrazione
 
@@ -29,7 +30,12 @@ ancora privi di evidenza finale restano aperti.
 La [PR #32](https://github.com/Fubeo/Fub/pull/32) è **OPEN, DRAFT**, con base
 `fix/audit-integration` e head `fix/lifecycle-mount-detached`. Dopo il fetch del
 12 settembre, l'head remoto esatto è
-`f626dfca8a3c5271f64ec14368e10d09af8f937d`.
+`4b957b25e23d89814344463e0fcfc77438a72501`. Il worktree
+`work/g3-integration` parte da
+`c8980cecb99b56979ec054c9c117c87efa5f5bc5`, `1` commit avanti e `0` indietro
+rispetto al remoto. `origin/fix/audit-integration` è
+`7efc4375a7167ea3df5070673c6c2163a758a0f2`; il candidato locale è `89`
+commit avanti e `0` indietro rispetto a quella base.
 
 Il candidato completa il distacco verificato delle callback di produzione:
 ripristino staged con mossa e rollback fuori custodia; rename esplicita di
@@ -55,33 +61,46 @@ violazione del confine di custodia: `ca0896ca` sincronizza le osservazioni
 concorrenti e `e8428be9` mantiene il turno di scrittura durante la verifica
 finale del flush. I fix sono test-only e non ampliano timeout.
 
-Sul genitore di codice `e8428be9729fd2489bbf00e445329d27ec74bb58` sono verdi:
+Sul candidato locale esatto
+`c8980cecb99b56979ec054c9c117c87efa5f5bc5` sono verdi:
 
 - `cargo +1.89 fmt --all -- --check`;
 - Clippy dell'intero workspace, tutti i target, con `-D warnings`;
-- `fub-host`: 334 test verdi in 42 eseguibili.
+- `fub-host`: 334 test verdi in 42 eseguibili;
+- `git diff --check`, con stato finale della validazione pulito.
 
 La revisione finale del call graph e le ultime suite complete di `fub-kernel`
 (800 test in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36
 eseguibili, 2 ignorati) risalgono all'antenato di codice `1b0f13f…`; kernel e
-feature non sono stati rieseguiti dopo i fix host-only e non vanno attribuiti a
-`e8428be9…` o `f626dfca…`.
+feature non sono stati rieseguiti per `c8980cec` e non vanno attribuiti al
+candidato locale.
 
-I fix e la documentazione sono confluiti nello stesso SHA remoto esatto
-`f626dfca8a3c5271f64ec14368e10d09af8f937d`, certificato da:
+La provenienza della chiusura `ARCH-001` e G3 rimane il candidato certificato
+`f626dfca8a3c5271f64ec14368e10d09af8f937d`: su quello SHA le run CI PR
+`34709566271` e push `34709564735` sono `success`, entrambe 8 job su 8, e le
+run NPM PR `34709566259` e push `34709564653` sono `success`.
 
-- [run CI PR 34709566271](https://github.com/Fubeo/Fub/actions/runs/34709566271):
+Sul successivo head remoto
+`4b957b25e23d89814344463e0fcfc77438a72501`:
+
+- [run CI PR 34711147682](https://github.com/Fubeo/Fub/actions/runs/34711147682):
   `completed/success`, 8 job su 8;
-- [run CI push 34709564735](https://github.com/Fubeo/Fub/actions/runs/34709564735):
-  `completed/success`, 8 job su 8;
-- [run NPM PR 34709566259](https://github.com/Fubeo/Fub/actions/runs/34709566259):
+- [run NPM PR 34711147695](https://github.com/Fubeo/Fub/actions/runs/34711147695)
+  e [run NPM push 34711144423](https://github.com/Fubeo/Fub/actions/runs/34711144423):
   `completed/success`;
-- [run NPM push 34709564653](https://github.com/Fubeo/Fub/actions/runs/34709564653):
-  `completed/success`.
+- [run CI push 34711144437](https://github.com/Fubeo/Fub/actions/runs/34711144437):
+  `completed/cancelled`, con sette job verdi e il job Ubuntu `103600048382`
+  cancellato dopo circa 40 minuti.
 
-Al controllo finale le run aperte su quello SHA sono 0. Questa evidenza chiude
-`ARCH-001` e G3. Il nuovo commit solo documentale che registra la chiusura deve
-ricevere a sua volta una CI completa verde sul proprio SHA prima che la PR #32
+La CI push `34711144437` non è verde. Il job Ubuntu era bloccato nel test
+`opening_runner_flush_rejects_same_provider_reentry_and_releases_its_guard`:
+la probe conservava il turno del writer durante `host.close()`. `c8980cec`
+rilascia esplicitamente il turno prima della chiusura; è un fix test-only e non
+cambia il comportamento G3/ARCH di produzione.
+
+Il candidato per la pubblicazione resta **`CI_PENDING`**. Il nuovo SHA che
+include `c8980cec` e questo aggiornamento deve essere pubblicato con push
+ordinario e ricevere una CI completa interamente verde prima che la PR #32
 diventi ready o che lo stato finale sia pubblicato. Nessuna issue viene chiusa,
 G15/GO resta aperto e non è autorizzato alcun merge in `main`.
 
@@ -192,15 +211,17 @@ fasi 5–10: l'estrazione iniziale non va ripetuta.
 ## Bloccato
 
 Il merge in `main` resta bloccato dai gate audit successivi. `ARCH-001` e G3
-sono `CLOSED` su `f626dfca…`; il commit solo documentale che registra la
-chiusura richiede ancora la propria CI completa prima che la PR #32 possa
-diventare ready. #8, #10, G14 e G15/GO restano aperti.
+sono `CLOSED` con provenienza su `f626dfca…`; il candidato di pubblicazione è
+`CI_PENDING` perché la CI push `34711144437` su `4b957b25…` è stata cancellata
+e il nuovo SHA con `c8980cec` richiede ancora una CI completa interamente verde.
+La PR #32 resta draft; #8, #10, G14 e G15/GO restano aperti.
 
 ## Prossimi passi
 
-1. integrare e pubblicare con push ordinario questo commit solo documentale
-   sopra `f626dfca…`, quindi attendere una CI completa verde sul suo SHA prima
-   di rendere la PR #32 ready;
+1. integrare e pubblicare con push ordinario il nuovo SHA che contiene
+   `c8980cec` e questo aggiornamento, quindi attendere una CI completa
+   interamente verde prima di rendere la PR #32 ready o pubblicare lo stato
+   finale;
 2. avviare lo slice 1 di #8 con un port semantico dell'inventario installato
    dalla PR #30 sulla linea G3 corrente, senza merge o cherry-pick dell'intera
    PR; mantenere aperte #8 e #10;

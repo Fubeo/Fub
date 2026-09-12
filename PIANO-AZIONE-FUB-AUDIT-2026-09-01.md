@@ -1039,7 +1039,7 @@ Per ogni callsite è stato verificato che:
 
 ## 3.10 Gate `G3 — Callback provider fuori lock`
 
-Stato del candidato di codice: **`CLOSED`** su
+Stato del candidato di codice: **`CLOSED`** con provenienza su
 `f626dfca8a3c5271f64ec14368e10d09af8f937d`. Le prove locali e remote
 autorizzano la chiusura di `ARCH-001` e G3:
 
@@ -1053,16 +1053,27 @@ autorizzano la chiusura di `ARCH-001` e G3:
 - [x] Clippy `-D warnings` verde in locale con Rust `1.89`;
 - [x] commit semantici ispezionati;
 - [x] `ARCH-001` aggiornato nella matrice;
-- [x] CI completa PR e push verde sul medesimo SHA.
+- [x] CI completa PR e push verde sul medesimo SHA `f626dfca…`.
 
-Sul genitore di codice `e8428be9729fd2489bbf00e445329d27ec74bb58`,
+Dopo il fetch del 12 settembre 2026, la PR #32 è **OPEN, DRAFT**, l'head remoto
+è `4b957b25e23d89814344463e0fcfc77438a72501` e il worktree
+`work/g3-integration` parte da
+`c8980cecb99b56979ec054c9c117c87efa5f5bc5`: rispetto al remoto sono `0`
+commit sul solo remoto e `1` sul solo locale. La base
+`origin/fix/audit-integration` è
+`7efc4375a7167ea3df5070673c6c2163a758a0f2`; il candidato locale è `89`
+commit avanti e `0` indietro.
+
+Sul candidato locale esatto `c8980cecb99b56979ec054c9c117c87efa5f5bc5`,
 `cargo +1.89 fmt --all -- --check`, Clippy dell'intero workspace con tutti i
 target e `-D warnings`, e la suite completa `fub-host` (334 test in 42
-eseguibili) sono verdi. Le ultime esecuzioni complete di `fub-kernel` (800 test
-in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36 eseguibili, 2
-ignorati) risalgono al candidato antenato `1b0f13f…`: non sono state rieseguite
-dopo i fix limitati all'host e non vanno attribuite a `e8428be9…` o
-`f626dfca…`.
+eseguibili) sono verdi. Anche `git diff --check` e lo stato finale della
+validazione sono puliti.
+
+Le ultime esecuzioni complete di `fub-kernel` (800 test in 62 eseguibili, 1
+ignorato) e delle feature (350 test in 36 eseguibili, 2 ignorati) risalgono al
+candidato antenato `1b0f13f…`: non sono state rieseguite per `c8980cec` e non
+vanno attribuite al candidato locale.
 
 La storia delle due run sul precedente head remoto
 `356c2920d9bbefeecd30317e6ec2a9cabb8cbb46` resta parte dell'evidenza:
@@ -1086,23 +1097,35 @@ diagnosi di un vero deadlock; `e8428be9` conserva esplicitamente il turno di
 scrittura durante la verifica finale del flush. Sono modifiche test-only e non
 ampliano alcun timeout.
 
-I fix e la documentazione sono poi confluiti nel medesimo SHA remoto esatto
-`f626dfca8a3c5271f64ec14368e10d09af8f937d`. Su quello SHA:
+Sul candidato certificato
+`f626dfca8a3c5271f64ec14368e10d09af8f937d`, la CI PR `34709566271` e la CI
+push `34709564735` sono `success` con 8 job su 8; le run NPM PR `34709566259`
+e push `34709564653` sono anch'esse `success`. Questa evidenza costituisce la
+provenienza della chiusura `ARCH-001`/G3.
 
-- la [run CI PR 34709566271](https://github.com/Fubeo/Fub/actions/runs/34709566271)
-  è `completed/success`, con 8 job su 8 verdi;
-- la [run CI push 34709564735](https://github.com/Fubeo/Fub/actions/runs/34709564735)
-  è `completed/success`, con 8 job su 8 verdi;
-- la [run NPM PR 34709566259](https://github.com/Fubeo/Fub/actions/runs/34709566259)
-  è `completed/success`;
-- la [run NPM push 34709564653](https://github.com/Fubeo/Fub/actions/runs/34709564653)
-  è `completed/success`;
-- al controllo finale non restano run aperte sullo SHA.
+Sul successivo head remoto
+`4b957b25e23d89814344463e0fcfc77438a72501`:
 
-Questa evidenza chiude `ARCH-001` e G3 sul candidato di codice. Il nuovo commit
-solo documentale che registra la chiusura deve a sua volta ricevere una CI
-completa verde sul proprio SHA prima di rendere la PR #32 ready o pubblicare lo
-stato finale; non riapre il gate tecnico e non autorizza gate successivi.
+- la [run CI PR 34711147682](https://github.com/Fubeo/Fub/actions/runs/34711147682)
+  è `completed/success`, con 8 job su 8 verdi;
+- la [run NPM PR 34711147695](https://github.com/Fubeo/Fub/actions/runs/34711147695)
+  e la [run NPM push 34711144423](https://github.com/Fubeo/Fub/actions/runs/34711144423)
+  sono `completed/success`;
+- la [run CI push 34711144437](https://github.com/Fubeo/Fub/actions/runs/34711144437)
+  è `completed/cancelled`: sette job sono verdi e il job Ubuntu
+  `103600048382` è stato cancellato dopo circa 40 minuti.
+
+La run push `34711144437` non è verde. Il job Ubuntu era bloccato in
+`opening_runner_flush_rejects_same_provider_reentry_and_releases_its_guard`:
+la probe di test conservava il turno del writer durante `host.close()`.
+`c8980cec` integra il fix test-only, con rilascio esplicito del turno prima
+della chiusura; il comportamento G3/ARCH di produzione rimane invariato.
+
+Il candidato pubblicabile resta **`CI_PENDING`**. Occorre integrare questo
+aggiornamento sopra `c8980cec`, eseguire un push ordinario e ottenere una CI
+completa interamente verde sul nuovo SHA prima di pubblicare lo stato finale o
+rendere ready la PR #32. Questo presidio non riapre il gate tecnico e non
+autorizza gate successivi, chiusure di issue, G15/GO o merge.
 
 Il rischio residuo reale non viene nascosto: il rollback di una rename può
 correre contro un processo esterno, perché `VaultStorage` non offre rename
@@ -2714,7 +2737,7 @@ Compilare una riga per ogni ID.
 
 | ID | Specifica ricostruita | Stato iniziale | Commit | Test/guardia | Docs | Rischio | CI |
 |---|---|---|---|---|---|---|---|
-| ARCH-001 | provider fuori lock con prepare/call/finalize | `CLOSED` su `f626dfca8a3c5271f64ec14368e10d09af8f937d` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...`, `ca0896ca...`, `e8428be9...`, `f626dfca...` | call graph production `Custody` PASS; sul genitore `e8428be9` fmt, Clippy workspace e host 334/42 PASS; kernel 800/62 +1 ignorato e features 350/36 +2 ignorati sull'antenato `1b0f13f` | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni; il commit documentale finale richiede CI propria prima dello stato pubblico ready | CI PR `34709566271` 8/8 e CI push `34709564735` 8/8 `success`; NPM PR `34709566259` e push `34709564653` `success`, tutte su `f626dfca`; run aperte 0 |
+| ARCH-001 | provider fuori lock con prepare/call/finalize | `CLOSED` con provenienza su `f626dfca8a3c5271f64ec14368e10d09af8f937d`; pubblicazione `CI_PENDING` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...`, `ca0896ca...`, `e8428be9...`, `f626dfca...`, `4b957b25...`, `c8980cec...` | call graph production `Custody` PASS; su `c8980cec` fmt Rust 1.89, Clippy workspace e host 334/42 PASS; kernel 800/62 +1 ignorato e features 350/36 +2 ignorati restano storici sull'antenato `1b0f13f` | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni; PR ready e pubblicazione finale bloccate fino alla nuova CI completa | CI PR `34711147682` 8/8 e NPM PR/push `34711147695`/`34711144423` `success` su `4b957b25`; CI push `34711144437` `cancelled`, con 7 job verdi e Ubuntu `103600048382` cancellato; nuova CI su SHA successivo `CI_PENDING` |
 | ARCH-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-004 | servizi indipendenti progrediscono sotto write lock Workspace | `OPEN/REASSESS` |  | progresso |  |  |  |
