@@ -207,6 +207,7 @@ fn close_with_timeout(host: Arc<Host>) -> Vec<PluginError> {
 #[test]
 fn opening_the_same_root_conflicts_while_teardown_owns_the_slot() {
     let (_dir, root) = root();
+    let root = root.canonicalize_utf8().expect("tempdir exists");
     let starts = Arc::new(AtomicUsize::new(0));
     let (entered_tx, entered_rx) = channel();
     let (release_tx, release_rx) = channel();
