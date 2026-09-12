@@ -517,7 +517,7 @@ impl PreflightedWatcherChange {
                     vec![PlannedWatcherChange::Asset(*plan)]
                 }
                 ExternalRenamePlan::Document(plan) => {
-                    vec![PlannedWatcherChange::Document(*plan)]
+                    vec![PlannedWatcherChange::Document(Box::new(*plan))]
                 }
                 ExternalRenamePlan::Sync(plans) => plans
                     .into_iter()
@@ -531,7 +531,7 @@ impl PreflightedWatcherChange {
 enum PlannedWatcherChange {
     Sync(Utf8PathBuf, Option<SyncPlan>),
     Asset(PreparedExternalAssetRename),
-    Document(PreparedExternalDocumentRename),
+    Document(Box<PreparedExternalDocumentRename>),
 }
 
 enum InvokedWatcherChange {
@@ -556,7 +556,7 @@ impl PlannedWatcherChange {
                     .collect(),
             },
             PlannedWatcherChange::Document(plan) => {
-                vec![InvokedWatcherChange::Document(plan.invoke())]
+                vec![InvokedWatcherChange::Document((*plan).invoke())]
             }
         }
     }
