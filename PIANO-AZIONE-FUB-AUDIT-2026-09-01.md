@@ -1024,7 +1024,9 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 Sul candidato di codice `1b0f13f125450b98170cf4ae17acc0b163506007`
 la revisione finale del call graph di produzione che attraversa
-`Custody<Workspace>` è `PASS`. Per ogni callsite è stato verificato che:
+`Custody<Workspace>` è `PASS`. I tre fix host-only successivi portano l'HEAD
+locale a `a0b77232972a0e5f7c316d0585d460c326fd9d07` senza modificare quel call
+graph. Per ogni callsite è stato verificato che:
 
 - [x] il guard termina prima della callback;
 - [x] il proxy non espone il workspace generico;
@@ -1047,18 +1049,27 @@ le spunte seguenti, ma non la chiusura di G3:
 - [x] test stale verde;
 - [x] error/panic cleanup verificato;
 - [x] `Host::workspace` non è stato usato come scorciatoia;
-- [ ] Clippy `-D warnings` verde — in attesa della CI sullo stesso SHA;
+- [x] Clippy `-D warnings` verde in locale con Rust `1.89`;
 - [x] commit semantici ispezionati;
 - [x] `ARCH-001` aggiornato nella matrice.
 
-`cargo fmt --all -- --check` è verde. Le suite complete sullo stesso candidato
-di codice hanno prodotto: kernel 800 test verdi in 62 eseguibili, con 1
-ignorato; host 334/42; features 350/36, con 2 ignorati. Totale: 1484 test verdi
-in 140 eseguibili e 3 ignorati. Il Clippy workspace locale non è verde
-esclusivamente per i tre lint preesistenti `chunks_exact_to_as_chunks` in
-`crates/fub-abi/src/edit.rs:255`, `:257` e `:296`; non sono stati aggiunti
-`allow` né altre deroghe. La CI completa resta quindi obbligatoria sullo SHA
-che include anche questo aggiornamento documentale.
+Su `a0b77232972a0e5f7c316d0585d460c326fd9d07`,
+`cargo +1.89 fmt --all -- --check`, Clippy dell'intero workspace con tutti i
+target e `-D warnings`, e la suite completa `fub-host` (334 test in 42
+eseguibili) sono verdi. Le ultime esecuzioni complete di `fub-kernel` (800 test
+in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36 eseguibili, 2
+ignorati) risalgono al candidato antenato `1b0f13f…`: non sono state rieseguite
+dopo i tre fix limitati all'host e non vanno attribuite ad `a0b77232…`.
+
+La [run CI 34706406133](https://github.com/Fubeo/Fub/actions/runs/34706406133)
+su `a8d5771402f1b8ef682ee5807e5732c16a329289` non è verde: rustfmt era passato,
+ma Clippy aveva rilevato `large_enum_variant` nel watcher. Il commit `7e3719f2`
+ha ridotto la variante; il successivo Clippy locale con Rust `1.89` ha esposto
+un import inutilizzato nel test, rimosso da `27808660`; il fallimento del test
+watcher su macOS/Windows dovuto al confronto con una radice non canonica è
+corretto da `a0b77232`. Nessuna CI certifica ancora questo HEAD locale né il
+successivo commit documentale: la matrice resta in attesa di una nuova run sullo
+stesso SHA pubblicato.
 
 Il rischio residuo reale non viene nascosto: il rollback di una rename può
 correre contro un processo esterno, perché `VaultStorage` non offre rename

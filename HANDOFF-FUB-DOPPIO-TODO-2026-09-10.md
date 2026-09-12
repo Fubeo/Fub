@@ -28,41 +28,31 @@ Dopo il fetch del 12 settembre 2026:
 - [PR #32](https://github.com/Fubeo/Fub/pull/32): **OPEN, DRAFT**, base
   `fix/audit-integration`, head `fix/lifecycle-mount-detached`;
 - head remoto della PR #32:
-  `c363d32cfc69166a9cd7f62c031c64a5541346fa`;
-- branch locale di consegna: `work/g3-integration`, HEAD di codice
-  pre-documentazione `1b0f13f125450b98170cf4ae17acc0b163506007`;
-- intervallo da pubblicare prima del commit documentale:
-  `c363d32cfc69166a9cd7f62c031c64a5541346fa..1b0f13f125450b98170cf4ae17acc0b163506007`;
-- divergenza: **14 commit avanti, 0 indietro**; l'aggiornamento è
-  fast-forward.
+  `a8d5771402f1b8ef682ee5807e5732c16a329289`;
+- branch locale di consegna: `work/g3-integration`, HEAD
+  `a0b77232972a0e5f7c316d0585d460c326fd9d07`;
+- intervallo locale non pubblicato:
+  `a8d5771402f1b8ef682ee5807e5732c16a329289..a0b77232972a0e5f7c316d0585d460c326fd9d07`;
+- divergenza: **3 commit avanti, 0 indietro**; il delta è fast-forward.
 
 Rifetcha questi riferimenti prima della pubblicazione. Gli SHA sono uno snapshot
 per rilevare drift, non istruzioni di reset. Se l'head remoto della PR non è più
-`c363d32c…`, confronta la storia e integra soltanto se il nuovo head è
+`a8d57714…`, confronta la storia e integra soltanto se il nuovo head è
 compatibile.
 
-## Candidato consegnato
+## Candidato e fix locali
 
-I 14 commit locali sopra l'head remoto sono:
+L'head remoto `a8d57714` contiene già il candidato di codice fino a `1b0f13f1`
+e il primo commit documentale. I tre commit locali successivi, tutti limitati a
+`fub-host`, sono:
 
-| Commit | Contenuto verificato |
-|---|---|
-| `14007bf6` | corregge il riferimento documentale al sidecar |
-| `a7c6dce0` | allinea i lint del workspace senza deroghe |
-| `ba78d17d` | sposta fuori custodia la mossa del ripristino |
-| `5debdbbe` | vincola il rollback della rename all'identità del file |
-| `7e6bfc0e` | stacca operazioni globali e dry run |
-| `e2c8dff2` | stacca il rebuild di manutenzione |
-| `89ac082b` | ripristina l'attore dopo il drain degli eventi |
-| `47a7f38a` | conserva la collisione tipizzata nella rename |
-| `0f3e4961` | ripristina il nome originale già esistente |
-| `774b56b4` | fissa nel banco il ruolo del mutex del watcher |
-| `9839ee6b` | impedisce la rientranza nel flush degli indici |
-| `6b1058dd` | stacca la rename esplicita degli asset |
-| `35c69d35` | impedisce la rientranza nel flush sincrono |
-| `1b0f13f1` | cattura il panic di `BeforeWrite` prima della scrittura |
+| Commit | Origine | Correzione |
+|---|---|---|
+| `7e3719f2` | CI 34706406133: Clippy `large_enum_variant` nel watcher | riduce la variante documentale |
+| `27808660` | successivo Clippy locale con Rust `1.89`: import inutilizzato | rimuove l'import dal test |
+| `a0b77232` | test watcher macOS/Windows: radice canonica confrontata con path non canonico | canonicalizza la radice nel test |
 
-Il comportamento risultante comprende:
+Il comportamento G3 risultante comprende:
 
 - restore staged: autorizzazione e snapshot sotto guardia, lettura, parser,
   mossa no-replace e rollback fuori custodia, commit riconvalidato;
@@ -83,41 +73,45 @@ custodia, letture e callback del rebuild, rename asset ancora sincrona,
 collisione e nome originale persi, attore non ripristinato, rientranza del
 flush e panic di `BeforeWrite` oltre il confine di scrittura.
 
-## Prove locali sul candidato di codice
+## Prove sul candidato
 
-Sul commit `1b0f13f125450b98170cf4ae17acc0b163506007`:
+Sul commit locale `a0b77232972a0e5f7c316d0585d460c326fd9d07`:
 
-- `cargo fmt --all -- --check`: **PASS**;
+- `cargo +1.89 fmt --all -- --check`: **PASS**;
+- Clippy workspace, tutti i target, `-D warnings`, Rust `1.89`: **PASS**;
+- `fub-host`: 334 test verdi in 42 eseguibili;
+- i tre fix rispetto all'head remoto toccano soltanto `fub-host`.
+
+Sul commit antenato `1b0f13f125450b98170cf4ae17acc0b163506007`:
+
 - call graph finale dei percorsi di produzione che attraversano
   `Custody<Workspace>`: **PASS**;
 - kernel: 800 test verdi in 62 eseguibili, 1 ignorato;
-- host: 334 test verdi in 42 eseguibili;
-- features: 350 test verdi in 36 eseguibili, 2 ignorati;
-- totale: 1484 test verdi in 140 eseguibili, 3 ignorati.
+- features: 350 test verdi in 36 eseguibili, 2 ignorati.
 
-Il Clippy workspace locale non è verde esclusivamente per tre occorrenze
-preesistenti di `chunks_exact_to_as_chunks` in
-`crates/fub-abi/src/edit.rs:255`, `:257` e `:296`. Non aggiungere `allow`, non
-cambiare toolchain e non presentare questo limite come una correzione richiesta
-al candidato G3.
+Kernel e feature non sono stati rieseguiti dopo i tre fix host-only: questi
+risultati non vanno attribuiti ad `a0b77232…`.
 
-Nessuna CI precedente certifica `1b0f13f…` o il successivo commit documentale.
-Per questo `ARCH-001` è **`CANDIDATE/CI_PENDING`** e G3 non è `CLOSED`.
+La [run CI 34706406133](https://github.com/Fubeo/Fub/actions/runs/34706406133)
+su `a8d57714…` è **FAILURE**: rustfmt era passato, mentre Clippy aveva rilevato
+la variante grande corretta da `7e3719f2`. Nessuna CI certifica ancora i tre fix
+locali né il nuovo commit documentale. Per questo `ARCH-001` resta
+**`CANDIDATE/CI_PENDING`** e G3 non è `CLOSED`.
 
 ## Azione successiva esatta
 
-1. Integra con fast-forward o cherry-pick pulito il commit documentale che
-   contiene questo handoff sopra `work/g3-integration` a `1b0f13f…`.
-2. Rifetcha la PR #32 e verifica che `c363d32c...HEAD` sia ancora un
+1. Integra con fast-forward o cherry-pick pulito questo nuovo commit
+   documentale sopra `work/g3-integration` a `a0b77232…`.
+2. Rifetcha la PR #32 e verifica che `a8d57714...HEAD` sia ancora un
    fast-forward; in caso di drift incompatibile fermati senza reset o force.
 3. Pubblica l'HEAD risultante su `fix/lifecycle-mount-detached` con push
    ordinario, mai force-push.
-4. Attendi la CI completa della
+4. Attendi una nuova CI completa della
    [PR #32](https://github.com/Fubeo/Fub/actions?query=branch%3Afix%2Flifecycle-mount-detached)
    e accetta esclusivamente tutti i job obbligatori verdi sullo stesso SHA
-   pubblicato.
+   appena pubblicato.
 5. Soltanto dopo quel verde aggiorna lo stato da `CANDIDATE/CI_PENDING` e valuta
-   la chiusura reale di G3. Non riusare una run di un commit precedente.
+   la chiusura reale di G3. Non riusare la run fallita sul commit precedente.
 6. Dopo G3, il prossimo lavoro è #8: integrare inventory e installazione
    end-to-end conformi, senza eseguibili in `.fub/plugins`; segue #10.
 
@@ -130,10 +124,9 @@ il filesystem una transazione globale. Questo rischio resta esplicito.
 
 Restano intenzionalmente pendenti:
 
-- Clippy `-D warnings` verde in locale, per i tre lint preesistenti indicati;
-- CI completa sullo SHA che include codice e documentazione;
+- CI completa sul nuovo SHA che include i tre fix e la documentazione;
 - chiusura di `ARCH-001` e G3;
-- pubblicazione e merge della PR #32;
+- pubblicazione del nuovo HEAD e merge della PR #32;
 - chiusura di qualunque issue;
 - G14 con la matrice completa 56/56;
 - G15/GO e ogni merge in `main`.
