@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
+use fub_abi::command::InvokeMode;
 use fub_abi::edit::{EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::{EventKind, EventMask, Notice};
 use fub_abi::format::{
@@ -10,13 +11,14 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
-    EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginManifest,
-    QueryRoute, VaultEntry, VaultStructure, VaultWrite,
+    EventHandler, HostApi, HostCommands, IndexLoss, IndexProvider, IndexQuery, IndexResult,
+    PluginManifest, QueryRoute, VaultEntry, VaultStructure, VaultWrite,
 };
 use fub_abi::{Event, FormatError, FormatProvider, PluginError};
 use fub_format_markdown::MarkdownProvider;
 use fub_host::{Custody, Host, JobHost, NoWatcher};
 use fub_kernel::journal::JournalOp;
+use fub_kernel::maintenance::{Maintenance, MAINTENANCE_ID, VAULT_REBUILD_INDEX};
 use fub_kernel::{FormatRegistry, Subscription, Trust, Workspace};
 
 const INDEX_FEED_LOCK_PLUGIN: &str = "fub.audit-index-feed";
@@ -26,6 +28,7 @@ const RESTORE_FEED_LOCK_PLUGIN: &str = "fub.audit-index-restore-feed";
 const RENAME_FEED_LOCK_PLUGIN: &str = "fub.audit-index-rename";
 const RENAME_BACKLINK_LOCK_PLUGIN: &str = "fub.audit-rename-backlink";
 
+const REBUILD_LOCK_PLUGIN: &str = "fub.audit-rebuild-lock";
 struct Vault {
     _dir: tempfile::TempDir,
     root: Utf8PathBuf,
@@ -551,6 +554,107 @@ fn rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
         std::fs::read_to_string(v.root.join("Backlink.md")).unwrap(),
         "# Backlink\n[[Renamed]]\n"
     );
+}
+
+/// Il rebuild attraversa lo stesso driver staccato sia dall'ingresso utente sia
+/// da `HostApi::run_command`: il canale vede l'indice sul primo e parser+indice
+/// sul secondo, con entrambe le guardie disponibili dentro ogni callback.
+#[test]
+fn rebuild_callbacks_are_detached_on_top_level_and_nested_paths() {
+    let v = vault();
+    std::fs::write(v.root.join("Backlink.md"), "# Backlink\n[[Note 0]]\n")
+        .expect("seed rebuild document");
+    let armed = Arc::new(AtomicBool::new(true));
+    let workspace_slot: WorkspaceSlot = Arc::new(Mutex::new(None));
+    let (observed_tx, observed_rx) = std::sync::mpsc::sync_channel(3);
+
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&v.root).expect("the vault opens");
+    host.wait_indexed(None)
+        .expect("the initial indexing finishes");
+    let top_level = host.debug_workspace(None).expect("debug custody");
+    *workspace_slot
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(top_level.clone());
+    {
+        let mut ws = top_level.write().expect("the vault is alive");
+        ws.register_core_feature(REBUILD_LOCK_PLUGIN, "Audit detached rebuild")
+            .expect("index owner declares");
+        ws.register_index_provider(
+            REBUILD_LOCK_PLUGIN,
+            Box::new(BacklinkIndexProbe {
+                workspace: Arc::clone(&workspace_slot),
+                observed: observed_tx.clone(),
+            }),
+        )
+        .expect("top-level index probe registers");
+    }
+
+    host.invoke_user_command(
+        None,
+        VAULT_REBUILD_INDEX,
+        serde_json::Value::Null,
+        InvokeMode::Apply,
+    )
+    .expect("top-level rebuild completes");
+    assert_eq!(
+        observed_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("top-level index callback observed"),
+        (BacklinkStage::Index, true, true)
+    );
+    assert!(host.close().is_empty(), "top-level host closes cleanly");
+
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(BacklinkFormatProbe {
+            armed,
+            workspace: Arc::clone(&workspace_slot),
+            observed: observed_tx.clone(),
+            markdown: MarkdownProvider::new(),
+        }))
+        .expect("nested format probe registers");
+    let mut nested = Workspace::new(&v.root, formats).expect("nested workspace opens");
+    nested
+        .register_plugin(
+            PluginManifest::core(MAINTENANCE_ID, "Manutenzione")
+                .speaking("it", fub_kernel::maintenance::catalog()),
+            Trust::Core,
+        )
+        .expect("maintenance declares");
+    nested
+        .register_command_provider(MAINTENANCE_ID, Box::new(Maintenance))
+        .expect("maintenance registers");
+    nested
+        .register_core_feature(REBUILD_LOCK_PLUGIN, "Audit nested rebuild")
+        .expect("nested caller declares");
+    let nested = Custody::new("nested rebuild workspace", nested);
+    *workspace_slot
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(nested.clone());
+    nested
+        .write()
+        .expect("nested workspace is alive")
+        .register_index_provider(
+            REBUILD_LOCK_PLUGIN,
+            Box::new(BacklinkIndexProbe {
+                workspace: Arc::clone(&workspace_slot),
+                observed: observed_tx,
+            }),
+        )
+        .expect("nested index probe registers");
+
+    JobHost::new(nested, REBUILD_LOCK_PLUGIN)
+        .run_command(VAULT_REBUILD_INDEX, serde_json::Value::Null)
+        .expect("nested rebuild completes");
+    for expected in [BacklinkStage::Parse, BacklinkStage::Index] {
+        assert_eq!(
+            observed_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("nested rebuild callback observed"),
+            (expected, true, true)
+        );
+    }
 }
 
 #[test]

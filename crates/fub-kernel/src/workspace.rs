@@ -1509,6 +1509,24 @@ impl PreparedCommand {
         })
     }
 }
+/// Frame del solo rebuild di manutenzione che l'host porta avanti senza una
+/// guardia del workspace. Attore, batch, pila e rinvio degli eventi restano
+/// aperti fino alla riconciliazione finale.
+pub struct PreparedMaintenanceRebuild {
+    owner: String,
+    command: String,
+    mode: InvokeMode,
+    previous_actor: Option<Actor>,
+    owns_batch: bool,
+    previous_dispatch_deferral: bool,
+}
+
+impl PreparedMaintenanceRebuild {
+    pub fn mode(&self) -> InvokeMode {
+        self.mode
+    }
+}
+
 /// Stato owned di un annullamento fra un passo e il successivo.
 ///
 /// Il token tiene aperti replay e batch senza prestare il [`Workspace`], così
@@ -8842,6 +8860,101 @@ impl Workspace {
             previous_provider_call,
         }))
     }
+    /// Apre il frame staccato esclusivamente per `vault.rebuild-index`.
+    ///
+    /// Gli altri comandi di manutenzione restano sul percorso sincrono: questa
+    /// porta non è un esecutore generico del potere interno del kernel.
+    pub fn prepare_maintenance_rebuild(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Option<Actor>,
+    ) -> std::result::Result<Option<PreparedMaintenanceRebuild>, PluginError> {
+        if command != crate::maintenance::VAULT_REBUILD_INDEX {
+            return Ok(None);
+        }
+
+        let at = self.command_owner(command)?;
+        if self.providers.commands[at].id != crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+        let spec = self.providers.commands[at]
+            .specs
+            .iter()
+            .find(|spec| spec.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando");
+        spec.validate_args(&args)?;
+
+        if self.providers.command_stack.iter().any(|id| id == command) {
+            let mut round = self.providers.command_stack.clone();
+            round.push(command.to_string());
+            return Err(PluginError::BadArgs(
+                format!(
+                    "un comando non può invocare sé stesso: {}",
+                    round.join(" → ")
+                )
+                .into(),
+            ));
+        }
+
+        let owner = self.providers.commands[at].id.clone();
+        let previous_actor = by.map(|actor| self.dispatch.swap_actor(actor));
+        let owns_batch = self.dispatch.open_batch();
+        self.providers.command_stack.push(command.to_string());
+        let previous_dispatch_deferral = self.dispatch.defer_dispatch();
+
+        Ok(Some(PreparedMaintenanceRebuild {
+            owner,
+            command: command.to_string(),
+            mode,
+            previous_actor,
+            owns_batch,
+            previous_dispatch_deferral,
+        }))
+    }
+
+    /// Chiude il frame del rebuild dopo che l'host ha completato tutte le fasi
+    /// esterne. `None` è il dry-run, che conserva il piano del percorso comune.
+    pub fn finish_maintenance_rebuild(
+        &mut self,
+        prepared: PreparedMaintenanceRebuild,
+        opening: Option<std::result::Result<Opening, PluginError>>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let outcome = match opening {
+            Some(Ok(opening)) => Ok(self.rebuild_index_outcome(opening)),
+            Some(Err(error)) => Err(error),
+            None => self.run_maintenance(&prepared.command, prepared.mode),
+        };
+
+        let popped = self.providers.command_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.command.as_str()));
+        let result = match outcome {
+            Err(error) => Err(self.localized(&prepared.owner, error)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                if prepared.mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
+                    if let Some(undo) = outcome.undo.clone() {
+                        self.undo.push(undo, outcome.partial.clone());
+                    }
+                }
+                Ok(outcome)
+            }
+        };
+
+        if prepared.owns_batch {
+            self.dispatch.close_batch();
+        }
+        if let Some(previous_actor) = prepared.previous_actor {
+            self.dispatch.restore_actor(previous_actor);
+        }
+        self.dispatch
+            .restore_dispatch(prepared.previous_dispatch_deferral);
+        result
+    }
 
     /// Chiude il frame del comando senza consegnare eventi. L'attore precedente
     /// resta nel token: storicamente veniva ripristinato soltanto *dopo* il
@@ -10510,21 +10623,7 @@ impl Workspace {
                 let opening = self.reindex().map_err(|and| {
                     PluginError::Internal(format!("l'indice non si è rifatto: {and}").into())
                 })?;
-                let discarded = opening.discarded.len();
-                Ok(CommandOutcome::notify(Text::message(
-                    crate::maintenance::T_REBUILT,
-                    vec![
-                        fub_abi::text::Arg::int(
-                            crate::maintenance::A_DOCS,
-                            self.indexes.core.metas.len() as i64,
-                        ),
-                        fub_abi::text::Arg::int(
-                            crate::maintenance::A_ENTRIES,
-                            self.indexes.core.entries.len() as i64,
-                        ),
-                        fub_abi::text::Arg::int(crate::maintenance::A_SKIPPED, discarded as i64),
-                    ],
-                )))
+                Ok(self.rebuild_index_outcome(opening))
             }
             VAULT_REPAIR => {
                 // rebuild non guarda — i dati attaccati a note che non ci sono
@@ -10637,6 +10736,26 @@ impl Workspace {
             }
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
+    }
+
+    fn rebuild_index_outcome(&self, opening: Opening) -> CommandOutcome {
+        CommandOutcome::notify(Text::message(
+            crate::maintenance::T_REBUILT,
+            vec![
+                fub_abi::text::Arg::int(
+                    crate::maintenance::A_DOCS,
+                    self.indexes.core.metas.len() as i64,
+                ),
+                fub_abi::text::Arg::int(
+                    crate::maintenance::A_ENTRIES,
+                    self.indexes.core.entries.len() as i64,
+                ),
+                fub_abi::text::Arg::int(
+                    crate::maintenance::A_SKIPPED,
+                    opening.discarded.len() as i64,
+                ),
+            ],
+        ))
     }
 
     /// e dice quante ne ha tolte.

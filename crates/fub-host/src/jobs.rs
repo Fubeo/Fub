@@ -73,7 +73,9 @@ use fub_abi::traits::{
 };
 use fub_abi::{Event, PluginError};
 use fub_kernel::host::{authorize_path, Capability, Guard, Policy};
-use fub_kernel::workspace::{DeferredEvents, EventDrain, PreparedPluginDataIo};
+use fub_kernel::workspace::{
+    DeferredEvents, EventDrain, PreparedMaintenanceRebuild, PreparedPluginDataIo,
+};
 use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -525,6 +527,81 @@ pub(crate) fn finish_events<T>(
     drain_events(workspace)?;
     let mut ws = workspace.write()?;
     Ok(ws.finish_deferred_events(deferred))
+}
+
+/// Porta in fondo il solo rebuild di manutenzione con la stessa sequenza a
+/// fasi dell'apertura. Il turno resta unico, mentre ogni callback di formato,
+/// sintassi e indice attraversa il confine senza guardie del workspace.
+pub(crate) fn run_detached_rebuild_index(
+    workspace: &Custody<Workspace>,
+    prepared: PreparedMaintenanceRebuild,
+) -> Result<CommandOutcome, PluginError> {
+    let rebuilding = if prepared.mode().is_dry_run() {
+        None
+    } else {
+        Some((|| {
+            let prepared_scan = {
+                let ws = workspace.read()?;
+                ws.prepare_scan_vault().map_err(|error| {
+                    PluginError::Internal(format!("l'indice non si è rifatto: {error}").into())
+                })?
+            };
+            let completed_scan = prepared_scan.invoke();
+            let mut work = {
+                let mut ws = workspace.write()?;
+                ws.finalize_scan_vault(completed_scan)
+            };
+
+            while !work.finished() {
+                let checked = {
+                    let ws = workspace.read()?;
+                    ws.prepare_index_batch_check(&mut work)
+                }
+                .invoke();
+                let parsed = {
+                    let ws = workspace.read()?;
+                    ws.prepare_index_batch_parse(checked)
+                }
+                .invoke(&mut work);
+                let pending = {
+                    let mut ws = workspace.write()?;
+                    ws.commit_index_batch_prepared(parsed)
+                };
+                let pending = pending.map(|pending| pending.invoke_indexes());
+                if let Some(pending) = pending {
+                    workspace.write()?.finalize_index_batch_prepared(pending);
+                }
+            }
+
+            let graph = {
+                let sources = workspace.read()?.graph_sources();
+                sources.build()
+            };
+            let prepared_finish = {
+                let ws = workspace.read()?;
+                ws.prepare_finish_index_with_graph(work, graph)
+            };
+            let completed_finish = prepared_finish.invoke();
+            let opening = workspace.write()?.finalize_finish_index(completed_finish);
+
+            let _ = crate::teardown::flush_indexes(workspace)?;
+            workspace.read()?.store_entries();
+            if let Err(error) = workspace.read()?.collect_doc_data() {
+                tracing::warn!(
+                    target: "fub.kernel",
+                    "spazi per-documento non raccolti: {error}"
+                );
+            }
+            Ok(opening)
+        })())
+    };
+
+    let outcome = {
+        let mut ws = workspace.write()?;
+        ws.finish_maintenance_rebuild(prepared, rebuilding)
+    };
+    drain_events(workspace)?;
+    outcome
 }
 
 // Le dodici famiglie. Sono righe di delega e nessuna decisione: ogni
@@ -1083,6 +1160,12 @@ impl HostCommands for JobHost {
             match ws.prepare_nested_provider_command(command, args.clone(), self.mode)? {
                 Some(prepared) => prepared,
                 None => {
+                    if let Some(rebuild) =
+                        ws.prepare_maintenance_rebuild(command, args.clone(), self.mode, None)?
+                    {
+                        drop(ws);
+                        return run_detached_rebuild_index(&workspace, rebuild);
+                    }
                     let deferred = ws.defer_event_dispatch();
                     let outcome = ws.invoke_nested_maintenance_command(command, args, self.mode);
                     ws.restore_event_dispatch(deferred);

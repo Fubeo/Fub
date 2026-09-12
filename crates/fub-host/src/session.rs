@@ -53,7 +53,9 @@ use fub_kernel::{Guard, MachineSettings, ReadOnly, SystemLocale, ViewStates, Wor
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
-use crate::jobs::{drain_events, finish_events, with_event_drain, JobHost};
+use crate::jobs::{
+    drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
+};
 use crate::mount::mount;
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
@@ -1961,6 +1963,15 @@ impl Host {
             match ws.prepare_provider_command(command, args.clone(), mode, Actor::User)? {
                 Some(prepared) => prepared,
                 None => {
+                    if let Some(rebuild) = ws.prepare_maintenance_rebuild(
+                        command,
+                        args.clone(),
+                        mode,
+                        Some(Actor::User),
+                    )? {
+                        drop(ws);
+                        return run_detached_rebuild_index(&workspace, rebuild);
+                    }
                     let deferred = ws.defer_event_dispatch();
                     let outcome = ws.invoke_command(command, args, mode, Actor::User);
                     ws.restore_event_dispatch(deferred);
