@@ -1,7 +1,7 @@
 # Stato del progetto
 
 > **Stato aggiornato per:** fix test-only locale
-> `c8980cecb99b56979ec054c9c117c87efa5f5bc5`, 12 settembre 2026;
+> `c97c994b929a9f2fdb1692dd3ef5ce6eeab95074`, 12 settembre 2026;
 > chiusura G3 con provenienza su `f626dfca8a3c5271f64ec14368e10d09af8f937d`.
 
 ## Governance di integrazione
@@ -30,11 +30,11 @@ ancora privi di evidenza finale restano aperti.
 La [PR #32](https://github.com/Fubeo/Fub/pull/32) è **OPEN, DRAFT**, con base
 `fix/audit-integration` e head `fix/lifecycle-mount-detached`. Dopo il fetch del
 12 settembre, l'head remoto esatto è
-`4b957b25e23d89814344463e0fcfc77438a72501`. Il worktree
+`c17467edc908ea88e57719e980e7e91b2363b77b`. Il worktree
 `work/g3-integration` parte da
-`c8980cecb99b56979ec054c9c117c87efa5f5bc5`, `1` commit avanti e `0` indietro
+`c97c994b929a9f2fdb1692dd3ef5ce6eeab95074`, `1` commit avanti e `0` indietro
 rispetto al remoto. `origin/fix/audit-integration` è
-`7efc4375a7167ea3df5070673c6c2163a758a0f2`; il candidato locale è `89`
+`7efc4375a7167ea3df5070673c6c2163a758a0f2`; il candidato locale è `91`
 commit avanti e `0` indietro rispetto a quella base.
 
 Il candidato completa il distacco verificato delle callback di produzione:
@@ -46,23 +46,38 @@ dal panic prima di ogni scrittura. Mount, rollback, teardown e chiamate dirette
 del registry fanno parte del call graph finale verificato, non sono più
 un'eccezione dichiarata.
 
-Resta registrata la storia delle due run fallite sul precedente head remoto
-`356c2920d9bbefeecd30317e6ec2a9cabb8cbb46`: la
-[run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
-fallì soltanto nel job macOS `103590610888`, dove
-`an_action_from_a_replaced_view_provider_is_rejected_as_stale` scadde in attesa
-del vecchio provider. La
-[run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
-fallì soltanto nel job Ubuntu `103590603150`, dove
-`opening_runner_flush_releases_custody_and_allows_host_reentry` perse
-l'asserzione finale `try_write`. Tutti gli altri sette job di ciascuna run
-erano verdi. Erano due osservazioni non bloccanti e racy nei test, non una
-violazione del confine di custodia: `ca0896ca` sincronizza le osservazioni
-concorrenti e `e8428be9` mantiene il turno di scrittura durante la verifica
-finale del flush. I fix sono test-only e non ampliano timeout.
+La provenienza della chiusura `ARCH-001` e G3 rimane il candidato certificato
+`f626dfca8a3c5271f64ec14368e10d09af8f937d`: su quello SHA le run CI PR
+`34709566271` e push `34709564735` sono `success`, entrambe 8 job su 8, e le
+run NPM PR `34709566259` e push `34709564653` sono `success`.
 
-Sul candidato locale esatto
-`c8980cecb99b56979ec054c9c117c87efa5f5bc5` sono verdi:
+Sul successivo head remoto
+`c17467edc908ea88e57719e980e7e91b2363b77b`:
+
+- [run CI push 34713518784](https://github.com/Fubeo/Fub/actions/runs/34713518784):
+  `completed/success`, 8 job su 8;
+- [run CI PR 34713519450](https://github.com/Fubeo/Fub/actions/runs/34713519450):
+  `completed/failure`; il solo job macOS `103606458363` è fallito, mentre gli
+  altri sette job e tutti gli altri sistemi/casi di test sono verdi;
+- [run NPM push 34713518782](https://github.com/Fubeo/Fub/actions/runs/34713518782)
+  e [run NPM PR 34713519528](https://github.com/Fubeo/Fub/actions/runs/34713519528):
+  `completed/success`.
+
+Nel job macOS della CI PR il test
+`opening_runner_flush_rejects_same_provider_reentry_and_releases_its_guard` è
+fallito in `runtime_index_flush_lock.rs:252`: la verifica finale usava un solo
+`try_write`. Il turno del writer impediva che un altro writer lo superasse, ma
+non escludeva un reader concorrente estraneo alla probe; quel reader poteva
+quindi far fallire l'osservazione non bloccante anche dopo il completamento del
+flush. Non è una violazione del confine di custodia.
+
+`c97c994b929a9f2fdb1692dd3ef5ce6eeab95074` corregge soltanto la probe: usa
+l'acquisizione bloccante della custodia per verificare il rilascio finale e
+rilascia immediatamente la guardia prima di `host.close()`. Il comportamento
+G3/ARCH di produzione e la provenienza della chiusura restano invariati.
+
+Sul candidato locale esatto `c97c994b929a9f2fdb1692dd3ef5ce6eeab95074`
+sono verdi:
 
 - `cargo +1.89 fmt --all -- --check`;
 - Clippy dell'intero workspace, tutti i target, con `-D warnings`;
@@ -72,37 +87,16 @@ Sul candidato locale esatto
 La revisione finale del call graph e le ultime suite complete di `fub-kernel`
 (800 test in 62 eseguibili, 1 ignorato) e delle feature (350 test in 36
 eseguibili, 2 ignorati) risalgono all'antenato di codice `1b0f13f…`; kernel e
-feature non sono stati rieseguiti per `c8980cec` e non vanno attribuiti al
+feature non sono stati rieseguiti per `c97c994b` e non vanno attribuiti al
 candidato locale.
 
-La provenienza della chiusura `ARCH-001` e G3 rimane il candidato certificato
-`f626dfca8a3c5271f64ec14368e10d09af8f937d`: su quello SHA le run CI PR
-`34709566271` e push `34709564735` sono `success`, entrambe 8 job su 8, e le
-run NPM PR `34709566259` e push `34709564653` sono `success`.
-
-Sul successivo head remoto
-`4b957b25e23d89814344463e0fcfc77438a72501`:
-
-- [run CI PR 34711147682](https://github.com/Fubeo/Fub/actions/runs/34711147682):
-  `completed/success`, 8 job su 8;
-- [run NPM PR 34711147695](https://github.com/Fubeo/Fub/actions/runs/34711147695)
-  e [run NPM push 34711144423](https://github.com/Fubeo/Fub/actions/runs/34711144423):
-  `completed/success`;
-- [run CI push 34711144437](https://github.com/Fubeo/Fub/actions/runs/34711144437):
-  `completed/cancelled`, con sette job verdi e il job Ubuntu `103600048382`
-  cancellato dopo circa 40 minuti.
-
-La CI push `34711144437` non è verde. Il job Ubuntu era bloccato nel test
-`opening_runner_flush_rejects_same_provider_reentry_and_releases_its_guard`:
-la probe conservava il turno del writer durante `host.close()`. `c8980cec`
-rilascia esplicitamente il turno prima della chiusura; è un fix test-only e non
-cambia il comportamento G3/ARCH di produzione.
-
-Il candidato per la pubblicazione resta **`CI_PENDING`**. Il nuovo SHA che
-include `c8980cec` e questo aggiornamento deve essere pubblicato con push
-ordinario e ricevere una CI completa interamente verde prima che la PR #32
-diventi ready o che lo stato finale sia pubblicato. Nessuna issue viene chiusa,
-G15/GO resta aperto e non è autorizzato alcun merge in `main`.
+Il candidato per la pubblicazione resta **`CI_PENDING`**. Il prossimo passo
+esatto è integrare questo commit documentale sopra `c97c994b…`, rifetchare la
+PR #32 e verificare che l'head remoto sia ancora `c17467ed…`, quindi pubblicare
+l'head risultante su `fix/lifecycle-mount-detached` con push ordinario. Le nuove
+CI PR e push devono completarsi interamente verdi sul medesimo nuovo SHA prima
+che la PR diventi ready o che lo stato finale sia pubblicato. Nessuna issue
+viene chiusa, G15/GO resta aperto e non è autorizzato alcun merge in `main`.
 
 Il rischio residuo reale è il rollback di una rename in concorrenza con un
 processo esterno: `VaultStorage` non offre rename condizionale né reservation.
@@ -212,16 +206,17 @@ fasi 5–10: l'estrazione iniziale non va ripetuta.
 
 Il merge in `main` resta bloccato dai gate audit successivi. `ARCH-001` e G3
 sono `CLOSED` con provenienza su `f626dfca…`; il candidato di pubblicazione è
-`CI_PENDING` perché la CI push `34711144437` su `4b957b25…` è stata cancellata
-e il nuovo SHA con `c8980cec` richiede ancora una CI completa interamente verde.
+`CI_PENDING`: su `c17467ed…` la CI push è verde 8/8, ma la CI PR
+`34713519450` è fallita soltanto nella probe racy su macOS; il nuovo SHA con
+`c97c994b` richiede nuove CI PR e push interamente verdi.
 La PR #32 resta draft; #8, #10, G14 e G15/GO restano aperti.
 
 ## Prossimi passi
 
-1. integrare e pubblicare con push ordinario il nuovo SHA che contiene
-   `c8980cec` e questo aggiornamento, quindi attendere una CI completa
-   interamente verde prima di rendere la PR #32 ready o pubblicare lo stato
-   finale;
+1. integrare questo aggiornamento sopra `c97c994b…`, rifetchare e verificare
+   l'head remoto `c17467ed…`, quindi pubblicare con push ordinario il nuovo SHA
+   e attendere CI PR e push interamente verdi sul medesimo commit prima di
+   rendere la PR #32 ready o pubblicare lo stato finale;
 2. avviare lo slice 1 di #8 con un port semantico dell'inventario installato
    dalla PR #30 sulla linea G3 corrente, senza merge o cherry-pick dell'intera
    PR; mantenere aperte #8 e #10;
