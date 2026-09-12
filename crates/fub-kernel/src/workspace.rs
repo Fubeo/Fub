@@ -324,6 +324,7 @@ pub struct ParsedExplicitRename {
     model: DocumentModel,
     fingerprint: Revision,
     stat: crate::storage::Stat,
+    identity: Option<crate::storage::FileIdentity>,
     rewrites: Vec<(DocId, EditRequest)>,
     side_data: CompletedRenameSideData,
 }
@@ -663,6 +664,12 @@ impl PreparedExplicitRename {
         if !before.is_file() {
             return Err(KernelError::NotFound(snapshot.from.to_string()));
         }
+        let identity_before = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
         let bytes = storage.read(&path).map_err(|source| KernelError::Io {
             path: path.clone(),
             source,
@@ -671,9 +678,16 @@ impl PreparedExplicitRename {
             path: path.clone(),
             source,
         })?;
-        if !after.is_file() || before != after {
+        let identity_after = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        if !after.is_file() || before != after || identity_before != identity_after {
             return Err(KernelError::Stale(snapshot.from.to_string()));
         }
+        let identity = identity_after;
         let fingerprint = Revision::of_bytes(&bytes);
         let source = match source_kind {
             SourceKind::Text => {
@@ -754,6 +768,7 @@ impl PreparedExplicitRename {
             model,
             fingerprint,
             stat: after,
+            identity,
             rewrites,
             side_data,
         })
@@ -768,6 +783,7 @@ impl ParsedExplicitRename {
             snapshot,
             storage,
             fingerprint,
+            identity,
             side_data,
             ..
         } = self;
@@ -777,6 +793,13 @@ impl ParsedExplicitRename {
                 path: snapshot.to_path.clone(),
                 source,
             })?;
+        let identity_before =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
         let bytes = storage
             .read(&snapshot.to_path)
             .map_err(|source| KernelError::Io {
@@ -789,7 +812,19 @@ impl ParsedExplicitRename {
                 path: snapshot.to_path.clone(),
                 source,
             })?;
-        if !before.is_file() || before != after || Revision::of_bytes(&bytes) != fingerprint {
+        let identity_after =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        if !before.is_file()
+            || before != after
+            || identity_before != identity
+            || identity_after != identity
+            || Revision::of_bytes(&bytes) != fingerprint
+        {
             return Err(KernelError::Stale(snapshot.to.to_string()));
         }
         storage
@@ -6701,6 +6736,7 @@ impl Workspace {
             model,
             fingerprint,
             stat: _,
+            identity: _,
             rewrites,
             side_data,
         } = parsed;

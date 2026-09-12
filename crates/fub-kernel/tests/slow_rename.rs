@@ -22,9 +22,10 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
 use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::FormatProvider;
-use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
+use fub_kernel::storage::{DirEntry, FileIdentity, Merge, RootedFsStorage, Stat, VaultStorage};
 use fub_kernel::{
-    ExternalRenamePlan, FormatRegistry, JournalOp, MachineSettings, Subscription, Workspace,
+    ExternalRenamePlan, FormatRegistry, JournalOp, KernelError, MachineSettings, Subscription,
+    Workspace,
 };
 
 const PLUGIN: &str = "test.appiccicoso";
@@ -406,7 +407,7 @@ fn a_arrival_with_another_fingerprint_not_pairs() {
 /// Il supporto verifica **nell'istante del rename del file** che i dati siano
 /// già sotto la chiave nuova (difetto 0168).
 struct Order {
-    inner: FsStorage,
+    inner: RootedFsStorage,
     doc_from: Utf8PathBuf,
     data_from: Utf8PathBuf,
     data_to: Utf8PathBuf,
@@ -465,6 +466,9 @@ impl VaultStorage for Order {
     fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
         self.inner.stat(path)
     }
+    fn file_identity(&self, path: &Utf8Path) -> std::io::Result<Option<FileIdentity>> {
+        self.inner.file_identity(path)
+    }
     fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
         self.inner.remove_empty_dir(dir)
     }
@@ -499,7 +503,7 @@ fn internal_rename_fixture(
         .join(doc_data::DOC_SPACE)
         .join(doc_data::encode("b.txt"));
     let support = Arc::new(Order {
-        inner: FsStorage,
+        inner: RootedFsStorage::open(&root).expect("supporto ancorato"),
         doc_from: root.join("a.txt"),
         data_from: data_from.clone(),
         data_to: data_to.clone(),
@@ -634,6 +638,61 @@ fn a_stale_commit_rolls_the_invoked_move_back_without_a_rename_fact() {
         Some("i dati di a.txt")
     );
     assert!(!fixture.data_to.exists());
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
+}
+
+#[test]
+fn a_replaced_same_bytes_destination_makes_rollback_stale_without_a_rename_fact() {
+    let mut fixture = internal_rename_fixture(false, false);
+    let prepared = fixture
+        .ws
+        .prepare_explicit_rename(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .expect("prepare")
+        .expect("documento");
+    let parsed = prepared.invoke().expect("invoke detached");
+    fixture
+        .ws
+        .sync_path(&fixture.root.join("a.txt"))
+        .expect("il core cambia dopo l'invoke");
+    let replacement = fixture.root.join("replacement.txt");
+    std::fs::write(&replacement, "il contenuto\n").expect("sostituto con gli stessi byte");
+    std::fs::remove_file(fixture.root.join("b.txt")).expect("destinazione invocata");
+    std::fs::rename(&replacement, fixture.root.join("b.txt")).expect("sostituzione");
+    let rx = fixture.ws.bus().subscribe();
+
+    let parsed = match fixture.ws.commit_explicit_rename(parsed) {
+        Err(failure) => {
+            let (_error, parsed) = *failure;
+            parsed
+        }
+        Ok(_) => panic!("la fotografia stale non può essere committata"),
+    };
+    let error = parsed
+        .rollback()
+        .expect_err("il sostituto non appartiene al token");
+
+    assert!(matches!(error, KernelError::Stale(_)), "{error:?}");
+    assert!(
+        !fixture.root.join("a.txt").exists(),
+        "il nome originale resta libero"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("b.txt")).expect("destinazione corrente"),
+        "il contenuto\n",
+        "la destinazione corrente resta intatta"
+    );
+    assert!(
+        fixture
+            .ws
+            .journal()
+            .expect("lettura registro")
+            .records
+            .iter()
+            .all(|record| !matches!(record.op, JournalOp::Renamed { .. })),
+        "il rollback rifiutato non fabbrica un fatto"
+    );
     assert!(events(&rx)
         .iter()
         .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
