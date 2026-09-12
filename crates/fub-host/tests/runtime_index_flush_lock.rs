@@ -248,12 +248,10 @@ fn exercise(path: Path) {
             observation.thread
         );
     }
-    let _turn = workspace.write_turn();
-    assert!(
-        workspace.try_write().is_some(),
-        "flush finalized and released its turn"
-    );
-    drop(_turn);
+    let custody = workspace
+        .write()
+        .expect("flush finalized and released its turn");
+    drop(custody);
     assert!(host.close().is_empty(), "normal shutdown remains clean");
 }
 
