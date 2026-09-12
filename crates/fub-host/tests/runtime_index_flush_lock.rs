@@ -248,6 +248,8 @@ fn exercise(path: Path) {
             observation.thread
         );
     }
+    let write_turn = workspace.write().expect("the workspace remains alive");
+    drop(write_turn);
     assert!(
         workspace.try_write().is_some(),
         "flush finalized and released its turn"

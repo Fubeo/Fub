@@ -144,10 +144,8 @@ impl ViewProvider for BlockingAction {
             ));
         }
         self.workspace
-            .try_write()
-            .ok_or_else(|| {
-                PluginError::Internal("a workspace write lock remained during the action".into())
-            })?
+            .write()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?
             .replace_view_provider(
                 PLUGIN,
                 Box::new(FixedView {
