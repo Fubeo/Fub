@@ -112,6 +112,7 @@ struct BlockingRestoreStorage {
     blocking: AtomicBool,
     list_hits: AtomicUsize,
     read_hits: AtomicUsize,
+    mutation_hits: AtomicUsize,
     entered: mpsc::SyncSender<Stage>,
     release: Mutex<mpsc::Receiver<()>>,
     data_probe: Mutex<Option<(Stage, Utf8PathBuf)>>,
@@ -252,11 +253,13 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         self.observe_data(Stage::DataWrite, path);
         self.inner.write(path, bytes)
     }
 
     fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         if let Some(workspace) = self
             .workspace_probe
             .lock()
@@ -271,6 +274,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         let probing = self
             .workspace_probe
             .lock()
@@ -284,6 +288,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         let source = self
             .source
             .lock()
@@ -302,6 +307,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         let probing = self
             .workspace_probe
             .lock()
@@ -315,6 +321,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         let probing = self
             .workspace_probe
             .lock()
@@ -357,6 +364,7 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.mutation_hits.fetch_add(1, Ordering::SeqCst);
         self.inner.remove_empty_dir(dir)
     }
 }
@@ -721,6 +729,7 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         blocking: AtomicBool::new(false),
         list_hits: AtomicUsize::new(0),
         read_hits: AtomicUsize::new(0),
+        mutation_hits: AtomicUsize::new(0),
         entered: entered_tx,
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
@@ -877,6 +886,7 @@ fn empty_trash_lists_and_removes_without_workspace_guards() {
         blocking: AtomicBool::new(false),
         list_hits: AtomicUsize::new(0),
         read_hits: AtomicUsize::new(0),
+        mutation_hits: AtomicUsize::new(0),
         entered: entered_tx,
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
@@ -940,6 +950,87 @@ fn empty_trash_lists_and_removes_without_workspace_guards() {
 }
 
 #[test]
+fn scoped_job_global_structure_operations_stop_before_storage_io() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::create_dir(root.join("public")).expect("public folder");
+    std::fs::write(root.join("public/Before.md"), "# Before\n").expect("seed rename source");
+    std::fs::write(root.join("public/Trash.md"), "# Trash\n").expect("seed trash source");
+    std::fs::write(root.join("Backlink.md"), "[before](public/Before.md)\n")
+        .expect("seed backlink outside the scope");
+    let (entered_tx, _entered_rx) = mpsc::sync_channel(1);
+    let (_release_tx, release_rx) = mpsc::sync_channel(1);
+    let storage = Arc::new(BlockingRestoreStorage {
+        inner: FsStorage,
+        trash_dir: root.join(".trash"),
+        source: Mutex::new(None),
+        armed: AtomicBool::new(false),
+        blocking: AtomicBool::new(false),
+        list_hits: AtomicUsize::new(0),
+        read_hits: AtomicUsize::new(0),
+        mutation_hits: AtomicUsize::new(0),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+        data_probe: Mutex::new(None),
+        data_hits: AtomicUsize::new(0),
+        data_skip: AtomicUsize::new(0),
+        workspace_probe: Mutex::new(None),
+    });
+    let mut formats = FormatRegistry::new();
+    formats
+        .register(Box::new(MarkdownProvider::new()))
+        .expect("format registers");
+    let mut workspace = Workspace::on(
+        &root,
+        formats,
+        storage.clone(),
+        MachineSettings::in_memory(),
+    )
+    .expect("workspace opens");
+    let mut permissions = PluginPermissions::of(&[]);
+    permissions
+        .granted
+        .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+    workspace
+        .register_plugin(
+            PluginManifest::new(PLUGIN, "Scoped global structure").granting(permissions),
+            Trust::Community,
+        )
+        .expect("scoped caller declares");
+    workspace.reindex().expect("seed notes enter workspace");
+    let trash_id = workspace
+        .delete_document(&DocId::new("public/Trash.md"))
+        .expect("seed note enters trash");
+    storage.arm(root.join(trash_id.as_str()), false);
+    storage.mutation_hits.store(0, Ordering::SeqCst);
+    let workspace = Custody::new("the scoped structure workspace", workspace);
+
+    let rename = JobHost::new(workspace.clone(), PLUGIN).rename_document(
+        &DocId::new("public/Before.md"),
+        &DocId::new("public/After.md"),
+    );
+    assert!(matches!(rename, Err(PluginError::PermissionDenied(_))));
+    assert_eq!(
+        storage.mutation_hits.load(Ordering::SeqCst),
+        0,
+        "the global backlink gate runs before any rename mutation"
+    );
+
+    let empty = JobHost::new(workspace, PLUGIN).empty_trash();
+    assert!(matches!(empty, Err(PluginError::PermissionDenied(_))));
+    assert_eq!(
+        storage.list_hits.load(Ordering::SeqCst),
+        0,
+        "the root structure gate runs before the trash sweep is listed"
+    );
+    assert_eq!(
+        storage.mutation_hits.load(Ordering::SeqCst),
+        0,
+        "the denied trash sweep performs no storage mutation"
+    );
+}
+
+#[test]
 fn trash_storage_and_sidecars_run_without_workspace_guards() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
@@ -955,6 +1046,7 @@ fn trash_storage_and_sidecars_run_without_workspace_guards() {
         blocking: AtomicBool::new(false),
         list_hits: AtomicUsize::new(0),
         read_hits: AtomicUsize::new(0),
+        mutation_hits: AtomicUsize::new(0),
         entered: entered_tx,
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
@@ -1074,6 +1166,7 @@ fn job_data_io_runs_without_workspace_guards_and_denial_precedes_storage() {
         blocking: AtomicBool::new(false),
         list_hits: AtomicUsize::new(0),
         read_hits: AtomicUsize::new(0),
+        mutation_hits: AtomicUsize::new(0),
         entered: entered_tx,
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),
@@ -1149,6 +1242,7 @@ fn job_setting_write_runs_without_workspace_guards() {
         blocking: AtomicBool::new(false),
         list_hits: AtomicUsize::new(0),
         read_hits: AtomicUsize::new(0),
+        mutation_hits: AtomicUsize::new(0),
         entered: entered_tx,
         release: Mutex::new(release_rx),
         data_probe: Mutex::new(None),

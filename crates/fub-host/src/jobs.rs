@@ -650,6 +650,14 @@ impl VaultStructure for JobHost {
                     to.as_str(),
                     || format!("renaming to `{to}`"),
                 )?;
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultWrite,
+                    "",
+                    || format!("rewriting backlinks after renaming `{from}`"),
+                )?;
             }
             let policy = ws.granted_policy(&self.plugin);
             authorize_path(&policy, Capability::VaultStructure, from.as_str(), || {
@@ -657,6 +665,9 @@ impl VaultStructure for JobHost {
             })?;
             authorize_path(&policy, Capability::VaultStructure, to.as_str(), || {
                 format!("renaming to `{to}`")
+            })?;
+            authorize_path(&policy, Capability::VaultWrite, "", || {
+                format!("rewriting backlinks after renaming `{from}`")
             })?;
             let from = fenced_doc_id(from)?;
             let to = fenced_doc_id(to)?;
@@ -848,17 +859,19 @@ impl VaultStructure for JobHost {
         let prepared = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
-                authorize_family(
+                authorize_path(
                     &ReadOnly {
                         why: "simulazione del comando",
                     },
                     Capability::VaultStructure,
+                    "",
                     || "emptying trash".into(),
                 )?;
             }
-            authorize_family(
+            authorize_path(
                 &ws.granted_policy(&self.plugin),
                 Capability::VaultStructure,
+                "",
                 || "emptying trash".into(),
             )?;
             ws.prepare_empty_trash()
@@ -1226,6 +1239,15 @@ impl HostNetwork for JobHost {
     /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         self.stopped()?;
+        if self.mode == InvokeMode::DryRun {
+            authorize_family(
+                &ReadOnly {
+                    why: "simulazione del comando",
+                },
+                Capability::Network,
+                || "performing a network request".into(),
+            )?;
+        }
         let (client, granted) = {
             let ws = self.workspace.read()?;
             (ws.network(), ws.granted_policy(&self.plugin))
@@ -1250,6 +1272,15 @@ impl HostServices for JobHost {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
         self.stopped()?;
+        if self.mode == InvokeMode::DryRun {
+            authorize_family(
+                &ReadOnly {
+                    why: "simulazione del comando",
+                },
+                Capability::Services,
+                || format!("calling `{service}.{method}`"),
+            )?;
+        }
         self.authorize_caller(Capability::Services, || {
             format!("calling `{service}.{method}`")
         })?;
@@ -1261,7 +1292,7 @@ impl HostServices for JobHost {
         };
 
         let owner = prepared.owner().to_string();
-        let mut host = self.for_provider(owner, InvokeMode::Apply);
+        let mut host = self.for_provider(owner, self.mode);
         let outcome = prepared.invoke(&mut host);
 
         let deferred = {

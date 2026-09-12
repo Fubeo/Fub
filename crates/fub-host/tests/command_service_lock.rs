@@ -29,9 +29,11 @@ use std::time::{Duration, Instant};
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::model::DocId;
+use fub_abi::net::{HttpRequest, HttpResponse};
 use fub_abi::options::permission;
 use fub_abi::traits::{
-    CommandProvider, HostApi, HostCommands, HostServices, PluginManifest, ServiceProvider,
+    CommandProvider, HostApi, HostCommands, HostNetwork, HostServices, PluginManifest,
+    ServiceProvider,
 };
 use fub_abi::PluginError;
 use fub_host::{Custody, Host, JobHost, NoWatcher};
@@ -196,6 +198,19 @@ impl ServiceProvider for CountingProvider {
     ) -> Result<serde_json::Value, PluginError> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Ok(serde_json::json!({ "called": true }))
+    }
+}
+
+struct CountingNetwork(Arc<AtomicUsize>);
+
+impl HostNetwork for CountingNetwork {
+    fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: Vec::new(),
+        })
     }
 }
 
@@ -403,6 +418,49 @@ fn undeclared_and_ungranted_job_hosts_do_not_invoke_services() {
         "the missing service grant must be reported: {denied:?}"
     );
     assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_direct_dry_run_job_host_never_reaches_the_service_provider() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    register_service(&workspace, Box::new(CountingProvider(Arc::clone(&calls))));
+
+    let denied = JobHost::new(workspace, CALLER)
+        .in_mode(InvokeMode::DryRun)
+        .call_service(SERVICE, "probe", serde_json::Value::Null);
+
+    assert!(matches!(denied, Err(PluginError::PermissionDenied(_))));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "DryRun is rejected before ServiceProvider::call"
+    );
+}
+
+#[test]
+fn a_direct_dry_run_job_host_never_reaches_the_network_provider() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(CALLER, "Audit boundary caller")
+            .expect("network caller declares");
+        ws.set_network(Arc::new(CountingNetwork(Arc::clone(&calls))));
+    }
+
+    let denied = JobHost::new(workspace, CALLER)
+        .in_mode(InvokeMode::DryRun)
+        .fetch(HttpRequest::get("https://api.acme.test/probe"));
+
+    assert!(matches!(denied, Err(PluginError::PermissionDenied(_))));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "DryRun is rejected before HostNetwork::fetch"
+    );
 }
 
 #[test]

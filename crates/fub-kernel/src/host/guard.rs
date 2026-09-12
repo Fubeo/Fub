@@ -946,6 +946,9 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
         self.check_path(Capability::VaultStructure, to.as_str(), || {
             format!("renaming to `{to}`")
         })?;
+        self.check_path(Capability::VaultWrite, "", || {
+            format!("rewriting backlinks after renaming `{from}`")
+        })?;
         self.inner.rename_document(from, to)
     }
 
@@ -975,7 +978,7 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
         self.inner.restore_document(entry, Some(target))
     }
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
-        self.check(Capability::VaultStructure, || "emptying trash".into())?;
+        self.check_path(Capability::VaultStructure, "", || "emptying trash".into())?;
         self.inner.empty_trash()
     }
 }
@@ -1679,6 +1682,136 @@ mod tests {
                 "the replacement".into(),
             ))))
         }
+    }
+
+    struct CountsGlobalStructure {
+        renames: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        sweeps: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl VaultRead for CountsGlobalStructure {
+        fn read_document(&self, _id: &DocId) -> Result<String, PluginError> {
+            unreachable!("the structural authorization benches do not read")
+        }
+
+        fn read_document_bytes(&self, _id: &DocId) -> Result<Vec<u8>, PluginError> {
+            unreachable!("the structural authorization benches do not read bytes")
+        }
+
+        fn document_revision(&self, _id: &DocId) -> Result<Revision, PluginError> {
+            unreachable!("the structural authorization benches do not read revisions")
+        }
+
+        fn list_documents(&self, _page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
+            unreachable!("the structural authorization benches do not list documents")
+        }
+
+        fn free_name(&self, id: &DocId) -> DocId {
+            id.clone()
+        }
+
+        fn read_model(&self, _id: &DocId) -> Result<DocumentModel, PluginError> {
+            unreachable!("the structural authorization benches do not parse")
+        }
+
+        fn format_of(&self, _id: &DocId) -> Option<DocumentFormat> {
+            None
+        }
+
+        fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
+            unreachable!("the structural authorization benches do not list trash")
+        }
+    }
+
+    impl VaultStructure for CountsGlobalStructure {
+        fn create_document(&mut self, _id: &DocId, _source: &str) -> Result<(), PluginError> {
+            unreachable!("the structural authorization benches do not create")
+        }
+
+        fn rename_document(&mut self, _from: &DocId, _to: &DocId) -> Result<(), PluginError> {
+            self.renames
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn trash_document(&mut self, _id: &DocId) -> Result<DocId, PluginError> {
+            unreachable!("the structural authorization benches do not trash")
+        }
+
+        fn restore_document(
+            &mut self,
+            _entry: &DocId,
+            _to: Option<DocId>,
+        ) -> Result<DocId, PluginError> {
+            unreachable!("the structural authorization benches do not restore")
+        }
+
+        fn empty_trash(&mut self) -> Result<u64, PluginError> {
+            self.sweeps
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(0)
+        }
+    }
+
+    fn scoped_structure_guard(
+        renames: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        sweeps: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Guard<CountsGlobalStructure, Granted> {
+        let mut permissions = PluginPermissions::of(&[permission::WRITE_VAULT]);
+        permissions
+            .granted
+            .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+        Guard::new(
+            CountsGlobalStructure { renames, sweeps },
+            Granted::new("scoped", &permissions, Trust::Community),
+        )
+    }
+
+    #[test]
+    fn a_path_scoped_rename_never_reaches_the_inner_mutation() {
+        let renames = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sweeps = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = scoped_structure_guard(
+            std::sync::Arc::clone(&renames),
+            std::sync::Arc::clone(&sweeps),
+        );
+
+        let error = guard
+            .rename_document(
+                &DocId::new("public/Before.md"),
+                &DocId::new("public/After.md"),
+            )
+            .expect_err("backlink rewrites require an unrestricted writer");
+
+        assert!(matches!(error, PluginError::PermissionDenied(_)));
+        assert_eq!(
+            renames.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "both endpoints are in scope, but the global backlink mutation stays fenced"
+        );
+        assert_eq!(sweeps.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_path_scoped_empty_trash_never_reaches_the_inner_sweep() {
+        let renames = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sweeps = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = scoped_structure_guard(
+            std::sync::Arc::clone(&renames),
+            std::sync::Arc::clone(&sweeps),
+        );
+
+        let error = guard
+            .empty_trash()
+            .expect_err("emptying trash requires unrestricted structure access");
+
+        assert!(matches!(error, PluginError::PermissionDenied(_)));
+        assert_eq!(
+            sweeps.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the root path gate runs before the wrapped host can sweep"
+        );
+        assert_eq!(renames.load(std::sync::atomic::Ordering::SeqCst), 0);
     }
 
     #[test]
