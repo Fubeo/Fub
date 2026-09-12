@@ -8667,6 +8667,13 @@ impl Workspace {
             |ws, indexes| {
                 let mut errors = Vec::new();
                 for (id, index) in indexes.iter() {
+                    let _call = match crate::index::IndexCall::enter(id, index) {
+                        Ok(call) => call,
+                        Err(error) => {
+                            errors.push(error);
+                            continue;
+                        }
+                    };
                     let mut index = index.write();
                     let mut host = ws.host_for(id, InvokeMode::Apply);
                     if let Err(and) = index.flush(&mut host) {
