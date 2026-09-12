@@ -392,6 +392,12 @@ impl<'a> OpeningTransaction<'a> {
         });
     }
 
+    fn session(&self) -> &VaultSession {
+        self.session
+            .as_ref()
+            .expect("la pubblicazione richiede una sessione completa")
+    }
+
     fn into_session(mut self) -> VaultSession {
         let session = self
             .session
@@ -841,6 +847,18 @@ impl Host {
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
     /// già aperto.
     fn mounts(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
+        self.mounts_with_info(root, info_of)
+    }
+
+    /// Variante privata che rende iniettabile la sola lettura pre-pubblicazione.
+    ///
+    /// Il seam resta dentro il modulo: i test possono far fallire `VaultInfo`
+    /// senza avvelenare un lock o aggiungere una leva all'API pubblica.
+    fn mounts_with_info(
+        &self,
+        root: &Utf8Path,
+        session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
+    ) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
         let crate::mount::Mounted {
             workspace: mut ws,
@@ -1001,29 +1019,38 @@ impl Host {
             match sessions.slots.get(&root) {
                 Some(SessionSlot::Open(winner)) => {
                     // Ha vinto l'altro: la sessione buona è la sua — riaprire
-                    // un vault già aperto non lo rimonta.
-                    (info_of(winner), Some(opening.into_session()))
+                    // un vault già aperto non lo rimonta. Anche se leggerne le
+                    // informazioni fallisce, la perdente viene trasferita
+                    // soltanto dopo e chiusa fuori dal lock.
+                    let info = session_info(winner);
+                    (info, Some(opening.into_session()))
                 }
                 Some(SessionSlot::Closing(_)) => {
                     // La pubblicazione ha perso contro una chiusura iniziata
                     // mentre il mount era in corso. Il marker non si sovrascrive.
                     (Err(closing_conflict(&root)), Some(opening.into_session()))
                 }
-                None => {
-                    sessions
-                        .slots
-                        .insert(root.clone(), SessionSlot::Open(opening.into_session()));
-                    let Some(SessionSlot::Open(winner)) = sessions.slots.get(&root) else {
-                        unreachable!("la sessione appena inserita è aperta")
-                    };
-                    (info_of(winner), None)
-                }
+                None => match session_info(opening.session()) {
+                    // `VaultInfo` è l'ultima operazione fallibile: solo dopo
+                    // si disarma la transazione e si pubblica la sessione.
+                    Ok(info) => {
+                        let session = opening.into_session();
+                        sessions
+                            .slots
+                            .insert(root.clone(), SessionSlot::Open(session));
+                        (Ok(info), None)
+                    }
+                    Err(error) => (Err(error), None),
+                },
             }
         };
         // Chiudere la sessione perdente sta **fuori** dal lock delle sessioni,
-        // anche quando ha perso contro un marker di chiusura.
+        // anche quando ha perso contro un marker di chiusura. Ogni errore viene
+        // denunciato senza sostituire l'esito primario dell'apertura.
         if let Some(loser) = loser {
-            loser.close();
+            for error in loser.close() {
+                tracing::error!(target: "fub.host", "losing session close failed: {error}");
+            }
         }
         info
     }
@@ -2374,6 +2401,127 @@ fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
 pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
     fub_kernel::valid_doc_id(raw).map_err(PluginError::from)
 }
+#[cfg(test)]
+mod opening_publication_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::watcher::{VaultWatcher, WatcherFactory};
+
+    struct DropProbe {
+        drops: Arc<AtomicUsize>,
+        panic_on_drop: bool,
+    }
+
+    impl VaultWatcher for DropProbe {
+        fn is_watching(&self) -> bool {
+            false
+        }
+    }
+
+    impl Drop for DropProbe {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, Ordering::SeqCst);
+            assert!(!self.panic_on_drop, "planned watcher close failure");
+        }
+    }
+
+    struct DropProbeFactory {
+        drops: Arc<AtomicUsize>,
+        starts: AtomicUsize,
+        panic_on_second: bool,
+    }
+
+    impl WatcherFactory for DropProbeFactory {
+        fn start(
+            &self,
+            _root: &Utf8Path,
+            _workspace: Custody<Workspace>,
+            _watching: Arc<std::sync::atomic::AtomicBool>,
+        ) -> Result<Box<dyn VaultWatcher>, String> {
+            let start = self.starts.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(DropProbe {
+                drops: Arc::clone(&self.drops),
+                panic_on_drop: self.panic_on_second && start == 1,
+            }))
+        }
+    }
+
+    fn vault_root() -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+            .expect("utf8")
+            .canonicalize_utf8()
+            .expect("the vault root exists");
+        std::fs::write(root.join("Nota.md"), "# Nota\n").expect("writes a note");
+        (dir, root)
+    }
+
+    #[test]
+    fn info_failure_rolls_back_before_publishing_the_session() {
+        let (_dir, root) = vault_root();
+        let drops = Arc::new(AtomicUsize::new(0));
+        let host = Host::new()
+            .with_watcher(Box::new(DropProbeFactory {
+                drops: Arc::clone(&drops),
+                starts: AtomicUsize::new(0),
+                panic_on_second: false,
+            }))
+            .with_job_threads(1);
+
+        let outcome = host.mounts_with_info(&root, |_| {
+            Err(PluginError::Internal("planned VaultInfo failure".into()))
+        });
+
+        assert!(outcome.is_err(), "the injected info failure is returned");
+        assert!(
+            host.vaults().is_empty(),
+            "a session whose info failed was published"
+        );
+        assert_eq!(
+            drops.load(Ordering::SeqCst),
+            1,
+            "rollback stopped the candidate watcher"
+        );
+
+        host.open(&root)
+            .expect("the cleaned resources allow the vault to reopen");
+        assert!(host.close().is_empty(), "the reopened vault closes cleanly");
+    }
+
+    #[test]
+    fn loser_close_errors_are_logged_without_masking_the_winner() {
+        let (_dir, root) = vault_root();
+        let drops = Arc::new(AtomicUsize::new(0));
+        let host = Host::new()
+            .with_watcher(Box::new(DropProbeFactory {
+                drops,
+                starts: AtomicUsize::new(0),
+                panic_on_second: true,
+            }))
+            .with_job_threads(1);
+        host.open(&root).expect("the winning session opens");
+        host.wait_indexed(None)
+            .expect("the winner finishes indexing");
+
+        let (outcome, log) =
+            fub_kernel::log::captured_default(|| host.mounts_with_info(&root, info_of));
+
+        outcome.expect("loser cleanup does not mask the winning open result");
+        assert!(
+            log.iter().any(|line| {
+                line.contains("fub.host losing session close failed:")
+                    && line.contains("planned watcher close failure")
+            }),
+            "the loser close error was not reported: {log:?}"
+        );
+        assert!(
+            host.close().is_empty(),
+            "the winning session closes cleanly"
+        );
+    }
+}
+
 #[cfg(test)]
 mod side_data_lock_tests {
     use std::sync::atomic::{AtomicBool, Ordering};
