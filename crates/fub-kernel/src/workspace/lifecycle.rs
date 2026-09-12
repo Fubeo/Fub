@@ -75,23 +75,29 @@ impl PreparedPluginTeardown {
         let mut errors = Vec::new();
         if let Some(indexes) = &mut self.indexes {
             for (id, handle) in std::mem::take(indexes) {
-                {
-                    let mut index = handle.write();
-                    for closing in [false, true] {
-                        let operation = if closing { "close" } else { "flush" };
-                        let outcome = crate::safety::external(
+                for closing in [false, true] {
+                    let operation = if closing { "close" } else { "flush" };
+                    let outcome = if closing {
+                        let mut index = handle.write();
+                        crate::safety::external(
                             &format!("IndexProvider::{operation} of `{id}`"),
                             |message| PluginError::Internal(message.into()),
-                            || {
-                                if closing {
-                                    index.close(host)
-                                } else {
-                                    index.flush(host)
-                                }
-                            },
-                        );
-                        errors.extend(outcome.err());
-                    }
+                            || index.close(host),
+                        )
+                    } else {
+                        match crate::index::IndexCall::enter(&id, &handle) {
+                            Ok(_call) => {
+                                let mut index = handle.write();
+                                crate::safety::external(
+                                    &format!("IndexProvider::{operation} of `{id}`"),
+                                    |message| PluginError::Internal(message.into()),
+                                    || index.flush(host),
+                                )
+                            }
+                            Err(error) => Err(error),
+                        }
+                    };
+                    errors.extend(outcome.err());
                 }
                 errors.extend(
                     crate::safety::external(
@@ -129,6 +135,7 @@ impl PreparedIndexFlush {
         let mut errors = Vec::new();
         for (id, index) in &self.providers {
             let mut invoke = |host: &mut dyn HostApi| {
+                let _call = crate::index::IndexCall::enter(id, index)?;
                 let mut index = index.write();
                 crate::safety::external(
                     &format!("IndexProvider::flush of `{id}`"),

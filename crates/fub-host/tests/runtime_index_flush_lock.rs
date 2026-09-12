@@ -7,7 +7,9 @@ use std::time::Duration;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::{DocId, DocumentModel};
-use fub_abi::traits::{HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryRoute};
+use fub_abi::traits::{
+    HostApi, HostQuery, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind, QueryRoute,
+};
 use fub_abi::PluginError;
 use fub_host::{
     Custody, ExternalChange, ExternalSync, Host, NoWatcher, VaultWatcher, WatcherFactory,
@@ -17,6 +19,13 @@ use fub_kernel::Workspace;
 const OWNER: &str = "fub.audit-runtime-flush";
 const WATCHDOG: Duration = Duration::from_secs(10);
 
+fn probe_query() -> IndexQuery {
+    IndexQuery::Custom {
+        ns: OWNER.into(),
+        query: serde_json::json!({ "probe": "flush-reentry" }),
+    }
+}
+
 struct Observation {
     read: bool,
     write: bool,
@@ -25,17 +34,19 @@ struct Observation {
 
 struct Probe {
     armed: AtomicBool,
+    reenter: AtomicBool,
     workspace: Mutex<Option<Custody<Workspace>>>,
     entered: mpsc::Sender<Observation>,
     release: Mutex<mpsc::Receiver<()>>,
     completed: mpsc::Sender<bool>,
+    nested: mpsc::Sender<Result<IndexResult, PluginError>>,
 }
 
 struct FlushIndex(Arc<Probe>);
 
 impl IndexProvider for FlushIndex {
     fn routes(&self) -> Vec<QueryRoute> {
-        Vec::new()
+        vec![QueryRoute::Query(QueryKind::Custom(OWNER.into()))]
     }
     fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
@@ -52,8 +63,9 @@ impl IndexProvider for FlushIndex {
     fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
         Ok(())
     }
-    fn query(&self, _: IndexQuery) -> Result<IndexResult, PluginError> {
-        unreachable!("flush probe has no query routes")
+    fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {
+        assert_eq!(request, probe_query());
+        Ok(IndexResult::Custom(serde_json::json!({ "ready": true })))
     }
     fn flush(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
         if !self.0.armed.swap(false, Ordering::SeqCst) {
@@ -79,6 +91,12 @@ impl IndexProvider for FlushIndex {
             .unwrap()
             .recv_timeout(WATCHDOG)
             .expect("reader releases the real flush callback");
+        if self.0.reenter.swap(false, Ordering::SeqCst) {
+            self.0
+                .nested
+                .send(host.query_index(probe_query()))
+                .expect("nested query observer remains alive");
+        }
         let reentered = read
             && write
             && host.data_write("flushed", b"yes").is_ok()
@@ -118,8 +136,10 @@ impl WatcherFactory for InstallingWatcher {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Path {
     Runner,
+    RunnerReentry,
     WatcherBatch,
     WatcherCatchUp,
 }
@@ -131,13 +151,17 @@ fn exercise(path: Path) {
     let (entered, observations) = mpsc::channel();
     let (release, released) = mpsc::channel();
     let (completed, completions) = mpsc::channel();
-    let is_runner = matches!(path, Path::Runner);
+    let (nested, nested_results) = mpsc::channel();
+    let is_runner = matches!(path, Path::Runner | Path::RunnerReentry);
+    let reenters = matches!(path, Path::RunnerReentry);
     let probe = Arc::new(Probe {
         armed: AtomicBool::new(is_runner),
+        reenter: AtomicBool::new(reenters),
         workspace: Mutex::new(None),
         entered,
         release: Mutex::new(released),
         completed,
+        nested,
     });
     let host = Host::new().with_watcher(Box::new(InstallingWatcher(probe.clone())));
     if !is_runner {
@@ -150,7 +174,9 @@ fn exercise(path: Path) {
     let (done_tx, done_rx) = mpsc::channel();
     let worker = std::thread::spawn(move || {
         let result = match path {
-            Path::Runner => host.open(&root).and_then(|_| host.wait_indexed(None)),
+            Path::Runner | Path::RunnerReentry => {
+                host.open(&root).and_then(|_| host.wait_indexed(None))
+            }
             Path::WatcherBatch | Path::WatcherCatchUp => {
                 let workspace = host.debug_workspace(None).expect("opened workspace");
                 let mut watcher = ExternalSync::new(workspace);
@@ -159,7 +185,7 @@ fn exercise(path: Path) {
                         watcher.batch(&[ExternalChange::Touched(root.join("External.md"))])
                     }
                     Path::WatcherCatchUp => watcher.catch_up(),
-                    Path::Runner => unreachable!(),
+                    Path::Runner | Path::RunnerReentry => unreachable!(),
                 }
                 Ok(())
             }
@@ -179,6 +205,15 @@ fn exercise(path: Path) {
     let reentered = completions
         .recv_timeout(WATCHDOG)
         .expect("flush capability re-entry returns");
+    if reenters {
+        assert!(
+            matches!(
+                nested_results.recv_timeout(WATCHDOG),
+                Ok(Err(PluginError::Conflict(_)))
+            ),
+            "same-provider query from flush must return its typed re-entry conflict"
+        );
+    }
     let (host, result) = done_rx
         .recv_timeout(WATCHDOG)
         .expect("runtime operation completes");
@@ -197,6 +232,15 @@ fn exercise(path: Path) {
         reentered,
         "flush could not use its real host data capability"
     );
+    if reenters {
+        assert!(
+            matches!(
+                host.query_index(None, probe_query()),
+                Ok(IndexResult::Custom(value)) if value == serde_json::json!({ "ready": true })
+            ),
+            "the flush guard must be cleared after the outer callback"
+        );
+    }
     if is_runner {
         assert!(
             observation.thread.starts_with("fub-job-"),
@@ -214,6 +258,11 @@ fn exercise(path: Path) {
 #[test]
 fn opening_runner_flush_releases_custody_and_allows_host_reentry() {
     exercise(Path::Runner);
+}
+
+#[test]
+fn opening_runner_flush_rejects_same_provider_reentry_and_releases_its_guard() {
+    exercise(Path::RunnerReentry);
 }
 
 #[test]

@@ -307,20 +307,28 @@ impl PreparedPluginDeactivation {
 
     pub fn close_indexes(&self, host: &mut dyn HostApi) -> Vec<PluginError> {
         let mut errors = Vec::new();
-        for (_, provider) in &self.indexes {
-            let mut provider = provider.write();
+        for (id, provider) in &self.indexes {
             for (phase, close) in [("index flush", false), ("index close", true)] {
-                let result = crate::safety::external(
-                    phase,
-                    |message| PluginError::Internal(message.into()),
-                    || {
-                        if close {
-                            provider.close(host)
-                        } else {
-                            provider.flush(host)
+                let result = if close {
+                    let mut provider = provider.write();
+                    crate::safety::external(
+                        phase,
+                        |message| PluginError::Internal(message.into()),
+                        || provider.close(host),
+                    )
+                } else {
+                    match crate::index::IndexCall::enter(id, provider) {
+                        Ok(_call) => {
+                            let mut provider = provider.write();
+                            crate::safety::external(
+                                phase,
+                                |message| PluginError::Internal(message.into()),
+                                || provider.flush(host),
+                            )
                         }
-                    },
-                );
+                        Err(error) => Err(error),
+                    }
+                };
                 if let Err(error) = result {
                     errors.push(error);
                 }
@@ -569,20 +577,31 @@ impl PreparedIndexRegistration {
     /// may be held; each callback and the destructor has its own panic boundary.
     pub fn dispose_uncommitted(mut self, host: &mut dyn HostApi) -> Vec<PluginError> {
         let mut errors = Vec::new();
-        if let Some(mut provider) = self.provider.take() {
+        if let Some(provider) = self.provider.take() {
+            let id = "uncommitted index";
+            let provider = Arc::new(SharedShelter::new(provider));
             if self.activated.is_some() {
                 for close in [false, true] {
-                    let result = crate::safety::external(
-                        "uncommitted index cleanup",
-                        |message| PluginError::Internal(message.into()),
-                        || {
-                            if close {
-                                provider.close(host)
-                            } else {
-                                provider.flush(host)
+                    let result = if close {
+                        let mut provider = provider.write();
+                        crate::safety::external(
+                            "uncommitted index cleanup",
+                            |message| PluginError::Internal(message.into()),
+                            || provider.close(host),
+                        )
+                    } else {
+                        match crate::index::IndexCall::enter(id, &provider) {
+                            Ok(_call) => {
+                                let mut provider = provider.write();
+                                crate::safety::external(
+                                    "uncommitted index cleanup",
+                                    |message| PluginError::Internal(message.into()),
+                                    || provider.flush(host),
+                                )
                             }
-                        },
-                    );
+                            Err(error) => Err(error),
+                        }
+                    };
                     if let Err(error) = result {
                         errors.push(error);
                     }
