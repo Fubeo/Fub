@@ -167,7 +167,7 @@ fn exercise(path: Path) {
     host.open(&root).expect("open vault");
     if !is_runner {
         host.wait_indexed(None)
-            .expect("runner finishes before arming watcher probe");
+            .expect("indicizzazione iniziale completata prima di armare la probe watcher");
         std::fs::write(root.join("External.md"), "# External\n").expect("real external change");
         probe.armed.store(true, Ordering::SeqCst);
     }
