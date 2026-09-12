@@ -8,7 +8,7 @@ use std::time::Duration;
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
-    HostApi, HostQuery, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind, QueryRoute,
+    HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind, QueryRoute,
 };
 use fub_abi::PluginError;
 use fub_host::{
