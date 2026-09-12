@@ -39,7 +39,7 @@ use crate::error::{KernelError, Result};
 use crate::registry::FormatRegistry;
 use crate::renderer::RendererRegistry;
 use crate::syntax::SyntaxRegistry;
-use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
+use crate::vault::{data_root, PreparedVaultRestore, TrashEntry, Vault, FUB_DIR};
 
 /// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
 /// ha `<vault>/.fub/plugins/<id>/` per i dati autorevoli e non vede nient'altro;
@@ -49,6 +49,25 @@ use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
 /// metterlo in sync deve portarsi dietro anche loro.
 const PLUGIN_DATA_DIR: &str = "plugins";
+
+fn plugin_data_roots(vault: &Vault) -> Vec<Utf8PathBuf> {
+    let mut roots = Vec::new();
+    for plugins in [
+        vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
+        data_root(vault.root()).join(PLUGIN_DATA_DIR),
+    ] {
+        roots.extend(
+            vault
+                .storage()
+                .list(&plugins)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|entry| entry.stat.is_dir())
+                .map(|entry| entry.path),
+        );
+    }
+    roots
+}
 
 /// Parser risolto senza eseguire codice esterno. Provider, descriptor e regole
 /// sono una fotografia coerente che può attraversare il confine del lock.
@@ -113,6 +132,22 @@ impl DocumentStoreHandle {
 
     pub(crate) fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
         self.vault.read_bytes(id)
+    }
+
+    pub(crate) fn prepare_restore(
+        &self,
+        entry: TrashEntry,
+        target: DocId,
+        revision: Revision,
+    ) -> Result<PreparedVaultRestore> {
+        self.vault.prepare_restore(entry, target, revision)
+    }
+
+    /// Censisce e migra gli spazi per-documento soltanto quando il token
+    /// detached viene invocato.
+    pub(crate) fn migrate_data(&self, from: &DocId, to: &DocId) -> Vec<String> {
+        let roots = plugin_data_roots(&self.vault);
+        crate::docdata::migrate_data(self.vault.storage().as_ref(), &roots, from, to)
     }
     /// Osserva una revisione soltanto se metadati e identità del file restano
     /// uguali ai due lati della lettura. Il chiamante può così riconvalidare un
@@ -421,26 +456,7 @@ impl DocumentStore {
     /// non può accorgersi di niente, ed è esattamente chi ha più bisogno che
     /// qualcun altro se ne accorga per lui.
     pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
-        let mut roots = Vec::new();
-        for plugins in [
-            self.vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
-            data_root(self.vault.root()).join(PLUGIN_DATA_DIR),
-        ] {
-            // In ordine — lo dà `VaultStorage::list` — perché gli errori che ne
-            // escono finiscono in un messaggio, e un messaggio che cambia ordine a
-            // ogni giro non si confronta. Le due radici restano entrambe leggibili
-            // durante il passaggio additivo del layout.
-            roots.extend(
-                self.vault
-                    .storage()
-                    .list(&plugins)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|and| and.stat.is_dir())
-                    .map(|and| and.path),
-            );
-        }
-        roots
+        plugin_data_roots(&self.vault)
     }
 }
 

@@ -744,6 +744,7 @@ impl VaultStructure for JobHost {
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
         self.stopped()?;
         let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
         let (policy, list_trash) = {
             let ws = workspace.read()?;
             let policy = ws.granted_policy(&self.plugin);
@@ -809,15 +810,20 @@ impl VaultStructure for JobHost {
                 .map_err(PluginError::from)?
         };
         let completed = prepared.invoke().map_err(PluginError::from)?;
-        let pending = {
+        let committed = {
             let mut ws = workspace.write()?;
-            ws.commit_document_restore(completed).map_err(|failure| {
-                let (error, _) = *failure;
-                error
-            })?
+            ws.commit_document_restore(completed)
+                .map_err(|failure| *failure)
+        };
+        let pending = match committed {
+            Ok(pending) => pending,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(error);
+            }
         };
         let pending = pending.invoke_indexes();
-        let deferred = {
+        let completion = {
             let mut ws = workspace.write()?;
             ws.finish_document_restore_deferred(pending)
                 .map_err(|failure| {
@@ -825,7 +831,14 @@ impl VaultStructure for JobHost {
                     error
                 })?
         };
-        finish_events(&workspace, deferred)
+        drain_events(&workspace)?;
+        let completion = completion.invoke();
+        let outcome = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_restore_completion(completion)
+        };
+        drain_events(&workspace)?;
+        Ok(outcome)
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {

@@ -11,11 +11,12 @@ enum RestoreContent {
     Attachment,
 }
 
-/// Ripristino risolto fino al confine del parser.
+/// Ripristino risolto fino al confine del parser e della mossa.
 ///
-/// Il token non porta prestiti del workspace. `invoke` può quindi attraversare
-/// un `FormatProvider` dopo che l'host ha rilasciato `Custody<Workspace>`.
-#[must_use = "il ripristino preparato deve essere parsato e finalizzato"]
+/// Il token non porta prestiti del workspace. `invoke` può quindi leggere,
+/// chiamare il provider e rinominare la voce dopo che l'host ha rilasciato
+/// `Custody<Workspace>`.
+#[must_use = "il ripristino preparato deve essere invocato"]
 pub struct PreparedDocumentRestore {
     workspace_id: u64,
     entry: TrashEntry,
@@ -24,30 +25,68 @@ pub struct PreparedDocumentRestore {
     content: RestoreContent,
 }
 
-/// Esito del parser, ancora da riconvalidare e applicare al vault.
+/// Esito del parser e della mossa autorevole, ancora da installare nel core.
+#[must_use = "il ripristino mosso deve essere committato o annullato"]
 pub struct CompletedDocumentRestore {
     workspace_id: u64,
-    entry: TrashEntry,
-    target: DocId,
-    source_kind: Option<fub_abi::format::SourceKind>,
-    source_revision: Revision,
     model: Option<DocumentModel>,
     documents: crate::documents::DocumentStoreHandle,
+    moved: crate::vault::CompletedVaultRestore,
 }
 
-/// Ripristino già committato sul disco e nel core, con gli indici esterni
-/// ancora da alimentare fuori dalla guardia.
-#[must_use = "gli indici del ripristino devono essere invocati e finalizzati"]
+/// Ripristino già committato sul disco e nel core, con indici, migrazioni e
+/// finalizzazione del sidecar ancora da eseguire fuori dalla guardia.
+#[must_use = "il ripristino deve essere invocato e finalizzato"]
 pub struct PendingDocumentRestore {
     workspace_id: u64,
     trash_id: DocId,
     target: DocId,
     documents: crate::documents::DocumentStoreHandle,
+    organization: Arc<crate::organization::OrganizationStore>,
+    rename_from: Option<DocId>,
+    doc_data_warnings: Vec<String>,
+    moved: Option<crate::vault::CompletedVaultRestore>,
     restored_identity: Option<crate::storage::FileIdentity>,
     observed_target: Option<(Revision, Option<crate::storage::FileIdentity>)>,
     routing_generation: u64,
     previous_provider_call: Option<bool>,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
     feed: Option<PreparedDocumentFeed>,
+}
+
+/// Epilogo che aspetta il drain degli eventi prima dell'unico append detached.
+#[must_use = "il journal del ripristino deve essere scritto"]
+pub struct PreparedDocumentRestoreCompletion {
+    outcome: DocId,
+    trash_id: DocId,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+}
+
+/// Esito owned dell'append, da riportare nel workspace senza altro I/O.
+pub struct CompletedDocumentRestoreCompletion {
+    outcome: DocId,
+    journal_fault: Option<String>,
+}
+
+impl PreparedDocumentRestoreCompletion {
+    pub fn invoke(self) -> CompletedDocumentRestoreCompletion {
+        let journal_fault = self
+            .journal
+            .append(
+                self.origin,
+                JournalOp::Restored {
+                    trash: self.trash_id,
+                    doc: self.outcome.clone(),
+                },
+            )
+            .err();
+        CompletedDocumentRestoreCompletion {
+            outcome: self.outcome,
+            journal_fault,
+        }
+    }
 }
 
 impl PreparedDocumentRestore {
@@ -56,8 +95,8 @@ impl PreparedDocumentRestore {
         &self.target
     }
 
-    /// Legge la sorgente e invoca parser e sintassi usando soltanto handle
-    /// owned: nessuna guardia del workspace attraversa questa fase.
+    /// Legge la sorgente, invoca parser e sintassi e infine compie la mossa
+    /// no-replace usando soltanto handle owned.
     pub fn invoke(self) -> Result<CompletedDocumentRestore> {
         let PreparedDocumentRestore {
             workspace_id,
@@ -66,7 +105,7 @@ impl PreparedDocumentRestore {
             documents,
             content,
         } = self;
-        let (source_kind, source_revision, model) = match content {
+        let (source_revision, model) = match content {
             RestoreContent::Document {
                 source_kind,
                 parser,
@@ -80,31 +119,59 @@ impl PreparedDocumentRestore {
                     }
                 };
                 let revision = Revision::of_bytes(source.bytes());
-                (Some(source_kind), revision, Some((*parser).invoke(source)?))
+                (revision, Some((*parser).invoke(source)?))
             }
-            RestoreContent::Attachment => (
-                None,
-                Revision::of_bytes(&documents.read_bytes(&entry.id)?),
-                None,
-            ),
+            RestoreContent::Attachment => {
+                (Revision::of_bytes(&documents.read_bytes(&entry.id)?), None)
+            }
         };
+        let moved = documents
+            .prepare_restore(entry, target, source_revision)?
+            .invoke()?;
         Ok(CompletedDocumentRestore {
             workspace_id,
-            entry,
-            target,
-            source_kind,
-            source_revision,
             model,
             documents,
+            moved,
         })
     }
 }
 
+impl CompletedDocumentRestore {
+    /// Annulla una mossa rifiutata dal core senza riprendere il workspace.
+    pub fn rollback(self) -> Result<()> {
+        self.moved.rollback()
+    }
+}
+
 impl PendingDocumentRestore {
-    /// Alimenta e rilascia gli indici, poi osserva sul supporto la revisione
-    /// stabile della destinazione. Entrambe le operazioni avvengono senza
-    /// prendere in prestito il workspace.
+    /// Migra i side-data, alimenta gli indici, osserva la revisione stabile e
+    /// infine rimuove best-effort il sidecar, sempre senza custodire il
+    /// workspace.
     pub fn invoke_indexes(mut self) -> Self {
+        if let Some(from) = self.rename_from.as_ref() {
+            if let Err(error) = self
+                .organization
+                .migrate(from.as_str(), self.target.as_str())
+            {
+                self.organization.warn(format!(
+                    "l'organizzazione di {from} non ha potuto seguire la rinomina in {}: {error}",
+                    self.target
+                ));
+            }
+            self.doc_data_warnings.extend(
+                self.documents
+                    .migrate_data(from, &self.target)
+                    .into_iter()
+                    .map(|error| {
+                        format!(
+                            "lo stato per-documento di {from} non ha potuto seguire la rinomina \
+                             in {} — {error}",
+                            self.target
+                        )
+                    }),
+            );
+        }
         if let Some(mut feed) = self.feed.take().map(PreparedDocumentFeed::invoke_indexes) {
             self.observed_target = match self.documents.observe_revision_stable(&self.target) {
                 Ok(observed) => observed,
@@ -117,6 +184,9 @@ impl PendingDocumentRestore {
                 }
             };
             self.feed = Some(feed);
+        }
+        if let Some(moved) = self.moved.take() {
+            moved.finalize();
         }
         self
     }
@@ -159,7 +229,9 @@ impl Workspace {
     ) -> Result<PreparedDocumentRestore> {
         self.indexes.ensure_mutation_available()?;
         let target = new_doc_id(target.as_str())?;
-        if self.is_taken(&target) {
+        if self.indexes.core.entries.contains_key(&target)
+            || self.indexes.core.metas.contains_key(&target)
+        {
             return Err(KernelError::AlreadyExists(target.to_string()));
         }
         let documents = self.docs.detached();
@@ -179,9 +251,8 @@ impl Workspace {
         })
     }
 
-    /// Riconvalida il token e sposta la voce una sola volta. Non chiama
-    /// provider: per un documento restituisce invece gli handle nel token
-    /// pending, che l'host invoca dopo aver rilasciato la guardia.
+    /// Installa nel core una mossa già riconvalidata. Questa fase non consulta
+    /// storage né provider: metadati e identità arrivano dalla ricevuta.
     pub fn commit_document_restore(
         &mut self,
         completed: CompletedDocumentRestore,
@@ -196,123 +267,91 @@ impl Workspace {
         if let Err(error) = self.indexes.ensure_mutation_available() {
             return Err(Box::new((PluginError::from(error), completed)));
         }
-        let entries = match self.docs.vault.list_trash() {
-            Ok(entries) => entries,
-            Err(error) => return Err(Box::new((PluginError::from(error), completed))),
-        };
-        let current = entries
-            .into_iter()
-            .find(|entry| entry.id == completed.entry.id);
-        let Some(current) = current else {
+        let target = completed.moved.target().clone();
+        if self.indexes.core.entries.contains_key(&target)
+            || self.indexes.core.metas.contains_key(&target)
+        {
             return Err(Box::new((
-                PluginError::NotFound(completed.entry.id.to_string().into()),
-                completed,
-            )));
-        };
-        if current != completed.entry {
-            return Err(Box::new((
-                PluginError::Conflict(completed.entry.id.to_string().into()),
-                completed,
-            )));
-        }
-        if self.is_taken(&completed.target) {
-            return Err(Box::new((
-                PluginError::AlreadyExists(completed.target.to_string().into()),
-                completed,
-            )));
-        }
-        let current_revision = match completed.source_kind {
-            Some(fub_abi::format::SourceKind::Text) => self
-                .docs
-                .vault
-                .read(&completed.entry.id)
-                .map(|source| Revision::of_bytes(source.as_bytes())),
-            Some(fub_abi::format::SourceKind::Bytes) | None => self
-                .docs
-                .vault
-                .read_bytes(&completed.entry.id)
-                .map(|source| Revision::of_bytes(&source)),
-        };
-        let current_revision = match current_revision {
-            Ok(revision) => revision,
-            Err(error) => return Err(Box::new((PluginError::from(error), completed))),
-        };
-        if current_revision != completed.source_revision {
-            return Err(Box::new((
-                PluginError::Conflict(completed.entry.id.to_string().into()),
+                PluginError::AlreadyExists(target.to_string().into()),
                 completed,
             )));
         }
 
-        if let Err(error) = self
-            .docs
-            .vault
-            .restore_trashed(&completed.entry.id, &completed.target)
-        {
-            return Err(Box::new((PluginError::from(error), completed)));
-        }
-        let restored_identity = self.docs.vault.file_identity(&completed.target);
+        let entry = completed.moved.entry().clone();
+        let source_revision = completed.moved.revision().clone();
+        let stat = completed.moved.stat();
+        let restored_identity = completed.moved.identity();
         let journal = JournalOp::Restored {
-            trash: completed.entry.id.clone(),
-            doc: completed.target.clone(),
+            trash: entry.id.clone(),
+            doc: target.clone(),
         };
         let routing_generation = self.indexes.routing_generation();
         let (feed, previous_provider_call) = match completed.model {
             Some(model) => {
                 let previous_provider_call = self.dispatch.enter_provider_call();
                 let feed = self.prepare_ingest_model(
-                    &completed.target,
+                    &target,
                     model,
-                    completed.source_revision,
-                    None,
+                    source_revision,
+                    Some((stat.size, stat.mtime)),
                     journal,
                 );
                 self.announce_index_feed(&feed);
                 (Some(feed), Some(previous_provider_call))
             }
             None => {
-                let kind = self
-                    .touch_entry(&completed.target, None)
-                    .unwrap_or(EntryKind::Unknown);
+                let kind = self.set_entry(&target, stat.size, stat.mtime, None);
                 self.emit_event(Event::EntryChanged {
-                    id: completed.target.clone(),
+                    id: target.clone(),
                     kind,
                 });
                 self.emit_event(Event::IndexUpdated);
                 (None, None)
             }
         };
-        if completed.target != completed.entry.original {
-            self.migrate_doc_data(&completed.entry.original, &completed.target);
+        let rename_from = (target != entry.original).then(|| entry.original.clone());
+        if let Some(from) = rename_from.as_ref() {
             self.emit_event(Event::DocumentRenamed {
-                from: completed.entry.original,
-                to: completed.target.clone(),
+                from: from.clone(),
+                to: target.clone(),
             });
         }
         Ok(PendingDocumentRestore {
             workspace_id: completed.workspace_id,
-            trash_id: completed.entry.id,
-            target: completed.target,
+            trash_id: entry.id,
+            target,
             documents: completed.documents,
+            organization: Arc::clone(&self.organization),
+            rename_from,
+            doc_data_warnings: Vec::new(),
+            moved: Some(completed.moved),
             restored_identity,
             observed_target: None,
             routing_generation,
             previous_provider_call,
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
             feed,
         })
     }
 
-    /// Completa stato derivato, migrazione e coda eventi senza richiamare
-    /// codice esterno. Un token consegnato al workspace sbagliato viene
-    /// restituito intatto al chiamante.
+    /// Completa stato derivato e coda eventi senza richiamare codice esterno.
     pub fn finish_document_restore_deferred(
         &mut self,
         pending: PendingDocumentRestore,
-    ) -> std::result::Result<DeferredEvents<DocId>, Box<(PluginError, PendingDocumentRestore)>>
-    {
+    ) -> std::result::Result<
+        PreparedDocumentRestoreCompletion,
+        Box<(PluginError, PendingDocumentRestore)>,
+    > {
         if pending.workspace_id != self.workspace_id {
             return Err(Box::new((
                 PluginError::Conflict("il ripristino appartiene a un altro workspace".into()),
+                pending,
+            )));
+        }
+        if pending.moved.is_some() {
+            return Err(Box::new((
+                PluginError::Conflict("il ripristino detached non è stato finalizzato".into()),
                 pending,
             )));
         }
@@ -324,8 +363,12 @@ impl Workspace {
             feed,
             restored_identity,
             observed_target,
+            doc_data_warnings,
+            journal,
+            origin,
             ..
         } = pending;
+        self.doc_data_warnings.extend(doc_data_warnings);
         if let Some(feed) = feed {
             if let Some(previous_provider_call) = previous_provider_call {
                 self.dispatch.restore_provider_call(previous_provider_call);
@@ -338,26 +381,38 @@ impl Workspace {
                 && routing_generation == self.indexes.routing_generation();
             self.finish_sync_index_feed(feed, current);
         }
-        Ok(DeferredEvents {
-            outcome: target.clone(),
-            previous_actor: None,
-            journal: Some(JournalOp::Restored {
-                trash: trash_id,
-                doc: target,
-            }),
+        Ok(PreparedDocumentRestoreCompletion {
+            outcome: target,
+            trash_id,
+            journal,
+            origin,
         })
     }
 
-    /// Chiude il ripristino staged dopo che l'host ha alimentato gli indici
-    /// fuori dalla propria guardia. Gli eventi precedono l'unica riga journal,
-    /// come nel percorso storico.
+    /// Chiude il ripristino staged nel percorso sincrono storico.
     pub fn finish_document_restore(
         &mut self,
         pending: PendingDocumentRestore,
     ) -> std::result::Result<DocId, Box<(PluginError, PendingDocumentRestore)>> {
-        let deferred = self.finish_document_restore_deferred(pending)?;
+        let prepared = self.finish_document_restore_deferred(pending)?;
         self.dispatch_pending();
-        Ok(self.finish_deferred_events(deferred))
+        Ok(self.finish_document_restore_completion(prepared.invoke()))
+    }
+
+    /// Riporta soltanto l'eventuale guasto dell'append già eseguito.
+    pub fn finish_document_restore_completion(
+        &mut self,
+        completed: CompletedDocumentRestoreCompletion,
+    ) -> DocId {
+        if let Some(error) = completed.journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {error}").into()),
+                None,
+            );
+        }
+        completed.outcome
     }
 }
 
@@ -379,15 +434,23 @@ mod tests {
     }
 
     #[test]
-    fn wrong_workspace_returns_a_reusable_restore_token() {
+    fn wrong_workspace_rollback_restores_the_exact_trash_entry_and_sidecar() {
         let (_first_dir, mut first) = workspace();
         let (_second_dir, mut second) = workspace();
         let trash_id = trashed_attachment(&mut first, "asset.bin", b"first");
+        let sidecar = crate::vault::data_root(first.root())
+            .join("trash")
+            .join(format!(
+                "{}.json",
+                Utf8Path::new(trash_id.as_str()).file_name().unwrap()
+            ));
+        let sidecar_before = std::fs::read(&sidecar).unwrap();
         let completed = first
             .prepare_document_restore(&trash_id, None)
             .unwrap()
             .invoke()
             .unwrap();
+        assert_eq!(std::fs::read(&sidecar).unwrap(), sidecar_before);
 
         let completed = match second.commit_document_restore(completed) {
             Ok(_) => panic!("another workspace accepted the restore"),
@@ -397,33 +460,39 @@ mod tests {
                 completed
             }
         };
-        let pending = match first.commit_document_restore(completed) {
-            Ok(pending) => pending,
-            Err(_) => panic!("the original workspace rejected its restore token"),
-        };
-        assert_eq!(pending.target, DocId::new("asset.bin"));
+        completed.rollback().unwrap();
+        assert!(!first.root().join("asset.bin").exists());
         assert_eq!(
-            std::fs::read(first.root().join("asset.bin")).unwrap(),
+            std::fs::read(first.root().join(trash_id.as_str())).unwrap(),
             b"first"
         );
+        assert_eq!(std::fs::read(sidecar).unwrap(), sidecar_before);
     }
 
     #[test]
     fn a_changed_attachment_is_rejected_before_the_restore_move() {
         let (_dir, mut workspace) = workspace();
         let trash_id = trashed_attachment(&mut workspace, "asset.bin", b"first");
-        let completed = workspace
-            .prepare_document_restore(&trash_id, None)
+        let entry = workspace
+            .docs
+            .vault
+            .list_trash()
             .unwrap()
-            .invoke()
+            .into_iter()
+            .find(|entry| entry.id == trash_id)
+            .unwrap();
+        let prepared = workspace
+            .docs
+            .vault
+            .prepare_restore(entry, DocId::new("asset.bin"), Revision::of_bytes(b"first"))
             .unwrap();
         std::fs::write(workspace.root().join(trash_id.as_str()), b"changed").unwrap();
 
-        let error = match workspace.commit_document_restore(completed) {
+        let error = match prepared.invoke() {
             Ok(_) => panic!("a stale attachment was restored"),
-            Err(failure) => failure.0,
+            Err(error) => error,
         };
-        assert!(matches!(error, PluginError::Conflict(_)));
+        assert!(matches!(error, KernelError::Stale(_)));
         assert!(!workspace.root().join("asset.bin").exists());
         assert_eq!(
             std::fs::read(workspace.root().join(trash_id.as_str())).unwrap(),

@@ -76,6 +76,17 @@ fn assert_workspace_is_free(workspace: &Custody<Workspace>, callback: &str) {
     );
 }
 
+fn assert_restore_detached_with_writer_turn(workspace: &Custody<Workspace>, callback: &str) {
+    assert!(
+        workspace.try_read().is_some(),
+        "{callback} held a write guard on Custody<Workspace>"
+    );
+    assert!(
+        workspace.try_write().is_none(),
+        "{callback} did not preserve the restore writer turn"
+    );
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stage {
     Parse,
@@ -291,6 +302,15 @@ impl VaultStorage for BlockingRestoreStorage {
     }
 
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        let probing = self
+            .workspace_probe
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .is_some();
+        if probing && from.starts_with(&self.trash_dir) {
+            self.assert_workspace_is_free("VaultStorage::rename_no_replace during restore");
+            self.traverse(Stage::TrashRename);
+        }
         self.inner.rename_no_replace(from, to)
     }
 
@@ -670,7 +690,7 @@ fn restore_releases_both_workspace_guards_for_format_parse() {
             .expect("restore parse entered"),
         Stage::Parse
     );
-    assert_workspace_is_free(&workspace, "restore FormatProvider::parse");
+    assert_restore_detached_with_writer_turn(&workspace, "restore FormatProvider::parse");
     parse_release.send(()).expect("release restore parse");
     let restored = call
         .join()
@@ -740,9 +760,13 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
         .delete_document(&original)
         .expect("seed note enters trash");
     let workspace = Custody::new("the detached restore workspace", workspace);
-    // Preparazione, riconvalida e touch del core fanno tre stat del target; il
-    // quarto è la lettura stabile che segue il feed degli indici.
-    storage.arm_data_after(Stage::DataRead, root.join(original.as_str()), 3, true);
+    *storage
+        .workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+    // Dopo la mossa, l'osservazione stabile fa stat, read, stat: si blocca
+    // sulla lettura centrale.
+    storage.arm_data_after(Stage::DataRead, root.join(original.as_str()), 1, true);
     storage.arm(root.join(trash_id.as_str()), true);
 
     let workspace_for_call = workspace.clone();
@@ -755,7 +779,7 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
             .expect("trash listing entered"),
         Stage::TrashList
     );
-    assert_workspace_is_free(&workspace, "VaultStorage::list during restore");
+    assert_restore_detached_with_writer_turn(&workspace, "VaultStorage::list during restore");
     release_tx.send(()).expect("release trash listing");
     assert_eq!(
         entered_rx
@@ -763,25 +787,51 @@ fn restore_lists_and_reads_without_workspace_guards_and_denial_precedes_io() {
             .expect("trash source read entered"),
         Stage::SourceRead
     );
-    assert_workspace_is_free(&workspace, "VaultStorage::read during restore");
+    assert_restore_detached_with_writer_turn(&workspace, "VaultStorage::read during restore");
     release_tx.send(()).expect("release trash source read");
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("trash restore rename entered"),
+        Stage::TrashRename
+    );
+    assert_restore_detached_with_writer_turn(
+        &workspace,
+        "VaultStorage::rename_no_replace during restore",
+    );
+    release_tx.send(()).expect("release trash restore rename");
     assert_eq!(
         entered_rx
             .recv_timeout(TIMEOUT)
             .expect("post-feed target read entered"),
         Stage::DataRead
     );
-    assert_workspace_is_free(
+    assert_restore_detached_with_writer_turn(
         &workspace,
         "VaultStorage::read after the restore index feed",
     );
     release_tx.send(()).expect("release post-feed target read");
+    assert_eq!(
+        entered_rx
+            .recv_timeout(TIMEOUT)
+            .expect("restore journal append entered"),
+        Stage::JournalAppend
+    );
+    assert_restore_detached_with_writer_turn(
+        &workspace,
+        "VaultStorage::append after restore events",
+    );
+    release_tx.send(()).expect("release restore journal append");
     assert_eq!(
         call.join()
             .expect("restore thread does not panic")
             .expect("restore succeeds"),
         original
     );
+    *storage
+        .workspace_probe
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = None;
 
     let denied_entry = workspace
         .write()
@@ -1343,7 +1393,7 @@ fn a_stale_restore_result_moves_nothing_and_records_no_fact() {
             .expect("restore parse entered"),
         Stage::Parse
     );
-    assert_workspace_is_free(&workspace, "stale restore FormatProvider::parse");
+    assert_restore_detached_with_writer_turn(&workspace, "stale restore FormatProvider::parse");
     std::fs::write(vault.root.join(trash_id.as_str()), "# After\n")
         .expect("concurrent trash change");
     parse_release.send(()).expect("release restore parse");
