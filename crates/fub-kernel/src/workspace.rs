@@ -315,6 +315,57 @@ pub struct PreparedExplicitRename {
     rewrites: Vec<PreparedExplicitLinkRewrite>,
     side_data: PreparedRenameSideData,
 }
+/// Piano owned di una rinomina esplicita di una voce senza provider di formato.
+///
+/// La preparazione fotografa soltanto core, path, riferimenti e handle. I byte
+/// dell'asset, le sorgenti dei link e i side-data vengono letti o mossi da
+/// [`PreparedExplicitAssetRename::invoke`] senza prendere in prestito il
+/// workspace.
+#[must_use = "la rinomina asset preparata deve essere invocata e committata"]
+pub struct PreparedExplicitAssetRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
+    side_data: PreparedAssetRenameSideData,
+}
+
+/// Asset già spostato e fotografato esattamente, ancora da riconvalidare nel core.
+#[must_use = "la rinomina asset spostata deve essere committata o annullata"]
+pub struct MovedExplicitAssetRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    fingerprint: Revision,
+    stat: crate::storage::Stat,
+    identity: Option<crate::storage::FileIdentity>,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedAssetRenameSideData,
+}
+
+/// Core della rinomina asset installato, con callback ancora da invocare.
+#[must_use = "registro e riscritture della rinomina asset devono essere invocati"]
+pub struct PendingExplicitAssetRename {
+    workspace_id: u64,
+    installed: VaultEntry,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedAssetRenameSideData,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+    from: DocId,
+    to: DocId,
+    owns_batch: bool,
+}
+
+/// Callback della rinomina asset concluse, pronto per eventi ed epilogo.
+pub struct CompletedExplicitAssetRename {
+    workspace_id: u64,
+    installed: VaultEntry,
+    side_data: CompletedAssetRenameSideData,
+    from: DocId,
+    to: DocId,
+    owns_batch: bool,
+    rewrite_failures: Vec<String>,
+    journal_fault: Option<String>,
+}
 
 /// Sorgente stabile e modello già parsato, ancora da riconvalidare nel core.
 #[must_use = "la rinomina parsata deve essere committata"]
@@ -445,6 +496,23 @@ struct CompletedRenameSideData {
     to: DocId,
     errors: Vec<String>,
     rollback: Option<PreparedRenameSideData>,
+}
+/// Handle owned per migrare soltanto i side-data che appartengono anche agli
+/// asset. Le bozze sono buffer di documenti testuali e non seguono questa rotta.
+struct PreparedAssetRenameSideData {
+    from: DocId,
+    to: DocId,
+    organization: Arc<OrganizationStore>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Esito e ricevuta one-shot per il rollback dei side-data di un asset.
+struct CompletedAssetRenameSideData {
+    from: DocId,
+    to: DocId,
+    errors: Vec<String>,
+    rollback: Option<PreparedAssetRenameSideData>,
 }
 
 /// Core della rinomina già installato, callback e side-data ancora detached.
@@ -705,39 +773,7 @@ impl PreparedExplicitRename {
         };
         let model = parser.invoke(source)?;
 
-        let rewrites = rewrites
-            .into_iter()
-            .filter_map(|prepared| {
-                let bytes = storage.read(&prepared.source_path).ok()?;
-                let source = fub_abi::rules::text_policy::decode(&bytes).ok()?;
-                let mut edits = Vec::new();
-                for prepared_edit in prepared.edits {
-                    let Some(slice) = source.get(prepared_edit.span.start..prepared_edit.span.end)
-                    else {
-                        continue;
-                    };
-                    let found = if prepared_edit.from_end {
-                        slice.rfind(&prepared_edit.written)
-                    } else {
-                        slice.find(&prepared_edit.written)
-                    };
-                    let Some(relative) = found else {
-                        continue;
-                    };
-                    let start = prepared_edit.span.start + relative;
-                    edits.push(TextEdit::replace(
-                        Span::new(start, start + prepared_edit.written.len()),
-                        prepared_edit.replacement,
-                    ));
-                }
-                (!edits.is_empty()).then(|| {
-                    (
-                        prepared.destination,
-                        EditRequest::new(Revision::of(source), edits),
-                    )
-                })
-            })
-            .collect();
+        let rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites);
 
         let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
         if !same_file && storage.exists(&snapshot.to_path) {
@@ -906,6 +942,257 @@ impl CompletedExplicitRename {
         self
     }
 }
+fn invoke_prepared_link_rewrites(
+    storage: &dyn crate::storage::VaultStorage,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
+) -> Vec<(DocId, EditRequest)> {
+    rewrites
+        .into_iter()
+        .filter_map(|prepared| {
+            let bytes = storage.read(&prepared.source_path).ok()?;
+            let source = fub_abi::rules::text_policy::decode(&bytes).ok()?;
+            let mut edits = Vec::new();
+            for prepared_edit in prepared.edits {
+                let Some(slice) = source.get(prepared_edit.span.start..prepared_edit.span.end)
+                else {
+                    continue;
+                };
+                let found = if prepared_edit.from_end {
+                    slice.rfind(&prepared_edit.written)
+                } else {
+                    slice.find(&prepared_edit.written)
+                };
+                let Some(relative) = found else {
+                    continue;
+                };
+                let start = prepared_edit.span.start + relative;
+                edits.push(TextEdit::replace(
+                    Span::new(start, start + prepared_edit.written.len()),
+                    prepared_edit.replacement,
+                ));
+            }
+            (!edits.is_empty()).then(|| {
+                (
+                    prepared.destination,
+                    EditRequest::new(Revision::of(source), edits),
+                )
+            })
+        })
+        .collect()
+}
+
+impl PreparedExplicitAssetRename {
+    /// Verifica l'identità dell'asset, prepara le CAS dei riferimenti, migra i
+    /// side-data e sposta il file senza trattenere il workspace.
+    pub fn invoke(self) -> Result<MovedExplicitAssetRename> {
+        let PreparedExplicitAssetRename {
+            snapshot,
+            storage,
+            rewrites,
+            side_data,
+        } = self;
+        let path = snapshot.from_path.clone();
+        let before = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if !before.is_file() {
+            return Err(KernelError::NotFound(snapshot.from.to_string()));
+        }
+        let identity_before = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let bytes = storage.read(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let after = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let identity_after = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        if !after.is_file() || before != after || identity_before != identity_after {
+            return Err(KernelError::Stale(snapshot.from.to_string()));
+        }
+        let identity = identity_after;
+        let fingerprint = Revision::of_bytes(&bytes);
+        let rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites);
+        let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
+        if !same_file && storage.exists(&snapshot.to_path) {
+            return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
+        }
+        let side_data = side_data.invoke();
+        if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
+            let rollback_errors = side_data.rollback();
+            if source.kind() == std::io::ErrorKind::AlreadyExists {
+                let to = if rollback_errors.is_empty() {
+                    snapshot.to.to_string()
+                } else {
+                    format!(
+                        "{}; anche il rollback dei side-data è fallito: {}",
+                        snapshot.to,
+                        rollback_errors.join("; ")
+                    )
+                };
+                return Err(KernelError::AlreadyExists(to));
+            }
+            let source = if rollback_errors.is_empty() {
+                source
+            } else {
+                std::io::Error::new(
+                    source.kind(),
+                    format!(
+                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                )
+            };
+            return Err(KernelError::Io {
+                path: snapshot.from_path,
+                source,
+            });
+        }
+        Ok(MovedExplicitAssetRename {
+            snapshot,
+            storage,
+            fingerprint,
+            stat: after,
+            identity,
+            rewrites,
+            side_data,
+        })
+    }
+}
+
+impl MovedExplicitAssetRename {
+    /// Ripristina esattamente il file mosso se il commit del core lo rifiuta.
+    pub fn rollback(self) -> Result<()> {
+        let MovedExplicitAssetRename {
+            snapshot,
+            storage,
+            fingerprint,
+            stat,
+            identity,
+            side_data,
+            ..
+        } = self;
+        let before = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let identity_before =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        let bytes = storage
+            .read(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let after = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let identity_after =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        if !before.is_file()
+            || before != stat
+            || before != after
+            || identity_before != identity
+            || identity_after != identity
+            || Revision::of_bytes(&bytes) != fingerprint
+        {
+            return Err(KernelError::Stale(snapshot.to.to_string()));
+        }
+        storage
+            .rename_no_replace(&snapshot.to_path, &snapshot.from_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let rollback_errors = side_data.rollback();
+        if rollback_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(KernelError::Io {
+                path: snapshot.from_path,
+                source: std::io::Error::other(format!(
+                    "l'asset è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                    rollback_errors.join("; ")
+                )),
+            })
+        }
+    }
+}
+
+impl PendingExplicitAssetRename {
+    /// Registra il fatto e applica le riscritture tramite callback del chiamante.
+    pub fn invoke_rewrites<E>(
+        self,
+        mut apply: impl FnMut(&DocId, &EditRequest) -> std::result::Result<(), E>,
+    ) -> CompletedExplicitAssetRename
+    where
+        E: std::fmt::Display,
+    {
+        let PendingExplicitAssetRename {
+            workspace_id,
+            installed,
+            rewrites,
+            side_data,
+            journal,
+            origin,
+            from,
+            to,
+            owns_batch,
+        } = self;
+        let journal_fault = journal
+            .append(
+                origin,
+                JournalOp::Renamed {
+                    from: from.clone(),
+                    to: to.clone(),
+                },
+            )
+            .err();
+        let mut rewrite_failures = Vec::new();
+        for (source, request) in &rewrites {
+            if let Err(error) = apply(source, request) {
+                rewrite_failures.push(format!("{source}: {error}"));
+            }
+        }
+        CompletedExplicitAssetRename {
+            workspace_id,
+            installed,
+            side_data,
+            from,
+            to,
+            owns_batch,
+            rewrite_failures,
+            journal_fault,
+        }
+    }
+}
 
 impl PendingIdentityMigration {
     fn invoke(self) -> CompletedIdentityMigration {
@@ -1053,6 +1340,62 @@ impl CompletedRenameSideData {
         if let Err(error) = drafts.migrate(&from, &to) {
             errors.push(format!("bozza non ripristinata: {error}"));
         }
+        errors
+    }
+}
+impl PreparedAssetRenameSideData {
+    fn invoke(self) -> CompletedAssetRenameSideData {
+        let rollback = PreparedAssetRenameSideData {
+            from: self.to.clone(),
+            to: self.from.clone(),
+            organization: Arc::clone(&self.organization),
+            storage: Arc::clone(&self.storage),
+            doc_data_roots: self.doc_data_roots.clone(),
+        };
+        let PreparedAssetRenameSideData {
+            from,
+            to,
+            organization,
+            storage,
+            doc_data_roots,
+        } = self;
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            organization.warn(format!(
+                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {error}"
+            ));
+        }
+        let errors = crate::docdata::migrate_data(storage.as_ref(), &doc_data_roots, &from, &to);
+        CompletedAssetRenameSideData {
+            from,
+            to,
+            errors,
+            rollback: Some(rollback),
+        }
+    }
+}
+
+impl CompletedAssetRenameSideData {
+    fn rollback(mut self) -> Vec<String> {
+        let Some(rollback) = self.rollback.take() else {
+            return vec!["ricevuta di rollback asset già consumata".into()];
+        };
+        let PreparedAssetRenameSideData {
+            from,
+            to,
+            organization,
+            storage,
+            doc_data_roots,
+        } = rollback;
+        let mut errors = Vec::new();
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            errors.push(format!("organizzazione non ripristinata: {error}"));
+        }
+        errors.extend(crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &from,
+            &to,
+        ));
         errors
     }
 }
@@ -6831,6 +7174,196 @@ impl Workspace {
             Ok(Err(KernelError::LinkRewrite(failed.join("; "))))
         }
     }
+    /// Fotografa una voce senza modello, i suoi riferimenti e gli handle dei
+    /// side-data senza leggere il filesystem né invocare provider.
+    pub fn prepare_explicit_asset_rename(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Option<PreparedExplicitAssetRename>> {
+        let to = new_doc_id(to.as_str())?;
+        if from == &to {
+            return Ok(None);
+        }
+        if self.indexes.core.metas.contains_key(from) {
+            return Ok(None);
+        }
+        let from_entry = self
+            .indexes
+            .core
+            .entries
+            .get(from)
+            .cloned()
+            .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
+        let to_entry = self.indexes.core.entries.get(&to).cloned();
+        if to_entry.is_some() || self.indexes.core.metas.contains_key(&to) {
+            return Err(KernelError::AlreadyExists(to.to_string()));
+        }
+        Ok(Some(PreparedExplicitAssetRename {
+            snapshot: ExplicitRenameSnapshot {
+                workspace_id: self.workspace_id,
+                from_path: self.docs.vault.path_for(from)?,
+                to_path: self.docs.vault.path_for(&to)?,
+                from: from.clone(),
+                to: to.clone(),
+                from_entry,
+                to_entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            storage: Arc::clone(self.docs.vault.storage()),
+            rewrites: self.prepare_explicit_entry_link_rewrites(from, &to),
+            side_data: PreparedAssetRenameSideData {
+                from: from.clone(),
+                to,
+                organization: Arc::clone(&self.organization),
+                storage: Arc::clone(self.docs.vault.storage()),
+                doc_data_roots: self.docs.plugin_data_roots(),
+            },
+        }))
+    }
+
+    /// Riconvalida e installa nel core un asset già spostato. In caso di stale
+    /// restituisce intatto il token, che il chiamante deve annullare fuori dal
+    /// guard.
+    pub fn commit_explicit_asset_rename(
+        &mut self,
+        moved: MovedExplicitAssetRename,
+    ) -> std::result::Result<PendingExplicitAssetRename, Box<(KernelError, MovedExplicitAssetRename)>>
+    {
+        let owns_batch = self.dispatch.open_batch();
+        match self.commit_explicit_asset_rename_in_batch(moved) {
+            Ok(mut pending) => {
+                pending.owns_batch = owns_batch;
+                Ok(pending)
+            }
+            Err(failure) => {
+                if owns_batch {
+                    self.dispatch.close_batch();
+                }
+                Err(failure)
+            }
+        }
+    }
+
+    fn commit_explicit_asset_rename_in_batch(
+        &mut self,
+        moved: MovedExplicitAssetRename,
+    ) -> std::result::Result<PendingExplicitAssetRename, Box<(KernelError, MovedExplicitAssetRename)>>
+    {
+        let snapshot = &moved.snapshot;
+        let current_from = self.indexes.core.entries.get(&snapshot.from);
+        let current_to = self.indexes.core.entries.get(&snapshot.to);
+        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&moved.fingerprint)
+            && snapshot.from_entry.size == moved.stat.size
+            && snapshot.from_entry.mtime == moved.stat.mtime;
+        let paths_match = self.docs.vault.path_for(&snapshot.from).ok().as_ref()
+            == Some(&snapshot.from_path)
+            && self.docs.vault.path_for(&snapshot.to).ok().as_ref() == Some(&snapshot.to_path);
+        if snapshot.workspace_id != self.workspace_id
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || self.indexes.core.metas.contains_key(&snapshot.from)
+            || self.indexes.core.metas.contains_key(&snapshot.to)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+            || !source_matches
+            || !paths_match
+        {
+            return Err(Box::new((
+                KernelError::Stale(snapshot.from.to_string()),
+                moved,
+            )));
+        }
+        if let Err(error) = self.indexes.ensure_mutation_available() {
+            return Err(Box::new((error, moved)));
+        }
+
+        let MovedExplicitAssetRename {
+            snapshot,
+            storage: _,
+            fingerprint,
+            stat,
+            identity: _,
+            rewrites,
+            side_data,
+        } = moved;
+        let installed = VaultEntry {
+            id: snapshot.to.clone(),
+            kind: snapshot.from_entry.kind,
+            size: stat.size,
+            mtime: stat.mtime,
+            fingerprint: Some(fingerprint),
+        };
+        self.indexes.core.remove_entry(&snapshot.from);
+        self.indexes.core.ensure_folders_of(&snapshot.to);
+        self.indexes.core.set_entry(installed.clone());
+        Ok(PendingExplicitAssetRename {
+            workspace_id: snapshot.workspace_id,
+            installed,
+            rewrites,
+            side_data,
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
+            from: snapshot.from,
+            to: snapshot.to,
+            owns_batch: false,
+        })
+    }
+
+    /// Converte callback e side-data completati nell'unico fatto di rename e
+    /// chiude il lotto sotto il guard del workspace.
+    pub fn finish_explicit_asset_rename(
+        &mut self,
+        completed: CompletedExplicitAssetRename,
+    ) -> std::result::Result<Result<()>, Box<(PluginError, CompletedExplicitAssetRename)>> {
+        if completed.workspace_id != self.workspace_id {
+            return Err(Box::new((
+                PluginError::Conflict(
+                    "la rinomina asset esplicita appartiene a un altro workspace".into(),
+                ),
+                completed,
+            )));
+        }
+        let CompletedExplicitAssetRename {
+            workspace_id: _,
+            installed,
+            side_data,
+            from,
+            to,
+            owns_batch,
+            rewrite_failures,
+            journal_fault,
+        } = completed;
+        for error in side_data.errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
+                side_data.from, side_data.to
+            ));
+        }
+        if let Some(and) = journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {and}").into()),
+                None,
+            );
+        }
+        self.emit_event(Event::EntryRenamed {
+            from,
+            to,
+            kind: installed.kind,
+        });
+        self.emit_event(Event::IndexUpdated);
+        if owns_batch {
+            self.dispatch.close_batch();
+        }
+        if rewrite_failures.is_empty() {
+            Ok(Ok(()))
+        } else {
+            Ok(Err(KernelError::LinkRewrite(rewrite_failures.join("; "))))
+        }
+    }
 
     /// (§14.1).
     ///
@@ -6848,84 +7381,41 @@ impl Workspace {
     /// mettendo ordine — romperebbe ogni nota che lo incorpora.
     // Il piano PRIMA di spostare: si risolve con il vecchio path ancora in
     fn rename_entry_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
-        let same_file = self.docs.vault.same_file(from, to);
-        if self.indexes.core.entries.contains_key(to)
-            || self.indexes.core.metas.contains_key(to)
-            || (!same_file && self.docs.vault.exists(to))
-        {
-            return Err(KernelError::AlreadyExists(to.to_string()));
-        }
-
-        // vigore, come per i documenti.
-        // L'impronta segue il file: un rename sposta i byte senza toccarli.
-        let plan = self.entry_rewrite_plan(from, to);
-        self.docs.vault.rename_no_replace(from, to)?;
-
-        let fingerprint = self
-            .indexes
-            .core
-            .entries
-            .get(from)
-            .and_then(|and| and.fingerprint.clone());
-        self.indexes.core.remove_entry(from);
-        // E lo seguono anche le due cose che seguono ogni identità che cambia:
-        let kind = self
-            .touch_entry(to, fingerprint)
-            .unwrap_or(EntryKind::Unknown);
-        // ciò che l'utente gli ha attaccato addosso (§11.3) e lo spazio
-        // per-documento di chiunque altro (§13.2). Un allegato può essere
-        // appuntato e può avere una miniatura, e nessuna delle due è meno sua
-        // per il fatto che nessuno lo parsa.
-        // Un allegato spostato è una mutazione del vault come le altre: il
-        if let Err(and) = self.organization.migrate(from.as_str(), to.as_str()) {
-            self.organization.warn(format!(
-                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {and}"
-            ));
-        }
-        self.migrate_doc_data(from, to);
-        // registro non conosce la differenza fra un documento e un file di cui
-        // nessuno sa il formato, e non deve — l'inverso è lo stesso.
-        // Per ogni documento che **mostra** o nomina `from`, la modifica che
-        self.record(JournalOp::Renamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
-
-        let mut failed: Vec<String> = Vec::new();
-        for (src, request) in plan {
-            if let Err(and) = self.apply_edit(&src, request) {
-                failed.push(format!("{src}: {and}"));
+        let prepared = self
+            .prepare_explicit_asset_rename(from, to)?
+            .expect("la voce senza modello è già stata classificata");
+        let moved = prepared.invoke()?;
+        let pending = match self.commit_explicit_asset_rename(moved) {
+            Ok(pending) => pending,
+            Err(failure) => {
+                let (error, moved) = *failure;
+                moved.rollback()?;
+                return Err(error);
             }
+        };
+        let completed = pending
+            .invoke_rewrites(|source, request| self.apply_edit(source, request.clone()).map(drop));
+        match self.finish_explicit_asset_rename(completed) {
+            Ok(outcome) => outcome,
+            Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
         }
-        self.emit_event(Event::EntryRenamed {
-            from: from.clone(),
-            to: to.clone(),
-            kind,
-        });
-        self.emit_event(Event::IndexUpdated);
-        self.dispatch_pending();
-        if !failed.is_empty() {
-            return Err(KernelError::LinkRewrite(failed.join("; ")));
-        }
-        Ok(())
     }
 
-    /// riscrive il suo riferimento verso `to` (§14.1).
+    /// Prepara, senza leggere le sorgenti, le sostituzioni dei riferimenti che
+    /// risolvono verso l'asset rinominato.
     ///
-    /// Le sorgenti non si chiedono al grafo, e non è una scorciatoia: un
-    /// allegato non è un nodo del grafo — non ha backlink, perché non ha link
-    /// uscenti e non partecipa alla risoluzione per nome delle note. Si cammina
-    /// quindi la cache dei metadati, che i link ce li ha tutti. È un giro
-    /// sull'intero vault, e si paga quando qualcuno sposta un allegato: cioè
-    /// quanto costa già un rename di nota con molti backlink.
-    // Un wikilink nomina per nome: il nome nuovo, che è il nome
-    fn entry_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
+    /// Le sorgenti non si chiedono al grafo: un allegato non è un nodo del
+    /// grafo, perché non ha link uscenti. Si cammina quindi la cache dei
+    /// metadati e si consegnano path, span e testo atteso al token owned, che
+    /// leggerà le sorgenti e costruirà le CAS fuori dal workspace.
+    fn prepare_explicit_entry_link_rewrites(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Vec<PreparedExplicitLinkRewrite> {
         let mut plan = Vec::new();
         for (src, metadata) in &self.indexes.core.metas {
-            let Ok(source_text) = self.docs.vault.read(src) else {
-                continue;
-            };
-            let mut edits: Vec<TextEdit> = Vec::new();
+            let mut edits = Vec::new();
             for link in &metadata.links {
                 if self.indexes.core.resolve_entry(src, &link.target).as_ref() != Some(from) {
                     continue;
@@ -6956,7 +7446,7 @@ impl Workspace {
                         } else {
                             name.to_string()
                         };
-                        (page.as_str(), new, false)
+                        (page.clone(), new, false)
                     }
                     LinkTarget::Path(written) => {
                         let (path, fragment) = rules_path::split_fragment(written);
@@ -6972,33 +7462,28 @@ impl Workspace {
                         if rewritten == *written {
                             continue;
                         }
-                        (written.as_str(), rewritten, true)
+                        (written.clone(), rewritten, true)
                     }
                     LinkTarget::Url(_) => continue,
                 };
-                let Some(slice) = source_text.get(link.span.start..link.span.end) else {
-                    continue;
-                };
-                let found = if from_end {
-                    slice.rfind(written)
-                } else {
-                    slice.find(written)
-                };
-                let Some(rel) = found else {
-                    continue;
-                };
-                let start = link.span.start + rel;
-                edits.push(TextEdit::replace(
-                    Span::new(start, start + written.len()),
+                edits.push(PreparedExplicitLinkEdit {
+                    span: link.span,
+                    written,
                     replacement,
-                ));
+                    from_end,
+                });
             }
-            if !edits.is_empty() {
-                plan.push((
-                    src.clone(),
-                    EditRequest::new(Revision::of(&source_text), edits),
-                ));
+            if edits.is_empty() {
+                continue;
             }
+            let Ok(source_path) = self.docs.vault.path_for(src) else {
+                continue;
+            };
+            plan.push(PreparedExplicitLinkRewrite {
+                source_path,
+                destination: src.clone(),
+                edits,
+            });
         }
         plan
     }

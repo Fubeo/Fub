@@ -707,7 +707,7 @@ impl VaultStructure for JobHost {
         self.stopped()?;
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
-        let (from, to, prepared) = {
+        let (prepared_document, prepared_asset) = {
             let ws = workspace.read()?;
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
@@ -747,12 +747,18 @@ impl VaultStructure for JobHost {
             })?;
             let from = fenced_doc_id(from)?;
             let to = fenced_doc_id(to)?;
-            let prepared = ws
+            let prepared_document = ws
                 .prepare_explicit_rename(&from, &to)
                 .map_err(PluginError::from)?;
-            (from, to, prepared)
+            let prepared_asset = if prepared_document.is_none() {
+                ws.prepare_explicit_asset_rename(&from, &to)
+                    .map_err(PluginError::from)?
+            } else {
+                None
+            };
+            (prepared_document, prepared_asset)
         };
-        if let Some(prepared) = prepared {
+        if let Some(prepared) = prepared_document {
             let parsed = prepared.invoke().map_err(PluginError::from)?;
             let committed = {
                 let mut ws = workspace.write()?;
@@ -773,10 +779,29 @@ impl VaultStructure for JobHost {
             with_event_drain(&workspace, |ws| ws.finish_explicit_rename(completed))?
                 .map_err(|failure| failure.0)?
                 .map_err(PluginError::from)
+        } else if let Some(prepared) = prepared_asset {
+            let moved = prepared.invoke().map_err(PluginError::from)?;
+            let committed = {
+                let mut ws = workspace.write()?;
+                ws.commit_explicit_asset_rename(moved)
+                    .map_err(|failure| *failure)
+            };
+            let pending = match committed {
+                Ok(pending) => pending,
+                Err((error, moved)) => {
+                    moved.rollback().map_err(PluginError::from)?;
+                    return Err(PluginError::from(error));
+                }
+            };
+            let completed = pending.invoke_rewrites(|source, request| {
+                self.apply_edit_detached_inner(source, request.clone())
+                    .map(drop)
+            });
+            with_event_drain(&workspace, |ws| ws.finish_explicit_asset_rename(completed))?
+                .map_err(|failure| failure.0)?
+                .map_err(PluginError::from)
         } else {
-            with_event_drain(&workspace, |ws| {
-                ws.rename_document(&from, &to).map_err(PluginError::from)
-            })?
+            Ok(())
         }
     }
 

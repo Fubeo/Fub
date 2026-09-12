@@ -28,7 +28,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::event::Event;
 use fub_abi::model::DocId;
+use fub_abi::traits::EntryKind;
 use fub_kernel::storage::{DirEntry, FsStorage, MemStorage, Merge, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, KernelError, MachineSettings, Workspace};
 use fub_testkit::SampleText;
@@ -212,6 +214,59 @@ fn whoever_arrives_after_the_guard_is_not_overwritten() {
         storage.read(&vault_path("vecchia.md")).unwrap(),
         b"il testo che si sposta",
         "il documento che non si è potuto muovere resta alla sorgente"
+    );
+}
+
+#[test]
+fn a_case_only_asset_rename_preserves_the_entry_and_emits_one_fact() {
+    let storage = Arc::new(WithoutCase::default());
+    storage
+        .write(&vault_path("photo.png"), b"PNG")
+        .expect("asset written");
+    let mut ws = workspace(storage.clone());
+    let events = ws.bus().subscribe();
+
+    ws.rename_document(&doc("photo.png"), &doc("Photo.png"))
+        .expect("case-only asset rename");
+
+    assert_eq!(storage.read(&vault_path("Photo.png")).unwrap(), b"PNG");
+    let seen: Vec<_> = events.try_iter().map(|notice| notice.event).collect();
+    assert_eq!(
+        seen.iter()
+            .filter(|event| matches!(
+                event,
+                Event::EntryRenamed { from, to, kind: EntryKind::Asset }
+                    if from == &doc("photo.png") && to == &doc("Photo.png")
+            ))
+            .count(),
+        1,
+        "the asset rename is one fact: {seen:?}"
+    );
+}
+
+#[test]
+fn a_late_asset_collision_is_typed_and_emits_no_rename_fact() {
+    let storage = Arc::new(WithoutCase::default());
+    storage
+        .write(&vault_path("old.png"), b"asset")
+        .expect("asset written");
+    let mut ws = workspace(storage.clone());
+    let events = ws.bus().subscribe();
+    storage.1.store(true, Ordering::SeqCst);
+
+    let outcome = ws.rename_document(&doc("old.png"), &doc("new.png"));
+
+    assert!(matches!(outcome, Err(KernelError::AlreadyExists(_))));
+    assert_eq!(storage.read(&vault_path("old.png")).unwrap(), b"asset");
+    assert_eq!(
+        storage.read(&vault_path("new.png")).unwrap(),
+        b"concorrente"
+    );
+    assert!(
+        events
+            .try_iter()
+            .all(|notice| !matches!(notice.event, Event::EntryRenamed { .. })),
+        "a collision is not a rename fact"
     );
 }
 

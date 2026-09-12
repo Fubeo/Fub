@@ -697,3 +697,70 @@ fn a_replaced_same_bytes_destination_makes_rollback_stale_without_a_rename_fact(
         .iter()
         .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
 }
+
+#[test]
+fn a_stale_asset_commit_rolls_the_exact_move_back_without_a_rename_fact() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("photo.png"), b"PNG").expect("seed asset");
+    let mut ws = Workspace::new(&root, registry()).expect("workspace");
+    ws.register_core_feature(PLUGIN, "Asset rename rollback")
+        .expect("asset state owner");
+    ws.reindex().expect("asset indexed");
+    ws.set_icon("photo.png", Some("pin".into()))
+        .expect("asset icon");
+    let plugin_root = ws.plugin_data_dir(PLUGIN).expect("plugin data");
+    let data_from = plugin_root
+        .join(doc_data::DOC_SPACE)
+        .join(doc_data::encode("photo.png"))
+        .join("thumbnail");
+    let data_to = plugin_root
+        .join(doc_data::DOC_SPACE)
+        .join(doc_data::encode("media/photo.png"))
+        .join("thumbnail");
+    std::fs::create_dir_all(data_from.parent().expect("asset data parent"))
+        .expect("asset data directory");
+    std::fs::write(&data_from, b"preview").expect("asset data");
+    let prepared = ws
+        .prepare_explicit_asset_rename(&DocId::new("photo.png"), &DocId::new("media/photo.png"))
+        .expect("prepare")
+        .expect("asset");
+    let moved = prepared.invoke().expect("move detached");
+    ws.sync_path(&root.join("media/photo.png"))
+        .expect("the core changes after the move");
+    let rx = ws.bus().subscribe();
+
+    let moved = match ws.commit_explicit_asset_rename(moved) {
+        Err(failure) => {
+            let (error, moved) = *failure;
+            assert!(matches!(error, KernelError::Stale(_)), "{error:?}");
+            moved
+        }
+        Ok(_) => panic!("the stale asset snapshot cannot commit"),
+    };
+    moved.rollback().expect("exact rollback detached");
+
+    assert_eq!(std::fs::read(root.join("photo.png")).unwrap(), b"PNG");
+    assert!(!root.join("media/photo.png").exists());
+    assert_eq!(
+        ws.organization().icons.get("photo.png").map(String::as_str),
+        Some("pin")
+    );
+    assert!(!ws.organization().icons.contains_key("media/photo.png"));
+    assert_eq!(std::fs::read(&data_from).unwrap(), b"preview");
+    assert!(!data_to.exists());
+    assert!(
+        events(&rx)
+            .iter()
+            .all(|notice| !matches!(notice.event, Event::EntryRenamed { .. })),
+        "a stale commit is not an asset rename fact"
+    );
+    assert!(
+        ws.journal()
+            .expect("journal")
+            .records
+            .iter()
+            .all(|record| !matches!(record.op, JournalOp::Renamed { .. })),
+        "a stale asset commit is not journaled"
+    );
+}

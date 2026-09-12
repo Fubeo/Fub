@@ -480,9 +480,14 @@ fn rename_remove_and_feed_callbacks_run_without_the_workspace_lock() {
 }
 
 #[test]
-fn rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
+fn asset_rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
     let v = vault();
-    std::fs::write(v.root.join("Backlink.md"), "# Backlink\n[[Note 0]]\n").expect("seed backlink");
+    std::fs::write(v.root.join("photo.png"), b"PNG").expect("seed asset");
+    std::fs::write(
+        v.root.join("Backlink.md"),
+        "# Backlink\n![photo](photo.png)\n",
+    )
+    .expect("seed backlink");
     let armed = Arc::new(AtomicBool::new(false));
     let workspace_slot: WorkspaceSlot = Arc::new(Mutex::new(None));
     let (observed_tx, observed_rx) = std::sync::mpsc::sync_channel(3);
@@ -514,9 +519,9 @@ fn rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
             let observed = observed_tx.clone();
             Arc::new(move |host, id| {
                 let source = host.read_document(id)?;
-                if !source.contains("[[Note 0]]") {
+                if !source.contains("![photo](photo.png)") {
                     return Err(PluginError::Internal(
-                        "before-write re-entry read the wrong backlink source".into(),
+                        "before-write re-entry read the wrong asset backlink source".into(),
                     ));
                 }
                 observe_backlink_stage(&workspace_slot, &observed, BacklinkStage::BeforeWrite);
@@ -535,8 +540,8 @@ fn rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
     armed.store(true, Ordering::SeqCst);
 
     JobHost::new(workspace, RENAME_BACKLINK_LOCK_PLUGIN)
-        .rename_document(&DocId::new("Note 0.md"), &DocId::new("Renamed.md"))
-        .expect("rename and backlink rewrite complete");
+        .rename_document(&DocId::new("photo.png"), &DocId::new("media/photo.png"))
+        .expect("asset rename and backlink rewrite complete");
 
     for expected in [
         BacklinkStage::Parse,
@@ -552,7 +557,11 @@ fn rename_backlink_callbacks_can_reenter_without_the_workspace_lock() {
     }
     assert_eq!(
         std::fs::read_to_string(v.root.join("Backlink.md")).unwrap(),
-        "# Backlink\n[[Renamed]]\n"
+        "# Backlink\n![photo](media/photo.png)\n"
+    );
+    assert_eq!(
+        std::fs::read(v.root.join("media/photo.png")).unwrap(),
+        b"PNG"
     );
 }
 
