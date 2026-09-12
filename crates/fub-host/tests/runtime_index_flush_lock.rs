@@ -253,6 +253,7 @@ fn exercise(path: Path) {
         workspace.try_write().is_some(),
         "flush finalized and released its turn"
     );
+    drop(_turn);
     assert!(host.close().is_empty(), "normal shutdown remains clean");
 }
 
