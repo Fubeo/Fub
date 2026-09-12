@@ -216,8 +216,7 @@ impl Workspace {
             .into_iter()
             .find(|entry| &entry.id == trash_id)
             .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
-        let target = to.unwrap_or_else(|| entry.original.clone());
-        self.prepare_listed_document_restore(entry, target)
+        self.prepare_listed_document_restore(entry, to)
     }
 
     /// Prepara una voce già elencata senza altro I/O né callback esterne.
@@ -225,10 +224,13 @@ impl Workspace {
     pub fn prepare_listed_document_restore(
         &self,
         entry: TrashEntry,
-        target: DocId,
+        to: Option<DocId>,
     ) -> Result<PreparedDocumentRestore> {
         self.indexes.ensure_mutation_available()?;
-        let target = new_doc_id(target.as_str())?;
+        let target = match to {
+            Some(target) => new_doc_id(target.as_str())?,
+            None => valid_doc_id(entry.original.as_str())?,
+        };
         if self.indexes.core.entries.contains_key(&target)
             || self.indexes.core.metas.contains_key(&target)
         {

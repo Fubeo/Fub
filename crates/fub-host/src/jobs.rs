@@ -875,8 +875,8 @@ impl VaultStructure for JobHost {
             })
             .find(|candidate| &candidate.id == entry)
             .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?;
-        let target = to.unwrap_or_else(|| listed.original.clone());
-        if listed.original == target {
+        if to.is_none() {
+            let target = &listed.original;
             if self.mode == InvokeMode::DryRun {
                 authorize_path(
                     &ReadOnly {
@@ -893,7 +893,7 @@ impl VaultStructure for JobHost {
         }
         let prepared = {
             let ws = workspace.read()?;
-            ws.prepare_listed_document_restore(listed, target)
+            ws.prepare_listed_document_restore(listed, to)
                 .map_err(PluginError::from)?
         };
         let completed = prepared.invoke().map_err(PluginError::from)?;
