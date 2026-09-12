@@ -86,6 +86,11 @@ enum Why {
 /// accorcia smette di essere una fotografia e diventa un ricordo.
 fn allowed_locks() -> BTreeMap<&'static str, Why> {
     BTreeMap::from([
+        // `SyncLifecycle` deve attendere e rilasciare con la sua `Condvar` lo
+        // stesso `std::sync::Mutex`: lo stato appartiene a un solo lifecycle
+        // condiviso via `Arc`, il poison è recuperato e il teardown aspetta le
+        // operazioni in volo.
+        ("src/watcher.rs:Mutex", Why::Condition),
         ("src/runner.rs:Mutex", Why::Condition),
         ("src/session.rs:Mutex", Why::Condition),
         ("src/config.rs:Mutex", Why::TestOnly),
