@@ -228,6 +228,18 @@ impl<'a> OpeningWatcher<'a> {
             .take()
             .expect("an opening watcher is finished only after start")
     }
+
+    /// Ritira un watcher d'apertura senza perdere l'errore del suo arresto.
+    ///
+    /// Il turno viene liberato per primo: un worker già accodato come writer
+    /// deve poter terminare prima che il suo `Drop` venga raggiunto.
+    pub(crate) fn rollback(mut self) -> Result<(), PluginError> {
+        drop(self.turn.take());
+        match self.watcher.take() {
+            Some(watcher) => watcher.stop(),
+            None => Ok(()),
+        }
+    }
 }
 
 impl Drop for OpeningWatcher<'_> {

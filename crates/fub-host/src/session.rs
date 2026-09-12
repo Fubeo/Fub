@@ -242,56 +242,7 @@ impl VaultSession {
         let mut errors: Vec<PluginError> = watcher.stop().err().into_iter().collect();
         errors.extend(runner.stop());
         drop(runner);
-        // Il turno conserva una sola chiusura logica, ma non è il `RwLock`:
-        // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
-        // La prepare alza `closed` e accoda il terminale; il drain ripristina
-        // sempre tabella, attore e flag prima che la finalize ritiri i provider.
-        // Il seguito usa token propri anche per flush, deactivate e close;
-        // nessuna di queste callback conserva il guard del workspace.
-        let _closing_turn = workspace.write_turn();
-        let prepared = match workspace.write() {
-            Ok(mut ws) => ws.prepare_close(),
-            Err(and) => {
-                errors.push(and);
-                return errors;
-            }
-        };
-        let Some(prepared) = prepared else {
-            return errors;
-        };
-        if let Err(and) = drain_events(&workspace) {
-            errors.push(and);
-        }
-
-        // Flush globale, corpi plugin e indici sono callback distinte. Ogni
-        // errore viene raccolto, senza saltare il resto del teardown.
-        match crate::teardown::flush_indexes(&workspace) {
-            Ok(and) => errors.extend(and),
-            Err(and) => errors.push(and),
-        }
-        let plugins = match workspace.read() {
-            Ok(ws) => ws.closing_plugins(&prepared),
-            Err(error) => Err(error),
-        };
-        match plugins {
-            Ok(plugins) => {
-                for id in plugins {
-                    match crate::teardown::unmount(&workspace, &registry, &id) {
-                        Ok(and) => errors.extend(and),
-                        Err(and) => errors.push(and),
-                    }
-                }
-            }
-            Err(error) => errors.push(error),
-        }
-        match workspace.write() {
-            Ok(mut ws) => {
-                if let Err((_prepared, error)) = ws.finish_detached_close(prepared) {
-                    errors.push(error);
-                }
-            }
-            Err(error) => errors.push(error),
-        }
+        close_session_resources(&workspace, &registry, &mut errors);
         errors
     }
 
@@ -300,6 +251,179 @@ impl VaultSession {
     /// gli dice di no.
     pub fn cancel_job(&self, id: JobId) {
         self.runner.cancel(id);
+    }
+}
+
+/// Esegue il protocollo condiviso da chiusura pubblicata e rollback
+/// pre-pubblicazione, quando workspace e registry sono ancora vivi.
+fn close_session_resources(
+    workspace: &Custody<Workspace>,
+    registry: &Custody<BundleRegistry>,
+    errors: &mut Vec<PluginError>,
+) {
+    // Il turno conserva una sola chiusura logica, ma non è il `RwLock`:
+    // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
+    // La prepare alza `closed` e accoda il terminale; il drain ripristina
+    // sempre tabella, attore e flag prima che la finalize ritiri i provider.
+    // Il seguito usa token propri anche per flush, deactivate e close;
+    // nessuna di queste callback conserva il guard del workspace.
+    let _closing_turn = workspace.write_turn();
+    let prepared = match workspace.write() {
+        Ok(mut ws) => ws.prepare_close(),
+        Err(error) => {
+            errors.push(error);
+            return;
+        }
+    };
+    let Some(prepared) = prepared else {
+        return;
+    };
+    if let Err(error) = drain_events(workspace) {
+        errors.push(error);
+    }
+
+    // Flush globale, corpi plugin e indici sono callback distinte. Ogni
+    // errore viene raccolto, senza saltare il resto del teardown.
+    match crate::teardown::flush_indexes(workspace) {
+        Ok(found) => errors.extend(found),
+        Err(error) => errors.push(error),
+    }
+    let plugins = match workspace.read() {
+        Ok(ws) => ws.closing_plugins(&prepared),
+        Err(error) => Err(error),
+    };
+    match plugins {
+        Ok(plugins) => {
+            for id in plugins {
+                match crate::teardown::unmount(workspace, registry, &id) {
+                    Ok(found) => errors.extend(found),
+                    Err(error) => errors.push(error),
+                }
+            }
+        }
+        Err(error) => errors.push(error),
+    }
+    match workspace.write() {
+        Ok(mut ws) => {
+            if let Err((_prepared, error)) = ws.finish_detached_close(prepared) {
+                errors.push(error);
+            }
+        }
+        Err(error) => errors.push(error),
+    }
+}
+
+/// Possesso transazionale di tutte le risorse fra mount e pubblicazione.
+///
+/// Un'uscita anticipata libera il turno di apertura, ferma watcher e runner e
+/// percorre lo stesso teardown di [`VaultSession::close`]. Gli errori di
+/// rollback vengono registrati senza sostituire l'errore che ha interrotto
+/// l'apertura.
+struct OpeningTransaction<'a> {
+    workspace: Custody<Workspace>,
+    registry: Custody<BundleRegistry>,
+    watcher: Option<OpeningWatcher<'a>>,
+    runner: Option<JobRunner>,
+    session: Option<VaultSession>,
+    published: bool,
+}
+
+impl<'a> OpeningTransaction<'a> {
+    fn new(workspace: &'a Custody<Workspace>, registry: &Custody<BundleRegistry>) -> Self {
+        Self {
+            workspace: workspace.clone(),
+            registry: registry.clone(),
+            watcher: Some(OpeningWatcher::new(workspace)),
+            runner: None,
+            session: None,
+            published: false,
+        }
+    }
+
+    fn workspace(&self) -> &Custody<Workspace> {
+        &self.workspace
+    }
+
+    fn registry(&self) -> &Custody<BundleRegistry> {
+        &self.registry
+    }
+
+    fn watcher(&mut self) -> &mut OpeningWatcher<'a> {
+        self.watcher
+            .as_mut()
+            .expect("la transazione non ha ancora costruito la sessione")
+    }
+
+    fn set_runner(&mut self, runner: JobRunner) {
+        assert!(
+            self.runner.replace(runner).is_none(),
+            "una apertura avvia un solo runner"
+        );
+    }
+
+    fn finish_session(
+        &mut self,
+        root: Utf8PathBuf,
+        unread: Custody<Vec<UnreadDoc>>,
+        indexed: Arc<(Mutex<bool>, std::sync::Condvar)>,
+        #[cfg(feature = "versioning")] versions: Option<VersionStore>,
+    ) {
+        assert!(
+            self.session.is_none() && self.watcher.is_some() && self.runner.is_some(),
+            "la sessione nasce una sola volta dopo watcher e runner"
+        );
+        let watcher = self
+            .watcher
+            .take()
+            .expect("il watcher è stato verificato")
+            .finish();
+        let runner = self.runner.take().expect("il runner è stato verificato");
+        self.session = Some(VaultSession {
+            root,
+            workspace: self.workspace.clone(),
+            registry: self.registry.clone(),
+            unread,
+            indexed,
+            runner,
+            #[cfg(feature = "versioning")]
+            versions,
+            watcher,
+            used: 0,
+        });
+    }
+
+    fn into_session(mut self) -> VaultSession {
+        let session = self
+            .session
+            .take()
+            .expect("la pubblicazione richiede una sessione completa");
+        self.published = true;
+        session
+    }
+}
+
+impl Drop for OpeningTransaction<'_> {
+    fn drop(&mut self) {
+        if self.published {
+            return;
+        }
+        let mut errors = if let Some(session) = self.session.take() {
+            session.close()
+        } else {
+            let mut errors = Vec::new();
+            if let Some(watcher) = self.watcher.take() {
+                errors.extend(watcher.rollback().err());
+            }
+            if let Some(mut runner) = self.runner.take() {
+                errors.extend(runner.stop());
+                drop(runner);
+            }
+            close_session_resources(&self.workspace, &self.registry, &mut errors);
+            errors
+        };
+        for error in errors.drain(..) {
+            tracing::error!(target: "fub.host", "opening rollback failed: {error}");
+        }
     }
 }
 
@@ -790,21 +914,24 @@ impl Host {
         // Il turno di apertura serializza ogni writer fino a subscriber e job
         // installati, ma non è il `RwLock`: sia `IndexProvider::up_to_date` sia
         // `WatcherFactory::start` girano fuori dalla guardia e possono rientrare
-        // sul workspace. `OpeningWatcher` possiede il turno insieme al watcher:
-        // su ogni errore successivo libera **prima** il turno, poi ferma/raggiunge
-        // i thread del watcher, che possono già essere in attesa di scrivere.
-        let mut opening = OpeningWatcher::new(&workspace);
+        // sul workspace. La transazione possiede turno, risorse e thread: ogni
+        // uscita prima della pubblicazione libera il turno, ferma watcher e
+        // runner, quindi percorre il teardown completo.
+        let mut opening = OpeningTransaction::new(&workspace, &registry);
         let watching = {
-            let ws = workspace.write()?;
+            let ws = opening.workspace().write()?;
             ws.watch_flag()
         };
-        opening.start(self.watcher.as_ref(), &root, workspace.clone(), watching)?;
+        let watcher_workspace = opening.workspace().clone();
+        opening
+            .watcher()
+            .start(self.watcher.as_ref(), &root, watcher_workspace, watching)?;
         let prepared_scan = {
-            let ws = workspace.write()?;
+            let ws = opening.workspace().write()?;
             ws.prepare_scan_vault().map_err(PluginError::from)?
         };
         let completed_scan = prepared_scan.invoke();
-        let (work, index_job, work_total, live) = with_event_drain(&workspace, |ws| {
+        let (work, index_job, work_total, live) = with_event_drain(opening.workspace(), |ws| {
             let work = ws.finalize_scan_vault(completed_scan);
             let work_total = work.total();
             let live = if self.sink.is_some() {
@@ -836,27 +963,19 @@ impl Host {
 
         // Il pool parte dopo la scansione e riceve la seconda fase dell'apertura.
         let runner = JobRunner::start(
-            workspace.clone(),
-            registry.clone(),
+            opening.workspace().clone(),
+            opening.registry().clone(),
             self.job_threads,
             Some(in_progress),
         )?;
-        let watcher = opening.finish();
-
-        let session = VaultSession {
-            root: root.clone(),
-            workspace,
-            registry,
+        opening.set_runner(runner);
+        opening.finish_session(
+            root.clone(),
             unread,
             indexed,
-            runner,
             #[cfg(feature = "versioning")]
             versions,
-            watcher,
-            // Aperta, non ancora corrente: lo diventa quando l'apertura è
-            // finita, e a dirlo è una riga sola per tutte e due le vie.
-            used: 0,
-        };
+        );
 
         // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
         // in cima non basta: fra lì e qui il lock delle sessioni è libero — deve
@@ -883,17 +1002,17 @@ impl Host {
                 Some(SessionSlot::Open(winner)) => {
                     // Ha vinto l'altro: la sessione buona è la sua — riaprire
                     // un vault già aperto non lo rimonta.
-                    (info_of(winner), Some(session))
+                    (info_of(winner), Some(opening.into_session()))
                 }
                 Some(SessionSlot::Closing(_)) => {
                     // La pubblicazione ha perso contro una chiusura iniziata
                     // mentre il mount era in corso. Il marker non si sovrascrive.
-                    (Err(closing_conflict(&root)), Some(session))
+                    (Err(closing_conflict(&root)), Some(opening.into_session()))
                 }
                 None => {
                     sessions
                         .slots
-                        .insert(root.clone(), SessionSlot::Open(session));
+                        .insert(root.clone(), SessionSlot::Open(opening.into_session()));
                     let Some(SessionSlot::Open(winner)) = sessions.slots.get(&root) else {
                         unreachable!("la sessione appena inserita è aperta")
                     };

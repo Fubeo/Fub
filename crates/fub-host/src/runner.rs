@@ -1089,15 +1089,29 @@ impl JobRunner {
             alarms: Custody::empty("le sveglie del vault"),
             in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
         });
-        let workers = (0..threads.max(1))
-            .map(|n| {
-                let shared = Arc::clone(&shared);
-                std::thread::Builder::new()
-                    .name(format!("fub-job-{n}"))
-                    .spawn(move || shared.work())
-                    .expect("thread del pool")
-            })
-            .collect();
+        let mut workers = Vec::with_capacity(threads.max(1));
+        for n in 0..threads.max(1) {
+            let worker_shared = Arc::clone(&shared);
+            match std::thread::Builder::new()
+                .name(format!("fub-job-{n}"))
+                .spawn(move || worker_shared.work())
+            {
+                Ok(worker) => workers.push(worker),
+                Err(error) => {
+                    let root = PluginError::Io(
+                        format!("impossibile avviare il thread del pool: {error}").into(),
+                    );
+                    let mut partial = JobRunner { shared, workers };
+                    for cleanup in partial.stop() {
+                        tracing::error!(
+                            target: "fub.host",
+                            "job runner startup rollback failed: {cleanup}"
+                        );
+                    }
+                    return Err(root);
+                }
+            }
+        }
         Ok(JobRunner { shared, workers })
     }
 
