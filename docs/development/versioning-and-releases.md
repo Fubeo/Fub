@@ -68,7 +68,7 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../../crates/fub-kernel/src/journal.rs) | 1 | mutazioni applicate al vault |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../../crates/fub-kernel/src/maintenance.rs) | 1 | copia dei fatti raccolti per la diagnostica |
-| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:149`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:150`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
 
 ### Derivato
 
