@@ -746,6 +746,18 @@ impl PreparedExplicitRename {
         let side_data = side_data.invoke();
         if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
             let rollback_errors = side_data.rollback();
+            if source.kind() == std::io::ErrorKind::AlreadyExists {
+                let to = if rollback_errors.is_empty() {
+                    snapshot.to.to_string()
+                } else {
+                    format!(
+                        "{}; anche il rollback dei side-data è fallito: {}",
+                        snapshot.to,
+                        rollback_errors.join("; ")
+                    )
+                };
+                return Err(KernelError::AlreadyExists(to));
+            }
             let source = if rollback_errors.is_empty() {
                 source
             } else {
