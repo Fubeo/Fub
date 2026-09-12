@@ -28,6 +28,12 @@ ciò che formerà la prima versione.
 - documentazione canonica organizzata per prodotto, architettura, sviluppo,
   riferimento e stato.
 
+### Corretto
+
+- staccate da `Custody<Workspace>` le callback di produzione per lifecycle,
+  restore, rename, watcher, manutenzione, flush degli indici e `BeforeWrite`,
+  con riconvalida, rollback e isolamento dei panic.
+
 ### In corso
 
 - completamento di M5: provider WASM aggiuntivi, UI non fidata e percorso

@@ -1,7 +1,7 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** `main` al commit
-> `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, 9 settembre 2026.
+> **Stato aggiornato per:** candidato locale G3 al commit di codice
+> `1b0f13f125450b98170cf4ae17acc0b163506007`, 12 settembre 2026.
 
 ## Governance di integrazione
 
@@ -21,41 +21,51 @@ come un nuovo bug.
 Gli incrementi vengono riconciliati e verificati sulla linea audit, senza
 sovrascriverne i contratti. Il passaggio a `main` richiede G0–G14 e un G15/GO
 esplicito sul candidato corrente, seguito dalla verifica dello SHA integrato.
-Il piano audit non è completato: la matrice conserva finding senza evidenza
-finale. Nessun gate viene spuntato per effetto di questo riallineamento.
+Il piano audit non è completato: le spunte G3 riportano prove locali sul
+candidato, non chiudono il gate né i finding ancora privi di evidenza finale.
 
-## Candidati della linea audit
+## Candidato G3 della linea audit
 
-La [PR #25](https://github.com/Fubeo/Fub/pull/25) è stata integrata nella sola
-linea audit con fast-forward a `65a0cce5ed849fc8eba46b12f88a6aa23a07a0eb`,
-dopo il verde completo delle run push e PR sullo stesso SHA. Preserva #22,
-i 284 commit esclusivi audit e i due esclusivi di `main`.
+La [PR #32](https://github.com/Fubeo/Fub/pull/32) è **OPEN, DRAFT**, con base
+`fix/audit-integration` e head `fix/lifecycle-mount-detached`. Dopo il fetch del
+12 settembre, la base remota è
+`7efc4375a7167ea3df5070673c6c2163a758a0f2`, l'head remoto della PR è
+`c363d32cfc69166a9cd7f62c031c64a5541346fa` e il candidato locale
+`work/g3-integration` pre-documentazione è
+`1b0f13f125450b98170cf4ae17acc0b163506007`: 14 commit avanti e 0 indietro,
+quindi pubblicabile con un normale fast-forward dopo l'integrazione del commit
+documentale. Nessun push o merge è implicito in questo stato.
 
-Il candidato di questa documentazione include anche la sola discovery della
-[PR #26](https://github.com/Fubeo/Fub/pull/26), al commit
-`77e1b8783fbba75364644078b0735a5b709de28d`. Le prove e il gate di integrazione
-sono registrati nella PR: il codice di discovery non completa il lifecycle.
-Ogni avanzamento della linea audit richiede i controlli applicabili sullo SHA
-effettivo; nessuna di queste integrazioni autorizza a spostare `main`.
+Il range locale completa il distacco verificato delle callback di produzione:
+ripristino staged con mossa e rollback fuori custodia; rename esplicita di
+documenti e asset con I/O, parser, feed, side-data e journal staccati; watcher
+in fasi prepare/invoke/finalize; rebuild di manutenzione staccato; flush degli
+indici tramite token e protezione `IndexCall`; `BeforeWrite` eseguito e protetto
+dal panic prima di ogni scrittura. Mount, rollback, teardown e chiamate dirette
+del registry fanno parte del call graph finale verificato, non sono più
+un'eccezione dichiarata.
 
-Il candidato CAS `4b3bd77e2b7af5584a56ba3a3556e1ade99e5976` corregge l'apertura
-concorrente del lock nuovo. La diagnostica precedente identifica `open_lock`
-come stadio dell'errore `ENOENT`; il protocollo usa creazione esclusiva e apre
-un file esistente soltanto dopo `AlreadyExists`. I due test CAS sono verdi sui
-tre sistemi nelle run
-[push](https://github.com/Fubeo/Fub/actions/runs/34388493276) e
-[PR](https://github.com/Fubeo/Fub/actions/runs/34388497315), entrambe concluse
-con successo in tutti gli otto job. Anche il candidato di riconciliazione
-`65a0cce` ha superato entrambe le run
-[push](https://github.com/Fubeo/Fub/actions/runs/34391260104) e
-[PR](https://github.com/Fubeo/Fub/actions/runs/34391266023).
-Queste prove non certificano automaticamente un successivo SHA.
+Sul commit di codice `1b0f13f…`, `cargo fmt --all -- --check` è verde e la
+revisione finale del call graph di produzione che attraversa
+`Custody<Workspace>` è `PASS`. Le suite complete locali hanno prodotto:
 
-C-04/G3 resta aperto: oltre al banco WASM, anche mount, abilitazione, rollback
-e teardown di produzione richiedono callback fuori da `Custody<Workspace>`.
-La revisione deve includere le chiamate indirette e i disposer dei provider.
-G14 conserva specifiche originali non ricostruite: la ricerca nella cronologia
-e nei tracker accessibili non consente di assegnarle per intuizione.
+- kernel: 800 test verdi in 62 eseguibili, 1 ignorato;
+- host: 334 test verdi in 42 eseguibili;
+- features: 350 test verdi in 36 eseguibili, 2 ignorati;
+- totale: 1484 test verdi in 140 eseguibili, 3 ignorati.
+
+Il Clippy workspace locale resta non verde soltanto per tre
+`chunks_exact_to_as_chunks` preesistenti in `crates/fub-abi/src/edit.rs`, alle
+righe 255, 257 e 296. Questo limite non va aggirato con `allow` e non equivale a
+un fallimento del candidato G3; rende però obbligatoria la CI completa sullo
+stesso SHA finale che include la documentazione. Fino a quel verde la PR resta
+draft, `ARCH-001` è **`CANDIDATE/CI_PENDING`**, G3 non è `CLOSED`, nessuna issue
+si chiude e G15/GO resta aperto.
+
+Il rischio residuo reale è il rollback di una rename in concorrenza con un
+processo esterno: `VaultStorage` non offre rename condizionale né reservation.
+Il candidato verifica l'identità osservata del file, ma non promette una
+transazione globale contro modifiche esterne.
 
 ## Release corrente
 
@@ -124,11 +134,11 @@ Il verde automatico non sostituisce queste evidenze.
 - discovery, installazione e teardown end-to-end;
 - esempio non banale.
 
-La [PR #23](https://github.com/Fubeo/Fub/pull/23) propone il primo incremento
-nativo di discovery e lifecycle. La CI del suo candidato `66141ad` è conclusa
-con successo, ma la PR resta draft: il banco deve usare i confini di mount e
-invocazione della linea audit senza callback sotto `Custody<Workspace>`.
-Non è una capacità consegnata su `main` e non chiude #8.
+La PR #32 contiene il candidato locale del lifecycle conforme al confine G3,
+ma non è una capacità consegnata su `main` e non chiude #8. Dopo il verde della
+CI sullo SHA finale e la chiusura reale di G3, il prossimo incremento è #8:
+inventory e installazione end-to-end conformi, senza eseguibili in
+`.fub/plugins`.
 
 Issue:
 
@@ -157,16 +167,19 @@ fasi 5–10: l'estrazione iniziale non va ripetuta.
 
 ## Bloccato
 
-Il merge in `main` è bloccato dal gate audit, non dal semplice stato della
-CI M5. La PR #23 richiede inoltre l'adattamento al lifecycle `BundleMount`
-della linea audit. Compilazione e test possono proseguire su branch dedicate;
-non certificano automaticamente un candidato ottenuto integrando due linee.
+Il merge in `main` è bloccato dal gate audit. Il candidato G3 è
+`CANDIDATE/CI_PENDING`: le prove locali sono complete salvo il limite Clippy
+descritto sopra, ma soltanto tutti i job obbligatori verdi sullo stesso SHA
+finale possono consentire la chiusura di G3. Anche allora servono i gate
+successivi e G15/GO esplicito.
 
 ## Prossimi passi
 
-1. completare i gate del candidato audit dopo #25, discovery #26 e port
-   documentale #28; adattare il lifecycle #23 a C-04 in produzione;
-2. chiudere il percorso prodotto M5 delle issue #8 e #10;
+1. integrare questo aggiornamento documentale sopra `1b0f13f…`, pubblicare
+   l'head risultante sulla PR #32 con push ordinario e attendere la CI completa
+   sul medesimo SHA;
+2. solo dopo quel verde, chiudere realmente G3 e passare a #8 per inventory e
+   installazione end-to-end conformi; quindi completare #10;
 3. completare ripristino atomico e backup/restore #5/#7;
 4. separare e misurare la Graph View con #12/#6;
 5. completare le evidenze manuali e ripetibili di #17;

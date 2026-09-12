@@ -1022,29 +1022,50 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## 3.9 Review manuale obbligatoria
 
-Per ogni callsite:
+Sul candidato di codice `1b0f13f125450b98170cf4ae17acc0b163506007`
+la revisione finale del call graph di produzione che attraversa
+`Custody<Workspace>` è `PASS`. Per ogni callsite è stato verificato che:
 
-- [ ] il guard termina prima della callback;
-- [ ] il proxy non espone il workspace generico;
-- [ ] non viene passato un riferimento che prolunga il prestito;
-- [ ] panic/error ripristinano lo stato;
-- [ ] finalize verifica staleness;
-- [ ] eventi sono drenati nel punto previsto;
-- [ ] nessuna callback indiretta resta sotto lock;
-- [ ] il test attraversa il percorso reale.
+- [x] il guard termina prima della callback;
+- [x] il proxy non espone il workspace generico;
+- [x] non viene passato un riferimento che prolunga il prestito;
+- [x] panic/error ripristinano lo stato;
+- [x] finalize verifica staleness;
+- [x] eventi sono drenati nel punto previsto;
+- [x] nessuna callback indiretta resta sotto lock;
+- [x] il test attraversa il percorso reale.
 
 ## 3.10 Gate `G3 — Callback provider fuori lock`
 
-- [ ] call graph completo delle callback;
-- [ ] tutti i percorsi usano prepare/call/finalize o equivalente dimostrabile;
-- [ ] nessun provider è chiamato dentro `read_workspace`/`write_workspace`;
-- [ ] test di re-entry verde;
-- [ ] test stale verde;
-- [ ] error/panic cleanup verificato;
-- [ ] `Host::workspace` non è stato usato come scorciatoia;
-- [ ] Clippy `-D warnings` verde;
-- [ ] commit semantico ispezionato;
-- [ ] `ARCH-001` aggiornato nella matrice.
+Stato del candidato: **`CANDIDATE/CI_PENDING`**. Le prove locali autorizzano
+le spunte seguenti, ma non la chiusura di G3:
+
+- [x] call graph completo delle callback;
+- [x] tutti i percorsi usano prepare/call/finalize o equivalente dimostrabile;
+- [x] nessun provider è chiamato dentro `read_workspace`/`write_workspace`;
+- [x] test di re-entry verde;
+- [x] test stale verde;
+- [x] error/panic cleanup verificato;
+- [x] `Host::workspace` non è stato usato come scorciatoia;
+- [ ] Clippy `-D warnings` verde — in attesa della CI sullo stesso SHA;
+- [x] commit semantici ispezionati;
+- [x] `ARCH-001` aggiornato nella matrice.
+
+`cargo fmt --all -- --check` è verde. Le suite complete sullo stesso candidato
+di codice hanno prodotto: kernel 800 test verdi in 62 eseguibili, con 1
+ignorato; host 334/42; features 350/36, con 2 ignorati. Totale: 1484 test verdi
+in 140 eseguibili e 3 ignorati. Il Clippy workspace locale non è verde
+esclusivamente per i tre lint preesistenti `chunks_exact_to_as_chunks` in
+`crates/fub-abi/src/edit.rs:255`, `:257` e `:296`; non sono stati aggiunti
+`allow` né altre deroghe. La CI completa resta quindi obbligatoria sullo SHA
+che include anche questo aggiornamento documentale.
+
+Il rischio residuo reale non viene nascosto: il rollback di una rename può
+correre contro un processo esterno, perché `VaultStorage` non offre rename
+condizionale né reservation. Il candidato vincola il rollback all'identità
+osservata del file, ma non può trasformare quel limite del filesystem in una
+transazione globale. **G3 non è `CLOSED` finché la CI dello stesso SHA non è
+interamente verde.**
 
 ## 3.11 Condizioni di stop
 
@@ -2650,7 +2671,7 @@ Compilare una riga per ogni ID.
 
 | ID | Specifica ricostruita | Stato iniziale | Commit | Test/guardia | Docs | Rischio | CI |
 |---|---|---|---|---|---|---|---|
-| ARCH-001 | provider fuori lock con prepare/call/finalize | `OPEN` |  | re-entry/progresso |  |  |  |
+| ARCH-001 | provider fuori lock con prepare/call/finalize | `CANDIDATE/CI_PENDING` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...` | call graph production `Custody` PASS; kernel 800/62 +1 ignorato; host 334/42; features 350/36 +2 ignorati | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni; Clippy locale limitato da 3 lint preesistenti | CI completa richiesta sullo SHA documentato |
 | ARCH-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-004 | servizi indipendenti progrediscono sotto write lock Workspace | `OPEN/REASSESS` |  | progresso |  |  |  |

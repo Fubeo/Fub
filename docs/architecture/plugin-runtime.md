@@ -132,7 +132,7 @@ model; non offre esecuzione concorrente dentro l'istanza.
 Le host function che accodano lavoro non lo eseguono immediatamente durante la
 chiamata guest.
 
-## Disabilitazione e chiusura
+## Disabilitazione, I/O e chiusura
 
 Il toggle utente e la chiusura della sessione preparano il teardown sotto lock,
 eseguono `Plugin::deactivate` e `IndexProvider::flush/close` fuori dai guard di
@@ -149,15 +149,45 @@ vengono isolati fuori lock; gli altri provider e gli hook dell'owner vengono
 estratti durante la finalizzazione e distrutti singolarmente dopo il rilascio
 del guard. Un panic del disposer non salta le risorse successive.
 
-Il flush di fine indicizzazione e quello del watcher usano la stessa porta
-staccata: gli snapshot degli indici vengono rilasciati fuori guard anche quando
-la finalizzazione rileva un provider ritirato.
+Il flush degli indici usa un token che estrae gli snapshot sotto guardia, chiama
+i provider con `JobHost` fuori da `Custody<Workspace>` e finalizza dopo la
+riacquisizione. `IndexCall` impedisce che un indice rientri sincronicamente nel
+proprio `flush`; il suo `Drop` ripristina il frame anche se la callback va in
+panic. Fine indicizzazione, watcher, manutenzione e teardown attraversano la
+stessa porta staccata.
 
-Anche scrittura, edit, creazione e ripristino dal cestino separano la mutazione
-autorevole dall'alimentazione degli indici. Il ripristino risolve e fotografa il
-parser, lo esegue senza guardia, poi riconvalida voce, destinazione e revisione
-prima della singola mossa dal cestino; gli indici ricevono il modello soltanto
-dopo il commit e fuori da `Custody<Workspace>`.
+Scrittura, edit e creazione preparano sorgente, parser e `BeforeWrite` sotto
+guardia, ma eseguono parser e hook con handle owned e capacità strette. Il panic
+di `BeforeWrite` viene convertito in errore prima della scrittura: il commit non
+tocca il documento quando l'hook fallisce o va in panic. Feed e finalize degli
+indici restano fasi successive e staccate.
+
+Il ripristino dal cestino fotografa voce, destinazione, revisione e parser sotto
+guardia; poi legge la sorgente, invoca parser e sintassi e compie la mossa
+no-replace fuori dalla custodia. Il commit riconvalida workspace e collisioni
+senza consultare storage o provider. Side-data, feed, osservazione della
+revisione e journal vengono completati fuori guardia. Se il core rifiuta il
+risultato, lo stesso token esegue il rollback; l'identità osservata impedisce di
+sovrascrivere alla cieca un file cambiato nel frattempo.
+
+Anche le rename esplicite di documenti e asset sono staged. Stat, letture,
+parser, riscritture dei link, feed, operazione filesystem, migrazione dei
+side-data e journal non vengono nascosti sotto `Custody<Workspace>`; prepare e
+commit riconvalidano invece identità, collisioni e generazioni. Il rollback usa
+la ricevuta della mossa e resta prudente se un processo esterno ha sostituito il
+file: senza rename condizionale o reservation non esiste una transazione globale
+contro il filesystem.
+
+Il watcher separa filtro e pianificazione, invocazione di stat/read/parse e
+finalizzazione. Le rename tracciate percorrono i token dedicati a documenti e
+asset; gli altri eventi ricadono nella sincronizzazione ordinaria. Un lotto che
+ha già mutato stato tenta il flush anche se un elemento successivo fallisce, in
+modo da non perdere in silenzio un derivato già alimentato.
+
+Il rebuild di manutenzione segue lo stesso schema: autorizzazione e snapshot
+sotto guardia, camminata, letture, parser e callback fuori custodia, quindi
+finalizzazione e drain degli eventi. Le operazioni globali e il dry run usano
+porte tipizzate e non riaprono accesso generico a `Host::workspace`.
 
 La sessione ferma watcher e job, consegna `VaultClosed`, esegue il flush globale
 e smonta i plugin in ordine inverso. L'anagrafe viene persistita per ultima.
@@ -165,9 +195,11 @@ La disabilitazione persiste prima la scelta e rinvia gli eventi fino al termine
 dello smontaggio. La chiusura consegna invece gli eventi di `deactivate` mentre
 le registrazioni del plugin sono ancora disponibili.
 
-Questa separazione riguarda il teardown delle porte host. Il mount, il suo
-rollback e le chiamate dirette del registry restano percorsi sincroni: non
-costituiscono una prova del contratto completo sulle callback fuori lock.
+Mount, rollback e chiamate dirette del registry rispettano lo stesso confine:
+preparazione, attivazione, registrazione e disposer esterni non conservano i
+guard di workspace o registry. La conformità del candidato G3 è provata
+localmente sul call graph di produzione; la chiusura del gate richiede ancora
+la CI completa sul medesimo SHA.
 
 ## UI non fidata
 
