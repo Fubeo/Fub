@@ -127,6 +127,10 @@ const SOURCES: &[(&str, &str)] = &[
     ("src/net.rs", include_str!("../src/net.rs")),
     ("app/src/lib.rs", include_str!("../../fub-app/src/lib.rs")),
     ("app/src/main.rs", include_str!("../../fub-app/src/main.rs")),
+    (
+        "app/src/startup.rs",
+        include_str!("../../fub-app/src/startup.rs"),
+    ),
 ];
 
 /// **La porta**, e l'unico file che il conto non legge.
