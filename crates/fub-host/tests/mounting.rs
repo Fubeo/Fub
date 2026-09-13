@@ -255,6 +255,31 @@ impl Bundle for PermissionBundle {
     }
 }
 
+struct PanickingPrepareBundle(&'static str);
+
+impl Bundle for PanickingPrepareBundle {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::new(self.0, self.0)
+            .granting(PluginPermissions::of(&[permission::READ_VAULT]))
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Community
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        OnlyProviders::boxed(self.manifest())
+    }
+
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn prepare(&self) -> fub_host::registry::BundleMount<'_> {
+        panic!("deterministic preparation panic")
+    }
+}
+
 #[test]
 fn a_bundle_that_speaks_a_other_contract_not_is_mounts() {
     let mut ws = vault();
@@ -289,6 +314,61 @@ fn a_activate_that_fails_not_leaves_a_plugin_declared() {
     assert!(ws.plugins().is_empty());
     assert!(ws.commands().is_empty());
     assert!(registry.ids().is_empty());
+}
+
+#[test]
+fn a_prepare_panic_is_typed_and_leaves_no_residue_before_a_valid_mount() {
+    const ID: &str = "com.acme.panicking-prepare";
+    const VALID: &str = "test.valid-after-prepare-panic";
+    let mut ws = vault();
+    let journal: Journal = Arc::default();
+    let mut registry = BundleRegistry::new();
+
+    let error = registry
+        .mount(&PanickingPrepareBundle(ID), &mut ws)
+        .expect_err("a preparation panic must become a mount error");
+
+    assert!(
+        matches!(
+            error,
+            BundleError::Preparation { ref id, ref error }
+                if id == ID && error.contains("deterministic preparation panic")
+        ),
+        "preparation must retain its typed root cause: {error}"
+    );
+    assert!(ws.plugins().is_empty(), "declaration must be withdrawn");
+    assert!(ws.commands().is_empty(), "providers must not remain");
+    assert!(registry.ids().is_empty(), "nothing may be mounted");
+    let key = permission_key(ID, permission::READ_VAULT);
+    let entries = match ws
+        .query_index(IndexQuery::Settings {
+            plugin: Some(ID.to_string()),
+        })
+        .expect("settings query")
+    {
+        IndexResult::Settings(entries) => entries,
+        other => panic!("settings query answered off-topic: {other:?}"),
+    };
+    assert!(
+        entries.into_iter().all(|entry| entry.spec.key != key),
+        "the default-deny created before prepare must be rolled back"
+    );
+
+    registry
+        .mount(&BundleSpy::new(VALID, &journal), &mut ws)
+        .expect("the registry and workspace remain reusable");
+    assert_eq!(registry.ids(), vec![VALID]);
+    let errors = registry.close(&mut ws);
+    assert!(
+        errors.is_empty(),
+        "valid bundle teardown failed: {errors:?}"
+    );
+    assert!(ws.is_closed());
+    assert!(ws.plugins().is_empty());
+    assert!(registry.ids().is_empty());
+    assert!(lines(&journal)
+        .iter()
+        .any(|line| line.contains("stopping (host=true, provider=true)")));
 }
 
 #[test]

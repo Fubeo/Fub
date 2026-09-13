@@ -344,6 +344,7 @@ pub enum BundleError {
     Abi { id: String, declared: String },
     Declaration(RegistryError),
     Unknown(String),
+    Preparation { id: String, error: String },
     Activation { id: String, error: PluginError },
     Registration { id: String, error: String },
 }
@@ -359,6 +360,9 @@ impl std::fmt::Display for BundleError {
             BundleError::Declaration(error) => write!(f, "{error}"),
             BundleError::Unknown(id) => {
                 write!(f, "`{id}` is not a bundle this host knows how to mount")
+            }
+            BundleError::Preparation { id, error } => {
+                write!(f, "`{id}` could not be prepared: {error}")
             }
             BundleError::Activation { id, error } => {
                 write!(f, "`{id}` did not activate: {error}")
@@ -377,9 +381,9 @@ impl From<BundleError> for PluginError {
         match error {
             BundleError::Abi { .. } => PluginError::Unserved(error.to_string().into()),
             BundleError::Unknown(_) => PluginError::NotFound(error.to_string().into()),
-            BundleError::Declaration(_) | BundleError::Registration { .. } => {
-                PluginError::Internal(error.to_string().into())
-            }
+            BundleError::Declaration(_)
+            | BundleError::Preparation { .. }
+            | BundleError::Registration { .. } => PluginError::Internal(error.to_string().into()),
             BundleError::Activation { .. } => error.into_activation_error(),
         }
     }
@@ -757,24 +761,29 @@ impl BundleRegistry {
         let initialized_permissions = match initialize_external_permissions(ws, &id, trust) {
             Ok(keys) => keys,
             Err(mut error) => {
-                match ws.deactivate_plugin(&id) {
-                    Ok(errors) => {
-                        for rollback in errors {
-                            error.push_str(&format!("; declaration rollback failed: {rollback}"));
-                        }
-                    }
-                    Err(rollback) => {
-                        error.push_str(&format!("; declaration rollback failed: {rollback}"));
-                    }
-                }
+                append_declaration_rollback(ws, &id, &mut error);
                 return Err(BundleError::Registration { id, error });
             }
         };
 
         // `prepare` viene dopo la dichiarazione come il vecchio `plugin()`: la
         // costruzione può essere specifica del backend, ma non ha ancora accesso
-        // alle capacità del vault.
-        let (mut plugin, register) = bundle.prepare().into_parts();
+        // alle capacità del vault. È comunque codice esterno: un panico ritira
+        // prima i default-deny creati dal tentativo e poi la dichiarazione.
+        let prepared = fub_kernel::safety::external(
+            "bundle preparation",
+            |message| PluginError::Internal(message.into()),
+            || Ok(bundle.prepare()),
+        );
+        let (mut plugin, register) = match prepared {
+            Ok(prepared) => prepared.into_parts(),
+            Err(error) => {
+                let mut reason = error.to_string();
+                append_permission_rollback(ws, &initialized_permissions, &mut reason);
+                append_declaration_rollback(ws, &id, &mut reason);
+                return Err(BundleError::Preparation { id, error: reason });
+            }
+        };
         let activation = fub_kernel::safety::external(
             "plugin activation",
             |message| PluginError::Internal(message.into()),
@@ -1013,6 +1022,19 @@ impl BundleRegistry {
 
     pub fn close(&mut self, ws: &mut Workspace) -> Vec<PluginError> {
         ws.close_with(|ws, id| self.stop(ws, id))
+    }
+}
+
+fn append_declaration_rollback(ws: &mut Workspace, id: &str, reason: &mut String) {
+    match ws.deactivate_plugin(id) {
+        Ok(errors) => {
+            for rollback in errors {
+                reason.push_str(&format!("; declaration rollback failed: {rollback}"));
+            }
+        }
+        Err(rollback) => {
+            reason.push_str(&format!("; declaration rollback failed: {rollback}"));
+        }
     }
 }
 
