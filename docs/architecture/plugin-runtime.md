@@ -210,6 +210,30 @@ giorno in cui `ViewProvider` attraversa WASM, ogni albero deve passare da
 Questa proprietà non è ancora esercitata end-to-end ed è tracciata in
 [#10](https://github.com/Fubeo/Fub/issues/10).
 
+## Inventario installato
+
+`InstalledPluginStore` in `fub-wasm-host` fornisce agli host nativi
+installazione da un singolo file, inventario persistente, consenso
+all'esecuzione, scelta enabled, load verificato e rimozione dell'eseguibile.
+Lo store conserva componenti identificati dal contenuto nella configurazione
+della macchina. Non salva né scopre componenti installati nello storage
+persistente `.fub/plugins/<id>/` del vault e non lo cancella.
+
+L'installazione valida componente, manifest e ABI senza chiamare `activate`.
+Listing e load verificano solo inventario e digest: non compilano, istanziano o
+chiamano il guest. La validazione attiva esplicita produce un `WasmBundle` con
+`Trust::Community` e ricontrolla il manifest. Nessuna di queste operazioni monta
+l'istanza o concede capability: `BundleMount` conserva il lifecycle comune e un
+solo `Guard` applica permessi e scope. Consenso, scelta enabled e stato del mount
+restano tre fatti distinti.
+
+La composizione desktop, il caricamento allo startup, lifecycle e IPC dello
+store non sono ancora implementati. Il percorso end-to-end resta tracciato in
+[#8](https://github.com/Fubeo/Fub/issues/8).
+
+Schema, atomicità e rimozione sono descritti nel
+[layout su disco](../reference/on-disk-layout.md).
+
 ## Stato di M5
 
 | Capacità | Stato |
@@ -222,7 +246,7 @@ Questa proprietà non è ancora esercitata end-to-end ed è tracciata in
 | capability negate | presenti |
 | `ViewProvider` | da completare |
 | altri provider | da completare su casi reali |
-| discovery e installazione | da completare |
+| discovery e store installato per host nativi | presenti, percorso desktop da completare |
 | UI non fidata | da completare |
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).

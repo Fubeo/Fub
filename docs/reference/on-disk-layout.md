@@ -31,9 +31,45 @@ La cartella viene scelta in ordine:
 | `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
 | `themes/<id>/` | installato | per tema | fogli, skin e asset |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
+| `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
+| `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
+
+## Componenti WASM installati
+
+`fub_wasm_host::installed::InstalledPluginStore` riceve esplicitamente la
+configurazione scelta dall'host nativo. Dopo `open`, usa la capability della
+directory e non deduce percorsi dal manifest o dai dati del vault.
+
+L'inventario schema 1 conserva `next_installation` e `plugins`. Ogni record
+ha identità monotona, manifest, digest SHA-256, `enabled` e `consent`.
+Contatore e identità attraversano JSON come stringhe decimali. Il consenso
+può essere `undecided`, `denied` o `granted` e riguarda gli esatti byte
+installati; non concede capability. La fiducia resta `Trust::Community`.
+
+Il blob identificato dal contenuto viene pubblicato prima dell'inventario, che
+usa una compare-and-swap (CAS) cooperativa. File `.part` e blob non referenziati
+sono invisibili allo store. Un errore nella pubblicazione lascia intatto
+l'inventario precedente; un file corrotto, illeggibile o con schema futuro non
+viene reinterpretato come vuoto. Il load ricontrolla il digest senza eseguire
+il guest; una validazione attiva esplicita ricontrolla anche il manifest sugli
+esatti byte. Un id duplicato, anche con versione diversa, richiede una scelta
+esplicita.
+
+La rimozione ritira il record prima del cleanup del blob. Un cleanup fallito è
+riportato nell'esito e può lasciare un orfano invisibile. La reinstallazione ha
+nuova identità e nessun consenso ereditato. Il chiamante deve completare il
+teardown prima di rimuovere: lo store non possiede le istanze e non monta in
+automatico. `InstalledPluginStore` non salva né scopre componenti installati in
+`.fub/plugins/<id>/` e non cancella quella directory.
+
+La composizione desktop, il mount allo startup dei soli componenti enabled con
+consenso `granted`, lifecycle e IPC restano da completare in
+[#8](https://github.com/Fubeo/Fub/issues/8). La decisione persistente è
+descritta nell'
+[ADR 0200](../decisions/0200-inventario-componenti-installati.md).
 
 ## Radice del vault
 

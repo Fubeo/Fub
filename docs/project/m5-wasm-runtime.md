@@ -105,13 +105,16 @@ reintroduce il protocollo temporale della PR #23. Il lifecycle resta da
 adattare anche nelle porte di produzione: spostare soltanto il banco non
 soddisfa C-04. Né #26 né il fix CAS #27 chiudono #8.
 
-L'installazione e il consenso nel desktop restano distinti dal banco di
-sviluppo. #8 richiede ancora posizione controllata dalla shell, inventario,
-consenso e scelta enabled/disabled persistenti, discovery all'avvio,
-installazione e rimozione sicure, collisioni, restart e rollback. Componente
-installato, dati persistenti del plugin, scelta di abilitazione e istanza
-montata restano separati. `.fub/plugins/` non è una directory di eseguibili e
-la rimozione del componente non cancella implicitamente dati autorevoli.
+`InstalledPluginStore` fornisce agli host nativi una radice di configurazione
+passata esplicitamente, inventario, consenso e scelta enabled persistenti,
+installazione e rimozione sicure, collisioni esplicite e integrità verificata
+dei componenti.
+Restano la composizione controllata dalla shell, il mount allo startup dei soli
+componenti enabled con consenso `granted`, il lifecycle desktop attraverso il
+riavvio, IPC e la prova end-to-end di installazione, esecuzione e rimozione.
+Componente installato, storage persistente del plugin, scelta di abilitazione e
+istanza montata restano separati. `InstalledPluginStore` non salva né scopre
+componenti installati in `.fub/plugins/` e non cancella quella directory.
 
 ## Criteri di completamento
 
