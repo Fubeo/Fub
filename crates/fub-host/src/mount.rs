@@ -44,6 +44,25 @@ pub struct Mounted {
     pub versions: Option<VersionStore>,
 }
 
+fn assemble_after_registry<T>(
+    workspace: &mut Workspace,
+    registry: &mut BundleRegistry,
+    assemble: impl FnOnce(&mut Workspace, &mut BundleRegistry) -> Result<T, String>,
+) -> Result<T, String> {
+    match assemble(workspace, registry) {
+        Ok(assembled) => Ok(assembled),
+        Err(error) => {
+            for cleanup in registry.close(workspace) {
+                tracing::error!(
+                    target: "fub.host",
+                    "partial mount rollback failed: {cleanup}"
+                );
+            }
+            Err(error)
+        }
+    }
+}
+
 /// Bundle nativo ufficiale: manifest core, provider posseduti dal kernel.
 struct CoreBundle {
     id: &'static str,
@@ -240,51 +259,65 @@ pub fn mount(
         registry.remember(Arc::clone(bundle));
     }
 
-    // Il core deve esistere prima di leggere `plugins.disabled` e i livelli.
-    registry
-        .enable(&mut ws, CORE_ID)
-        .map_err(|error| format!("core bundle won't mount: {error}"))?;
-    crate::settings::apply_log_levels(&ws, levels);
-
-    // Questi provider sono infrastruttura sempre disponibile: in particolare i
-    // comandi di manutenzione non possono sparire proprio nel vault da riparare.
-    for id in [fub_kernel::maintenance::MAINTENANCE_ID, MARKDOWN_ID] {
+    let versions = assemble_after_registry(&mut ws, &mut registry, |ws, registry| {
+        // Il core deve esistere prima di leggere `plugins.disabled` e i livelli.
         registry
-            .enable(&mut ws, id)
-            .map_err(|error| format!("mandatory bundle `{id}` won't mount: {error}"))?;
-    }
+            .enable(ws, CORE_ID)
+            .map_err(|error| format!("core bundle won't mount: {error}"))?;
+        crate::settings::apply_log_levels(ws, levels);
 
-    let disabled = disabled_plugins(&ws);
-    let selected = bundles
-        .iter()
-        .map(|bundle| bundle.manifest().id)
-        .filter(|id| {
-            id != CORE_ID
-                && id != fub_kernel::maintenance::MAINTENANCE_ID
-                && id != MARKDOWN_ID
-                && !disabled.contains(id)
-        })
-        .collect::<Vec<_>>();
+        // Questi provider sono infrastruttura sempre disponibile: in particolare i
+        // comandi di manutenzione non possono sparire proprio nel vault da riparare.
+        for id in [fub_kernel::maintenance::MAINTENANCE_ID, MARKDOWN_ID] {
+            registry
+                .enable(ws, id)
+                .map_err(|error| format!("mandatory bundle `{id}` won't mount: {error}"))?;
+        }
 
-    for (id, error) in registry.enable_in_dependency_order(&mut ws, selected) {
-        tracing::error!(target: "fub.host", "bundle `{id}` not mounted: {error}");
-    }
+        let disabled = disabled_plugins(ws);
+        let selected = bundles
+            .iter()
+            .map(|bundle| bundle.manifest().id)
+            .filter(|id| {
+                id != CORE_ID
+                    && id != fub_kernel::maintenance::MAINTENANCE_ID
+                    && id != MARKDOWN_ID
+                    && !disabled.contains(id)
+            })
+            .collect::<Vec<_>>();
 
-    for warning in ws.settings_warnings() {
-        tracing::warn!(target: "fub.host", "settings: {warning}");
-    }
-    for warning in ws.organization_warnings() {
-        tracing::warn!(target: "fub.host", "organization: {warning}");
-    }
-    for warning in ws.doc_data_warnings() {
-        tracing::warn!(target: "fub.host", "per-document state: {warning}");
-    }
-    for kind in ws.undrawn_kinds() {
-        tracing::warn!(target: "fub.host", "`{kind}` has no renderer: will degrade to generic rendering");
-    }
+        for (id, error) in registry.enable_in_dependency_order(ws, selected) {
+            tracing::error!(target: "fub.host", "bundle `{id}` not mounted: {error}");
+        }
 
-    #[cfg(feature = "versioning")]
-    let versions = store.read().map_err(|error| error.to_string())?.clone();
+        for warning in ws.settings_warnings() {
+            tracing::warn!(target: "fub.host", "settings: {warning}");
+        }
+        for warning in ws.organization_warnings() {
+            tracing::warn!(target: "fub.host", "organization: {warning}");
+        }
+        for warning in ws.doc_data_warnings() {
+            tracing::warn!(target: "fub.host", "per-document state: {warning}");
+        }
+        for kind in ws.undrawn_kinds() {
+            tracing::warn!(target: "fub.host", "`{kind}` has no renderer: will degrade to generic rendering");
+        }
+
+        #[cfg(feature = "versioning")]
+        {
+            store
+                .read()
+                .map_err(|error| error.to_string())
+                .map(|slot| slot.clone())
+        }
+        #[cfg(not(feature = "versioning"))]
+        {
+            Ok(())
+        }
+    })?;
+    #[cfg(not(feature = "versioning"))]
+    let () = versions;
+
     Ok(Mounted {
         workspace: ws,
         registry,
@@ -428,4 +461,228 @@ fn register_blocks(registrar: &mut Registrar<'_>) -> Vec<String> {
         }
     }
     failures
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+    use fub_abi::traits::{CommandProvider, HostApi};
+    use fub_abi::PluginError;
+
+    use super::*;
+
+    const FIRST: &str = "test.mount-first";
+    const SECOND: &str = "test.mount-second";
+    const ROOT_ERROR: &str = "the mandatory bundle did not mount";
+
+    #[derive(Default)]
+    struct Lifecycle {
+        activated: AtomicUsize,
+        deactivated: AtomicUsize,
+    }
+
+    struct ProbePlugin {
+        id: &'static str,
+        lifecycle: Arc<Lifecycle>,
+        activation_fails: bool,
+        deactivation_fails: bool,
+    }
+
+    impl Plugin for ProbePlugin {
+        fn manifest(&self) -> PluginManifest {
+            PluginManifest::core(self.id, self.id)
+        }
+
+        fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+            self.lifecycle.activated.fetch_add(1, Ordering::SeqCst);
+            if self.activation_fails {
+                Err(PluginError::Internal("activation failed".into()))
+            } else {
+                Ok(())
+            }
+        }
+
+        fn deactivate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+            self.lifecycle.deactivated.fetch_add(1, Ordering::SeqCst);
+            if self.deactivation_fails {
+                Err(PluginError::Internal("cleanup failed".into()))
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    struct ProbeCommands(&'static str);
+
+    impl CommandProvider for ProbeCommands {
+        fn commands(&self) -> Vec<CommandSpec> {
+            vec![CommandSpec::new(format!("{}.command", self.0), "Probe")]
+        }
+
+        fn invoke(
+            &self,
+            _command: &str,
+            _args: serde_json::Value,
+            _mode: InvokeMode,
+            _host: &mut dyn HostApi,
+        ) -> Result<CommandOutcome, PluginError> {
+            Ok(CommandOutcome::notify("called"))
+        }
+    }
+
+    struct ProbeBundle {
+        id: &'static str,
+        lifecycle: Arc<Lifecycle>,
+        activation_fails: bool,
+        deactivation_fails: bool,
+    }
+
+    impl ProbeBundle {
+        fn new(id: &'static str, lifecycle: Arc<Lifecycle>) -> Self {
+            Self {
+                id,
+                lifecycle,
+                activation_fails: false,
+                deactivation_fails: false,
+            }
+        }
+
+        fn failing_activation(mut self) -> Self {
+            self.activation_fails = true;
+            self
+        }
+
+        fn failing_deactivation(mut self) -> Self {
+            self.deactivation_fails = true;
+            self
+        }
+    }
+
+    impl Bundle for ProbeBundle {
+        fn manifest(&self) -> PluginManifest {
+            PluginManifest::core(self.id, self.id)
+        }
+
+        fn trust(&self) -> Trust {
+            Trust::Core
+        }
+
+        fn plugin(&self) -> Box<dyn Plugin> {
+            Box::new(ProbePlugin {
+                id: self.id,
+                lifecycle: Arc::clone(&self.lifecycle),
+                activation_fails: self.activation_fails,
+                deactivation_fails: self.deactivation_fails,
+            })
+        }
+
+        fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
+            registrar
+                .register_command_provider(Box::new(ProbeCommands(self.id)))
+                .err()
+                .map(|error| vec![error.to_string()])
+                .unwrap_or_default()
+        }
+    }
+
+    fn workspace() -> (tempfile::TempDir, Workspace) {
+        let directory = tempfile::tempdir().expect("temporary vault");
+        let root = camino::Utf8PathBuf::from_path_buf(directory.path().to_path_buf())
+            .expect("temporary path is UTF-8");
+        let mut formats = FormatRegistry::new();
+        formats
+            .register(MarkdownProvider::boxed())
+            .expect("the Markdown format registers once");
+        let workspace = Workspace::new(&root, formats).expect("temporary vault opens");
+        (directory, workspace)
+    }
+
+    #[test]
+    fn a_fatal_post_registry_error_rolls_back_every_prior_bundle_once() {
+        let (_directory, mut workspace) = workspace();
+        let first = Arc::new(Lifecycle::default());
+        let second = Arc::new(Lifecycle::default());
+        let mut registry = BundleRegistry::new();
+        registry.remember(Arc::new(
+            ProbeBundle::new(FIRST, Arc::clone(&first)).failing_deactivation(),
+        ));
+        registry.remember(Arc::new(
+            ProbeBundle::new(SECOND, Arc::clone(&second)).failing_activation(),
+        ));
+
+        let error =
+            assemble_after_registry(&mut workspace, &mut registry, |workspace, registry| {
+                registry
+                    .enable(workspace, FIRST)
+                    .map_err(|error| error.to_string())?;
+                registry
+                    .enable(workspace, SECOND)
+                    .map_err(|_| ROOT_ERROR.to_owned())
+            })
+            .expect_err("the later mandatory bundle fails");
+
+        assert_eq!(error, ROOT_ERROR, "cleanup must not replace the root error");
+        assert_eq!(first.activated.load(Ordering::SeqCst), 1);
+        assert_eq!(first.deactivated.load(Ordering::SeqCst), 1);
+        assert_eq!(second.activated.load(Ordering::SeqCst), 1);
+        assert_eq!(second.deactivated.load(Ordering::SeqCst), 0);
+        assert!(workspace.is_closed());
+        assert!(
+            workspace.plugins().is_empty(),
+            "declarations survived rollback"
+        );
+        assert!(
+            workspace.commands().is_empty(),
+            "providers survived rollback"
+        );
+        assert!(registry.ids().is_empty(), "bundle bodies survived rollback");
+
+        assert!(registry.close(&mut workspace).is_empty());
+        assert_eq!(
+            first.deactivated.load(Ordering::SeqCst),
+            1,
+            "a closed partial mount must not tear down twice"
+        );
+    }
+
+    #[test]
+    fn a_successful_post_registry_assembly_transfers_live_bundles_to_mounted_state() {
+        let (_directory, mut workspace) = workspace();
+        let first = Arc::new(Lifecycle::default());
+        let second = Arc::new(Lifecycle::default());
+        let mut registry = BundleRegistry::new();
+        registry.remember(Arc::new(ProbeBundle::new(FIRST, Arc::clone(&first))));
+        registry.remember(Arc::new(ProbeBundle::new(SECOND, Arc::clone(&second))));
+
+        let assembled =
+            assemble_after_registry(&mut workspace, &mut registry, |workspace, registry| {
+                registry
+                    .enable(workspace, FIRST)
+                    .map_err(|error| error.to_string())?;
+                registry
+                    .enable(workspace, SECOND)
+                    .map_err(|error| error.to_string())?;
+                Ok(17)
+            })
+            .expect("both mandatory bundles mount");
+
+        assert_eq!(assembled, 17);
+        assert_eq!(first.deactivated.load(Ordering::SeqCst), 0);
+        assert_eq!(second.deactivated.load(Ordering::SeqCst), 0);
+        assert_eq!(workspace.plugins().len(), 2);
+        assert_eq!(workspace.commands().len(), 2);
+        assert_eq!(registry.ids(), vec![FIRST, SECOND]);
+
+        assert!(
+            registry.close(&mut workspace).is_empty(),
+            "normal close succeeds"
+        );
+        assert_eq!(first.deactivated.load(Ordering::SeqCst), 1);
+        assert_eq!(second.deactivated.load(Ordering::SeqCst), 1);
+        assert!(workspace.plugins().is_empty());
+        assert!(workspace.commands().is_empty());
+        assert!(registry.ids().is_empty());
+    }
 }
