@@ -1,6 +1,6 @@
 # HANDOFF — certificare i documenti G3 e avviare lo slice 1 di #8
 
-Questo è l'handoff operativo corrente al 12 settembre 2026 per `Fubeo/Fub`.
+Questo è l'handoff operativo corrente al 13 settembre 2026 per `Fubeo/Fub`.
 Conserva il nome storico del file, non autorizza il merge in `main` e non
 anticipa alcun gate successivo a G3.
 
@@ -15,50 +15,43 @@ Prima di modificare il repository, leggere:
 Valgono sempre le regole più restrittive dell'audit: nessun callback provider o
 codice esterno sotto `Custody<Workspace>`, nessuna scorciatoia tramite
 `Host::workspace`, nessuna modifica ai WIT frozen, nessun CodeRabbit,
-force-push, reset distruttivo o indebolimento dei test. Non modificare `main`
-prima di G15/GO esplicito.
+force-push, reset distruttivo o indebolimento dei test. Non introdurre `allow`
+per Clippy, skip, `sleep` come sincronizzazione o mutex globale per serializzare
+le suite. Non modificare `main` prima di G15/GO esplicito.
 
 ## Stato live verificato
 
-Dopo il fetch del 12 settembre 2026:
+Dopo il fetch live del 13 settembre 2026:
 
 - [PR #32](https://github.com/Fubeo/Fub/pull/32): **OPEN, DRAFT**, base
   `fix/audit-integration`, head `fix/lifecycle-mount-detached`;
 - head remoto esatto della PR #32:
-  `c17467edc908ea88e57719e980e7e91b2363b77b`;
-- il worktree `work/g3-integration` parte da
-  `c97c994b929a9f2fdb1692dd3ef5ce6eeab95074`, un commit avanti rispetto
-  all'head remoto (`0` remoto, `1` locale);
-- `origin/fix/audit-integration` è
-  `7efc4375a7167ea3df5070673c6c2163a758a0f2`; il candidato locale è `91`
-  commit avanti e `0` indietro rispetto a quella base;
-- `ARCH-001` e G3 restano **`CLOSED`** con provenienza sul candidato certificato
-  `f626dfca8a3c5271f64ec14368e10d09af8f937d`;
-- #8 e #10 sono **OPEN**;
-- G15/GO resta aperto e `main` non è autorizzato al merge.
+  `9c5a4db2382d45ee709ada4668a840465d871c64`;
+- `ARCH-001` e G3 sono **`CLOSED` sul tree `9c5a4db…`**;
+- la [run CI PR 34746750247](https://github.com/Fubeo/Fub/actions/runs/34746750247)
+  è `completed/success`, 8 job su 8, sul medesimo SHA;
+- la [run CI push 34746748272](https://github.com/Fubeo/Fub/actions/runs/34746748272)
+  è `completed/success` sul medesimo SHA;
+- #8, #10, G14 e G15/GO sono **OPEN**;
+- la decisione è **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
 
-Rifetcha questi riferimenti prima di qualunque pubblicazione. Gli SHA sono uno
-snapshot per rilevare drift, non istruzioni di reset. Se l'head remoto della PR
-non è più `c17467ed…`, confronta la storia e integra soltanto se il nuovo head è
-compatibile.
+Rifetcha questi riferimenti prima di qualunque modifica o pubblicazione. Gli SHA
+sono uno snapshot per rilevare drift, non istruzioni di reset. Se l'head remoto
+della PR non è più `9c5a4db…`, fermati, confronta la storia e registra il nuovo
+SHA live prima di procedere.
 
 ## Candidato e storia dei fix
 
-La sequenza rilevante conserva sia i fix sia gli aggiornamenti documentali:
+Il tree live certificato include già i sei commit successivi a `fbe9676a…`:
 
-| Commit | Stato | Origine e correzione |
-|---|---|---|
-| `7e3719f2` | remoto | CI 34706406133: riduce la variante documentale segnalata da Clippy |
-| `27808660` | remoto | rimuove l'import inutilizzato emerso dal Clippy locale con Rust `1.89` |
-| `a0b77232` | remoto | canonicalizza nel test watcher la radice confrontata su macOS/Windows |
-| `356c2920` | remoto | aggiorna i documenti e avvia le due run CI poi risultate racy |
-| `ca0896ca` | remoto | sincronizza le osservazioni concorrenti nei test stale/flush |
-| `e8428be9` | remoto | mantiene il turno nella verifica finale del flush |
-| `f626dfca` | remoto certificato | registra la seconda CI e costituisce lo SHA di chiusura G3 |
-| `4b957b25` | remoto storico | aggiorna i documenti; CI PR verde, CI push cancellata durante un test host bloccato |
-| `c8980cec` | remoto storico | rilascia esplicitamente il turno della probe prima di `host.close()` |
-| `c17467ed` | remoto corrente | registra la CI precedente e il fix `c8980cec`; CI push 8/8, CI PR fallita solo su macOS |
-| `c97c994b` | locale | sostituisce il `try_write` one-shot della probe con una custodia bloccante, rilasciata prima di `host.close()` |
+| Commit | Correzione |
+|---|---|
+| `d8e86e83` | rollback delle opening non pubblicate |
+| `8a9a530f` | avvio atomico dei worker |
+| `0e0441ef` | pubblicazione atomica della sessione |
+| `78a89f92` | contenimento dei panic nella preparazione dei bundle |
+| `440bd410` | rollback dei mount parziali |
+| `9c5a4db` | isolamento dei fallimenti della scansione su nomi non UTF-8 |
 
 Il comportamento G3 risultante comprende:
 
@@ -76,94 +69,34 @@ Il comportamento G3 risultante comprende:
 - mount, rollback, teardown, disposer e chiamate dirette del registry inclusi
   nel call graph di produzione verificato.
 
-`c97c994b` modifica soltanto la regressione host: non cambia il comportamento
-G3/ARCH di produzione e non sposta la provenienza della chiusura da
-`f626dfca…`.
+La certificazione G3/ARCH riguarda l'intero tree live `9c5a4db…`, inclusi i sei
+fix sopra elencati; non va attribuita agli SHA intermedi `f626dfca…`,
+`fbe9676a…` o `c17467ed…`.
 
 ## Prove conservate
 
-Sul candidato locale esatto
-`c97c994b929a9f2fdb1692dd3ef5ce6eeab95074`:
+Sul tree live esatto `9c5a4db2382d45ee709ada4668a840465d871c64`:
 
-- `cargo +1.89 fmt --all -- --check`: **PASS**;
-- Clippy workspace, tutti i target, `-D warnings`, Rust `1.89`: **PASS**;
-- `fub-host`: 334 test verdi in 42 eseguibili;
-- `git diff --check` e stato finale della validazione: **PASS/pulito**.
+- [run CI PR 34746750247](https://github.com/Fubeo/Fub/actions/runs/34746750247):
+  **PASS**, 8 job su 8;
+- [run CI push 34746748272](https://github.com/Fubeo/Fub/actions/runs/34746748272):
+  **PASS**;
+- entrambe le run sono associate allo stesso SHA certificato.
 
-Sul commit antenato `1b0f13f125450b98170cf4ae17acc0b163506007`:
-
-- call graph finale dei percorsi di produzione che attraversano
-  `Custody<Workspace>`: **PASS**;
-- kernel: 800 test verdi in 62 eseguibili, 1 ignorato;
-- features: 350 test verdi in 36 eseguibili, 2 ignorati.
-
-Kernel e feature non sono stati rieseguiti per `c97c994b`: questi risultati
-restano storici e non vanno attribuiti al candidato locale.
-
-Le due run sul precedente head
-`356c2920d9bbefeecd30317e6ec2a9cabb8cbb46` restano nella storia:
-
-- la [run PR 34707687690](https://github.com/Fubeo/Fub/actions/runs/34707687690)
-  fallì soltanto nel job macOS `103590610888`, dove
-  `an_action_from_a_replaced_view_provider_is_rejected_as_stale` scadde in
-  attesa del vecchio provider; gli altri sette job furono verdi;
-- la [run push 34707684943](https://github.com/Fubeo/Fub/actions/runs/34707684943)
-  fallì soltanto nel job Ubuntu `103590603150`, dove
-  `opening_runner_flush_releases_custody_and_allows_host_reentry` perse
-  l'asserzione finale `try_write`; gli altri sette job furono verdi.
-
-Le cause radice erano due osservazioni non bloccanti racy, non una violazione
-del confine di custodia. `ca0896ca` sincronizza le asserzioni e usa nel provider
-stale l'accesso bloccante governato dal watchdog; `e8428be9` conserva il turno
-di scrittura nella verifica finale del flush. I fix sono test-only e non
-ampliano alcun timeout.
-
-Il candidato certificato
-`f626dfca8a3c5271f64ec14368e10d09af8f937d` conserva la CI completa PR e push
-8/8 e le due run NPM verdi già registrate. Questa evidenza chiude `ARCH-001` e
-G3 sul candidato di codice.
-
-Sul successivo head remoto
-`c17467edc908ea88e57719e980e7e91b2363b77b`:
-
-- la [run CI push 34713518784](https://github.com/Fubeo/Fub/actions/runs/34713518784)
-  è `completed/success`, 8 job su 8;
-- la [run CI PR 34713519450](https://github.com/Fubeo/Fub/actions/runs/34713519450)
-  è `completed/failure`: è fallito soltanto il job macOS `103606458363`; gli
-  altri sette job e tutti gli altri sistemi/casi di test sono verdi;
-- la [run NPM push 34713518782](https://github.com/Fubeo/Fub/actions/runs/34713518782)
-  e la [run NPM PR 34713519528](https://github.com/Fubeo/Fub/actions/runs/34713519528)
-  sono `completed/success`.
-
-Nel job macOS il test
-`opening_runner_flush_rejects_same_provider_reentry_and_releases_its_guard`
-fallì in `runtime_index_flush_lock.rs:252`: la verifica finale usava un solo
-`try_write`. Il turno del writer impediva il sorpasso di un altro writer, ma un
-reader concorrente estraneo alla probe poteva comunque impedire l'acquisizione
-non bloccante. La causa radice è questa osservazione racy, non una violazione
-del confine di custodia.
-
-`c97c994b` usa una custodia bloccante per la verifica finale e rilascia
-immediatamente la guardia prima di `host.close()`. Il fix resta test-only.
+Questa evidenza chiude `ARCH-001` e G3 sul tree live. Non costituisce evidenza
+di completamento per #8, #10, G14 o G15/GO e non autorizza il merge in `main`.
+In particolare, la matrice G14 56/56 non è dichiarata completa.
 
 ## Azione successiva esatta
 
-1. Integra questo commit solo documentale sopra `c97c994b…` senza reset o
-   force.
-2. Rifetcha la PR #32 e verifica che l'head remoto sia ancora `c17467ed…` e che
-   la storia locale sia un fast-forward compatibile.
-3. Pubblica l'head risultante su `fix/lifecycle-mount-detached` con push
-   ordinario, mai force-push.
-4. Attendi le nuove CI PR e push sul medesimo nuovo SHA. Il candidato resta
-   **`CI_PENDING`**: entrambe devono essere interamente verdi, la PR #32 deve
-   restare draft e la pubblicazione finale resta bloccata fino a quel risultato.
-   Questo presidio non riapre il gate tecnico G3.
-5. Come prossimo lavoro funzionale, avvia lo **slice 1 di #8**: porta
-   semanticamente dalla PR #30 il solo inventario installato, adattalo alla
-   linea G3 corrente e mantieni gli eseguibili fuori da `.fub/plugins`.
-   **Non fare merge né cherry-pick dell'intera PR #30.**
-6. Mantieni #8 e #10 aperte: lo slice 1 non completa installazione, composition
-   root, mount, teardown, percorso UI né provider WASM residui.
+1. Rifetcha `fix/lifecycle-mount-detached` e `pull/32/head`; procedi soltanto se
+   entrambi indicano ancora `9c5a4db…`.
+2. Avvia dal tree `9c5a4db…` lo **slice inventory/installazione di #8**.
+3. Porta semanticamente dalla PR #30 soltanto l'inventario installato e mantieni
+   gli eseguibili fuori da `.fub/plugins`.
+4. Non fare merge né cherry-pick dell'intera PR #30.
+5. Mantieni #8 e #10 aperte: lo slice non completa composition root, mount,
+   teardown, percorso UI né provider WASM residui.
 
 ## Rischi e dichiarazioni lasciate aperte
 
@@ -175,13 +108,11 @@ dopo la chiusura G3.
 
 Restano intenzionalmente pendenti:
 
-- push ordinario del nuovo SHA che include `c97c994b` e questo aggiornamento;
-- nuove CI PR e push interamente verdi sul medesimo SHA, ora **`CI_PENDING`**;
-- passaggio della PR #32 da draft a ready e pubblicazione dello stato finale;
-- chiusura di #8, #10 o qualunque altra issue;
-- G14 con la matrice completa 56/56;
-- G15/GO e ogni merge in `main`.
+- la chiusura di #8 e #10;
+- G14, senza dichiarare completa la matrice 56/56;
+- G15/GO e ogni merge in `main`;
+- il passaggio della PR #32 fuori dallo stato **OPEN, DRAFT**.
 
-La decisione resta **NO-GO — NOT READY FOR PHASE 9**. La chiusura di
-`ARCH-001` e G3 non completa da sola l'audit: #8 e gli altri gate restano
-nell'ordine governato dal piano.
+La decisione resta **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
+La chiusura di `ARCH-001` e G3 sul tree `9c5a4db…` non completa da sola
+l'audit: #8 e gli altri gate restano nell'ordine governato dal piano.
