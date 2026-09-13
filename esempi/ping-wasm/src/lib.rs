@@ -54,7 +54,11 @@ const ID: &str = "demo.ping";
 /// La versione del contratto contro cui è scritto. La confronta
 /// `fub_abi::traits::abi_compatible` al primo passo del montaggio: major
 /// diversa → rifiuto, minor più alta dell'host → rifiuto.
-const ABI: &str = "0.1.1";
+const ABI: &str = if cfg!(feature = "abi-incompatibile") {
+    "99.0.0"
+} else {
+    "0.1.1"
+};
 
 /// Quando ci siamo attivati, in millisecondi. Il diario del plugin nativo era
 /// un `Arc<Mutex<Vec<String>>>` condiviso col test; qui il test non può
@@ -68,9 +72,17 @@ struct Componente;
 impl Guest for Componente {
     fn manifest() -> PluginManifest {
         PluginManifest {
-            id: ID.to_string(),
+            id: if cfg!(feature = "manifest-non-valido") {
+                String::new()
+            } else {
+                ID.to_string()
+            },
             name: "Demo Ping (WASM)".to_string(),
-            version: "0.1.0".to_string(),
+            version: if cfg!(feature = "versione-successiva") {
+                "0.2.0".to_string()
+            } else {
+                "0.1.0".to_string()
+            },
             abi_version: ABI.to_string(),
             permissions: PluginPermissions {
                 // `option-map` è una lista di coppie e il valore è JSON: un

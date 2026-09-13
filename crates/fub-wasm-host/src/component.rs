@@ -326,7 +326,13 @@ impl std::fmt::Debug for WasmBundle {
 impl WasmBundle {
     /// Carica il componente e legge subito il manifest, prima del montaggio.
     pub fn from_file(path: &Utf8Path, trust: Trust) -> Result<Self, LoadError> {
-        let component = Component::from_file(path)?;
+        Self::from_bytes(&std::fs::read(path)?, trust)
+    }
+
+    /// Compila e legge il manifest degli esatti byte ricevuti, senza riaprire
+    /// un percorso che potrebbe essere cambiato dopo la verifica.
+    pub fn from_bytes(bytes: &[u8], trust: Trust) -> Result<Self, LoadError> {
+        let component = Component::from_bytes(bytes)?;
         let manifest = {
             let mut instance = component.instantiate()?;
             let manifest = instance

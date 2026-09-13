@@ -52,6 +52,7 @@ serde = { version = "1", features = ["derive"] }
 # preserve_order: il frontmatter proiettato su JSON mantiene l'ordine delle
 # chiavi del file dell'utente — riscriverlo non deve riordinarle (fedeltà).
 serde_json = { version = "1", features = ["preserve_order"] }
+serde_ignored = "0.1.14"
 thiserror = "2"
 regex = "1"
 camino = { version = "1", features = ["serde1"] }

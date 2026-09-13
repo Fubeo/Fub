@@ -33,6 +33,10 @@ senza-permessi = []
 con-rete = []
 # Il mondo che chiede i dati persistiti: il backend WASM lo rifiuta al caricamento.
 con-dati = []
+# Varianti reali per il rifiuto prima della pubblicazione nell'inventario.
+abi-incompatibile = []
+versione-successiva = []
+manifest-non-valido = []
 
 [dependencies]
 wit-bindgen = "0.60"
