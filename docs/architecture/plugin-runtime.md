@@ -197,9 +197,8 @@ le registrazioni del plugin sono ancora disponibili.
 
 Mount, rollback e chiamate dirette del registry rispettano lo stesso confine:
 preparazione, attivazione, registrazione e disposer esterni non conservano i
-guard di workspace o registry. La conformità del candidato G3 è provata
-localmente sul call graph di produzione; la chiusura del gate richiede ancora
-la CI completa sul medesimo SHA.
+guard di workspace o registry. Le prove del call graph di produzione e la
+certificazione G3 sono riferite nello [stato del progetto](../project/status.md).
 
 ## UI non fidata
 
@@ -227,9 +226,21 @@ l'istanza o concede capability: `BundleMount` conserva il lifecycle comune e un
 solo `Guard` applica permessi e scope. Consenso, scelta enabled e stato del mount
 restano tre fatti distinti.
 
-La composizione desktop, il caricamento allo startup, lifecycle e IPC dello
-store non sono ancora implementati. Il percorso end-to-end resta tracciato in
-[#8](https://github.com/Fubeo/Fub/issues/8).
+Il bootstrap desktop sceglie una sola directory di configurazione per log,
+host e store. Filtra i record con `enabled && consent == granted` prima di
+leggere il blob o validare attivamente il componente. I record esclusi restano
+metadata nello store: un loro blob corrotto non viene eseguito né diagnosticato
+durante l'avvio.
+
+I bundle selezionati entrano in `Host::with_startup_bundles` e nel registry
+comune prima della custodia del workspace. Feature ufficiali, temi e primo
+bundle registrato conservano la propria identità; una collisione non li
+sostituisce. Un plugin opzionale fallito viene diagnosticato senza pubblicare
+registrazioni parziali né impedire l'apertura del vault. Il riavvio rilegge le
+scelte persistite; lo store resta separato dalle istanze delle sessioni.
+
+Gestione desktop di installazione, consenso, toggle e rimozione, IPC e guida
+del ciclo completo restano tracciati in [#8](https://github.com/Fubeo/Fub/issues/8).
 
 Schema, atomicità e rimozione sono descritti nel
 [layout su disco](../reference/on-disk-layout.md).
@@ -246,7 +257,7 @@ Schema, atomicità e rimozione sono descritti nel
 | capability negate | presenti |
 | `ViewProvider` | da completare |
 | altri provider | da completare su casi reali |
-| discovery e store installato per host nativi | presenti, percorso desktop da completare |
+| discovery, store installato e startup autorizzato | presenti; gestione desktop da completare |
 | UI non fidata | da completare |
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).

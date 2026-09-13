@@ -1435,11 +1435,13 @@ dependencies = [
  "fub-abi",
  "fub-host",
  "fub-kernel",
+ "fub-wasm-host",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "tempfile",
  "tracing",
 ]
 

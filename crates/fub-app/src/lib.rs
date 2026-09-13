@@ -23,6 +23,8 @@
 //! sempre la stessa cosa. Adesso passa un [`PluginError`], che è serializzabile
 //! e **discriminabile**: `{"kind": "already_exists", "message": …}`.
 
+pub mod startup;
+
 use std::sync::Arc;
 
 use camino::Utf8PathBuf;
@@ -754,33 +756,72 @@ fn discard_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), P
 }
 
 pub fn run() {
-    // Il collettore del log si installa **prima** di tutto: le righe che
-    // `Host::installed` scrive aprendo i file della macchina devono avere un
-    // posto dove andare (§17.3, decisione 0062). L'`Arc` torna qui e passa
-    // all'host, perché è lo stesso su cui il montaggio cambierà il livello
-    // leggendo le impostazioni.
-    let (levels, warning) = fub_host::install_logging();
+    // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
+    // store installato ricevono lo stesso valore: nessun proprietario riapre
+    // l'ambiente o deduce una seconda posizione.
+    let config_dir = fub_host::config_dir();
+    let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
+    let (startup_store, startup_bundles) = match config_dir.as_deref() {
+        Some(dir) => match startup::installed(dir) {
+            Ok(startup::InstalledStartup {
+                store,
+                bundles,
+                diagnostics,
+            }) => {
+                for diagnostic in diagnostics {
+                    tracing::error!(
+                        target: "fub.app",
+                        stage = ?diagnostic.stage,
+                        installation = diagnostic.installation,
+                        plugin_id = diagnostic.plugin_id.as_deref(),
+                        error = %diagnostic.error,
+                        "installed plugin startup failed"
+                    );
+                }
+                (Some(store), bundles)
+            }
+            Err(diagnostic) => {
+                tracing::error!(
+                    target: "fub.app",
+                    stage = ?diagnostic.stage,
+                    installation = diagnostic.installation,
+                    plugin_id = diagnostic.plugin_id.as_deref(),
+                    error = %diagnostic.error,
+                    "installed plugin store unavailable"
+                );
+                (None, Vec::new())
+            }
+        },
+        None => (None, Vec::new()),
+    };
+
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
     // `WebviewEvents`).
     let sink = Arc::new(WebviewEvents::default());
     let bridge = sink.clone();
+    let mut host = Host::new();
+    if let Some(dir) = config_dir.as_deref() {
+        host = host.with_config_dir(dir);
+    }
+    host = host
+        .with_session_notice(warning)
+        .with_levels(levels)
+        .with_sink(sink)
+        .with_startup_bundles(startup_bundles);
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        // `installed()` e non `new()`: è qui che Fub è un'**installazione** —
-        // con una cartella di configurazione, un livello macchina e un registro
-        // dei vault. Un test o un e2e headless costruiscono `Host::new()`, che
-        // lavora in memoria e non tocca la configurazione di chi lo esegue.
-        // L'avviso di `install_logging` entra da qui: è nato prima dell'host,
-        // e questo è il punto più basso che lo può tenere fino al tiraggio
-        // della shell (§25.5).
-        .manage(
-            Host::installed()
-                .with_session_notice(warning)
-                .with_levels(levels)
-                .with_sink(sink),
-        )
+        .manage(host);
+    // Lo store appartiene all'applicazione, non all'host né ai vault. Se
+    // l'apertura è fallita non si inventa uno store vuoto: la diagnosi è già
+    // stata emessa e l'host resta utilizzabile senza componenti opzionali.
+    let builder = match startup_store {
+        Some(store) => builder.manage(store),
+        None => builder,
+    };
+
+    builder
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
             let zoom = app

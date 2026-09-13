@@ -109,9 +109,11 @@ soddisfa C-04. Né #26 né il fix CAS #27 chiudono #8.
 passata esplicitamente, inventario, consenso e scelta enabled persistenti,
 installazione e rimozione sicure, collisioni esplicite e integrità verificata
 dei componenti.
-Restano la composizione controllata dalla shell, il mount allo startup dei soli
-componenti enabled con consenso `granted`, il lifecycle desktop attraverso il
-riavvio, IPC e la prova end-to-end di installazione, esecuzione e rimozione.
+La composizione desktop sceglie una sola configurazione e monta allo startup
+soltanto i componenti enabled con consenso `granted`, filtrati prima del load
+e della validazione attiva. Il banco attraversa store, comando WASM e restart
+enabled/disabled. Restano gestione desktop di installazione, scelte e rimozione,
+IPC e guida dello stesso ciclo end-to-end.
 Componente installato, storage persistente del plugin, scelta di abilitazione e
 istanza montata restano separati. `InstalledPluginStore` non salva né scopre
 componenti installati in `.fub/plugins/` e non cancella quella directory.
