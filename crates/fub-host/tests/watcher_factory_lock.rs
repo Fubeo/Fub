@@ -395,11 +395,13 @@ impl WatcherFactory for ArcProbe {
     }
 }
 
+#[cfg(unix)]
 struct FailsScanAfterStart {
     calls: Arc<AtomicUsize>,
     workspaces: Mutex<Vec<Custody<Workspace>>>,
 }
 
+#[cfg(unix)]
 impl WatcherFactory for FailsScanAfterStart {
     fn start(
         &self,
@@ -422,6 +424,7 @@ impl WatcherFactory for FailsScanAfterStart {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn a_scan_error_after_watcher_start_rolls_back_the_whole_opening() {
     let (_dir, root) = root();
@@ -449,14 +452,20 @@ fn a_scan_error_after_watcher_start_rolls_back_the_whole_opening() {
 
     use std::os::unix::ffi::OsStringExt;
     let invalid = std::ffi::OsString::from_vec(vec![0xff]);
-    std::fs::remove_file(root.as_std_path().join(invalid)).expect("remove invalid scan entry");
+    match std::fs::remove_file(root.as_std_path().join(invalid)) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("remove invalid scan entry: {error}"),
+    }
     open_with_timeout(Arc::clone(&host), root).expect("the same host retries after scan failure");
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     assert!(close_with_timeout(host).is_empty());
 }
 
+#[cfg(unix)]
 struct ArcScanFailure(Arc<FailsScanAfterStart>);
 
+#[cfg(unix)]
 impl WatcherFactory for ArcScanFailure {
     fn start(
         &self,
