@@ -59,7 +59,7 @@ use crate::jobs::{
 use crate::mount::mount;
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
-use crate::registry::{Bundle, BundleInfo, BundleRegistry};
+use crate::registry::{BundleInfo, BundleRegistry, StartupBundle};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
 use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
@@ -535,6 +535,8 @@ pub struct Host {
     sessions: Custody<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    /// Bundle già costruiti che ogni vault deve conoscere all'apertura.
+    startup_bundles: Vec<StartupBundle>,
     /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di
     /// configurazione non si può scrivere — o non c'è» composta da
     /// `install_logging` prima che l'host esistesse. Si tiene qui perché
@@ -664,6 +666,7 @@ impl Host {
             sessions: Custody::empty("le sessioni aperte"),
             watcher,
             sink: None,
+            startup_bundles: Vec::new(),
             session_notice: Mutex::new(None),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -737,6 +740,17 @@ impl Host {
     /// Sostituisce il rilevatore. Un e2e headless passa `NoWatcher`.
     pub fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
         self.watcher = watcher;
+        self
+    }
+    /// Aggiunge i bundle già composti che ogni vault deve conoscere all'avvio.
+    ///
+    /// La decisione `requested` dentro ogni voce appartiene al chiamante; qui
+    /// non viene salvata né combinata con `plugins.disabled`.
+    pub fn with_startup_bundles(
+        mut self,
+        bundles: impl IntoIterator<Item = StartupBundle>,
+    ) -> Self {
+        self.startup_bundles.extend(bundles);
         self
     }
 
@@ -899,8 +913,14 @@ impl Host {
             let (themes, errors) = crate::theme::discover_themes(config_dir);
             for theme in themes {
                 let bundle = std::sync::Arc::new(theme);
-                let id = bundle.manifest().id;
-                registry.remember(bundle);
+                let (id, remembered) = registry.remember_first(bundle);
+                if !remembered {
+                    tracing::error!(
+                        target: "fub.host",
+                        "theme `{id}` skipped: id already claimed"
+                    );
+                    continue;
+                }
                 if !disabled.contains(&id) {
                     if let Err(and) = registry.enable(&mut ws, &id) {
                         tracing::error!(target: "fub.host", "theme not mounted: {and}");
@@ -911,6 +931,28 @@ impl Host {
                 tracing::error!(target: "fub.host", "theme skipped: {problem}");
             }
         }
+        // I bundle del composition root entrano per ultimi: feature ufficiali,
+        // temi di macchina e la prima voce di startup che rivendica un id non
+        // possono essere sostituiti da una voce successiva.
+        let mut requested = Vec::new();
+        for startup in &self.startup_bundles {
+            let (bundle, should_enable) = startup.parts();
+            let (id, remembered) = registry.remember_first(bundle);
+            if !remembered {
+                tracing::error!(
+                    target: "fub.host",
+                    "startup bundle `{id}` skipped: id already claimed"
+                );
+                continue;
+            }
+            if should_enable {
+                requested.push(id);
+            }
+        }
+        for (id, error) in registry.enable_in_dependency_order(&mut ws, requested) {
+            tracing::error!(target: "fub.host", "startup bundle `{id}` not mounted: {error}");
+        }
+
         let registry = Custody::new("i componenti montati", registry);
 
         // **I tasti che questo vault propone e che nessuno ha guardato**

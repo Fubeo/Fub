@@ -107,7 +107,7 @@ pub use custody::Custody;
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};
-pub use registry::{Bundle, BundleError, BundleInfo, BundleRegistry, OnlyProviders};
+pub use registry::{Bundle, BundleError, BundleInfo, BundleRegistry, OnlyProviders, StartupBundle};
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};

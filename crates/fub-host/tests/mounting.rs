@@ -615,3 +615,133 @@ fn a_whole_bundle_leaves_no_lines_in_the_log() {
         "a complete mount has nothing to warn about: {log:?}"
     );
 }
+
+fn opens_with_startup_bundles(
+    bundles: impl IntoIterator<Item = fub_host::StartupBundle>,
+) -> (tempfile::TempDir, fub_host::Host) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Nota.md"), "# Nota\n").expect("a note");
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_startup_bundles(bundles);
+    host.open(&root).expect("startup bundles do not block open");
+    (dir, host)
+}
+
+fn startup_inventory(host: &fub_host::Host) -> Vec<fub_host::BundleInfo> {
+    host.with_session(None, |session| {
+        session.bundles().read().expect("registry").inventory()
+    })
+    .expect("open session")
+}
+
+#[test]
+fn requested_startup_bundle_is_mounted() {
+    const ID: &str = "test.startup.requested";
+    let journal: Journal = Arc::default();
+    let (_dir, host) = opens_with_startup_bundles([fub_host::StartupBundle::new(
+        Arc::new(BundleSpy::new(ID, &journal)),
+        true,
+    )]);
+
+    assert!(startup_inventory(&host)
+        .iter()
+        .any(|bundle| bundle.id == ID && bundle.mounted));
+    assert_eq!(lines(&journal), vec![format!("{ID}: activating")]);
+
+    let errors = host.close();
+    assert!(errors.is_empty(), "startup teardown failed: {errors:?}");
+}
+
+#[test]
+fn unrequested_startup_bundle_stays_known_and_unmounted() {
+    const ID: &str = "test.startup.unrequested";
+    let journal: Journal = Arc::default();
+    let (_dir, host) = opens_with_startup_bundles([fub_host::StartupBundle::new(
+        Arc::new(BundleSpy::new(ID, &journal)),
+        false,
+    )]);
+
+    assert!(startup_inventory(&host)
+        .iter()
+        .any(|bundle| bundle.id == ID && !bundle.mounted));
+    assert!(lines(&journal).is_empty());
+
+    let errors = host.close();
+    assert!(errors.is_empty(), "startup teardown failed: {errors:?}");
+    assert!(lines(&journal).is_empty());
+}
+
+#[test]
+fn broken_unrequested_neighbor_does_not_block_requested_bundle() {
+    const BROKEN: &str = "test.startup.broken-neighbor";
+    const REQUESTED: &str = "test.startup.valid-neighbor";
+    let broken: Journal = Arc::default();
+    let requested: Journal = Arc::default();
+    let (_dir, host) = opens_with_startup_bundles([
+        fub_host::StartupBundle::new(
+            Arc::new(BundleSpy::new(BROKEN, &broken).that_not_is_activates()),
+            false,
+        ),
+        fub_host::StartupBundle::new(Arc::new(BundleSpy::new(REQUESTED, &requested)), true),
+    ]);
+
+    let inventory = startup_inventory(&host);
+    assert!(inventory
+        .iter()
+        .any(|bundle| bundle.id == BROKEN && !bundle.mounted));
+    assert!(inventory
+        .iter()
+        .any(|bundle| bundle.id == REQUESTED && bundle.mounted));
+    assert!(lines(&broken).is_empty());
+    assert_eq!(lines(&requested), vec![format!("{REQUESTED}: activating")]);
+
+    let errors = host.close();
+    assert!(
+        errors.is_empty(),
+        "requested neighbor teardown failed: {errors:?}"
+    );
+}
+
+#[test]
+fn startup_collisions_keep_official_and_first_claims() {
+    const CLAIMED: &str = "test.startup.claimed";
+    let official_impostor: Journal = Arc::default();
+    let first: Journal = Arc::default();
+    let second: Journal = Arc::default();
+    let (_dir, host) = opens_with_startup_bundles([
+        fub_host::StartupBundle::new(
+            Arc::new(BundleSpy::new(fub_host::CORE_ID, &official_impostor)),
+            true,
+        ),
+        fub_host::StartupBundle::new(Arc::new(BundleSpy::new(CLAIMED, &first)), true),
+        fub_host::StartupBundle::new(Arc::new(BundleSpy::new(CLAIMED, &second)), true),
+    ]);
+
+    let inventory = startup_inventory(&host);
+    assert!(inventory
+        .iter()
+        .any(|bundle| bundle.id == fub_host::CORE_ID && bundle.mounted));
+    assert_eq!(
+        inventory
+            .iter()
+            .filter(|bundle| bundle.id == CLAIMED)
+            .count(),
+        1
+    );
+    assert!(inventory
+        .iter()
+        .any(|bundle| bundle.id == CLAIMED && bundle.mounted));
+    assert!(lines(&official_impostor).is_empty());
+    assert_eq!(lines(&first), vec![format!("{CLAIMED}: activating")]);
+    assert!(lines(&second).is_empty());
+
+    let errors = host.close();
+    assert!(
+        errors.is_empty(),
+        "winning claim teardown failed: {errors:?}"
+    );
+    assert!(lines(&official_impostor).is_empty());
+    assert!(lines(&second).is_empty());
+}

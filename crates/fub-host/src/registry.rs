@@ -337,6 +337,24 @@ pub trait Bundle: Send + Sync {
         BundleMount::new(self.plugin(), move |registrar| self.registration(registrar))
     }
 }
+/// Un bundle immutabile consegnato dal composition root prima dell'apertura.
+///
+/// `requested` è una decisione già calcolata dal chiamante: l'host non la
+/// persiste e non prova a ricostruirla da configurazione o stato installato.
+pub struct StartupBundle {
+    bundle: Arc<dyn Bundle>,
+    requested: bool,
+}
+
+impl StartupBundle {
+    pub fn new(bundle: Arc<dyn Bundle>, requested: bool) -> Self {
+        Self { bundle, requested }
+    }
+
+    pub(crate) fn parts(&self) -> (Arc<dyn Bundle>, bool) {
+        (Arc::clone(&self.bundle), self.requested)
+    }
+}
 
 /// Perché un bundle non è montato.
 #[derive(Debug)]
@@ -858,6 +876,22 @@ impl BundleRegistry {
         };
         self.known.retain(|known| known.manifest.id != id);
         self.known.push(known);
+    }
+    /// Ricorda il bundle solo se nessuna sorgente precedente ne ha già
+    /// rivendicato l'identità. Restituisce l'id e se questa istanza ha vinto.
+    pub(crate) fn remember_first(&mut self, bundle: Arc<dyn Bundle>) -> (String, bool) {
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        if self.knows(&id) {
+            return (id, false);
+        }
+        self.known.push(KnownBundle {
+            manifest,
+            kind: bundle.kind(),
+            trust: bundle.trust(),
+            bundle,
+        });
+        (id, true)
     }
 
     pub fn remember_guarded(
