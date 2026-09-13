@@ -1,9 +1,10 @@
 //! **Il rilevatore non ingerisce un file a metà scrittura** (difetto 0197).
 //!
-//! `plan_sync` e `refresh_from_disk` fanno due `stat` attorno alla lettura: se
-//! dimensione o data cambiano in mezzo, i byte sono una metà e il piano è
-//! `None`. Il debounce del rilevatore riproverà. Qui non si aspetta: un tempo
-//! su una macchina condivisa non è un segnale, e la prova è sui due numeri.
+//! `ParsedChange::invoke` e `refresh_from_disk` fanno due `stat` attorno alla
+//! lettura: se dimensione o data cambiano in mezzo, i byte sono una metà e il
+//! risultato detached viene scartato. Il debounce del rilevatore riproverà.
+//! Qui non si aspetta: un tempo su una macchina condivisa non è un segnale, e
+//! la prova è sui due numeri.
 //!
 //! Il supporto di prova **mente sulla dimensione** fra la prima e la seconda
 //! `stat` dello stesso path: è la finestra presa invece che aspettata.
@@ -135,11 +136,14 @@ fn an_unstable_file_is_not_parsed() {
     std::fs::write(&notes, "full version\n").expect("seed");
 
     let storage = InProgress::new(notes.clone(), 4, 18);
-    let ws = opened(&root, storage);
-
+    let mut ws = opened(&root, storage);
+    let plan = ws.plan_sync(&notes).expect("owned preparation");
+    let changed = ws
+        .sync_path_prepared(&notes, Some(plan.invoke()))
+        .expect("unstable input is a handled no-op");
     assert!(
-        ws.plan_sync(&notes).is_none(),
-        "two disagreeing stat: the plan is None, not half-swallowed"
+        !changed,
+        "two disagreeing stat must be discarded, not half-swallowed"
     );
 }
 

@@ -13,8 +13,8 @@ use fub_abi::traits::{
 };
 use fub_abi::PluginError;
 use fub_format_markdown::MarkdownProvider;
-use fub_host::registry::{Bundle, BundleError, BundleRegistry, OnlyProviders};
-use fub_kernel::{Trust, Workspace};
+use fub_host::registry::{Bundle, BundleError, BundleRegistry, OnlyProviders, Registrar};
+use fub_kernel::Trust;
 use fub_testkit::{Bench, Mounted};
 
 fn vault() -> Mounted {
@@ -158,25 +158,21 @@ impl Bundle for BundleSpy {
         })
     }
 
-    fn register(&self, ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
         let mut failures = Vec::new();
-        if let Err(error) =
-            ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id)))
+        if let Err(error) = registrar.register_command_provider(Box::new(GreetingProvider(self.id)))
         {
             failures.push(format!("command: {error}"));
         }
-        if let Err(error) = ws.register_event_handler(
-            self.id,
-            Box::new(EventRecorder {
-                id: self.id,
-                journal: self.journal.clone(),
-            }),
-        ) {
+        if let Err(error) = registrar.register_event_handler(Box::new(EventRecorder {
+            id: self.id,
+            journal: self.journal.clone(),
+        })) {
             failures.push(format!("handler: {error}"));
         }
         if self.loses_a_piece {
             if let Err(error) =
-                ws.register_command_provider(self.id, Box::new(GreetingProvider(self.id)))
+                registrar.register_command_provider(Box::new(GreetingProvider(self.id)))
             {
                 failures.push(format!("command: {error}"));
             }
@@ -227,7 +223,7 @@ impl Bundle for DependencyBundle {
         OnlyProviders::boxed(self.manifest())
     }
 
-    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }
@@ -254,8 +250,33 @@ impl Bundle for PermissionBundle {
         OnlyProviders::boxed(self.manifest())
     }
 
-    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
         Vec::new()
+    }
+}
+
+struct PanickingPrepareBundle(&'static str);
+
+impl Bundle for PanickingPrepareBundle {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::new(self.0, self.0)
+            .granting(PluginPermissions::of(&[permission::READ_VAULT]))
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Community
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        OnlyProviders::boxed(self.manifest())
+    }
+
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn prepare(&self) -> fub_host::registry::BundleMount<'_> {
+        panic!("deterministic preparation panic")
     }
 }
 
@@ -293,6 +314,61 @@ fn a_activate_that_fails_not_leaves_a_plugin_declared() {
     assert!(ws.plugins().is_empty());
     assert!(ws.commands().is_empty());
     assert!(registry.ids().is_empty());
+}
+
+#[test]
+fn a_prepare_panic_is_typed_and_leaves_no_residue_before_a_valid_mount() {
+    const ID: &str = "com.acme.panicking-prepare";
+    const VALID: &str = "test.valid-after-prepare-panic";
+    let mut ws = vault();
+    let journal: Journal = Arc::default();
+    let mut registry = BundleRegistry::new();
+
+    let error = registry
+        .mount(&PanickingPrepareBundle(ID), &mut ws)
+        .expect_err("a preparation panic must become a mount error");
+
+    assert!(
+        matches!(
+            error,
+            BundleError::Preparation { ref id, ref error }
+                if id == ID && error.contains("deterministic preparation panic")
+        ),
+        "preparation must retain its typed root cause: {error}"
+    );
+    assert!(ws.plugins().is_empty(), "declaration must be withdrawn");
+    assert!(ws.commands().is_empty(), "providers must not remain");
+    assert!(registry.ids().is_empty(), "nothing may be mounted");
+    let key = permission_key(ID, permission::READ_VAULT);
+    let entries = match ws
+        .query_index(IndexQuery::Settings {
+            plugin: Some(ID.to_string()),
+        })
+        .expect("settings query")
+    {
+        IndexResult::Settings(entries) => entries,
+        other => panic!("settings query answered off-topic: {other:?}"),
+    };
+    assert!(
+        entries.into_iter().all(|entry| entry.spec.key != key),
+        "the default-deny created before prepare must be rolled back"
+    );
+
+    registry
+        .mount(&BundleSpy::new(VALID, &journal), &mut ws)
+        .expect("the registry and workspace remain reusable");
+    assert_eq!(registry.ids(), vec![VALID]);
+    let errors = registry.close(&mut ws);
+    assert!(
+        errors.is_empty(),
+        "valid bundle teardown failed: {errors:?}"
+    );
+    assert!(ws.is_closed());
+    assert!(ws.plugins().is_empty());
+    assert!(registry.ids().is_empty());
+    assert!(lines(&journal)
+        .iter()
+        .any(|line| line.contains("stopping (host=true, provider=true)")));
 }
 
 #[test]

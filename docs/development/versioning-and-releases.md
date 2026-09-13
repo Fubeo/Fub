@@ -62,13 +62,13 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 | organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../../crates/fub-kernel/src/viewstate.rs) | 1 | posizione e stato per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:147`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |
-| impostazioni | [`crates/fub-kernel/src/settings.rs:89`](../../crates/fub-kernel/src/settings.rs) | 1 | valori per vault e macchina |
+| impostazioni | [`crates/fub-kernel/src/settings.rs:90`](../../crates/fub-kernel/src/settings.rs) | 1 | valori per vault e macchina |
 | versioning | [`crates/fub-features/src/versioning.rs:261`](../../crates/fub-features/src/versioning.rs) | 1 | snapshot dei file |
 | indice di ricerca | [`crates/fub-features/src/search.rs:93`](../../crates/fub-features/src/search.rs) | 5 | campi, opzioni e tokenizer dell'indice |
 | registro delle mutazioni | [`crates/fub-kernel/src/journal.rs:177`](../../crates/fub-kernel/src/journal.rs) | 1 | mutazioni applicate al vault |
 | bozze | [`crates/fub-kernel/src/drafts.rs:110`](../../crates/fub-kernel/src/drafts.rs) | 1 | contenuto non ancora salvato |
 | bundle diagnostico | [`crates/fub-kernel/src/maintenance.rs:232`](../../crates/fub-kernel/src/maintenance.rs) | 1 | copia dei fatti raccolti per la diagnostica |
-| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:149`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
+| sidecar del cestino | [`crates/fub-kernel/src/vault.rs:150`](../../crates/fub-kernel/src/vault.rs) | 1 | provenienza di una voce cestinata |
 
 ### Derivato
 

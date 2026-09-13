@@ -265,7 +265,7 @@ impl crate::registry::Bundle for ThemeBundle {
         OnlyProviders::boxed(self.manifest())
     }
 
-    fn register(&self, _ws: &mut fub_kernel::Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut crate::registry::Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }

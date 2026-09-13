@@ -33,7 +33,7 @@ use camino::Utf8PathBuf;
 use fub_abi::model::DocId;
 use fub_kernel::storage::{FsStorage, VaultStorage};
 use fub_kernel::{FormatRegistry, MachineSettings, OrganizationStore, Vault, Workspace};
-use fub_testkit::SampleText;
+use fub_testkit::{restore_document, SampleText};
 
 struct Bench {
     _dir: tempfile::TempDir,
@@ -177,11 +177,13 @@ fn a_restore_does_not_land_where_the_scan_does_not_watch() {
     let mut ws = bench.workspace();
     let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
 
-    let err = ws
-        .restore_from_trash(&trashed, Some(DocId::new(".nascosta/Idea.txt")))
-        .unwrap_err();
+    let err =
+        restore_document(&mut ws, &trashed, Some(DocId::new(".nascosta/Idea.txt"))).unwrap_err();
 
-    assert!(err.to_string().contains("nome non valido"), "{err}");
+    assert!(
+        matches!(&err, fub_abi::PluginError::BadArgs(_)),
+        "errore inatteso: {err}"
+    );
     assert!(
         !bench.root.join(".nascosta").exists(),
         "niente è stato creato nella cartella nascosta"
@@ -205,9 +207,7 @@ fn a_restore_to_its_place_brings_back_a_name_that_would_not_be_created() {
     let mut ws = bench.workspace();
     let trashed = ws.delete_document(&DocId::new("CON.txt")).unwrap();
 
-    let returned = ws
-        .restore_from_trash(&trashed, None)
-        .expect("il nome c'era già: torna");
+    let returned = restore_document(&mut ws, &trashed, None).expect("il nome c'era già: torna");
 
     assert_eq!(returned, DocId::new("CON.txt"));
     assert!(bench.root.join("CON.txt").exists());

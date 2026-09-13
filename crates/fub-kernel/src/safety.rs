@@ -140,6 +140,25 @@ pub fn external<R, E>(
         Err(payload) => Err(wrap(format!("{context}: {}", why(payload)))),
     }
 }
+/// Isola una callback interna posseduta da un plugin ma non classificata come
+/// porta ABI. Il panico nomina sia l'owner sia il gancio senza fabbricare un
+/// [`Gate`] che gli eventi non possono osservare.
+pub(crate) fn calling_callback<R>(
+    who: &str,
+    callback: &str,
+    f: impl FnOnce() -> Result<R, PluginError>,
+) -> Result<R, PluginError> {
+    match catch_unwind(AssertUnwindSafe(f)) {
+        Ok(out) => out,
+        Err(payload) => Err(PluginError::Internal(
+            format!(
+                "`{who}` è andato in panico in `{callback}`: {}",
+                why(payload)
+            )
+            .into(),
+        )),
+    }
+}
 
 /// Come [`calling`], per chi risponde di no in un'altra lingua: `wrap` è la
 /// variante d'errore in cui il panico si traduce.

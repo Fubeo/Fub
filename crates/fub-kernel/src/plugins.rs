@@ -112,6 +112,10 @@ pub struct PluginEntry {
     /// si presta a ogni evento consegnato, e un `BTreeMap` clonato per evento
     /// per handler è un costo che non compra niente.
     pub(crate) granted: Granted,
+    /// Identifies this declaration, even when the same id is retired and
+    /// declared again in the same workspace.
+    pub(crate) generation: u64,
+    pub(crate) retiring: bool,
     pub registrations: Vec<Registration>,
 }
 
@@ -167,6 +171,10 @@ pub enum RegistryError {
     /// L'indice **è** registrato e la sua `activate` è fallita: reindicizzerà
     /// tutto, che è lento e non sbagliato.
     Activate(PluginError),
+    /// A provider declaration panicked before registration; nothing was published.
+    External(PluginError),
+    /// A prepared registration has already been consumed or is in the wrong phase.
+    RegistrationPhase(String),
     /// Una **disattivazione** chiesta mentre i provider sono in prestito, cioè
     /// da dentro la chiamata di un provider (§9.4).
     ///
@@ -246,7 +254,10 @@ impl std::fmt::Display for RegistryError {
             RegistryError::Route(c) => write!(f, "{c}"),
             RegistryError::Syntax(c) => write!(f, "{c}"),
             RegistryError::Renderer(c) => write!(f, "{c}"),
-            RegistryError::Activate(and) => write!(f, "{and}"),
+            RegistryError::Activate(and) | RegistryError::External(and) => write!(f, "{and}"),
+            RegistryError::RegistrationPhase(id) => {
+                write!(f, "`{id}` registration token is not in the required phase")
+            }
             RegistryError::Busy(id) => write!(
                 f,
                 "`{id}` cannot be deactivated from inside a provider call: \
@@ -261,9 +272,18 @@ impl std::fmt::Display for RegistryError {
 impl std::error::Error for RegistryError {}
 
 /// Chi è registrato, in ordine di dichiarazione.
-#[derive(Default)]
 pub struct PluginRegistry {
     entries: Vec<PluginEntry>,
+    next_generation: u64,
+}
+
+impl Default for PluginRegistry {
+    fn default() -> Self {
+        Self {
+            entries: Vec::new(),
+            next_generation: 1,
+        }
+    }
 }
 
 impl PluginRegistry {
@@ -281,10 +301,14 @@ impl PluginRegistry {
             return Err(RegistryError::DuplicatePlugin(manifest.id));
         }
         let granted = Granted::new(&manifest.id, &manifest.permissions, trust);
+        let generation = self.next_generation;
+        self.next_generation = self.next_generation.wrapping_add(1).max(1);
         self.entries.push(PluginEntry {
             manifest,
             trust,
             granted,
+            generation,
+            retiring: false,
             registrations: Vec::new(),
         });
         Ok(())
@@ -333,6 +357,24 @@ impl PluginRegistry {
 
     pub fn get(&self, id: &str) -> Option<&PluginEntry> {
         self.entries.iter().find(|and| and.manifest.id == id)
+    }
+
+    pub(crate) fn generation_of(&self, id: &str) -> Option<u64> {
+        self.get(id).map(|entry| entry.generation)
+    }
+
+    pub(crate) fn is_retiring(&self, id: &str) -> bool {
+        self.get(id).is_some_and(|entry| entry.retiring)
+    }
+
+    pub(crate) fn begin_retirement(&mut self, id: &str) {
+        if let Some(entry) = self
+            .entries
+            .iter_mut()
+            .find(|entry| entry.manifest.id == id)
+        {
+            entry.retiring = true;
+        }
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, PluginEntry> {
@@ -528,6 +570,9 @@ impl PluginRegistry {
         let Some(entry) = self.get(plugin) else {
             return Err(RegistryError::UnknownPlugin(plugin.to_string()));
         };
+        if entry.retiring {
+            return Err(RegistryError::RegistrationPhase(plugin.to_owned()));
+        }
         // Prima di ogni altra domanda, e prima del ramo che lascia passare le
         // specie che non nominano niente: un revocato non registra **nessuna**
         // specie, e un handler di eventi è codice che gira quanto una view.

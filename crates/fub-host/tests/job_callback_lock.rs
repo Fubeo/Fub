@@ -109,7 +109,7 @@ impl Bundle for JobProbeBundle {
         })
     }
 
-    fn register(&self, _workspace: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut fub_host::registry::Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }
@@ -148,18 +148,12 @@ fn bench(vault: &Vault) -> Bench {
     let (entered_tx, entered_rx) = mpsc::sync_channel(1);
     let (release_tx, release_rx) = mpsc::sync_channel(1);
     host.with_session(None, |session| {
-        let mut workspace = session.workspace().write().expect("the vault is alive");
-        session
-            .bundles()
-            .write()
-            .expect("the bundle registry is alive")
-            .mount(
-                &JobProbeBundle {
-                    entered: entered_tx,
-                    release: Arc::new(Mutex::new(release_rx)),
-                },
-                &mut workspace,
-            )
+        let bundle = Arc::new(JobProbeBundle {
+            entered: entered_tx,
+            release: Arc::new(Mutex::new(release_rx)),
+        });
+        fub_host::BundleRegistry::remember_guarded(session.bundles(), bundle).unwrap();
+        fub_host::BundleRegistry::enable_guarded(session.bundles(), session.workspace(), PLUGIN)
             .expect("the job probe mounts");
     })
     .expect("an open session exists");

@@ -21,6 +21,7 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
 use fub_abi::FormatProvider;
 use fub_kernel::{data_root, FormatRegistry, Workspace};
+use fub_testkit::restore_document;
 
 /// Un provider che non legge niente: qui i documenti servono a esistere, non a
 /// dire qualcosa.
@@ -215,9 +216,8 @@ fn also_the_restore_on_a_other_path_and_a_rename() {
     // Qualcun altro riprende il path.
     notes(&mut ws, "Nota.md", "un'altra");
 
-    let returned = ws
-        .restore_from_trash(&trashed, Some(DocId::new("Nota 1.md")))
-        .expect("ripristino");
+    let returned =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Nota 1.md"))).expect("ripristino");
     assert_eq!(returned, DocId::new("Nota 1.md"));
 
     assert_eq!(

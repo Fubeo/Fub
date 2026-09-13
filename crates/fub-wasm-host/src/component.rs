@@ -11,8 +11,8 @@ use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::traits::{CommandProvider, HostApi, Plugin, PluginManifest};
 use fub_abi::PluginError;
-use fub_host::registry::{Bundle, BundleMount, RegistrationReport};
-use fub_kernel::{Trust, Workspace};
+use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
+use fub_kernel::Trust;
 use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType};
 use wasmtime::{Engine, Store};
@@ -390,7 +390,7 @@ impl Bundle for WasmBundle {
 
     /// La registrazione WASM richiede l'istanza preparata insieme al plugin.
     /// Una chiamata diretta non può quindi fabbricare correttamente i provider.
-    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
         vec!["WASM providers require a prepared bundle mount".to_string()]
     }
 
@@ -414,8 +414,7 @@ impl Bundle for WasmBundle {
         let plugin = Box::new(WasmPlugin {
             inner: Arc::clone(&inner),
         });
-        let id = self.manifest.id.clone();
-        BundleMount::new(plugin, move |ws| {
+        BundleMount::new(plugin, move |registrar| {
             let specs = match Self::declared_commands(&inner) {
                 Ok(specs) => specs,
                 Err(error) => return RegistrationReport::failed(error),
@@ -425,7 +424,7 @@ impl Bundle for WasmBundle {
             }
 
             let provider = WasmCommandProvider { inner, specs };
-            match ws.register_command_provider(&id, Box::new(provider)) {
+            match registrar.register_command_provider(Box::new(provider)) {
                 Ok(()) => RegistrationReport::complete(),
                 Err(error) => {
                     RegistrationReport::failed(format!("comandi non registrati: {error}"))

@@ -110,9 +110,12 @@ pub use storage::{
     Stat, VaultStorage,
 };
 pub use syntax::{SyntaxConflict, SyntaxRegistry, SyntaxSnapshot};
-pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
+pub use vault::{data_root, PreparedIgnoreCheck, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange, Rejected,
-    Trust, Workspace, INDEX_JOB, MAIN_PANE,
+    new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
+    ExternalRenamePlan, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange,
+    ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
+    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedExplicitRename,
+    PreparedExternalAssetRename, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, MAIN_PANE,
 };

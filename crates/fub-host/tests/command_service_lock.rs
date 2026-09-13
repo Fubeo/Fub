@@ -29,8 +29,11 @@ use std::time::{Duration, Instant};
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandScope, CommandSpec, InvokeMode};
 use fub_abi::model::DocId;
+use fub_abi::net::{HttpRequest, HttpResponse};
+use fub_abi::options::permission;
 use fub_abi::traits::{
-    CommandProvider, HostApi, HostCommands, HostServices, PluginManifest, ServiceProvider,
+    CommandProvider, HostApi, HostCommands, HostNetwork, HostServices, PluginManifest,
+    ServiceProvider,
 };
 use fub_abi::PluginError;
 use fub_host::{Custody, Host, JobHost, NoWatcher};
@@ -166,6 +169,51 @@ impl ServiceProvider for BlockingService {
     }
 }
 
+struct CountingProvider(Arc<AtomicUsize>);
+
+impl CommandProvider for CountingProvider {
+    fn commands(&self) -> Vec<CommandSpec> {
+        vec![CommandSpec::new(COMMAND, "Caller policy probe").with_scope(CommandScope::read_only())]
+    }
+
+    fn invoke(
+        &self,
+        _: &str,
+        _: serde_json::Value,
+        _: InvokeMode,
+        _: &mut dyn HostApi,
+    ) -> Result<CommandOutcome, PluginError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(CommandOutcome::done())
+    }
+}
+
+impl ServiceProvider for CountingProvider {
+    fn call(
+        &self,
+        _: &str,
+        _: &str,
+        _: serde_json::Value,
+        _: &mut dyn HostApi,
+    ) -> Result<serde_json::Value, PluginError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(serde_json::json!({ "called": true }))
+    }
+}
+
+struct CountingNetwork(Arc<AtomicUsize>);
+
+impl HostNetwork for CountingNetwork {
+    fn fetch(&self, _request: HttpRequest) -> Result<HttpResponse, PluginError> {
+        self.0.fetch_add(1, Ordering::SeqCst);
+        Ok(HttpResponse {
+            status: 200,
+            headers: Vec::new(),
+            body: Vec::new(),
+        })
+    }
+}
+
 fn boundary(
     workspace: &Custody<Workspace>,
 ) -> (
@@ -292,6 +340,126 @@ fn assert_workspace_reusable(workspace: &Custody<Workspace>) {
         workspace.reports(),
         0,
         "a provider panic outside the guard must not poison the custody"
+    );
+}
+
+#[test]
+fn undeclared_and_ungranted_job_hosts_do_not_invoke_commands() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(COMMAND_OWNER, "Audit command boundary")
+            .expect("command owner declares");
+        ws.register_command_provider(COMMAND_OWNER, Box::new(CountingProvider(calls.clone())))
+            .expect("command provider registers");
+    }
+
+    let mut job = JobHost::new(workspace.clone(), CALLER);
+    assert!(matches!(
+        job.run_command(COMMAND, serde_json::Value::Null),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    workspace
+        .write()
+        .expect("the vault is alive")
+        .register_plugin(
+            PluginManifest::new(CALLER, "Audit boundary caller"),
+            Trust::Community,
+        )
+        .expect("caller declares without grants");
+    let denied = job.run_command(COMMAND, serde_json::Value::Null);
+    assert!(
+        matches!(&denied, Err(PluginError::PermissionDenied(message))
+            if message.to_string().contains(permission::RUN_COMMAND)),
+        "the missing command grant must be reported: {denied:?}"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn undeclared_and_ungranted_job_hosts_do_not_invoke_services() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_plugin(
+            PluginManifest::core(SERVICE_OWNER, "Audit service boundary").providing(&[SERVICE]),
+            Trust::Core,
+        )
+        .expect("service owner declares");
+        ws.register_service_provider(SERVICE_OWNER, Box::new(CountingProvider(calls.clone())))
+            .expect("service provider registers");
+    }
+
+    let mut job = JobHost::new(workspace.clone(), CALLER);
+    assert!(matches!(
+        job.call_service(SERVICE, "probe", serde_json::Value::Null),
+        Err(PluginError::PermissionDenied(_))
+    ));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+
+    workspace
+        .write()
+        .expect("the vault is alive")
+        .register_plugin(
+            PluginManifest::new(CALLER, "Audit boundary caller"),
+            Trust::Community,
+        )
+        .expect("caller declares without grants");
+    let denied = job.call_service(SERVICE, "probe", serde_json::Value::Null);
+    assert!(
+        matches!(&denied, Err(PluginError::PermissionDenied(message))
+            if message.to_string().contains(permission::CALL_SERVICE)),
+        "the missing service grant must be reported: {denied:?}"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn a_direct_dry_run_job_host_never_reaches_the_service_provider() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    register_service(&workspace, Box::new(CountingProvider(Arc::clone(&calls))));
+
+    let denied = JobHost::new(workspace, CALLER)
+        .in_mode(InvokeMode::DryRun)
+        .call_service(SERVICE, "probe", serde_json::Value::Null);
+
+    assert!(matches!(denied, Err(PluginError::PermissionDenied(_))));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "DryRun is rejected before ServiceProvider::call"
+    );
+}
+
+#[test]
+fn a_direct_dry_run_job_host_never_reaches_the_network_provider() {
+    let vault = vault();
+    let (_host, workspace) = open(&vault);
+    let calls = Arc::new(AtomicUsize::new(0));
+    {
+        let mut ws = workspace.write().expect("the vault is alive");
+        ws.register_core_feature(CALLER, "Audit boundary caller")
+            .expect("network caller declares");
+        ws.set_network(Arc::new(CountingNetwork(Arc::clone(&calls))));
+    }
+
+    let denied = JobHost::new(workspace, CALLER)
+        .in_mode(InvokeMode::DryRun)
+        .fetch(HttpRequest::get("https://api.acme.test/probe"));
+
+    assert!(matches!(denied, Err(PluginError::PermissionDenied(_))));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "DryRun is rejected before HostNetwork::fetch"
     );
 }
 
@@ -530,4 +698,91 @@ fn a_service_panic_is_converted_and_the_next_call_still_works() {
                 && message.to_string().contains("panic intenzionale del servizio")),
         "the service panic must become a qualified provider error: {failed:?}"
     );
+}
+
+#[test]
+fn a_scoped_job_cannot_partially_replay_a_global_undo() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8 vault path");
+    std::fs::create_dir(root.join("public")).expect("public folder");
+    std::fs::create_dir(root.join("secret")).expect("secret folder");
+    let public = root.join("public/Note.md");
+    let secret = root.join("secret/Note.md");
+    std::fs::write(&public, "before public\n").expect("public note");
+    std::fs::write(&secret, "before secret\n").expect("secret note");
+
+    let mut formats = fub_kernel::FormatRegistry::new();
+    formats
+        .register(fub_format_markdown::MarkdownProvider::boxed())
+        .expect("markdown format registers");
+    let mut workspace = Workspace::new(&root, formats).expect("workspace opens");
+    workspace
+        .register_plugin(
+            PluginManifest::core(fub_features::COMMANDS_ID, fub_features::COMMANDS_ID)
+                .speaking("it", fub_features::commands::catalog()),
+            Trust::Core,
+        )
+        .expect("core commands declare");
+    workspace
+        .register_command_provider(
+            fub_features::COMMANDS_ID,
+            Box::new(fub_features::CoreCommands),
+        )
+        .expect("core commands register");
+
+    let mut permissions =
+        fub_abi::traits::PluginPermissions::of(&[permission::RUN_COMMAND, permission::WRITE_VAULT]);
+    permissions
+        .granted
+        .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+    workspace
+        .register_plugin(
+            PluginManifest::new(CALLER, "Scoped undo caller").granting(permissions),
+            Trust::Community,
+        )
+        .expect("scoped caller declares");
+    workspace.reindex().expect("seed notes enter the workspace");
+    workspace
+        .invoke_command(
+            fub_features::VAULT_REPLACE,
+            serde_json::json!({
+                "find": "before",
+                "replace": "after",
+                "docs": ["public/Note.md", "secret/Note.md"],
+            }),
+            InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect("the user seeds a two-document undo");
+    assert_eq!(std::fs::read_to_string(&public).unwrap(), "after public\n");
+    assert_eq!(std::fs::read_to_string(&secret).unwrap(), "after secret\n");
+
+    let workspace = Custody::new("the scoped undo workspace", workspace);
+    let error = JobHost::new(workspace.clone(), CALLER)
+        .undo_last()
+        .expect_err("a public-only caller cannot begin a vault-wide undo");
+    assert!(matches!(error, PluginError::PermissionDenied(_)));
+    assert_eq!(
+        std::fs::read_to_string(&public).unwrap(),
+        "after public\n",
+        "the allowed first replay step must not run"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&secret).unwrap(),
+        "after secret\n",
+        "the denied replay step must not be reached"
+    );
+
+    workspace
+        .write()
+        .expect("workspace is alive")
+        .invoke_command(
+            fub_features::VAULT_UNDO,
+            serde_json::Value::Null,
+            InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect("the denied call left the undo entry available");
+    assert_eq!(std::fs::read_to_string(public).unwrap(), "before public\n");
+    assert_eq!(std::fs::read_to_string(secret).unwrap(), "before secret\n");
 }

@@ -29,6 +29,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::custom::SyntaxForm;
+use fub_abi::edit::Revision;
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, SourceKind,
 };
@@ -38,7 +39,7 @@ use crate::error::{KernelError, Result};
 use crate::registry::FormatRegistry;
 use crate::renderer::RendererRegistry;
 use crate::syntax::SyntaxRegistry;
-use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
+use crate::vault::{data_root, PreparedVaultRestore, TrashEntry, Vault, FUB_DIR};
 
 /// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
 /// ha `<vault>/.fub/plugins/<id>/` per i dati autorevoli e non vede nient'altro;
@@ -48,6 +49,25 @@ use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
 /// metterlo in sync deve portarsi dietro anche loro.
 const PLUGIN_DATA_DIR: &str = "plugins";
+
+fn plugin_data_roots(vault: &Vault) -> Vec<Utf8PathBuf> {
+    let mut roots = Vec::new();
+    for plugins in [
+        vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
+        data_root(vault.root()).join(PLUGIN_DATA_DIR),
+    ] {
+        roots.extend(
+            vault
+                .storage()
+                .list(&plugins)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|entry| entry.stat.is_dir())
+                .map(|entry| entry.path),
+        );
+    }
+    roots
+}
 
 /// Parser risolto senza eseguire codice esterno. Provider, descriptor e regole
 /// sono una fotografia coerente che può attraversare il confine del lock.
@@ -89,6 +109,76 @@ impl PreparedParse {
             renderers,
             options,
         )?)
+    }
+}
+/// Handle owned per le sole letture di una preparazione staccata.
+///
+/// Clona gli handle condivisi e la fotografia delle sintassi, non lo stato
+/// mutabile del [`Workspace`](crate::Workspace).
+pub(crate) struct DocumentStoreHandle {
+    vault: Vault,
+    registry: Arc<FormatRegistry>,
+    syntax: SyntaxRegistry,
+}
+
+impl DocumentStoreHandle {
+    pub(crate) fn list_trash(&self) -> Result<Vec<TrashEntry>> {
+        self.vault.list_trash()
+    }
+
+    pub(crate) fn read(&self, id: &DocId) -> Result<String> {
+        self.vault.read(id)
+    }
+
+    pub(crate) fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
+        self.vault.read_bytes(id)
+    }
+
+    pub(crate) fn prepare_restore(
+        &self,
+        entry: TrashEntry,
+        target: DocId,
+        revision: Revision,
+    ) -> Result<PreparedVaultRestore> {
+        self.vault.prepare_restore(entry, target, revision)
+    }
+
+    /// Censisce e migra gli spazi per-documento soltanto quando il token
+    /// detached viene invocato.
+    pub(crate) fn migrate_data(&self, from: &DocId, to: &DocId) -> Vec<String> {
+        let roots = plugin_data_roots(&self.vault);
+        crate::docdata::migrate_data(self.vault.storage().as_ref(), &roots, from, to)
+    }
+    /// Osserva una revisione soltanto se metadati e identità del file restano
+    /// uguali ai due lati della lettura. Il chiamante può così riconvalidare un
+    /// feed senza tenere in prestito il workspace durante l'I/O.
+    pub(crate) fn observe_revision_stable(
+        &self,
+        id: &DocId,
+    ) -> Result<Option<(Revision, Option<crate::storage::FileIdentity>)>> {
+        let Some(before) = self.vault.stat(id) else {
+            return Ok(None);
+        };
+        let identity_before = self.vault.file_identity(id);
+        let revision = Revision::of_bytes(&self.vault.read_bytes(id)?);
+        let Some(after) = self.vault.stat(id) else {
+            return Ok(None);
+        };
+        let identity_after = self.vault.file_identity(id);
+        Ok((before == after && identity_before == identity_after)
+            .then_some((revision, identity_after)))
+    }
+
+    pub(crate) fn prepare_parse_with_kind(
+        &self,
+        id: &DocId,
+    ) -> Result<Option<(fub_abi::format::SourceKind, PreparedParse)>> {
+        let ext = extension_of(id).unwrap_or_default();
+        let Some(descriptor) = self.registry.descriptor_for_ext(&ext) else {
+            return Ok(None);
+        };
+        let source = descriptor.source;
+        prepare_parse(&self.registry, &self.syntax, id).map(|parser| Some((source, parser)))
     }
 }
 
@@ -135,6 +225,14 @@ impl DocumentStore {
             renderers: RendererRegistry::new(),
         })
     }
+    /// Fotografia owned delle sole dipendenze necessarie alle letture staccate.
+    pub(crate) fn detached(&self) -> DocumentStoreHandle {
+        DocumentStoreHandle {
+            vault: self.vault.clone(),
+            registry: Arc::clone(&self.registry),
+            syntax: self.syntax.clone(),
+        }
+    }
 
     /// La radice del vault.
     pub fn root(&self) -> &Utf8Path {
@@ -159,22 +257,7 @@ impl DocumentStore {
     /// Risolve il parser senza eseguire callback. Il descriptor viene dalla
     /// cache del registro, le regole sono una fotografia condivisa.
     pub(crate) fn prepare_parse(&self, id: &DocId) -> Result<PreparedParse> {
-        let ext = extension_of(id).unwrap_or_default();
-        let provider = self
-            .registry
-            .provider_arc_for_ext(&ext)
-            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
-        let descriptor = self
-            .registry
-            .descriptor_for_ext(&ext)
-            .cloned()
-            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
-        Ok(PreparedParse {
-            id: id.clone(),
-            descriptor,
-            provider,
-            syntax: self.syntax.clone(),
-        })
+        prepare_parse(&self.registry, &self.syntax, id)
     }
 
     // --- cestino -----------------------------------------------------------
@@ -373,27 +456,29 @@ impl DocumentStore {
     /// non può accorgersi di niente, ed è esattamente chi ha più bisogno che
     /// qualcun altro se ne accorga per lui.
     pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
-        let mut roots = Vec::new();
-        for plugins in [
-            self.vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
-            data_root(self.vault.root()).join(PLUGIN_DATA_DIR),
-        ] {
-            // In ordine — lo dà `VaultStorage::list` — perché gli errori che ne
-            // escono finiscono in un messaggio, e un messaggio che cambia ordine a
-            // ogni giro non si confronta. Le due radici restano entrambe leggibili
-            // durante il passaggio additivo del layout.
-            roots.extend(
-                self.vault
-                    .storage()
-                    .list(&plugins)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|and| and.stat.is_dir())
-                    .map(|and| and.path),
-            );
-        }
-        roots
+        plugin_data_roots(&self.vault)
     }
+}
+
+fn prepare_parse(
+    registry: &FormatRegistry,
+    syntax: &SyntaxRegistry,
+    id: &DocId,
+) -> Result<PreparedParse> {
+    let ext = extension_of(id).unwrap_or_default();
+    let provider = registry
+        .provider_arc_for_ext(&ext)
+        .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+    let descriptor = registry
+        .descriptor_for_ext(&ext)
+        .cloned()
+        .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+    Ok(PreparedParse {
+        id: id.clone(),
+        descriptor,
+        provider,
+        syntax: syntax.clone(),
+    })
 }
 
 fn ensure_model_identity(requested: &DocId, returned: &DocId) -> Result<()> {

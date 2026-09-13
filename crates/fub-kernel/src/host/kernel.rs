@@ -192,14 +192,23 @@ impl VaultStructure for KernelHost<'_> {
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        // `entry` nomina un file **dentro** `.trash/`, non un documento del
-        // vault: il recinto che vale qui è quello del cestino, e lo applica
-        // `restore_from_trash` cercando la voce fra quelle che esistono — un id
-        // che non è nel cestino è `NotFound`, non un path da spazzolare. Il
-        // `to`, che invece atterra nel vault, lo valida il kernel.
-        self.ws
-            .restore_from_trash(entry, to)
-            .map_err(PluginError::from)
+        let prepared = self
+            .ws
+            .prepare_document_restore(entry, to)
+            .map_err(PluginError::from)?;
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let pending = self
+            .ws
+            .commit_document_restore(completed)
+            .map_err(|failure| {
+                let (error, _) = *failure;
+                error
+            })?;
+        let pending = pending.invoke_indexes();
+        self.ws.finish_document_restore(pending).map_err(|failure| {
+            let (error, _) = *failure;
+            error
+        })
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {

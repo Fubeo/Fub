@@ -1,18 +1,14 @@
-//! **La rinomina che il debounce spezza, e quella che il crash può spezzare.**
+//! **L'identità segue solo una rinomina esplicita.**
 //!
-//! Due difetti, la stessa identità:
+//! Le notifiche `Touched` descrivono soltanto lo stato di un path. Anche quando
+//! una rimozione e una creazione hanno gli stessi byte, il kernel non può
+//! dedurne che siano lo stesso documento: bozza, organizzazione e dati
+//! per-documento restano sotto la chiave precedente. La rotta esplicita di
+//! rename, invece, migra quell'identità una volta sola.
 //!
-//! 1. **0198.** `changes()` accoppia solo `RenameMode::Both` nella stessa
-//!    finestra. Partenza e arrivo in due lotti arrivano come remove+add, e
-//!    senza l'accoppiamento per impronta la bozza e lo stato per-documento
-//!    restano sotto il nome morto.
-//! 2. **0168.** `rename_document` spostava il file e *poi* i dati: un crash
-//!    in mezzo lasciava il file al nome nuovo e i dati sotto la chiave vecchia,
-//!    dove la prima `collect` li spazza. Adesso i dati si spostano **prima**,
-//!    e il supporto di prova lo verifica nell'istante in cui il file si muove.
-//!
-//! Zero `sleep`. Il debounce è una finestra di chi osserva il filesystem; qui
-//! le due metà si chiamano in sequenza, che è ciò che due finestre producono.
+//! Il secondo presidio resta il difetto 0168: `rename_document` deve spostare i
+//! dati prima del file, così un crash fra le due operazioni non lascia il file
+//! al nome nuovo e i dati sotto quello vecchio.
 
 use std::sync::Arc;
 
@@ -24,9 +20,13 @@ use fub_abi::format::{
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::rules::doc_data;
+use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::FormatProvider;
-use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
+use fub_kernel::storage::{DirEntry, FileIdentity, Merge, RootedFsStorage, Stat, VaultStorage};
+use fub_kernel::{
+    ExternalRenamePlan, FormatRegistry, JournalOp, KernelError, MachineSettings, Subscription,
+    Workspace,
+};
 
 const PLUGIN: &str = "test.appiccicoso";
 
@@ -126,182 +126,220 @@ fn events(rx: &Subscription) -> Vec<Notice> {
     seen
 }
 
-/// Le due metà di una rinomina esterna, come due lotti del rilevatore.
+/// Rimozione e creazione successiva con gli stessi byte sono due identità.
 #[test]
-fn a_rename_split_carries_behind_draft_and_data() {
+fn same_bytes_remove_then_create_does_not_migrate_identity() {
     let mut b = Bench::new();
     b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
         .expect("bozza");
     b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
     b.attach_data("a.txt");
 
-    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
+    let bytes = std::fs::read(b.root.join("a.txt")).expect("contenuto");
+    std::fs::remove_file(b.root.join("a.txt")).expect("rimozione");
     b.ws.sync_path(&b.root.join("a.txt"))
-        .expect("la partenza: il file non c'è più");
+        .expect("il path è sparito");
+    std::fs::write(b.root.join("b.txt"), bytes).expect("creazione successiva");
     b.ws.sync_path(&b.root.join("b.txt"))
-        .expect("l'arrivo: è comparso un file con la stessa impronta");
+        .expect("il nuovo path compare");
 
+    assert!(b.draft_of("b.txt").is_none());
     assert_eq!(
-        b.draft_of("b.txt").as_deref(),
-        Some("e questo non l'ho salvato"),
-        "la bozza ha seguito la nota"
+        b.draft_of("a.txt").as_deref(),
+        Some("e questo non l'ho salvato")
     );
-    assert!(
-        b.draft_of("a.txt").is_none(),
-        "e non è rimasta anche sotto il nome vecchio"
-    );
+    assert!(b.data_of("b.txt").is_none());
+    assert_eq!(b.data_of("a.txt").as_deref(), Some("i dati di a.txt"));
+    assert!(!b.ws.organization().icons.contains_key("b.txt"));
     assert_eq!(
-        b.data_of("b.txt").as_deref(),
-        Some("i dati di a.txt"),
-        "e lo spazio per-documento"
-    );
-    assert!(
-        b.data_of("a.txt").is_none(),
-        "che si è spostato, non copiato"
-    );
-    assert_eq!(
-        b.ws.organization().icons.get("b.txt").map(String::as_str),
-        Some("📌"),
-        "e l'icona, che passa dalla stessa funzione"
+        b.ws.organization().icons.get("a.txt").map(String::as_str),
+        Some("📌")
     );
 }
 
-/// **La stessa rinomina, ma con partenza e arrivo in due finestre del
-/// debounce** (difetto 0198): il caso che il presidio qui sopra non copre.
-///
-/// Là le due metà si chiamano con `sync_path`, che è la porta del kernel; qui
-/// si chiamano con le **fasi di un lotto del rilevatore** — `plan_sync` sotto
-/// prestito condiviso e `sync_path_prepared` sotto quello esclusivo, che è
-/// ciò che `ExternalSync::batch` fa davvero. La differenza non è di forma: la
-/// partenza, che in un lotto vero è un `Touched` su un path sparito, esce da
-/// `plan_sync` come `None` — «non c'è niente da preparare» — e tocca a
-/// `sync_path_prepared` rifare la strada intera, che è il ramo in cui il
-/// documento si toglie e l'impronta si ricorda. Se l'accoppiamento vivesse
-/// solo nel ramo «piano pronto», la rinomina spezzata resterebbe spezzata
-/// proprio quando il debounce la spezza.
-///
-/// L'arrivo è il lotto **dopo**: un `Touched` su un path che è comparso, con
-/// un piano vero. L'impronta è la stessa di chi è appena sparito, e la bozza,
-/// i dati per-documento e l'icona seguono la nota — come nel presidio
-/// stessa-finestra, che è il come.
+/// La rotta `Renamed` del watcher conserva l'identità senza eseguire le fasi
+/// detached sotto il workspace.
 #[test]
-fn a_rename_split_in_two_windows_carries_behind_draft_and_data() {
+fn a_watcher_rename_carries_identity_once() {
     let mut b = Bench::new();
-    b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
+    b.ws.save_draft(&DocId::new("a.txt"), "testo non salvato", None)
         .expect("bozza");
     b.ws.set_icon("a.txt", Some("📌".into())).expect("icona");
     b.attach_data("a.txt");
-    // Chi tiene stato per-documento fuori dallo spazio dichiarato — il
-    // versioning, che ha uno store suo — ascolta la rinomina: senza l'evento
-    // la storia si spezza in due chiavi.
+    b.ws.set_active_document(Some(DocId::new("a.txt")));
+    let rx = b.ws.bus().subscribe();
+    let to = b.root.join("nested/b.txt");
+    std::fs::create_dir_all(to.parent().expect("cartella destinazione")).expect("cartella");
+    std::fs::rename(b.root.join("a.txt"), &to).expect("rinomina sul disco");
+    let prepared = match b.ws.plan_external_rename(&b.root.join("a.txt"), &to) {
+        ExternalRenamePlan::Document(plan) => plan,
+        _ => panic!("la rinomina documento nota deve avere la rotta staged"),
+    };
+    let parsed = prepared.invoke();
+    let pending =
+        b.ws.prepare_external_document_rename(parsed)
+            .expect("prepare")
+            .expect("fotografia corrente");
+    let completed = pending.invoke();
+
+    let other_dir = tempfile::tempdir().expect("secondo tempdir");
+    let other_root =
+        Utf8PathBuf::from_path_buf(other_dir.path().to_path_buf()).expect("seconda radice utf8");
+    let mut other = Workspace::new(&other_root, registry()).expect("secondo workspace");
+    let completed = match other.finish_external_document_rename(completed) {
+        Err(failure) => {
+            let (_error, completed) = *failure;
+            completed
+        }
+        Ok(outcome) => panic!("il workspace sbagliato ha consumato il token: {outcome}"),
+    };
+    let result = b.ws.finish_external_document_rename(completed);
+    let Ok(rename_is_current) = result else {
+        panic!("il proprietario recupera il token");
+    };
+    assert!(rename_is_current, "la fotografia resta corrente");
+
+    let renamed = DocId::new("nested/b.txt");
+    assert!(!b.ws.documents().contains(&DocId::new("a.txt")));
+    assert!(b.ws.documents().contains(&renamed));
+    assert_eq!(
+        b.draft_of(renamed.as_str()).as_deref(),
+        Some("testo non salvato")
+    );
+    assert!(b.draft_of("a.txt").is_none());
+    assert_eq!(
+        b.data_of(renamed.as_str()).as_deref(),
+        Some("i dati di a.txt")
+    );
+    assert!(b.data_of("a.txt").is_none());
+    assert_eq!(
+        b.ws.organization()
+            .icons
+            .get(renamed.as_str())
+            .map(String::as_str),
+        Some("📌")
+    );
+    assert!(
+        !b.ws.organization().icons.contains_key("a.txt"),
+        "l'organizzazione non conserva la chiave vecchia"
+    );
+    assert_eq!(
+        b.ws.active_document().as_ref().map(DocId::as_str),
+        Some("nested/b.txt")
+    );
+    let IndexResult::Folders(folders) =
+        b.ws.query_index(IndexQuery::Folders {
+            under: None,
+            page: None,
+        })
+        .expect("indice cartelle")
+    else {
+        panic!("risposta cartelle");
+    };
+    assert!(
+        folders.items.iter().any(|folder| folder.path == "nested"),
+        "la prepare registra la cartella d'arrivo"
+    );
+
+    let seen = events(&rx);
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(&notice.event, Event::DocumentRenamed { .. }))
+            .count(),
+        1,
+        "DocumentRenamed esce una volta: {seen:?}"
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(&notice.event, Event::IndexUpdated))
+            .count(),
+        1,
+        "IndexUpdated esce una volta: {seen:?}"
+    );
+    assert!(
+        seen.iter().all(|notice| !matches!(
+            &notice.event,
+            Event::DocumentRemoved { .. } | Event::DocumentChanged { .. }
+        )),
+        "nessun evento remove/change duplicato: {seen:?}"
+    );
+}
+
+/// Anche attraverso le fasi detached di due lotti, gli stessi byte non
+/// trasformano due `Touched` in una rinomina.
+#[test]
+fn same_bytes_in_two_watcher_windows_do_not_migrate_identity() {
+    let mut b = Bench::new();
+    b.ws.save_draft(&DocId::new("a.txt"), "e questo non l'ho salvato", None)
+        .expect("bozza");
+    b.attach_data("a.txt");
     let rx = b.ws.bus().subscribe();
 
-    std::fs::rename(b.root.join("a.txt"), b.root.join("b.txt")).expect("rinomina sul disco");
+    let bytes = std::fs::read(b.root.join("a.txt")).expect("contenuto");
+    std::fs::remove_file(b.root.join("a.txt")).expect("rimozione");
+    let plan =
+        b.ws.plan_sync(&b.root.join("a.txt"))
+            .expect("piano di rimozione")
+            .invoke();
+    b.ws.sync_path_prepared(&b.root.join("a.txt"), Some(plan))
+        .expect("primo lotto");
 
-    // Finestra 1: la partenza. Il path non esiste più, quindi `plan_sync` non
-    // ha niente da preparare — è il ramo che in `ExternalSync::batch` rifà la
-    // strada intera sotto il prestito esclusivo.
-    let plan = b.ws.plan_sync(&b.root.join("a.txt"));
-    assert!(
-        plan.is_none(),
-        "un path sparito non ha un piano: è il ramo che la fase 2 rifà per intero"
-    );
-    b.ws.sync_path_prepared(&b.root.join("a.txt"), plan)
-        .expect("la partenza: il file non c'è più");
-
-    // Finestra 2: l'arrivo, con un piano vero.
-    let plan = b.ws.plan_sync(&b.root.join("b.txt")).expect("un piano");
+    std::fs::write(b.root.join("b.txt"), bytes).expect("creazione");
+    let plan =
+        b.ws.plan_sync(&b.root.join("b.txt"))
+            .expect("piano di creazione")
+            .invoke();
     b.ws.sync_path_prepared(&b.root.join("b.txt"), Some(plan))
-        .expect("l'arrivo: è comparso un file con la stessa impronta");
+        .expect("secondo lotto");
 
+    assert!(b.draft_of("b.txt").is_none());
     assert_eq!(
-        b.draft_of("b.txt").as_deref(),
-        Some("e questo non l'ho salvato"),
-        "la bozza ha seguito la nota anche attraverso due finestre"
+        b.draft_of("a.txt").as_deref(),
+        Some("e questo non l'ho salvato")
     );
-    assert!(
-        b.draft_of("a.txt").is_none(),
-        "e non è rimasta anche sotto il nome vecchio"
-    );
-    assert_eq!(
-        b.data_of("b.txt").as_deref(),
-        Some("i dati di a.txt"),
-        "e lo spazio per-documento"
-    );
-    assert!(
-        b.data_of("a.txt").is_none(),
-        "che si è spostato, non copiato"
-    );
-    assert_eq!(
-        b.ws.organization().icons.get("b.txt").map(String::as_str),
-        Some("📌"),
-        "e l'icona"
-    );
-    // E l'accoppiamento lo **dice**, con lo stesso evento della rinomina
-    // vista: il gemello a vault chiuso lo emette (workspace.rs, il precedente
-    // del rejoin), e chi ascolta non deve distinguere i due casi.
-    let seen = events(&rx);
-    assert!(
-        seen.iter().any(|n| matches!(
-            &n.event,
-            Event::DocumentRenamed { from, to }
-                if from.as_str() == "a.txt" && to.as_str() == "b.txt"
-        )),
-        "l'accoppiamento ha annunciato la rinomina: {seen:?}"
-    );
+    assert!(b.data_of("b.txt").is_none());
+    assert_eq!(b.data_of("a.txt").as_deref(), Some("i dati di a.txt"));
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(&notice.event, Event::DocumentRenamed { .. })));
 }
 
-/// **Un remove seguito a distanza da un add non correlato non diventa una
-/// rinomina** (difetto 0198, il falso positivo).
-///
-/// L'accoppiamento per impronta è la regola della 0099 vista dal rilevatore
-/// aperto, e la 0099 ha un bound: **uno solo**. Due sparizioni di fila
-/// tengono l'ultima — la prima non ha più un arrivo da aspettare, e un
-/// arrivo che arrivasse dopo sarebbe di un'altra mossa. Qui la prima
-/// sparizione è di `a.txt`; poi sparisce anche `b.txt`; poi compare `c.txt`
-/// con l'impronta di **`a`**. Se il posto non si consumasse, `c` erediterebbe
-/// la bozza di `a` — un contenuto identico non è una prova di identità quando
-/// in mezzo c'è stata un'altra sparizione.
+/// Più rimozioni e creazioni nello stesso scenario non si accoppiano per
+/// contenuto: senza un fatto di rename ogni nuova chiave resta nuova.
 #[test]
-fn a_remove_a_distance_from_a_add_not_related_not_pairs() {
+fn multiple_same_bytes_pairs_do_not_migrate_without_explicit_renames() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
-    std::fs::write(root.join("a.txt"), "il contenuto di a\n").unwrap();
-    std::fs::write(root.join("b.txt"), "il contenuto di b\n").unwrap();
+    std::fs::write(root.join("a.txt"), "contenuto a\n").unwrap();
+    std::fs::write(root.join("b.txt"), "contenuto b\n").unwrap();
     let mut ws = Workspace::new(&root, registry()).expect("apertura");
     ws.reindex().expect("reindex");
-    ws.save_draft(&DocId::new("a.txt"), "bozza di a", None)
+    ws.save_draft(&DocId::new("a.txt"), "bozza a", None)
         .expect("bozza a");
+    ws.save_draft(&DocId::new("b.txt"), "bozza b", None)
+        .expect("bozza b");
 
-    // Due sparizioni di fila: la prima non è più l'ultima.
     std::fs::remove_file(root.join("a.txt")).unwrap();
-    ws.sync_path(&root.join("a.txt")).expect("a sparisce");
     std::fs::remove_file(root.join("b.txt")).unwrap();
+    ws.sync_path(&root.join("a.txt")).expect("a sparisce");
     ws.sync_path(&root.join("b.txt")).expect("b sparisce");
-
-    // L'arrivo porta l'impronta di `a`, ma non è la stessa mossa: in mezzo
-    // c'è stata un'altra sparizione, e il posto di `a` si è consumato.
-    std::fs::write(root.join("c.txt"), "il contenuto di a\n").unwrap();
+    std::fs::write(root.join("c.txt"), "contenuto a\n").unwrap();
+    std::fs::write(root.join("d.txt"), "contenuto b\n").unwrap();
     ws.sync_path(&root.join("c.txt")).expect("c compare");
+    ws.sync_path(&root.join("d.txt")).expect("d compare");
 
-    assert!(
-        ws.drafts()
-            .expect("bozze")
+    let drafts = ws.drafts().expect("bozze");
+    let of = |doc: &str| {
+        drafts
             .drafts
             .iter()
-            .all(|d| d.doc.as_str() != "c.txt"),
-        "un contenuto identico a chi è sparito due mosse fa non eredita la bozza"
-    );
-    assert_eq!(
-        ws.drafts()
-            .expect("bozze")
-            .drafts
-            .iter()
-            .find(|d| d.doc.as_str() == "a.txt")
-            .map(|d| d.text.as_str()),
-        Some("bozza di a"),
-        "e la bozza resta sotto la chiave vecchia, dove il recupero la ritrova"
-    );
+            .find(|draft| draft.doc.as_str() == doc)
+            .map(|draft| draft.text.as_str())
+    };
+    assert_eq!(of("a.txt"), Some("bozza a"));
+    assert_eq!(of("b.txt"), Some("bozza b"));
+    assert_eq!(of("c.txt"), None);
+    assert_eq!(of("d.txt"), None);
 }
 
 /// Una destinazione già viva non è una rinomina (0135): i dati di chi sparisce
@@ -369,10 +407,12 @@ fn a_arrival_with_another_fingerprint_not_pairs() {
 /// Il supporto verifica **nell'istante del rename del file** che i dati siano
 /// già sotto la chiave nuova (difetto 0168).
 struct Order {
-    inner: FsStorage,
+    inner: RootedFsStorage,
     doc_from: Utf8PathBuf,
     data_from: Utf8PathBuf,
     data_to: Utf8PathBuf,
+    fail_document_rename: bool,
+    fail_journal_append: bool,
 }
 
 impl VaultStorage for Order {
@@ -386,6 +426,12 @@ impl VaultStorage for Order {
         self.inner.update(path, merge)
     }
     fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        if self.fail_journal_append && path.file_name() == Some("journal.jsonl") {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                "guasto forzato del registro",
+            ));
+        }
         self.inner.append(path, bytes)
     }
     fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
@@ -402,6 +448,12 @@ impl VaultStorage for Order {
                 !self.inner.exists(&self.data_from),
                 "e non devono più stare sotto la chiave vecchia"
             );
+            if self.fail_document_rename {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::PermissionDenied,
+                    "guasto forzato del rename",
+                ));
+            }
         }
         self.inner.rename_no_replace(from, to)
     }
@@ -414,13 +466,26 @@ impl VaultStorage for Order {
     fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
         self.inner.stat(path)
     }
+    fn file_identity(&self, path: &Utf8Path) -> std::io::Result<Option<FileIdentity>> {
+        self.inner.file_identity(path)
+    }
     fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
         self.inner.remove_empty_dir(dir)
     }
 }
 
-#[test]
-fn the_internal_rename_migrates_data_before_moving_the_file() {
+struct InternalRenameFixture {
+    _dir: tempfile::TempDir,
+    root: Utf8PathBuf,
+    ws: Workspace,
+    data_from: Utf8PathBuf,
+    data_to: Utf8PathBuf,
+}
+
+fn internal_rename_fixture(
+    fail_document_rename: bool,
+    fail_journal_append: bool,
+) -> InternalRenameFixture {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     std::fs::write(root.join("a.txt"), "il contenuto\n").unwrap();
@@ -438,25 +503,264 @@ fn the_internal_rename_migrates_data_before_moving_the_file() {
         .join(doc_data::DOC_SPACE)
         .join(doc_data::encode("b.txt"));
     let support = Arc::new(Order {
-        inner: FsStorage,
+        inner: RootedFsStorage::open(&root).expect("supporto ancorato"),
         doc_from: root.join("a.txt"),
         data_from: data_from.clone(),
         data_to: data_to.clone(),
+        fail_document_rename,
+        fail_journal_append,
     });
     let mut ws =
         Workspace::on(&root, registry(), support, MachineSettings::in_memory()).expect("apertura");
     ws.reindex().expect("reindex");
     std::fs::create_dir_all(&data_from).unwrap();
     std::fs::write(data_from.join("annotazione"), "i dati di a.txt").unwrap();
+    InternalRenameFixture {
+        _dir: dir,
+        root,
+        ws,
+        data_from,
+        data_to,
+    }
+}
 
-    ws.rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
+#[test]
+fn the_internal_rename_migrates_data_before_moving_the_file() {
+    let mut fixture = internal_rename_fixture(false, false);
+
+    fixture
+        .ws
+        .rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
         .expect("rinomina");
 
     assert_eq!(
-        std::fs::read_to_string(data_to.join("annotazione"))
+        std::fs::read_to_string(fixture.data_to.join("annotazione"))
             .ok()
             .as_deref(),
         Some("i dati di a.txt")
     );
-    assert!(!data_from.exists(), "la chiave vecchia è vuota");
+    assert!(!fixture.data_from.exists(), "la chiave vecchia è vuota");
+}
+
+#[test]
+fn a_failed_file_move_rolls_side_data_back_without_a_rename_fact() {
+    let mut fixture = internal_rename_fixture(true, false);
+    let rx = fixture.ws.bus().subscribe();
+
+    assert!(fixture
+        .ws
+        .rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .is_err());
+
+    assert!(fixture.root.join("a.txt").exists());
+    assert!(!fixture.root.join("b.txt").exists());
+    assert_eq!(
+        std::fs::read_to_string(fixture.data_from.join("annotazione"))
+            .ok()
+            .as_deref(),
+        Some("i dati di a.txt")
+    );
+    assert!(!fixture.data_to.exists());
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
+}
+
+#[test]
+fn a_failed_journal_append_does_not_roll_back_or_duplicate_the_rename() {
+    let mut fixture = internal_rename_fixture(false, true);
+    let rx = fixture.ws.bus().subscribe();
+
+    fixture
+        .ws
+        .rename_document(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .expect("la rinomina riuscita non dipende dal registro");
+
+    assert!(!fixture.root.join("a.txt").exists());
+    assert!(fixture.root.join("b.txt").exists());
+    assert!(
+        fixture
+            .ws
+            .journal()
+            .expect("lettura registro")
+            .records
+            .iter()
+            .all(|record| !matches!(record.op, JournalOp::Renamed { .. })),
+        "un append fallito non fabbrica un fatto"
+    );
+    let seen = events(&rx);
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(notice.event, Event::Trouble { .. }))
+            .count(),
+        1,
+        "il guasto del registro viene riportato una volta: {seen:?}"
+    );
+    assert_eq!(
+        seen.iter()
+            .filter(|notice| matches!(notice.event, Event::DocumentRenamed { .. }))
+            .count(),
+        1,
+        "la rinomina riuscita resta un solo evento: {seen:?}"
+    );
+}
+
+#[test]
+fn a_stale_commit_rolls_the_invoked_move_back_without_a_rename_fact() {
+    let mut fixture = internal_rename_fixture(false, false);
+    let prepared = fixture
+        .ws
+        .prepare_explicit_rename(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .expect("prepare")
+        .expect("documento");
+    let parsed = prepared.invoke().expect("invoke detached");
+    fixture
+        .ws
+        .sync_path(&fixture.root.join("a.txt"))
+        .expect("il core cambia dopo l'invoke");
+    let rx = fixture.ws.bus().subscribe();
+
+    let parsed = match fixture.ws.commit_explicit_rename(parsed) {
+        Err(failure) => {
+            let (_error, parsed) = *failure;
+            parsed
+        }
+        Ok(_) => panic!("la fotografia stale non può essere committata"),
+    };
+    parsed.rollback().expect("rollback detached");
+
+    assert!(fixture.root.join("a.txt").exists());
+    assert!(!fixture.root.join("b.txt").exists());
+    assert_eq!(
+        std::fs::read_to_string(fixture.data_from.join("annotazione"))
+            .ok()
+            .as_deref(),
+        Some("i dati di a.txt")
+    );
+    assert!(!fixture.data_to.exists());
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
+}
+
+#[test]
+fn a_replaced_same_bytes_destination_makes_rollback_stale_without_a_rename_fact() {
+    let mut fixture = internal_rename_fixture(false, false);
+    let prepared = fixture
+        .ws
+        .prepare_explicit_rename(&DocId::new("a.txt"), &DocId::new("b.txt"))
+        .expect("prepare")
+        .expect("documento");
+    let parsed = prepared.invoke().expect("invoke detached");
+    fixture
+        .ws
+        .sync_path(&fixture.root.join("a.txt"))
+        .expect("il core cambia dopo l'invoke");
+    let replacement = fixture.root.join("replacement.txt");
+    std::fs::write(&replacement, "il contenuto\n").expect("sostituto con gli stessi byte");
+    std::fs::remove_file(fixture.root.join("b.txt")).expect("destinazione invocata");
+    std::fs::rename(&replacement, fixture.root.join("b.txt")).expect("sostituzione");
+    let rx = fixture.ws.bus().subscribe();
+
+    let parsed = match fixture.ws.commit_explicit_rename(parsed) {
+        Err(failure) => {
+            let (_error, parsed) = *failure;
+            parsed
+        }
+        Ok(_) => panic!("la fotografia stale non può essere committata"),
+    };
+    let error = parsed
+        .rollback()
+        .expect_err("il sostituto non appartiene al token");
+
+    assert!(matches!(error, KernelError::Stale(_)), "{error:?}");
+    assert!(
+        !fixture.root.join("a.txt").exists(),
+        "il nome originale resta libero"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("b.txt")).expect("destinazione corrente"),
+        "il contenuto\n",
+        "la destinazione corrente resta intatta"
+    );
+    assert!(
+        fixture
+            .ws
+            .journal()
+            .expect("lettura registro")
+            .records
+            .iter()
+            .all(|record| !matches!(record.op, JournalOp::Renamed { .. })),
+        "il rollback rifiutato non fabbrica un fatto"
+    );
+    assert!(events(&rx)
+        .iter()
+        .all(|notice| !matches!(notice.event, Event::DocumentRenamed { .. })));
+}
+
+#[test]
+fn a_stale_asset_commit_rolls_the_exact_move_back_without_a_rename_fact() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("photo.png"), b"PNG").expect("seed asset");
+    let mut ws = Workspace::new(&root, registry()).expect("workspace");
+    ws.register_core_feature(PLUGIN, "Asset rename rollback")
+        .expect("asset state owner");
+    ws.reindex().expect("asset indexed");
+    ws.set_icon("photo.png", Some("pin".into()))
+        .expect("asset icon");
+    let plugin_root = ws.plugin_data_dir(PLUGIN).expect("plugin data");
+    let data_from = plugin_root
+        .join(doc_data::DOC_SPACE)
+        .join(doc_data::encode("photo.png"))
+        .join("thumbnail");
+    let data_to = plugin_root
+        .join(doc_data::DOC_SPACE)
+        .join(doc_data::encode("media/photo.png"))
+        .join("thumbnail");
+    std::fs::create_dir_all(data_from.parent().expect("asset data parent"))
+        .expect("asset data directory");
+    std::fs::write(&data_from, b"preview").expect("asset data");
+    let prepared = ws
+        .prepare_explicit_asset_rename(&DocId::new("photo.png"), &DocId::new("media/photo.png"))
+        .expect("prepare")
+        .expect("asset");
+    let moved = prepared.invoke().expect("move detached");
+    ws.sync_path(&root.join("media/photo.png"))
+        .expect("the core changes after the move");
+    let rx = ws.bus().subscribe();
+
+    let moved = match ws.commit_explicit_asset_rename(moved) {
+        Err(failure) => {
+            let (error, moved) = *failure;
+            assert!(matches!(error, KernelError::Stale(_)), "{error:?}");
+            moved
+        }
+        Ok(_) => panic!("the stale asset snapshot cannot commit"),
+    };
+    moved.rollback().expect("exact rollback detached");
+
+    assert_eq!(std::fs::read(root.join("photo.png")).unwrap(), b"PNG");
+    assert!(!root.join("media/photo.png").exists());
+    assert_eq!(
+        ws.organization().icons.get("photo.png").map(String::as_str),
+        Some("pin")
+    );
+    assert!(!ws.organization().icons.contains_key("media/photo.png"));
+    assert_eq!(std::fs::read(&data_from).unwrap(), b"preview");
+    assert!(!data_to.exists());
+    assert!(
+        events(&rx)
+            .iter()
+            .all(|notice| !matches!(notice.event, Event::EntryRenamed { .. })),
+        "a stale commit is not an asset rename fact"
+    );
+    assert!(
+        ws.journal()
+            .expect("journal")
+            .records
+            .iter()
+            .all(|record| !matches!(record.op, JournalOp::Renamed { .. })),
+        "a stale asset commit is not journaled"
+    );
 }

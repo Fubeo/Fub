@@ -200,7 +200,7 @@ fn on_the_two_host(
 
 /// Il documento che non c'è, e il path che è già occupato.
 ///
-/// Sono i sei rami su cui il doppio rispondeva `bad-args` — «hai sbagliato a
+/// Sono i quattro rami su cui il doppio rispondeva `bad-args` — «hai sbagliato a
 /// chiedere» — mentre il kernel diceva «non c'è» o «c'è già»: le due risposte
 /// da cui dipende cosa fa chi chiama.
 #[test]
@@ -211,7 +211,7 @@ fn absent_and_occupied_have_the_same_face_here_and_there() {
         host.create_document(&c_and, "il testo").expect("si scrive");
         host.create_document(&DocId::new("Seconda.md"), "due")
             .expect("si scrive");
-        let trashed = host.trash_document(&c_and).expect("si cestina");
+        host.trash_document(&c_and).expect("si cestina");
         host.create_document(&c_and, "di nuovo")
             .expect("si riscrive");
 
@@ -240,31 +240,15 @@ fn absent_and_occupied_have_the_same_face_here_and_there() {
                         .unwrap_err(),
                 ),
             ),
-            (
-                "ripristinare una voce che nel cestino non c'è".into(),
-                kind(
-                    &host
-                        .restore_document(&DocId::new(".trash/mai-cestinata.md"), None)
-                        .unwrap_err(),
-                ),
-            ),
-            (
-                "ripristinare su un path che nel frattempo è tornato".into(),
-                kind(&host.restore_document(&trashed, None).unwrap_err()),
-            ),
         ]
     });
 }
 
-/// Il giro del cestino, dove conta la **forma** dell'id.
+/// La forma dell'id del cestino.
 ///
-/// `trash_document` rende un id, e quell'id è l'unica cosa che chi chiama ha in
-/// mano per ripristinare: se i due lo costruiscono con forme diverse, il codice
-/// che lo maneggia — che lo mostri, che ne ricavi il nome di prima, che lo
-/// riporti indietro — è scritto contro una forma sola. Qui non si confrontano
-/// gli id (il timbro dipende dall'orologio, e il doppio non ne ha uno) ma la
-/// forma: la cartella, la piattezza, l'estensione in coda, e che il giro di
-/// andata e ritorno riporti lo stesso id dai due lati.
+/// `trash_document` rende l'id che l'owner host userà poi nel protocollo
+/// staged. Il timbro dipende dall'orologio, quindi qui si confrontano la
+/// cartella, la piattezza e l'estensione in coda.
 #[test]
 fn the_id_of_the_trash_has_the_same_form_of_here_and_of_the() {
     on_the_two_host(None, |host| {
@@ -285,12 +269,6 @@ fn the_id_of_the_trash_has_the_same_form_of_here_and_of_the() {
             (
                 "l'estensione resta in coda".into(),
                 s.ends_with(".md").to_string(),
-            ),
-            (
-                "e il ripristino rende lo stesso id".into(),
-                host.restore_document(&trashed, None)
-                    .expect("si ripristina")
-                    .to_string(),
             ),
         ]
     });
@@ -503,7 +481,7 @@ fn the_writes_leave_the_same_vault_of_here_and_of_the() {
             face(&host.rename_document(&within, &within)),
         ));
 
-        // --- cestino e ripristino ---
+        // --- cestino ---
         let trashed = host.trash_document(&within).expect("si cestina");
         journal.push((
             "cestinare toglie dall'elenco".into(),
@@ -532,36 +510,6 @@ fn the_writes_leave_the_same_vault_of_here_and_of_the() {
             "una voce cestinata non si legge come documento".into(),
             face(&host.read_document(&trashed)),
         ));
-        journal.push((
-            "ripristinare senza dire dove".into(),
-            host.restore_document(&trashed, None)
-                .map(|d| d.to_string())
-                .unwrap_or_else(|and| kind(&and)),
-        ));
-        journal.push((
-            "e il testo è tornato".into(),
-            host.read_document(&within).unwrap_or_default(),
-        ));
-        journal.push((
-            "e il cestino è vuoto".into(),
-            host.list_trash().map(|v| v.len()).unwrap_or(99).to_string(),
-        ));
-
-        let trashed = host.trash_document(&within).expect("si cestina");
-        journal.push((
-            "ripristinare altrove".into(),
-            host.restore_document(&trashed, Some(DocId::new("Altrove.md")))
-                .map(|d| d.to_string())
-                .unwrap_or_else(|and| kind(&and)),
-        ));
-        journal.push((
-            "e il testo è là".into(),
-            host.read_document(&DocId::new("Altrove.md"))
-                .unwrap_or_default(),
-        ));
-
-        host.trash_document(&DocId::new("Altrove.md"))
-            .expect("si cestina");
         journal.push((
             "svuotare il cestino conta".into(),
             host.empty_trash()

@@ -329,7 +329,6 @@ fn the_trash_round_trip_closes_without_touching_the_workspace() {
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].id, destination, "l'id con cui si ripristina");
         assert_eq!(entries[0].original.as_str(), "nota.md", "dove tornerebbe");
-
         let entry = entries[0].id.clone();
         host.restore_document(&entry, None).expect("ripristina")
     });

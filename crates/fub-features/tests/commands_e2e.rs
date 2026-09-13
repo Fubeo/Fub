@@ -22,10 +22,11 @@ use fub_abi::PluginError;
 use fub_features::{
     CoreCommands, COMMANDS_ID, NOTES_CREATE, NOTES_RENAME, NOTES_TRASH, SELECTION_WIKILINK,
     SETTINGS_EXPORT, SETTINGS_IMPORT, SETTINGS_NS, SETTINGS_RESET, SETTINGS_SET, TRASH_EMPTY,
-    TRASH_RESTORE, VAULT_ARCHIVE, VAULT_REPLACE,
+    VAULT_ARCHIVE, VAULT_REPLACE,
 };
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
+use fub_testkit::restore_document;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -483,16 +484,11 @@ fn a_dry_run_opens_no_batch_because_it_touches_nothing() {
 // I comandi strutturali (decisione 0013): il giro che la shell faceva coi comandi Tauri
 // ---------------------------------------------------------------------------
 
-/// Il ciclo di vita completo di una nota, chiesto **solo** al registro: creare,
-/// rinominare, cestinare, ripristinare, svuotare.
-///
-/// È il dogfooding che la decisione 0009 non aveva potuto fare: nessuna riga qui chiama
-/// un metodo di `Workspace` per cambiare il vault. Se un giorno una di queste
-/// azioni tornasse a passare per una via privilegiata, questo test resterebbe
-/// verde — ed è per questo che il suo compagno è la sparizione dei comandi
-/// Tauri, che si vede nel diff e non in un assert.
+/// Il ciclo di vita completo di una nota: i comandi del registro creano,
+/// rinominano e cestinano; il protocollo staged ripristina senza offrire al
+/// `KernelHost` sincrono una callback sotto guardia.
 #[test]
-fn the_whole_life_of_a_notes_goes_through_the_registry() {
+fn the_whole_life_of_a_notes_uses_registry_and_staged_restore() {
     let vault = Vault::new();
     let mut ws = vault.open();
 
@@ -548,21 +544,11 @@ fn the_whole_life_of_a_notes_goes_through_the_registry() {
     assert!(ws.documents().is_empty());
 
     let entry = ws.list_trash().expect("cestino")[0].id.clone();
-    let outcome = ws
-        .invoke_command(
-            TRASH_RESTORE,
-            serde_json::json!({ "entry": entry.as_str() }),
-            InvokeMode::Apply,
-            Actor::User,
-        )
-        .expect("ripristina");
+    let restored = restore_document(&mut ws, &entry, None).expect("ripristina");
     assert_eq!(
-        outcome.effect,
-        CommandEffect::Navigate {
-            doc: DocId::new("Progetti/Idee vecchie.md")
-        },
-        "il ripristino dice con che path la nota è tornata: è ciò che la shell \
-         usa al posto del valore di ritorno che un comando non ha"
+        restored,
+        DocId::new("Progetti/Idee vecchie.md"),
+        "il ripristino restituisce il path con cui la nota è tornata"
     );
 
     // E infine il cestino, che è vuoto e lo dice.
@@ -581,22 +567,8 @@ fn the_whole_life_of_a_notes_goes_through_the_registry() {
         .contains('0'));
 }
 
-/// Il ripristino su un path **occupato** risponde `AlreadyExists`, e ci arriva
-/// attraverso tutta la catena.
-///
-/// È il presidio del cliente vero del §12.2
-/// ([decisione 0041](../../../docs/decisions/0192-impostazioni-locale-e-temi.md)):
-/// `apps/client/src/panels/trash.ts` rama su `already_exists` per decidere se
-/// chiedere «lo ripristino con un altro nome?», e prima aveva un `catch` nudo
-/// che faceva quella domanda a *qualunque* fallimento — anche a un disco pieno,
-/// dove la risposta affermativa ritentava qualcosa che sarebbe fallito uguale.
-///
-/// La catena ha tre anelli e ognuno può romperlo in silenzio: il kernel produce
-/// `KernelError::AlreadyExists`, il `From` lo traduce senza appiattirlo, e il
-/// comando lo propaga con un `?` invece di riavvolgerlo. Un `map_err` di troppo
-/// in mezzo non farebbe fallire niente — renderebbe solo *morto* quel ramo, e
-/// la shell tornerebbe a fare la domanda sbagliata senza che nessun test lo
-/// dica.
+/// Il protocollo staged conserva `AlreadyExists`: è la variante su cui il
+/// pannello cestino decide se proporre un nome alternativo.
 #[test]
 fn restoring_onto_an_occupied_path_says_exactly_that() {
     let vault = Vault::new();
@@ -628,14 +600,7 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
     .expect("ricrea sullo stesso path");
 
     let entry = ws.list_trash().expect("cestino")[0].id.clone();
-    let and = ws
-        .invoke_command(
-            TRASH_RESTORE,
-            serde_json::json!({ "entry": entry.as_str() }),
-            InvokeMode::Apply,
-            Actor::User,
-        )
-        .expect_err("il path originale è occupato");
+    let and = restore_document(&mut ws, &entry, None).expect_err("il path originale è occupato");
     assert!(
         matches!(and, PluginError::AlreadyExists(_)),
         "è la variante su cui il cestino rama, e senza la domanda torna sbagliata: {and}"
@@ -643,13 +608,7 @@ fn restoring_onto_an_occupied_path_says_exactly_that() {
 
     // E col nome che la shell propone, passa: l'altro capo dello stesso ramo.
     let free = ws.free_name(&DocId::new("Idee.md"));
-    ws.invoke_command(
-        TRASH_RESTORE,
-        serde_json::json!({ "entry": entry.as_str(), "to": free.as_str() }),
-        InvokeMode::Apply,
-        Actor::User,
-    )
-    .expect("ripristina con un altro nome");
+    restore_document(&mut ws, &entry, Some(free)).expect("ripristina con un altro nome");
 }
 
 #[test]
