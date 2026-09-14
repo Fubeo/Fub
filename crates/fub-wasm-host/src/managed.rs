@@ -405,6 +405,7 @@ impl InstalledPluginManager {
     }
 
     fn replace_and_invalidate_validity(&self) -> Result<(), PluginError> {
+        let _turn = self.validity_turn.write_turn();
         self.replace_validity()?.invalidate()
     }
 
