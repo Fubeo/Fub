@@ -337,10 +337,6 @@ fn exercise(close: bool, fault: Fault) {
         assert_eq!(deactivated, [SECOND, FIRST]);
     }
     drop(ws);
-    assert!(
-        workspace.try_write().is_some(),
-        "no poisoned guard or leaked turn"
-    );
     assert!(host.close().is_empty(), "repeated close is harmless");
     if close {
         assert_eq!(

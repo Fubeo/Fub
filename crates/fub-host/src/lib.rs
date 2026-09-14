@@ -81,6 +81,7 @@ mod bridge;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 pub mod custody;
+pub mod format_source;
 pub mod jobs;
 pub mod mount;
 /// Il filo verso fuori (§23.3), dietro la cargo feature `http-client` per la
@@ -104,6 +105,7 @@ pub mod watcher;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use custody::Custody;
+pub use format_source::{FormatSource, PreparedFormatSource};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};

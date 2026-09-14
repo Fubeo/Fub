@@ -792,11 +792,186 @@ impl fub_host::StartupSource for BlockingStartupSource {
                 true,
                 self.claim.clone(),
             )],
+            formats: fub_host::PreparedFormatSource::empty(),
             diagnostics: Vec::new(),
             validity: Some(Arc::clone(&self.validity)),
             lease: Some(lease),
         })
     }
+}
+
+struct CancelledStartupSource;
+
+impl fub_host::StartupSource for CancelledStartupSource {
+    fn prepare(&self) -> Result<fub_host::StartupSnapshot, PluginError> {
+        Err(PluginError::Cancelled("startup cancelled".into()))
+    }
+}
+
+struct DiagnosticStartupSource;
+
+impl fub_host::StartupSource for DiagnosticStartupSource {
+    fn prepare(&self) -> Result<fub_host::StartupSnapshot, PluginError> {
+        Ok(fub_host::StartupSnapshot {
+            bundles: Vec::new(),
+            formats: fub_host::PreparedFormatSource::empty(),
+            diagnostics: vec![PluginError::Io("diagnostic".into())],
+            validity: None,
+            lease: None,
+        })
+    }
+}
+struct StartupFormatSource {
+    signalled: Arc<AtomicUsize>,
+}
+
+impl fub_host::StartupSource for StartupFormatSource {
+    fn prepare(&self) -> Result<fub_host::StartupSnapshot, PluginError> {
+        Ok(fub_host::StartupSnapshot {
+            bundles: Vec::new(),
+            formats: fub_host::PreparedFormatSource::from_provider(MarkdownProvider::boxed())
+                .retain(PanicOnDrop)
+                .retain(SignalOnDrop(Arc::clone(&self.signalled))),
+            diagnostics: Vec::new(),
+            validity: None,
+            lease: None,
+        })
+    }
+}
+
+#[test]
+fn independent_format_error_cleans_startup_formats_before_returning() {
+    let (_dir, root) = test_root();
+    let signalled = Arc::new(AtomicUsize::new(0));
+    let expected = PluginError::Io("independent format failure".into());
+    let independent_error = expected.clone();
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_startup_source(Arc::new(StartupFormatSource {
+            signalled: Arc::clone(&signalled),
+        }))
+        .with_format_source(Arc::new(move || Err(independent_error.clone())));
+
+    let error = match host.open(&root) {
+        Err(error) => error,
+        Ok(_) => panic!("independent source fails"),
+    };
+    assert_eq!(error, expected);
+    assert_eq!(
+        signalled.load(Ordering::SeqCst),
+        1,
+        "cleanup continues after a prepared resource destructor panics"
+    );
+    assert!(host.vaults().is_empty(), "failed open publishes no session");
+}
+
+struct PanicOnDrop;
+
+impl Drop for PanicOnDrop {
+    fn drop(&mut self) {
+        panic!("injected retained resource drop panic");
+    }
+}
+
+struct SignalOnDrop(Arc<AtomicUsize>);
+
+impl Drop for SignalOnDrop {
+    fn drop(&mut self) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+fn test_root() -> (tempfile::TempDir, camino::Utf8PathBuf) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Nota.md"), "# Nota\n").expect("a note");
+    (dir, root)
+}
+
+#[test]
+fn cancelled_startup_source_never_publishes() {
+    let (_dir, root) = test_root();
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_startup_source(Arc::new(CancelledStartupSource));
+
+    assert!(matches!(
+        host.open(&root),
+        Err(PluginError::Cancelled(message)) if message == "startup cancelled"
+    ));
+    assert!(host.vaults().is_empty());
+}
+
+#[test]
+fn startup_diagnostics_are_queryable_as_typed_errors() {
+    let (_dir, root) = test_root();
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_startup_source(Arc::new(DiagnosticStartupSource));
+    host.open(&root)
+        .expect("diagnostic source does not block open");
+
+    let diagnostics = host.startup_diagnostics(None).expect("open session");
+    assert!(matches!(
+        diagnostics.as_slice(),
+        [PluginError::Io(message)] if *message == "diagnostic"
+    ));
+    assert!(host.close().is_empty());
+}
+
+#[test]
+fn retained_resource_drop_panic_does_not_stop_later_resources_or_close() {
+    let (_dir, root) = test_root();
+    let signalled = Arc::new(AtomicUsize::new(0));
+    let later = Arc::clone(&signalled);
+    let source: Arc<dyn fub_host::FormatSource> = Arc::new(move || {
+        Ok(fub_host::PreparedFormatSource::empty()
+            .retain(PanicOnDrop)
+            .retain(SignalOnDrop(Arc::clone(&later))))
+    });
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_format_source(source);
+    host.open(&root).expect("format source opens");
+
+    let errors = host.close();
+    assert_eq!(signalled.load(Ordering::SeqCst), 1);
+    assert!(
+        errors
+            .iter()
+            .any(|error| matches!(error, PluginError::Internal(message)
+                if message.to_string().contains("retained format resource"))),
+        "drop panic must be reported while close continues: {errors:?}"
+    );
+}
+
+#[test]
+fn mount_failure_preserves_primary_error_and_drops_later_resources() {
+    let (_dir, root) = test_root();
+    let signalled = Arc::new(AtomicUsize::new(0));
+    let later = Arc::clone(&signalled);
+    let source: Arc<dyn fub_host::FormatSource> = Arc::new(move || {
+        Ok(
+            fub_host::PreparedFormatSource::from_provider(MarkdownProvider::boxed())
+                .retain(PanicOnDrop)
+                .retain(SignalOnDrop(Arc::clone(&later))),
+        )
+    });
+    let host = fub_host::Host::new()
+        .with_watcher(Box::new(fub_host::NoWatcher))
+        .with_format_source(source);
+
+    let error = match host.open(&root) {
+        Err(error) => error,
+        Ok(_) => panic!("duplicate markdown provider fails mount"),
+    };
+    assert!(
+        matches!(&error, PluginError::Internal(message)
+            if message.to_string().contains("format provider conflict")),
+        "the primary mount error must remain visible: {error}"
+    );
+    assert_eq!(signalled.load(Ordering::SeqCst), 1);
+    assert!(host.vaults().is_empty());
 }
 
 #[test]
@@ -831,21 +1006,17 @@ fn invalidation_waits_for_the_old_opening_lease_and_stale_publication_rolls_back
     let opening = std::thread::spawn(move || opening_host.open(&root));
     entered_rx.recv().expect("snapshot lease is held");
 
-    let invalidating = Arc::clone(&validity);
-    let invalidation = std::thread::spawn(move || invalidating.invalidate());
-    loop {
-        match validity.acquire() {
-            Err(PluginError::Conflict(_)) => break,
-            Ok(lease) => {
-                drop(lease);
-                std::thread::yield_now();
-            }
-            Err(error) => panic!("unexpected validity error: {error}"),
-        }
-    }
+    validity.revoke().expect("revocation marks startup invalid");
     assert!(
-        !invalidation.is_finished(),
-        "invalidation cannot finish while the old opening owns its lease"
+        matches!(validity.acquire(), Err(PluginError::Conflict(_))),
+        "revocation rejects a new opening while the old lease remains"
+    );
+    let draining = Arc::clone(&validity);
+    let drain = std::thread::spawn(move || draining.drain());
+    std::thread::yield_now();
+    assert!(
+        !drain.is_finished(),
+        "draining cannot finish while the old opening owns its lease"
     );
     assert!(
         !host
@@ -862,10 +1033,7 @@ fn invalidation_waits_for_the_old_opening_lease_and_stale_publication_rolls_back
         "the invalid snapshot must not publish: {:?}",
         outcome.err()
     );
-    invalidation
-        .join()
-        .expect("invalidation thread does not panic")
-        .expect("invalidation drains the lease");
+    drain.join().expect("draining thread does not panic");
     assert_eq!(
         host.vaults().len(),
         1,
@@ -878,7 +1046,7 @@ fn invalidation_waits_for_the_old_opening_lease_and_stale_publication_rolls_back
             format!("{ID}: vault closing"),
             format!("{ID}: stopping (host=true, provider=true)"),
         ],
-        "invalidation returns only after the old opening completed teardown"
+        "shutdown drains only after the old opening completed teardown"
     );
     assert!(host.close().is_empty());
 }

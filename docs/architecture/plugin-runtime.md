@@ -58,11 +58,11 @@ un contatore o un token di transazione.
 Resta un confine esplicito nelle view. Durante la registrazione
 `PreparedRegistration::views` cattura fuori guardia anche `interests` per
 l'istanza unica; un panic fallisce la registrazione e non viene sostituito da un
-default. Per un'istanza parametrica `ViewProvider::interests` resta però
-non-fallibile: un proxy WASM che possa produrre trap non dispone di un
-canale di errore tipizzato. Risolverlo richiede un cambiamento del contratto
-Rust e WIT; finché quel contratto non nasce da un caso reale, il runtime non
-inventa un fallback e non modifica l'ABI.
+default. Per un'istanza parametrica, l'export WIT `view` alimenta il proxy
+`ViewProvider`. Il trait `ViewProvider::interests` è infallibile: se il guest
+va in trap, il proxy panica e il confine `Workspace` converte il panic in
+`PluginError::Internal`. Non esiste quindi un canale `Result` nell'interesse e
+non serve alcun cambiamento al contratto Rust o al WIT.
 
 ## Provider nativo
 
@@ -71,6 +71,56 @@ gli consegna un `HostApi` protetto dalla policy.
 
 Essere nativo non significa poter ignorare il contratto: comandi, view ed eventi
 devono comunque usare tipi ed errori condivisi.
+
+## Formati e confine host
+
+`FormatSource` è una porta host-agnostica: prepara `FormatProvider` e risorse
+prima dell'apertura del `Workspace`. L'host registra i provider prima di
+costruire il workspace; le risorse preparate restano vive per la sessione e
+vengono rilasciate anche in caso di rollback.
+
+L'interfaccia WIT `format` è opzionale. Se il componente la esporta,
+`WasmBundle` congela descriptor e capability dichiarati e `fub-wasm-host`
+presenta un proxy `FormatProvider` per `parse`, `render_html` e `serialize`.
+La validazione del modello in ingresso e in uscita è parte del confine fidato:
+modelli malformati e trap vengono restituiti come `FormatError`. La validazione
+accetta DAG ordinari e visita il grafo in `O(V+E)`; rifiuta cicli, riferimenti
+fuori indice, profondità oltre 64, span non validi, JSON non valido e una
+materializzazione oltre il budget documentato di 8 Mi unità pesate.
+
+`InstalledPluginManager` prepara una sola volta, per ogni apertura, lo snapshot
+dell'inventario `enabled` con consenso `granted`: da quello stesso passaggio
+restituisce bundle e `PreparedFormatSource` sotto la medesima
+`StartupValidity`/lease. Il manager è cablato come `StartupSource`, non come
+`FormatSource`; ogni bundle selezionato viene caricato una sola volta. Se un
+componente selezionato è corrotto o non caricabile, o se un'export `format`
+presente è incompatibile, l'apertura conserva una diagnostica tipizzata e
+salta quel componente, senza impedire l'apertura del vault. Un bundle caricato
+resta utilizzabile per le altre interfacce anche se la preparazione del suo
+provider di formato fallisce, con la diagnostica corrispondente. Un'invalidazione
+concorrente revoca la validità: l'apertura stantia fa rollback e non pubblica
+alcuna sessione.
+
+Il lease e le risorse preparate sono posseduti dalla sessione o dal rollback;
+nessuna `Operation` del manager viene trattenuta dalla sessione.
+
+Il componente non riceve capability host per il solo fatto di esportare
+`format`: ogni famiglia resta soggetta al mount e al `Guard`. Il percorso
+end-to-end verificato copre parse, render, errore dichiarato dal guest,
+modello malformato, trap e serialize; non documenta una parità ulteriore.
+
+### Decisioni sui provider
+
+`FormatProvider` è implementato e ha parità nativo/WASM per le operazioni
+coperte `parse`, `render_html` e `serialize`. Errori dichiarati dal guest,
+modelli malformati e trap sono coperti end-to-end nel percorso WASM e vengono
+recuperati come `FormatError`, ma non costituiscono un confronto di parità
+nativo/WASM.
+
+`IndexProvider` non viene aggiunto senza un componente che ne possieda una
+route e provi il feed, la query, il flush e la close. `EventHandler` inbound
+resta deferred finché un componente deve reagire a `Notice`; non va confuso
+con `host-events`, già supportato per il percorso outbound verso il guest.
 
 ## Provider WASM
 
@@ -98,6 +148,43 @@ sequenceDiagram
     CORE-->>GUARD: esito
     GUARD-->>GUEST: valore o errore
 ```
+
+### ViewProvider WASM
+
+Il componente può esportare facoltativamente l'interfaccia WIT `view`; il proxy
+`ViewProvider` viene registrato sulla stessa `Instance` del `Plugin` e degli
+altri provider preparati per il mount. Le `ViewSpec` dichiarano i parametri e
+l'host ne applica la validazione prima della chiamata al provider.
+
+Il proxy espone:
+
+- `interests`, infallibile: un trap del guest fa paniare il proxy e il confine
+  `Workspace` converte il panic in `PluginError::Internal`;
+- `render_view`, che legge dal `ReadApi`;
+- `on_action`, che usa l'`HostApi` e restituisce un `ViewUpdate`.
+
+Render e aggiornamenti passano dallo stesso `Guard` di fiducia: `Html` e
+`WebView` prodotti da provider non fidati (`Trust::Community`) sono rifiutati
+prima della shell; i provider `Trust::Core` possono produrli. Il confine
+preflight controlla root e riferimenti, cicli, profondità massima 64 e un budget
+di 8 Mi unità pesate.
+
+La stessa istanza non è rientrante: una chiamata guest che prova a rientrare
+nel proprio provider riceve un errore tipizzato. Un trap invalida il guest ma
+lascia vivo l'host; il teardown può riportare il trap come errore osservabile.
+
+`IndexProvider` e `EventHandler` inbound non fanno parte di questo percorso:
+restano deferred.
+
+La parità dimostrata è limitata a spec/interests/render/`Replace`/`Patch`, non
+implica parità per provider non esercitati.
+
+## Esempio minimo
+
+`esempi/view-wasm/` espone una view con parametri `mode` e `density`: il test
+monta il componente, confronta spec, interests e render con un provider
+nativo, invoca sia `Replace` sia `Patch`, quindi smonta e verifica che la view
+non sia più disponibile.
 
 ## Capability
 
@@ -189,10 +276,11 @@ sotto guardia, camminata, letture, parser e callback fuori custodia, quindi
 finalizzazione e drain degli eventi. Le operazioni globali e il dry run usano
 porte tipizzate e non riaprono accesso generico a `Host::workspace`.
 
-La sessione ferma watcher e job, consegna `VaultClosed`, esegue il flush globale
-e smonta i plugin in ordine inverso. L'anagrafe viene persistita per ultima.
-La disabilitazione persiste prima la scelta e rinvia gli eventi fino al termine
-dello smontaggio. La chiusura consegna invece gli eventi di `deactivate` mentre
+L'uscita desktop è in due fasi: prima il manager chiude l'ammissione e revoca
+lo snapshot startup; poi `Host` chiude le sessioni e infine il manager attende
+il drain dei lease. La sessione ferma watcher e job, consegna `VaultClosed`,
+esegue il flush globale e smonta i plugin in ordine inverso; l'anagrafe viene
+persistita per ultima. La chiusura consegna gli eventi di `deactivate` mentre
 le registrazioni del plugin sono ancora disponibili.
 
 Mount, rollback e chiamate dirette del registry rispettano lo stesso confine:
@@ -202,12 +290,11 @@ certificazione G3 sono riferite nello [stato del progetto](../project/status.md)
 
 ## UI non fidata
 
-`UiNode` contiene forme riservate al codice fidato, come HTML o webview. Il
-giorno in cui `ViewProvider` attraversa WASM, ogni albero deve passare da
-`UiNode::validate_untrusted()` prima della shell.
-
-Questa proprietà non è ancora esercitata end-to-end ed è tracciata in
-[#10](https://github.com/Fubeo/Fub/issues/10).
+`UiNode` contiene forme riservate al codice fidato, come HTML o webview. Nel
+percorso `ViewProvider` WASM ogni albero prodotto da un provider non fidato
+(`Trust::Community`) passa da `UiNode::validate_untrusted()` prima della shell;
+la stessa regola vale per `render_view` e per gli aggiornamenti restituiti da
+`on_action`. I provider `Trust::Core` possono produrre `Html` e `WebView`.
 
 ## Inventario installato
 
@@ -260,10 +347,10 @@ Schema, atomicità e rimozione sono descritti nel
 | eventi host | presente |
 | timeout e memoria | presenti |
 | capability negate | presenti |
-| `ViewProvider` | da completare |
-| altri provider | da completare su casi reali |
+| `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
+| altri provider | `IndexProvider` e `EventHandler` inbound deferred |
 | discovery, store installato e startup autorizzato | presenti; gestione desktop da completare |
-| UI non fidata | da completare |
+| UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 

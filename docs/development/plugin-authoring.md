@@ -43,6 +43,45 @@ registrazione e crearne un'altra.
 
 Non chiamare API Tauri e non importare dettagli privati della shell.
 
+Per un `FormatProvider`, la porta corrente è `FormatSource`: l'host lo prepara
+prima di costruire il `Workspace`, lo registra prima della costruzione e
+conserva le risorse preparate per la sessione, rilasciandole anche in caso di
+rollback.
+
+Un componente WASM può esportare opzionalmente l'interfaccia WIT `format`.
+`fub-wasm-host` ne prepara descriptor e capability, poi espone il proxy
+`FormatProvider` per parse, render HTML e serialize. Il modello attraversa una
+validazione del confine fidato `O(V+E)`: sono ammessi DAG ordinari, mentre cicli,
+riferimenti fuori indice, profondità oltre 64, span non validi, JSON non valido
+e materializzazione oltre 8 Mi unità pesate diventano errori tipizzati.
+Il manager usa solo plugin `enabled` con consenso `granted` nello snapshot della
+singola apertura e carica ogni bundle selezionato una volta; le modifiche
+diventano effettive dopo una riapertura. Un componente selezionato corrotto o
+non caricabile, o un'export `format` presente ma incompatibile, produce una
+diagnostica tipizzata e viene saltato per quell'apertura, senza impedire il
+vault. Un bundle caricato resta utilizzabile per le altre interfacce se fallisce
+la preparazione del provider di formato. Nessuna capability host è concessa
+implicitamente dall'esportazione: dichiarare `format` non sostituisce manifest,
+consenso, abilitazione o policy.
+
+Le risorse preparate e il lease sono posseduti dalla sessione o dal rollback;
+non conservare un'`Operation` del manager. Se una modifica invalida lo snapshot
+durante l'apertura, il token viene revocato, l'apertura stantia fa rollback e
+non pubblica una sessione.
+
+### Decisioni sui provider
+
+`FormatProvider` è implementato e ha parità nativo/WASM per le operazioni
+coperte `parse`, `render_html` e `serialize`. Errori dichiarati dal guest,
+modelli malformati e trap sono coperti end-to-end nel percorso WASM e vengono
+recuperati come `FormatError`, ma non costituiscono un confronto di parità
+nativo/WASM.
+
+`IndexProvider` non viene aggiunto senza un componente che ne possieda una
+route e provi il feed, la query, il flush e la close. `EventHandler` inbound
+resta deferred finché un componente deve reagire a `Notice`; non va confuso
+con `host-events`, già supportato per il percorso outbound verso il guest.
+
 ## Componente WASM
 
 Gli esempi correnti sono:
@@ -50,7 +89,16 @@ Gli esempi correnti sono:
 - `esempi/ping-wasm/`;
 - `esempi/modello-wasm/`;
 - `esempi/eventi-wasm/`;
-- `esempi/ciclo-wasm/`.
+- `esempi/ciclo-wasm/`;
+- `esempi/format-wasm/` per un provider di formato WASM end-to-end;
+- `esempi/view-wasm/` per un `ViewProvider` WASM end-to-end.
+
+Per il formato, usa `esempi/format-wasm/` come riferimento: il percorso
+esercitato copre parse, render, errore dichiarato, modello malformato, trap e
+serialize. Non assumere supporto per operazioni o capability non comprese in
+questi casi. Il proxy non è rientrante; l'istanza e le risorse preparate vivono
+fino alla chiusura della sessione o al rollback, senza trattenere un'`Operation`
+del manager.
 
 Il target è `wasm32-wasip2`.
 
@@ -119,7 +167,7 @@ mantengono stato non verificabile.
 
 Un provider restituisce `UiNode`; non restituisce DOM o JavaScript.
 
-Un componente WASM non può inviare:
+Un componente WASM non fidato (`Trust::Community`) non può inviare:
 
 - estensioni CodeMirror;
 - closure;
@@ -127,8 +175,38 @@ Un componente WASM non può inviare:
 - HTML fidato;
 - webview.
 
-`ViewProvider` WASM e validazione non fidata sono ancora lavoro aperto in
-[#10](https://github.com/Fubeo/Fub/issues/10).
+Un componente `Trust::Core` può produrre `Html` e `WebView` secondo la policy.
+
+### ViewProvider WASM
+
+Scegli il `ViewProvider` WASM quando la view è un'estensione di terzi isolata
+via WIT; il proxy è opzionale e condivide la stessa istanza del `Plugin`.
+`ViewSpec` espone i parametri (per esempio `mode` obbligatorio e `density`
+opzionale), che l'host valida prima della chiamata.
+
+Il provider dichiara `interests`, che è infallibile: un trap fa paniare il proxy
+e il confine `Workspace` converte il panic in `PluginError::Internal`. Legge il
+modello tramite `ReadApi` in `render_view` e usa l'`HostApi` in `on_action`;
+entrambe sono capacità già protette dal `Guard`, non accessi liberi del guest.
+Le sole forme di aggiornamento dimostrate in parità sono `Replace` e `Patch`;
+`IndexProvider` e `EventHandler` inbound restano deferred.
+
+Render e action passano il guard di fiducia e il preflight dell'albero:
+root/riferimenti, DAG senza cicli, profondità massima 64 e budget di 8 Mi
+unità pesate. Per `Trust::Community`, `Html` e `WebView` sono rifiutati prima
+della shell; `Trust::Core` è ammesso. Una rientranza sulla stessa istanza
+diventa un errore tipizzato. Un trap invalida il guest, mantiene vivo l'host e
+può essere riportato durante il teardown.
+
+Per una view, il test minimo aggiunge: caricamento di `esempi/view-wasm/`,
+validazione dei due parametri dichiarati, confronto di `interests` e
+`render_view` con un provider nativo, quindi una action che produca
+`Replace` e una che produca `Patch`. Dopo lo smontaggio, una nuova chiamata
+deve risultare in view sconosciuta.
+
+Il test di confine copre inoltre un albero malformato (`BadArgs`), `Html` o
+`WebView` annidati (`PermissionDenied`), un errore guest tipizzato, un trap
+(`Internal`) e il fatto che l'host resti utilizzabile.
 
 ## Test minimo
 
@@ -144,6 +222,10 @@ flowchart LR
 ```
 
 Aggiungi anche timeout, trap e output malformato quando il backend è WASM.
+Per l'apertura gestita, tratta la corruzione o incompatibilità come diagnostica
+tipizzata locale del manager e salto del componente selezionato; documenta
+separatamente il rollback di uno snapshot revocato e la chiusura con drain dei
+lease.
 
 ## Pubblicazione
 

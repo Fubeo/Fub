@@ -443,15 +443,27 @@ impl StartupValidity {
         })
     }
 
-    pub fn invalidate(&self) -> Result<(), PluginError> {
+    /// Revokes this startup decision without waiting for openings that already
+    /// acquired a lease to finish.
+    ///
+    /// Keeping revocation separate from draining lets shutdown reject new
+    /// openings before closing the currently published host.
+    pub fn revoke(&self) -> Result<(), PluginError> {
         let mut valid = self.valid.write()?;
         *valid = false;
+        Ok(())
+    }
+
+    /// Waits until every lease acquired before revocation has been released.
+    ///
+    /// The lease counter is deliberately independent from the validity lock:
+    /// draining therefore does not hold the host, registry, or session locks.
+    pub fn drain(&self) {
         let mut active = self
             .leases
             .active
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        drop(valid);
         while *active != 0 {
             active = self
                 .leases
@@ -459,6 +471,16 @@ impl StartupValidity {
                 .wait(active)
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
         }
+    }
+
+    /// Revokes the decision and waits for all existing startup leases.
+    ///
+    /// This compatibility operation preserves the original combined behavior;
+    /// shutdown that must close the published host between those phases should
+    /// call [`Self::revoke`] and [`Self::drain`] separately.
+    pub fn invalidate(&self) -> Result<(), PluginError> {
+        self.revoke()?;
+        self.drain();
         Ok(())
     }
 
@@ -475,6 +497,7 @@ impl Default for StartupValidity {
 
 pub struct StartupSnapshot {
     pub bundles: Vec<StartupBundle>,
+    pub formats: crate::PreparedFormatSource,
     pub diagnostics: Vec<PluginError>,
     pub validity: Option<Arc<StartupValidity>>,
     pub lease: Option<StartupLease>,
@@ -484,6 +507,7 @@ impl StartupSnapshot {
     pub fn new(bundles: Vec<StartupBundle>) -> Self {
         Self {
             bundles,
+            formats: crate::PreparedFormatSource::empty(),
             diagnostics: Vec::new(),
             validity: None,
             lease: None,

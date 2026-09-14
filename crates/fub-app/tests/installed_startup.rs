@@ -207,11 +207,28 @@ fn startup_source_skips_corrupt_unapproved_blobs_and_diagnoses_the_selected_one(
         .expect("corruzione controllata");
     let inventory_before = std::fs::read(inventory(config)).expect("inventory bytes");
 
-    let startup = manager.prepare().expect("lo store apre");
-    assert!(startup.bundles.is_empty());
-    assert_eq!(startup.diagnostics.len(), 1);
-    assert!(matches!(&startup.diagnostics[0], PluginError::Conflict(_)));
+    let vault_dir = tempfile::tempdir().expect("vault tempdir");
+    let vault = root(&vault_dir);
+    std::fs::write(vault.join("Nota.md"), NOTE).expect("nota");
+    host.open(vault).expect("il vault resta apribile");
+    assert!(matches!(
+        host.startup_diagnostics(None)
+            .expect("diagnostica apertura")
+            .as_slice(),
+        [PluginError::Conflict(_)]
+    ));
+    let listed = manager
+        .list(&host, Some(vault.as_str()))
+        .expect("lista installata");
+    assert_eq!(listed.len(), 1);
+    assert!(!listed[0].bundle.mounted);
+    assert!(matches!(
+        host.invoke_user_command(None, COMMAND, serde_json::json!({}), InvokeMode::Apply),
+        Err(PluginError::UnknownCommand(_))
+    ));
     assert_eq!(std::fs::read(inventory(config)).unwrap(), inventory_before);
+    manager.shutdown().expect("manager chiuso");
+    assert!(host.close().is_empty());
 
     let dir = tempfile::tempdir().expect("config tempdir");
     let config = root(&dir);
@@ -237,8 +254,26 @@ fn startup_source_skips_corrupt_unapproved_blobs_and_diagnoses_the_selected_one(
     let inventory_before = serde_json::to_vec_pretty(&persisted).unwrap();
     std::fs::write(inventory(config), &inventory_before).expect("inventory coerente col blob");
 
-    let startup = manager.prepare().expect("lo store apre");
-    assert!(startup.bundles.is_empty());
-    assert_eq!(startup.diagnostics.len(), 1);
+    let vault_dir = tempfile::tempdir().expect("vault tempdir");
+    let vault = root(&vault_dir);
+    std::fs::write(vault.join("Nota.md"), NOTE).expect("nota");
+    host.open(vault).expect("il vault resta apribile");
+    assert!(matches!(
+        host.startup_diagnostics(None)
+            .expect("diagnostica apertura")
+            .as_slice(),
+        [PluginError::BadArgs(_)]
+    ));
+    let listed = manager
+        .list(&host, Some(vault.as_str()))
+        .expect("lista installata");
+    assert_eq!(listed.len(), 1);
+    assert!(!listed[0].bundle.mounted);
+    assert!(matches!(
+        host.invoke_user_command(None, COMMAND, serde_json::json!({}), InvokeMode::Apply),
+        Err(PluginError::UnknownCommand(_))
+    ));
     assert_eq!(std::fs::read(inventory(config)).unwrap(), inventory_before);
+    manager.shutdown().expect("manager chiuso");
+    assert!(host.close().is_empty());
 }

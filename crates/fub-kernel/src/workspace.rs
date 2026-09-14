@@ -8924,9 +8924,12 @@ impl Workspace {
         instance: &ViewInstance,
     ) -> std::result::Result<ViewInterests, PluginError> {
         let at = self.view_owner(&instance.view)?;
+        self.check_params(at, instance)?;
         let registered = &self.providers.views[at];
         let provider = registered.provider.read();
-        Ok(provider.interests(instance))
+        crate::safety::calling_callback(&registered.id, "ViewProvider::interests", || {
+            Ok(provider.interests(instance))
+        })
     }
 
     /// aggiornamento. Ogni albero che l'aggiornamento porta con sé —
@@ -8935,7 +8938,6 @@ impl Workspace {
     /// fidato non può iniettare contenuto attivo *in risposta a un click*
     /// invece che al rendering, né per la via stretta invece che per quella
     /// larga.
-    // Prima del `take`: dopo, il registro è vuoto.
     /// Prepara un'azione di view senza eseguire codice del provider. Il flag di
     /// provider-call viene aperto qui e chiuso in `finish_view_action`, così gli
     /// eventi prodotti dalla callback non possono rientrare nel suo frame.
