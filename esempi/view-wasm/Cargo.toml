@@ -13,6 +13,7 @@ malformed-arena = []
 
 [dependencies]
 wit-bindgen = "0.60"
+fub-abi = { path = "../../crates/fub-abi" }
 
 [profile.release]
 strip = true

@@ -332,15 +332,6 @@ impl ViewGuest for Component {
     }
 }
 
-fn escape_html(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
-}
-
 impl FormatGuest for Component {
     fn descriptor() -> FormatDescriptor {
         FormatDescriptor {
@@ -399,7 +390,7 @@ impl FormatGuest for Component {
         };
         Ok(format!(
             "<p data-format=\"example.view-format\" data-target=\"{target}\">{}</p>",
-            escape_html(&model.text)
+            fub_abi::html::escape(&model.text)
         ))
     }
 
