@@ -30,7 +30,7 @@ use fub_kernel::storage::{DirEntry, FsStorage, Stat, VaultStorage};
 use fub_kernel::{FormatRegistry, MachineSettings, Workspace, MAIN_PANE};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    Arc, Barrier,
+    Arc, Barrier, OnceLock,
 };
 
 struct Vault {
@@ -41,15 +41,19 @@ struct Vault {
 struct RestoreRaceStorage {
     inner: FsStorage,
     gate: Arc<Barrier>,
+    document_path: Utf8PathBuf,
+    snapshot_path: OnceLock<Utf8PathBuf>,
     armed: AtomicBool,
     write_fault: AtomicBool,
 }
 
 impl VaultStorage for RestoreRaceStorage {
     fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
-        let is_snapshot = self.armed.load(Ordering::Acquire)
-            && path.to_string().contains("/.fub/plugins/fub.versioning/")
-            && path.extension() == Some("md");
+        let is_snapshot = self
+            .snapshot_path
+            .get()
+            .is_some_and(|snapshot| path == snapshot)
+            && self.armed.swap(false, Ordering::AcqRel);
         if is_snapshot {
             self.gate.wait();
             self.gate.wait();
@@ -62,8 +66,7 @@ impl VaultStorage for RestoreRaceStorage {
         expected: Option<&[u8]>,
         bytes: &[u8],
     ) -> std::io::Result<fub_kernel::storage::ConditionalWrite> {
-        let is_document = path.extension() == Some("md") && !path.to_string().contains("/.fub/");
-        if is_document && self.write_fault.swap(false, Ordering::AcqRel) {
+        if path == self.document_path && self.write_fault.swap(false, Ordering::AcqRel) {
             return Err(std::io::Error::other("write_if_unchanged fault"));
         }
         self.inner.write_if_unchanged(path, expected, bytes)
@@ -529,6 +532,8 @@ fn restore_conflicts_if_document_changes_while_snapshot_is_read() {
     let storage = Arc::new(RestoreRaceStorage {
         inner: FsStorage,
         gate: Arc::clone(&gate),
+        document_path: vault.root.join("Uno.md"),
+        snapshot_path: OnceLock::new(),
         armed: AtomicBool::new(false),
         write_fault: AtomicBool::new(false),
     });
@@ -546,6 +551,26 @@ fn restore_conflicts_if_document_changes_while_snapshot_is_read() {
     let store = vault.root.join(".fub").join("plugins").join(VERSIONING_ID);
     let index = store.join("versions.json");
     let index_before = std::fs::read(&index).expect("indice delle versioni");
+    let snapshot = std::fs::read_dir(&store)
+        .expect("spazio del versioning")
+        .find_map(|entry| {
+            let path =
+                Utf8PathBuf::from_path_buf(entry.expect("voce dello store").path()).expect("utf8");
+            let candidate = path.join(format!(
+                "{}.md",
+                action
+                    .payload
+                    .get("ts")
+                    .and_then(|value| value.as_u64())
+                    .expect("l'azione porta il suo istante")
+            ));
+            candidate.is_file().then_some(candidate)
+        })
+        .expect("snapshot selezionato");
+    storage
+        .snapshot_path
+        .set(snapshot)
+        .expect("snapshot armabile");
     storage.armed.store(true, Ordering::Release);
     let root = vault.root.clone();
     let external = std::thread::spawn(move || {
@@ -590,6 +615,8 @@ fn restore_reports_io_and_changes_nothing_if_document_write_fails() {
     let storage = Arc::new(RestoreRaceStorage {
         inner: FsStorage,
         gate: Arc::new(Barrier::new(2)),
+        document_path: vault.root.join("Uno.md"),
+        snapshot_path: OnceLock::new(),
         armed: AtomicBool::new(false),
         write_fault: AtomicBool::new(false),
     });
