@@ -92,7 +92,7 @@ eliminato né escluso da un backup senza una scelta esplicita.
 | `.fub/workspace.json` | autorevole | 1 | organizzazione |
 | `.fub/journal.jsonl` | autorevole operativo | 1 | registro mutazioni |
 | `.fub/drafts/` | autorevole | 1 | bozze non consolidate |
-| `.fub/data/entries.json` | derivata | 4 | anagrafe dei file |
+| `.fub/data/entries.json` | derivata | 5 | anagrafe dei file |
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 
@@ -183,15 +183,28 @@ I file autorevoli seguono:
 
 ## Backup
 
-Un backup completo include:
+Il backup completo del vault comprende documenti, allegati, file sconosciuti,
+`.trash/`, ogni voce autorevole in `.fub/` e lo storage autorevole dei plugin.
+La configurazione macchina è fuori dallo scope del vault e resta esclusa dal
+drill. Il comando focalizzato è:
 
-- documenti, allegati e file sconosciuti;
-- `.trash/`;
-- ogni voce autorevole in `.fub/`;
-- storage autorevole dei plugin;
-- configurazione macchina soltanto quando si vuole ripristinare preferenze e
-  registro locale.
+```bash
+cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+```
 
-Indici, cache e log possono essere omessi se la procedura dimostra la
-ricostruzione. La prova è tracciata in
-[#7](https://github.com/Fubeo/Fub/issues/7).
+Il fixture versionato contiene l'intero scope del vault e il manifesto
+indipendente registra path, classe, dimensione, impronta FNV-1a e schema.
+L'enumerazione rifiuta symlink e file speciali. Il banco lavora offline in un
+parent temporaneo privato ed esclusivo, prepara uno staging adiacente alla
+destinazione e pubblica con un solo rename. Non dimostra no-replace
+concorrente universale né durabilità dopo un crash.
+
+La validazione di un artefatto corrotto o mancante avviene prima dello staging
+e della destinazione. Se la destinazione è occupata, resta invariata e lo
+staging completo resta disponibile. La verifica conclusiva apre il vault con
+`Host` reale, attende l'indicizzazione, legge il documento e chiude l'host.
+
+La feature `fub.backup` annota soltanto le note nello stesso vault: non è il
+flusso completo documentato da questo drill. La prova è tracciata nell'issue
+[#7](https://github.com/Fubeo/Fub/issues/7), ancora aperta finché CI non la
+verifica.

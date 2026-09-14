@@ -337,6 +337,76 @@ fn validate_manifest(root: &Path, expected: &[ExpectedEntry]) {
         root.display()
     );
 }
+fn validate_restore_manifest(
+    root: &Path,
+    expected: &[ExpectedEntry],
+    phase: &str,
+) -> Result<(), String> {
+    for entry in expected {
+        let path = root.join(entry.path);
+        let bytes = match fs::read(&path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(format!(
+                    "{phase} {}: missing authoritative entry",
+                    entry.path
+                ));
+            }
+            Err(error) => return Err(format!("{phase} {}: read failed: {error}", entry.path)),
+        };
+        let actual = Fnv1a::hash(&bytes);
+        if actual != entry.hash {
+            return Err(format!(
+                "{phase} {}: hash mismatch (expected {:#018x}, actual {:#018x})",
+                entry.path, entry.hash, actual
+            ));
+        }
+        if bytes.len() as u64 != entry.size {
+            return Err(format!(
+                "{phase} {}: size mismatch (expected {}, actual {})",
+                entry.path,
+                entry.size,
+                bytes.len()
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn restore_artifact(
+    artifact: &Path,
+    destination: &Path,
+    expected: &[ExpectedEntry],
+) -> Result<(), String> {
+    validate_restore_manifest(artifact, expected, "validate artifact")?;
+    let staging = destination.with_file_name(format!(
+        "{}.staging",
+        destination
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| format!(
+                "stage {}: destination has no UTF-8 name",
+                destination.display()
+            ))?
+    ));
+    copy_tree(artifact, &staging);
+    validate_restore_manifest(&staging, expected, "validate staging")?;
+    if destination.exists() {
+        return Err(format!(
+            "publish {}: destination already exists; staging remains at {}",
+            destination.display(),
+            staging.display()
+        ));
+    }
+    fs::rename(&staging, destination).map_err(|error| {
+        format!(
+            "publish {} -> {}: {error}",
+            staging.display(),
+            destination.display()
+        )
+    })?;
+    Ok(())
+}
 
 #[test]
 fn backup_restore_drill_captures_publishes_and_opens_cleanly() {
@@ -351,25 +421,17 @@ fn backup_restore_drill_captures_publishes_and_opens_cleanly() {
     let oracle = collect_manifest(&source);
     validate_manifest(&artifact, &oracle);
 
-    // Il parent è un TempDir privato ed esclusivo del test: non ci sono writer concorrenti.
-    // L'assert subito prima di rename è una guardia del drill, non una garanzia universale
-    // di «atomic no-replace» su ogni piattaforma o contro processi esterni.
     let destination_area = TempDir::new().expect("stage: destination tempdir");
     let destination = destination_area.path().join("restored");
-    let staging = destination_area.path().join("restored.staging");
-    copy_tree(&artifact, &staging);
-    validate_manifest(&staging, &oracle);
-    assert!(!destination.exists(), "publish: destination must be absent");
-    fs::rename(&staging, &destination).unwrap_or_else(|error| {
-        panic!(
-            "publish {} -> {}: {error}",
-            staging.display(),
-            destination.display()
-        )
-    });
-    assert!(!staging.exists(), "publish: staging remains after rename");
+    restore_artifact(&artifact, &destination, &oracle)
+        .unwrap_or_else(|error| panic!("restore failed: {error}"));
+    assert!(
+        !destination.with_file_name("restored.staging").exists(),
+        "publish: staging remains after rename"
+    );
     validate_manifest(&destination, &oracle);
     let host = Host::new().with_watcher(Box::new(NoWatcher));
+
     host.open(
         &camino::Utf8PathBuf::from_path_buf(destination.clone())
             .expect("verify: destination path is UTF-8"),
@@ -416,6 +478,89 @@ fn backup_restore_drill_captures_publishes_and_opens_cleanly() {
         "verify close errors: {close_errors:?}"
     );
     validate_after_host(&destination, &oracle);
+}
+#[test]
+fn backup_restore_drill_rejects_corrupt_artifact_without_mutation() {
+    let source_area = TempDir::new().expect("capture: source tempdir");
+    let source = source_area.path().join("source");
+    copy_tree(&fixture_root(), &source);
+    let oracle = collect_manifest(&source);
+
+    let artifact_area = TempDir::new().expect("capture: artifact tempdir");
+    let artifact = artifact_area.path().join("backup");
+    copy_tree(&source, &artifact);
+    let corrupt_path = artifact.join("attachments/non-utf8.bin");
+    let mut bytes = fs::read(&corrupt_path).expect("corrupt: read blob");
+    bytes[0] ^= 0xff;
+    fs::write(&corrupt_path, &bytes).expect("corrupt: write blob");
+
+    let destination_area = TempDir::new().expect("stage: destination tempdir");
+    let destination = destination_area.path().join("restored");
+    let sentinel = b"destination sentinel";
+    fs::write(&destination, sentinel).expect("publish: write sentinel");
+    let error = restore_artifact(&artifact, &destination, &oracle).expect_err("corrupt accepted");
+    assert!(error.contains("validate artifact"));
+    assert!(error.contains("attachments/non-utf8.bin"));
+    assert!(error.contains("expected") && error.contains("actual"));
+    assert_eq!(
+        fs::read(&destination).expect("publish: read sentinel"),
+        sentinel
+    );
+    assert!(!destination.with_file_name("restored.staging").exists());
+}
+
+#[test]
+fn backup_restore_drill_rejects_missing_artifact_without_mutation() {
+    let source_area = TempDir::new().expect("capture: source tempdir");
+    let source = source_area.path().join("source");
+    copy_tree(&fixture_root(), &source);
+    let oracle = collect_manifest(&source);
+
+    let artifact_area = TempDir::new().expect("capture: artifact tempdir");
+    let artifact = artifact_area.path().join("backup");
+    copy_tree(&source, &artifact);
+    fs::remove_file(artifact.join("unknown.data")).expect("missing: remove authoritative entry");
+
+    let destination_area = TempDir::new().expect("stage: destination tempdir");
+    let destination = destination_area.path().join("restored");
+    let sentinel = b"destination sentinel";
+    fs::write(&destination, sentinel).expect("publish: write sentinel");
+    let error = restore_artifact(&artifact, &destination, &oracle).expect_err("missing accepted");
+    assert!(error.contains("validate artifact"));
+    assert!(error.contains("unknown.data"));
+    assert!(error.contains("missing"));
+    assert_eq!(
+        fs::read(&destination).expect("publish: read sentinel"),
+        sentinel
+    );
+    assert!(!destination.with_file_name("restored.staging").exists());
+}
+
+#[test]
+fn backup_restore_drill_rejects_occupied_destination_and_keeps_staging() {
+    let source_area = TempDir::new().expect("capture: source tempdir");
+    let source = source_area.path().join("source");
+    copy_tree(&fixture_root(), &source);
+    let oracle = collect_manifest(&source);
+
+    let artifact_area = TempDir::new().expect("capture: artifact tempdir");
+    let artifact = artifact_area.path().join("backup");
+    copy_tree(&source, &artifact);
+
+    let destination_area = TempDir::new().expect("stage: destination tempdir");
+    let destination = destination_area.path().join("restored");
+    let sentinel = b"destination sentinel";
+    fs::write(&destination, sentinel).expect("publish: write sentinel");
+    let error = restore_artifact(&artifact, &destination, &oracle).expect_err("occupied accepted");
+    assert!(error.contains("publish"));
+    assert!(error.contains("already exists"));
+    assert_eq!(
+        fs::read(&destination).expect("publish: read sentinel"),
+        sentinel
+    );
+    let staging = destination.with_file_name("restored.staging");
+    assert!(staging.is_dir(), "publish: staging must remain complete");
+    validate_manifest(&staging, &oracle);
 }
 
 #[test]

@@ -100,14 +100,40 @@ Fub comprende convenzioni usate nei vault Markdown, tra cui frontmatter YAML,
 wikilink, tag, heading, ancore ed embed. Il provider decide la semantica del
 formato; il kernel conserva path e sorgente senza incorporare regole Markdown.
 
+## Backup e ripristino
+
+Il backup completo riguarda l'intero vault: documenti, allegati, file
+sconosciuti, `.trash/`, stato autorevole sotto `.fub/` e storage autorevole
+dei plugin. La configurazione macchina è esclusa. Il banco focalizzato si
+esegue con:
+
+```bash
+cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+```
+
+Il fixture è versionato e il manifesto indipendente controlla ogni path,
+classe, dimensione, impronta FNV-1a e schema; symlink e file speciali sono
+rifiutati. Il flusso resta offline, con parent temporaneo privato ed
+esclusivo, staging adiacente e un solo rename di pubblicazione. Sono espliciti
+i limiti: nessuna garanzia universale di no-replace concorrente e nessuna
+garanzia di durabilità dopo un crash.
+
+Artefatti corrotti o mancanti falliscono la validazione prima dello staging e
+della destinazione. Una destinazione occupata conserva il contenuto esistente
+e lo staging completo. `Host` reale apre il vault ripristinato, attende
+l'indicizzazione, verifica la lettura del documento e chiude senza errori.
+
+`fub.backup` copia snapshot delle sole note nello storage namespaced dello stesso vault e al restore ricrea soltanto note mancanti; il drill completo resta separato.
+
 ## Limiti
 
 - Fub non sincronizza automaticamente il vault con un servizio remoto;
-- il backup completo deve includere ogni dato classificato come autorevole;
+- il backup completo include ogni dato classificato come autorevole;
 - eliminare l'intera `.fub/` può perdere impostazioni, organizzazione, bozze,
   versioni e dati di plugin;
 - eliminare soltanto una cache è sicuro solo quando il riferimento tecnico la
   dichiara ricostruibile.
 
-La prova periodica di backup e ripristino è tracciata nell'issue
-[#7](https://github.com/Fubeo/Fub/issues/7).
+La prova è tracciata nell'issue
+[#7](https://github.com/Fubeo/Fub/issues/7), ancora aperta finché CI non la
+verifica.
