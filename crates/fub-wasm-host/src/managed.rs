@@ -8,8 +8,8 @@ use camino::Utf8Path;
 use fub_abi::PluginError;
 use fub_host::registry::BundleKind;
 use fub_host::{
-    BundleClaim, BundleInfo, Custody, Host, StartupBundle, StartupSnapshot, StartupSource,
-    StartupValidity,
+    BundleClaim, BundleInfo, Custody, Host, PreparedFormatSource, StartupBundle, StartupSnapshot,
+    StartupSource, StartupValidity,
 };
 use fub_kernel::Trust;
 use serde::Serialize;
@@ -117,6 +117,15 @@ pub struct InstalledPluginManager {
     operations: Arc<OperationLifecycle>,
 }
 
+/// Token della prima fase di arresto, che conserva la validità revocata.
+///
+/// Il token non attende le aperture startup già in corso: [`Self::finish`]
+/// completa esplicitamente la seconda fase, drenandone i lease.
+#[must_use = "completare l'arresto con InstalledShutdown::finish()"]
+pub struct InstalledShutdown {
+    validity: Arc<StartupValidity>,
+}
+
 impl InstalledPluginManager {
     /// Apre lo store nella configurazione macchina già scelta dal composition root.
     pub fn open(config: &Utf8Path) -> Result<Self, PluginError> {
@@ -139,10 +148,20 @@ impl InstalledPluginManager {
         &self.store
     }
 
-    /// Impedisce nuovi ingressi e aspetta operazioni e aperture già ammesse.
-    pub fn shutdown(&self) -> Result<(), PluginError> {
+    /// Impedisce nuovi ingressi e aspetta le operazioni già ammesse.
+    ///
+    /// La validità startup viene revocata senza attendere i lease delle
+    /// aperture già in corso; [`InstalledShutdown::finish`] completa il drain.
+    pub fn begin_shutdown(&self) -> Result<InstalledShutdown, PluginError> {
         self.operations.shutdown()?;
-        self.replace_and_invalidate_validity()
+        let validity = self.replace_validity()?;
+        validity.revoke()?;
+        Ok(InstalledShutdown { validity })
+    }
+
+    /// Arresto compatibile per i chiamanti headless che hanno già chiuso l'host.
+    pub fn shutdown(&self) -> Result<(), PluginError> {
+        self.begin_shutdown()?.finish()
     }
 
     /// Ammette un'operazione prima di accodarla su un executor esterno.
@@ -376,13 +395,17 @@ impl InstalledPluginManager {
             .clone())
     }
 
-    fn replace_and_invalidate_validity(&self) -> Result<(), PluginError> {
+    fn replace_validity(&self) -> Result<Arc<StartupValidity>, PluginError> {
         let _turn = self.validity_turn.write_turn();
-        let previous = {
-            let mut state = self.state.write()?;
-            std::mem::replace(&mut state.validity, Arc::new(StartupValidity::new()))
-        };
-        previous.invalidate()
+        let mut state = self.state.write()?;
+        Ok(std::mem::replace(
+            &mut state.validity,
+            Arc::new(StartupValidity::new()),
+        ))
+    }
+
+    fn replace_and_invalidate_validity(&self) -> Result<(), PluginError> {
+        self.replace_validity()?.invalidate()
     }
 
     fn reconcile(
@@ -453,6 +476,13 @@ impl InstalledPluginManager {
         Ok(metadata_info(installed, mounted, runtime_known))
     }
 }
+impl InstalledShutdown {
+    /// Attende il rilascio dei lease startup acquisiti prima della revoca.
+    pub fn finish(self) -> Result<(), PluginError> {
+        self.validity.drain();
+        Ok(())
+    }
+}
 
 /// Ammissione owned che resta viva anche mentre l'operazione attende un executor.
 pub struct InstalledOperation {
@@ -520,6 +550,7 @@ impl StartupSource for InstalledPluginManager {
         let lease = validity.acquire()?;
         let snapshot = self.store.snapshot().map_err(plugin_error)?;
         let mut bundles = Vec::new();
+        let mut formats = PreparedFormatSource::empty();
         let mut diagnostics = Vec::new();
         for installed in snapshot
             .plugins()
@@ -528,11 +559,25 @@ impl StartupSource for InstalledPluginManager {
         {
             let state = self.installation_state(installed.installation)?;
             match self.load_bundle(installed) {
-                Ok(bundle) => bundles.push(StartupBundle::new(
-                    Arc::new(bundle),
-                    true,
-                    state.claim.clone(),
-                )),
+                Ok(bundle) => {
+                    let opening = Arc::new(bundle.prepare_opening());
+                    match opening.format_provider() {
+                        Ok(Some(provider)) => {
+                            formats = formats.with_provider(provider);
+                        }
+                        Ok(None) => {}
+                        Err(mut error) => {
+                            let message = error.message().to_string();
+                            *error.message_mut() = format!(
+                                "plugin `{}` (installazione {}), provider di formato: {message}",
+                                installed.manifest.id, installed.installation,
+                            )
+                            .into();
+                            diagnostics.push(error);
+                        }
+                    }
+                    bundles.push(StartupBundle::new(opening, true, state.claim.clone()));
+                }
                 Err(mut error) => {
                     let message = error.message().to_string();
                     *error.message_mut() = format!(
@@ -546,6 +591,7 @@ impl StartupSource for InstalledPluginManager {
         }
         Ok(StartupSnapshot {
             bundles,
+            formats,
             diagnostics,
             validity: Some(validity),
             lease: Some(lease),

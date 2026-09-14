@@ -9,8 +9,13 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
+    RenderOptions,
+};
+use fub_abi::model::DocumentModel;
 use fub_abi::traits::{CommandProvider, HostApi, Plugin, PluginManifest};
-use fub_abi::PluginError;
+use fub_abi::{FormatError, PluginError};
 use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
 use fub_kernel::Trust;
 use wasmtime::component::types::ComponentItem;
@@ -19,10 +24,10 @@ use wasmtime::{Engine, Store};
 
 use crate::borrow::{with_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
+use crate::contract::exports::fub::abi::format as w_format;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
 use crate::guest::add_to_linker;
 use crate::translate as tr;
-
 /// Famiglie del contratto effettivamente collegate da questo host.
 const FAMILIES_SERVED: &[&str] = &[
     "fub:abi/host-env",
@@ -32,6 +37,30 @@ const FAMILIES_SERVED: &[&str] = &[
     "fub:abi/host-events",
 ];
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
+const FORMAT_INTERFACE: &str = "fub:abi/format";
+const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
+
+fn is_supported_format_export(name: &str) -> bool {
+    name == FORMAT_INTERFACE
+        || name == FORMAT_EXPORT
+        || name
+            .strip_prefix(FORMAT_INTERFACE)
+            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+}
+
+fn resolve_format_indices<T, E>(
+    export_present: bool,
+    resolve: impl FnOnce() -> Result<T, E>,
+) -> Result<Option<T>, LoadError>
+where
+    E: std::fmt::Display,
+{
+    match resolve() {
+        Ok(indices) => Ok(Some(indices)),
+        Err(error) if export_present => Err(LoadError::Compilation(format!("{error:#}"))),
+        Err(_) => Ok(None),
+    }
+}
 
 /// Errori che possono verificarsi prima che un componente WASM diventi un
 /// bundle montabile.
@@ -62,6 +91,7 @@ pub struct Component {
     pre: InstancePre<State>,
     indices: w_plugin::GuestIndices,
     command_indices: Option<w_command::GuestIndices>,
+    format_indices: Option<w_format::GuestIndices>,
 }
 
 impl Component {
@@ -98,17 +128,23 @@ impl Component {
         }
         cap_the_rest(&mut linker, &engine, &component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
-
+        let format_export_present = component
+            .component_type()
+            .exports(&engine)
+            .any(|(name, _)| is_supported_format_export(name));
         let pre = linker
             .instantiate_pre(&component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
         let indices = w_plugin::GuestIndices::new(&pre)
             .map_err(|error| LoadError::NotAPlugin(format!("{error:#}")))?;
         let command_indices = w_command::GuestIndices::new(&pre).ok();
+        let format_indices =
+            resolve_format_indices(format_export_present, || w_format::GuestIndices::new(&pre))?;
         Ok(Self {
             pre,
             indices,
             command_indices,
+            format_indices,
         })
     }
 
@@ -131,9 +167,21 @@ impl Component {
             ),
             None => None,
         };
+        let format = match &self.format_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
         Ok(Instance {
             store,
-            interfaces: Interfaces { plugin, commands },
+            interfaces: Interfaces {
+                plugin,
+                commands,
+                format,
+            },
         })
     }
 }
@@ -184,6 +232,7 @@ fn cap_the_rest(
 struct Interfaces {
     plugin: w_plugin::Guest,
     commands: Option<w_command::Guest>,
+    format: Option<w_format::Guest>,
 }
 
 struct Instance {
@@ -305,6 +354,86 @@ impl CommandProvider for WasmCommandProvider {
     }
 }
 
+/// Proxy `FormatProvider` sopra una singola istanza WASM.
+pub struct WasmFormatProvider {
+    inner: Arc<Mutex<Instance>>,
+    descriptor: FormatDescriptor,
+    capabilities: FormatCapabilities,
+}
+
+impl FormatProvider for WasmFormatProvider {
+    fn descriptor(&self) -> FormatDescriptor {
+        self.descriptor.clone()
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        self.capabilities.clone()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source_wit = tr::to_document_source(source);
+        let ctx_wit = tr::to_parse_context(ctx);
+        let mut instance = self
+            .inner
+            .lock()
+            .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *instance;
+        crate::limits::renew(&mut *store);
+        let format = interfaces.format.as_ref().ok_or_else(|| {
+            FormatError::Parse("il componente non esporta `fub:abi/format`".into())
+        })?;
+        let model = format
+            .call_parse(&mut *store, &source_wit, &ctx_wit)
+            .map_err(|error| FormatError::Parse(format!("il componente è caduto: {error:#}")))?
+            .map_err(tr::from_format_error)?;
+        crate::model::from_document(model, ctx, source)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        let model_wit = crate::model::to_document(model.clone())
+            .map_err(|error| FormatError::Render(error.to_string()))?;
+        let opts_wit = tr::to_render_options(opts);
+        let mut instance = self
+            .inner
+            .lock()
+            .map_err(|_| FormatError::Render("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *instance;
+        crate::limits::renew(&mut *store);
+        let format = interfaces.format.as_ref().ok_or_else(|| {
+            FormatError::Render("il componente non esporta `fub:abi/format`".into())
+        })?;
+        format
+            .call_render_html(&mut *store, &model_wit, &opts_wit)
+            .map_err(|error| FormatError::Render(format!("il componente è caduto: {error:#}")))?
+            .map_err(tr::from_format_error)
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        let model_wit = crate::model::to_document(model.clone())
+            .map_err(|error| FormatError::Serialize(error.to_string()))?;
+        let mut instance = self
+            .inner
+            .lock()
+            .map_err(|_| FormatError::Serialize("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *instance;
+        crate::limits::renew(&mut *store);
+        let format = interfaces.format.as_ref().ok_or_else(|| {
+            FormatError::Serialize("il componente non esporta `fub:abi/format`".into())
+        })?;
+        format
+            .call_serialize(&mut *store, &model_wit)
+            .map_err(|error| FormatError::Serialize(format!("il componente è caduto: {error:#}")))?
+            .map_err(tr::from_format_error)
+    }
+}
 /// Componente montabile dalla stessa porta dei bundle nativi.
 pub struct WasmBundle {
     component: Component,
@@ -376,6 +505,107 @@ impl WasmBundle {
             }),
         }
     }
+    fn format_provider_from_inner(
+        inner: Arc<Mutex<Instance>>,
+    ) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+        let mut locked = inner
+            .lock()
+            .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *locked;
+        let format = match interfaces.format.as_ref() {
+            Some(format) => format,
+            None => return Ok(None),
+        };
+        crate::limits::renew(&mut *store);
+        let descriptor = format
+            .call_descriptor(&mut *store)
+            .map_err(failure)
+            .map(tr::from_format_descriptor)?;
+        crate::limits::renew(&mut *store);
+        let capabilities = format
+            .call_capabilities(&mut *store)
+            .map_err(failure)
+            .and_then(tr::from_format_capabilities)?;
+        drop(locked);
+        Ok(Some(Box::new(WasmFormatProvider {
+            inner,
+            descriptor,
+            capabilities,
+        })))
+    }
+
+    /// Prepara il provider di formato opzionale e ne congela i metadati.
+    pub fn format_provider(&self) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+        let instance = self
+            .component
+            .instantiate()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+        Self::format_provider_from_inner(Arc::new(Mutex::new(instance)))
+    }
+
+    pub(crate) fn prepare_opening(self) -> WasmOpeningBundle {
+        let instance = self
+            .component
+            .instantiate()
+            .map(|instance| Arc::new(Mutex::new(instance)))
+            .map_err(|error| error.to_string());
+        WasmOpeningBundle {
+            instance,
+            manifest: self.manifest,
+            trust: self.trust,
+        }
+    }
+}
+
+fn bundle_mount(
+    instance: Result<Arc<Mutex<Instance>>, String>,
+    manifest: PluginManifest,
+) -> BundleMount<'static> {
+    let inner = match instance {
+        Ok(inner) => inner,
+        Err(error) => {
+            return BundleMount::new(Box::new(FailedPlugin { manifest, error }), |_| {
+                RegistrationReport::complete()
+            });
+        }
+    };
+    let plugin = Box::new(WasmPlugin {
+        inner: Arc::clone(&inner),
+    });
+    BundleMount::new(plugin, move |registrar| {
+        let specs = match WasmBundle::declared_commands(&inner) {
+            Ok(specs) => specs,
+            Err(error) => return RegistrationReport::failed(error),
+        };
+        if specs.is_empty() {
+            return RegistrationReport::complete();
+        }
+
+        let provider = WasmCommandProvider { inner, specs };
+        match registrar.register_command_provider(Box::new(provider)) {
+            Ok(()) => RegistrationReport::complete(),
+            Err(error) => RegistrationReport::failed(format!("comandi non registrati: {error}")),
+        }
+    })
+}
+
+/// Stato preparato per una singola apertura: plugin e provider condividono
+/// esattamente l'istanza conservata qui.
+pub(crate) struct WasmOpeningBundle {
+    instance: Result<Arc<Mutex<Instance>>, String>,
+    manifest: PluginManifest,
+    trust: Trust,
+}
+
+impl WasmOpeningBundle {
+    pub(crate) fn format_provider(&self) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+        let inner = self
+            .instance
+            .as_ref()
+            .map(Arc::clone)
+            .map_err(|error| PluginError::Internal(error.clone().into()))?;
+        WasmBundle::format_provider_from_inner(inner)
+    }
 }
 
 impl Bundle for WasmBundle {
@@ -403,43 +633,44 @@ impl Bundle for WasmBundle {
     /// Crea **una** istanza e consegna due proprietari espliciti dello stesso
     /// `Arc`: il plugin e la closure che registra i provider.
     fn prepare(&self) -> BundleMount<'_> {
-        let instance = match self.component.instantiate() {
-            Ok(instance) => instance,
-            Err(error) => {
-                return BundleMount::new(
-                    Box::new(FailedPlugin {
-                        manifest: self.manifest.clone(),
-                        error: error.to_string(),
-                    }),
-                    |_| RegistrationReport::complete(),
-                );
-            }
-        };
-
-        let inner = Arc::new(Mutex::new(instance));
-        let plugin = Box::new(WasmPlugin {
-            inner: Arc::clone(&inner),
-        });
-        BundleMount::new(plugin, move |registrar| {
-            let specs = match Self::declared_commands(&inner) {
-                Ok(specs) => specs,
-                Err(error) => return RegistrationReport::failed(error),
-            };
-            if specs.is_empty() {
-                return RegistrationReport::complete();
-            }
-
-            let provider = WasmCommandProvider { inner, specs };
-            match registrar.register_command_provider(Box::new(provider)) {
-                Ok(()) => RegistrationReport::complete(),
-                Err(error) => {
-                    RegistrationReport::failed(format!("comandi non registrati: {error}"))
-                }
-            }
-        })
+        let instance = self
+            .component
+            .instantiate()
+            .map(|instance| Arc::new(Mutex::new(instance)))
+            .map_err(|error| error.to_string());
+        bundle_mount(instance, self.manifest.clone())
     }
 }
 
+impl Bundle for WasmOpeningBundle {
+    fn manifest(&self) -> PluginManifest {
+        self.manifest.clone()
+    }
+
+    fn trust(&self) -> Trust {
+        self.trust
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        match &self.instance {
+            Ok(inner) => Box::new(WasmPlugin {
+                inner: Arc::clone(inner),
+            }),
+            Err(error) => Box::new(FailedPlugin {
+                manifest: self.manifest.clone(),
+                error: error.clone(),
+            }),
+        }
+    }
+
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
+        vec!["WASM providers require a prepared bundle mount".to_string()]
+    }
+
+    fn prepare(&self) -> BundleMount<'_> {
+        bundle_mount(self.instance.clone(), self.manifest.clone())
+    }
+}
 /// Plugin che rappresenta un'istanza che non è mai nata: fallisce in activate
 /// così il montaggio resta atomico e restituisce la causa originale.
 struct FailedPlugin {
@@ -467,5 +698,31 @@ impl Plugin for FailedPlugin {
         _host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         Err(PluginError::Internal(self.error.clone().into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_supported_format_export, resolve_format_indices, FORMAT_EXPORT};
+
+    #[test]
+    fn format_export_matches_identity_across_versions() {
+        assert!(is_supported_format_export(FORMAT_EXPORT));
+        assert!(is_supported_format_export("fub:abi/format"));
+        assert!(is_supported_format_export("fub:abi/format@0.1.2"));
+        assert!(is_supported_format_export("fub:abi/format@9.9.9"));
+        assert!(!is_supported_format_export("fub:abi/format@"));
+        assert!(!is_supported_format_export("fub:abi/formatting@0.1.1"));
+        assert!(!is_supported_format_export("fub:abi/format-extra@0.1.1"));
+        assert!(!is_supported_format_export("foreign:fub/abi/format@0.1.1"));
+    }
+
+    #[test]
+    fn malformed_format_indices_fail_only_when_identity_is_present() {
+        assert!(resolve_format_indices(true, || -> Result<(), &str> { Err("malformed") }).is_err());
+        assert_eq!(
+            resolve_format_indices(false, || -> Result<(), &str> { Err("not exported") }).unwrap(),
+            None
+        );
     }
 }

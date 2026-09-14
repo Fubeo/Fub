@@ -36,7 +36,7 @@ use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
 use fub_host::{doc_id, Delivery, EventSink, Host};
 use fub_wasm_host::installed::Consent;
-use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager};
+use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -91,10 +91,10 @@ impl InstalledPlugins {
         }
     }
 
-    fn shutdown(&self) -> Result<(), PluginError> {
+    fn begin_shutdown(&self) -> Result<Option<InstalledShutdown>, PluginError> {
         match &self.availability {
-            InstalledAvailability::Ready(manager) => manager.shutdown(),
-            InstalledAvailability::NotConfigured | InstalledAvailability::Failed(_) => Ok(()),
+            InstalledAvailability::Ready(manager) => manager.begin_shutdown().map(Some),
+            InstalledAvailability::NotConfigured | InstalledAvailability::Failed(_) => Ok(None),
         }
     }
 }
@@ -931,10 +931,6 @@ pub fn run() {
         }
         None => InstalledAvailability::NotConfigured,
     };
-    let startup_manager = match &installed_availability {
-        InstalledAvailability::Ready(manager) => Some(manager.clone()),
-        InstalledAvailability::NotConfigured | InstalledAvailability::Failed(_) => None,
-    };
 
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
@@ -949,8 +945,10 @@ pub fn run() {
         .with_session_notice(warning)
         .with_levels(levels)
         .with_sink(sink);
-    if let Some(manager) = startup_manager {
-        host = host.with_startup_source(manager);
+    // Keep the manager alive in `InstalledPlugins`; the startup source is the
+    // sole host integration point and its snapshot also carries formats.
+    if let InstalledAvailability::Ready(manager) = &installed_availability {
+        host = host.with_startup_source(manager.clone());
     }
 
     let builder = tauri::Builder::default()
@@ -1030,21 +1028,29 @@ pub fn run() {
         // chiuderli.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
-                match app.state::<InstalledPlugins>().shutdown() {
-                    Ok(()) => {
-                        for and in app.state::<Host>().close() {
-                            // L'app sta uscendo: il ponte verso la shell sta morendo e
-                            // non c'è nessuno che disegna un evento. Resta il log, che è
-                            // ciò che il bundle diagnostico (§15.2) raccoglierà — e il
-                            // fatto che un indice non si sia chiuso pulito è una
-                            // diagnosi per chi sviluppa, non una cosa che l'utente può
-                            // ancora riparare a schermo spento (0062).
-                            tracing::warn!(target: "fub.app", "vault closure: {and}");
+                let shutdown = app.state::<InstalledPlugins>().begin_shutdown();
+                for and in app.state::<Host>().close() {
+                    // L'app sta uscendo: il ponte verso la shell sta morendo e
+                    // non c'è nessuno che disegna un evento. Resta il log, che è
+                    // ciò che il bundle diagnostico (§15.2) raccoglierà — e il
+                    // fatto che un indice non si sia chiuso pulito è una
+                    // diagnosi per chi sviluppa, non una cosa che l'utente può
+                    // ancora riparare a schermo spento (0062).
+                    tracing::warn!(target: "fub.app", "vault closure: {and}");
+                }
+                match shutdown {
+                    Ok(Some(shutdown)) => {
+                        if let Err(and) = shutdown.finish() {
+                            tracing::error!(
+                                target: "fub.app",
+                                "installed plugin manager did not drain: {and}"
+                            );
                         }
                     }
+                    Ok(None) => {}
                     Err(and) => tracing::error!(
                         target: "fub.app",
-                        "installed plugin manager did not drain; host closure skipped: {and}"
+                        "installed plugin manager did not begin shutdown; host closure completed: {and}"
                     ),
                 }
             }

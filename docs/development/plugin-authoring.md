@@ -46,9 +46,28 @@ Non chiamare API Tauri e non importare dettagli privati della shell.
 Per un `FormatProvider`, la porta corrente è `FormatSource`: l'host lo prepara
 prima di costruire il `Workspace`, lo registra prima della costruzione e
 conserva le risorse preparate per la sessione, rilasciandole anche in caso di
-rollback. Non esiste ancora un adapter o proxy WASM per `FormatProvider`, né un
-consumer desktop che lo utilizzi: gli autori non devono fare affidamento su un
-provider di formato WASM.
+rollback.
+
+Un componente WASM può esportare opzionalmente l'interfaccia WIT `format`.
+`fub-wasm-host` ne prepara descriptor e capability, poi espone il proxy
+`FormatProvider` per parse, render HTML e serialize. Il modello attraversa una
+validazione del confine fidato `O(V+E)`: sono ammessi DAG ordinari, mentre cicli,
+riferimenti fuori indice, profondità oltre 64, span non validi, JSON non valido
+e materializzazione oltre 8 Mi unità pesate diventano errori tipizzati.
+Il manager usa solo plugin `enabled` con consenso `granted` nello snapshot della
+singola apertura e carica ogni bundle selezionato una volta; le modifiche
+diventano effettive dopo una riapertura. Un componente selezionato corrotto o
+non caricabile, o un'export `format` presente ma incompatibile, produce una
+diagnostica tipizzata e viene saltato per quell'apertura, senza impedire il
+vault. Un bundle caricato resta utilizzabile per le altre interfacce se fallisce
+la preparazione del provider di formato. Nessuna capability host è concessa
+implicitamente dall'esportazione: dichiarare `format` non sostituisce manifest,
+consenso, abilitazione o policy.
+
+Le risorse preparate e il lease sono posseduti dalla sessione o dal rollback;
+non conservare un'`Operation` del manager. Se una modifica invalida lo snapshot
+durante l'apertura, il token viene revocato, l'apertura stantia fa rollback e
+non pubblica una sessione.
 
 ## Componente WASM
 
@@ -57,7 +76,15 @@ Gli esempi correnti sono:
 - `esempi/ping-wasm/`;
 - `esempi/modello-wasm/`;
 - `esempi/eventi-wasm/`;
-- `esempi/ciclo-wasm/`.
+- `esempi/ciclo-wasm/`;
+- `esempi/format-wasm/` per un provider di formato WASM end-to-end.
+
+Per il formato, usa `esempi/format-wasm/` come riferimento: il percorso
+esercitato copre parse, render, errore dichiarato, modello malformato, trap e
+serialize. Non assumere supporto per operazioni o capability non comprese in
+questi casi. Il proxy non è rientrante; l'istanza e le risorse preparate vivono
+fino alla chiusura della sessione o al rollback, senza trattenere un'`Operation`
+del manager.
 
 Il target è `wasm32-wasip2`.
 
@@ -151,6 +178,10 @@ flowchart LR
 ```
 
 Aggiungi anche timeout, trap e output malformato quando il backend è WASM.
+Per l'apertura gestita, tratta la corruzione o incompatibilità come diagnostica
+tipizzata locale del manager e salto del componente selezionato; documenta
+separatamente il rollback di uno snapshot revocato e la chiusura con drain dei
+lease.
 
 ## Pubblicazione
 

@@ -36,7 +36,9 @@ use fub_abi::PluginError;
 // aggirare: dice che i tipi di un'interfaccia che l'host *chiama* e di una che
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
-use crate::contract::exports::fub::abi::{command as w_command, plugin as w_plugin};
+use crate::contract::exports::fub::abi::{
+    command as w_command, format as x_format, plugin as w_plugin,
+};
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
 // importate: la duplicazione qui sopra riguarda i tipi che un'interfaccia
@@ -374,6 +376,71 @@ pub(crate) fn to_format(f: &fub_abi::format::DocumentFormat) -> w_format::Docume
             syntax: to_map(&f.capabilities.syntax),
         },
     }
+}
+
+pub(crate) fn to_document_source(
+    source: &fub_abi::format::DocumentSource,
+) -> x_format::DocumentSource {
+    match source {
+        fub_abi::format::DocumentSource::Text(text) => x_format::DocumentSource::Text(text.clone()),
+        fub_abi::format::DocumentSource::Bytes(bytes) => {
+            x_format::DocumentSource::Bytes(bytes.clone())
+        }
+    }
+}
+
+pub(crate) fn to_parse_context(ctx: &fub_abi::format::ParseContext) -> x_format::ParseContext {
+    x_format::ParseContext {
+        doc_id: ctx.doc_id.clone(),
+        options: to_map(&ctx.options),
+    }
+}
+
+pub(crate) fn to_render_options(opts: &fub_abi::format::RenderOptions) -> x_format::RenderOptions {
+    x_format::RenderOptions {
+        target: match opts.target {
+            fub_abi::format::RenderTarget::Screen => x_format::RenderTarget::Screen,
+            fub_abi::format::RenderTarget::Print => x_format::RenderTarget::Print,
+            fub_abi::format::RenderTarget::Pdf => x_format::RenderTarget::Pdf,
+            fub_abi::format::RenderTarget::StaticSite => x_format::RenderTarget::StaticSite,
+        },
+        options: to_map(&opts.options),
+    }
+}
+
+pub(crate) fn from_format_error(error: x_format::FormatError) -> fub_abi::FormatError {
+    match error {
+        x_format::FormatError::Parse(message) => fub_abi::FormatError::Parse(message),
+        x_format::FormatError::Render(message) => fub_abi::FormatError::Render(message),
+        x_format::FormatError::Serialize(message) => fub_abi::FormatError::Serialize(message),
+        x_format::FormatError::Unsupported(error) => fub_abi::FormatError::Unsupported {
+            format: error.format,
+            got: match error.got {
+                x_format::SourceKind::Text => fub_abi::format::SourceKind::Text,
+                x_format::SourceKind::Bytes => fub_abi::format::SourceKind::Bytes,
+            },
+        },
+    }
+}
+pub(crate) fn from_format_descriptor(
+    descriptor: x_format::FormatDescriptor,
+) -> fub_abi::format::FormatDescriptor {
+    fub_abi::format::FormatDescriptor {
+        id: descriptor.id,
+        name: descriptor.name,
+        extensions: descriptor.extensions,
+        source: match descriptor.source {
+            x_format::SourceKind::Text => fub_abi::format::SourceKind::Text,
+            x_format::SourceKind::Bytes => fub_abi::format::SourceKind::Bytes,
+        },
+    }
+}
+pub(crate) fn from_format_capabilities(
+    capabilities: x_format::FormatCapabilities,
+) -> Result<fub_abi::format::FormatCapabilities, PluginError> {
+    Ok(fub_abi::format::FormatCapabilities {
+        syntax: from_map(capabilities.syntax)?,
+    })
 }
 
 pub(crate) fn to_trash(and: fub_abi::traits::TrashEntry) -> w_vault::TrashEntry {

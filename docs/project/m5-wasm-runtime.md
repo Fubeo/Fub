@@ -48,6 +48,7 @@ flowchart LR
 - manifest e versione ABI;
 - lifecycle `Plugin`;
 - `CommandProvider`;
+- `FormatProvider` opzionale via proxy WASM;
 - lettura del modello;
 - eventi host;
 - capability negate come errori tipizzati;
@@ -61,16 +62,45 @@ risorse possedute prima di costruire il `Workspace`. L'host registra i provider
 prima della costruzione del workspace; le risorse preparate restano vive per
 tutta la sessione e vengono rilasciate anche in caso di rollback.
 
-Questo confine host è presente, ma non espone ancora un `FormatProvider` WASM:
-non esiste un adapter o proxy WASM, né un consumer desktop che lo utilizzi.
-Un autore non deve quindi fare affidamento su un provider di formato WASM.
+`fub-wasm-host` espone ora un'interfaccia `format` opzionale: `WasmBundle`
+prepara descriptor e capability dichiarati e restituisce un proxy
+`FormatProvider` per `parse`, `render_html` e `serialize`. Il modello in ingresso
+e quello restituito dal guest attraversano la validazione del confine fidato;
+output malformato e trap diventano `FormatError`, senza propagarsi come stato
+parziale o abbattere l'host. La validazione è `O(V+E)`, accetta DAG ordinari e
+rifiuta cicli, riferimenti fuori indice, profondità oltre 64, span non validi,
+JSON non valido e materializzazione oltre 8 Mi unità pesate.
+
+`InstalledPluginManager` prepara una sola volta lo snapshot per apertura dei
+plugin `enabled` con consenso `granted`, caricando ogni bundle selezionato una
+sola volta e restituendo bundle e `PreparedFormatSource` sotto la stessa
+`StartupValidity`/lease. È cablato come `StartupSource`, non come
+`FormatSource`. Un componente selezionato corrotto o non caricabile, oppure
+un'export `format` presente ma incompatibile, produce una diagnostica tipizzata
+e viene saltato per quella apertura senza impedire l'apertura del vault. Un
+bundle caricato resta utilizzabile per le altre interfacce se la preparazione
+del provider di formato fallisce, con la diagnostica corrispondente.
+Un'invalidazione concorrente revoca il token: l'apertura stantia fa rollback e
+non pubblica alcuna sessione. Lease e risorse preparate appartengono alla
+sessione o al rollback; nessuna `Operation` del manager viene trattenuta dalla
+sessione.
+
+Il percorso esercitato copre un componente fuori workspace con parse, render,
+errore dichiarato dal guest, modello malformato, trap e serialize. I test
+coprono anche rollback di snapshot stantio e chiusura con drain delle aperture;
+questo non implica ancora parità oltre a questi casi, né rende disponibili
+implicitamente capability host al componente.
 
 ### Esempi
 
 - `esempi/ping-wasm/`;
 - `esempi/modello-wasm/`;
 - `esempi/eventi-wasm/`;
-- `esempi/ciclo-wasm/`.
+- `esempi/ciclo-wasm/`;
+- `esempi/format-wasm/`, percorso fuori workspace per il provider di formato.
+
+Il percorso `format-wasm` viene costruito dai test e dimostra le operazioni
+supportate e i fallimenti tipizzati del confine.
 
 Gli esempi vengono costruiti dai sorgenti durante i test.
 

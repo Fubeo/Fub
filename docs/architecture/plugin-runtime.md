@@ -79,10 +79,35 @@ prima dell'apertura del `Workspace`. L'host registra i provider prima di
 costruire il workspace; le risorse preparate restano vive per la sessione e
 vengono rilasciate anche in caso di rollback.
 
-Questo confine non espone ancora `FormatProvider` a WASM: non esiste un
-adapter o proxy WASM per i formati e non esiste un consumer desktop che lo
-utilizzi. I componenti non devono quindi dichiarare o usare un provider di
-formato WASM.
+L'interfaccia WIT `format` è opzionale. Se il componente la esporta,
+`WasmBundle` congela descriptor e capability dichiarati e `fub-wasm-host`
+presenta un proxy `FormatProvider` per `parse`, `render_html` e `serialize`.
+La validazione del modello in ingresso e in uscita è parte del confine fidato:
+modelli malformati e trap vengono restituiti come `FormatError`. La validazione
+accetta DAG ordinari e visita il grafo in `O(V+E)`; rifiuta cicli, riferimenti
+fuori indice, profondità oltre 64, span non validi, JSON non valido e una
+materializzazione oltre il budget documentato di 8 Mi unità pesate.
+
+`InstalledPluginManager` prepara una sola volta, per ogni apertura, lo snapshot
+dell'inventario `enabled` con consenso `granted`: da quello stesso passaggio
+restituisce bundle e `PreparedFormatSource` sotto la medesima
+`StartupValidity`/lease. Il manager è cablato come `StartupSource`, non come
+`FormatSource`; ogni bundle selezionato viene caricato una sola volta. Se un
+componente selezionato è corrotto o non caricabile, o se un'export `format`
+presente è incompatibile, l'apertura conserva una diagnostica tipizzata e
+salta quel componente, senza impedire l'apertura del vault. Un bundle caricato
+resta utilizzabile per le altre interfacce anche se la preparazione del suo
+provider di formato fallisce, con la diagnostica corrispondente. Un'invalidazione
+concorrente revoca la validità: l'apertura stantia fa rollback e non pubblica
+alcuna sessione.
+
+Il lease e le risorse preparate sono posseduti dalla sessione o dal rollback;
+nessuna `Operation` del manager viene trattenuta dalla sessione.
+
+Il componente non riceve capability host per il solo fatto di esportare
+`format`: ogni famiglia resta soggetta al mount e al `Guard`. Il percorso
+end-to-end verificato copre parse, render, errore dichiarato dal guest,
+modello malformato, trap e serialize; non documenta una parità ulteriore.
 
 ## Provider WASM
 
@@ -201,10 +226,11 @@ sotto guardia, camminata, letture, parser e callback fuori custodia, quindi
 finalizzazione e drain degli eventi. Le operazioni globali e il dry run usano
 porte tipizzate e non riaprono accesso generico a `Host::workspace`.
 
-La sessione ferma watcher e job, consegna `VaultClosed`, esegue il flush globale
-e smonta i plugin in ordine inverso. L'anagrafe viene persistita per ultima.
-La disabilitazione persiste prima la scelta e rinvia gli eventi fino al termine
-dello smontaggio. La chiusura consegna invece gli eventi di `deactivate` mentre
+L'uscita desktop è in due fasi: prima il manager chiude l'ammissione e revoca
+lo snapshot startup; poi `Host` chiude le sessioni e infine il manager attende
+il drain dei lease. La sessione ferma watcher e job, consegna `VaultClosed`,
+esegue il flush globale e smonta i plugin in ordine inverso; l'anagrafe viene
+persistita per ultima. La chiusura consegna gli eventi di `deactivate` mentre
 le registrazioni del plugin sono ancora disponibili.
 
 Mount, rollback e chiamate dirette del registry rispettano lo stesso confine:

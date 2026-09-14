@@ -156,6 +156,16 @@ pub fn mount(
     )
 }
 
+fn mount_error_with_resource_disposal(
+    primary: String,
+    resources: crate::format_source::FormatResources,
+) -> String {
+    let disposal_errors = crate::format_source::dispose_format_resources(resources);
+    disposal_errors.into_iter().fold(primary, |message, error| {
+        format!("{message}; retained format resource disposal failed: {error}")
+    })
+}
+
 pub(crate) fn mount_with_formats(
     root: &Utf8Path,
     machine: Arc<MachineSettings>,
@@ -164,21 +174,35 @@ pub(crate) fn mount_with_formats(
     levels: &fub_kernel::log::Levels,
     prepared_formats: crate::PreparedFormatSource,
 ) -> Result<Mounted, String> {
-    let (providers, format_resources) = prepared_formats.into_parts();
+    let (providers, resources) = prepared_formats.into_parts();
+    let mut format_resources = Some(resources);
     let mut formats = FormatRegistry::new();
-    formats
-        .register(MarkdownProvider::boxed())
-        .map_err(|error| format!("format provider conflict: {error}"))?;
+    if let Err(error) = formats.register(MarkdownProvider::boxed()) {
+        return Err(mount_error_with_resource_disposal(
+            format!("format provider conflict: {error}"),
+            format_resources.take().unwrap_or_default(),
+        ));
+    }
     for provider in providers {
-        formats
-            .register(provider)
-            .map_err(|error| format!("format provider conflict: {error}"))?;
+        if let Err(error) = formats.register(provider) {
+            return Err(mount_error_with_resource_disposal(
+                format!("format provider conflict: {error}"),
+                format_resources.take().unwrap_or_default(),
+            ));
+        }
     }
 
-    let mut ws = Workspace::with_machine_settings(root, formats, machine)
-        .map_err(|error| error.to_string())?
-        .with_view_states(view_states)
-        .with_system_locale(system_locale);
+    let mut ws = match Workspace::with_machine_settings(root, formats, machine) {
+        Ok(ws) => ws
+            .with_view_states(view_states)
+            .with_system_locale(system_locale),
+        Err(error) => {
+            return Err(mount_error_with_resource_disposal(
+                error.to_string(),
+                format_resources.take().unwrap_or_default(),
+            ))
+        }
+    };
 
     #[cfg(feature = "http-client")]
     ws.set_network(Arc::new(crate::net::UreqNetwork::new()));
@@ -259,9 +283,12 @@ pub(crate) fn mount_with_formats(
                 failures
             })
         } else {
-            return Err(format!(
-                "feature '{}' is in the inventory but the mount table does not know what it registers",
-                feature.id
+            return Err(mount_error_with_resource_disposal(
+                format!(
+                    "feature '{}' is in the inventory but the mount table does not know what it registers",
+                    feature.id
+                ),
+                format_resources.take().unwrap_or_default(),
             ));
         };
 
@@ -284,7 +311,7 @@ pub(crate) fn mount_with_formats(
         registry.remember(Arc::clone(bundle));
     }
 
-    let versions = assemble_after_registry(&mut ws, &mut registry, |ws, registry| {
+    let versions = match assemble_after_registry(&mut ws, &mut registry, |ws, registry| {
         // Il core deve esistere prima di leggere `plugins.disabled` e i livelli.
         registry
             .enable(ws, CORE_ID)
@@ -339,14 +366,22 @@ pub(crate) fn mount_with_formats(
         {
             Ok(())
         }
-    })?;
+    }) {
+        Ok(versions) => versions,
+        Err(error) => {
+            return Err(mount_error_with_resource_disposal(
+                error,
+                format_resources.take().unwrap_or_default(),
+            ))
+        }
+    };
     #[cfg(not(feature = "versioning"))]
     let () = versions;
 
     Ok(Mounted {
         workspace: ws,
         registry,
-        format_resources,
+        format_resources: format_resources.take().unwrap_or_default(),
         #[cfg(feature = "versioning")]
         versions,
     })

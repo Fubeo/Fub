@@ -138,6 +138,8 @@ pub struct VaultSession {
     registry: Custody<BundleRegistry>,
     /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
     _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    /// Diagnostica tipizzata prodotta dalla sorgente di startup per questa apertura.
+    startup_diagnostics: Vec<PluginError>,
     /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
     /// tenuto per la vita della sessione.
     ///
@@ -204,6 +206,11 @@ impl VaultSession {
         self.versions.as_ref()
     }
 
+    /// Diagnostica tipizzata conservata dall'apertura del vault.
+    pub fn startup_diagnostics(&self) -> Vec<PluginError> {
+        self.startup_diagnostics.clone()
+    }
+
     /// Questo vault ha il rilevamento delle modifiche esterne? (§9.7)
     pub fn is_watching(&self) -> bool {
         self.watcher.is_watching()
@@ -236,6 +243,7 @@ impl VaultSession {
             watcher,
             registry,
             mut runner,
+            _format_resources,
             ..
         } = self;
         // 1. smette di guardare, 2. smette di lavorare, 3. si chiude. I primi
@@ -245,6 +253,9 @@ impl VaultSession {
         errors.extend(runner.stop());
         drop(runner);
         close_session_resources(&workspace, &registry, &mut errors);
+        errors.extend(crate::format_source::dispose_format_resources(
+            _format_resources,
+        ));
         errors
     }
 
@@ -325,6 +336,7 @@ struct OpeningTransaction<'a> {
     workspace: Custody<Workspace>,
     registry: Custody<BundleRegistry>,
     format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    startup_diagnostics: Vec<PluginError>,
     watcher: Option<OpeningWatcher<'a>>,
     runner: Option<JobRunner>,
     session: Option<VaultSession>,
@@ -337,12 +349,14 @@ impl<'a> OpeningTransaction<'a> {
         workspace: &'a Custody<Workspace>,
         registry: &Custody<BundleRegistry>,
         format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+        startup_diagnostics: Vec<PluginError>,
         startup_lease: Option<StartupLease>,
     ) -> Self {
         Self {
             workspace: workspace.clone(),
             registry: registry.clone(),
             format_resources,
+            startup_diagnostics,
             watcher: Some(OpeningWatcher::new(workspace)),
             runner: None,
             session: None,
@@ -393,6 +407,7 @@ impl<'a> OpeningTransaction<'a> {
             root,
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
+            startup_diagnostics: std::mem::take(&mut self.startup_diagnostics),
             _format_resources: std::mem::take(&mut self.format_resources),
             unread,
             indexed,
@@ -438,6 +453,9 @@ impl Drop for OpeningTransaction<'_> {
                 drop(runner);
             }
             close_session_resources(&self.workspace, &self.registry, &mut errors);
+            errors.extend(crate::format_source::dispose_format_resources(
+                std::mem::take(&mut self.format_resources),
+            ));
             errors
         };
         for error in errors.drain(..) {
@@ -889,17 +907,6 @@ impl Host {
         root: &Utf8Path,
         session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
     ) -> Result<VaultInfo, PluginError> {
-        let prepared_formats = self
-            .format_source
-            .as_ref()
-            .map(|source| {
-                fub_kernel::safety::external(
-                    "format source preparation",
-                    |message| PluginError::Internal(message.into()),
-                    || source.prepare(),
-                )
-            })
-            .unwrap_or_else(|| Ok(crate::PreparedFormatSource::empty()))?;
         let root = root.to_owned();
         let startup = self
             .startup_source
@@ -914,16 +921,56 @@ impl Host {
             .unwrap_or_else(|| Ok(StartupSnapshot::new(Vec::new())));
         let StartupSnapshot {
             bundles: startup_bundles,
-            diagnostics: _,
+            formats: mut prepared_formats,
+            diagnostics: startup_diagnostics,
             validity: startup_validity,
             lease: startup_lease,
         } = match startup {
             Ok(snapshot) => snapshot,
+            Err(error @ (PluginError::Cancelled(_) | PluginError::Conflict(_))) => {
+                return Err(error)
+            }
             Err(error) => {
-                tracing::error!(target: "fub.host", "startup source unavailable: {error}");
+                tracing::warn!(
+                    target: "fub.host",
+                    startup_source_error = ?error,
+                    "startup source unavailable; continuing without startup bundles"
+                );
                 StartupSnapshot::new(Vec::new())
             }
         };
+        for diagnostic in &startup_diagnostics {
+            tracing::warn!(
+                target: "fub.host",
+                startup_diagnostic = ?diagnostic,
+                "startup diagnostic"
+            );
+        }
+        let independent_formats = self
+            .format_source
+            .as_ref()
+            .map(|source| {
+                fub_kernel::safety::external(
+                    "format source preparation",
+                    |message| PluginError::Internal(message.into()),
+                    || source.prepare(),
+                )
+            })
+            .unwrap_or_else(|| Ok(crate::PreparedFormatSource::empty()));
+        let independent_formats = match independent_formats {
+            Ok(formats) => formats,
+            Err(error) => {
+                for cleanup_error in prepared_formats.dispose() {
+                    tracing::error!(
+                        target: "fub.host",
+                        cleanup_error = ?cleanup_error,
+                        "prepared format cleanup failed after independent source error"
+                    );
+                }
+                return Err(error);
+            }
+        };
+        prepared_formats.extend(independent_formats);
         let crate::mount::Mounted {
             workspace: mut ws,
             mut registry,
@@ -1033,8 +1080,13 @@ impl Host {
         // sul workspace. La transazione possiede turno, risorse e thread: ogni
         // uscita prima della pubblicazione libera il turno, ferma watcher e
         // runner, quindi percorre il teardown completo.
-        let mut opening =
-            OpeningTransaction::new(&workspace, &registry, format_resources, startup_lease);
+        let mut opening = OpeningTransaction::new(
+            &workspace,
+            &registry,
+            format_resources,
+            startup_diagnostics,
+            startup_lease,
+        );
         let watching = {
             let ws = opening.workspace().write()?;
             ws.watch_flag()
@@ -2013,6 +2065,13 @@ impl Host {
         // una chiusura panica, gli elementi non ancora visitati vengono
         // comunque lasciati cadere e ritirano ciascuno il proprio marker.
         claimed.into_iter().flat_map(CloseClaim::close).collect()
+    }
+    /// Restituisce la diagnostica tipizzata conservata dall'apertura del vault.
+    pub fn startup_diagnostics(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        self.with_session(vault, VaultSession::startup_diagnostics)
     }
 
     /// I vault aperti, in ordine di path.
