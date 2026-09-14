@@ -109,6 +109,19 @@ Il componente non riceve capability host per il solo fatto di esportare
 end-to-end verificato copre parse, render, errore dichiarato dal guest,
 modello malformato, trap e serialize; non documenta una parità ulteriore.
 
+### Decisioni sui provider
+
+`FormatProvider` è implementato e ha parità nativo/WASM per le operazioni
+coperte `parse`, `render_html` e `serialize`. Errori dichiarati dal guest,
+modelli malformati e trap sono coperti end-to-end nel percorso WASM e vengono
+recuperati come `FormatError`, ma non costituiscono un confronto di parità
+nativo/WASM.
+
+`IndexProvider` non viene aggiunto senza un componente che ne possieda una
+route e provi il feed, la query, il flush e la close. `EventHandler` inbound
+resta deferred finché un componente deve reagire a `Notice`; non va confuso
+con `host-events`, già supportato per il percorso outbound verso il guest.
+
 ## Provider WASM
 
 `fub-wasm-host`:

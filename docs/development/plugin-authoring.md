@@ -69,6 +69,19 @@ non conservare un'`Operation` del manager. Se una modifica invalida lo snapshot
 durante l'apertura, il token viene revocato, l'apertura stantia fa rollback e
 non pubblica una sessione.
 
+### Decisioni sui provider
+
+`FormatProvider` è implementato e ha parità nativo/WASM per le operazioni
+coperte `parse`, `render_html` e `serialize`. Errori dichiarati dal guest,
+modelli malformati e trap sono coperti end-to-end nel percorso WASM e vengono
+recuperati come `FormatError`, ma non costituiscono un confronto di parità
+nativo/WASM.
+
+`IndexProvider` non viene aggiunto senza un componente che ne possieda una
+route e provi il feed, la query, il flush e la close. `EventHandler` inbound
+resta deferred finché un componente deve reagire a `Notice`; non va confuso
+con `host-events`, già supportato per il percorso outbound verso il guest.
+
 ## Componente WASM
 
 Gli esempi correnti sono:

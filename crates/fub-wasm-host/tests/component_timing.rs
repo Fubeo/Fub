@@ -262,7 +262,11 @@ fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
         "il componente fermato non riparte da solo: {said}"
     );
 
-    host.close();
+    let _close_errors = host.close();
+    assert!(
+        host.with_session(None, |_| ()).is_err(),
+        "dopo il teardown dell'interruzione non resta pubblicata alcuna sessione o registrazione"
+    );
 }
 
 /// **Un componente che divora memoria trova il tetto**, e lo trova prima della
@@ -326,5 +330,9 @@ fn a_component_that_devours_memory_finds_the_ceiling() {
         "la memoria lineare non torna indietro: il secondo giro non ottiene niente"
     );
 
-    host.close();
+    let _close_errors = host.close();
+    assert!(
+        host.with_session(None, |_| ()).is_err(),
+        "dopo il teardown del tetto di memoria non resta pubblicata alcuna sessione o registrazione"
+    );
 }
