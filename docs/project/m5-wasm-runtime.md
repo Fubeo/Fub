@@ -49,11 +49,26 @@ flowchart LR
 - lifecycle `Plugin`;
 - `CommandProvider`;
 - `FormatProvider` opzionale via proxy WASM;
+- `ViewProvider` opzionale via export WIT `view`;
 - lettura del modello;
 - eventi host;
 - capability negate come errori tipizzati;
 - arena per forme ricorsive;
 - parità osservabile nei casi nativo/WASM coperti.
+
+### Esempi
+
+- `esempi/ping-wasm/`;
+- `esempi/modello-wasm/`;
+- `esempi/eventi-wasm/`;
+- `esempi/ciclo-wasm/`;
+- `esempi/format-wasm/`, percorso fuori workspace per il provider di formato;
+- `esempi/view-wasm/`, percorso end-to-end per `ViewProvider`.
+
+Il percorso `format-wasm` viene costruito dai test e dimostra le operazioni
+supportate e i fallimenti tipizzati del confine.
+
+Gli esempi vengono costruiti dai sorgenti durante i test.
 
 ### Confine host dei formati
 
@@ -104,32 +119,32 @@ route e provi il feed, la query, il flush e la close. `EventHandler` inbound
 resta deferred finché un componente deve reagire a `Notice`; non va confuso
 con `host-events`, già supportato per il percorso outbound verso il guest.
 
-### Esempi
+## Consegnato nel percorso ViewProvider
 
-- `esempi/ping-wasm/`;
-- `esempi/modello-wasm/`;
-- `esempi/eventi-wasm/`;
-- `esempi/ciclo-wasm/`;
-- `esempi/format-wasm/`, percorso fuori workspace per il provider di formato.
+L'interfaccia WIT `view` è un'export opzionale sulla stessa `Instance` del
+`Plugin`. Le `ViewSpec` dichiarano parametri che l'host valida; `interests` è
+infallibile: un trap fa paniare il proxy e il confine `Workspace` converte il
+panic in `PluginError::Internal`. `render_view` usa `ReadApi` e `on_action`
+usa `HostApi`.
 
-Il percorso `format-wasm` viene costruito dai test e dimostra le operazioni
-supportate e i fallimenti tipizzati del confine.
+Il guard di fiducia protegge sia render sia action: per `Trust::Community`,
+`Html` e `WebView` sono rifiutati prima della shell; `Trust::Core` è ammesso. Il
+preflight dell'albero verifica root e riferimenti, assenza di cicli (DAG),
+profondità massima 64 e budget di 8 Mi unità pesate. La stessa istanza non è
+rientrante: la rientranza è un errore tipizzato.
 
-Gli esempi vengono costruiti dai sorgenti durante i test.
-
-## In corso
-
-### Provider
-
-`ViewProvider` deve attraversare il confine con un caso non banale. Gli altri
-provider vengono aggiunti soltanto insieme a un esempio o test che dimostri la
-necessità.
+Un trap invalida il guest ma lascia vivo l'host; il teardown può riportare
+l'errore. La parità verificata è limitata a spec/interests/render/`Replace`/
+`Patch`. `IndexProvider` e `EventHandler` inbound restano deferred. L'esempio
+minimo è `esempi/view-wasm/`, con test di mount, parametri, render, `Replace`,
+`Patch` e smontaggio.
 
 ### UI non fidata
 
-Ogni `UiNode` prodotto da un componente deve passare da
-`UiNode::validate_untrusted()`. HTML, webview e forme fidate devono essere
-rifiutati prima dell'IPC.
+La validazione attiva è completata per provider `Trust::Community`:
+`UiNode::validate_untrusted()` viene applicato prima della shell e vale anche
+per gli aggiornamenti restituiti da una action. `Trust::Core` può produrre `Html`
+e `WebView` secondo la policy.
 
 ### Discovery e installazione
 
@@ -177,7 +192,10 @@ componenti installati in `.fub/plugins/` e non cancella quella directory.
 M5 è completa quando:
 
 - [ ] #8 dimostra il percorso installazione-esecuzione-rimozione;
-- [ ] #10 completa la view non fidata e i provider necessari;
+- #10: View consegnata = export WIT `view` + spec validata + `interests`/render
+  equivalenti al provider nativo + action `Replace`/`Patch` + trap/panic
+  convertito a `PluginError::Internal` al confine `Workspace`, senza richiedere
+  discovery, `IndexProvider` o `EventHandler` inbound futuri;
 - [ ] il tutorial riproduce lo stesso percorso dei test;
 - [ ] un plugin incompatibile viene rifiutato prima del mount;
 - [ ] un permesso negato non lascia stato parziale;

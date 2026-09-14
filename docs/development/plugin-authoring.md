@@ -90,7 +90,8 @@ Gli esempi correnti sono:
 - `esempi/modello-wasm/`;
 - `esempi/eventi-wasm/`;
 - `esempi/ciclo-wasm/`;
-- `esempi/format-wasm/` per un provider di formato WASM end-to-end.
+- `esempi/format-wasm/` per un provider di formato WASM end-to-end;
+- `esempi/view-wasm/` per un `ViewProvider` WASM end-to-end.
 
 Per il formato, usa `esempi/format-wasm/` come riferimento: il percorso
 esercitato copre parse, render, errore dichiarato, modello malformato, trap e
@@ -166,7 +167,7 @@ mantengono stato non verificabile.
 
 Un provider restituisce `UiNode`; non restituisce DOM o JavaScript.
 
-Un componente WASM non può inviare:
+Un componente WASM non fidato (`Trust::Community`) non può inviare:
 
 - estensioni CodeMirror;
 - closure;
@@ -174,8 +175,38 @@ Un componente WASM non può inviare:
 - HTML fidato;
 - webview.
 
-`ViewProvider` WASM e validazione non fidata sono ancora lavoro aperto in
-[#10](https://github.com/Fubeo/Fub/issues/10).
+Un componente `Trust::Core` può produrre `Html` e `WebView` secondo la policy.
+
+### ViewProvider WASM
+
+Scegli il `ViewProvider` WASM quando la view è un'estensione di terzi isolata
+via WIT; il proxy è opzionale e condivide la stessa istanza del `Plugin`.
+`ViewSpec` espone i parametri (per esempio `mode` obbligatorio e `density`
+opzionale), che l'host valida prima della chiamata.
+
+Il provider dichiara `interests`, che è infallibile: un trap fa paniare il proxy
+e il confine `Workspace` converte il panic in `PluginError::Internal`. Legge il
+modello tramite `ReadApi` in `render_view` e usa l'`HostApi` in `on_action`;
+entrambe sono capacità già protette dal `Guard`, non accessi liberi del guest.
+Le sole forme di aggiornamento dimostrate in parità sono `Replace` e `Patch`;
+`IndexProvider` e `EventHandler` inbound restano deferred.
+
+Render e action passano il guard di fiducia e il preflight dell'albero:
+root/riferimenti, DAG senza cicli, profondità massima 64 e budget di 8 Mi
+unità pesate. Per `Trust::Community`, `Html` e `WebView` sono rifiutati prima
+della shell; `Trust::Core` è ammesso. Una rientranza sulla stessa istanza
+diventa un errore tipizzato. Un trap invalida il guest, mantiene vivo l'host e
+può essere riportato durante il teardown.
+
+Per una view, il test minimo aggiunge: caricamento di `esempi/view-wasm/`,
+validazione dei due parametri dichiarati, confronto di `interests` e
+`render_view` con un provider nativo, quindi una action che produca
+`Replace` e una che produca `Patch`. Dopo lo smontaggio, una nuova chiamata
+deve risultare in view sconosciuta.
+
+Il test di confine copre inoltre un albero malformato (`BadArgs`), `Html` o
+`WebView` annidati (`PermissionDenied`), un errore guest tipizzato, un trap
+(`Internal`) e il fatto che l'host resti utilizzabile.
 
 ## Test minimo
 
