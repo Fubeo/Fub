@@ -133,7 +133,7 @@ impl FormatGuest for Componente {
         let text = render_body(&model.body)?;
         Ok(format!(
             "<p data-format=\"example-format\" data-target=\"{target}\">{}</p>",
-            escape(&text)
+            fub_abi::html::escape(&text)
         ))
     }
 
@@ -188,21 +188,6 @@ fn render_body(body: &DocumentTree) -> Result<String, FormatError> {
         }
     }
     Ok(text)
-}
-
-fn escape(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for c in text.chars() {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            '"' => out.push_str("&quot;"),
-            '\'' => out.push_str("&#39;"),
-            c => out.push(c),
-        }
-    }
-    out
 }
 
 export!(Componente);
