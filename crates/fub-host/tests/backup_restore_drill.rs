@@ -3,11 +3,13 @@
 //! Il manifesto qui sotto è intenzionalmente scritto a mano: la scansione del
 //! fixture può solo essere confrontata con esso, non può contribuire a crearlo.
 
+use fub_abi::model::DocId;
 use fub_abi::{Fnv1a, SchemaVersion};
+use fub_host::{Host, NoWatcher};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-
+use tempfile::TempDir;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum EntryClass {
     Derived,
@@ -131,23 +133,28 @@ const ORACLE: &[ExpectedEntry] = &[
 fn fixture_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/backup-restore-drill")
 }
-
 fn collect_files(root: &Path, dir: &Path, out: &mut Vec<String>) {
     let mut entries: Vec<_> = fs::read_dir(dir)
-        .expect("fixture directory reads")
-        .map(Result::unwrap)
+        .unwrap_or_else(|error| panic!("enumerate {}: {error}", dir.display()))
+        .map(|entry| entry.unwrap_or_else(|error| panic!("enumerate {}: {error}", dir.display())))
         .collect();
     entries.sort_by_key(|entry| entry.file_name());
     for entry in entries {
         let path = entry.path();
-        if path.is_dir() {
+        let kind = fs::symlink_metadata(&path)
+            .unwrap_or_else(|error| panic!("enumerate {}: {error}", path.display()))
+            .file_type();
+        if kind.is_symlink() || (!kind.is_dir() && !kind.is_file()) {
+            panic!("enumerate {}: unsupported entry type", path.display());
+        }
+        if kind.is_dir() {
             collect_files(root, &path, out);
         } else {
             out.push(
                 path.strip_prefix(root)
-                    .unwrap()
+                    .unwrap_or_else(|error| panic!("enumerate {}: {error}", path.display()))
                     .to_str()
-                    .unwrap()
+                    .unwrap_or_else(|| panic!("enumerate {}: non-UTF-8 path", path.display()))
                     .replace('\\', "/"),
             );
         }
@@ -197,6 +204,218 @@ fn schema_value(bytes: &[u8], path: &str) -> Option<SchemaVersion> {
                 .and_then(serde_json::Value::as_u64)
                 .map(|value| SchemaVersion::new(value as u32))
         })
+}
+
+fn copy_tree(source: &Path, destination: &Path) {
+    let kind = fs::symlink_metadata(source)
+        .unwrap_or_else(|error| panic!("capture source {}: {error}", source.display()))
+        .file_type();
+    if kind.is_symlink() || (!kind.is_dir() && !kind.is_file()) {
+        panic!(
+            "capture source {}: unsupported entry type",
+            source.display()
+        );
+    }
+    if kind.is_dir() {
+        fs::create_dir_all(destination).unwrap_or_else(|error| {
+            panic!("capture destination {}: {error}", destination.display())
+        });
+        let mut entries: Vec<_> = fs::read_dir(source)
+            .unwrap_or_else(|error| panic!("capture enumerate {}: {error}", source.display()))
+            .map(|entry| {
+                entry.unwrap_or_else(|error| {
+                    panic!("capture enumerate {}: {error}", source.display())
+                })
+            })
+            .collect();
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            copy_tree(&entry.path(), &destination.join(entry.file_name()));
+        }
+    } else {
+        fs::copy(source, destination)
+            .unwrap_or_else(|error| panic!("capture file {}: {error}", source.display()));
+    }
+}
+
+fn collect_manifest(root: &Path) -> Vec<ExpectedEntry> {
+    let mut paths = Vec::new();
+    collect_files(root, root, &mut paths);
+    let expected: BTreeMap<_, _> = ORACLE.iter().map(|entry| (entry.path, entry)).collect();
+    assert_eq!(
+        paths,
+        ORACLE
+            .iter()
+            .map(|entry| entry.path.to_owned())
+            .collect::<Vec<_>>(),
+        "capture: paths must stay sorted, unique, and complete"
+    );
+    paths
+        .into_iter()
+        .map(|path| {
+            let bytes = fs::read(root.join(&path))
+                .unwrap_or_else(|error| panic!("capture read {path}: {error}"));
+            let entry = expected[path.as_str()];
+            let actual = ExpectedEntry {
+                path: entry.path,
+                class: class_of(&path),
+                size: bytes.len() as u64,
+                hash: Fnv1a::hash(&bytes),
+
+                schema: schema_value(&bytes, &path),
+            };
+            assert_eq!(actual, *entry, "capture: oracle mismatch for {path}");
+            actual
+        })
+        .collect()
+}
+fn validate_after_host(root: &Path, expected: &[ExpectedEntry]) {
+    let expected_by_path: BTreeMap<_, _> =
+        expected.iter().map(|entry| (entry.path, entry)).collect();
+
+    // Prima si verifica che ogni voce autorevole non derivata sia ancora presente.
+    for entry in expected
+        .iter()
+        .filter(|entry| entry.class != EntryClass::Derived)
+    {
+        let path = root.join(entry.path);
+        assert!(
+            path.is_file(),
+            "verify: missing expected file {}",
+            entry.path
+        );
+        let bytes =
+            fs::read(&path).unwrap_or_else(|error| panic!("verify read {}: {error}", entry.path));
+        assert_eq!(bytes.len() as u64, entry.size, "verify size {}", entry.path);
+        assert_eq!(
+            Fnv1a::hash(&bytes),
+            entry.hash,
+            "verify hash {}",
+            entry.path
+        );
+        assert_eq!(
+            schema_value(&bytes, entry.path),
+            entry.schema,
+            "verify schema {}",
+            entry.path
+        );
+    }
+
+    let mut paths = Vec::new();
+    collect_files(root, root, &mut paths);
+    for path in paths {
+        if expected_by_path.contains_key(path.as_str()) {
+            continue;
+        }
+        let journal_lock = path == ".fub/.journal.jsonl.lock";
+        if journal_lock {
+            let lock_file = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(root.join(&path))
+                .unwrap_or_else(|error| panic!("verify open lock {path}: {error}"));
+            lock_file
+                .try_lock()
+                .unwrap_or_else(|error| panic!("verify lock is still held {path}: {error}"));
+            continue;
+        }
+        let allowed_search_manifest = path == ".fub/plugins/fub.search/manifest.json";
+        let allowed_search_index = path.starts_with(".fub/plugins/fub.search/index/");
+        assert!(
+            allowed_search_manifest || allowed_search_index,
+            "verify: unexpected Host output {path}"
+        );
+    }
+}
+
+fn validate_manifest(root: &Path, expected: &[ExpectedEntry]) {
+    let actual = collect_manifest(root);
+    assert_eq!(
+        actual,
+        expected,
+        "validate: manifest mismatch at {}",
+        root.display()
+    );
+}
+
+#[test]
+fn backup_restore_drill_captures_publishes_and_opens_cleanly() {
+    let fixture = fixture_root();
+    let source_area = TempDir::new().expect("capture: source tempdir");
+    let source = source_area.path().join("source");
+    copy_tree(&fixture, &source);
+
+    let artifact_area = TempDir::new().expect("capture: artifact tempdir");
+    let artifact = artifact_area.path().join("backup");
+    copy_tree(&source, &artifact);
+    let oracle = collect_manifest(&source);
+    validate_manifest(&artifact, &oracle);
+
+    // Il parent è un TempDir privato ed esclusivo del test: non ci sono writer concorrenti.
+    // L'assert subito prima di rename è una guardia del drill, non una garanzia universale
+    // di «atomic no-replace» su ogni piattaforma o contro processi esterni.
+    let destination_area = TempDir::new().expect("stage: destination tempdir");
+    let destination = destination_area.path().join("restored");
+    let staging = destination_area.path().join("restored.staging");
+    copy_tree(&artifact, &staging);
+    validate_manifest(&staging, &oracle);
+    assert!(!destination.exists(), "publish: destination must be absent");
+    fs::rename(&staging, &destination).unwrap_or_else(|error| {
+        panic!(
+            "publish {} -> {}: {error}",
+            staging.display(),
+            destination.display()
+        )
+    });
+    assert!(!staging.exists(), "publish: staging remains after rename");
+    validate_manifest(&destination, &oracle);
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(
+        &camino::Utf8PathBuf::from_path_buf(destination.clone())
+            .expect("verify: destination path is UTF-8"),
+    )
+    .unwrap_or_else(|error| panic!("verify open {}: {error}", destination.display()));
+    host.wait_indexed(None)
+        .unwrap_or_else(|error| panic!("verify index {}: {error}", destination.display()));
+    let (document, _) = host
+        .read_document(None, &DocId::new("notes/README.md"))
+        .unwrap_or_else(|error| panic!("verify document read: {error}"));
+    assert_eq!(
+        document,
+        "# Backup restore drill\n\nA deterministic Markdown document for the backup fixture.\n"
+    );
+    let workspace = host
+        .debug_workspace(None)
+        .expect("verify: workspace is open");
+    assert!(
+        workspace
+            .read()
+            .expect("verify workspace lock")
+            .documents()
+            .contains(&DocId::new("notes/README.md")),
+        "verify: document is indexed"
+    );
+    for path in [
+        "attachments/non-utf8.bin",
+        "unknown.data",
+        ".trash/Deleted.md",
+        ".fub/plugins/com.example.archive/index.bin",
+    ] {
+        let expected = fs::read(destination.join(path))
+            .unwrap_or_else(|error| panic!("verify bytes {path}: {error}"));
+        assert_eq!(
+            expected,
+            fs::read(artifact.join(path))
+                .unwrap_or_else(|error| panic!("verify artifact bytes {path}: {error}")),
+            "verify bytes {path}"
+        );
+    }
+    let close_errors = host.close();
+    assert!(
+        close_errors.is_empty(),
+        "verify close errors: {close_errors:?}"
+    );
+    validate_after_host(&destination, &oracle);
 }
 
 #[test]
