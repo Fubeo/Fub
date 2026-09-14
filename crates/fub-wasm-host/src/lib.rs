@@ -38,6 +38,7 @@ mod events;
 mod guest;
 pub mod installed;
 mod limits;
+pub mod managed;
 mod model;
 mod translate;
 

@@ -93,6 +93,9 @@ fn allowed_locks() -> BTreeMap<&'static str, Why> {
         ("src/watcher.rs:Mutex", Why::Condition),
         ("src/runner.rs:Mutex", Why::Condition),
         ("src/session.rs:Mutex", Why::Condition),
+        // Contatore delle lease di un singolo token startup: la Condvar ne
+        // attende il drain fuori dalla Custody di validità e dai guard vault.
+        ("src/registry.rs:Mutex", Why::Condition),
         ("src/config.rs:Mutex", Why::TestOnly),
     ])
 }
@@ -127,10 +130,6 @@ const SOURCES: &[(&str, &str)] = &[
     ("src/net.rs", include_str!("../src/net.rs")),
     ("app/src/lib.rs", include_str!("../../fub-app/src/lib.rs")),
     ("app/src/main.rs", include_str!("../../fub-app/src/main.rs")),
-    (
-        "app/src/startup.rs",
-        include_str!("../../fub-app/src/startup.rs"),
-    ),
 ];
 
 /// **La porta**, e l'unico file che il conto non legge.

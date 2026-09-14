@@ -37,6 +37,8 @@ con-dati = []
 abi-incompatibile = []
 versione-successiva = []
 manifest-non-valido = []
+# Il manifest è valido, ma l'attivazione fallisce per provare il rollback del mount.
+fallisce-attivazione = []
 
 [dependencies]
 wit-bindgen = "0.60"

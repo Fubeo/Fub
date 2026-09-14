@@ -41,7 +41,7 @@ del repository verificano le eccezioni.
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
-| `fub-wasm-host` | Wasmtime, binding e traduzione | policy duplicata |
+| `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
 
 ## Dipendenze vietate

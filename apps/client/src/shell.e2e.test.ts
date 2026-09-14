@@ -101,6 +101,7 @@ vi.mock("./host/ipc", () => {
 vi.mock("./host/dialog", () => ({
   confirm: () => Promise.resolve(box.confirm),
   pickFolder: () => Promise.resolve("/vault"),
+  pickFile: () => Promise.resolve(null),
 }));
 
 const { createFakeHost, TRASH_VIEW, testViewSpec } = await import("./host/fake");

@@ -3,6 +3,7 @@ import { MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   BundleInfo,
+  InstalledPluginInfo,
   CommandEffect,
   CommandOutcome,
   CommandScope,
@@ -724,6 +725,19 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     kind: true,
     trust: true,
     permissions: true,
+  }),
+  InstalledPluginInfo: keysOf<InstalledPluginInfo>({
+    id: true,
+    name: true,
+    mounted: true,
+    kind: true,
+    trust: true,
+    permissions: true,
+    installation: true,
+    version: true,
+    enabled: true,
+    consent: true,
+    runtime_known: true,
   }),
   // La chiave resta il nome del tipo RUST (`fub_host::VaultEntry`), che è
   // ciò che la fixture gemella scrive; di qua si chiama `KnownVault` perché

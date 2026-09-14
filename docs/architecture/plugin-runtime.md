@@ -232,15 +232,20 @@ leggere il blob o validare attivamente il componente. I record esclusi restano
 metadata nello store: un loro blob corrotto non viene eseguito né diagnosticato
 durante l'avvio.
 
-I bundle selezionati entrano in `Host::with_startup_bundles` e nel registry
-comune prima della custodia del workspace. Feature ufficiali, temi e primo
-bundle registrato conservano la propria identità; una collisione non li
-sostituisce. Un plugin opzionale fallito viene diagnosticato senza pubblicare
-registrazioni parziali né impedire l'apertura del vault. Il riavvio rilegge le
-scelte persistite; lo store resta separato dalle istanze delle sessioni.
+`InstalledPluginManager` implementa `StartupSource`;
+`Host::with_startup_source` prepara i bundle e i relativi `BundleClaim` per il
+registry comune prima della custodia del workspace. Feature ufficiali, temi e
+primo bundle registrato conservano la propria identità; una collisione non li
+sostituisce e non trasferisce l'autorità sul claim. Un plugin opzionale fallito
+viene diagnosticato senza pubblicare registrazioni parziali né impedire
+l'apertura del vault. Il riavvio rilegge le scelte persistite; lo store resta
+separato dalle istanze delle sessioni.
 
-Gestione desktop di installazione, consenso, toggle e rimozione, IPC e guida
-del ciclo completo restano tracciati in [#8](https://github.com/Fubeo/Fub/issues/8).
+`InstalledPluginManager` espone le cinque operazioni IPC desktop per inventario,
+installazione, consenso, abilitazione e rimozione, persiste le decisioni e
+riconcilia i vault aperti. La rimozione richiede prima la disabilitazione, ritira
+soltanto i claim posseduti, quindi elimina record e blob senza cancellare
+`.fub/plugins/<id>/`.
 
 Schema, atomicità e rimozione sono descritti nel
 [layout su disco](../reference/on-disk-layout.md).

@@ -337,22 +337,167 @@ pub trait Bundle: Send + Sync {
         BundleMount::new(self.plugin(), move |registrar| self.registration(registrar))
     }
 }
+/// Identità opaca di una sorgente runtime.
+///
+/// Due claim sono uguali soltanto quando discendono dallo stesso `new`/clone;
+/// non attraversano ABI, JSON o disco.
+#[derive(Clone, Default)]
+pub struct BundleClaim(Arc<()>);
+
+impl BundleClaim {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// Un bundle immutabile consegnato dal composition root prima dell'apertura.
 ///
 /// `requested` è una decisione già calcolata dal chiamante: l'host non la
 /// persiste e non prova a ricostruirla da configurazione o stato installato.
+#[derive(Clone)]
 pub struct StartupBundle {
     bundle: Arc<dyn Bundle>,
     requested: bool,
+    claim: BundleClaim,
 }
 
 impl StartupBundle {
-    pub fn new(bundle: Arc<dyn Bundle>, requested: bool) -> Self {
-        Self { bundle, requested }
+    pub fn new(bundle: Arc<dyn Bundle>, requested: bool, claim: BundleClaim) -> Self {
+        Self {
+            bundle,
+            requested,
+            claim,
+        }
     }
 
-    pub(crate) fn parts(&self) -> (Arc<dyn Bundle>, bool) {
-        (Arc::clone(&self.bundle), self.requested)
+    pub(crate) fn parts(&self) -> (Arc<dyn Bundle>, bool, BundleClaim) {
+        (Arc::clone(&self.bundle), self.requested, self.claim.clone())
+    }
+}
+
+/// Token che linearizza una decisione installata con preparazione, rollback e
+/// pubblicazione delle aperture che ne hanno letto lo snapshot.
+pub struct StartupValidity {
+    valid: Custody<bool>,
+    leases: Arc<StartupLeaseCounter>,
+}
+
+#[derive(Default)]
+struct StartupLeaseCounter {
+    active: std::sync::Mutex<usize>,
+    drained: std::sync::Condvar,
+}
+
+/// Lease RAII di uno snapshot in preparazione o in apertura.
+pub struct StartupLease {
+    counter: Arc<StartupLeaseCounter>,
+}
+
+impl Drop for StartupLease {
+    fn drop(&mut self) {
+        let mut active = self
+            .counter
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *active = active
+            .checked_sub(1)
+            .expect("una lease viene rilasciata una sola volta");
+        if *active == 0 {
+            self.counter.drained.notify_all();
+        }
+    }
+}
+
+impl StartupValidity {
+    pub fn new() -> Self {
+        Self {
+            valid: Custody::new("la validità dello startup", true),
+            leases: Arc::new(StartupLeaseCounter::default()),
+        }
+    }
+
+    pub fn acquire(&self) -> Result<StartupLease, PluginError> {
+        let valid = self.valid.read()?;
+        if !*valid {
+            return Err(PluginError::Conflict(
+                "La decisione dei componenti non è più corrente.".into(),
+            ));
+        }
+        let mut active = self
+            .leases
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *active = active.checked_add(1).ok_or_else(|| {
+            PluginError::Internal("Troppe aperture startup contemporanee.".into())
+        })?;
+        drop(active);
+        drop(valid);
+        Ok(StartupLease {
+            counter: Arc::clone(&self.leases),
+        })
+    }
+
+    pub fn invalidate(&self) -> Result<(), PluginError> {
+        let mut valid = self.valid.write()?;
+        *valid = false;
+        let mut active = self
+            .leases
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        drop(valid);
+        while *active != 0 {
+            active = self
+                .leases
+                .drained
+                .wait(active)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn read(&self) -> Result<std::sync::RwLockReadGuard<'_, bool>, PluginError> {
+        self.valid.read()
+    }
+}
+
+impl Default for StartupValidity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct StartupSnapshot {
+    pub bundles: Vec<StartupBundle>,
+    pub diagnostics: Vec<PluginError>,
+    pub validity: Option<Arc<StartupValidity>>,
+    pub lease: Option<StartupLease>,
+}
+
+impl StartupSnapshot {
+    pub fn new(bundles: Vec<StartupBundle>) -> Self {
+        Self {
+            bundles,
+            diagnostics: Vec::new(),
+            validity: None,
+            lease: None,
+        }
+    }
+}
+
+pub trait StartupSource: Send + Sync {
+    fn prepare(&self) -> Result<StartupSnapshot, PluginError>;
+}
+
+impl StartupSource for Vec<StartupBundle> {
+    fn prepare(&self) -> Result<StartupSnapshot, PluginError> {
+        Ok(StartupSnapshot::new(self.clone()))
     }
 }
 
@@ -423,11 +568,12 @@ struct MountedBundle {
     plugin: Arc<dyn Plugin>,
 }
 
-struct KnownBundle {
+pub(crate) struct KnownBundle {
     manifest: PluginManifest,
     kind: BundleKind,
     trust: Trust,
     bundle: Arc<dyn Bundle>,
+    claim: Option<BundleClaim>,
 }
 
 #[derive(Default)]
@@ -558,6 +704,34 @@ impl BundleRegistry {
         .ok_or_else(|| BundleError::Unknown(id.to_owned()))?;
 
         Self::mount_guarded(registry, workspace, bundle.as_ref())
+    }
+
+    pub(crate) fn enable_claimed_guarded(
+        registry: &Custody<Self>,
+        workspace: &Custody<Workspace>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<(), PluginError> {
+        let _workspace_turn = workspace.write_turn();
+        let _registry_turn = registry.write_turn();
+        let bundle = {
+            let registry = registry.read()?;
+            let Some(known) = registry.known.iter().find(|known| known.manifest.id == id) else {
+                return Err(PluginError::NotFound(
+                    format!("Nessun bundle conosciuto con id `{id}`.").into(),
+                ));
+            };
+            if !known.claim.as_ref().is_some_and(|known| known.same(claim)) {
+                return Err(PluginError::AlreadyExists(
+                    format!("Il bundle `{id}` appartiene a un'altra sorgente.").into(),
+                ));
+            }
+            if registry.mounted.iter().any(|bundle| bundle.id == id) {
+                return Ok(());
+            }
+            Arc::clone(&known.bundle)
+        };
+        Self::mount_guarded(registry, workspace, bundle.as_ref()).map_err(PluginError::from)
     }
 
     fn mount_guarded(
@@ -868,15 +1042,25 @@ impl BundleRegistry {
     pub fn remember(&mut self, bundle: Arc<dyn Bundle>) {
         let manifest = bundle.manifest();
         let id = manifest.id.clone();
+        if self
+            .known
+            .iter()
+            .find(|known| known.manifest.id == id)
+            .is_some_and(|known| known.claim.is_some())
+        {
+            return;
+        }
         let known = KnownBundle {
             manifest,
             kind: bundle.kind(),
             trust: bundle.trust(),
             bundle,
+            claim: None,
         };
         self.known.retain(|known| known.manifest.id != id);
         self.known.push(known);
     }
+
     /// Ricorda il bundle solo se nessuna sorgente precedente ne ha già
     /// rivendicato l'identità. Restituisce l'id e se questa istanza ha vinto.
     pub(crate) fn remember_first(&mut self, bundle: Arc<dyn Bundle>) -> (String, bool) {
@@ -890,8 +1074,108 @@ impl BundleRegistry {
             kind: bundle.kind(),
             trust: bundle.trust(),
             bundle,
+            claim: None,
         });
         (id, true)
+    }
+
+    pub(crate) fn claimed(bundle: Arc<dyn Bundle>, claim: BundleClaim) -> (String, KnownBundle) {
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        (
+            id,
+            KnownBundle {
+                manifest,
+                kind: bundle.kind(),
+                trust: bundle.trust(),
+                bundle,
+                claim: Some(claim),
+            },
+        )
+    }
+
+    /// Muove `candidate` nel registro soltanto se l'id è davvero vacante.
+    /// Lasciarlo nell'`Option` negli altri rami consente al chiamante di
+    /// distruggerne il corpo dopo avere rilasciato la custodia.
+    pub(crate) fn remember_claimed(
+        &mut self,
+        candidate: &mut Option<KnownBundle>,
+    ) -> Result<bool, PluginError> {
+        let proposed = candidate
+            .as_ref()
+            .expect("il candidato viene consumato soltanto quando è inserito");
+        let id = proposed.manifest.id.as_str();
+        let Some(existing) = self.known.iter().find(|known| known.manifest.id == id) else {
+            self.known.push(
+                candidate
+                    .take()
+                    .expect("il candidato vacante è ancora disponibile"),
+            );
+            return Ok(true);
+        };
+        if existing
+            .claim
+            .as_ref()
+            .zip(proposed.claim.as_ref())
+            .is_some_and(|(existing, proposed)| existing.same(proposed))
+        {
+            return Ok(false);
+        }
+        Err(PluginError::AlreadyExists(
+            format!("Il bundle `{id}` appartiene già a un'altra sorgente.").into(),
+        ))
+    }
+
+    pub(crate) fn is_owned(&self, id: &str, claim: &BundleClaim) -> bool {
+        self.known
+            .iter()
+            .find(|known| known.manifest.id == id)
+            .and_then(|known| known.claim.as_ref())
+            .is_some_and(|known| known.same(claim))
+    }
+
+    pub(crate) fn is_claimed(&self, id: &str) -> bool {
+        self.known
+            .iter()
+            .find(|known| known.manifest.id == id)
+            .is_some_and(|known| known.claim.is_some())
+    }
+
+    pub(crate) fn is_active_owned(&self, id: &str, claim: &BundleClaim) -> bool {
+        self.is_owned(id, claim) && self.mounted.iter().any(|bundle| bundle.id == id)
+    }
+
+    pub(crate) fn forget_claimed(
+        &mut self,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<KnownBundle, PluginError> {
+        let Some(at) = self.known.iter().position(|known| known.manifest.id == id) else {
+            return Err(PluginError::NotFound(
+                format!("Nessun bundle conosciuto con id `{id}`.").into(),
+            ));
+        };
+        let owned = self.known[at]
+            .claim
+            .as_ref()
+            .is_some_and(|known| known.same(claim));
+        if !owned {
+            return Err(PluginError::AlreadyExists(
+                format!("Il bundle `{id}` appartiene a un'altra sorgente.").into(),
+            ));
+        }
+        if self.mounted.iter().any(|bundle| bundle.id == id) {
+            return Err(PluginError::Conflict(
+                format!("Il bundle `{id}` è ancora montato.").into(),
+            ));
+        }
+        Ok(self.known.remove(at))
+    }
+
+    pub(crate) fn drop_known(bundle: Option<KnownBundle>) {
+        if let Some(bundle) = bundle {
+            drop_external(bundle, "managed bundle drop");
+        }
     }
 
     pub fn remember_guarded(
@@ -900,26 +1184,39 @@ impl BundleRegistry {
     ) -> Result<(), PluginError> {
         let manifest = bundle.manifest();
         let id = manifest.id.clone();
-        let known = KnownBundle {
+        let mut candidate = Some(KnownBundle {
             manifest,
             kind: bundle.kind(),
             trust: bundle.trust(),
             bundle,
+            claim: None,
+        });
+        let (result, replaced) = match registry.write() {
+            Ok(mut registry) => {
+                let at = registry
+                    .known
+                    .iter()
+                    .position(|entry| entry.manifest.id == id);
+                if at.is_some_and(|at| registry.known[at].claim.is_some()) {
+                    (
+                        Err(PluginError::AlreadyExists(
+                            format!("Il bundle `{id}` appartiene a una sorgente runtime.").into(),
+                        )),
+                        None,
+                    )
+                } else {
+                    let replaced = at.map(|at| registry.known.remove(at));
+                    registry
+                        .known
+                        .push(candidate.take().expect("il bundle non è stato rifiutato"));
+                    (Ok(()), replaced)
+                }
+            }
+            Err(error) => (Err(error), None),
         };
-        let replaced = {
-            let mut registry = registry.write()?;
-            let replaced = registry
-                .known
-                .iter()
-                .position(|entry| entry.manifest.id == id)
-                .map(|at| registry.known.remove(at));
-            registry.known.push(known);
-            replaced
-        };
-        if let Some(replaced) = replaced {
-            drop_external(replaced, "replaced bundle drop");
-        }
-        Ok(())
+        Self::drop_known(candidate);
+        Self::drop_known(replaced);
+        result
     }
 
     pub fn inventory(&self) -> Vec<BundleInfo> {

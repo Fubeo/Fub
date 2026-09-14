@@ -1,7 +1,8 @@
 //! Presidi del lifecycle dei bundle: ABI, attivazione, registrazione atomica,
 //! dipendenze, permessi e teardown.
 
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
 
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::event::{Event, EventKind, EventMask, Notice};
@@ -622,9 +623,11 @@ fn opens_with_startup_bundles(
     let dir = tempfile::tempdir().expect("tempdir");
     let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
     std::fs::write(root.join("Nota.md"), "# Nota\n").expect("a note");
+    let source: Arc<dyn fub_host::StartupSource> =
+        Arc::new(bundles.into_iter().collect::<Vec<_>>());
     let host = fub_host::Host::new()
         .with_watcher(Box::new(fub_host::NoWatcher))
-        .with_startup_bundles(bundles);
+        .with_startup_source(source);
     host.open(&root).expect("startup bundles do not block open");
     (dir, host)
 }
@@ -643,6 +646,7 @@ fn requested_startup_bundle_is_mounted() {
     let (_dir, host) = opens_with_startup_bundles([fub_host::StartupBundle::new(
         Arc::new(BundleSpy::new(ID, &journal)),
         true,
+        fub_host::BundleClaim::new(),
     )]);
 
     assert!(startup_inventory(&host)
@@ -661,6 +665,7 @@ fn unrequested_startup_bundle_stays_known_and_unmounted() {
     let (_dir, host) = opens_with_startup_bundles([fub_host::StartupBundle::new(
         Arc::new(BundleSpy::new(ID, &journal)),
         false,
+        fub_host::BundleClaim::new(),
     )]);
 
     assert!(startup_inventory(&host)
@@ -683,8 +688,13 @@ fn broken_unrequested_neighbor_does_not_block_requested_bundle() {
         fub_host::StartupBundle::new(
             Arc::new(BundleSpy::new(BROKEN, &broken).that_not_is_activates()),
             false,
+            fub_host::BundleClaim::new(),
         ),
-        fub_host::StartupBundle::new(Arc::new(BundleSpy::new(REQUESTED, &requested)), true),
+        fub_host::StartupBundle::new(
+            Arc::new(BundleSpy::new(REQUESTED, &requested)),
+            true,
+            fub_host::BundleClaim::new(),
+        ),
     ]);
 
     let inventory = startup_inventory(&host);
@@ -714,9 +724,18 @@ fn startup_collisions_keep_official_and_first_claims() {
         fub_host::StartupBundle::new(
             Arc::new(BundleSpy::new(fub_host::CORE_ID, &official_impostor)),
             true,
+            fub_host::BundleClaim::new(),
         ),
-        fub_host::StartupBundle::new(Arc::new(BundleSpy::new(CLAIMED, &first)), true),
-        fub_host::StartupBundle::new(Arc::new(BundleSpy::new(CLAIMED, &second)), true),
+        fub_host::StartupBundle::new(
+            Arc::new(BundleSpy::new(CLAIMED, &first)),
+            true,
+            fub_host::BundleClaim::new(),
+        ),
+        fub_host::StartupBundle::new(
+            Arc::new(BundleSpy::new(CLAIMED, &second)),
+            true,
+            fub_host::BundleClaim::new(),
+        ),
     ]);
 
     let inventory = startup_inventory(&host);
@@ -744,4 +763,204 @@ fn startup_collisions_keep_official_and_first_claims() {
     );
     assert!(lines(&official_impostor).is_empty());
     assert!(lines(&second).is_empty());
+}
+
+struct BlockingStartupSource {
+    calls: AtomicUsize,
+    validity: Arc<fub_host::StartupValidity>,
+    entered: mpsc::SyncSender<()>,
+    release: Mutex<mpsc::Receiver<()>>,
+    bundle: Arc<dyn Bundle>,
+    claim: fub_host::BundleClaim,
+}
+
+impl fub_host::StartupSource for BlockingStartupSource {
+    fn prepare(&self) -> Result<fub_host::StartupSnapshot, PluginError> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Ok(fub_host::StartupSnapshot::new(Vec::new()));
+        }
+        let lease = self.validity.acquire()?;
+        self.entered.send(()).expect("the opening is observed");
+        self.release
+            .lock()
+            .expect("release channel")
+            .recv()
+            .expect("the opening is released");
+        Ok(fub_host::StartupSnapshot {
+            bundles: vec![fub_host::StartupBundle::new(
+                Arc::clone(&self.bundle),
+                true,
+                self.claim.clone(),
+            )],
+            diagnostics: Vec::new(),
+            validity: Some(Arc::clone(&self.validity)),
+            lease: Some(lease),
+        })
+    }
+}
+
+#[test]
+fn invalidation_waits_for_the_old_opening_lease_and_stale_publication_rolls_back() {
+    const ID: &str = "test.startup.stale";
+    let stable_dir = tempfile::tempdir().expect("stable tempdir");
+    let stable_root =
+        camino::Utf8PathBuf::from_path_buf(stable_dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(stable_root.join("Nota.md"), "# Stable\n").expect("a stable note");
+    let dir = tempfile::tempdir().expect("stale tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Nota.md"), "# Stale\n").expect("a stale note");
+    let journal: Journal = Arc::default();
+    let validity = Arc::new(fub_host::StartupValidity::new());
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    let source: Arc<dyn fub_host::StartupSource> = Arc::new(BlockingStartupSource {
+        calls: AtomicUsize::new(0),
+        validity: Arc::clone(&validity),
+        entered: entered_tx,
+        release: Mutex::new(release_rx),
+        bundle: Arc::new(BundleSpy::new(ID, &journal)),
+        claim: fub_host::BundleClaim::new(),
+    });
+    let host = Arc::new(
+        fub_host::Host::new()
+            .with_watcher(Box::new(fub_host::NoWatcher))
+            .with_startup_source(source),
+    );
+    host.open(&stable_root).expect("open stable vault");
+    let opening_host = Arc::clone(&host);
+    let opening = std::thread::spawn(move || opening_host.open(&root));
+    entered_rx.recv().expect("snapshot lease is held");
+
+    let invalidating = Arc::clone(&validity);
+    let invalidation = std::thread::spawn(move || invalidating.invalidate());
+    loop {
+        match validity.acquire() {
+            Err(PluginError::Conflict(_)) => break,
+            Ok(lease) => {
+                drop(lease);
+                std::thread::yield_now();
+            }
+            Err(error) => panic!("unexpected validity error: {error}"),
+        }
+    }
+    assert!(
+        !invalidation.is_finished(),
+        "invalidation cannot finish while the old opening owns its lease"
+    );
+    assert!(
+        !host
+            .bundles(Some(stable_root.as_str()))
+            .expect("the existing workspace remains available")
+            .is_empty(),
+        "lease draining does not hold workspace, registry or sessions custody"
+    );
+
+    release_tx.send(()).expect("release old prepare");
+    let outcome = opening.join().expect("opening thread does not panic");
+    assert!(
+        matches!(outcome, Err(PluginError::Conflict(_))),
+        "the invalid snapshot must not publish: {:?}",
+        outcome.err()
+    );
+    invalidation
+        .join()
+        .expect("invalidation thread does not panic")
+        .expect("invalidation drains the lease");
+    assert_eq!(
+        host.vaults().len(),
+        1,
+        "only the previously published session remains"
+    );
+    assert_eq!(
+        lines(&journal),
+        vec![
+            format!("{ID}: activating"),
+            format!("{ID}: vault closing"),
+            format!("{ID}: stopping (host=true, provider=true)"),
+        ],
+        "invalidation returns only after the old opening completed teardown"
+    );
+    assert!(host.close().is_empty());
+}
+
+#[test]
+fn runtime_claims_cannot_replace_or_be_mutated_through_another_identity() {
+    const ID: &str = "test.runtime.claimed";
+    let dir = tempfile::tempdir().expect("tempdir");
+    let root = camino::Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    std::fs::write(root.join("Nota.md"), "# Nota\n").expect("a note");
+    let host = fub_host::Host::new().with_watcher(Box::new(fub_host::NoWatcher));
+    host.open(&root).expect("open vault");
+    let journal: Journal = Arc::default();
+    let owner = fub_host::BundleClaim::new();
+    let other = fub_host::BundleClaim::new();
+
+    host.remember_bundle(None, Arc::new(BundleSpy::new(ID, &journal)), &owner)
+        .expect("owner remembers its runtime bundle");
+    host.remember_bundle(
+        None,
+        Arc::new(BundleSpy::new(ID, &Journal::default())),
+        &owner,
+    )
+    .expect("the same claim is already-known success");
+    assert!(host.bundle_is_owned(None, ID, &owner).unwrap());
+    assert!(!host.bundle_is_owned(None, ID, &other).unwrap());
+    assert!(matches!(
+        host.remember_bundle(
+            None,
+            Arc::new(BundleSpy::new(ID, &Journal::default())),
+            &other,
+        ),
+        Err(PluginError::AlreadyExists(_))
+    ));
+    assert!(matches!(
+        host.set_bundle_active(None, ID, &other, true),
+        Err(PluginError::AlreadyExists(_))
+    ));
+    assert!(host
+        .set_bundle_active(None, ID, &other, false)
+        .expect("another claim has no owned instance")
+        .is_empty());
+
+    host.set_bundle_active(None, ID, &owner, true)
+        .expect("owner mounts");
+    assert!(host.is_bundle_active(None, ID, &owner).unwrap());
+    assert!(matches!(
+        host.set_plugin_enabled(None, ID, false),
+        Err(PluginError::BadArgs(_))
+    ));
+    assert!(
+        host.is_bundle_active(None, ID, &owner).unwrap(),
+        "the native preference path cannot bypass source ownership"
+    );
+    assert!(matches!(
+        host.forget_bundle(None, ID, &owner),
+        Err(PluginError::Conflict(_))
+    ));
+    host.set_bundle_active(None, ID, &owner, false)
+        .expect("owner unmounts");
+    assert!(matches!(
+        host.forget_bundle(None, ID, &other),
+        Err(PluginError::AlreadyExists(_))
+    ));
+    host.forget_bundle(None, ID, &owner)
+        .expect("owner forgets its unmounted bundle");
+    assert!(!host.bundle_is_owned(None, ID, &owner).unwrap());
+
+    let collision = fub_host::BundleClaim::new();
+    assert!(matches!(
+        host.remember_bundle(
+            None,
+            Arc::new(BundleSpy::new("fub.stats", &Journal::default())),
+            &collision,
+        ),
+        Err(PluginError::AlreadyExists(_))
+    ));
+    assert!(host
+        .set_plugin_enabled(None, "fub.stats", false)
+        .expect("an unclaimed official keeps its native toggle")
+        .is_empty());
+    host.set_plugin_enabled(None, "fub.stats", true)
+        .expect("restore official feature");
+    assert!(host.close().is_empty());
 }
