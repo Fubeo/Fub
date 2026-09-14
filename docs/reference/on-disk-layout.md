@@ -123,10 +123,24 @@ essere eliminata e ricostruita dai documenti.
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
 autorevoli: eliminarli perde la memoria delle versioni. Ogni `VersionRef`
 nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
-La lettura per anteprima o `version.restore` confronta entrambe con i byte dello
-snapshot prima di decodificarlo come UTF-8. Se anche una sola non corrisponde,
-l'operazione restituisce un errore interno localizzato senza scrivere il
+La lettura per anteprima o `version.restore` verifica che il `VersionRef`
+esista, che il blob sia leggibile e che dimensione e impronta corrispondano ai
+byte dello snapshot, prima di decodificarlo come UTF-8. Se anche una sola
+verifica fallisce, l'operazione restituisce un errore senza scrivere il
 documento corrente o l'indice.
+
+`version.restore` cattura la revisione del documento prima di leggere lo
+snapshot e usa quella revisione per la scrittura condizionata. Il confronto e
+scambio (CAS) impedisce agli writer cooperativi di sovrascrivere una modifica
+intervenuta durante la lettura. Per gli writer esterni è best-effort: una
+modifica già osservabile al confronto produce un conflitto. Il conflitto e gli
+errori di lettura o confronto non modificano documento e indice. Sui file
+regolari sostituibili anche un errore di scrittura preserva i byte precedenti;
+per symlink, hardlink o conteggio dei nomi non disponibile, la scrittura
+in-place preserva l'identità ma un errore può lasciare i byte modificati.
+Quando riesce, il ripristino è una scrittura normale: fotografa prima il
+contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
+esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
 Quindi `.fub/plugins/` non è né tutta cache né tutto dato autorevole.
 

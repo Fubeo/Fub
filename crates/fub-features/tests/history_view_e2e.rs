@@ -16,7 +16,7 @@
 //! 3. un ripristino è annullabile, perché è a sua volta una scrittura — e quindi
 //!    una versione (D8).
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::edit::WriteBase;
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
@@ -26,13 +26,89 @@ use fub_abi::PluginError;
 use fub_features::versioning::{HistoryView, VersioningCommands, HISTORY_VIEW, VERSION_RESTORE};
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
-use fub_kernel::{FormatRegistry, Workspace, MAIN_PANE};
+use fub_kernel::storage::{DirEntry, FsStorage, Stat, VaultStorage};
+use fub_kernel::{FormatRegistry, MachineSettings, Workspace, MAIN_PANE};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Barrier,
+};
 
 struct Vault {
     _dir: tempfile::TempDir,
     root: Utf8PathBuf,
 }
 
+struct RestoreRaceStorage {
+    inner: FsStorage,
+    gate: Arc<Barrier>,
+    armed: AtomicBool,
+    write_fault: AtomicBool,
+}
+
+impl VaultStorage for RestoreRaceStorage {
+    fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+        let is_snapshot = self.armed.load(Ordering::Acquire)
+            && path.to_string().contains("/.fub/plugins/fub.versioning/")
+            && path.extension() == Some("md");
+        if is_snapshot {
+            self.gate.wait();
+            self.gate.wait();
+        }
+        self.inner.read(path)
+    }
+    fn write_if_unchanged(
+        &self,
+        path: &Utf8Path,
+        expected: Option<&[u8]>,
+        bytes: &[u8],
+    ) -> std::io::Result<fub_kernel::storage::ConditionalWrite> {
+        let is_document = path.extension() == Some("md") && !path.to_string().contains("/.fub/");
+        if is_document && self.write_fault.swap(false, Ordering::AcqRel) {
+            return Err(std::io::Error::other("write_if_unchanged fault"));
+        }
+        self.inner.write_if_unchanged(path, expected, bytes)
+    }
+
+    fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+        self.inner.write(path, bytes)
+    }
+
+    fn update(
+        &self,
+        path: &Utf8Path,
+        merge: fub_kernel::storage::Merge<'_>,
+    ) -> std::io::Result<()> {
+        self.inner.update(path, merge)
+    }
+
+    fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+        self.inner.append(path, bytes)
+    }
+
+    fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename(from, to)
+    }
+
+    fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+        self.inner.rename_no_replace(from, to)
+    }
+
+    fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove(path)
+    }
+
+    fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+        self.inner.list(dir)
+    }
+
+    fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+        self.inner.stat(path)
+    }
+
+    fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+        self.inner.remove_empty_dir(dir)
+    }
+}
 impl Vault {
     fn new() -> Self {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -61,6 +137,32 @@ impl Vault {
         // ricevono. È la proprietà che questo banco esiste per provare — chi
         // disegna rilegge dal proprio spazio dati, e non ha bisogno che qualcuno
         // gli presti l'esemplare in memoria di chi scrive.
+        ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
+            .expect("view registrata");
+        ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands))
+            .expect("comando registrato");
+        ws.reindex().expect("reindex");
+        ws
+    }
+
+    fn open_with_storage(&self, storage: Arc<dyn VaultStorage>) -> Workspace {
+        let mut registry = FormatRegistry::new();
+        registry
+            .register(MarkdownProvider::boxed())
+            .expect("nessun conflitto di estensioni");
+        let mut ws = Workspace::on(&self.root, registry, storage, MachineSettings::in_memory())
+            .expect("l'apertura del vault riesce");
+        ws.register_plugin(
+            fub_abi::traits::PluginManifest::core(VERSIONING_ID, VERSIONING_ID)
+                .speaking("it", fub_features::versioning::catalog()),
+            fub_kernel::Trust::Core,
+        )
+        .expect("dichiarato");
+        let store = ws
+            .with_host(VERSIONING_ID, VersionStore::open)
+            .expect("store versioni");
+        ws.register_event_handler(VERSIONING_ID, Box::new(VersioningHandler::new(store)))
+            .expect("handler registrato");
         ws.register_view_provider(VERSIONING_ID, Box::new(HistoryView))
             .expect("view registrata");
         ws.register_command_provider(VERSIONING_ID, Box::new(VersioningCommands))
@@ -418,5 +520,123 @@ fn inverse_of_a_restore_and_declared_from_the_command() {
     assert_eq!(
         std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
         "com'è\n"
+    );
+}
+#[test]
+fn restore_conflicts_if_document_changes_while_snapshot_is_read() {
+    let vault = Vault::new();
+    let gate = Arc::new(Barrier::new(2));
+    let storage = Arc::new(RestoreRaceStorage {
+        inner: FsStorage,
+        gate: Arc::clone(&gate),
+        armed: AtomicBool::new(false),
+        write_fault: AtomicBool::new(false),
+    });
+    let mut ws = vault.open_with_storage(Arc::clone(&storage) as Arc<dyn VaultStorage>);
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    ws.write_document(&doc, "com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+
+    let tree = ws.render_view(&instance()).expect("storia");
+    let action = restores(&tree).expect("il bottone c'è");
+    let count_before = entries(&tree).len();
+    let store = vault.root.join(".fub").join("plugins").join(VERSIONING_ID);
+    let index = store.join("versions.json");
+    let index_before = std::fs::read(&index).expect("indice delle versioni");
+    storage.armed.store(true, Ordering::Release);
+    let root = vault.root.clone();
+    let external = std::thread::spawn(move || {
+        gate.wait();
+        std::fs::write(root.join("Uno.md"), "modifica esterna\n").expect("scrittura esterna");
+        gate.wait();
+    });
+    let events = ws.bus().subscribe();
+
+    let error = ws
+        .invoke_command(
+            VERSION_RESTORE,
+            action.payload,
+            fub_abi::command::InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect_err("il ripristino concorrente deve essere un conflitto");
+    external.join().expect("thread esterno");
+
+    assert!(
+        matches!(error, PluginError::Conflict(_)),
+        "errore: {error:?}"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "modifica esterna\n"
+    );
+    assert_eq!(std::fs::read(&index).unwrap(), index_before);
+    assert_eq!(
+        entries(&ws.render_view(&instance()).unwrap()).len(),
+        count_before
+    );
+    assert!(
+        events.try_iter().next().is_none(),
+        "un conflitto non emette eventi"
+    );
+}
+
+#[test]
+fn restore_reports_io_and_changes_nothing_if_document_write_fails() {
+    let vault = Vault::new();
+    let storage = Arc::new(RestoreRaceStorage {
+        inner: FsStorage,
+        gate: Arc::new(Barrier::new(2)),
+        armed: AtomicBool::new(false),
+        write_fault: AtomicBool::new(false),
+    });
+    let mut ws = vault.open_with_storage(Arc::clone(&storage) as Arc<dyn VaultStorage>);
+    let doc = DocId::new("Uno.md");
+    ws.write_document(&doc, "com'era\n", WriteBase::Dictated)
+        .expect("creata");
+    watches(&mut ws, doc.as_str());
+    ws.write_document(&doc, "com'è\n", WriteBase::Dictated)
+        .expect("riscritta");
+
+    let tree = ws.render_view(&instance()).expect("storia");
+    let action = restores(&tree).expect("il bottone c'è");
+    let entries_before = entries(&tree);
+    let index = vault
+        .root
+        .join(".fub")
+        .join("plugins")
+        .join(VERSIONING_ID)
+        .join("versions.json");
+    let index_before = std::fs::read(&index).expect("indice delle versioni");
+    storage.write_fault.store(true, Ordering::Release);
+    let events = ws.bus().subscribe();
+
+    let error = ws
+        .invoke_command(
+            VERSION_RESTORE,
+            action.payload,
+            fub_abi::command::InvokeMode::Apply,
+            fub_abi::event::Actor::User,
+        )
+        .expect_err("il guasto della scrittura deve essere un errore I/O");
+    assert!(
+        !storage.write_fault.load(Ordering::Acquire),
+        "il guasto one-shot è stato consumato"
+    );
+
+    assert!(matches!(error, PluginError::Io(_)), "errore: {error:?}");
+    assert_eq!(
+        std::fs::read_to_string(vault.root.join("Uno.md")).unwrap(),
+        "com'è\n"
+    );
+    assert_eq!(std::fs::read(&index).unwrap(), index_before);
+    let entries_after = entries(&ws.render_view(&instance()).unwrap());
+    assert_eq!(entries_after, entries_before);
+    assert!(
+        events.try_iter().next().is_none(),
+        "un guasto I/O non emette eventi"
     );
 }

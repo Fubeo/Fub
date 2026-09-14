@@ -63,10 +63,23 @@ una destinazione sicura.
 
 ## Versioning
 
-Il versioning conserva snapshot del contenuto. Uno snapshot non è il documento
-corrente e non deve essere applicato con una scrittura parziale. Il ripristino
-atomico è tracciato nell'issue
-[#5](https://github.com/Fubeo/Fub/issues/5).
+Il versioning conserva snapshot del contenuto. `version.restore` cattura la
+revisione del documento, quindi verifica che il riferimento alla versione
+esista e che il blob sia leggibile e integro (dimensione e impronta FNV-1a).
+La scrittura condizionata usa quella revisione come confronto e scambio (CAS).
+Per gli writer cooperativi, una modifica intervenuta durante la lettura viene
+rifiutata come conflitto.
+Per gli writer esterni il controllo è best-effort: una modifica già osservabile
+al confronto produce lo stesso conflitto. Un riferimento o un blob non valido e
+gli errori di lettura o confronto non modificano né il documento né l'indice
+delle versioni. Le garanzie di un errore di scrittura dipendono dal supporto:
+per i file regolari sostituibili il valore precedente resta intatto; symlink,
+hardlink e filesystem senza conteggio dei nomi richiedono invece la scrittura
+in-place descritta nel riferimento tecnico.
+
+Quando riesce, il ripristino è una scrittura normale: fotografa prima il
+contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
+esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
 ## Cartella `.fub/`
 

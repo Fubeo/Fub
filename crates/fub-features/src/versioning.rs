@@ -1990,7 +1990,13 @@ impl CommandProvider for VersioningCommands {
         // cambiata — ed è l'istante dell'ultima versione salvata, non l'ora
         // corrente: fra le due c'è il dedup (D6), che può non aver fotografato
         // niente se il file era già uguale.
+        //
+        // `document_revision` è la base del CAS reale di `write_document`:
+        // catturarla prima di leggere lo snapshot fa fallire il ripristino se
+        // il documento cambia durante quella lettura, senza sovrascrivere la
+        // modifica concorrente.
         let before = versions_of(host, &doc).first().map(|v| v.ts);
+        let base = host.document_revision(&doc)?;
         let source = version_source(host, &doc, ts)?;
         // **Detta**, e qui la parola è precisa: un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce apposta, ed è il gesto con cui
@@ -1998,7 +2004,7 @@ impl CommandProvider for VersioningCommands {
         // revisione corrente vorrebbe dire rifiutare il ripristino ogni volta
         // che c'è qualcosa da ripristinare, cioè sempre. Ciò che si copre non
         // è perduto: il dedup (D6) ne fotografa una versione prima.
-        host.write_document(&doc, &source, WriteBase::Dictated)?;
+        host.write_document(&doc, &source, WriteBase::DescendsFrom(base))?;
 
         let result = CommandOutcome::notify(when_for(DONE_RESTORE, ts));
         Ok(match before {
