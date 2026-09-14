@@ -7,12 +7,91 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fub_abi::error::FormatError;
-use fub_abi::model::{Block, DocId, DocumentModel, Inline};
+use fub_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
+    RenderOptions, RenderTarget,
+};
+use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, Span};
 use fub_abi::PluginError;
 use fub_host::{Host, NoWatcher, StartupSnapshot, StartupSource, StartupValidity};
 use fub_kernel::{KernelError, Trust};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::InstalledPluginManager;
+
+struct NativeExampleFormat;
+
+impl FormatProvider for NativeExampleFormat {
+    fn descriptor(&self) -> FormatDescriptor {
+        FormatDescriptor {
+            id: ID.to_string(),
+            name: "Example Format".to_string(),
+            extensions: vec!["fubfmt".to_string()],
+            source: fub_abi::format::SourceKind::Text,
+        }
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        FormatCapabilities::default()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let text = source.text().ok_or_else(|| FormatError::Unsupported {
+            format: ID.into(),
+            got: source.kind(),
+        })?;
+        let span = Span {
+            start: 0,
+            end: text.len(),
+        };
+        Ok(DocumentModel {
+            id: DocId::new(ctx.doc_id.clone()),
+            frontmatter: Frontmatter::default(),
+            body: vec![Block::Paragraph {
+                inlines: vec![Inline::Text(text.to_string())],
+                anchor: None,
+                span,
+            }],
+            outline: vec![],
+            links: vec![],
+            tags: vec![],
+            anchors: vec![],
+            text: text.to_string(),
+            frontmatter_present: false,
+        })
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        let target = match opts.target {
+            RenderTarget::Screen => "screen",
+            RenderTarget::Print => "print",
+            RenderTarget::Pdf => "pdf",
+            RenderTarget::StaticSite => "static-site",
+        };
+        let text = match model.body.as_slice() {
+            [Block::Paragraph { inlines, .. }] => match inlines.as_slice() {
+                [Inline::Text(text)] => text,
+                _ => return Err(FormatError::Render("unsupported paragraph".to_string())),
+            },
+            _ => return Err(FormatError::Render("unsupported body".to_string())),
+        };
+        Ok(format!(
+            "<p data-format=\"example-format\" data-target=\"{target}\">{}</p>",
+            fub_abi::html::escape(text)
+        ))
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        Ok(format!("fubfmt:{}", model.text))
+    }
+}
 use fub_wasm_host::WasmBundle;
 const ID: &str = "example.format";
 const FILE: &str = "nota.fubfmt";
@@ -397,6 +476,7 @@ fn assert_bad_variant_is_recoverable(variant: &str) {
     manager
         .set_consent(&host, installed.installation, Consent::Granted)
         .expect("consent persists");
+
     host.close_vault(&vault.root)
         .expect("initial session closes");
     host.open(&vault.root).expect("variant session opens");
@@ -425,4 +505,54 @@ fn malformed_wasm_model_is_a_recoverable_format_failure() {
 #[test]
 fn trapped_wasm_parser_is_a_recoverable_format_failure() {
     assert_bad_variant_is_recoverable("trap-on-parse");
+}
+#[test]
+fn native_and_wasm_format_providers_have_observable_parity() {
+    let wasm = common::component("format-wasm", "format_wasm", "");
+    let wasm_bundle =
+        WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
+    let wasm_provider = wasm_bundle
+        .format_provider()
+        .expect("il provider si prepara")
+        .expect("il componente dichiara un provider di formato");
+    let native_provider = NativeExampleFormat;
+    let native: &dyn FormatProvider = &native_provider;
+    let wasm: &dyn FormatProvider = wasm_provider.as_ref();
+    let source = DocumentSource::Text(SOURCE.to_string());
+    let context = ParseContext::obsidian(FILE);
+    let options = RenderOptions {
+        target: RenderTarget::StaticSite,
+        ..RenderOptions::default()
+    };
+
+    let native_model = native
+        .parse(&source, &context)
+        .expect("il provider nativo esegue il parse");
+    let wasm_model = wasm
+        .parse(&source, &context)
+        .expect("il provider WASM esegue il parse");
+    assert_eq!(
+        native_model, wasm_model,
+        "il modello attraversa invariato il confine WASM"
+    );
+    let native_html = native
+        .render_html(&native_model, &options)
+        .expect("il provider nativo esegue il render");
+    let wasm_html = wasm
+        .render_html(&native_model, &options)
+        .expect("il provider WASM esegue il render");
+    assert_eq!(
+        native_html, wasm_html,
+        "il target e il contenuto HTML restano invariati"
+    );
+    let native_source = native
+        .serialize(&native_model)
+        .expect("il provider nativo serializza il modello");
+    let wasm_source = wasm
+        .serialize(&native_model)
+        .expect("il provider WASM serializza il modello");
+    assert_eq!(
+        native_source, wasm_source,
+        "la serializzazione resta invariata"
+    );
 }
