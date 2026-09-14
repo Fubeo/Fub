@@ -12,6 +12,7 @@ use fub_abi::format::{
     RenderOptions, RenderTarget,
 };
 use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, Span};
+use fub_abi::traits::ViewInstance;
 use fub_abi::PluginError;
 use fub_host::{Host, NoWatcher, StartupSnapshot, StartupSource, StartupValidity};
 use fub_kernel::{KernelError, Trust};
@@ -190,6 +191,45 @@ fn enabled_manager_variant(vault: &Vault, variant: &str) -> (Arc<InstalledPlugin
         .is_empty()
         .then_some(())
         .expect("consent has no diagnostic");
+    host.close_vault(&vault.root)
+        .expect("initial session closes");
+    host.open(&vault.root).expect("managed session reopens");
+    host.wait_indexed(None).expect("managed indexing completes");
+    (manager, host)
+}
+
+fn enabled_view_and_format_manager(vault: &Vault) -> (Arc<InstalledPluginManager>, Host) {
+    let config_path =
+        Utf8PathBuf::from_path_buf(vault._config.path().to_path_buf()).expect("config utf8");
+    let manager = Arc::new(InstalledPluginManager::open(&config_path).expect("manager opens"));
+    let view = manager
+        .install(&common::component("view-wasm", "view_wasm", ""))
+        .expect("view component installs");
+
+    let host = host_with_manager(Arc::clone(&manager));
+    host.open(&vault.root).expect("initial session opens");
+    host.wait_indexed(None).expect("initial indexing completes");
+    let installation = view.installation;
+    manager
+        .set_enabled(&host, installation, true)
+        .expect("enabled choice persists")
+        .is_empty()
+        .then_some(())
+        .expect("enabling has no diagnostic");
+    manager
+        .set_consent(&host, installation, Consent::Granted)
+        .expect("consent persists")
+        .is_empty()
+        .then_some(())
+        .expect("consent has no diagnostic");
+    let permission =
+        fub_abi::settings::permission_key("example.view", fub_abi::options::permission::READ_VAULT);
+    host.set_setting_for_user(
+        Some(vault.root.as_str()),
+        &permission,
+        fub_abi::settings::SettingValue::Toggle(true),
+    )
+    .expect("user grants the declared view capability");
     host.close_vault(&vault.root)
         .expect("initial session closes");
     host.open(&vault.root).expect("managed session reopens");
@@ -437,6 +477,52 @@ fn guest_declared_parse_error_crosses_host_as_format_parse() {
     );
     drop(workspace);
     host.close();
+}
+
+#[test]
+fn managed_view_format_reentry_is_rejected_and_view_recovers() {
+    const VIEW_FILE: &str = "Self.viewfmt";
+    let vault = Vault::new();
+    std::fs::write(vault.root.join(VIEW_FILE), "self format source\n")
+        .expect("view format fixture");
+    let (_manager, host) = enabled_view_and_format_manager(&vault);
+    let host = Arc::new(host);
+    let self_format = ViewInstance::new(
+        "example.view:panel",
+        "example.view#format-crosses",
+        serde_json::json!({"mode": "self-format"}),
+    );
+    let (result_tx, result_rx) = mpsc::sync_channel(0);
+    let rendering_host = Arc::clone(&host);
+    let render_thread = std::thread::spawn(move || {
+        let result = rendering_host.render_view(None, &self_format);
+        result_tx.send(result).expect("render result receiver");
+    });
+    let error = result_rx
+        .recv_timeout(Duration::from_secs(1))
+        .expect("self-format render must reject re-entry promptly")
+        .expect_err("self-format render must return the nested format error");
+    assert!(
+        matches!(error, PluginError::Internal(_)),
+        "nested format call must remain a typed plugin error: {error}"
+    );
+    render_thread
+        .join()
+        .expect("render thread exits after rejection");
+
+    let summary = ViewInstance::new(
+        "example.view:panel",
+        "example.view#format-crosses",
+        serde_json::json!({"mode": "summary"}),
+    );
+    host.render_view(None, &summary)
+        .expect("the shared guest instance remains usable");
+    assert!(host
+        .views(None)
+        .expect("view registry remains available")
+        .iter()
+        .any(|view| view.id == "example.view:panel"));
+    assert!(host.close().is_empty(), "managed session closes cleanly");
 }
 
 #[test]

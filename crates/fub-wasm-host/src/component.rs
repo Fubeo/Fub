@@ -5,7 +5,45 @@
 //! istanza» fra chiamate: non esiste quindi uno stato temporale implicito che un
 //! secondo montaggio o una chiamata fuori sequenza possa sovrascrivere.
 
+use std::cell::RefCell;
 use std::sync::{Arc, Mutex};
+
+thread_local! {
+    static ACTIVE_INSTANCES: RefCell<Vec<*const ()>> = const { RefCell::new(Vec::new()) };
+}
+
+struct InstanceGuard {
+    identity: *const (),
+}
+
+impl Drop for InstanceGuard {
+    fn drop(&mut self) {
+        ACTIVE_INSTANCES.with(|active| {
+            let mut active = active.borrow_mut();
+            if let Some(index) = active
+                .iter()
+                .rposition(|identity| *identity == self.identity)
+            {
+                active.remove(index);
+            }
+        });
+    }
+}
+
+fn enter_instance(identity: *const ()) -> Result<InstanceGuard, ()> {
+    ACTIVE_INSTANCES.with(|active| {
+        let mut active = active.borrow_mut();
+        if active.contains(&identity) {
+            return Err(());
+        }
+        active.push(identity);
+        Ok(InstanceGuard { identity })
+    })
+}
+
+fn instance_identity(inner: &Mutex<Instance>) -> *const () {
+    inner as *const Mutex<Instance> as *const ()
+}
 
 use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
@@ -14,7 +52,11 @@ use fub_abi::format::{
     RenderOptions,
 };
 use fub_abi::model::DocumentModel;
-use fub_abi::traits::{CommandProvider, HostApi, Plugin, PluginManifest};
+use fub_abi::traits::{
+    CommandProvider, HostApi, Plugin, PluginManifest, ReadApi, ViewInstance, ViewInterests,
+    ViewProvider, ViewSpec,
+};
+use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{FormatError, PluginError};
 use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
 use fub_kernel::Trust;
@@ -22,10 +64,11 @@ use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType};
 use wasmtime::{Engine, Store};
 
-use crate::borrow::{with_guest, State};
+use crate::borrow::{with_guest, with_read_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
 use crate::contract::exports::fub::abi::format as w_format;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
+use crate::contract::exports::fub::abi::view as w_view;
 use crate::guest::add_to_linker;
 use crate::translate as tr;
 /// Famiglie del contratto effettivamente collegate da questo host.
@@ -39,6 +82,15 @@ const FAMILIES_SERVED: &[&str] = &[
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
 const FORMAT_INTERFACE: &str = "fub:abi/format";
 const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
+const VIEW_INTERFACE: &str = "fub:abi/view";
+const VIEW_EXPORT: &str = "fub:abi/view@0.1.1";
+fn is_supported_view_export(name: &str) -> bool {
+    name == VIEW_INTERFACE
+        || name == VIEW_EXPORT
+        || name
+            .strip_prefix(VIEW_INTERFACE)
+            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+}
 
 fn is_supported_format_export(name: &str) -> bool {
     name == FORMAT_INTERFACE
@@ -92,6 +144,7 @@ pub struct Component {
     indices: w_plugin::GuestIndices,
     command_indices: Option<w_command::GuestIndices>,
     format_indices: Option<w_format::GuestIndices>,
+    view_indices: Option<w_view::GuestIndices>,
 }
 
 impl Component {
@@ -132,6 +185,10 @@ impl Component {
             .component_type()
             .exports(&engine)
             .any(|(name, _)| is_supported_format_export(name));
+        let view_export_present = component
+            .component_type()
+            .exports(&engine)
+            .any(|(name, _)| is_supported_view_export(name));
         let pre = linker
             .instantiate_pre(&component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
@@ -140,11 +197,14 @@ impl Component {
         let command_indices = w_command::GuestIndices::new(&pre).ok();
         let format_indices =
             resolve_format_indices(format_export_present, || w_format::GuestIndices::new(&pre))?;
+        let view_indices =
+            resolve_format_indices(view_export_present, || w_view::GuestIndices::new(&pre))?;
         Ok(Self {
             pre,
             indices,
             command_indices,
             format_indices,
+            view_indices,
         })
     }
 
@@ -175,12 +235,21 @@ impl Component {
             ),
             None => None,
         };
+        let view = match &self.view_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
         Ok(Instance {
             store,
             interfaces: Interfaces {
                 plugin,
                 commands,
                 format,
+                view,
             },
         })
     }
@@ -233,6 +302,7 @@ struct Interfaces {
     plugin: w_plugin::Guest,
     commands: Option<w_command::Guest>,
     format: Option<w_format::Guest>,
+    view: Option<w_view::Guest>,
 }
 
 struct Instance {
@@ -245,12 +315,29 @@ fn call<R>(
     host: &mut dyn HostApi,
     call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
     let mut inner = inner
         .lock()
         .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *inner;
     let interfaces = &*interfaces;
     with_guest(store, host, |store| call(interfaces, store))
+}
+
+fn call_read<R>(
+    inner: &Mutex<Instance>,
+    host: &dyn ReadApi,
+    call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
+) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let mut inner = inner
+        .lock()
+        .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+    let Instance { store, interfaces } = &mut *inner;
+    let interfaces = &*interfaces;
+    with_read_guest(store, host, |store| call(interfaces, store))
 }
 
 fn failure(error: wasmtime::Error) -> PluginError {
@@ -377,6 +464,8 @@ impl FormatProvider for WasmFormatProvider {
     ) -> Result<DocumentModel, FormatError> {
         let source_wit = tr::to_document_source(source);
         let ctx_wit = tr::to_parse_context(ctx);
+        let _guard = enter_instance(instance_identity(self.inner.as_ref()))
+            .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
         let mut instance = self
             .inner
             .lock()
@@ -401,6 +490,8 @@ impl FormatProvider for WasmFormatProvider {
         let model_wit = crate::model::to_document(model.clone())
             .map_err(|error| FormatError::Render(error.to_string()))?;
         let opts_wit = tr::to_render_options(opts);
+        let _guard = enter_instance(instance_identity(self.inner.as_ref()))
+            .map_err(|_| FormatError::Render("re-entrant component call".into()))?;
         let mut instance = self
             .inner
             .lock()
@@ -419,6 +510,8 @@ impl FormatProvider for WasmFormatProvider {
     fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
         let model_wit = crate::model::to_document(model.clone())
             .map_err(|error| FormatError::Serialize(error.to_string()))?;
+        let _guard = enter_instance(instance_identity(self.inner.as_ref()))
+            .map_err(|_| FormatError::Serialize("re-entrant component call".into()))?;
         let mut instance = self
             .inner
             .lock()
@@ -432,6 +525,77 @@ impl FormatProvider for WasmFormatProvider {
             .call_serialize(&mut *store, &model_wit)
             .map_err(|error| FormatError::Serialize(format!("il componente è caduto: {error:#}")))?
             .map_err(tr::from_format_error)
+    }
+}
+/// Proxy `ViewProvider` sopra la stessa istanza WASM.
+pub struct WasmViewProvider {
+    inner: Arc<Mutex<Instance>>,
+    specs: Vec<ViewSpec>,
+}
+
+impl ViewProvider for WasmViewProvider {
+    fn views(&self) -> Vec<ViewSpec> {
+        self.specs.clone()
+    }
+
+    fn interests(&self, instance: &ViewInstance) -> ViewInterests {
+        let wit_instance = tr::to_view_instance(instance)
+            .unwrap_or_else(|error| panic!("view instance non traducibile: {error}"));
+        let result = {
+            let mut locked = self
+                .inner
+                .lock()
+                .unwrap_or_else(|_| panic!("component instance is poisoned"));
+            let Instance { store, interfaces } = &mut *locked;
+            let view = interfaces
+                .view
+                .as_ref()
+                .unwrap_or_else(|| panic!("il componente non esporta `fub:abi/view`"));
+            crate::limits::renew(&mut *store);
+            view.call_interests(&mut *store, &wit_instance)
+        };
+        result
+            .map_err(failure)
+            .and_then(tr::from_view_interests)
+            .unwrap_or_else(|error| panic!("interessi view falliti: {error}"))
+    }
+
+    fn render_view(
+        &self,
+        instance: &ViewInstance,
+        host: &dyn ReadApi,
+    ) -> Result<UiNode, PluginError> {
+        let wit_instance = tr::to_view_instance(instance)?;
+        call_read(&self.inner, host, |interfaces, store| {
+            let view = interfaces.view.as_ref().ok_or_else(|| {
+                PluginError::Internal("il componente non esporta `fub:abi/view`".into())
+            })?;
+            let tree = view
+                .call_render_view(store, &wit_instance)
+                .map_err(failure)?
+                .map_err(tr::from_error)?;
+            crate::ui::from_tree(tree)
+        })
+    }
+
+    fn on_action(
+        &mut self,
+        instance: &ViewInstance,
+        action: UiAction,
+        host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        let wit_instance = tr::to_view_instance(instance)?;
+        let wit_action = crate::ui::to_action(&action)?;
+        call(&self.inner, host, |interfaces, store| {
+            let view = interfaces.view.as_ref().ok_or_else(|| {
+                PluginError::Internal("il componente non esporta `fub:abi/view`".into())
+            })?;
+            let update = view
+                .call_on_action(store, &wit_instance, &wit_action)
+                .map_err(failure)?
+                .map_err(tr::from_error)?;
+            crate::ui::from_update(update)
+        })
     }
 }
 /// Componente montabile dalla stessa porta dei bundle nativi.
@@ -492,6 +656,25 @@ impl WasmBundle {
             format!("comandi non dichiarati: il componente è caduto: {error:#}")
         })?;
         Ok(specs.into_iter().map(tr::from_command_spec).collect())
+    }
+
+    fn declared_views(inner: &Mutex<Instance>) -> Result<Vec<ViewSpec>, String> {
+        let mut instance = inner
+            .lock()
+            .map_err(|_| "component instance is poisoned".to_string())?;
+        let Instance { store, interfaces } = &mut *instance;
+        let Some(view) = interfaces.view.as_ref() else {
+            return Ok(Vec::new());
+        };
+        crate::limits::renew(&mut *store);
+        let specs = view
+            .call_views(&mut *store)
+            .map_err(|error| format!("view non dichiarate: il componente è caduto: {error:#}"))?;
+        specs
+            .into_iter()
+            .map(tr::from_view_spec)
+            .collect::<Result<_, _>>()
+            .map_err(|error| format!("view non traducibili: {error}"))
     }
 
     fn instantiate_plugin(&self) -> Box<dyn Plugin> {
@@ -572,20 +755,36 @@ fn bundle_mount(
     let plugin = Box::new(WasmPlugin {
         inner: Arc::clone(&inner),
     });
+    let command_specs = WasmBundle::declared_commands(&inner);
+    let view_specs = WasmBundle::declared_views(&inner);
     BundleMount::new(plugin, move |registrar| {
-        let specs = match WasmBundle::declared_commands(&inner) {
-            Ok(specs) => specs,
-            Err(error) => return RegistrationReport::failed(error),
+        let command_specs = match &command_specs {
+            Ok(specs) => specs.clone(),
+            Err(error) => return RegistrationReport::failed(error.clone()),
         };
-        if specs.is_empty() {
-            return RegistrationReport::complete();
+        let view_specs = match &view_specs {
+            Ok(specs) => specs.clone(),
+            Err(error) => return RegistrationReport::failed(error.clone()),
+        };
+        if !command_specs.is_empty() {
+            let provider = WasmCommandProvider {
+                inner: Arc::clone(&inner),
+                specs: command_specs,
+            };
+            if let Err(error) = registrar.register_command_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("comandi non registrati: {error}"));
+            }
         }
-
-        let provider = WasmCommandProvider { inner, specs };
-        match registrar.register_command_provider(Box::new(provider)) {
-            Ok(()) => RegistrationReport::complete(),
-            Err(error) => RegistrationReport::failed(format!("comandi non registrati: {error}")),
+        if !view_specs.is_empty() {
+            let provider = WasmViewProvider {
+                inner: Arc::clone(&inner),
+                specs: view_specs,
+            };
+            if let Err(error) = registrar.register_view_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("view non registrate: {error}"));
+            }
         }
+        RegistrationReport::complete()
     })
 }
 
@@ -703,7 +902,26 @@ impl Plugin for FailedPlugin {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_supported_format_export, resolve_format_indices, FORMAT_EXPORT};
+    use super::{
+        enter_instance, is_supported_format_export, resolve_format_indices, FORMAT_EXPORT,
+    };
+    use std::sync::Mutex;
+
+    #[test]
+    fn instance_guard_rejects_reentry_and_cleans_up_nested_instances() {
+        let first = Mutex::new(());
+        let second = Mutex::new(());
+        let first_id = &first as *const Mutex<()> as *const ();
+        let second_id = &second as *const Mutex<()> as *const ();
+
+        let first_guard = enter_instance(first_id).expect("first entry should succeed");
+        assert!(enter_instance(first_id).is_err());
+        let second_guard = enter_instance(second_id).expect("nested distinct entry should succeed");
+        drop(second_guard);
+        assert!(enter_instance(first_id).is_err());
+        drop(first_guard);
+        assert!(enter_instance(first_id).is_ok());
+    }
 
     #[test]
     fn format_export_matches_identity_across_versions() {

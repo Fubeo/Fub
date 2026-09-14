@@ -58,11 +58,11 @@ un contatore o un token di transazione.
 Resta un confine esplicito nelle view. Durante la registrazione
 `PreparedRegistration::views` cattura fuori guardia anche `interests` per
 l'istanza unica; un panic fallisce la registrazione e non viene sostituito da un
-default. Per un'istanza parametrica `ViewProvider::interests` resta però
-non-fallibile: un proxy WASM che possa produrre trap non dispone di un
-canale di errore tipizzato. Risolverlo richiede un cambiamento del contratto
-Rust e WIT; finché quel contratto non nasce da un caso reale, il runtime non
-inventa un fallback e non modifica l'ABI.
+default. Per un'istanza parametrica, l'export WIT `view` alimenta il proxy
+`ViewProvider`. Il trait `ViewProvider::interests` è infallibile: se il guest
+va in trap, il proxy panica e il confine `Workspace` converte il panic in
+`PluginError::Internal`. Non esiste quindi un canale `Result` nell'interesse e
+non serve alcun cambiamento al contratto Rust o al WIT.
 
 ## Provider nativo
 
@@ -148,6 +148,43 @@ sequenceDiagram
     CORE-->>GUARD: esito
     GUARD-->>GUEST: valore o errore
 ```
+
+### ViewProvider WASM
+
+Il componente può esportare facoltativamente l'interfaccia WIT `view`; il proxy
+`ViewProvider` viene registrato sulla stessa `Instance` del `Plugin` e degli
+altri provider preparati per il mount. Le `ViewSpec` dichiarano i parametri e
+l'host ne applica la validazione prima della chiamata al provider.
+
+Il proxy espone:
+
+- `interests`, infallibile: un trap del guest fa paniare il proxy e il confine
+  `Workspace` converte il panic in `PluginError::Internal`;
+- `render_view`, che legge dal `ReadApi`;
+- `on_action`, che usa l'`HostApi` e restituisce un `ViewUpdate`.
+
+Render e aggiornamenti passano dallo stesso `Guard` di fiducia: `Html` e
+`WebView` prodotti da provider non fidati (`Trust::Community`) sono rifiutati
+prima della shell; i provider `Trust::Core` possono produrli. Il confine
+preflight controlla root e riferimenti, cicli, profondità massima 64 e un budget
+di 8 Mi unità pesate.
+
+La stessa istanza non è rientrante: una chiamata guest che prova a rientrare
+nel proprio provider riceve un errore tipizzato. Un trap invalida il guest ma
+lascia vivo l'host; il teardown può riportare il trap come errore osservabile.
+
+`IndexProvider` e `EventHandler` inbound non fanno parte di questo percorso:
+restano deferred.
+
+La parità dimostrata è limitata a spec/interests/render/`Replace`/`Patch`, non
+implica parità per provider non esercitati.
+
+## Esempio minimo
+
+`esempi/view-wasm/` espone una view con parametri `mode` e `density`: il test
+monta il componente, confronta spec, interests e render con un provider
+nativo, invoca sia `Replace` sia `Patch`, quindi smonta e verifica che la view
+non sia più disponibile.
 
 ## Capability
 
@@ -253,12 +290,11 @@ certificazione G3 sono riferite nello [stato del progetto](../project/status.md)
 
 ## UI non fidata
 
-`UiNode` contiene forme riservate al codice fidato, come HTML o webview. Il
-giorno in cui `ViewProvider` attraversa WASM, ogni albero deve passare da
-`UiNode::validate_untrusted()` prima della shell.
-
-Questa proprietà non è ancora esercitata end-to-end ed è tracciata in
-[#10](https://github.com/Fubeo/Fub/issues/10).
+`UiNode` contiene forme riservate al codice fidato, come HTML o webview. Nel
+percorso `ViewProvider` WASM ogni albero prodotto da un provider non fidato
+(`Trust::Community`) passa da `UiNode::validate_untrusted()` prima della shell;
+la stessa regola vale per `render_view` e per gli aggiornamenti restituiti da
+`on_action`. I provider `Trust::Core` possono produrre `Html` e `WebView`.
 
 ## Inventario installato
 
@@ -311,10 +347,10 @@ Schema, atomicità e rimozione sono descritti nel
 | eventi host | presente |
 | timeout e memoria | presenti |
 | capability negate | presenti |
-| `ViewProvider` | da completare |
-| altri provider | da completare su casi reali |
+| `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
+| altri provider | `IndexProvider` e `EventHandler` inbound deferred |
 | discovery, store installato e startup autorizzato | presenti; gestione desktop da completare |
-| UI non fidata | da completare |
+| UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 
