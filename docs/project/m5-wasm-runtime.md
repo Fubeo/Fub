@@ -54,6 +54,17 @@ flowchart LR
 - arena per forme ricorsive;
 - parità osservabile nei casi nativo/WASM coperti.
 
+### Confine host dei formati
+
+`FormatSource` è una porta host-agnostica: prepara `FormatProvider` e le
+risorse possedute prima di costruire il `Workspace`. L'host registra i provider
+prima della costruzione del workspace; le risorse preparate restano vive per
+tutta la sessione e vengono rilasciate anche in caso di rollback.
+
+Questo confine host è presente, ma non espone ancora un `FormatProvider` WASM:
+non esiste un adapter o proxy WASM, né un consumer desktop che lo utilizzi.
+Un autore non deve quindi fare affidamento su un provider di formato WASM.
+
 ### Esempi
 
 - `esempi/ping-wasm/`;

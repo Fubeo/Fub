@@ -40,6 +40,7 @@ const TRASH_ID: &str = "fub.trash";
 pub struct Mounted {
     pub workspace: Workspace,
     pub registry: BundleRegistry,
+    pub format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     #[cfg(feature = "versioning")]
     pub versions: Option<VersionStore>,
 }
@@ -145,10 +146,34 @@ pub fn mount(
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
 ) -> Result<Mounted, String> {
+    mount_with_formats(
+        root,
+        machine,
+        view_states,
+        system_locale,
+        levels,
+        crate::PreparedFormatSource::empty(),
+    )
+}
+
+pub(crate) fn mount_with_formats(
+    root: &Utf8Path,
+    machine: Arc<MachineSettings>,
+    view_states: Arc<ViewStates>,
+    system_locale: Arc<SystemLocale>,
+    levels: &fub_kernel::log::Levels,
+    prepared_formats: crate::PreparedFormatSource,
+) -> Result<Mounted, String> {
+    let (providers, format_resources) = prepared_formats.into_parts();
     let mut formats = FormatRegistry::new();
     formats
         .register(MarkdownProvider::boxed())
         .map_err(|error| format!("format provider conflict: {error}"))?;
+    for provider in providers {
+        formats
+            .register(provider)
+            .map_err(|error| format!("format provider conflict: {error}"))?;
+    }
 
     let mut ws = Workspace::with_machine_settings(root, formats, machine)
         .map_err(|error| error.to_string())?
@@ -321,6 +346,7 @@ pub fn mount(
     Ok(Mounted {
         workspace: ws,
         registry,
+        format_resources,
         #[cfg(feature = "versioning")]
         versions,
     })

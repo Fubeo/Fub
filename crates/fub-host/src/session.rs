@@ -56,7 +56,6 @@ use crate::custody::Custody;
 use crate::jobs::{
     drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
 };
-use crate::mount::mount;
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
 use crate::registry::{
@@ -136,8 +135,9 @@ pub struct VaultSession {
     ///
     /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
-    /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Custody<BundleRegistry>,
+    /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
+    _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
     /// tenuto per la vita della sessione.
     ///
@@ -324,6 +324,7 @@ fn close_session_resources(
 struct OpeningTransaction<'a> {
     workspace: Custody<Workspace>,
     registry: Custody<BundleRegistry>,
+    format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     watcher: Option<OpeningWatcher<'a>>,
     runner: Option<JobRunner>,
     session: Option<VaultSession>,
@@ -335,11 +336,13 @@ impl<'a> OpeningTransaction<'a> {
     fn new(
         workspace: &'a Custody<Workspace>,
         registry: &Custody<BundleRegistry>,
+        format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
         startup_lease: Option<StartupLease>,
     ) -> Self {
         Self {
             workspace: workspace.clone(),
             registry: registry.clone(),
+            format_resources,
             watcher: Some(OpeningWatcher::new(workspace)),
             runner: None,
             session: None,
@@ -390,6 +393,7 @@ impl<'a> OpeningTransaction<'a> {
             root,
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
+            _format_resources: std::mem::take(&mut self.format_resources),
             unread,
             indexed,
             runner,
@@ -544,8 +548,9 @@ pub struct Host {
     sessions: Custody<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
-    /// Sorgente runtime interrogata una volta per ciascuna nuova apertura.
     startup_source: Option<Arc<dyn StartupSource>>,
+    /// Sorgente dei provider di formato, interrogata prima del workspace.
+    format_source: Option<Arc<dyn crate::FormatSource>>,
     /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di
     /// configurazione non si può scrivere — o non c'è» composta da
     /// `install_logging` prima che l'host esistesse. Si tiene qui perché
@@ -675,6 +680,7 @@ impl Host {
             sessions: Custody::empty("le sessioni aperte"),
             watcher,
             sink: None,
+            format_source: None,
             startup_source: None,
             session_notice: Mutex::new(None),
             machine: with_the_schema(MachineSettings::in_memory()),
@@ -757,6 +763,12 @@ impl Host {
     /// reinterpreta quella decisione.
     pub fn with_startup_source(mut self, source: Arc<dyn StartupSource>) -> Self {
         self.startup_source = Some(source);
+        self
+    }
+
+    /// Imposta la sorgente dei provider di formato per ogni nuova apertura.
+    pub fn with_format_source(mut self, source: Arc<dyn crate::FormatSource>) -> Self {
+        self.format_source = Some(source);
         self
     }
 
@@ -872,13 +884,22 @@ impl Host {
 
     /// Variante privata che rende iniettabile la sola lettura pre-pubblicazione.
     ///
-    /// Il seam resta dentro il modulo: i test possono far fallire `VaultInfo`
-    /// senza avvelenare un lock o aggiungere una leva all'API pubblica.
     fn mounts_with_info(
         &self,
         root: &Utf8Path,
         session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
     ) -> Result<VaultInfo, PluginError> {
+        let prepared_formats = self
+            .format_source
+            .as_ref()
+            .map(|source| {
+                fub_kernel::safety::external(
+                    "format source preparation",
+                    |message| PluginError::Internal(message.into()),
+                    || source.prepare(),
+                )
+            })
+            .unwrap_or_else(|| Ok(crate::PreparedFormatSource::empty()))?;
         let root = root.to_owned();
         let startup = self
             .startup_source
@@ -893,7 +914,7 @@ impl Host {
             .unwrap_or_else(|| Ok(StartupSnapshot::new(Vec::new())));
         let StartupSnapshot {
             bundles: startup_bundles,
-            diagnostics,
+            diagnostics: _,
             validity: startup_validity,
             lease: startup_lease,
         } = match startup {
@@ -903,20 +924,19 @@ impl Host {
                 StartupSnapshot::new(Vec::new())
             }
         };
-        for diagnostic in diagnostics {
-            tracing::error!(target: "fub.host", "startup bundle skipped: {diagnostic}");
-        }
         let crate::mount::Mounted {
             workspace: mut ws,
             mut registry,
+            format_resources,
             #[cfg(feature = "versioning")]
             versions,
-        } = mount(
+        } = crate::mount::mount_with_formats(
             &root,
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
             Arc::clone(&self.system_locale),
             &self.levels,
+            prepared_formats,
         )
         // Le tre cose che fanno fallire il montaggio sono un provider di
         // formato in conflitto con sé stesso, un bundle di core che non si
@@ -1013,7 +1033,8 @@ impl Host {
         // sul workspace. La transazione possiede turno, risorse e thread: ogni
         // uscita prima della pubblicazione libera il turno, ferma watcher e
         // runner, quindi percorre il teardown completo.
-        let mut opening = OpeningTransaction::new(&workspace, &registry, startup_lease);
+        let mut opening =
+            OpeningTransaction::new(&workspace, &registry, format_resources, startup_lease);
         let watching = {
             let ws = opening.workspace().write()?;
             ws.watch_flag()

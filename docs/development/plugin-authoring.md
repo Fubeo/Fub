@@ -43,6 +43,13 @@ registrazione e crearne un'altra.
 
 Non chiamare API Tauri e non importare dettagli privati della shell.
 
+Per un `FormatProvider`, la porta corrente è `FormatSource`: l'host lo prepara
+prima di costruire il `Workspace`, lo registra prima della costruzione e
+conserva le risorse preparate per la sessione, rilasciandole anche in caso di
+rollback. Non esiste ancora un adapter o proxy WASM per `FormatProvider`, né un
+consumer desktop che lo utilizzi: gli autori non devono fare affidamento su un
+provider di formato WASM.
+
 ## Componente WASM
 
 Gli esempi correnti sono:

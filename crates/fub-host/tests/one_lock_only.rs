@@ -128,6 +128,10 @@ const SOURCES: &[(&str, &str)] = &[
     ("src/shell.rs", include_str!("../src/shell.rs")),
     ("src/wall.rs", include_str!("../src/wall.rs")),
     ("src/net.rs", include_str!("../src/net.rs")),
+    (
+        "src/format_source.rs",
+        include_str!("../src/format_source.rs"),
+    ),
     ("app/src/lib.rs", include_str!("../../fub-app/src/lib.rs")),
     ("app/src/main.rs", include_str!("../../fub-app/src/main.rs")),
 ];

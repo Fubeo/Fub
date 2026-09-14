@@ -72,6 +72,18 @@ gli consegna un `HostApi` protetto dalla policy.
 Essere nativo non significa poter ignorare il contratto: comandi, view ed eventi
 devono comunque usare tipi ed errori condivisi.
 
+## Formati e confine host
+
+`FormatSource` è una porta host-agnostica: prepara `FormatProvider` e risorse
+prima dell'apertura del `Workspace`. L'host registra i provider prima di
+costruire il workspace; le risorse preparate restano vive per la sessione e
+vengono rilasciate anche in caso di rollback.
+
+Questo confine non espone ancora `FormatProvider` a WASM: non esiste un
+adapter o proxy WASM per i formati e non esiste un consumer desktop che lo
+utilizzi. I componenti non devono quindi dichiarare o usare un provider di
+formato WASM.
+
 ## Provider WASM
 
 `fub-wasm-host`:
