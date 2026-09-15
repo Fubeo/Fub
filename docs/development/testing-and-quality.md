@@ -61,6 +61,34 @@ I guard del contratto verificano:
 - proiezioni TypeScript;
 - enum e fixture generate;
 - dipendenze vietate.
+### Drill backup/restore
+
+Il banco d'integrazione eseguibile è:
+
+```bash
+cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+```
+
+Il fixture copre l'intero vault: documenti Markdown, allegati binari, file
+sconosciuti, `.trash/` e stato autorevole sotto `.fub/`, inclusi storage di
+plugin e versioning. La configurazione macchina resta esclusa. Il manifesto
+indipendente verifica per ogni path classe, dimensione, impronta FNV-1a e
+schema; la scansione rifiuta symlink e file speciali.
+
+Il drill opera offline in un parent temporaneo privato ed esclusivo. Copia
+l'albero in uno staging adiacente alla destinazione e pubblica con un solo
+rename. Questo dimostra il flusso del banco, non una garanzia universale di
+no-replace concorrente o di durabilità dopo un crash.
+
+Un artefatto corrotto o mancante viene validato prima di creare lo staging e
+prima di toccare la destinazione. Una destinazione occupata resta invariata e
+lo staging completo resta disponibile. La verifica finale usa `Host` reale:
+apertura, attesa dell'indicizzazione e lettura del documento, poi chiusura.
+
+`fub.backup` riguarda soltanto le note nello stesso vault; non è il backup
+completo esercitato da questo drill. Il banco documenta il comportamento
+presente, mentre l'issue resta aperta fino alla verifica CI.
+
 
 ## Frontend
 

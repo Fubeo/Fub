@@ -1,0 +1,2 @@
+
+{"v":1,"at":1700000000000,"origin":{"actor":{"kind":"user"},"batch":null},"writer":"fixture","op":{"op":"renamed","from":"notes/old.md","to":"notes/README.md"}}
