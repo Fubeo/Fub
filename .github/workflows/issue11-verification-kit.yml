@@ -1,0 +1,72 @@
+name: Issue 11 verification kit
+
+on:
+  push:
+    branches: ["ci/issue11-verification-kit"]
+
+permissions:
+  contents: read
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Sorgenti esatti, senza metadati Git o credenziali
+        run: |
+          mkdir -p diagnostics
+          git archive --format=tar.gz HEAD > diagnostics/source.tar.gz
+          git rev-parse HEAD > diagnostics/source-sha.txt
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: issue11-source
+          path: diagnostics/
+          retention-days: 1
+          if-no-files-found: error
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-wasip2
+      - name: Dipendenze bloccate per verifica offline
+        run: |
+          mkdir -p diagnostics
+          cargo vendor --locked --sync esempi/view-wasm/Cargo.toml --sync esempi/format-wasm/Cargo.toml --sync esempi/ping-wasm/Cargo.toml --sync esempi/modello-wasm/Cargo.toml --sync esempi/eventi-wasm/Cargo.toml --sync esempi/ciclo-wasm/Cargo.toml --sync tools/varco-wasm/Cargo.toml vendor > diagnostics/vendor-config.toml
+          tar -czf diagnostics/vendor.tar.gz vendor
+          tar -czf diagnostics/rust-toolchain.tar.gz -C "$(rustc --print sysroot)" bin lib libexec
+          cargo fmt --all
+          git diff --binary > diagnostics/rustfmt.patch
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: issue11-rust-kit
+          path: diagnostics/
+          retention-days: 1
+          if-no-files-found: error
+  client:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: apps/client
+      - name: Dipendenze client bloccate, senza cache o configurazione npm
+        run: |
+          mkdir -p diagnostics
+          tar -czf diagnostics/client-dependencies.tar.gz apps/client/node_modules
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: issue11-client-kit
+          path: diagnostics/
+          retention-days: 1
+          if-no-files-found: error
