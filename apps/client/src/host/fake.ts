@@ -510,11 +510,12 @@ export function createFakeHost(options: Options = {}): FakeHost {
       readDocument: (id) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", [id], Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate(
-          "readDocument",
-          [id],
-          Promise.resolve({ text: doc.text, revision: doc.revision }),
-        );
+        return gate("readDocument", [id], Promise.resolve({
+          text: doc.text,
+          revision: doc.revision,
+          format_id: id.endsWith(".md") || id.endsWith(".markdown") ? "markdown" : null,
+          source_kind: "text",
+        }));
       },
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre

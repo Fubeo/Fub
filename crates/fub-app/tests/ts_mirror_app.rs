@@ -14,11 +14,13 @@
 //! `UPDATE_MIRROR=1 cargo test -p fub-app --test ts_mirror_app`.
 
 use fub_abi::error::PluginError;
+use fub_abi::format::SourceKind;
 use fub_abi::options::permission;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
 use fub_app_lib::{
-    BundleInfo, EmbedContent, InstalledPluginInfo, OpenVaults, UnreadDoc, VaultEntry, VaultInfo,
+    BundleInfo, DocumentSource, EmbedContent, InstalledPluginInfo, OpenVaults, UnreadDoc,
+    VaultEntry, VaultInfo,
 };
 use fub_host::registry::BundleKind;
 use fub_kernel::{
@@ -121,6 +123,12 @@ fn expected() -> Value {
         "OpenVaults": [to_value(OpenVaults {
             roots: vec!["/vault".into(), "/altro".into()],
             current: Some("/vault".into()),
+        })],
+        "DocumentSource": [to_value(DocumentSource {
+            text: "# Nota".into(),
+            revision: "sha256:abc".into(),
+            format_id: Some("markdown".into()),
+            source_kind: SourceKind::Text,
         })],
         // I componenti che questo host sa montare (§11.1): il campione ne ha
         // uno acceso e uno spento, perché con uno solo il record non direbbe

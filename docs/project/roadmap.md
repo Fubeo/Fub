@@ -76,13 +76,13 @@ ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
 
 ### Proseguire le superfici condivise
 
-Le fasi 0–4 del piano sono concluse su `main`: il motore testuale ha già il
-secondo cliente e `DocumentSession` è estratta. Il seguito parte dalla fase 5,
-`DocumentSurfaceRegistry`, con risoluzione, collisioni esplicite e fallback.
+Le fasi 0–5 del piano sono concluse nello stack candidato: il motore testuale ha
+il secondo cliente, `DocumentSession` è estratta e `DocumentSurfaceRegistry`
+risolve formato, specie della sorgente e fallback senza collisioni silenziose.
 
-Seguono modalità e tastiera per superficie, formato pilota `.fubsheet`,
-vertical slice della griglia e misura del protocollo. L'estensione ABI/WIT
-resta l'ultima fase, dopo casi reali, limiti e teardown verificati.
+Il seguito parte da modalità e tastiera per superficie, poi formato pilota
+`.fubsheet`, vertical slice della griglia e misura del protocollo. L'estensione
+ABI/WIT resta l'ultima fase, dopo casi reali, limiti e teardown verificati.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:

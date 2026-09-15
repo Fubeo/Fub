@@ -18,14 +18,22 @@
 // La superficie pubblica di questo modulo continua a rispondere alle domande
 // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
 // lo stato mutabile della sessione ai suoi clienti.
-import { createEditor, type Editor, type EditorChange } from "../editor/editor";
+import type { EditorChange } from "../editors/text/engine";
+import {
+  createDocumentSurfaceRegistry,
+  isMarkdownSurface,
+} from "../editors/core/bootstrap";
+import type {
+  DocumentSurfaceRegistry,
+  EditorSurface,
+} from "../editors/core/registry";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
 import { api } from "../host/ipc";
 import { WITHOUT_PAGE, notesByName, resolvedReference, vaultTags } from "../host/query";
-import type { PaneMode, SelectionSet, ViewContext } from "../host/contract";
-import { onEvent } from "../state/kernel";
+import type { PaneMode, SelectionSet, SyntaxForm, ViewContext } from "../host/contract";
 import { existingRecentNotes } from "../state/recent";
+import { onEvent } from "../state/kernel";
 import { emit, on, state } from "../state/store";
 import { CASE_KEY, caseOf, toRecover } from "../state/drafts";
 import { syntaxForms, unsavedDrafts } from "../host/query";
@@ -36,6 +44,7 @@ import {
   type DocumentSessionEvent,
   type DocumentSurfaceUpdate,
   type ExternalChangeResult,
+  type DocumentSurfaceSource,
 } from "../state/document-session";
 import {
   openIn,
@@ -93,7 +102,7 @@ interface Pane {
   /// Vuoto quasi sempre: è la terza superficie di un riquadro, accanto
   /// all'editor e alla lettura, e come loro c'è anche quando non si vede.
   viewEl: HTMLElement;
-  editor: Editor;
+  surface: EditorSurface | null;
   /// Cosa c'è **adesso** in questo riquadro. Una linguetta e non un path: dalla §3.3
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
   shown: Tab | null;
@@ -108,6 +117,7 @@ const panes = new Map<string, Pane>();
 let panesEl: HTMLElement;
 let sessionEventsStop: (() => void) | undefined;
 let deps: DocumentDeps;
+let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
 
 /// La firma dell'albero disegnato adesso. Ricostruire la struttura del DOM a
@@ -125,6 +135,20 @@ let contextTimer: number | undefined;
 /// riguardano.
 export function mountDocument(d: DocumentDeps): void {
   deps = d;
+  surfaceRegistry = createDocumentSurfaceRegistry({
+    onChange: written,
+    onSelectionChange: (paneId) => {
+      if (layout.focus === paneId) scheduleContext();
+    },
+    onOpenWikilink: (page, heading, block) =>
+      void openWikilink(page, heading ?? undefined, block ?? undefined),
+    onSearchTag: (tag) => deps.searchTag(tag),
+    completions: {
+      searchNotes: (prefix: string) =>
+        (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
+      listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
+    },
+  });
   panesEl = $("#panes");
   sessionEventsStop?.();
   sessionEventsStop = documentSessions.subscribe(handleSessionEvent);
@@ -442,7 +466,7 @@ function buildStructure(): void {
       // Prima la registrazione, poi il nodo: un disposer rimasto appeso è un
       // abbonamento a una sessione che il riquadro non mostra più.
       detachSurface(r);
-      r.editor.destroy();
+      destroySurface(r);
       r.root.remove();
       panes.delete(id);
     }
@@ -497,47 +521,6 @@ function renderPane(id: string): Pane {
   root.addEventListener("mousedown", () => focusPane(id));
   root.addEventListener("focusin", () => focusPane(id));
 
-  const editor = createEditor(editorEl, {
-    onChange: (change) => written(id, change),
-    onSelectionChange: () => {
-      // Solo il riquadro col fuoco pubblica: il contesto di sessione è «cosa
-      // sta guardando l'utente adesso», e con N riquadri la risposta resta una
-      // — è la ragione per cui il kernel non tiene una mappa di riquadri.
-      if (layout.focus === id) scheduleContext();
-    },
-    onOpenWikilink: (page, heading, block) =>
-      void openWikilink(page, heading ?? undefined, block ?? undefined),
-    onSearchTag: (tag) => deps.searchTag(tag),
-    // Le sorgenti dei completamenti sono l'IPC, ammorbidite: prima che un
-    // vault sia aperto rispondono vuoto, non con un errore in console.
-    completions: {
-      // **La quarta superficie che cerca** (§21.5), e la prima che violava la
-      // regola: chiedeva `vaultEntries("document")`, cioè l'elenco intero, e
-      // filtrava CodeMirror. Adesso passa dalla porta di tutte le altre —
-      // `notesByName`, che è `IndexQuery::Documents` con i campi sul nome e il
-      // prefisso della §21.2 (0082, 0083).
-      //
-      // A prefisso vuoto — `[[` appena scritto — si propongono le **recenti**,
-      // come nel quick switcher: una domanda al kernel per una query vuota
-      // sarebbe l'elenco intero rientrato dalla porta nuova, e un popup vuoto
-      // sarebbe un autocompletamento che non parte finché non si indovina la
-      // prima lettera. La decisione è la stessa delle due superfici perché la
-      // domanda è la stessa; è qui e non in `editor/completions.ts` perché
-      // quel modulo non conosce né il vault né la memoria corta.
-      searchNotes: (prefix: string) =>
-        (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
-      // `WITHOUT_PAGE`, e dichiarato: i tag sono il **vocabolario** di un
-      // vault, non il suo contenuto — cresce col numero di concetti e non col
-      // numero di note — e il filtro per prefisso lo fa CodeMirror in locale su
-      // ciò che ha in mano. Una finestra qui non taglierebbe una risposta
-      // grande: taglierebbe l'alfabeto, e i tag dopo la lettera del taglio
-      // smetterebbero di completarsi senza che nessuno lo dica.
-      listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
-    },
-  });
-  // Un riquadro nato dopo il tema deve nascere nella luce giusta, non
-  // correggersi al primo cambio (§12.4).
-  if (theme) editor.setTheme(theme);
 
   const r: Pane = {
     id,
@@ -546,7 +529,7 @@ function renderPane(id: string): Pane {
     editorEl,
     previewEl,
     viewEl,
-    editor,
+    surface: null,
     shown: null,
     loadGeneration: 0,
     disposeSurface: null,
@@ -647,7 +630,7 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
 
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
   for (const paneId of panesWithDoc(doc)) {
-    panes.get(paneId)?.editor.setReadOnly(readOnly);
+    panes.get(paneId)?.surface?.setReadOnly?.(readOnly);
   }
 }
 
@@ -682,44 +665,51 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // Una view che se ne va porta con sé il suo pannello: senza, resterebbe
   // registrata a ridisegnarsi dentro un elemento che nessuno guarda.
   if (changed && r.shown?.k === "view") unmountViewFromPane(r.shown.view, r.id);
-  // Cambia ciò che il riquadro mostra: la registrazione precedente alla
-  // sessione precedente si toglie, chi attacca dopo lo farà con la nuova.
-  if (changed) detachSurface(r);
+  // Sessione e superficie hanno ownership separate, ma terminano nello stesso
+  // cambio di tab: prima si interrompe il flusso, poi si smonta l'istanza.
+  if (changed) {
+    detachSurface(r);
+    destroySurface(r);
+  }
   r.shown = tab;
   r.root.classList.toggle("con-vista", tab?.k === "view");
 
   if (tab?.k === "view") {
-    // **Non condizionata a `cambiata`**, ed è voluto: `mountViewInPane` è
-    // idempotente, e chiamarla a ogni giro è ciò che rimette in piedi le view
-    // dei riquadri quando `mountDeclaredViews` azzera tutto per un vault nuovo.
-    // Con un editor questo giro costerebbe cursore e cronologia; con una view
-    // dichiarata costa un `render_view`, che è la stessa cosa che il pannello
-    // farebbe da sé al primo evento.
-    r.editor.setDoc("");
-    r.editor.setReadOnly(false);
     clearPreview(r.previewEl);
     await mountViewInPane(tab.view, r.id, r.viewEl);
     return;
   }
   if (!changed) return;
   if (!tab) {
-    r.editor.setDoc("");
-    r.editor.setReadOnly(false);
     clearPreview(r.previewEl);
     return;
   }
-  let text: string;
-  let forms: Awaited<ReturnType<typeof syntaxForms>>;
+
+  let source: DocumentSurfaceSource;
+  let forms: SyntaxForm[];
   try {
-    [text, forms] = await Promise.all([readBuffer(tab.doc), syntaxForms(tab.doc)]);
+    [source, forms] = await Promise.all([
+      readBuffer(tab.doc),
+      syntaxForms(tab.doc),
+    ]);
   } catch (error) {
     if (isDocumentDeletedDuringRead(error)) return;
     throw error;
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
-  r.editor.setSyntaxForms(forms);
-  r.editor.setDoc(text);
-  r.editor.setReadOnly(documentSessions.isDeletionPending(tab.doc));
+
+  const surface = surfaceRegistry.mount(
+    { formatId: source.formatId, sourceKind: source.sourceKind },
+    { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
+  );
+  r.surface = surface;
+  if (theme) surface.setTheme?.(theme);
+  if (isMarkdownSurface(surface)) {
+    surface.setSyntaxForms(forms);
+    surface.setLivePreview(paneState(r.id)?.mode === "live_preview");
+  }
+  surface.setDoc(source.text);
+  surface.setReadOnly?.(documentSessions.isDeletionPending(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
@@ -731,16 +721,24 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
 /// riquadro vive, opaco per la sessione. Attacare due volte con lo stesso id
 /// è la stessa superficie rimontata, non due superfici.
 function attachSurface(r: Pane, doc: string): void {
+  const surface = r.surface;
+  if (!surface) return;
   r.disposeSurface = documentSessions.attachSurface(doc, {
-    id: r.id,
+    id: surface.surfaceId,
     sync: (update) => applySurfaceUpdate(r, doc, update),
   });
-  r.editor.setReadOnly(documentSessions.isDeletionPending(doc));
+  surface.setReadOnly?.(documentSessions.isDeletionPending(doc));
 }
 
 function detachSurface(r: Pane): void {
   r.disposeSurface?.();
   r.disposeSurface = null;
+}
+
+function destroySurface(r: Pane): void {
+  r.surface?.destroy();
+  r.surface = null;
+  r.editorEl.replaceChildren();
 }
 
 /// Applica alla superficie di questo riquadro il dato che la sessione ha
@@ -750,7 +748,7 @@ function detachSurface(r: Pane): void {
 /// altro riquadro non diventa un undo di questo.
 function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate): void {
   if (r.shown?.k !== "doc" || r.shown.doc !== doc) return;
-  r.editor.syncDoc(
+  r.surface?.syncDoc(
     update.kind === "operation" ? { text: update.text, operation: update.operation } : update.text,
   );
 }
@@ -763,8 +761,8 @@ function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate)
 /// su disco. L'alternativa — rileggere sempre dal disco — darebbe due riquadri
 /// che mostrano due testi diversi dello stesso documento, che è esattamente ciò
 /// che questa decisione esiste per non avere.
-async function readBuffer(doc: string): Promise<string> {
-  return documentSessions.read(doc);
+async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
+  return documentSessions.readForSurface(doc);
 }
 
 /// Ridisegna la superficie di lettura di ogni riquadro che mostra questo
@@ -968,7 +966,7 @@ function written(paneId: string, change: EditorChange): void {
   if (outcome.kind !== "realigned") return;
   const source = panes.get(paneId);
   if (source?.shown?.k === "doc" && source.shown.doc === doc) {
-    source.editor.syncDoc(outcome.text);
+    source.surface?.syncDoc(outcome.text);
   }
 }
 
@@ -1062,7 +1060,7 @@ function paneContext(): ViewContext {
   const p = activePane();
   const doc = activeDoc();
   const r = panes.get(layout.focus);
-  const sel = r?.editor.selections();
+  const sel = r?.surface?.selections?.();
   const inEditing = doc !== null && p.mode !== "reading" && sel !== undefined;
   const dirty = doc ? documentSessions.isDirty(doc) : false;
   if (!inEditing || !sel) {
@@ -1134,12 +1132,13 @@ export async function setMode(next: PaneMode): Promise<void> {
   setPaneMode(layout.focus, next);
   const r = panes.get(layout.focus);
   if (r) {
-    // Sorgente = la stessa configurazione senza la resa inline.
-    r.editor.setLivePreview(next === "live_preview");
+    if (isMarkdownSurface(r.surface)) {
+      r.surface.setLivePreview(next === "live_preview");
+    }
     if (next === "reading") {
       if (doc) await updatePreview(r.previewEl, doc);
     } else {
-      r.editor.focus();
+      r.surface?.focus?.();
     }
   }
   await publishContext();
@@ -1150,7 +1149,7 @@ export function revealByteOffset(byteOffset: number): void {
   const pane = panes.get(layout.focus);
   if (!pane) return;
   if (activePane().mode !== "reading") {
-    pane.editor.revealByteOffset(byteOffset);
+    pane.surface?.revealByteOffset?.(byteOffset);
     return;
   }
 
@@ -1158,7 +1157,7 @@ export function revealByteOffset(byteOffset: number): void {
 }
 
 export function focusEditor(): void {
-  panes.get(layout.focus)?.editor.focus();
+  panes.get(layout.focus)?.surface?.focus?.();
 }
 
 /// Porta gli editor nell'altra luce (§12.4).
@@ -1170,5 +1169,5 @@ export function focusEditor(): void {
 /// giusta, non correggersi al prossimo.
 export function setEditorTheme(t: Theme): void {
   theme = t;
-  for (const r of panes.values()) r.editor.setTheme(t);
+  for (const r of panes.values()) r.surface?.setTheme?.(t);
 }

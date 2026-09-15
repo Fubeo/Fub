@@ -10,6 +10,7 @@ import type {
   CommandSpec,
   DocPosition,
   DocumentMatch,
+  DocumentSource,
   EmbedContent,
   Failure,
   EventMask,
@@ -718,6 +719,12 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
   EmbedContent: keysOf<EmbedContent>({ doc_id: true, html: true, parts: true }),
   RenderedDocument: keysOf<RenderedDocument>({ html: true, parts: true }),
   OpenVaults: keysOf<OpenVaults>({ roots: true, current: true }),
+  DocumentSource: keysOf<DocumentSource>({
+    text: true,
+    revision: true,
+    format_id: true,
+    source_kind: true,
+  }),
   BundleInfo: keysOf<BundleInfo>({
     id: true,
     name: true,

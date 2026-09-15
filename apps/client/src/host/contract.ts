@@ -34,6 +34,7 @@ import type {
   SettingScope,
   SettingSource,
   Severity,
+  SourceKind,
   TextField,
   TextMode,
   TextTolerance,
@@ -863,6 +864,8 @@ export const MAIN_PANE = "main";
 export interface DocumentSource {
   text: string;
   revision: string;
+  format_id: string | null;
+  source_kind: SourceKind;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).

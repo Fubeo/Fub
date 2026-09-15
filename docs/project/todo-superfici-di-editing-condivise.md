@@ -359,10 +359,10 @@ Le collisioni nominano entrambi gli owner e non usano silenziosamente
 
 Criteri di uscita:
 
-- [ ] il pannello non chiama direttamente `createEditor()`;
-- [ ] Markdown e plain text vengono scelti dal registro;
-- [ ] una famiglia assente mostra il fallback;
-- [ ] unregister rimuove binding e istanze possedute.
+- [x] il pannello non chiama direttamente `createEditor()`;
+- [x] Markdown e plain text vengono scelti dal registro;
+- [x] una famiglia assente mostra il fallback;
+- [x] unregister rimuove binding e istanze possedute.
 
 ### Fase 6 — modalità e tastiera per superficie
 

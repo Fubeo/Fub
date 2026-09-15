@@ -42,6 +42,7 @@ use std::sync::{Arc, Mutex};
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::format::DocumentFormat;
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
 use fub_abi::traits::{JobId, ViewInstance, ViewSpec};
@@ -2183,6 +2184,19 @@ impl Host {
     ) -> Result<R, PluginError> {
         self.in_session(vault, |session| with_event_drain(&session.workspace, f)?)
     }
+    /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
+    pub fn read_document_with_format(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        self.read_workspace(vault, |workspace| {
+            let source = workspace.read_source(id).map_err(PluginError::from)?;
+            let revision = Revision::of(&source);
+            let format = workspace.format_of(id);
+            Ok((source, revision, format))
+        })
+    }
 
     /// Sorgente e revisione dalla stessa lettura.
     pub fn read_document(
@@ -2190,11 +2204,8 @@ impl Host {
         vault: Option<&str>,
         id: &DocId,
     ) -> Result<(String, Revision), PluginError> {
-        self.read_workspace(vault, |workspace| {
-            let source = workspace.read_source(id).map_err(PluginError::from)?;
-            let revision = Revision::of(&source);
-            Ok((source, revision))
-        })
+        self.read_document_with_format(vault, id)
+            .map(|(source, revision, _format)| (source, revision))
     }
 
     pub fn write_document(

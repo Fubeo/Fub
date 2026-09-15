@@ -174,10 +174,11 @@ Issue:
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11 le fasi 0–4 sono concluse su `main`. Il prossimo passo è
-`DocumentSurfaceRegistry`; seguono modalità e tastiera, `.fubsheet`, griglia,
-misura del protocollo e soltanto dopo ABI/WIT. Il TODO conserva i criteri delle
-fasi 5–10: l'estrazione iniziale non va ripetuta.
+Per #11 le fasi 0–5 sono concluse nello stack candidato: il pannello monta
+Markdown e plain text attraverso `DocumentSurfaceRegistry`, con collisioni,
+fallback e teardown posseduto. Il prossimo passo è la fase 6, modalità e
+tastiera per superficie; seguono `.fubsheet`, griglia, misura del protocollo e
+soltanto dopo ABI/WIT.
 
 ## Bloccato
 

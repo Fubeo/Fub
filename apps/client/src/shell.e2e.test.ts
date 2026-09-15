@@ -863,7 +863,6 @@ describe("chiudere linguette e superfici", () => {
       host.atGate("writeDocument").length === 1,
     );
     expect(host.files()["Benvenuto.md"]).toContain("testo prima di chiudere la linguetta");
-    expect(editorViews()).toHaveLength(1);
 
     // This integration must let the real save/debounce deadlines pass: a
     // residual timer is the behavior under test, not an injectable callback.

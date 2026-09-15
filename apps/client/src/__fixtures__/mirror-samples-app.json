@@ -105,6 +105,14 @@
       "current": "/vault"
     }
   ],
+  "DocumentSource": [
+    {
+      "text": "# Nota",
+      "revision": "sha256:abc",
+      "format_id": "markdown",
+      "source_kind": "text"
+    }
+  ],
   "BundleInfo": [
     {
       "id": "fub.versioning",

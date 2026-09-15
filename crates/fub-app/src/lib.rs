@@ -28,6 +28,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::format::SourceKind;
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -252,21 +253,20 @@ fn session_notice(host: State<Host>) -> Option<fub_abi::Notice> {
 // La **capacità** omonima resta dov'era (`VaultRead::list_documents`): quella
 // la `Page` la prende, ed è l'elenco dei plugin, non quello della shell.
 
-/// Il sorgente di un documento **e la revisione che lo nomina** (§18.1):
-/// rispecchiato da `DocumentSource` in `apps/client/src/host/contract.ts`.
+/// Il sorgente di un documento, la revisione che lo nomina e i metadati con
+/// cui la shell sceglie la superficie (§18.1, §11.4): rispecchiato da
+/// `DocumentSource` in `apps/client/src/host/contract.ts`.
 ///
-/// Due campi e non uno perché chi apre un documento è chi lo salverà, e per
-/// salvarlo in sicurezza deve poter dire da cosa era partito. Viaggiano
-/// **insieme** e non in due porte per la ragione per cui la revisione è opaca
-/// (`fub_abi::edit`): l'alternativa a riceverla è ricalcolarla di là dal
-/// confine, cioè una seconda implementazione di come questo host deriva le
-/// impronte — due implementazioni che a un certo punto divergono, e la seconda
-/// mente in silenzio. Qui la deriva chi ha appena letto il file, dallo stesso
-/// testo, senza rileggere niente.
+/// Viaggiano **insieme**: chi apre il documento deve sia salvarlo contro la
+/// revisione letta, sia montare la superficie dichiarata dal registro dei
+/// formati. Separarli in più porte aggiungerebbe un viaggio IPC e potrebbe
+/// associare al buffer metadati letti dopo un cambio di registro.
 #[derive(serde::Serialize)]
 pub struct DocumentSource {
     pub text: String,
     pub revision: String,
+    pub format_id: Option<String>,
+    pub source_kind: SourceKind,
 }
 
 #[tauri::command]
@@ -275,10 +275,17 @@ fn read_document(
     id: String,
     vault: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
-    let (text, revision) = host.read_document(vault.as_deref(), &doc_id(&id)?)?;
+    let id = doc_id(&id)?;
+    let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
+    let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
+    let source_kind = format
+        .map(|known| known.descriptor.source)
+        .unwrap_or(SourceKind::Text);
     Ok(DocumentSource {
         text,
         revision: revision.0,
+        format_id,
+        source_kind,
     })
 }
 
