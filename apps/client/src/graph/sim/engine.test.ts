@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { accumulateForces } from "./forces";
 import { DT, calculateTier, energy, step, type EngineState } from "./engine";
 import { build, QuadtreePool } from "./quadtree";
-import { organicConfig, createStructure, type PhysicsConfig, type GraphData, type Structure } from "./types";
+import { organicConfig, createStructure, seedOf, type PhysicsConfig, type GraphData, type Structure } from "./types";
 
 /// Costruisce una `Structure` a mano con n nodi e m archi, tutto zero tranne
 /// massa/raggio (di default 1 e 4). I test la personalizzano dopo.
@@ -160,6 +160,68 @@ describe("motore — determinismo", () => {
       expect(s1.y[i]).toBe(s2.y[i]);
       expect(s1.vx[i]).toBe(s2.vx[i]);
       expect(s1.vy[i]).toBe(s2.vy[i]);
+    }
+  });
+  it("permutazioni di nodi e archi → stessa traiettoria per identità", () => {
+    const data1: GraphData = {
+      nodes: ["z", "a", "m", "a"],
+      edges: [
+        { from: "m", to: "z" },
+        { from: "a", to: "m" },
+        { from: "z", to: "a" },
+        { from: "missing", to: "a" },
+        { from: "m", to: "m" },
+        { from: "a", to: "m" },
+      ],
+    };
+    const data2: GraphData = {
+      nodes: ["m", "z", "a"],
+      edges: [
+        { from: "a", to: "m" },
+        { from: "m", to: "z" },
+        { from: "a", to: "m" },
+        { from: "z", to: "a" },
+        { from: "unknown", to: "z" },
+      ],
+    };
+    const originalNodes1 = [...data1.nodes];
+    const originalEdges1 = data1.edges.map((e) => ({ ...e }));
+    const originalNodes2 = [...data2.nodes];
+    const originalEdges2 = data2.edges.map((e) => ({ ...e }));
+    const c = config();
+    const s1 = createStructure(data1, c, seedOf(data1));
+    const s2 = createStructure(data2, c, seedOf(data2));
+    expect(s1.id).toEqual(["a", "m", "z"]);
+    expect(s2.id).toEqual(s1.id);
+    expect(data1.nodes).toEqual(originalNodes1);
+    expect(data1.edges).toEqual(originalEdges1);
+    expect(data2.nodes).toEqual(originalNodes2);
+    expect(data2.edges).toEqual(originalEdges2);
+
+    const index2 = new Map(s2.id.map((id, i) => [id, i]));
+    for (const id of s1.id) {
+      const i = s1.id.indexOf(id);
+      const j = index2.get(id)!;
+      expect(s1.x[i]).toBe(s2.x[j]);
+      expect(s1.y[i]).toBe(s2.y[j]);
+      expect(s1.vx[i]).toBe(s2.vx[j]);
+      expect(s1.vy[i]).toBe(s2.vy[j]);
+    }
+    const pool1 = new QuadtreePool();
+    const pool2 = new QuadtreePool();
+    const st1 = newState();
+    const st2 = newState();
+    for (let p = 0; p < 100; p++) {
+      step(s1, c, st1, build(s1, pool1), DT);
+      step(s2, c, st2, build(s2, pool2), DT);
+    }
+    for (const id of s1.id) {
+      const i = s1.id.indexOf(id);
+      const j = index2.get(id)!;
+      expect(s1.x[i]).toBe(s2.x[j]);
+      expect(s1.y[i]).toBe(s2.y[j]);
+      expect(s1.vx[i]).toBe(s2.vx[j]);
+      expect(s1.vy[i]).toBe(s2.vy[j]);
     }
   });
 });
