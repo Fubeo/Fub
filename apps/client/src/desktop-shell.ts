@@ -34,7 +34,7 @@ import {
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
-import { openLifetime } from "./ui/lifetime";
+import { openLifetime, type Teardown } from "./ui/lifetime";
 import { mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -98,6 +98,9 @@ const paletteHost = {
 /// tre file.
 const pageWindowLifetime = openLifetime();
 
+/// Chiude una finestra già montata, senza ripetere nessuno smontaggio.
+const teardownPageWindow: Teardown = () => pageWindowLifetime.close();
+
 /// Porta accanto ai bottoni della titlebar l'accordo efficace del comando.
 function refreshTitlebarShortcuts(): void {
   const targets: Array<[string, string]> = [
@@ -115,7 +118,7 @@ function refreshTitlebarShortcuts(): void {
   }
 }
 
-async function init(): Promise<void> {
+async function init(): Promise<Teardown> {
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
@@ -163,8 +166,21 @@ async function init(): Promise<void> {
   // l'iscrizione, non la chiusura — ma non è nemmeno buttata: un `catch` che
   // dice cosa non c'è, perché una finestra che chiudendo perde l'ultima battuta
   // non lo racconta a nessuno.
-  void onClose(flushBeforeClose).catch(() => {
+  const closeListener = onClose(async () => {
+    try {
+      await flushBeforeClose();
+    } finally {
+      pageWindowLifetime.close();
+    }
+  }).catch(() => {
     notify(t("document.close_unhooked"), "guasto");
+    return () => {};
+  });
+  pageWindowLifetime.add(() => {
+    void closeListener.then(
+      (unlisten) => unlisten(),
+      () => notify(t("document.close_unhooked"), "guasto"),
+    );
   });
 
   // L'host dei pannelli per primo: da qui in poi ogni pannello — nativo o
@@ -217,7 +233,7 @@ async function init(): Promise<void> {
     },
   });
 
-  $("#open-vault").addEventListener("click", () => void pickVault());
+  pageWindowLifetime.listen($("#open-vault"), "click", () => void pickVault());
 
   // I due comandi che sono **di qui e di nessun pannello**: aprire un vault e
   // aprire la palette. Come ogni altro pannello, questo file dichiara i propri
@@ -256,12 +272,11 @@ async function init(): Promise<void> {
   // Il trigger di ricerca nella titlebar: fa focus su `#search-input`, che è
   // la ricerca onesta — già lì, già cablata — e non una palette travestita.
   // Il suggerimento mostra l'accordo di `shell.panel.search`, per chi cerca un comando.
-  $("#command-search").addEventListener("click", () => {
+  pageWindowLifetime.listen($("#command-search"), "click", () => {
     showPanel("search");
     $("#search-input").focus();
   });
-  // Il bottone palette nella titlebar: apre la palette dei comandi.
-  $("#open-palette").addEventListener("click", () =>
+  pageWindowLifetime.listen($("#open-palette"), "click", () =>
     void openCommandPalette(paletteHost),
   );
 
@@ -313,6 +328,7 @@ async function init(): Promise<void> {
   // riquadro, vuoto, col fuoco — e non in nessuno stato.
   if (initial) await openVaultPath(initial);
   else await synchronize();
+  return teardownPageWindow;
 }
 
 async function pickVault(): Promise<void> {
@@ -501,8 +517,10 @@ async function warnIfUnwatched(): Promise<void> {
 // non può aspettare la fine del montaggio deve dormire un tempo a caso e
 // sperare, cioè diventa un presidio che ogni tanto passa; e questa è l'unica
 // promessa che la shell fa sul proprio boot. Chi la esporta la dichiara.
-export const startup: Promise<void> = init().catch((e) => {
+export const startup: Promise<Teardown> = init().catch((e) => {
   const reason = errorText(e);
+  pageWindowLifetime.close();
   notify(t("app.start_failed", { reason }), "guasto");
   vaultPathEl.textContent = t("app.start_failed", { reason });
+  return teardownPageWindow;
 });

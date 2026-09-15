@@ -127,7 +127,7 @@ async function mount(
   throttles: string[] = [],
   notice: KernelNotice | null = null,
   commands: CommandSpec[] = [],
-): Promise<{ host: FakeHost; startup: Promise<void>; unlock: Map<string, () => void> }> {
+): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
   vi.resetModules();
   box.confirm = true;
   const host = createFakeHost({
@@ -271,6 +271,39 @@ function editorTexts(): string[] {
 beforeEach(() => {
   document.body.innerHTML = "";
   localStorage.clear();
+});
+
+describe("vita della finestra", () => {
+  it("smette i gesti quando si smonta e non duplica al rimontaggio", async () => {
+    const first = await mount({});
+    const stopFirst = await first.startup;
+
+    const firstOpenVaults = first.host.atGate("openVault").length;
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "o", ctrlKey: true, shiftKey: true }),
+    );
+    await settle();
+    expect(first.host.atGate("openVault")).toHaveLength(firstOpenVaults + 1);
+
+    stopFirst();
+    stopFirst();
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "o", ctrlKey: true, shiftKey: true }),
+    );
+    await settle();
+    expect(first.host.atGate("openVault")).toHaveLength(firstOpenVaults + 1);
+
+    const second = await mount({});
+    const stopSecond = await second.startup;
+    const secondOpenVaults = second.host.atGate("openVault").length;
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "o", ctrlKey: true, shiftKey: true }),
+    );
+    await settle();
+    expect(second.host.atGate("openVault")).toHaveLength(secondOpenVaults + 1);
+
+    stopSecond();
+  });
 });
 
 describe("apri un vault", () => {
