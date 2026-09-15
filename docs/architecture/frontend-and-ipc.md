@@ -279,10 +279,15 @@ scartano risposte stantie. Se il comando non è montato, la superficie dichiara
 `data-evaluation="unavailable"` e mostra gli input grezzi senza duplicare il
 linguaggio formule in TypeScript.
 
-I tipi di valutazione in `host/contract.ts` e il comando Tauri sono interni e
-provvisori: non sono entrati in `fub-abi`, WIT o nel contratto plugin. La fase
-successiva misura finestre, operazioni incrementali, dipendenze e lifecycle
-prima di scegliere i tipi minimi da pubblicare.
+I tipi di valutazione in `host/contract.ts` e il comando Tauri restano interni
+e provvisori. La misura della
+[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) esclude dal
+contratto pubblico sia la sorgente completa a ogni commit sia il
+`TextOperation` della serializzazione. Il protocollo grid apre una sessione con
+sorgente e revisione, legge finestre limitate e applica patch coordinate
+atomiche; il provider restituisce il diff per la `DocumentSession` e
+un'invalidazione limitata delle celle dipendenti. Famiglia e versione
+sconosciute usano il fallback senza eseguire il provider.
 
 ## Confine CodeMirror
 

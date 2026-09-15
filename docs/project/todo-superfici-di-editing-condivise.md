@@ -1,8 +1,9 @@
 # TODO — modularità delle superfici di editing
 
-> **Stato:** in esecuzione — fasi 0–4 concluse su main, fasi 5–10 aperte.
+> **Stato:** in esecuzione — fasi 0–4 concluse su main, fasi 5–9 concluse
+> nello stack candidato, fase 10 aperta.
 > **Tracker:** [issue #11](https://github.com/Fubeo/Fub/issues/11).
-> **Aggiornato:** 29 agosto 2026.
+> **Aggiornato:** 15 settembre 2026.
 > **Origine:** recupero e revisione del piano storico sulle superfici
 > condivise, conservato nella cronologia Git al commit
 > `5d8af02050700c738e73461a7a0a98059d91dfc2`.
@@ -452,26 +453,50 @@ e fallback senza valutatore. Su un workbook 120×60 il DOM ha mantenuto soltanto
 la finestra visibile con overscan; la riapertura ha conservato gli input senza
 produrre modifiche spurie.
 
-### Fase 9 — misurare il protocollo
+### Fase 9 — protocollo misurato
 
-Prima di pubblicare tipi, rispondere con il vertical slice a queste domande:
+La misura e la decisione completa sono nella
+[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md). Il comando
+provvisorio scala con il workbook: sul caso dense 120×60 invia 696 785 byte e
+restituisce 625 368 byte/7 200 celle per una viewport che ne disegna da 390 a
+528; cambiare `A1` richiede invece di aggiornare soltanto `A1` e `B1`. Una patch
+coordinata occupa 106 byte contro 12 963 byte di sorgente sparse reinviata.
 
-1. dato minimo per scegliere una superficie;
-2. owner del binding formato→superficie;
-3. scope della scelta;
-4. negoziazione della versione;
-5. fallback;
-6. finestre di celle e operazioni incrementali;
-7. ritorno delle celle dipendenti;
-8. persistenza dello stato visuale;
-9. unload del bundle;
-10. capability richieste;
-11. localizzazione di errori e stati mancanti;
-12. comportamento di una shell che non conosce una versione.
+Le dodici domande hanno risposta:
 
-Un tipo entra nel contratto soltanto se ha almeno due clienti, non espone il
-framework frontend, attraversa WIT, possiede limiti e fallback, funziona
-nativamente e via WASM e non richiede chiamate per battuta.
+1. la superficie si sceglie con `format-id + source-kind`, preceduti
+   dall'eventuale override;
+2. il bundle possiede il binding e il registro della shell ne possiede
+   arbitrato e disposer;
+3. registrazione globale al mount, scelta e stato visuale per riquadro e
+   documento, buffer unico nella sessione;
+4. ogni famiglia negozia una propria versione intera, indipendente da ABI e
+   formato;
+5. il fallback è testo UTF-8, viewer per byte o errore esplicito; senza
+   valutatore grid restano visibili gli input grezzi;
+6. apertura e reload portano la sorgente completa, le letture successive usano
+   finestre e i commit patch coordinate atomiche;
+7. il provider invalida celle cambiate e dipendenti transitive; oltre il limite
+   invalida `all`, poi ogni istanza rilegge soltanto la propria finestra;
+8. selezione, scroll, zoom e modalità sono stato versionato della superficie,
+   non del file;
+9. l'unload ritira il binding, distrugge le istanze e infine rilascia il
+   provider;
+10. la famiglia grid non è una capability di sicurezza; valgono soltanto i
+    permessi host realmente usati dal provider;
+11. formule e località usano codici e coordinate, gli errori operativi
+    `PluginError`, gli stati della shell frasi localizzate dalla shell;
+12. una shell che non conosce famiglia o versione non chiama quel provider,
+    conserva le altre registrazioni del bundle, mostra un notice e usa il
+    fallback.
+
+Il primo contratto limita sorgente/reload a 16 MiB, finestra a 256×128 e 32 768
+coordinate, commit a 16 384 patch/4 MiB, risposta a 8 MiB e invalidazione
+esplicita a 32 768 celle. Oltre tale soglia l'invalidazione diventa `all`.
+
+Un tipo entra nel contratto soltanto insieme ai due clienti della fase 10 —
+provider nativo ed esempio WASM —, senza framework frontend, con parità,
+limiti, fallback e nessuna chiamata per battuta.
 
 ### Fase 10 — ABI, WIT e WASM
 
