@@ -36,6 +36,7 @@ npm test
 npm run build
 npm run bench:a11y
 npm run bench:verify
+npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
 ```
 
 Per la documentazione:

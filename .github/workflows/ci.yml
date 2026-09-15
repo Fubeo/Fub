@@ -192,6 +192,18 @@ jobs:
       - name: il browser del banco visivo, alla revisione che il lock pinna
         run: npx playwright install --with-deps chromium
         working-directory: apps/client
+      - name: la scala del grafo resta riproducibile
+        id: graph_scale
+        run: npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+        working-directory: apps/client
+      - name: referto della scala del grafo
+        if: ${{ failure() && steps.graph_scale.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: graph-scale-${{ github.sha }}
+          path: apps/client/bench/.output/graph-scale.json
+          include-hidden-files: true
+          if-no-files-found: error
       - name: le scene restano uguali alle baseline del runner
         id: bench_verify
         run: npm run bench:verify

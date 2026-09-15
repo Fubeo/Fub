@@ -1,8 +1,9 @@
-const countKinds = (resources) => Object.fromEntries([...new Set(resources)].map((kind) => [kind, resources.filter((entry) => entry === kind).length]));
-
+import * as os from "node:os";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { openStage, openPage, OUTPUT } from "./stage.mjs";
+
+const countKinds = (resources) => Object.fromEntries([...new Set(resources)].map((kind) => [kind, resources.filter((entry) => entry === kind).length]));
 
 const REPORT = join(OUTPUT, "graph-scale.json");
 const DEFAULTS = { nodes: 2000, seed: 6, cycles: 3 };
@@ -28,13 +29,48 @@ function args() {
   return out;
 }
 
+function environmentHost() {
+  const cpus = os.cpus();
+  return {
+    node: { version: process.version, platform: process.platform, arch: process.arch, kernelRelease: os.release() },
+    cpu: { model: cpus[0]?.model ?? null, logicalCount: cpus.length },
+    memory: { totalBytes: os.totalmem() },
+    browser: { chromiumVersion: null },
+    page: { userAgent: null, hardwareConcurrency: null, deviceMemory: null },
+    viewport: { width: null, height: null, deviceScaleFactor: null },
+    media: { reducedMotion: null, colorScheme: null },
+  };
+}
+
+async function captureEnvironment(environment, browser, page) {
+  try {
+    environment.browser.chromiumVersion = await browser.version();
+  } catch {}
+    const details = await page.evaluate(() => ({
+      userAgent: navigator.userAgent ?? null,
+      hardwareConcurrency: Number.isFinite(navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : null,
+      deviceMemory: Number.isFinite(navigator.deviceMemory) ? navigator.deviceMemory : null,
+      width: Number.isFinite(window.innerWidth) ? window.innerWidth : null,
+      height: Number.isFinite(window.innerHeight) ? window.innerHeight : null,
+      deviceScaleFactor: Number.isFinite(window.devicePixelRatio) ? window.devicePixelRatio : null,
+      reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+      colorScheme: window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light",
+    }));
+    Object.assign(environment.page, { userAgent: details.userAgent, hardwareConcurrency: details.hardwareConcurrency, deviceMemory: details.deviceMemory });
+    Object.assign(environment.viewport, { width: details.width, height: details.height, deviceScaleFactor: details.deviceScaleFactor });
+    Object.assign(environment.media, { reducedMotion: details.reducedMotion, colorScheme: details.colorScheme });
+  return environment;
+}
+
 async function installProbe(page) {
   await page.addInitScript(() => {
     const state = { active: false, resources: new Set(), frames: [], longtasks: [], sample: null, interaction: [], pointerCaptures: [] };
     const listeners = [];
     const graphOwned = (target) => target === window || target === document || (typeof Element !== "undefined" && target instanceof Element && !!target.closest("canvas.graph-main, canvas.graph-bg, .graph-panel"));
     const describeTarget = (target) => target === window ? "window" : target === document ? "document" : target?.tagName?.toLowerCase() ?? null;
-    const own = (record) => { if (state.active) state.resources.add(record); };
+    const captureStack = () => state.active ? String(new Error().stack ?? "").split("\n").slice(1, 7).map((line) => line.replaceAll("\\", "/")) : null;
+    const moduleOwned = (stack) => Array.isArray(stack) && stack.some((line) => /(?:^|[\\/])src[\\/]graph[\\/]/.test(line) || /(?:^|[\\/])src[\\/]panels[\\/]graph\.ts(?:[^A-Za-z0-9_.-]|$)/.test(line));
+    const own = (record) => { if (state.active && (record.kind === "listener" || moduleOwned(record.stack))) state.resources.add(record); };
     const drop = (record) => {
       state.resources.delete(record);
       if (record) { record.target = null; record.listener = null; record.signal = null; record.wrapper = null; }
@@ -44,7 +80,7 @@ async function installProbe(page) {
     const nativeSetTimeout = window.setTimeout.bind(window);
     const nativeClearTimeout = window.clearTimeout.bind(window);
     window.requestAnimationFrame = (cb) => {
-      const record = { kind: "raf", id: null };
+      const record = { kind: "raf", id: null, stack: captureStack() };
       const id = raf((t) => {
         drop(record);
         if (state.active) state.frames.push(t);
@@ -69,7 +105,7 @@ async function installProbe(page) {
     for (const name of ["setTimeout", "setInterval"]) {
       const native = window[name].bind(window);
       window[name] = (cb, delay, ...rest) => {
-        const record = { kind: name, id: null, delay: Number(delay), stack: state.active ? String(new Error().stack ?? "").split("\n").slice(1, 7).map((line) => line.replace(/file:\/\/[^) ]+/g, "<module>")) : null };
+        const record = { kind: name, id: null, delay: Number(delay), stack: captureStack() };
         const id = native(function (...args) {
           if (name === "setTimeout") drop(record);
           return typeof cb === "function" ? cb.apply(this, args.length ? args : rest) : undefined;
@@ -146,7 +182,7 @@ async function installProbe(page) {
       return nativeCapture.call(this, pointerId);
     };
     const Obs = (Native, kind) => class extends Native {
-      constructor(...a) { super(...a); this.__benchRecord = { kind, target: this }; }
+      constructor(...a) { super(...a); this.__benchRecord = { kind, target: this, stack: captureStack() }; }
       observe(...a) { own(this.__benchRecord); return super.observe(...a); }
       disconnect() { drop(this.__benchRecord); return super.disconnect(); }
     };
@@ -237,8 +273,9 @@ const cleanupResultsFrom = (error) => {
 
 async function main() {
   const started = Date.now();
+  const environment = environmentHost();
   let config = null;
-  let report = { config: null, fixture: null, timings: {}, resources: {}, memory: {}, pass: false };
+  let report = { config: null, fixture: null, environment, timings: {}, resources: {}, memory: {}, pass: false };
   let stage, page, context, cdp;
   let stageRollback;
   let primary;
@@ -267,9 +304,10 @@ async function main() {
       error.observedDigest = fixture.digest ?? null;
       throw error;
     }
+    await captureEnvironment(environment, stage.browser, page);
     await page.mouse.move(1, 1);
     const base = await page.evaluate(() => ({ children: document.querySelector("#panes")?.children.length ?? 0, probe: window.__graphScaleProbe.snapshot() }));
-    report.memory.before = await heap(cdp); report.resources.scope = "DOM listeners are tracked only on window/document and elements within canvas.graph-main, canvas.graph-bg, or .graph-panel; timers, rAF, and observers are tracked while active."; report.resources.baseline = base.probe.resources.length; report.resources.baselineByKind = countKinds(base.probe.resources);
+    report.memory.before = await heap(cdp); report.resources.scope = "DOM listeners are tracked only on window/document and elements within canvas.graph-main, canvas.graph-bg, or .graph-panel; timers, rAF, and observers are tracked only when their creation stack contains /src/graph/ or /src/panels/graph.ts while the probe is active."; report.resources.baseline = base.probe.resources.length; report.resources.baselineByKind = countKinds(base.probe.resources);
     for (let i = 0; i < config.cycles; i++) {
       await page.evaluate(() => window.__graphScaleProbe.begin()); const t0 = performance.now();
       await page.locator("#show-graph").dispatchEvent("click");
