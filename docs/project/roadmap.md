@@ -76,16 +76,18 @@ ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
 
 ### Proseguire le superfici condivise
 
-Le fasi 0–6 del piano sono concluse nello stack candidato: il motore testuale ha
+Le fasi 0–7 del piano sono concluse nello stack candidato: il motore testuale ha
 il secondo cliente, `DocumentSession` è estratta, `DocumentSurfaceRegistry`
 risolve formato, specie della sorgente e fallback senza collisioni silenziose e
 ogni superficie dichiara le proprie modalità. La tastiera arbitra popup,
 editor, superficie, profilo, documento, riquadro e globale senza listener
 aggiuntivi nei renderer.
 
-Il seguito parte dal formato pilota `.fubsheet`, poi vertical slice della
-griglia e misura del protocollo. L'estensione ABI/WIT resta l'ultima fase, dopo
-casi reali, limiti e teardown verificati.
+Il formato pilota `.fubsheet` dispone ora di schema testuale v1, identità
+stabili indipendenti da A1, limiti, round trip e proiezioni comuni. Resta
+separato da `DocumentModel` e non ha anticipato ABI o WIT. Il seguito parte
+dalla vertical slice della griglia e dalla misura del protocollo; l'estensione
+ABI/WIT resta l'ultima fase, dopo casi reali, limiti e teardown verificati.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:

@@ -406,6 +406,16 @@ Principi:
 Non iniziare da XLSX: OOXML, ZIP, stili e relazioni oscurerebbero la prova
 architetturale.
 
+Criteri di uscita:
+
+- [x] schema JSON v1 incluso nel crate e parser strict per campi o versioni sconosciuti;
+- [x] `SheetId`, `RowId` e `ColumnId` persistono l'identità separata dall'indirizzo A1;
+- [x] ordine, dimensioni, input, stile e proprietà sopravvivono al round trip;
+- [x] coordinate duplicate o mancanti, id invalidi e limiti fuori contratto vengono rifiutati;
+- [x] riordinare righe e colonne conserva `CellKey` e modifica soltanto la proiezione A1;
+- [x] outline, ricerca e proprietà sono proiezioni Rust del workbook;
+- [x] nessun tipo del workbook entra in `DocumentModel`, ABI o WIT.
+
 ### Fase 8 — vertical slice di `GridEngine`
 
 Consegnare:

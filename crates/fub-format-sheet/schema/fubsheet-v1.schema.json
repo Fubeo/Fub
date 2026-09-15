@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fub.app/schema/fubsheet-v1.json",
+  "title": "Fub Sheet workbook v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "sheets"],
+  "properties": {
+    "version": { "const": 1 },
+    "properties": { "type": "object" },
+    "sheets": {
+      "type": "array",
+      "maxItems": 1024,
+      "items": { "$ref": "#/$defs/sheet" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$"
+    },
+    "sheet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "rows", "columns"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "name": { "type": "string", "minLength": 1 },
+        "rows": {
+          "type": "array",
+          "maxItems": 1048576,
+          "items": { "$ref": "#/$defs/row" }
+        },
+        "columns": {
+          "type": "array",
+          "maxItems": 16384,
+          "items": { "$ref": "#/$defs/column" }
+        },
+        "cells": {
+          "type": "array",
+          "maxItems": 4000000,
+          "items": { "$ref": "#/$defs/cell" }
+        },
+        "properties": { "type": "object" }
+      }
+    },
+    "row": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "hidden": { "type": "boolean", "default": false }
+      }
+    },
+    "column": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "hidden": { "type": "boolean", "default": false }
+      }
+    },
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["row", "column"],
+      "properties": {
+        "row": { "$ref": "#/$defs/id" },
+        "column": { "$ref": "#/$defs/id" },
+        "input": { "type": "string", "maxLength": 1048576 },
+        "style": { "$ref": "#/$defs/cellStyle" }
+      }
+    },
+    "cellStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bold": { "type": "boolean", "default": false },
+        "italic": { "type": "boolean", "default": false },
+        "text_color": { "type": "string" },
+        "fill_color": { "type": "string" },
+        "horizontal": { "enum": ["start", "center", "end"] },
+        "number_format": { "type": "string" }
+      }
+    }
+  }
+}

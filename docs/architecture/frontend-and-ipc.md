@@ -255,6 +255,20 @@ riquadro e globale. Popup e keymap locale vincono prima del router tramite
 `defaultPrevented`; i renderer non aggiungono listener globali. Questi tipi e
 l'arbitrato restano interni a TypeScript e non modificano WIT o ABI.
 
+### Formato workbook prima del confine
+
+`crates/fub-format-sheet` possiede il formato testuale `.fubsheet` v1.
+`Workbook` conserva soltanto dati autorevoli: versione, proprietà, ordine,
+dimensioni, input e stile. `SheetId + RowId + ColumnId` identifica una cella;
+A1, outline, ricerca e proprietà comuni sono proiezioni calcolate. Formula AST,
+valori, dipendenze, cache ed errori non vengono serializzati.
+
+Il workbook non implementa `DocumentModel` e in questa fase non attraversa
+`host/contract.ts`, IPC, ABI o WIT. La vertical slice della griglia deve prima
+misurare finestre e operazioni reali; soltanto quel protocollo misurato potrà
+diventare un contratto additivo. L'editing in-cell e la formula bar restano
+locali alla shell: nessuna battuta genera una chiamata IPC o WASM.
+
 ## Confine CodeMirror
 
 Gli import `@codemirror/*` della shell sono confinati a
@@ -294,3 +308,4 @@ Gli altri guard del frontend impediscono:
 - `apps/client/src/state/`
 - `apps/client/src/ui/`
 - `crates/fub-app/src/lib.rs`
+- `crates/fub-format-sheet/src/lib.rs`

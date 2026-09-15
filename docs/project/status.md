@@ -174,12 +174,15 @@ Issue:
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11 le fasi 0–6 sono concluse nello stack candidato: il pannello monta
+Per #11 le fasi 0–7 sono concluse nello stack candidato: il pannello monta
 Markdown e plain text attraverso `DocumentSurfaceRegistry`, con collisioni,
 fallback e teardown posseduto; modalità e comandi sono dichiarati dalle
 superfici e arbitrati prima dei layer profilo, documento, riquadro e globale.
-Il prossimo passo è `.fubsheet`; seguono griglia, misura del protocollo e
-soltanto dopo ABI/WIT.
+Il crate `fub-format-sheet` aggiunge il formato JSON testuale v1, identità
+stabili di sheet, righe, colonne e celle, validazione dei limiti e proiezioni
+A1, outline, ricerca e proprietà senza modificare `DocumentModel`, ABI o WIT.
+Il prossimo passo è la vertical slice `GridEngine`; seguono misura del
+protocollo e, soltanto dopo, ABI/WIT.
 
 ## Bloccato
 

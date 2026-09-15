@@ -137,6 +137,19 @@ i layer superficie, profilo, documento, riquadro e globale. I comandi
 indisponibili sulla superficie attiva non entrano nella palette né nel router;
 i renderer non installano listener globali propri.
 
+## Formato pilota `.fubsheet`
+
+Il formato persistente della griglia è un documento JSON testuale versionato.
+Conserva input, ordine, dimensioni, stile, proprietà e identità stabili di
+sheet, righe e colonne. L'indirizzo A1 dipende invece dall'ordine corrente:
+riordinare una riga sposta l'indirizzo senza cambiare l'identità della cella.
+
+Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
+salvati nel file: sono ricostruiti dai dati autorevoli. Outline, ricerca e
+proprietà sono proiezioni del workbook, non un adattamento a `DocumentModel`.
+La superficie a griglia e le sue interazioni appartengono alla fase successiva;
+questa fase non dichiara ancora una capacità utente o plugin.
+
 ## Dove si trova
 
 - `apps/client/src/editor/`
@@ -146,3 +159,4 @@ i renderer non installano listener globali propri.
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`
+- `crates/fub-format-sheet/src/lib.rs`

@@ -3,7 +3,8 @@
 > **Domanda:** come rappresenta Fub documenti di formati diversi senza perdere
 > la sorgente?
 > **Fonti autorevoli:** `crates/fub-abi/src/model.rs`,
-> `crates/fub-abi/src/arena.rs`, `crates/fub-abi/src/format.rs`.
+> `crates/fub-abi/src/arena.rs`, `crates/fub-abi/src/format.rs`,
+> `crates/fub-format-sheet/src/lib.rs`.
 
 ## In breve
 
@@ -111,6 +112,19 @@ Il parser non indovina uno schema di prodotto: una stringa diventa data soltanto
 quando rispetta la forma prevista; valori annidati non rappresentabili restano
 JSON.
 
+## Workbook `.fubsheet`
+
+Una griglia non viene forzata nell'albero di `DocumentModel`.
+`fub-format-sheet::Workbook` è un modello autorevole separato: conserva
+versione, proprietà, ordine, dimensioni, input e stile. Le celle usano identità
+stabili composte da sheet, riga e colonna; A1 dipende dall'ordine corrente.
+
+Formula AST, valori, dipendenze, cache, A1 ed errori sono derivati e non
+persistiti. Outline, ricerca e proprietà sono proiezioni comuni del workbook,
+non campi aggiunti al modello dei blocchi. Il formato JSON v1 rifiuta campi
+sconosciuti, versioni future, coordinate ambigue o mancanti e input oltre i
+limiti dichiarati, evitando una riscrittura con perdita silenziosa.
+
 ## Arena al confine WASM
 
 WIT non ammette tipi ricorsivi. Gli alberi `Block`, `Inline` e `UiNode`
@@ -136,7 +150,8 @@ albero malformato.
 - parse e serializzazione non normalizzano dati senza dichiararlo;
 - gli alberi ricorsivi hanno una sola conversione al confine;
 - un nuovo campo pubblico rispetta l'additività del WIT;
-- una regola comune vive nel contratto, non in due provider.
+- una regola comune vive nel contratto, non in due provider;
+- un workbook a celle conserva autorità e identità fuori da `DocumentModel`.
 
 ## Dove si trova
 
@@ -146,3 +161,4 @@ albero malformato.
 - `crates/fub-format-markdown/src/parse.rs`
 - `crates/fub-format-markdown/src/render.rs`
 - `crates/fub-format-markdown/src/serialize.rs`
+- `crates/fub-format-sheet/src/lib.rs`
