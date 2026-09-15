@@ -48,6 +48,7 @@ flowchart TD
     host --> abi
     host --> features
     host --> markdown
+    host --> sheet
     host --> kernel
     features --> abi
     markdown --> abi

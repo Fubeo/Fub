@@ -236,9 +236,9 @@ dominio:
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
 Markdown e plain text sono superfici utente distinte montate dal registro sullo
-stesso `TextEngine`; `FormulaProfile` resta un cliente interno esercitato dai
-test e dalla fixture. I moduli dei profili vivono rispettivamente in
-`apps/client/src/editors/text/profiles/markdown/profile.ts`,
+stesso `TextEngine`; `FormulaProfile` è incorporato dalla formula bar e
+dall'editor in-cell di `GridEngine`. I moduli dei profili vivono rispettivamente
+in `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `apps/client/src/editors/text/profiles/plain-text.ts` e
 `apps/client/src/editors/text/profiles/formula.ts`. Le callback
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
@@ -255,19 +255,34 @@ riquadro e globale. Popup e keymap locale vincono prima del router tramite
 `defaultPrevented`; i renderer non aggiungono listener globali. Questi tipi e
 l'arbitrato restano interni a TypeScript e non modificano WIT o ABI.
 
-### Formato workbook prima del confine
+### Workbook e vertical slice della griglia
 
-`crates/fub-format-sheet` possiede il formato testuale `.fubsheet` v1.
-`Workbook` conserva soltanto dati autorevoli: versione, proprietà, ordine,
-dimensioni, input e stile. `SheetId + RowId + ColumnId` identifica una cella;
-A1, outline, ricerca e proprietà comuni sono proiezioni calcolate. Formula AST,
-valori, dipendenze, cache ed errori non vengono serializzati.
+`crates/fub-format-sheet` possiede il formato testuale `.fubsheet` v1 e il
+valutatore autorevole. `Workbook` conserva soltanto dati persistenti: versione,
+proprietà, ordine, dimensioni, input e stile. `SheetId + RowId + ColumnId`
+identifica una cella; A1, AST, valori, dipendenze, cache, errori, outline,
+ricerca e proprietà comuni sono proiezioni calcolate.
 
-Il workbook non implementa `DocumentModel` e in questa fase non attraversa
-`host/contract.ts`, IPC, ABI o WIT. La vertical slice della griglia deve prima
-misurare finestre e operazioni reali; soltanto quel protocollo misurato potrà
-diventare un contratto additivo. L'editing in-cell e la formula bar restano
-locali alla shell: nessuna battuta genera una chiamata IPC o WASM.
+Il formato è registrato nel kernel come sorgente conosciuta senza adattarlo a
+`DocumentModel`: discovery, sincronizzazione e indicizzazione conservano
+l'entry, mentre nessun parser di blocchi viene inventato. `GridEngine` analizza
+lo stesso JSON strict nel client, virtualizza righe e colonne e produce
+`GridOperation` con coordinate stabili, preimmagini e patch inverse.
+`DocumentSession` valida e diffonde l'operazione tipizzata prima della scrittura
+guardata; i reload full-text restano il fallback autorevole.
+
+Editor in-cell e formula bar usano due istanze di `TextEngine` con
+`FormulaProfile`, ma nessuna battuta attraversa IPC. Dopo un commit,
+`evaluate_sheet` invia provvisoriamente la sorgente completa a `fub-host`, che
+usa `Workbook::parse()` e `Workbook::evaluate()`. Le generazioni asincrone
+scartano risposte stantie. Se il comando non è montato, la superficie dichiara
+`data-evaluation="unavailable"` e mostra gli input grezzi senza duplicare il
+linguaggio formule in TypeScript.
+
+I tipi di valutazione in `host/contract.ts` e il comando Tauri sono interni e
+provvisori: non sono entrati in `fub-abi`, WIT o nel contratto plugin. La fase
+successiva misura finestre, operazioni incrementali, dipendenze e lifecycle
+prima di scegliere i tipi minimi da pubblicare.
 
 ## Confine CodeMirror
 

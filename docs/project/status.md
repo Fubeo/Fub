@@ -174,15 +174,20 @@ Issue:
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11 le fasi 0–7 sono concluse nello stack candidato: il pannello monta
-Markdown e plain text attraverso `DocumentSurfaceRegistry`, con collisioni,
-fallback e teardown posseduto; modalità e comandi sono dichiarati dalle
-superfici e arbitrati prima dei layer profilo, documento, riquadro e globale.
-Il crate `fub-format-sheet` aggiunge il formato JSON testuale v1, identità
-stabili di sheet, righe, colonne e celle, validazione dei limiti e proiezioni
-A1, outline, ricerca e proprietà senza modificare `DocumentModel`, ABI o WIT.
-Il prossimo passo è la vertical slice `GridEngine`; seguono misura del
-protocollo e, soltanto dopo, ABI/WIT.
+Per #11 le fasi 0–8 sono concluse nello stack candidato. Il pannello monta
+Markdown, plain text e `.fubsheet` attraverso `DocumentSurfaceRegistry`, con
+collisioni, fallback e teardown posseduto; modalità e comandi sono dichiarati
+dalle superfici e arbitrati prima dei layer profilo, documento, riquadro e
+globale.
+
+`fub-format-sheet` possiede il formato JSON v1 e il valutatore autorevole di
+formule. `GridEngine` offre una griglia virtualizzata, identità di cella stabili,
+selezione e tastiera, editor in-cell e formula bar condivisi, TSV, operazioni
+atomiche, undo locale e ARIA. Le battute restano nella shell; soltanto i commit
+chiedono una valutazione Rust e le risposte stantie vengono scartate. Il fake
+host rende esplicita l'indisponibilità e la superficie conserva gli input
+grezzi. `DocumentModel`, ABI e WIT non sono stati modificati. Il prossimo passo
+è misurare il protocollo della vertical slice prima di congelarne una parte.
 
 ## Bloccato
 

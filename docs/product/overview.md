@@ -61,18 +61,20 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 
 ### Scrittura
 
-- editor CodeMirror;
-- sorgente, live preview e lettura;
+- editor CodeMirror per Markdown e plain text;
+- griglia `.fubsheet` virtualizzata con tastiera, selezione, editor in-cell,
+  formula bar, TSV e undo dedicato;
+- sorgente, live preview e lettura per Markdown;
 - frontmatter;
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal
   provider Markdown;
 - revisioni e conflitti espliciti;
 - sincronizzazione fra più riquadri sullo stesso documento.
 
-Nella shell corrente, l'unico percorso montato dall'utente è Markdown.
-`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
-stesso `TextEngine`, esercitati dai test e dalla fixture a tre profili, ma non
-sono superfici esposte all'utente.
+La shell monta Markdown, plain text e `.fubsheet` attraverso
+`DocumentSurfaceRegistry`. I profili testuali condividono `TextEngine`; la
+griglia incorpora `FormulaProfile` e delega il calcolo autorevole al motore
+Rust, con fallback sugli input grezzi quando non è disponibile.
 
 ### Navigazione e conoscenza
 

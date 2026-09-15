@@ -1496,6 +1496,7 @@ dependencies = [
  "fub-abi",
  "fub-features",
  "fub-format-markdown",
+ "fub-format-sheet",
  "fub-kernel",
  "fub-testkit",
  "jiff",

@@ -868,6 +868,42 @@ export interface DocumentSource {
   source_kind: SourceKind;
 }
 
+export interface SheetCellKey {
+  sheet: string;
+  row: string;
+  column: string;
+}
+
+export type SheetFormulaError =
+  | "parse"
+  | "ref"
+  | "name"
+  | "value"
+  | "div_zero"
+  | "num"
+  | "cycle";
+
+export type SheetCellValue =
+  | { kind: "blank" }
+  | { kind: "number"; value: number }
+  | { kind: "text"; value: string }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "error"; value: SheetFormulaError };
+
+export interface SheetEvaluatedCell extends SheetCellKey {
+  value: SheetCellValue;
+}
+
+export interface SheetCellDependency {
+  cell: SheetCellKey;
+  depends_on: SheetCellKey[];
+}
+
+export interface SheetEvaluation {
+  cells: SheetEvaluatedCell[];
+  dependencies: SheetCellDependency[];
+}
+
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
 // Tag adiacente (`kind` + `value`) come `LinkTarget`: un caso porta uno scalare
 // e l'altro niente.

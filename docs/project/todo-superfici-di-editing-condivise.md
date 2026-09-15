@@ -420,17 +420,17 @@ Criteri di uscita:
 
 Consegnare:
 
-- [ ] una sheet visibile con righe, colonne e intestazioni;
-- [ ] viewport virtualizzata e overscan limitato;
-- [ ] cella attiva e selezione rettangolare;
-- [ ] navigazione completa da tastiera;
-- [ ] un solo editor in-cell riusabile;
-- [ ] formula bar basata su `TextEngine`;
-- [ ] commit, cancel e politica di blur;
-- [ ] copia e incolla TSV come una sola operazione;
-- [ ] undo del workbook separato dall'undo testuale;
-- [ ] lettura e scrittura `.fubsheet`;
-- [ ] accessibilità con `role="grid"` e focus ripristinato.
+- [x] una sheet visibile con righe, colonne e intestazioni;
+- [x] viewport virtualizzata e overscan limitato;
+- [x] cella attiva e selezione rettangolare;
+- [x] navigazione completa da tastiera;
+- [x] un solo editor in-cell riusabile;
+- [x] formula bar basata su `TextEngine`;
+- [x] commit, cancel e politica di blur;
+- [x] copia e incolla TSV come una sola operazione;
+- [x] undo del workbook separato dall'undo testuale;
+- [x] lettura e scrittura `.fubsheet`;
+- [x] accessibilità con `role="grid"` e focus ripristinato.
 
 Nessun carattere digitato attraversa IPC o WASM. Il commit produce una
 `GridOperation`, poi passa dalla `DocumentSession` e dalla scrittura guardata.
@@ -438,6 +438,19 @@ Nessun carattere digitato attraversa IPC o WASM. Il commit produce una
 La prima versione delle formule comprende numeri, stringhe, operatori,
 parentesi, riferimenti, intervalli, `SUM`, `AVERAGE`, `MIN`, `MAX`, `IF`, errori
 tipizzati e rilevamento dei cicli. L'evaluatore autorevole resta in Rust.
+
+La slice usa coordinate `SheetId + RowId + ColumnId`, preimmagini atomiche e
+patch inverse. Un'operazione peer strutturata non entra nella history locale e
+conserva la bozza; un reload full-text autorevole annulla la bozza prima di
+ricostruire il workbook. Assi nascosti non ricevono selezione o focus. Le
+valutazioni asincrone hanno una generazione e una risposta superata non può
+riscrivere la vista corrente.
+
+Lo smoke browser reale ha esercitato commit, cancel, blur, formula bar,
+copia/incolla TSV, undo/redo, scroll virtualizzato, serializzazione, riapertura
+e fallback senza valutatore. Su un workbook 120×60 il DOM ha mantenuto soltanto
+la finestra visibile con overscan; la riapertura ha conservato gli input senza
+produrre modifiche spurie.
 
 ### Fase 9 — misurare il protocollo
 
@@ -544,18 +557,18 @@ ABI, WIT, SDK, proxy WASM, esempio e rimozione degli adapter.
 
 - [x] Markdown usa `TextEngine` attraverso `MarkdownProfile`.
 - [x] Il core testuale non conosce Markdown.
-- [ ] Plain text, formula bar e cell editor usano lo stesso motore.
+- [x] Plain text, formula bar e cell editor usano lo stesso motore.
 - [x] Una correzione al core raggiunge tutti i profili.
-- [ ] Il pannello documenti monta le superfici attraverso il registro.
+- [x] Il pannello documenti monta le superfici attraverso il registro.
 - [x] Il buffer appartiene alla sessione; cursore, scroll e undo alla superficie.
-- [ ] La griglia usa un solo CodeMirror in-cell riusabile.
-- [ ] Nessuna battuta genera IPC o WASM.
-- [ ] Undo testuale e undo del foglio restano separati.
-- [ ] Famiglia e profilo sconosciuti hanno un fallback.
-- [ ] Disabilitare un owner rimuove registrazioni e istanze.
+- [x] La griglia usa un solo CodeMirror in-cell riusabile.
+- [x] Nessuna battuta genera IPC o WASM.
+- [x] Undo testuale e undo del foglio restano separati.
+- [x] Famiglia e profilo sconosciuti hanno un fallback.
+- [x] Disabilitare un owner rimuove registrazioni e istanze.
 - [ ] Un plugin WASM può richiedere una superficie conosciuta senza iniettare JS.
 - [ ] Rust, WIT, TypeScript, SDK, host nativo e WASM sono conformi.
-- [ ] `DocumentModel` resta agnostico rispetto a celle e DOCX.
+- [x] `DocumentModel` resta agnostico rispetto a celle e DOCX.
 - [ ] Banchi visuali e di accessibilità coprono testo e griglia.
 - [ ] Tutta la CI pertinente è verde.
 

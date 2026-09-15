@@ -4636,6 +4636,10 @@ impl Workspace {
                     }
                 },
             };
+            let ext = extension_of(&entry.id).unwrap_or_default();
+            if self.docs.registry.provider_for_ext(&ext).is_none() {
+                continue;
+            }
             match self.docs.prepare_parse(&entry.id) {
                 Ok(parser) => parses.push(PendingDocumentParse {
                     id: entry.id,
@@ -6229,8 +6233,10 @@ impl Workspace {
         let ext = extension_of(&id).unwrap_or_default();
         let entry = self.indexes.core.entries.get(&id).cloned();
         let seen = entry.as_ref().and_then(|entry| entry.fingerprint.clone());
-        let action = if let Some(descriptor) = self.docs.registry.descriptor_for_ext(&ext) {
-            let parser = self.docs.prepare_parse(&id).ok()?;
+        let action = if let (Some(descriptor), Ok(parser)) = (
+            self.docs.registry.descriptor_for_ext(&ext),
+            self.docs.prepare_parse(&id),
+        ) {
             SyncPlanAction::Parse {
                 storage: Arc::clone(self.docs.vault.storage()),
                 parser: Box::new(parser),

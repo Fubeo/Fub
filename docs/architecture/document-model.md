@@ -125,6 +125,12 @@ non campi aggiunti al modello dei blocchi. Il formato JSON v1 rifiuta campi
 sconosciuti, versioni future, coordinate ambigue o mancanti e input oltre i
 limiti dichiarati, evitando una riscrittura con perdita silenziosa.
 
+`Workbook::evaluate()` interpreta operatori, stringhe, booleani, riferimenti,
+intervalli, riferimenti cross-sheet e le funzioni `SUM`, `AVERAGE`, `MIN`,
+`MAX` e `IF`. Gli errori sono valori tipizzati e i cicli vengono rilevati. Il
+client non replica questa semantica: chiede il risultato Rust dopo il commit e
+usa l'input persistito come fallback.
+
 ## Arena al confine WASM
 
 WIT non ammette tipi ricorsivi. Gli alberi `Block`, `Inline` e `UiNode`

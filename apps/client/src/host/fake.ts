@@ -513,10 +513,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
         return gate("readDocument", [id], Promise.resolve({
           text: doc.text,
           revision: doc.revision,
-          format_id: id.endsWith(".md") || id.endsWith(".markdown") ? "markdown" : null,
+          format_id: id.endsWith(".fubsheet")
+            ? "fubsheet"
+            : id.endsWith(".md") || id.endsWith(".markdown")
+              ? "markdown"
+              : null,
           source_kind: "text",
         }));
       },
+      evaluateSheet: (source) =>
+        gate(
+          "evaluateSheet",
+          [source],
+          Promise.reject(new Error("host fake: il motore formule Rust non è montato")),
+        ),
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci

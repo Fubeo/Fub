@@ -10,6 +10,7 @@ use std::sync::Arc;
 #[cfg(feature = "versioning")]
 use crate::custody::Custody;
 use camino::Utf8Path;
+use fub_abi::format::FormatDescriptor;
 use fub_abi::settings::SettingSpec;
 use fub_abi::text::StringCatalog;
 use fub_abi::traits::{Plugin, PluginManifest};
@@ -180,6 +181,16 @@ pub(crate) fn mount_with_formats(
     if let Err(error) = formats.register(MarkdownProvider::boxed()) {
         return Err(mount_error_with_resource_disposal(
             format!("format provider conflict: {error}"),
+            format_resources.take().unwrap_or_default(),
+        ));
+    }
+    if let Err(error) = formats.register_source(FormatDescriptor::text(
+        fub_format_sheet::FORMAT_ID,
+        "Fub Sheet",
+        &["fubsheet"],
+    )) {
+        return Err(mount_error_with_resource_disposal(
+            format!("source format conflict: {error}"),
             format_resources.take().unwrap_or_default(),
         ));
     }

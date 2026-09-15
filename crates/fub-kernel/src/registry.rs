@@ -42,7 +42,7 @@ impl std::fmt::Display for RegistryConflict {
 struct RegisteredFormat {
     descriptor: FormatDescriptor,
     capabilities: FormatCapabilities,
-    provider: Arc<dyn FormatProvider>,
+    provider: Option<Arc<dyn FormatProvider>>,
 }
 
 #[derive(Default)]
@@ -78,7 +78,31 @@ impl FormatRegistry {
             extensions.push(ext);
         }
         let capabilities = provider.capabilities();
-        self.insert_normalized(provider, descriptor, capabilities, extensions);
+        self.insert_normalized(Some(provider), descriptor, capabilities, extensions);
+        Ok(())
+    }
+
+    /// Registers a document source whose editor owns its model.
+    ///
+    /// Source-only formats participate in discovery, source-kind selection and
+    /// surface routing, but deliberately have no `DocumentModel` parser.
+    pub fn register_source(
+        &mut self,
+        descriptor: FormatDescriptor,
+    ) -> Result<(), RegistryConflict> {
+        let mut extensions = Vec::with_capacity(descriptor.extensions.len());
+        for ext in &descriptor.extensions {
+            let ext = ext.to_lowercase();
+            if let Some(&at) = self.by_ext.get(&ext) {
+                return Err(RegistryConflict {
+                    extension: ext,
+                    incumbent: self.providers[at].descriptor.id.clone(),
+                    challenger: descriptor.id,
+                });
+            }
+            extensions.push(ext);
+        }
+        self.insert_normalized(None, descriptor, FormatCapabilities::default(), extensions);
         Ok(())
     }
 
@@ -90,7 +114,7 @@ impl FormatRegistry {
         let capabilities = provider.capabilities();
         let extensions = descriptor.extensions.clone();
         self.insert_normalized(
-            provider,
+            Some(provider),
             descriptor,
             capabilities,
             extensions
@@ -102,7 +126,7 @@ impl FormatRegistry {
 
     fn insert_normalized(
         &mut self,
-        provider: Box<dyn FormatProvider>,
+        provider: Option<Box<dyn FormatProvider>>,
         descriptor: FormatDescriptor,
         capabilities: FormatCapabilities,
         extensions: Vec<String>,
@@ -114,17 +138,17 @@ impl FormatRegistry {
         self.providers.push(RegisteredFormat {
             descriptor,
             capabilities,
-            provider: Arc::from(provider),
+            provider: provider.map(Arc::from),
         });
     }
 
     pub fn provider_for_ext(&self, ext: &str) -> Option<&dyn FormatProvider> {
-        if let Some(&at) = self.by_ext.get(ext) {
-            return Some(self.providers[at].provider.as_ref());
-        }
-        self.by_ext
-            .get(&ext.to_lowercase())
-            .map(|&at| self.providers[at].provider.as_ref())
+        let at = self
+            .by_ext
+            .get(ext)
+            .copied()
+            .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
+        self.providers[at].provider.as_deref()
     }
 
     /// Lo stesso lookup di `provider_for_ext`, ma con ownership condivisa: chi
@@ -136,7 +160,7 @@ impl FormatRegistry {
             .get(ext)
             .copied()
             .or_else(|| self.by_ext.get(&ext.to_lowercase()).copied())?;
-        Some(Arc::clone(&self.providers[at].provider))
+        self.providers[at].provider.as_ref().map(Arc::clone)
     }
 
     /// Descriptor congelato al momento della registrazione. Consultarlo non è
@@ -308,6 +332,44 @@ mod tests {
         assert!(reg.has_doc_ext("md"));
         assert!(reg.has_doc_ext("MD"));
         assert!(!reg.has_doc_ext("txt"));
+    }
+
+    #[test]
+    fn source_only_formats_are_discoverable_without_a_document_model_parser() {
+        let mut reg = FormatRegistry::new();
+        let descriptor = FormatDescriptor::text("fubsheet", "Fub Sheet", &["fubsheet"]);
+        let expected_source = descriptor.source;
+        reg.register_source(descriptor).unwrap();
+
+        assert!(reg.has_doc_ext("fubsheet"));
+        assert!(reg.all_extensions().contains(&"fubsheet".to_owned()));
+        assert_eq!(
+            reg.descriptor_for_ext("FUBSHEET").unwrap().source,
+            expected_source
+        );
+        assert!(
+            reg.provider_for_ext("fubsheet").is_none(),
+            "source-only discovery must not invent a DocumentModel parser"
+        );
+    }
+
+    #[test]
+    fn a_source_only_conflict_is_atomic_against_existing_providers() {
+        let mut reg = FormatRegistry::new();
+        reg.register(Box::new(Fake("markdown", "md"))).unwrap();
+
+        let error = reg
+            .register_source(FormatDescriptor::text(
+                "mixed",
+                "Mixed source",
+                &["fubsheet", "md"],
+            ))
+            .expect_err("md is already owned");
+
+        assert_eq!(error.incumbent, "markdown");
+        assert_eq!(error.challenger, "mixed");
+        assert!(!reg.has_doc_ext("fubsheet"));
+        assert!(reg.provider_for_ext("md").is_some());
     }
 
     #[test]

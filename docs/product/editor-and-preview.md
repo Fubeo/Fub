@@ -125,8 +125,7 @@ un owner distrugge le istanze che possiede.
 
 `TextEngine` è il motore testuale condiviso. Markdown e plain text sono percorsi
 utente distinti montati dal registro sullo stesso motore; `FormulaProfile`
-resta un cliente interno esercitato dai test e dalla fixture, non una modalità
-del documento.
+alimenta la formula bar e l'unico editor in-cell riusabile della griglia.
 
 La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle;
 il pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
@@ -144,11 +143,21 @@ Conserva input, ordine, dimensioni, stile, proprietà e identità stabili di
 sheet, righe e colonne. L'indirizzo A1 dipende invece dall'ordine corrente:
 riordinare una riga sposta l'indirizzo senza cambiare l'identità della cella.
 
+La superficie mostra intestazioni, celle e selezione rettangolare in una
+viewport virtualizzata. Supporta tastiera, editor in-cell, formula bar,
+copia/incolla TSV e undo/redo del workbook. Commit, cancel e blur sono
+espliciti; una modifica peer strutturata conserva la bozza locale, mentre una
+riscrittura completa autorevole la annulla.
+
 Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
-salvati nel file: sono ricostruiti dai dati autorevoli. Outline, ricerca e
-proprietà sono proiezioni del workbook, non un adattamento a `DocumentModel`.
-La superficie a griglia e le sue interazioni appartengono alla fase successiva;
-questa fase non dichiara ancora una capacità utente o plugin.
+salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
+valutatore non è disponibile, la griglia resta modificabile e mostra gli input
+grezzi. Nessuna battuta attraversa IPC; la valutazione parte dopo il commit e
+una risposta stantia non sostituisce lo stato corrente.
+
+Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
+`DocumentModel`. Il protocollo della vertical slice è ancora interno: ABI e WIT
+saranno estesi soltanto dopo la misura di finestre, operazioni e lifecycle.
 
 ## Dove si trova
 

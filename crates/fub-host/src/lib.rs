@@ -95,6 +95,7 @@ pub mod registry;
 pub mod runner;
 pub mod session;
 pub mod settings;
+pub mod sheet;
 pub mod shell;
 mod teardown;
 pub mod theme;

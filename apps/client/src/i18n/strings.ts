@@ -109,6 +109,7 @@ const IT = {
   // --- le tre modalità del pannello --------------------------------------
   "mode.group": "Modalità del pannello",
   "mode.source": "Sorgente",
+  "mode.sheet": "Foglio",
   "mode.live": "Live",
   "mode.reading": "Lettura",
 
@@ -664,6 +665,7 @@ const EN: Record<Key, string> = {
 
   "mode.group": "Pane mode",
   "mode.source": "Source",
+  "mode.sheet": "Sheet",
   "mode.live": "Live",
   "mode.reading": "Reading",
 

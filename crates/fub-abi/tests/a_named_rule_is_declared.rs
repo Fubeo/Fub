@@ -188,6 +188,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-sheet/src/lib.rs::search",
+            (
+                Family::ContextualCase,
+                "cerca una sottostringa nel testo libero delle celle, non stabilisce l'identità \
+                 di un path: piega query e input perché la grafia dell'utente non deve cambiare \
+                 i risultati. Resta locale al formato perché restituisce coordinate stabili del \
+                 foglio, mentre le altre ricerche lavorano su proprietà o indici di documenti.",
+            ),
+        ),
+        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
@@ -241,6 +251,15 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "l'identità di un'estensione nel registro è full-Unicode e non ASCII, e diverge \
                  apposta da `rules/media.rs`: qui l'estensione arriva dal **descrittore di un \
                  provider**, che è testo di terzi, non dal nome di un file del vault.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::register_source",
+            (
+                Family::ContextualCase,
+                "dichiara nella stessa mappa un formato privo di parser `DocumentModel`: \
+                 l'assenza del provider non può cambiare l'identità dell'estensione, quindi \
+                 deve piegarla esattamente come `register` prima di controllare i conflitti.",
             ),
         ),
         (
@@ -405,6 +424,24 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                  revisione FNV-1a a sedici cifre accetta maiuscole e minuscole equivalenti, perché \
                  l'alfabeto esadecimale è ASCII. Le revisioni SHA-256 correnti restano canoniche \
                  e si confrontano esattamente; una piegatura Unicode inventerebbe equivalenze.",
+            ),
+        ),
+        (
+            "crates/fub-format-sheet/src/formula.rs::matches_ignore_ascii_case",
+            (
+                Family::AsciiCase,
+                "confronta identificatori del linguaggio formule con il suo vocabolario chiuso \
+                 (`IF`, `SUM`, `TRUE`): la grammatica accetta token ASCII e una piegatura Unicode \
+                 attribuirebbe equivalenze che il formato non dichiara.",
+            ),
+        ),
+        (
+            "crates/fub-format-sheet/src/formula.rs::reference",
+            (
+                Family::AsciiCase,
+                "converte le lettere di una coordinata A1 dopo averle già limitate con \
+                 `is_ascii_alphabetic`: l'alfabeto delle colonne è A–Z per formato, quindi una \
+                 maiuscola Unicode non può identificare una colonna.",
             ),
         ),
         (

@@ -177,6 +177,9 @@ impl DocumentStoreHandle {
         let Some(descriptor) = self.registry.descriptor_for_ext(&ext) else {
             return Ok(None);
         };
+        if self.registry.provider_arc_for_ext(&ext).is_none() {
+            return Ok(None);
+        }
         let source = descriptor.source;
         prepare_parse(&self.registry, &self.syntax, id).map(|parser| Some((source, parser)))
     }

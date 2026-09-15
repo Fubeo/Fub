@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createDocumentSurfaceRegistry } from "./bootstrap";
 import type { EditorSurface, SurfaceFamily, SurfaceFactory } from "./registry";
 import { DocumentSurfaceRegistry, SurfaceRegistrationConflict } from "./registry";
 
@@ -78,6 +79,26 @@ describe("DocumentSurfaceRegistry", () => {
       owner: "core.text",
       family: "text",
       profile: "plain-text",
+    });
+  });
+
+  it("routes the fubsheet format to the grid sheet surface", () => {
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(),
+      onSelectionChange: vi.fn(),
+      onOpenWikilink: vi.fn(),
+      onSearchTag: vi.fn(),
+      completions: {
+        searchNotes: async () => [],
+        listTags: async () => [],
+      },
+      evaluateSheet: async () => ({ cells: [], dependencies: [] }),
+    });
+
+    expect(registry.resolve({ formatId: "fubsheet", sourceKind: "text" })).toMatchObject({
+      owner: "fub.shell.grid",
+      family: "grid",
+      profile: "sheet",
     });
   });
 

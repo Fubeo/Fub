@@ -11,6 +11,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+mod formula;
+
+pub use formula::{CellDependency, CellValue, EvaluatedCell, FormulaErrorCode, WorkbookEvaluation};
+
 pub const FORMAT_ID: &str = "fubsheet";
 pub const SCHEMA_VERSION: u32 = 1;
 pub const JSON_SCHEMA: &str = include_str!("../schema/fubsheet-v1.schema.json");
@@ -349,7 +353,7 @@ pub enum HorizontalAlign {
     End,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct CellKey {
     pub sheet: SheetId,
     pub row: RowId,

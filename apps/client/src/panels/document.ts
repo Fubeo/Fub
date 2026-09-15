@@ -149,6 +149,7 @@ export function mountDocument(d: DocumentDeps): void {
         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
     },
+    evaluateSheet: api.evaluateSheet,
   });
   panesEl = $("#panes");
   sessionEventsStop?.();

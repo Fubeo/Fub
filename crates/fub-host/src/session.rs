@@ -2086,9 +2086,8 @@ impl Host {
             .map(|s| {
                 s.slots
                     .iter()
-                    .filter_map(|(root, slot)| {
-                        matches!(slot, SessionSlot::Open(_)).then(|| root.clone())
-                    })
+                    .filter(|(_, slot)| matches!(slot, SessionSlot::Open(_)))
+                    .map(|(root, _)| root.clone())
                     .collect()
             })
             .unwrap_or_default()

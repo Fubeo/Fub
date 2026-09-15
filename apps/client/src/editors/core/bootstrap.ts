@@ -1,8 +1,9 @@
 import { createEditor, type Editor } from "../../editor/editor";
 import type { CompletionSources } from "../../editor/completions";
-import type { SyntaxForm } from "../../host/contract";
+import type { SheetEvaluation, SyntaxForm } from "../../host/contract";
 import { t } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
+import { GridEngine } from "../grid/engine";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
 import {
@@ -27,6 +28,7 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void;
   readonly onSearchTag: (tag: string) => void;
   readonly completions: CompletionSources;
+  readonly evaluateSheet: (source: string) => Promise<SheetEvaluation>;
 }
 
 const MARKDOWN_MODES = [
@@ -47,6 +49,10 @@ const MARKDOWN_MODES = [
 
 const PLAIN_TEXT_MODES = [
   { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+] as const;
+
+const GRID_MODES = [
+  { id: "sheet", label: () => t("mode.sheet"), presentation: "surface", contextMode: "source" },
 ] as const;
 
 const VIEWER_MODES = [
@@ -183,6 +189,41 @@ export function createDocumentSurfaceRegistry(
           focus: () => engine.focus(),
           revealByteOffset: (byteOffset) => engine.revealByteOffset(byteOffset),
           selections: () => engine.selections(),
+          setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
+          setTheme: (theme) => engine.setTheme(theme),
+          destroy: () => engine.destroy(),
+        };
+      },
+    },
+  });
+  registry.register({
+    owner: "fub.shell.grid",
+    family: "grid",
+    defaultProfile: "sheet",
+    formats: { fubsheet: "sheet" },
+    factory: {
+      mount(profile, context) {
+        if (profile !== "sheet") throw new Error(`grid surface profile ${profile} is not registered`);
+        const engine = new GridEngine(context.parent, {
+          surfaceId: context.paneId,
+          onChange: (change) => options.onChange(context.paneId, change),
+          onSelectionChange: () => options.onSelectionChange(context.paneId),
+          evaluate: options.evaluateSheet,
+          theme: currentTheme(),
+        });
+        return {
+          family: "grid",
+          profile,
+          surfaceId: context.paneId,
+          modes: GRID_MODES,
+          setMode(mode) {
+            requireMode(GRID_MODES, mode);
+            context.parent.dataset.surfaceMode = mode;
+          },
+          setDoc: (text) => engine.setDoc(text),
+          syncDoc: (update) => engine.syncDoc(update),
+          getDoc: () => engine.getDoc(),
+          focus: () => engine.focus(),
           setReadOnly: (readOnly) => engine.setReadOnly(readOnly),
           setTheme: (theme) => engine.setTheme(theme),
           destroy: () => engine.destroy(),
