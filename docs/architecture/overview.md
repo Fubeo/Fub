@@ -34,6 +34,7 @@ flowchart TD
     host["fub-host"]
     features["fub-features"]
     markdown["fub-format-markdown"]
+    sheet["fub-format-sheet"]
     wasmhost["fub-wasm-host"]
     sdk["fub-sdk"]
     testkit["fub-testkit"]
