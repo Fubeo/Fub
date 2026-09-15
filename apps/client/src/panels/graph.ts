@@ -215,11 +215,10 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
 
   let disposed = false;
 
-  // `on` non ha unsubscribe (§9.4): i moduli shell vivono quanto la finestra.
-  // La guard `disposed` ferma il callback quando il grafo è smontato, e il
-  // commento dice perché non c'è un `off` da chiamare nel dispose.
-  on("layout", () => {
-    if (disposed) return;
+  // `on` restituisce il disposer della registrazione: il renderer deve
+  // rimuovere il listener quando il grafo viene smontato, non solo ignorare
+  // gli eventi con una guard.
+  const unsubscribeLayout = on("layout", () => {
     chart.setOpenDocuments(openDocuments());
   });
 
@@ -232,6 +231,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
 
   return () => {
     disposed = true;
+    unsubscribeLayout();
     unsubscribeLanguage();
     chart.unmount();
     panel.destroy();
