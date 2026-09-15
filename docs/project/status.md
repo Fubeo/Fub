@@ -92,12 +92,17 @@ La regressione del fallback dei blocchi Markdown personalizzati è risolta in
 baseline visuali e accessibilità. La correzione non rigenera le immagini e non
 cambia le soglie del banco.
 
-[#17](https://github.com/Fubeo/Fub/issues/17) resta il tracker unico delle
-baseline; #16 è stata assorbita come duplicata. Prima della chiusura servono
-provenienza e revisione delle immagini, esame del foglio di contatto nelle due
-luci, due esecuzioni consecutive nello stesso ambiente, confronto delle
-soglie, diagnosi del drift e correzione del commento storico del banco.
-Il verde automatico non sostituisce queste evidenze.
+La provenienza e la stabilità delle baseline di
+[#17](https://github.com/Fubeo/Fub/issues/17) sono certificate sul candidato:
+il commit `7463f725` le ha rigenerate sul runner `ubuntu-latest`, ha spiegato
+l'allineamento delle fixture e la neutralizzazione del puntatore e ha ripetuto
+il banco 42/42 senza modificare le soglie. Il foglio di contatto canonico è
+stato riesaminato nelle due luci. Le run `34966343591` e `34966348108` sullo
+stesso SHA hanno poi completato consecutivamente banco visuale e accessibilità
+nello stesso ambiente. Un controllo locale fuori dal runner ha isolato il
+drift a rasterizzazione di testo e canvas, senza promuoverlo a baseline. #16
+resta assorbita; #17 si chiude con l'integrazione autorizzata di queste
+evidenze.
 
 ## Implementato
 
