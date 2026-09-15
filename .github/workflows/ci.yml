@@ -204,6 +204,18 @@ jobs:
           path: apps/client/bench/.output/graph-scale.json
           include-hidden-files: true
           if-no-files-found: error
+      - name: soak osservativo del grafo a 10k
+        id: graph_scale_10k
+        run: npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+        working-directory: apps/client
+      - name: referto del soak grafo a 10k
+        if: ${{ failure() && steps.graph_scale_10k.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: banco-grafo-10k-${{ github.sha }}
+          path: apps/client/bench/.output/graph-scale.json
+          if-no-files-found: error
+          include-hidden-files: true
       - name: le scene restano uguali alle baseline del runner
         id: bench_verify
         run: npm run bench:verify

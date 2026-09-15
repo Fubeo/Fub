@@ -310,6 +310,25 @@ const cleanupResultsFrom = (error) => {
   return null;
 };
 
+const successSummary = (report) => ({
+  config: report.config,
+  fixture: report.fixture,
+  frames: report.frames ?? null,
+  soak: {
+    heapAvailability: report.soak?.heapAvailability ?? null,
+    heapSeries: report.soak?.heapSeries ?? null,
+    slopeBytesPerWindow: report.soak?.linearRegressionSlopeBytesPerWindow ?? null,
+    monotonicIncreaseCount: report.soak?.monotonicIncreaseCount ?? null,
+  },
+  resourceDelta: report.resources?.cycles?.map(({ delta, deltaByKind }) => ({ delta, deltaByKind })) ?? null,
+  totalMs: report.timings?.totalMs ?? null,
+  environment: {
+    browser: report.environment?.browser?.chromiumVersion ?? null,
+    platform: report.environment?.node?.platform ?? null,
+  },
+});
+
+
 async function main() {
   const started = Date.now();
   const environment = environmentHost();
@@ -496,6 +515,7 @@ async function main() {
     primary ??= error;
     console.error(`graph-scale: report write failed: ${error.message}`);
   }
+  if (!primary) console.log(JSON.stringify(successSummary(report)));
   if (primary) throw primary;
 }
 
