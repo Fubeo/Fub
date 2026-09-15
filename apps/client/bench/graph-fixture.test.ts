@@ -36,6 +36,10 @@ describe("graph bench fixture", () => {
     },
   );
 
+  it("keeps the seed six 2k oracle stable", () => {
+    expect(generateGraphFixture(2_000, 6).digest).toBe("eeeacc27");
+  });
+
   it("is deterministic for one seed and changes with another", () => {
     const first = generateGraphFixture(2_000, 0x1234_5678);
     const same = generateGraphFixture(2_000, 0x1234_5678);
