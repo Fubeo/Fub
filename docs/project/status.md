@@ -174,10 +174,11 @@ Issue:
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11 le fasi 0–5 sono concluse nello stack candidato: il pannello monta
+Per #11 le fasi 0–6 sono concluse nello stack candidato: il pannello monta
 Markdown e plain text attraverso `DocumentSurfaceRegistry`, con collisioni,
-fallback e teardown posseduto. Il prossimo passo è la fase 6, modalità e
-tastiera per superficie; seguono `.fubsheet`, griglia, misura del protocollo e
+fallback e teardown posseduto; modalità e comandi sono dichiarati dalle
+superfici e arbitrati prima dei layer profilo, documento, riquadro e globale.
+Il prossimo passo è `.fubsheet`; seguono griglia, misura del protocollo e
 soltanto dopo ABI/WIT.
 
 ## Bloccato
@@ -196,9 +197,9 @@ aperti. Decisione: **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`*
 2. completare ripristino atomico e backup/restore #5/#7;
 3. separare e misurare la Graph View con #12/#6;
 4. completare le evidenze manuali e ripetibili di #17;
-5. proseguire dalle fasi 5–10 del
+5. proseguire dalle fasi 7–10 del
    [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md),
-   tracciato in #11, senza rifare le fasi 0–4;
+   tracciato in #11, senza rifare le fasi 0–6;
 6. completare il contratto dei temi #13;
 7. decidere esplicitamente se #9 blocca la prima release e verificarla oppure
    motivarne il rinvio senza chiuderla artificialmente;

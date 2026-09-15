@@ -11,6 +11,15 @@ function factory(family: SurfaceFamily, destroyed: string[], mountedProfiles: st
         family,
         profile,
         surfaceId: `${context.paneId}:${context.documentId}`,
+        modes: [
+          {
+            id: "edit",
+            label: () => "Edit",
+            presentation: "surface",
+            contextMode: "source",
+          },
+        ],
+        setMode: vi.fn(),
         setDoc(value) {
           text = value;
         },
@@ -180,5 +189,27 @@ describe("DocumentSurfaceRegistry", () => {
       family: "error",
       profile: "unsupported",
     });
+  });
+
+  it("rejects and destroys a mounted surface with no declared mode", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const destroyed: string[] = [];
+    const base = factory("text", destroyed, []);
+    registry.register({
+      owner: "core.text",
+      family: "text",
+      defaultProfile: "plain-text",
+      sources: { text: "plain-text" },
+      factory: {
+        mount(profile, context) {
+          return { ...base.mount(profile, context), modes: [] };
+        },
+      },
+    });
+
+    expect(() =>
+      registry.mount({ formatId: null, sourceKind: "text" }, mountContext),
+    ).toThrow("declares no modes");
+    expect(destroyed).toEqual(["note.md"]);
   });
 });

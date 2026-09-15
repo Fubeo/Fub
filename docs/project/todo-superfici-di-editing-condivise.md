@@ -382,6 +382,14 @@ Ordine di arbitrato:
 Il commutatore della shell legge la superficie attiva. Non vengono aggiunti
 listener globali isolati nei renderer.
 
+Criteri di uscita:
+
+- [x] il commutatore deriva modalità, etichette e presentazione dalla superficie;
+- [x] plain text non eredita le modalità Markdown;
+- [x] popup e keymap locale precedono i layer di superficie e shell;
+- [x] i comandi seguono l'ordine superficie, profilo, documento, riquadro, globale;
+- [x] il rimontaggio rimuove l'unico listener globale della tastiera.
+
 ### Fase 7 — formato pilota `.fubsheet`
 
 Creare `crates/fub-format-sheet/` con formato testuale e schema versionato.

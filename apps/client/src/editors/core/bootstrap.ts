@@ -1,6 +1,7 @@
 import { createEditor, type Editor } from "../../editor/editor";
 import type { CompletionSources } from "../../editor/completions";
 import type { SyntaxForm } from "../../host/contract";
+import { t } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
 import { createTextEngine } from "../text/engine";
 import { createPlainTextProfile } from "../text/profiles/plain-text";
@@ -16,7 +17,6 @@ export interface MarkdownEditorSurface extends EditorSurface {
   readonly family: "text";
   readonly profile: "markdown";
   setSyntaxForms(forms: readonly SyntaxForm[]): void;
-  setLivePreview(on: boolean): void;
 }
 
 export function isMarkdownSurface(surface: EditorSurface | null): surface is MarkdownEditorSurface {
@@ -29,6 +29,40 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly completions: CompletionSources;
 }
 
+const MARKDOWN_MODES = [
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+  {
+    id: "live_preview",
+    label: () => t("mode.live"),
+    presentation: "surface",
+    contextMode: "live_preview",
+  },
+  {
+    id: "reading",
+    label: () => t("mode.reading"),
+    presentation: "rendered",
+    contextMode: "reading",
+  },
+] as const;
+
+const PLAIN_TEXT_MODES = [
+  { id: "source", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+] as const;
+
+const VIEWER_MODES = [
+  { id: "view", label: () => t("mode.reading"), presentation: "surface", contextMode: "reading" },
+] as const;
+
+const ERROR_MODES = [
+  { id: "error", label: () => t("mode.source"), presentation: "surface", contextMode: "source" },
+] as const;
+
+function requireMode(modes: EditorSurface["modes"], mode: string): void {
+  if (!modes.some((candidate) => candidate.id === mode)) {
+    throw new RangeError(`surface mode ${mode} is not supported`);
+  }
+}
+
 function markdownSurface(
   editor: Editor,
   context: SurfaceMountContext,
@@ -37,8 +71,12 @@ function markdownSurface(
     family: "text",
     profile: "markdown",
     surfaceId: context.paneId,
+    modes: MARKDOWN_MODES,
+    setMode(mode) {
+      requireMode(MARKDOWN_MODES, mode);
+      editor.setLivePreview(mode === "live_preview");
+    },
     setSyntaxForms: (forms) => editor.setSyntaxForms(forms),
-    setLivePreview: (on) => editor.setLivePreview(on),
     setDoc: (text) => editor.setDoc(text),
     syncDoc: (update) => editor.syncDoc(update),
     getDoc: () => editor.getDoc(),
@@ -68,6 +106,11 @@ function staticSurface(
     family,
     profile,
     surfaceId: context.paneId,
+    modes: family === "viewer" ? VIEWER_MODES : ERROR_MODES,
+    setMode(mode) {
+      requireMode(family === "viewer" ? VIEWER_MODES : ERROR_MODES, mode);
+      element.dataset.mode = mode;
+    },
     setDoc(text) {
       source = text;
     },
@@ -129,6 +172,11 @@ export function createDocumentSurfaceRegistry(
           family: "text",
           profile: "plain-text",
           surfaceId: context.paneId,
+          modes: PLAIN_TEXT_MODES,
+          setMode(mode) {
+            requireMode(PLAIN_TEXT_MODES, mode);
+            context.parent.dataset.surfaceMode = mode;
+          },
           setDoc: (text) => engine.setDoc(text),
           syncDoc: (update) => engine.syncDoc(update),
           getDoc: () => engine.getDoc(),

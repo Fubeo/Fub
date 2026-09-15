@@ -6,14 +6,16 @@
 
 ## Modalità
 
-Il documento Markdown può essere mostrato come:
+Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 
 - **sorgente**, con la sintassi esplicita;
 - **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
 - **lettura**, che mostra la resa senza cursore di testo.
 
-Il provider Markdown interpreta la sorgente. La shell possiede CodeMirror,
-focus, selezione, scroll, tema e lifecycle.
+La superficie plain text offre soltanto **sorgente**: non simula capacità
+Markdown. Il commutatore della shell legge la dichiarazione della superficie
+attiva; cambiando tab cambia anche l'insieme dei pulsanti e delle scorciatoie
+disponibili.
 
 ## Flusso
 
@@ -116,27 +118,29 @@ tracciato nell'issue [#10](https://github.com/Fubeo/Fub/issues/10).
 
 ## Superfici condivise
 
-`TextEngine` è il motore testuale corrente della shell e fornisce la meccanica
-condivisa. L'unico percorso montato dall'utente è l'editor Markdown, che passa
-da `createEditor()` e `MarkdownProfile`.
+`DocumentSurfaceRegistry` sceglie la superficie con precedenza esplicita:
+override dell'utente, formato, specie della sorgente, fallback testuale, viewer
+per byte ed errore. Le collisioni nominano entrambi gli owner; la rimozione di
+un owner distrugge le istanze che possiede.
 
-`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
-stesso `TextEngine`: vengono esercitati soltanto dai test dedicati e dalla
-fixture a tre profili, ma non sono superfici esposte all'utente. La loro
-presenza dimostra il seam interno; non introduce una nuova modalità del
-prodotto.
+`TextEngine` è il motore testuale condiviso. Markdown e plain text sono percorsi
+utente distinti montati dal registro sullo stesso motore; `FormulaProfile`
+resta un cliente interno esercitato dai test e dalla fixture, non una modalità
+del documento.
 
 La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle;
 il pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
 chiamata IPC o WASM per ogni battuta.
 
-Il percorso corrente non include un `DocumentSurfaceRegistry`, una griglia di
-superfici o la `Phase 5`: restano assenti e l'esperienza utente rimane quella
-del percorso Markdown esistente.
+Popup e keymap locale precedono i comandi della superficie. La shell ordina poi
+i layer superficie, profilo, documento, riquadro e globale. I comandi
+indisponibili sulla superficie attiva non entrano nella palette né nel router;
+i renderer non installano listener globali propri.
 
 ## Dove si trova
 
 - `apps/client/src/editor/`
+- `apps/client/src/editors/core/`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/state/`
 - `crates/fub-abi/src/edit.rs`

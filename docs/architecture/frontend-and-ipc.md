@@ -139,11 +139,11 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece un `Editor`. `renderPane()` crea l'editor chiamando
-`createEditor()` da `apps/client/src/editor/editor.ts`, che costruisce un
-`TextEngine` per quel riquadro e inoltra l'API del profilo Markdown. Questo
-`createEditor()` è un adapter temporaneo di compatibilità, non un secondo
-motore.
+Ogni `Pane` possiede invece una `EditorSurface`.
+`DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
+`source_kind`, applicando override, formato, specie, fallback testuale, viewer
+per byte ed errore. Il registro possiede le istanze e le distrugge quando il
+riquadro o l'owner vengono smontati.
 
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
@@ -235,21 +235,25 @@ dominio:
 | `PlainTextProfile` | `createPlainTextProfile()` monta estensioni vuote, senza sintassi o comandi di dominio. |
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
-Questi profili sono un'architettura interna della shell. `MarkdownProfile` è
-l'unico profilo montato dal percorso utente; `PlainTextProfile` e
-`FormulaProfile` sono esercitati dai test e dalla fixture a tre profili, ma non
-sono superfici esposte all'utente.
-
-I moduli sono rispettivamente
+Markdown e plain text sono superfici utente distinte montate dal registro sullo
+stesso `TextEngine`; `FormulaProfile` resta un cliente interno esercitato dai
+test e dalla fixture. I moduli dei profili vivono rispettivamente in
 `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `apps/client/src/editors/text/profiles/plain-text.ts` e
 `apps/client/src/editors/text/profiles/formula.ts`. Le callback
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
-Non fanno parte dell'architettura corrente un `DocumentSurfaceRegistry`, una
-griglia condivisa di superfici o la `Phase 5`: il pannello collega direttamente
-le superfici alla sessione e il percorso attuale resta quello testuale.
+Ogni superficie dichiara almeno una `SurfaceMode`: id estensibile, etichetta,
+presentazione editabile o resa e proiezione sul `PaneMode` ABI già congelato.
+Il layout conserva qualunque id non vuoto; se la superficie attuale non lo
+supporta, il pannello usa il primo modo dichiarato senza sovrascrivere la
+preferenza persistita.
+
+Il router della shell ordina i comandi nei layer superficie, profilo, documento,
+riquadro e globale. Popup e keymap locale vincono prima del router tramite
+`defaultPrevented`; i renderer non aggiungono listener globali. Questi tipi e
+l'arbitrato restano interni a TypeScript e non modificano WIT o ABI.
 
 ## Confine CodeMirror
 

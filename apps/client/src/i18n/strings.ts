@@ -109,11 +109,8 @@ const IT = {
   // --- le tre modalità del pannello --------------------------------------
   "mode.group": "Modalità del pannello",
   "mode.source": "Sorgente",
-  "mode.source.hint": "Solo sorgente, nessuna resa inline",
   "mode.live": "Live",
-  "mode.live.hint": "Sorgente con resa inline",
   "mode.reading": "Lettura",
-  "mode.reading.hint": "Sola lettura, senza editor",
 
   // --- la ricerca --------------------------------------------------------
   "search.placeholder": "Cerca nel vault…",
@@ -667,11 +664,8 @@ const EN: Record<Key, string> = {
 
   "mode.group": "Pane mode",
   "mode.source": "Source",
-  "mode.source.hint": "Source only, no inline rendering",
   "mode.live": "Live",
-  "mode.live.hint": "Source with inline rendering",
   "mode.reading": "Reading",
-  "mode.reading.hint": "Read only, no editor",
 
   "search.placeholder": "Search the vault…",
   "search.hint": "Search the vault",

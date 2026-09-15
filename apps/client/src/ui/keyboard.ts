@@ -14,12 +14,9 @@
 // nella barra di stato — e non contiene nessuna regola. È la stessa divisione
 // che `ui/notify.ts` fa fra un avviso e il suo disegno.
 //
-// C'è un'eccezione, ed è la conseguenza della 0156: il **fuoco** si osserva
-// qui, dove il DOM c'è, e non in `avanza`. Un accordo non dichiara un ambito —
-// dove vale lo dice il fuoco — e l'unico posto in cui il fuoco si vede è
-// l'evento che risale da chi lo tiene. La regola che ne esce sta sotto, accanto
-// all'ascoltatore, e non è un riconoscimento di tasti: è la rinuncia a tre
-// accordi quando l'editor li ha già presi.
+// Popup e keymap locali rispondono prima che l'evento raggiunga questo unico
+// ascoltatore. `defaultPrevented` è il loro verdetto osservabile: nessun elenco
+// di collisioni cablato nella shell e nessun listener globale nei renderer.
 import { t } from "../i18n/strings";
 import type { Lifetime } from "./lifetime";
 import {
@@ -40,45 +37,21 @@ let waiting: Waiting | null = null;
 /// Il timer della scadenza, per poterlo disdire quando il tasto arriva.
 let deadline: ReturnType<typeof setTimeout> | undefined;
 
-/// I tre accordi che l'editor monta anche lui, e che dentro l'editor vince
-/// l'editor (0156). È la stessa lista di `SCONTRI_NOTI` in
-/// `keybindings.test.ts`: là è un lucchetto sugli elenchi dichiarati — i due
-/// registri continuano a dichiararli entrambi — qui è la regola che a runtime
-/// decide chi li tiene, e lo decide il fuoco.
-const PASSED_TO_EDITOR: ReadonlySet<string> = new Set([
-  "shell.doc.search",
-  "shell.pane.split.down",
-  "shell.mode.live",
-]);
-
-/// L'evento è nato dentro l'editor? Il fuoco si osserva qui, dove il DOM c'è, e
-/// non in `avanza`, che resta pura e non riceve il bersaglio.
-function inEditor(target: EventTarget | null): boolean {
-  return target instanceof Element && target.closest(".cm-editor") !== null;
-}
 
 /// Monta l'ascoltatore. `execute` è cosa fare del comando trovato — l'avvio vero
 /// sta in `main.ts`, che è l'unico a sapere dove chiedere i parametri.
 export function mountKeyboard(lifetime: Lifetime, execute: (entry: CommandEntry) => void): void {
   lifetime.listen(document, "keydown", (e) => {
+    if (e.defaultPrevented) {
+      stopWaiting();
+      return;
+    }
     const result = advance(allCommands(), waiting, e);
     // L'unico esito che lascia passare il tasto. Gli altri tre sono gesti
     // dell'app, e un gesto dell'app non finisce anche dentro la nota.
     if (result.type === "passa") return;
-    // I tre accordi che l'editor monta anche lui: quando il tasto nasce
-    // dentro l'editor e non c'è una sequenza in corso, l'editor lo ha già
-    // preso in bubbling e la shell si ritira. La sequenza continua sempre
-    // (0090), e ogni altro comando della shell resta attivo anche con
-    // l'editor a fuoco: il fuoco decide solo i tre che nessuno ha
-    // dichiarato insieme.
-    if (
-      result.type === "esegue" &&
-      waiting === null &&
-      inEditor(e.target) &&
-      PASSED_TO_EDITOR.has(result.entry.id)
-    ) {
-      return;
-    }
+    // Popup e editor locali sono già passati: da qui decide l'ordine dei layer
+    // nel registro, e ogni esito diverso da `passa` appartiene alla shell.
     e.preventDefault();
     if (result.type === "attende") {
       waitFor(result.waiting);

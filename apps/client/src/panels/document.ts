@@ -26,6 +26,7 @@ import {
 import type {
   DocumentSurfaceRegistry,
   EditorSurface,
+  SurfaceMode,
 } from "../editors/core/registry";
 import { Queue } from "../ui/race";
 import type { Theme } from "../theme/theme";
@@ -70,7 +71,7 @@ import {
 } from "../state/layout";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
-import { registerShellCommand } from "../ui/commands";
+import { allCommands, registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
 import { clearPreview, sourceBlockAt, updatePreview } from "./preview";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
@@ -153,9 +154,10 @@ export function mountDocument(d: DocumentDeps): void {
   sessionEventsStop?.();
   sessionEventsStop = documentSessions.subscribe(handleSessionEvent);
 
-  for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
-    b.addEventListener("click", () => void setMode(b.dataset.mode as PaneMode));
-  }
+  $("#mode-switch").addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button[data-mode]") : null;
+    if (button?.dataset.mode) void setMode(button.dataset.mode);
+  });
 
   // Il layout è cambiato — qualcuno ha diviso, chiuso, cambiato linguetta — e il DOM
   // lo insegue. Il verso passa dal bus e non da una chiamata perché chi muta il
@@ -201,10 +203,12 @@ export function mountDocument(d: DocumentDeps): void {
     for (const id of openDocuments()) void reloadDocument(id);
   });
 
-  // Il testo dello stato di salvataggio non passa da `applicaStringhe` — non ha
-  // un `data-i18n`, perché lo scrive chi conosce lo stato — quindi si rifà da sé
-  // al cambio di lingua, come fanno i due pulsanti della barra.
-  onLanguage(drawSave);
+  // Lo stato di salvataggio e le etichette delle modalità sono disegnati da
+  // questo modulo, quindi seguono esplicitamente il cambio di lingua.
+  onLanguage(() => {
+    drawSave();
+    updateToggle();
+  });
 
   registerCommands();
 }
@@ -249,36 +253,44 @@ function registerCommands(): void {
     id: "shell.mode.reading",
     title: "commands.mode.reading",
     description: "commands.mode.reading.desc",
+    layer: "surface",
+    available: () => supportsMode("reading"),
     run: () => void setMode("reading"),
   });
   registerShellCommand({
     id: "shell.mode.live",
     title: "commands.mode.live",
     description: "commands.mode.live.desc",
+    layer: "profile",
+    available: () => supportsMode("live_preview"),
     run: () => void setMode("live_preview"),
   });
   registerShellCommand({
     id: "shell.pane.split.right",
     title: "commands.pane.split.right",
     description: "commands.pane.split.right.desc",
+    layer: "pane",
     run: () => splitPane("row"),
   });
   registerShellCommand({
     id: "shell.pane.split.down",
     title: "commands.pane.split.down",
     description: "commands.pane.split.down.desc",
+    layer: "pane",
     run: () => splitPane("col"),
   });
   registerShellCommand({
     id: "shell.pane.close",
     title: "commands.pane.close",
     description: "commands.pane.close.desc",
+    layer: "pane",
     run: () => void closeCurrentPane(),
   });
   registerShellCommand({
     id: "shell.tab.close",
     title: "commands.tab.close",
     description: "commands.tab.close.desc",
+    layer: "document",
     run: () => void closeCurrentTab(),
   });
   // Le due vie d'uscita da un conflitto (§18.1), e sono comandi e non un
@@ -290,12 +302,14 @@ function registerCommands(): void {
     id: "shell.doc.conflict.mine",
     title: "commands.doc.conflict.mine",
     description: "commands.doc.conflict.mine.desc",
+    layer: "document",
     run: () => void resolveKeepingMine(),
   });
   registerShellCommand({
     id: "shell.doc.conflict.theirs",
     title: "commands.doc.conflict.theirs",
     description: "commands.doc.conflict.theirs.desc",
+    layer: "document",
     run: () => void resolveDiscardingMine(),
   });
 }
@@ -434,6 +448,7 @@ async function render(): Promise<void> {
     r.root.dataset.mode = p.mode;
     r.root.classList.toggle("focus", id === layout.focus);
     await show(r, activeTab(id));
+    r.root.dataset.mode = selectedMode(r)?.id ?? p.mode;
   }
   updateToggle();
   drawSave();
@@ -703,17 +718,21 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     { paneId: r.id, documentId: tab.doc, parent: r.editorEl },
   );
   r.surface = surface;
-  if (theme) surface.setTheme?.(theme);
-  if (isMarkdownSurface(surface)) {
-    surface.setSyntaxForms(forms);
-    surface.setLivePreview(paneState(r.id)?.mode === "live_preview");
+  const mode = selectedMode(r);
+  if (!mode) {
+    destroySurface(r);
+    throw new Error(`surface ${surface.surfaceId} declares no modes`);
   }
+  surface.setMode(mode.id);
+  r.root.dataset.mode = mode.id;
+  if (theme) surface.setTheme?.(theme);
+  if (isMarkdownSurface(surface)) surface.setSyntaxForms(forms);
   surface.setDoc(source.text);
   surface.setReadOnly?.(documentSessions.isDeletionPending(tab.doc));
   // Il contenuto è a posto: da qui la sessione può raggiungere questo
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
-  await redrawReading(tab.doc);
+  if (mode.presentation === "rendered") await updatePreview(r.previewEl, tab.doc);
 }
 
 /// La sottoscrizione di un riquadro alla sessione del documento mostrato.
@@ -759,36 +778,78 @@ function applySurfaceUpdate(r: Pane, doc: string, update: DocumentSurfaceUpdate)
 /// È qui che la regola del buffer unico si vede: aprire in un secondo riquadro
 /// una nota con modifiche non salvate mostra **quelle modifiche**, non il file
 /// su disco. L'alternativa — rileggere sempre dal disco — darebbe due riquadri
-/// che mostrano due testi diversi dello stesso documento, che è esattamente ciò
-/// che questa decisione esiste per non avere.
+/// che mostrano due testi diversi dello stesso documento.
 async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
   return documentSessions.readForSurface(doc);
 }
 
-/// Ridisegna la superficie di lettura di ogni riquadro che mostra questo
-/// documento **ed è in Lettura**.
+/// Ridisegna ogni presentazione resa che mostra questo documento.
 async function redrawReading(doc: string): Promise<void> {
   await Promise.all(
     panesWithDoc(doc).map(async (id) => {
       const r = panes.get(id);
-      if (!r || paneState(id)?.mode !== "reading" || activeDoc(id) !== doc) return;
+      if (
+        !r ||
+        selectedMode(r)?.presentation !== "rendered" ||
+        activeDoc(id) !== doc
+      ) return;
       await updatePreview(r.previewEl, doc);
     }),
   );
 }
 
-/// Il commutatore in testata riflette il riquadro col **fuoco**: è di lui che si
-/// sta parlando, ed è di lui che si cambia la modalità.
+/// Il modo effettivo è quello persistito quando la superficie lo dichiara,
+/// altrimenti il primo che essa supporta. Il fallback non riscrive il layout:
+/// tornando alla superficie precedente, il riquadro ritrova la sua modalità.
+function selectedMode(r: Pane | undefined): SurfaceMode | undefined {
+  if (!r?.surface) return undefined;
+  const requested = paneState(r.id)?.mode;
+  return r.surface.modes.find((mode) => mode.id === requested) ?? r.surface.modes[0];
+}
+
+function supportsMode(id: string): boolean {
+  return panes.get(layout.focus)?.surface?.modes.some((mode) => mode.id === id) ?? false;
+}
+
+/// Il commutatore deriva interamente dalla superficie del riquadro col fuoco.
 function updateToggle(): void {
-  const mode = activePane().mode;
-  for (const b of document.querySelectorAll<HTMLElement>("#mode-switch button")) {
-    const choice = b.dataset.mode === mode;
-    // Quale modalità è accesa lo diceva solo lo sfondo. `aria-pressed` lo dice
-    // a chi non lo vede — ed è l'informazione che serve *prima* di premere, non
-    // dopo: senza, i tre pulsanti sono tre comandi indistinguibili. Da quando
-    // la pelle lo legge, è anche l'unico posto in cui la scelta sta scritta.
-    b.setAttribute("aria-pressed", String(choice));
+  const switcher = $("#mode-switch");
+  const r = panes.get(layout.focus);
+  const active = selectedMode(r);
+  if (!r?.surface || !active) {
+    switcher.replaceChildren();
+    switcher.hidden = true;
+    return;
   }
+  const commandIds: Readonly<Record<string, string>> = {
+    live_preview: "shell.mode.live",
+    reading: "shell.mode.reading",
+  };
+  const commands = allCommands();
+  const children: HTMLElement[] = [];
+  for (const mode of r.surface.modes) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "segmented-option";
+    button.dataset.mode = mode.id;
+    button.textContent = mode.label();
+    button.setAttribute("aria-pressed", String(mode.id === active.id));
+    children.push(button);
+
+    const commandId = commandIds[mode.id];
+    const binding = commandId
+      ? commands.find((entry) => entry.id === commandId)?.binding ?? null
+      : null;
+    if (binding) {
+      const key = document.createElement("kbd");
+      key.className = "titlebar-shortcut";
+      key.ariaHidden = "true";
+      key.textContent = binding;
+      children.push(key);
+    }
+  }
+  switcher.replaceChildren(...children);
+  switcher.hidden = false;
 }
 
 /// **Ritrova ciò che era rimasto non salvato** (§15.2), all'apertura del vault.
@@ -1060,11 +1121,17 @@ function paneContext(): ViewContext {
   const p = activePane();
   const doc = activeDoc();
   const r = panes.get(layout.focus);
+  const mode = selectedMode(r);
+  const contextMode: PaneMode =
+    mode?.contextMode ??
+    (p.mode === "source" || p.mode === "live_preview" || p.mode === "reading"
+      ? p.mode
+      : "source");
   const sel = r?.surface?.selections?.();
-  const inEditing = doc !== null && p.mode !== "reading" && sel !== undefined;
+  const inEditing = doc !== null && mode?.presentation !== "rendered" && sel !== undefined;
   const dirty = doc ? documentSessions.isDirty(doc) : false;
   if (!inEditing || !sel) {
-    return { pane: layout.focus, doc, selections: null, mode: p.mode };
+    return { pane: layout.focus, doc, selections: null, mode: contextMode };
   }
   // Il buffer è UNO, e il suo stato decide per tutte le selezioni insieme: è
   // la ragione per cui il caso si sceglie qui, una volta, e non dentro ogni
@@ -1089,7 +1156,7 @@ function paneContext(): ViewContext {
           })),
         },
       };
-  return { pane: layout.focus, doc, selections, mode: p.mode };
+  return { pane: layout.focus, doc, selections, mode: contextMode };
 }
 
 /// Pubblica il contesto e annuncia **quali** view il kernel ha dichiarato
@@ -1123,24 +1190,23 @@ function scheduleContext(): void {
 /// Che sia **del riquadro** e non della finestra è la parte nuova, ed è ciò che
 /// rende utile la divisione: la nota di lato in Lettura mentre si scrive è la
 /// disposizione per cui si divide, e con una modalità globale non esisterebbe.
-export async function setMode(next: PaneMode): Promise<void> {
-  const doc = activeDoc();
-  // Il documento reso lo produce il kernel dal **sorgente salvato**: entrare in
-  // lettura con del testo appeso al debounce mostrerebbe la nota di un minuto
-  // fa. Si salva prima, e la lettura è sempre di ciò che si è scritto.
-  if (next === "reading" && doc) await documentSessions.flush(doc);
-  setPaneMode(layout.focus, next);
+export async function setMode(next: string): Promise<void> {
   const r = panes.get(layout.focus);
-  if (r) {
-    if (isMarkdownSurface(r.surface)) {
-      r.surface.setLivePreview(next === "live_preview");
-    }
-    if (next === "reading") {
-      if (doc) await updatePreview(r.previewEl, doc);
-    } else {
-      r.surface?.focus?.();
-    }
+  const mode = r?.surface?.modes.find((candidate) => candidate.id === next);
+  if (!r?.surface || !mode) return;
+  const doc = activeDoc();
+  // Una presentazione resa nasce dal sorgente salvato: prima si svuota il
+  // debounce, qualunque nome le abbia dato la superficie.
+  if (mode.presentation === "rendered" && doc) await documentSessions.flush(doc);
+  setPaneMode(layout.focus, mode.id);
+  r.root.dataset.mode = mode.id;
+  r.surface.setMode(mode.id);
+  if (mode.presentation === "rendered") {
+    if (doc) await updatePreview(r.previewEl, doc);
+  } else {
+    r.surface.focus?.();
   }
+  updateToggle();
   await publishContext();
 }
 
@@ -1148,11 +1214,10 @@ export async function setMode(next: PaneMode): Promise<void> {
 export function revealByteOffset(byteOffset: number): void {
   const pane = panes.get(layout.focus);
   if (!pane) return;
-  if (activePane().mode !== "reading") {
+  if (selectedMode(pane)?.presentation !== "rendered") {
     pane.surface?.revealByteOffset?.(byteOffset);
     return;
   }
-
   sourceBlockAt(pane.previewEl, byteOffset)?.scrollIntoView({ block: "start" });
 }
 

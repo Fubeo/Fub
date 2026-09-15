@@ -1,5 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import type { SourceKind } from "../../host/enums.generated";
+import type { PaneMode } from "../../host/contract";
 import type {
   DocumentUpdate,
   EditorChange,
@@ -19,6 +20,14 @@ export interface SurfaceRequest {
   readonly override?: SurfaceOverride;
 }
 
+export interface SurfaceMode {
+  readonly id: string;
+  readonly label: () => string;
+  readonly presentation: "surface" | "rendered";
+  /** Projection onto the frozen host context until the public surface ABI exists. */
+  readonly contextMode: PaneMode;
+}
+
 export interface SurfaceMountContext {
   readonly paneId: string;
   readonly documentId: string;
@@ -30,6 +39,8 @@ export interface EditorSurface {
   readonly family: SurfaceFamily;
   readonly profile: string;
   readonly surfaceId: string;
+  readonly modes: readonly SurfaceMode[];
+  setMode(mode: string): void;
   setDoc(text: string): void;
   syncDoc(update: DocumentUpdate | string): void;
   getDoc(): string;
@@ -193,6 +204,19 @@ export class DocumentSurfaceRegistry {
       throw new Error(
         `surface factory ${resolved.owner} returned family ${surface.family}, expected ${resolved.family}`,
       );
+    }
+    const modeIds = new Set<string>();
+    for (const mode of surface.modes) {
+      const id = required("surface mode id", mode.id);
+      if (modeIds.has(id)) {
+        surface.destroy();
+        throw new Error(`surface ${surface.surfaceId} declares mode ${id} more than once`);
+      }
+      modeIds.add(id);
+    }
+    if (modeIds.size === 0) {
+      surface.destroy();
+      throw new Error(`surface ${surface.surfaceId} declares no modes`);
     }
     const mounted: MountedSurface = { registration, surface, active: true };
     this.#mounted.add(mounted);

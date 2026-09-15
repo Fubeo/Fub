@@ -80,6 +80,7 @@ export function mountGraph(): void {
     id: "shell.graph",
     title: "commands.graph",
     description: "commands.graph.desc",
+    layer: "global",
     run: () => openGraph(),
   });
 

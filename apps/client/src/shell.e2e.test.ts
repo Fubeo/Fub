@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Trentasette gesti, contati da fuori
+// # Trentanove gesti, contati da fuori
 //
-// I gesti sono **trentasette** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **trentanove** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -61,6 +61,8 @@ const box = vi.hoisted(() => ({
   /// la shell chiede al di là del confine (§1.3), e negli e2e è un `true`.
   confirm: true,
 }));
+
+let activeStop: (() => void) | null = null;
 
 // Il modulo mimato è **uno solo per tutto il file**, e delega all'host di
 // adesso a ogni chiamata. Non è un vezzo: `vi.resetModules()` svuota il
@@ -142,7 +144,15 @@ async function mount(
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
   mountShell();
   const main = await import("./main");
-  return { host, startup: main.startup, unlock };
+  const startup = main.startup.then((stop) => {
+    const tracked = () => {
+      stop();
+      if (activeStop === tracked) activeStop = null;
+    };
+    activeStop = tracked;
+    return tracked;
+  });
+  return { host, startup, unlock };
 }
 
 /// Monta la shell su un vault finto e **aspetta che l'avvio sia finito**.
@@ -269,6 +279,8 @@ function editorTexts(): string[] {
 }
 
 beforeEach(() => {
+  activeStop?.();
+  activeStop = null;
   document.body.innerHTML = "";
   localStorage.clear();
 });
@@ -369,6 +381,48 @@ describe("apri un vault", () => {
       "Riunione",
       "Spesa",
     ]);
+  });
+
+  it("il commutatore e le scorciatoie seguono la superficie attiva", async () => {
+    const mounted = await mount({
+      "Markdown.md": "# Titolo\n",
+      "Plain.txt": "solo testo\n",
+    });
+    const stop = await mounted.startup;
+    await settle();
+    const modes = () =>
+      [...document.querySelectorAll<HTMLElement>("#mode-switch button")].map(
+        (button) => button.dataset.mode,
+      );
+
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
+    // `start` rimonta i moduli dopo i mock: serve l'esemplare vivo del pannello,
+    // non un import statico catturato prima di `vi.resetModules`.
+    const { openDocument } = await import("./panels/document");
+    await openDocument("Plain.txt");
+    await settle();
+    expect(modes()).toEqual(["source"]);
+    expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "l",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await settle();
+    expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
+    document.querySelector<HTMLElement>(".tab")?.click();
+    await settle();
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
+    expect(
+      document.querySelector<HTMLElement>("#mode-switch button[aria-pressed='true']")
+        ?.dataset.mode,
+    ).toBe("live_preview");
+    stop();
   });
 });
 

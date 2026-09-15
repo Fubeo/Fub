@@ -247,12 +247,14 @@ async function init(): Promise<Teardown> {
     id: "shell.vault.open",
     title: "commands.vault.open",
     description: "commands.vault.open.desc",
+    layer: "global",
     run: () => void pickVault(),
   });
   registerShellCommand({
     id: "shell.palette",
     title: "commands.palette",
     description: "commands.palette.desc",
+    layer: "global",
     run: () => void openCommandPalette(paletteHost),
   });
   mountSidebarCommands();
