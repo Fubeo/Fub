@@ -129,7 +129,7 @@ jobs:
         run: cargo test -p fub-kernel --test rooted_cas -- --nocapture
       - name: regressione unitaria della CAS cooperativa
         run: cargo test -p fub-kernel --lib storage::rooted::tests::cooperative_cas_has_exactly_one_winner -- --exact --nocapture
-      - run: cargo test --workspace
+      - run: cargo test --workspace --no-fail-fast
 
   docs:
     name: documentazione canonica

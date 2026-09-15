@@ -23,7 +23,7 @@ Dalla radice:
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace --no-fail-fast
 cargo deny check
 ```
 
@@ -59,7 +59,7 @@ I comandi seguenti costituiscono il nucleo che deve rimanere presente in CI.
 ```text
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace --no-fail-fast
 npm run typecheck
 npm test
 npm run build
