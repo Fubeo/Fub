@@ -40,9 +40,9 @@ frame e non sostituisce la review dei percentili.
 
 ## Evidenza corrente
 
-Lo SHA `4383a7c9d54b1e6557d070501e5ad998224ff294` ha tre distribuzioni
-confrontabili: locale, CI push e CI pull request. I due comandi hanno restituito
-`pass`, heap complete e resource delta
+Lo SHA applicativo `4383a7c9d54b1e6557d070501e5ad998224ff294` ha tre
+distribuzioni confrontabili: locale, CI push e CI pull request. I due comandi
+hanno restituito `pass`, heap complete e resource delta
 `0`; le misure complete sono nella
 [tabella delle distribuzioni](performance-budget.md#evidenza-delle-tre-distribuzioni).
 I workflow [CI #808](https://github.com/Fubeo/Fub/actions/runs/34958062374) e

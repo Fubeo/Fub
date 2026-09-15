@@ -1,7 +1,7 @@
 # Budget prestazionale della Graph View
 
 > **Ambito:** evidenza osservazionale e criteri provvisori per la Graph View.
-> **Snapshot:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
+> **Snapshot applicativo:** SHA `4383a7c9d54b1e6557d070501e5ad998224ff294`.
 
 Questa pagina documenta tre distribuzioni dello stesso codice (locale, CI push e
 CI PR). Le misure descrivono quelle esecuzioni e quella fixture deterministica;
