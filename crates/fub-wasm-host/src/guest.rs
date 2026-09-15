@@ -1,11 +1,12 @@
 //! **Le capacità, dal lato di chi le offre.**
 //!
 //! Ogni funzione di questo modulo è una host function: il componente la chiama,
-//! lei chiede la stessa cosa all'`HostApi` prestato e traduce la risposta. Non
-//! decide niente — chi può cosa lo ha già deciso il `Guard` del kernel, che è
-//! *dentro* l'`HostApi` che arriva qui (vedi il doc del crate). Una host
-//! function di questo file che leggesse i permessi sarebbe il secondo punto di
-//! enforcement che la 0021 esiste per non avere.
+//! lei inoltra la richiesta all'API prestata — `ReadApi` per le letture,
+//! `HostApi` per le scritture e le action — e traduce la risposta. Non decide
+//! niente: le capacità disponibili sono già quelle esposte dall'API ricevuta,
+//! e questo modulo non replica controlli di permesso. Una host function di
+//! questo file che leggesse i permessi sarebbe il secondo punto di enforcement
+//! che la 0021 esiste per non avere.
 //!
 //! # Si linka ciò che si implementa
 //!
@@ -23,11 +24,11 @@
 //! di cache) e `host-data-write` (scrive e cancella gli stessi blob — due
 //! interfacce e non una, perché il percorso di render rilegge ciò che il
 //! provider si è salvato e non deve poter scrivere mentre disegna), e
-//! `host-events` (pubblicare un evento, e sottoscrivere). Le prime due sono
-//! quelle che il ping del primo plugin nativo attraversa, cioè quelle su cui
-//! c'è una parità da provare; l'ultima è l'unica in cui il guest chiama l'host
-//! mentre l'host sta chiamando il guest, e per questo il suo `impl` sta in
-//! [`crate::events`] e non qui.
+//! `host-events` (emettere eventi, avviare job e riportare progresso). Le prime
+//! due sono quelle che il ping del primo plugin nativo attraversa, cioè quelle
+//! su cui c'è una parità da provare; l'ultima è l'unica in cui il guest chiama
+//! l'host mentre l'host sta chiamando il guest, e per questo il suo `impl` sta
+//! in [`crate::events`] e non qui.
 
 use fub_abi::model::DocId;
 use wasmtime::component::{HasSelf, Linker};
@@ -58,7 +59,16 @@ pub(crate) fn add_to_linker(linker: &mut Linker<State>) -> wasmtime::Result<()> 
 /// Vedi [`crate::borrow`]: è un guasto dell'host, non del componente.
 macro_rules! guest {
     ($self:expr) => {
-        match $self.guest() {
+        match $self.writer() {
+            Ok(h) => h,
+            Err(and) => return Err(tr::to_error(&and)),
+        }
+    };
+}
+
+macro_rules! reader {
+    ($self:expr) => {
+        match $self.reader() {
             Ok(h) => h,
             Err(and) => return Err(tr::to_error(&and)),
         }
@@ -76,13 +86,12 @@ impl host_env::Host for State {
     /// l'epoca, cioè un istante che nessuno scambia per adesso.
     /// l'epoca, cioè un istante che nessuno scambia per adesso.
     fn now_unix_millis(&mut self) -> u64 {
-        self.guest().map(|h| h.now_unix_millis()).unwrap_or(0)
+        self.reader().map(|h| h.now_unix_millis()).unwrap_or(0)
     }
 
-    /// Come sopra: il locale di ripiego è quello di default, che è la stessa
-    /// cosa che l'host risponde quando l'utente non ha scelto niente.
+    /// Come sopra: il locale di ripiego è quello di default.
     fn user_locale(&mut self) -> w_intl::Locale {
-        let locale = self.guest().map(|h| h.user_locale()).unwrap_or_default();
+        let locale = self.reader().map(|h| h.user_locale()).unwrap_or_default();
         tr::to_locale(&locale)
     }
 
@@ -90,12 +99,12 @@ impl host_env::Host for State {
         &mut self,
         n: u32,
     ) -> Result<Vec<u8>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.random_bytes(n).map_err(|and| tr::to_error(&and))
     }
 
     fn active_context(&mut self) -> Option<w_session::ViewContext> {
-        self.guest()
+        self.reader()
             .ok()
             .and_then(|h| h.active_context())
             .as_ref()
@@ -112,7 +121,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.read_document(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))
     }
@@ -121,7 +130,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<Vec<u8>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.read_document_bytes(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))
     }
@@ -130,7 +139,7 @@ impl host_vault_read::Host for State {
         &mut self,
         id: w_model::DocId,
     ) -> Result<String, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.document_revision(&DocId::new(id))
             .map(|r| r.0)
             .map_err(|and| tr::to_error(&and))
@@ -140,41 +149,24 @@ impl host_vault_read::Host for State {
         &mut self,
         page: Option<w_index::Page>,
     ) -> Result<w_index::DocIdsPage, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.list_documents(tr::from_page(page))
             .map(tr::to_doc_ids_page)
             .map_err(|and| tr::to_error(&and))
     }
 
     fn free_name(&mut self, id: w_model::DocId) -> w_model::DocId {
-        match self.guest() {
+        match self.reader() {
             Ok(h) => h.free_name(&DocId::new(id)).0,
-            // Senza host non c'è nessun vault in cui il nome sia libero: torna
-            // quello chiesto, che è ciò che `free_name` risponde quando è già
-            // libero.
             Err(_) => id,
         }
     }
 
-    /// **L'albero più grande del contratto, di là dal confine.**
-    ///
-    /// Fino al passo scorso rispondeva `unserved` col proprio perché: tradurre
-    /// `document-model` — blocchi, intestazioni, link, frontmatter — è un lavoro
-    /// suo, e un modello vuoto sarebbe stata una risposta *sbagliata* a una
-    /// domanda giusta. Quel lavoro adesso c'è, e sta in [`crate::model`]: qui
-    /// resta ciò che fanno tutte le altre di questa famiglia — chiedere all'host
-    /// prestato e tradurre la risposta.
-    ///
-    /// I due errori possibili sono due cose diverse e restano distinguibili: il
-    /// primo `?` porta il no del vault (permesso, documento assente, I/O), il
-    /// secondo il no della traduzione (un albero più profondo di quanto l'host
-    /// scenda). Entrambi arrivano al componente come **valore**, non come trap.
-    /// scenda). Entrambi arrivano al componente come **valore**, non come trap.
     fn read_model(
         &mut self,
         id: w_model::DocId,
     ) -> Result<w_model::DocumentModel, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         let model = h
             .read_model(&DocId::new(id))
             .map_err(|and| tr::to_error(&and))?;
@@ -182,7 +174,7 @@ impl host_vault_read::Host for State {
     }
 
     fn format_of(&mut self, id: w_model::DocId) -> Option<w_format::DocumentFormat> {
-        self.guest()
+        self.reader()
             .ok()
             .and_then(|h| h.format_of(&DocId::new(id)))
             .as_ref()
@@ -193,7 +185,7 @@ impl host_vault_read::Host for State {
         &mut self,
     ) -> Result<Vec<host_vault_read::TrashEntry>, crate::contract::fub::abi::errors::PluginError>
     {
-        let h = guest!(self);
+        let h = reader!(self);
         h.list_trash()
             .map(|v| v.into_iter().map(tr::to_trash).collect())
             .map_err(|and| tr::to_error(&and))
@@ -209,7 +201,7 @@ impl host_data_read::Host for State {
         &mut self,
         path: String,
     ) -> Result<Option<Vec<u8>>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.data_read(&path).map_err(|and| tr::to_error(&and))
     }
 
@@ -217,7 +209,7 @@ impl host_data_read::Host for State {
         &mut self,
         prefix: String,
     ) -> Result<Vec<String>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.data_list(&prefix).map_err(|and| tr::to_error(&and))
     }
 
@@ -225,7 +217,7 @@ impl host_data_read::Host for State {
         &mut self,
         path: String,
     ) -> Result<Option<Vec<u8>>, crate::contract::fub::abi::errors::PluginError> {
-        let h = guest!(self);
+        let h = reader!(self);
         h.cache_read(&path).map_err(|and| tr::to_error(&and))
     }
 }

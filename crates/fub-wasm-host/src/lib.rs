@@ -36,11 +36,16 @@ mod component;
 mod discovery;
 mod events;
 mod guest;
+pub mod installed;
 mod limits;
+pub mod managed;
 mod model;
 mod translate;
+mod ui;
 
-pub use component::{Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin};
+pub use component::{
+    Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin, WasmViewProvider,
+};
 pub use discovery::{discover, DiscoveredPlugin};
 
 /// I binding **lato host** di `plugin-world`, generati dal contratto.

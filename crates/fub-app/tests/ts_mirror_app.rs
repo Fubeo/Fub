@@ -17,11 +17,14 @@ use fub_abi::error::PluginError;
 use fub_abi::options::permission;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
-use fub_app_lib::{BundleInfo, EmbedContent, OpenVaults, UnreadDoc, VaultEntry, VaultInfo};
+use fub_app_lib::{
+    BundleInfo, EmbedContent, InstalledPluginInfo, OpenVaults, UnreadDoc, VaultEntry, VaultInfo,
+};
 use fub_host::registry::BundleKind;
 use fub_kernel::{
     PluginInfo, Registration, RegistrationKind, RenderedDocument, RenderedPart, Trust,
 };
+use fub_wasm_host::installed::Consent;
 use serde_json::{json, Value};
 
 fn to_value<T: serde::Serialize>(v: T) -> Value {
@@ -149,6 +152,21 @@ fn expected() -> Value {
                     .with(permission::NETWORK, json!(["api.acme.com"])),
             }),
         ],
+        "InstalledPluginInfo": [to_value(InstalledPluginInfo {
+            bundle: BundleInfo {
+                id: "com.acme.tasks".into(),
+                name: "Tasks".into(),
+                mounted: true,
+                kind: BundleKind::Component,
+                trust: Trust::Community,
+                permissions: PluginPermissions::of(&[permission::READ_VAULT]).granted,
+            },
+            installation: u64::MAX,
+            version: "2.1.0".into(),
+            enabled: true,
+            consent: Consent::Granted,
+            runtime_known: true,
+        })],
         // Il registro dei vault (§11.1): quello appuntato con la sua icona e un
         // recente nudo, perché i campi opzionali hanno due forme e il mirror
         // deve reggerle entrambe. Il primo porta anche una scorciatoia già

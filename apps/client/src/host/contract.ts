@@ -1503,6 +1503,23 @@ export interface BundleInfo {
   // lo accendessi» è una domanda che ci si pone prima di accenderlo.
   permissions: Record<string, unknown>;
 }
+// Un'installazione scelta su questa macchina. Estende il manifest che l'host
+// usa per le righe native, ma tiene separate le tre decisioni che non sono lo
+// stesso stato: preferenza persistita, consenso all'esecuzione e montaggio
+// effettivo nel vault corrente.
+export interface InstalledPluginInfo extends BundleInfo {
+  // Identità u64 dell'installazione, serializzata come stringa per non perdere
+  // bit nel passaggio JSON. È questa, non `id`, che autorizza le mutazioni.
+  installation: string;
+  version: string;
+  enabled: boolean;
+  // `true` solo quando il registro runtime conosce la voce posseduta da questa
+  // installazione nel vault selezionato. Consente alla UI di togliere il suo
+  // duplicato da `listBundles` senza filtrare un bundle ufficiale omonimo.
+  runtime_known: boolean;
+  consent: "undecided" | "denied" | "granted";
+}
+
 
 // Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,
 // §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`

@@ -49,12 +49,16 @@ fub-kernel = { workspace = true }
 # tradurla — ed è ciò che `features = [...]` qui sopra fa adesso.
 # `features = [...]` above does now.
 fub-host = { workspace = true, features = ["official-features"] }
+fub-wasm-host = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 camino = { workspace = true }
 tauri = { version = "2.11.5", features = [] }
 tracing = { workspace = true }
 tauri-plugin-dialog = "2.7.2"
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }

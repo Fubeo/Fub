@@ -42,6 +42,7 @@
 // che compone sono tipizzate dal contratto e non da sé.
 import type {
   BundleInfo,
+  InstalledPluginInfo,
   CommandSpec,
   DraftInfo,
   IndexQuery,
@@ -102,6 +103,13 @@ export interface Options {
   settings?: SettingEntry[];
   /// Le forme sintattiche effettive risposte dal montaggio finto.
   syntaxForms?: SyntaxForm[];
+  /// Bundle nativi/ufficiali che l'host conosce.
+  bundles?: BundleInfo[];
+  /// Inventario installato della macchina, compresi elementi spenti o senza
+  /// consenso: il fake non li ricava dai bundle runtime.
+  installedPlugins?: InstalledPluginInfo[];
+  /// File che il selettore può consegnare all'installazione nei test.
+  installablePlugins?: Record<string, InstalledPluginInfo>;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -163,6 +171,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const viewStates = new Map<string, unknown>();
   const calls: Call[] = [];
   const view = options.view ?? [];
+  const bundles = options.bundles ?? [];
+  const installedPlugins = new Map(
+    (options.installedPlugins ?? []).map((plugin) => [
+      plugin.installation,
+      copyInstalled(plugin),
+    ]),
+  );
+  const installablePlugins = options.installablePlugins ?? {};
   let listener: ((n: KernelNotice) => void) | null = null;
   let onClose: (() => Promise<void>) | null = null;
   let revision = 0;
@@ -201,6 +217,39 @@ export function createFakeHost(options: Options = {}): FakeHost {
     // di far cominciare la seconda.
     if (throttle && result instanceof Promise) return throttle.then(() => result) as T;
     return result;
+  }
+
+  /// Una mutazione del fake è pigra: un fault o un throttle agiscono prima
+  /// dell'effetto, come il backend che non persiste una scelta rifiutata.
+  function installedOperation<T>(
+    name: string,
+    args: unknown[],
+    effect: () => T,
+  ): Promise<T> {
+    calls.push({ gate: name, args });
+    const fault = faults.get(name);
+    if (fault !== undefined) return Promise.reject(new Error(fault));
+    const run = () => Promise.resolve().then(effect);
+    const throttle = throttles.get(name);
+    return throttle ? throttle.then(run) : run();
+  }
+
+  function installed(id: string): InstalledPluginInfo {
+    const plugin = installedPlugins.get(id);
+    if (plugin) return plugin;
+    throw {
+      kind: "not_found",
+      message: `l'installazione «${id}» non esiste`,
+    } satisfies PluginError;
+  }
+
+  function copyInstalled(plugin: InstalledPluginInfo): InstalledPluginInfo {
+    return { ...plugin, permissions: { ...plugin.permissions } };
+  }
+
+  function reconcile(plugin: InstalledPluginInfo): void {
+    plugin.mounted = plugin.enabled && plugin.consent === "granted";
+    if (plugin.mounted) plugin.runtime_known = true;
   }
 
   function emit(event: KernelEvent): boolean {
@@ -533,9 +582,73 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("setSetting", [key, value], Promise.resolve(writeSetting(key, value))),
       resetSetting: (key) =>
         gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
-      listBundles: () => gate("listBundles", [], Promise.resolve([] as BundleInfo[])),
+      listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
+      listInstalledPlugins: (vault) =>
+        gate(
+          "listInstalledPlugins",
+          [vault],
+          Promise.resolve(
+            [...installedPlugins.values()].map((plugin) => ({
+              ...copyInstalled(plugin),
+              mounted: vault === undefined ? false : plugin.mounted,
+              runtime_known: vault === undefined ? false : plugin.runtime_known,
+            })),
+          ),
+        ),
+      installPlugin: (path) =>
+        installedOperation("installPlugin", [path], () => {
+          const source = installablePlugins[path];
+          if (!source) {
+            throw {
+              kind: "bad_args",
+              message: `il file «${path}» non è installabile dal fake`,
+            } satisfies PluginError;
+          }
+          if ([...installedPlugins.values()].some((plugin) => plugin.id === source.id)) {
+            throw {
+              kind: "already_exists",
+              message: `«${source.id}» è già installato`,
+            } satisfies PluginError;
+          }
+          const plugin = copyInstalled({
+            ...source,
+            kind: "component",
+            mounted: false,
+            enabled: false,
+            consent: "undecided",
+            runtime_known: false,
+          });
+          installedPlugins.set(plugin.installation, plugin);
+          return copyInstalled(plugin);
+        }),
+      setInstalledPluginEnabled: (installation, enabled) =>
+        installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
+          const plugin = installed(installation);
+          plugin.enabled = enabled;
+          reconcile(plugin);
+          return [];
+        }),
+      setInstalledPluginConsent: (installation, consent) =>
+        installedOperation("setInstalledPluginConsent", [installation, consent], () => {
+          const plugin = installed(installation);
+          plugin.consent = consent;
+          reconcile(plugin);
+          return [];
+        }),
+      removeInstalledPlugin: (installation) =>
+        installedOperation("removeInstalledPlugin", [installation], () => {
+          const plugin = installed(installation);
+          if (plugin.enabled) {
+            throw {
+              kind: "bad_args",
+              message: "un componente abilitato non si può rimuovere",
+            } satisfies PluginError;
+          }
+          installedPlugins.delete(installation);
+          return [];
+        }),
       knownVaults: () => gate("knownVaults", [], Promise.resolve([])),
       setVaultFavorite: (path, favorite) =>
         gate("setVaultFavorite", [path, favorite], Promise.resolve()),
