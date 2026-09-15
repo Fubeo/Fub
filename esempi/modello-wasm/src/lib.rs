@@ -32,7 +32,7 @@ const ID: &str = "demo.modello";
 
 /// La versione del contratto contro cui è scritto: la confronta
 /// `abi_compatible` al primo passo del montaggio.
-const ABI: &str = "0.1.1";
+const ABI: &str = "0.1.2";
 
 /// Quanto in giù questo componente accetta di camminare l'arena che riceve.
 ///

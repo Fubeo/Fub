@@ -50,7 +50,8 @@
 
 mod registration;
 pub use registration::{
-    PreparedIndexRegistration, PreparedPluginDeactivation, PreparedRegistration, RegistrationPermit,
+    PreparedGridCall, PreparedIndexRegistration, PreparedPluginDeactivation, PreparedRegistration,
+    RegistrationPermit,
 };
 mod lifecycle;
 pub use lifecycle::{PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin};
@@ -74,6 +75,9 @@ use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::DocChanges;
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions, SourceKind};
+use fub_abi::grid::{
+    GridApplyRequest, GridCommit, GridProvider, GridSession, GridWindow, GridWindowRequest,
+};
 use fub_abi::locale::Locale;
 use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget, Span};
 use fub_abi::query::{Matches, QueryEvaluator, QueryPredicate};
@@ -123,7 +127,9 @@ use crate::occurrences;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::poison::{SharedShelter, Shelter};
-use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
+use crate::providers::{
+    ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredGrid, RegisteredView,
+};
 use crate::registry::FormatRegistry;
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
@@ -3560,12 +3566,13 @@ impl Workspace {
         }
 
         let mut prepared = self.prepare_plugin_teardown(plugin)?;
+        let mut errors = prepared.invoke_grids();
         self.take_plugin_teardown_indexes(&mut prepared)
             .map_err(RegistryError::Activate)?;
-        let errors = {
+        {
             let mut host = self.host_for(plugin, InvokeMode::Apply);
-            prepared.invoke_indexes(&mut host)
-        };
+            errors.extend(prepared.invoke_indexes(&mut host));
+        }
         let outcome = self
             .finish_plugin_teardown(prepared, errors)
             .map(RetiredPlugin::dispose)
@@ -3586,6 +3593,7 @@ impl Workspace {
         });
         retired.take("view", &mut self.providers.views, |v| v.id == plugin);
         retired.take("command", &mut self.providers.commands, |c| c.id == plugin);
+        retired.take("grid", &mut self.providers.grids, |grid| grid.id == plugin);
         retired.take("service", &mut self.providers.services, |(id, _)| {
             id == plugin
         });

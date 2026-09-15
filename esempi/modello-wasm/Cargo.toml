@@ -31,3 +31,5 @@ wit-bindgen = "0.60"
 [profile.release]
 strip = true
 opt-level = "s"
+
+[workspace]

@@ -32,3 +32,5 @@ wit-bindgen = "0.60"
 # porta dietro i simboli è un file grosso da leggere a ogni test.
 strip = true
 opt-level = "s"
+
+[workspace]

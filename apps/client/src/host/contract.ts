@@ -868,13 +868,63 @@ export interface DocumentSource {
   source_kind: SourceKind;
 }
 
-export interface SheetCellKey {
+export const GRID_PROTOCOL_VERSION = 1;
+
+export interface GridSurfaceSpec {
+  id: string;
+  format: string;
+  protocol_version: number;
+}
+
+export interface GridSession {
+  instance: string;
+  sheets: GridSheet[];
+}
+
+export interface GridSheet {
+  id: string;
+  name: string;
+  row_count: number;
+  column_count: number;
+}
+
+export interface GridRow {
+  id: string;
+  index: number;
+  height: number | null;
+  hidden: boolean;
+}
+
+export interface GridColumn {
+  id: string;
+  index: number;
+  width: number | null;
+  hidden: boolean;
+}
+
+export interface GridCellKey {
   sheet: string;
   row: string;
   column: string;
 }
 
-export type SheetFormulaError =
+export type GridHorizontalAlign = "start" | "center" | "end";
+
+export interface GridCellStyle {
+  bold: boolean;
+  italic: boolean;
+  text_color: string | null;
+  fill_color: string | null;
+  horizontal: GridHorizontalAlign | null;
+  number_format: string | null;
+}
+
+export interface GridCellSnapshot {
+  input: string;
+  style: GridCellStyle;
+}
+
+export type GridFormulaError =
   | "parse"
   | "ref"
   | "name"
@@ -883,25 +933,51 @@ export type SheetFormulaError =
   | "num"
   | "cycle";
 
-export type SheetCellValue =
+export type GridCellValue =
   | { kind: "blank" }
   | { kind: "number"; value: number }
   | { kind: "text"; value: string }
   | { kind: "boolean"; value: boolean }
-  | { kind: "error"; value: SheetFormulaError };
+  | { kind: "error"; value: GridFormulaError };
 
-export interface SheetEvaluatedCell extends SheetCellKey {
-  value: SheetCellValue;
+export interface GridCell {
+  key: GridCellKey;
+  snapshot: GridCellSnapshot;
+  value: GridCellValue;
 }
 
-export interface SheetCellDependency {
-  cell: SheetCellKey;
-  depends_on: SheetCellKey[];
+export interface GridWindowRequest {
+  sheet: string;
+  row_start: number;
+  row_count: number;
+  column_start: number;
+  column_count: number;
 }
 
-export interface SheetEvaluation {
-  cells: SheetEvaluatedCell[];
-  dependencies: SheetCellDependency[];
+export interface GridWindow {
+  sheet: string;
+  rows: GridRow[];
+  columns: GridColumn[];
+  cells: GridCell[];
+}
+
+export interface GridCellPatch {
+  cell: GridCellKey;
+  before: GridCellSnapshot | null;
+  after: GridCellSnapshot | null;
+}
+
+export interface GridApplyRequest {
+  patches: GridCellPatch[];
+}
+
+export type GridInvalidation =
+  | { kind: "cells"; cells: GridCellKey[] }
+  | { kind: "all" };
+
+export interface GridCommit {
+  edit: EditRequest;
+  invalidation: GridInvalidation;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).

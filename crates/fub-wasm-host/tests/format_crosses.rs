@@ -529,6 +529,13 @@ fn managed_view_format_reentry_is_rejected_and_view_recovers() {
 fn real_wasm_format_provider_serializes_document_model() {
     let wasm = common::component("format-wasm", "format_wasm", "");
     let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
+    assert!(
+        bundle
+            .grid_provider()
+            .expect("optional grid discovery")
+            .is_none(),
+        "un componente senza grid resta caricabile"
+    );
     let provider = bundle
         .format_provider()
         .expect("il provider si prepara")

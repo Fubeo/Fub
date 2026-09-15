@@ -962,6 +962,16 @@ fn additions_at_the_end_pass() {
                 imports.insert("settings".into());
             }),
         ),
+        (
+            "un export di capability opzionale in più nel world",
+            Box::new(|c: &mut Contract| {
+                let (_, exports) = c
+                    .worlds
+                    .get_mut("plugin-world")
+                    .expect("plugin-world esiste");
+                exports.insert("grid-v2".into());
+            }),
+        ),
     ];
 
     for (name, apply_change) in additions {

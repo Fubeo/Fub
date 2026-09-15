@@ -360,9 +360,9 @@ pub(crate) fn compose(
 /// dal chiamante. Sta qui perché `compose` può chiamare il provider più volte.
 ///
 /// `FormatParse` nomina per ora la famiglia `FormatProvider`, non soltanto il
-/// verbo `parse`: ABI 0.1.1 non può ricevere un nuovo discriminante WIT senza
-/// una release minor. Il giorno in cui quella release introdurrà una porta di
-/// render dedicata, questo è il solo boundary da aggiornare.
+/// verbo `parse`: ABI 0.1.2 non può ricevere un nuovo discriminante WIT senza
+/// una futura release minor. Il giorno in cui quella release introdurrà una
+/// porta di render dedicata, questo è il solo boundary da aggiornare.
 fn render_format(
     provider_id: &str,
     provider: &dyn FormatProvider,

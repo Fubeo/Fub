@@ -35,6 +35,7 @@ use crate::settings::{
 };
 
 const MARKDOWN_ID: &str = "fub.markdown";
+const SHEET_ID: &str = "fub.sheet";
 const COMMANDS_SERVICE: &str = "fub.commands";
 const TRASH_ID: &str = "fub.trash";
 
@@ -244,6 +245,7 @@ pub(crate) fn mount_with_formats(
             "Markdown",
             register_markdown_transfer,
         )),
+        Arc::new(CoreBundle::new(SHEET_ID, "Fub Sheet", register_sheet_grid)),
         Arc::new(crate::theme::ThemeBundle::series()),
     ];
 
@@ -330,8 +332,13 @@ pub(crate) fn mount_with_formats(
         crate::settings::apply_log_levels(ws, levels);
 
         // Questi provider sono infrastruttura sempre disponibile: in particolare i
-        // comandi di manutenzione non possono sparire proprio nel vault da riparare.
-        for id in [fub_kernel::maintenance::MAINTENANCE_ID, MARKDOWN_ID] {
+        // comandi di manutenzione e la superficie del formato di serie non possono
+        // sparire proprio nel vault che li usa.
+        for id in [
+            fub_kernel::maintenance::MAINTENANCE_ID,
+            MARKDOWN_ID,
+            SHEET_ID,
+        ] {
             registry
                 .enable(ws, id)
                 .map_err(|error| format!("mandatory bundle `{id}` won't mount: {error}"))?;
@@ -484,6 +491,13 @@ fn register_view(
     match registrar.register_view_provider(provider) {
         Ok(()) => Vec::new(),
         Err(error) => vec![format!("view not registered: {error}")],
+    }
+}
+
+fn register_sheet_grid(registrar: &mut Registrar<'_>) -> Vec<String> {
+    match registrar.register_grid_provider(Box::new(crate::sheet::SheetGridProvider::new())) {
+        Ok(()) => Vec::new(),
+        Err(error) => vec![format!("sheet grid not registered: {error}")],
     }
 }
 

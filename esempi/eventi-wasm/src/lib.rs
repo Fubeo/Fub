@@ -42,7 +42,7 @@ const ID: &str = "demo.eventi";
 
 /// La versione del contratto contro cui è scritto: la confronta
 /// `abi_compatible` al primo passo del montaggio.
-const ABI: &str = "0.1.1";
+const ABI: &str = "0.1.2";
 
 struct Componente;
 

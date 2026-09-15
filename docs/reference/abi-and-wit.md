@@ -17,7 +17,7 @@
 Il package WIT corrente è:
 
 ```wit
-package fub:abi@0.1.1;
+package fub:abi@0.1.2;
 ```
 
 ## Superficie Rust
@@ -33,6 +33,7 @@ package fub:abi@0.1.1;
 - sessione;
 - impostazioni, locale e tema;
 - servizi host;
+- superfici grid strutturate a finestre;
 - errori, regole e schema;
 - capability e manifest.
 
@@ -112,6 +113,13 @@ L'host accetta:
 - stessa major;
 - minor del plugin non superiore a quella dell'host.
 
+`plugin-world` è un inventario e un superset delle famiglie di capacità
+opzionali che un componente può esportare. A runtime è obbligatorio soltanto
+l'export `plugin`; gli export `format`, `view` e `grid` sono scoperti
+dinamicamente e un componente può ometterli. Perciò l'aggiunta di una nuova
+interfaccia esportata è additiva per i componenti esistenti: i loro export
+immutati continuano a essere caricati.
+
 Gli snapshot congelati rendono meccanica l'additività. Sono incompatibili:
 
 - rimozione o rinomina;
@@ -119,15 +127,15 @@ Gli snapshot congelati rendono meccanica l'additività. Sono incompatibili:
 - cambio d'ordine di campi o casi pubblicati;
 - inserimento nel mezzo di una forma congelata;
 - spostamento fra interfacce;
-- modifica della firma.
+- modifica della firma;
+- aggiunta di funzioni a un'interfaccia provider già esportata.
 
 Sono compatibili, quando aggiunte in coda o in una nuova superficie:
 
 - nuovo record o alias;
 - nuovo caso;
 - nuovo campo;
-- nuova funzione;
-- nuova interfaccia.
+- nuova interfaccia o nuovo export di provider.
 
 La patch non cambia la superficie.
 

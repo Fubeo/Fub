@@ -53,3 +53,5 @@ wit-bindgen = "0.60"
 # come lo vede l'host, cioè come un trap.
 strip = true
 opt-level = "s"
+
+[workspace]

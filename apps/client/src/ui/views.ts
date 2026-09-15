@@ -150,6 +150,7 @@ export function unmountViewFromPane(view: string, pane: string): void {
   const id = panePanel(view, pane);
   const mountedView = mounted.get(id);
   if (!mountedView) return;
+  mountedView.race.cancel();
   unregisterPanel(id);
   unmountTree(mountedView.container);
   mounted.delete(id);

@@ -144,6 +144,13 @@ impl Registrar<'_> {
         self.publish(PreparedRegistration::views(provider).map_err(RegistryError::External)?)
     }
 
+    pub fn register_grid_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::grid::GridProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::grid(provider).map_err(RegistryError::External)?)
+    }
+
     pub fn register_event_handler(
         &mut self,
         provider: Box<dyn fub_abi::traits::EventHandler>,
@@ -1366,17 +1373,51 @@ impl BundleRegistry {
         error.into_iter().collect()
     }
 
-    pub fn unmount(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
-        let mut errors = self.stop(ws, id);
-        match ws.deactivate_plugin(id) {
-            Ok(provider_errors) => errors.extend(provider_errors),
-            Err(error) => errors.push(PluginError::Internal(error.to_string().into())),
+    fn unmount_direct(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
+        let mut prepared = match ws.prepare_plugin_teardown(id) {
+            Ok(prepared) => prepared,
+            Err(error) => return vec![PluginError::Internal(error.to_string().into())],
+        };
+        let mut errors = prepared.invoke_grids();
+        let mut body = self.prepare_stop(id);
+        if let Some(body) = body.as_mut() {
+            errors.extend(ws.with_host(id, |host| body.invoke(host)));
         }
-        errors
+        drop(body);
+        errors.extend(ws.finish_plugin_body_deactivation(&mut prepared).err());
+        match ws.take_plugin_teardown_indexes(&mut prepared) {
+            Ok(()) => errors.extend(ws.with_host(id, |host| prepared.invoke_indexes(host))),
+            Err(error) => errors.push(error),
+        }
+        match ws.finish_plugin_teardown(prepared, errors) {
+            Ok(retired) => retired.dispose(),
+            Err((_, error)) => vec![error],
+        }
+    }
+
+    pub fn unmount(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
+        self.unmount_direct(ws, id)
     }
 
     pub fn close(&mut self, ws: &mut Workspace) -> Vec<PluginError> {
-        ws.close_with(|ws, id| self.stop(ws, id))
+        let Some(prepared) = ws.prepare_close() else {
+            return Vec::new();
+        };
+        let mut errors = ws.flush_indexes();
+        let plugins = match ws.closing_plugins(&prepared) {
+            Ok(plugins) => plugins,
+            Err(error) => {
+                errors.push(error);
+                Vec::new()
+            }
+        };
+        for id in plugins {
+            errors.extend(self.unmount_direct(ws, &id));
+        }
+        if let Err((_, error)) = ws.finish_detached_close(prepared) {
+            errors.push(error);
+        }
+        errors
     }
 }
 
@@ -1436,8 +1477,9 @@ fn retire_guarded(workspace: &Custody<Workspace>, permit: &RegistrationPermit) -
         Ok(prepared) => prepared,
         Err(error) => return vec![PluginError::Internal(error.to_string().into())],
     };
+    let mut errors = prepared.close_grids();
     let mut host = JobHost::new(workspace.clone(), prepared.owner());
-    let mut errors = prepared.close_indexes(&mut host);
+    errors.extend(prepared.close_indexes(&mut host));
     let finalized =
         crate::jobs::with_event_drain(workspace, |ws| ws.finish_plugin_deactivation(&mut prepared));
     match finalized {

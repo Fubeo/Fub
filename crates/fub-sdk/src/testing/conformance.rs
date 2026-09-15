@@ -39,8 +39,13 @@
 
 use std::collections::BTreeSet;
 
+use fub_abi::edit::Revision;
 use fub_abi::error::FormatError;
 use fub_abi::format::{DocumentSource, ParseContext, SourceKind};
+use fub_abi::grid::{
+    GridApplyRequest, GridCellKey, GridCellPatch, GridInvalidation, GridProvider,
+    GridWindowRequest, GRID_PROTOCOL_VERSION,
+};
 use fub_abi::model::{
     canonical_anchor, heading_slugs, Block, DocId, DocumentModel, Heading, Inline, Link,
     LinkTarget, Span, Tag,
@@ -1247,4 +1252,148 @@ fn model(id: &str, text: &str) -> DocumentModel {
     let mut m = DocumentModel::empty(DocId::new(id));
     m.text = text.to_string();
     m
+}
+
+/// Caso minimo consumato dalla suite condivisa del lifecycle grid.
+pub struct GridLifecycleFixture<'a> {
+    pub surface: &'a str,
+    /// Sorgente autorevole passata a `open` e a `reload`.
+    pub source: &'a str,
+    /// Input iniziale della cella nella proiezione della sorgente.
+    pub input: &'a str,
+    pub replacement: &'a str,
+    pub cell: GridCellKey,
+    pub serialized_matches: fn(&str) -> bool,
+}
+
+/// Verifica lo stesso lifecycle osservabile per provider nativi e WASM:
+/// dichiarazione stabile, apertura, finestra, commit guardato, reload, close e
+/// shutdown.
+pub fn a_grid_supports_the_lifecycle(
+    provider: &mut dyn GridProvider,
+    fixture: GridLifecycleFixture<'_>,
+) {
+    let first = provider.surfaces();
+    assert_eq!(first, provider.surfaces(), "grid surfaces must be stable");
+    let surface = first
+        .iter()
+        .find(|surface| surface.id == fixture.surface)
+        .expect("fixture surface must be declared");
+    assert_eq!(
+        surface.protocol_version, GRID_PROTOCOL_VERSION,
+        "fixture surface must use the current protocol"
+    );
+
+    let session = provider
+        .open(
+            fixture.surface,
+            fixture.source,
+            Revision::of(fixture.source),
+        )
+        .expect("grid opens");
+    let request = GridWindowRequest {
+        sheet: fixture.cell.sheet.clone(),
+        row_start: 0,
+        row_count: 1,
+        column_start: 0,
+        column_count: 1,
+    };
+    let window = provider
+        .window(&session.instance, request.clone())
+        .expect("first window");
+    let before = window
+        .cells
+        .iter()
+        .find(|cell| cell.key == fixture.cell)
+        .expect("fixture cell is visible")
+        .snapshot
+        .clone();
+    assert_eq!(before.input, fixture.input);
+    let mut after = before.clone();
+    after.input = fixture.replacement.to_string();
+    let commit = provider
+        .apply(
+            &session.instance,
+            GridApplyRequest {
+                patches: vec![GridCellPatch {
+                    cell: fixture.cell.clone(),
+                    before: Some(before),
+                    after: Some(after),
+                }],
+            },
+        )
+        .expect("guarded grid commit");
+    let (edited, _) = commit
+        .edit
+        .apply_to(fixture.source)
+        .expect("provider edit applies to the opened source");
+    assert!(
+        (fixture.serialized_matches)(&edited),
+        "provider edit must serialize the committed cell"
+    );
+    if let GridInvalidation::Cells(cells) = &commit.invalidation {
+        assert!(
+            cells.contains(&fixture.cell),
+            "commit must invalidate its changed cell"
+        );
+    }
+    let changed = provider
+        .window(&session.instance, request.clone())
+        .expect("window after commit");
+    assert_eq!(
+        changed
+            .cells
+            .iter()
+            .find(|cell| cell.key == fixture.cell)
+            .expect("changed fixture cell is visible")
+            .snapshot
+            .input,
+        fixture.replacement
+    );
+
+    provider
+        .reload(
+            &session.instance,
+            fixture.source,
+            Revision::of(fixture.source),
+        )
+        .expect("grid reloads");
+    provider.close(&session.instance).expect("grid closes");
+    assert!(
+        provider.window(&session.instance, request).is_err(),
+        "closed grid instance must not remain callable"
+    );
+
+    let one = provider
+        .open(
+            fixture.surface,
+            fixture.source,
+            Revision::of(fixture.source),
+        )
+        .expect("first shutdown fixture opens");
+    let two = provider
+        .open(
+            fixture.surface,
+            fixture.source,
+            Revision::of(fixture.source),
+        )
+        .expect("second shutdown fixture opens");
+    provider.shutdown().expect("grid shuts down");
+    for instance in [one.instance, two.instance] {
+        assert!(
+            provider
+                .window(
+                    &instance,
+                    GridWindowRequest {
+                        sheet: fixture.cell.sheet.clone(),
+                        row_start: 0,
+                        row_count: 1,
+                        column_start: 0,
+                        column_count: 1,
+                    },
+                )
+                .is_err(),
+            "shutdown must retire every grid instance"
+        );
+    }
 }

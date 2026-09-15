@@ -27,7 +27,7 @@ impl PluginGuest for Componente {
             id: ID.to_string(),
             name: "Example Format".to_string(),
             version: "0.1.0".to_string(),
-            abi_version: "0.1.1".to_string(),
+            abi_version: "0.1.2".to_string(),
             permissions: PluginPermissions { granted: vec![] },
             provides: vec![],
             requires: vec![],

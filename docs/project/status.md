@@ -78,7 +78,7 @@ transazione globale contro modifiche esterne.
 ## Release corrente
 
 Fub non ha ancora pubblicato un tag. Il workspace e la shell dichiarano
-`0.1.0`; il contratto plugin è `fub:abi@0.1.1`.
+`0.1.0`; il contratto plugin è `fub:abi@0.1.2`.
 
 Milestone 1–4 sono assorbite nel prodotto e nell'architettura correnti.
 Milestone 5, runtime WASM, è in corso.
@@ -174,7 +174,7 @@ Issue:
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11 le fasi 0–9 sono concluse nello stack candidato. Il pannello monta
+Per #11 le fasi 0–10 sono concluse nello stack candidato. Il pannello monta
 Markdown, plain text e `.fubsheet` attraverso `DocumentSurfaceRegistry`, con
 collisioni, fallback e teardown posseduto; modalità e comandi sono dichiarati
 dalle superfici e arbitrati prima dei layer profilo, documento, riquadro e
@@ -186,8 +186,9 @@ editor condivisi, TSV, operazioni atomiche, undo locale e ARIA senza chiamate
 per battuta. La [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md)
 registra le misure della slice e sceglie sessioni derivate, finestre limitate,
 patch coordinate e invalidazioni dipendenti. `DocumentModel` resta agnostico;
-la fase 10 porta i tipi minimi in ABI/WIT e ne prova i due clienti nativo e
-WASM.
+La fase 10 ha portato i tipi minimi in ABI/WIT ed è stata verificata con
+conformità condivisa fra nativo e WASM e con test del lifecycle e del registry
+di `Host`.
 
 ## Bloccato
 

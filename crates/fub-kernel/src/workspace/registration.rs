@@ -7,6 +7,7 @@
 
 use super::*;
 use fub_abi::custom::{CustomRendererSpec, SyntaxRuleSpec};
+use fub_abi::grid::{validate_grid_source, GridSurfaceSpec};
 
 /// Authority to publish providers for one live plugin declaration.
 ///
@@ -28,6 +29,7 @@ impl RegistrationPermit {
 enum Declaration {
     Commands(Vec<CommandSpec>, Box<dyn CommandProvider>),
     Views(Vec<ViewSpec>, Box<dyn ViewProvider>),
+    Grid(Vec<GridSurfaceSpec>, Box<dyn GridProvider>),
     Export(Vec<String>, Box<dyn ExportProvider>),
     Import(Box<dyn ImportProvider>),
     Handler(Box<dyn EventHandler>),
@@ -61,6 +63,23 @@ impl PreparedRegistration {
             crate::providers::declared_specs(provider)
         })?;
         Ok(Self::new(Declaration::Views(specs, provider)))
+    }
+
+    /// Calls `surfaces` exactly once, without borrowing a workspace.
+    pub fn grid(provider: Box<dyn GridProvider>) -> std::result::Result<Self, PluginError> {
+        let (specs, provider) = capture(provider, |provider| provider.surfaces())?;
+        if specs.is_empty()
+            || specs.iter().any(|spec| {
+                spec.id.trim().is_empty()
+                    || spec.format.trim().is_empty()
+                    || spec.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+            })
+        {
+            return Err(PluginError::BadArgs(
+                "a grid provider must declare valid surfaces".into(),
+            ));
+        }
+        Ok(Self::new(Declaration::Grid(specs, provider)))
     }
 
     /// Calls `targets` exactly once, without borrowing a workspace.
@@ -98,6 +117,82 @@ impl PreparedRegistration {
     }
 }
 
+/// A provider borrowed without retaining the workspace custody guard.
+pub struct PreparedGridCall {
+    provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+}
+
+impl PreparedGridCall {
+    fn invoke<R>(
+        &self,
+        operation: &'static str,
+        call: impl FnOnce(&mut dyn GridProvider) -> std::result::Result<R, PluginError>,
+    ) -> std::result::Result<R, PluginError> {
+        crate::safety::external(
+            operation,
+            |message| PluginError::Internal(message.into()),
+            || {
+                let mut provider = self.provider.write();
+                call(provider.as_mut())
+            },
+        )
+    }
+
+    pub fn open(
+        &self,
+        surface: &str,
+        source: &str,
+        revision: Revision,
+    ) -> std::result::Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        let session = self.invoke("grid open", |provider| {
+            provider.open(surface, source, revision)
+        })?;
+        session.validate()?;
+        Ok(session)
+    }
+
+    pub fn window(
+        &self,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> std::result::Result<GridWindow, PluginError> {
+        request.validate()?;
+        let window = self.invoke("grid window", |provider| provider.window(instance, request))?;
+        window.validate()?;
+        Ok(window)
+    }
+
+    pub fn apply(
+        &self,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> std::result::Result<GridCommit, PluginError> {
+        request.validate()?;
+        let commit = self.invoke("grid apply", |provider| provider.apply(instance, request))?;
+        commit.validate()?;
+        Ok(commit)
+    }
+
+    pub fn reload(
+        &self,
+        instance: &str,
+        source: &str,
+        revision: Revision,
+    ) -> std::result::Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        let session = self.invoke("grid reload", |provider| {
+            provider.reload(instance, source, revision)
+        })?;
+        session.validate()?;
+        Ok(session)
+    }
+
+    pub fn close(&self, instance: &str) -> std::result::Result<(), PluginError> {
+        self.invoke("grid close", |provider| provider.close(instance))
+    }
+}
+
 impl Workspace {
     pub fn registration_permit(
         &self,
@@ -115,6 +210,45 @@ impl Workspace {
             workspace_id: self.workspace_id,
             owner: owner.to_owned(),
             generation,
+        })
+    }
+
+    pub fn grid_surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.providers
+            .grids
+            .iter()
+            .flat_map(|entry| entry.specs.iter().cloned())
+            .collect()
+    }
+
+    pub fn prepare_grid_call(
+        &self,
+        surface: &str,
+    ) -> std::result::Result<PreparedGridCall, PluginError> {
+        let registered = self
+            .providers
+            .grids
+            .iter()
+            .find(|entry| entry.specs.iter().any(|spec| spec.id == surface))
+            .ok_or_else(|| {
+                PluginError::Unserved(format!("grid surface `{surface}` is unavailable").into())
+            })?;
+        let spec = registered
+            .specs
+            .iter()
+            .find(|spec| spec.id == surface)
+            .expect("surface found above");
+        if spec.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION {
+            return Err(PluginError::Unserved(
+                format!(
+                    "grid surface `{surface}` uses unsupported protocol version {}",
+                    spec.protocol_version
+                )
+                .into(),
+            ));
+        }
+        Ok(PreparedGridCall {
+            provider: Arc::clone(&registered.provider),
         })
     }
 
@@ -203,6 +337,10 @@ impl Workspace {
                 RegistrationKind::View,
                 specs.iter().map(|s| s.id.clone()).collect(),
             ),
+            Declaration::Grid(specs, _) => (
+                RegistrationKind::Grid,
+                specs.iter().map(|spec| spec.id.clone()).collect(),
+            ),
             Declaration::Export(ids, _) => (RegistrationKind::Export, ids.clone()),
             Declaration::Import(_) => (RegistrationKind::Import, Vec::new()),
             Declaration::Handler(_) => (RegistrationKind::EventHandler, Vec::new()),
@@ -258,6 +396,11 @@ impl Workspace {
                 generation: Arc::new(()),
                 trust,
             }),
+            Declaration::Grid(specs, provider) => self.providers.grids.push(RegisteredGrid {
+                id: plugin.to_owned(),
+                specs,
+                provider: Arc::new(SharedShelter::new(provider)),
+            }),
             Declaration::Export(_, provider) => {
                 self.providers.exports.push((plugin.to_owned(), provider))
             }
@@ -279,6 +422,7 @@ impl Workspace {
 enum RetiredProvider {
     Command(Arc<dyn CommandProvider>),
     View(Arc<SharedShelter<Box<dyn ViewProvider>>>),
+    Grid(Arc<SharedShelter<Box<dyn GridProvider>>>),
     Handler(Box<dyn EventHandler>),
     Service(Arc<dyn ServiceProvider>),
     Import(Box<dyn ImportProvider>),
@@ -305,6 +449,24 @@ impl PreparedPluginDeactivation {
         &self.owner
     }
 
+    /// Destroys derived grid instances before the plugin body is deactivated.
+    pub fn close_grids(&self) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        for provider in &self.providers {
+            let RetiredProvider::Grid(provider) = provider else {
+                continue;
+            };
+            let result = crate::safety::external(
+                "grid provider shutdown",
+                |message| PluginError::Internal(message.into()),
+                || provider.write().shutdown(),
+            );
+            if let Err(error) = result {
+                errors.push(error);
+            }
+        }
+        errors
+    }
     pub fn close_indexes(&self, host: &mut dyn HostApi) -> Vec<PluginError> {
         let mut errors = Vec::new();
         for (id, provider) in &self.indexes {
@@ -369,6 +531,7 @@ impl PreparedPluginDeactivation {
                     match provider {
                         RetiredProvider::Command(provider) => drop(provider),
                         RetiredProvider::View(provider) => drop(provider),
+                        RetiredProvider::Grid(provider) => drop(provider),
                         RetiredProvider::Handler(provider) => drop(provider),
                         RetiredProvider::Service(provider) => drop(provider),
                         RetiredProvider::Import(provider) => drop(provider),
@@ -404,12 +567,19 @@ impl Workspace {
 
         let indexes = self.indexes.remove(&permit.owner);
         let removed_indexes = !indexes.is_empty();
+        let grids = self
+            .providers
+            .grids
+            .extract(|entry| entry.id == permit.owner)
+            .into_iter()
+            .map(|entry| RetiredProvider::Grid(entry.provider))
+            .collect();
         Ok(PreparedPluginDeactivation {
             owner: permit.owner.clone(),
             workspace_id: permit.workspace_id,
             generation: permit.generation,
             indexes,
-            providers: Vec::new(),
+            providers: grids,
             removed_indexes,
         })
     }

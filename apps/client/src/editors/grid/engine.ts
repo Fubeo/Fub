@@ -1,5 +1,17 @@
 import type { Theme } from "../../theme/theme";
-import type { SheetCellValue, SheetEvaluation } from "../../host/contract";
+import type {
+  EditRequest,
+  GridApplyRequest,
+  GridCellSnapshot as ProviderCellSnapshot,
+  GridCellValue,
+  GridInvalidation,
+  GridSession,
+  GridSurfaceSpec,
+  GridWindow,
+  GridWindowRequest,
+} from "../../host/contract";
+import { operationFromText } from "../../editor/text-operation";
+import { byteToCharIndex } from "../../rules/offsets";
 import { createTextEngine, type EditorChangeOrigin, type TextEngine } from "../text/engine";
 import { createFormulaProfile } from "../text/profiles/formula";
 import {
@@ -15,7 +27,6 @@ import {
 } from "./model";
 import {
   applyGridPatches,
-  commitGridPatches,
   inputPatch,
   inverseGridPatches,
   isGridOperation,
@@ -38,11 +49,23 @@ export interface GridChange {
   readonly origin: EditorChangeOrigin;
 }
 
+export interface GridProviderClient {
+  listSurfaces(): Promise<GridSurfaceSpec[]>;
+  open(surface: string, source: string): Promise<GridSession>;
+  window(surface: string, instance: string, request: GridWindowRequest): Promise<GridWindow>;
+  apply(surface: string, instance: string, request: GridApplyRequest): Promise<{
+    edit: EditRequest;
+    invalidation: GridInvalidation;
+  }>;
+  reload(surface: string, instance: string, source: string): Promise<GridSession>;
+  close(surface: string, instance: string): Promise<void>;
+}
+
 export interface GridEngineOptions {
   readonly surfaceId: string;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
-  readonly evaluate: (source: string) => Promise<SheetEvaluation>;
+  readonly provider: GridProviderClient;
   readonly theme?: Theme;
 }
 
@@ -101,7 +124,7 @@ function key(sheet: string, row: string, column: string): string {
   return `${sheet}\u0000${row}\u0000${column}`;
 }
 
-function displayValue(value: SheetCellValue | undefined, fallback: string): string {
+function displayValue(value: GridCellValue | undefined, fallback: string): string {
   if (!value) return fallback;
   switch (value.kind) {
     case "blank": return "";
@@ -131,6 +154,37 @@ function clamp(value: number, maximum: number): number {
   return Math.max(0, Math.min(maximum, value));
 }
 
+function providerSnapshot(
+  snapshot: GridCellPatch["before"],
+): ProviderCellSnapshot | null {
+  if (!snapshot) return null;
+  return {
+    input: snapshot.input,
+    style: {
+      bold: snapshot.style?.bold ?? false,
+      italic: snapshot.style?.italic ?? false,
+      text_color: snapshot.style?.text_color ?? null,
+      fill_color: snapshot.style?.fill_color ?? null,
+      horizontal: snapshot.style?.horizontal ?? null,
+      number_format: snapshot.style?.number_format ?? null,
+    },
+  };
+}
+
+function applyProviderEdit(source: string, request: EditRequest): string {
+  const chunks: string[] = [];
+  let cursor = 0;
+  for (const edit of request.edits) {
+    const start = byteToCharIndex(source, edit.span.start);
+    const end = byteToCharIndex(source, edit.span.end);
+    if (start < cursor || end < start) throw new Error("modifica grid fuori ordine");
+    chunks.push(source.slice(cursor, start), edit.text);
+    cursor = end;
+  }
+  chunks.push(source.slice(cursor));
+  return chunks.join("");
+}
+
 export class GridEngine {
   readonly #root: HTMLElement;
   readonly #formulaHost: HTMLElement;
@@ -149,16 +203,23 @@ export class GridEngine {
   #sheetIndex = 0;
   #source = "";
   #selection: GridSelection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
-  #values = new Map<string, SheetCellValue>();
+  #values = new Map<string, GridCellValue>();
   #rows: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #columns: AxisLayout = { offsets: [0], sizes: [], total: 0 };
   #editing: EditingState | null = null;
   #readOnly = false;
   #destroyed = false;
-  #evaluationGeneration = 0;
   #undo: GridCellPatch[][] = [];
   #redo: GridCellPatch[][] = [];
   #pointerAnchor: GridPosition | null = null;
+  #providerSurface: string | null = null;
+  #providerInstance: string | null = null;
+  #providerGeneration = 0;
+  #windowKey: string | null = null;
+  #windowGeneration = 0;
+  #providerQueue: Promise<void> = Promise.resolve();
+  #windowInFlight = new Set<Promise<void>>();
+  #committing = false;
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
     this.#options = options;
@@ -254,7 +315,7 @@ export class GridEngine {
     this.#selection = this.#visibleSelection(this.#selection);
     this.#syncFormulaBar();
     this.#render();
-    this.#evaluate();
+    void this.#connectProvider(source);
   }
 
   syncDoc(update: { readonly text: string; readonly operation: import("../../editor/text-operation").TextOperation | null } | string): void {
@@ -289,8 +350,9 @@ export class GridEngine {
     this.#rebuildLayout();
     this.#selection = this.#visibleSelection(this.#selection);
     if (!this.#editing) this.#syncFormulaBar();
+    this.#windowKey = null;
     this.#render();
-    this.#evaluate();
+    void this.#connectProvider(source);
   }
 
   getDoc(): string { return this.#source; }
@@ -314,6 +376,7 @@ export class GridEngine {
   }
 
   undo(): boolean {
+    if (this.#committing) return false;
     const patches = this.#undo.pop();
     if (!patches) return false;
     if (!this.#commit(inverseGridPatches(patches), "undo", false)) {
@@ -325,6 +388,7 @@ export class GridEngine {
   }
 
   redo(): boolean {
+    if (this.#committing) return false;
     const patches = this.#redo.pop();
     if (!patches) return false;
     if (!this.#commit(patches, "redo", false)) {
@@ -344,6 +408,18 @@ export class GridEngine {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#providerGeneration += 1;
+    const surface = this.#providerSurface;
+    const instance = this.#providerInstance;
+    this.#providerSurface = null;
+    this.#providerInstance = null;
+    if (surface && instance) {
+      const closing = this.#providerQueue.then(async () => {
+        await Promise.all(this.#windowInFlight);
+        await this.#options.provider.close(surface, instance);
+      });
+      void closing.catch(() => {});
+    }
     this.#abort.abort();
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();
@@ -445,6 +521,15 @@ export class GridEngine {
         : "";
     }
     if (this.#editing?.owner === "cell") this.#positionEditor(this.#editing.position);
+    if (rowWindow.end >= rowWindow.start && columnWindow.end >= columnWindow.start) {
+      void this.#loadWindow({
+        sheet: sheet.id,
+        row_start: rowWindow.start,
+        row_count: rowWindow.end - rowWindow.start + 1,
+        column_start: columnWindow.start,
+        column_count: columnWindow.end - columnWindow.start + 1,
+      });
+    }
   }
 
   #place(element: HTMLElement, left: number, top: number, width: number, height: number): void {
@@ -569,7 +654,7 @@ export class GridEngine {
   }
 
   #keydown(event: KeyboardEvent): void {
-    if (!this.#workbook || event.defaultPrevented) return;
+    if (this.#committing) return;
     const modifier = event.ctrlKey || event.metaKey;
     if (modifier && event.key.toLowerCase() === "z") {
       event.preventDefault();
@@ -629,10 +714,11 @@ export class GridEngine {
   }
 
   #beginEditing(owner: "cell" | "formula", position: GridPosition, initial?: string): void {
-    if (this.#readOnly || !this.#workbook || !this.#isVisiblePosition(position)) return;
+    if (this.#committing || this.#readOnly || !this.#workbook || !this.#isVisiblePosition(position)) return;
     const current = cellAt(this.#sheet(), position)?.input ?? "";
     if (this.#editing && (!samePosition(this.#editing.position, position) || this.#editing.owner !== owner)) {
       this.#finishEditing(true, "input", false);
+      if (this.#editing) return;
     }
     this.#editing = { position, original: current, draft: initial ?? current, owner };
     if (owner === "cell") {
@@ -658,14 +744,15 @@ export class GridEngine {
   }
 
   #finishEditing(commit: boolean, origin: EditorChangeOrigin, restoreFocus = true): void {
+    if (this.#committing) return;
     const editing = this.#editing;
     if (!editing) return;
-    this.#editing = null;
-    this.#cellEditorHost.hidden = true;
     if (commit && editing.draft !== editing.original) {
       const patch = inputPatch(this.#sheet(), editing.position, editing.draft);
-      if (patch) this.#commit([patch], origin, true);
+      if (patch && !this.#commit([patch], origin, true)) return;
     }
+    this.#editing = null;
+    this.#cellEditorHost.hidden = true;
     this.#syncFormulaBar();
     this.#render();
     if (restoreFocus) queueMicrotask(() => this.#viewport.focus());
@@ -682,22 +769,61 @@ export class GridEngine {
   }
 
   #commit(patches: readonly GridCellPatch[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
-    if (!this.#workbook || this.#readOnly) return false;
-    const committed = commitGridPatches(this.#workbook, this.#source, patches);
-    if (!committed) return false;
-    this.#source = committed.source;
-    if (recordHistory) {
-      this.#undo.push([...patches]);
-      this.#redo = [];
+    const surface = this.#providerSurface;
+    const instance = this.#providerInstance;
+    if (!this.#workbook || this.#readOnly || this.#committing || !surface || !instance) {
+      return false;
     }
-    this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
-    this.#render();
-    this.#evaluate();
+    const request: GridApplyRequest = {
+      patches: patches.map((patch) => ({
+        cell: patch.coordinate,
+        before: providerSnapshot(patch.before),
+        after: providerSnapshot(patch.after),
+      })),
+    };
+    this.#committing = true;
+    this.#root.dataset.committing = "true";
+    const applying = this.#providerQueue.then(() =>
+      this.#options.provider.apply(surface, instance, request)
+    );
+    this.#providerQueue = applying.then(() => {}, () => {});
+    void applying.then((commit) => {
+      if (this.#destroyed || surface !== this.#providerSurface || instance !== this.#providerInstance) {
+        return;
+      }
+      const before = this.#source;
+      const source = applyProviderEdit(before, commit.edit);
+      if (!this.#workbook || !applyGridPatches(this.#workbook, patches)) {
+        throw new Error("preimmagine grid locale non valida");
+      }
+      this.#source = source;
+      if (recordHistory) {
+        this.#undo.push([...patches]);
+        this.#redo = [];
+      }
+      this.#invalidate(commit.invalidation);
+      const operation: GridOperation = {
+        kind: "grid",
+        patches,
+        ...operationFromText(before, source),
+      };
+      this.#options.onChange({ text: source, operation, origin });
+      this.#windowKey = null;
+      delete this.#root.dataset.provider;
+      this.#render();
+    }).catch(() => {
+      if (this.#destroyed) return;
+      this.#root.dataset.provider = "unavailable";
+      void this.#connectProvider(this.#source);
+    }).finally(() => {
+      this.#committing = false;
+      delete this.#root.dataset.committing;
+    });
     return true;
   }
 
   #clearSelection(): void {
-    if (this.#readOnly) return;
+    if (this.#readOnly || this.#committing) return;
     const range = normalizedSelection(this.#selection);
     const patches: GridCellPatch[] = [];
     for (let row = range.rowStart; row <= range.rowEnd; row += 1) {
@@ -716,13 +842,13 @@ export class GridEngine {
   }
 
   #cut(event: ClipboardEvent): void {
-    if (this.#readOnly) return;
+    if (this.#readOnly || this.#committing) return;
     this.#copy(event);
     this.#clearSelection();
   }
 
   #paste(event: ClipboardEvent): void {
-    if (this.#readOnly || !event.clipboardData) return;
+    if (this.#readOnly || this.#committing || !event.clipboardData) return;
     event.preventDefault();
     const patches = pastePatches(this.#sheet(), this.#selection.focus, event.clipboardData.getData("text/plain"));
     this.#commit(patches, "input", true);
@@ -771,20 +897,105 @@ export class GridEngine {
     else if (bottom > this.#viewport.scrollTop + this.#viewport.clientHeight) this.#viewport.scrollTop = bottom - this.#viewport.clientHeight;
   }
 
-  async #evaluate(): Promise<void> {
-    const generation = ++this.#evaluationGeneration;
-    const source = this.#source;
+  #connectProvider(source: string): Promise<void> {
+    const generation = ++this.#providerGeneration;
+    const run = async (): Promise<void> => {
+      const previousSurface = this.#providerSurface;
+      const previousInstance = this.#providerInstance;
+      let opened = false;
+      try {
+        let surface = previousSurface;
+        let session: GridSession;
+        if (surface && previousInstance) {
+          session = await this.#options.provider.reload(surface, previousInstance, source);
+        } else {
+          const surfaces = await this.#options.provider.listSurfaces();
+          const spec = surfaces.find((candidate) =>
+            candidate.format === "fubsheet" && candidate.protocol_version === 1
+          );
+          if (!spec) throw new Error("provider grid fubsheet non disponibile");
+          surface = spec.id;
+          session = await this.#options.provider.open(surface, source);
+          opened = true;
+        }
+        if (this.#destroyed || generation !== this.#providerGeneration) {
+          if (opened) await this.#options.provider.close(surface, session.instance);
+          return;
+        }
+        this.#providerSurface = surface;
+        this.#providerInstance = session.instance;
+        this.#windowKey = null;
+        this.#values.clear();
+        delete this.#root.dataset.provider;
+        this.#render();
+      } catch {
+        if (this.#destroyed || generation !== this.#providerGeneration) return;
+        if (previousSurface && previousInstance) {
+          await this.#options.provider.close(previousSurface, previousInstance).catch(() => {});
+        }
+        this.#providerSurface = null;
+        this.#providerInstance = null;
+        this.#windowKey = null;
+        this.#values.clear();
+        this.#root.dataset.provider = "unavailable";
+        this.#render();
+      }
+    };
+    const queued = this.#providerQueue.then(run, run);
+    this.#providerQueue = queued.then(() => {}, () => {});
+    return queued;
+  }
+
+  async #loadWindow(request: GridWindowRequest): Promise<void> {
+    const surface = this.#providerSurface;
+    const instance = this.#providerInstance;
+    if (!surface || !instance) return;
+    const requestKey = JSON.stringify(request);
+    if (requestKey === this.#windowKey) return;
+    this.#windowKey = requestKey;
+    const windowGeneration = ++this.#windowGeneration;
+    const generation = this.#providerGeneration;
+    const requestPromise = Promise.resolve().then(() =>
+      this.#options.provider.window(surface, instance, request)
+    );
+    const inFlight = requestPromise.then(() => {}, () => {});
+    this.#windowInFlight.add(inFlight);
     try {
-      const evaluation = await this.#options.evaluate(source);
-      if (generation !== this.#evaluationGeneration || this.#destroyed || source !== this.#source) return;
-      this.#values = new Map(evaluation.cells.map((cell) => [key(cell.sheet, cell.row, cell.column), cell.value]));
-      delete this.#root.dataset.evaluation;
+      const window = await requestPromise;
+      if (
+        this.#destroyed
+        || generation !== this.#providerGeneration
+        || windowGeneration !== this.#windowGeneration
+        || surface !== this.#providerSurface
+        || instance !== this.#providerInstance
+        || requestKey !== this.#windowKey
+      ) return;
+      for (const row of window.rows) {
+        for (const column of window.columns) {
+          this.#values.delete(key(window.sheet, row.id, column.id));
+        }
+      }
+      for (const cell of window.cells) {
+        this.#values.set(key(cell.key.sheet, cell.key.row, cell.key.column), cell.value);
+      }
+      delete this.#root.dataset.provider;
       this.#render();
     } catch {
-      if (generation !== this.#evaluationGeneration || this.#destroyed) return;
+      if (generation !== this.#providerGeneration || this.#destroyed) return;
+      this.#windowKey = null;
+      this.#root.dataset.provider = "unavailable";
+    } finally {
+      this.#windowInFlight.delete(inFlight);
+    }
+  }
+
+  #invalidate(invalidation: GridInvalidation): void {
+    if (invalidation.kind === "all") {
       this.#values.clear();
-      this.#root.dataset.evaluation = "unavailable";
-      this.#render();
+      return;
+    }
+    for (const cell of invalidation.cells) {
+      this.#values.delete(key(cell.sheet, cell.row, cell.column));
     }
   }
 }

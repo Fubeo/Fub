@@ -7,12 +7,15 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::grid::{
+    GridApplyRequest, GridProvider, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
     CommandProvider, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, Plugin,
     PluginManifest, QueryRoute,
 };
-use fub_abi::{Event, PluginError};
+use fub_abi::{Event, PluginError, Revision};
 use fub_host::registry::{Bundle, BundleRegistry, Registrar};
 use fub_host::{Custody, Host, NoWatcher};
 use fub_kernel::{Trust, Workspace};
@@ -23,6 +26,7 @@ const WATCHDOG: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Stage {
+    GridShutdown,
     Deactivate,
     Flush,
     Close,
@@ -35,6 +39,7 @@ enum Fault {
     Panic(Stage),
 }
 
+#[derive(Clone, Copy, Debug)]
 struct Observation {
     id: &'static str,
     stage: Stage,
@@ -42,10 +47,13 @@ struct Observation {
     workspace_write: bool,
     registry_read: bool,
     registry_write: bool,
+    grid_shutdown_complete: bool,
 }
 
 struct Probe {
     armed: AtomicBool,
+    grid_shutdown_complete: AtomicBool,
+    surfaces: Mutex<Vec<&'static str>>,
     // La fixture stacca esplicitamente questo riferimento per evitare cicli.
     workspace: Mutex<Option<Custody<Workspace>>>,
     registry: Mutex<Option<Custody<BundleRegistry>>>,
@@ -55,6 +63,33 @@ struct Probe {
 }
 
 impl Probe {
+    fn observe(&self, id: &'static str, stage: Stage) -> Observation {
+        let workspace = self.workspace.lock().unwrap().as_ref().unwrap().clone();
+        let registry = self.registry.lock().unwrap().as_ref().unwrap().clone();
+        let workspace_read = workspace.try_read().is_some();
+        let workspace_write = workspace.try_write().is_some();
+        let registry_read = registry.try_read().is_some();
+        let registry_write = registry.try_write().is_some();
+        let observation = Observation {
+            id,
+            stage,
+            workspace_read,
+            workspace_write,
+            registry_read,
+            registry_write,
+            grid_shutdown_complete: self.grid_shutdown_complete.load(Ordering::SeqCst),
+        };
+        self.entered
+            .send(observation)
+            .expect("the observer is alive");
+        self.release
+            .lock()
+            .unwrap()
+            .recv_timeout(WATCHDOG)
+            .expect("the independent reader releases this callback");
+        observation
+    }
+
     fn call(
         &self,
         id: &'static str,
@@ -64,27 +99,11 @@ impl Probe {
         if !self.armed.load(Ordering::SeqCst) {
             return Ok(());
         }
-        let workspace = self.workspace.lock().unwrap().as_ref().unwrap().clone();
-        let registry = self.registry.lock().unwrap().as_ref().unwrap().clone();
-        let workspace_read = workspace.try_read().is_some();
-        let workspace_write = workspace.try_write().is_some();
-        let registry_read = registry.try_read().is_some();
-        let registry_write = registry.try_write().is_some();
-        self.entered
-            .send(Observation {
-                id,
-                stage,
-                workspace_read,
-                workspace_write,
-                registry_read,
-                registry_write,
-            })
-            .expect("the observer is alive");
-        self.release
-            .lock()
-            .unwrap()
-            .recv_timeout(WATCHDOG)
-            .expect("the independent reader releases this callback");
+        let observation = self.observe(id, stage);
+        let workspace_read = observation.workspace_read;
+        let workspace_write = observation.workspace_write;
+        let registry_read = observation.registry_read;
+        let registry_write = observation.registry_write;
         if !(workspace_read && workspace_write && registry_read && registry_write) {
             // Una regressione viene riportata senza tentare una re-entry morta.
             return Err(PluginError::Internal("teardown retained custody".into()));
@@ -127,6 +146,12 @@ impl Bundle for ProbeBundle {
         registrar
             .register_command_provider(Box::new(ProbeCommand(self.id)))
             .expect("register command");
+        registrar
+            .register_grid_provider(Box::new(ProbeGrid {
+                id: self.id,
+                probe: self.probe.clone(),
+            }))
+            .expect("register grid");
         registrar
             .register_index_provider(Box::new(ProbeIndex {
                 id: self.id,
@@ -174,11 +199,66 @@ impl CommandProvider for ProbeCommand {
     }
 }
 
-struct ProbeIndex {
+struct ProbeGrid {
     id: &'static str,
     probe: Arc<Probe>,
 }
 
+impl GridProvider for ProbeGrid {
+    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.probe.surfaces.lock().unwrap().push(self.id);
+        vec![GridSurfaceSpec::new(
+            format!("{}.grid", self.id),
+            "fub.audit-grid",
+        )]
+    }
+
+    fn open(&mut self, _: &str, _: &str, _: Revision) -> Result<GridSession, PluginError> {
+        Err(PluginError::Internal("grid probe does not open".into()))
+    }
+
+    fn window(&mut self, _: &str, _: GridWindowRequest) -> Result<GridWindow, PluginError> {
+        Err(PluginError::Internal("grid probe does not window".into()))
+    }
+
+    fn apply(
+        &mut self,
+        _: &str,
+        _: GridApplyRequest,
+    ) -> Result<fub_abi::grid::GridCommit, PluginError> {
+        Err(PluginError::Internal("grid probe does not apply".into()))
+    }
+
+    fn reload(&mut self, _: &str, _: &str, _: Revision) -> Result<GridSession, PluginError> {
+        Err(PluginError::Internal("grid probe does not reload".into()))
+    }
+
+    fn close(&mut self, _: &str) -> Result<(), PluginError> {
+        Err(PluginError::Internal("grid probe does not close".into()))
+    }
+
+    fn shutdown(&mut self) -> Result<(), PluginError> {
+        let observation = self.probe.observe(self.id, Stage::GridShutdown);
+        if !(observation.workspace_read
+            && observation.workspace_write
+            && observation.registry_read
+            && observation.registry_write)
+        {
+            return Err(PluginError::Internal(
+                "grid teardown retained custody".into(),
+            ));
+        }
+        self.probe
+            .grid_shutdown_complete
+            .store(true, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+struct ProbeIndex {
+    id: &'static str,
+    probe: Arc<Probe>,
+}
 impl IndexProvider for ProbeIndex {
     fn routes(&self) -> Vec<QueryRoute> {
         Vec::new()
@@ -229,6 +309,8 @@ fn exercise(close: bool, fault: Fault) {
     let (release, released) = mpsc::channel();
     let probe = Arc::new(Probe {
         armed: AtomicBool::new(false),
+        grid_shutdown_complete: AtomicBool::new(false),
+        surfaces: Mutex::new(Vec::new()),
         workspace: Mutex::new(Some(workspace.clone())),
         registry: Mutex::new(Some(registry.clone())),
         entered,
@@ -264,7 +346,7 @@ fn exercise(close: bool, fault: Fault) {
         };
         done_tx.send((host, result)).unwrap();
     });
-    let count = if close { 8 } else { 3 };
+    let count = if close { 10 } else { 4 };
     let mut journal = Vec::new();
     let mut all_free = true;
     for _ in 0..count {
@@ -275,7 +357,11 @@ fn exercise(close: bool, fault: Fault) {
             && observation.workspace_write
             && observation.registry_read
             && observation.registry_write;
-        journal.push((observation.id, observation.stage));
+        journal.push((
+            observation.id,
+            observation.stage,
+            observation.grid_shutdown_complete,
+        ));
         // La callback è ancora ferma su release: il progresso del reader è
         // una relazione causale a canali, non un'inferenza da un timeout.
         let other_workspace = workspace.clone();
@@ -317,22 +403,40 @@ fn exercise(close: bool, fault: Fault) {
         assert!(!registry.read().unwrap().ids().contains(&id));
         let stages: Vec<_> = journal
             .iter()
-            .filter(|(owner, _)| *owner == id)
-            .map(|(_, stage)| *stage)
+            .filter(|(owner, _, _)| *owner == id)
+            .map(|(_, stage, _)| *stage)
             .collect();
         let expected = if close {
-            vec![Stage::Flush, Stage::Deactivate, Stage::Flush, Stage::Close]
+            vec![
+                Stage::Flush,
+                Stage::GridShutdown,
+                Stage::Deactivate,
+                Stage::Flush,
+                Stage::Close,
+            ]
         } else {
-            vec![Stage::Deactivate, Stage::Flush, Stage::Close]
+            vec![
+                Stage::GridShutdown,
+                Stage::Deactivate,
+                Stage::Flush,
+                Stage::Close,
+            ]
         };
         assert_eq!(stages, expected, "teardown order for {id}");
     }
+    assert!(
+        journal
+            .iter()
+            .filter(|(_, stage, _)| *stage == Stage::Deactivate)
+            .all(|(_, _, grid_shutdown_complete)| *grid_shutdown_complete),
+        "every deactivate observes completed grid shutdown: {journal:?}"
+    );
     if close {
         assert!(ws.is_closed());
         let deactivated: Vec<_> = journal
             .iter()
-            .filter(|(_, stage)| *stage == Stage::Deactivate)
-            .map(|(id, _)| *id)
+            .filter(|(_, stage, _)| *stage == Stage::Deactivate)
+            .map(|(id, _, _)| *id)
             .collect();
         assert_eq!(deactivated, [SECOND, FIRST]);
     }

@@ -37,7 +37,7 @@ use fub_abi::PluginError;
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
 use crate::contract::exports::fub::abi::{
-    command as w_command, format as x_format, plugin as w_plugin, view as w_view,
+    command as w_command, format as x_format, grid as w_grid, plugin as w_plugin, view as w_view,
 };
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
@@ -643,7 +643,9 @@ fn from_text_edit(and: w_edit::TextEdit) -> Result<fub_abi::edit::TextEdit, Plug
     })
 }
 
-fn from_edit_request(r: w_edit::EditRequest) -> Result<fub_abi::edit::EditRequest, PluginError> {
+pub(crate) fn from_edit_request(
+    r: w_edit::EditRequest,
+) -> Result<fub_abi::edit::EditRequest, PluginError> {
     Ok(fub_abi::edit::EditRequest {
         base: fub_abi::edit::Revision(r.base),
         edits: r
@@ -870,5 +872,196 @@ pub(crate) fn to_view_instance(
         view: i.view.clone(),
         instance: i.instance.clone(),
         params: to_json(&i.params),
+    })
+}
+
+pub(crate) fn from_grid_surface_spec(
+    spec: w_grid::GridSurfaceSpec,
+) -> fub_abi::grid::GridSurfaceSpec {
+    fub_abi::grid::GridSurfaceSpec {
+        id: spec.id,
+        format: spec.format,
+        protocol_version: spec.protocol_version,
+    }
+}
+
+pub(crate) fn from_grid_session(session: w_grid::GridSession) -> fub_abi::grid::GridSession {
+    fub_abi::grid::GridSession {
+        instance: session.instance,
+        sheets: session
+            .sheets
+            .into_iter()
+            .map(|sheet| fub_abi::grid::GridSheet {
+                id: sheet.id,
+                name: sheet.name,
+                row_count: sheet.row_count,
+                column_count: sheet.column_count,
+            })
+            .collect(),
+    }
+}
+
+fn to_grid_cell_key(key: &fub_abi::grid::GridCellKey) -> w_grid::GridCellKey {
+    w_grid::GridCellKey {
+        sheet: key.sheet.clone(),
+        row: key.row.clone(),
+        column: key.column.clone(),
+    }
+}
+
+fn from_grid_cell_key(key: w_grid::GridCellKey) -> fub_abi::grid::GridCellKey {
+    fub_abi::grid::GridCellKey {
+        sheet: key.sheet,
+        row: key.row,
+        column: key.column,
+    }
+}
+
+fn to_grid_style(style: &fub_abi::grid::GridCellStyle) -> w_grid::GridCellStyle {
+    w_grid::GridCellStyle {
+        bold: style.bold,
+        italic: style.italic,
+        text_color: style.text_color.clone(),
+        fill_color: style.fill_color.clone(),
+        horizontal: style.horizontal.map(|align| match align {
+            fub_abi::grid::GridHorizontalAlign::Start => w_grid::GridHorizontalAlign::Start,
+            fub_abi::grid::GridHorizontalAlign::Center => w_grid::GridHorizontalAlign::Center,
+            fub_abi::grid::GridHorizontalAlign::End => w_grid::GridHorizontalAlign::End,
+        }),
+        number_format: style.number_format.clone(),
+    }
+}
+
+fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle {
+    fub_abi::grid::GridCellStyle {
+        bold: style.bold,
+        italic: style.italic,
+        text_color: style.text_color,
+        fill_color: style.fill_color,
+        horizontal: style.horizontal.map(|align| match align {
+            w_grid::GridHorizontalAlign::Start => fub_abi::grid::GridHorizontalAlign::Start,
+            w_grid::GridHorizontalAlign::Center => fub_abi::grid::GridHorizontalAlign::Center,
+            w_grid::GridHorizontalAlign::End => fub_abi::grid::GridHorizontalAlign::End,
+        }),
+        number_format: style.number_format,
+    }
+}
+
+fn to_grid_snapshot(snapshot: &fub_abi::grid::GridCellSnapshot) -> w_grid::GridCellSnapshot {
+    w_grid::GridCellSnapshot {
+        input: snapshot.input.clone(),
+        style: to_grid_style(&snapshot.style),
+    }
+}
+
+fn from_grid_snapshot(snapshot: w_grid::GridCellSnapshot) -> fub_abi::grid::GridCellSnapshot {
+    fub_abi::grid::GridCellSnapshot {
+        input: snapshot.input,
+        style: from_grid_style(snapshot.style),
+    }
+}
+
+pub(crate) fn to_grid_window_request(
+    request: fub_abi::grid::GridWindowRequest,
+) -> w_grid::GridWindowRequest {
+    w_grid::GridWindowRequest {
+        sheet: request.sheet,
+        row_start: request.row_start,
+        row_count: request.row_count,
+        column_start: request.column_start,
+        column_count: request.column_count,
+    }
+}
+
+pub(crate) fn from_grid_window(window: w_grid::GridWindow) -> fub_abi::grid::GridWindow {
+    fub_abi::grid::GridWindow {
+        sheet: window.sheet,
+        rows: window
+            .rows
+            .into_iter()
+            .map(|row| fub_abi::grid::GridRow {
+                id: row.id,
+                index: row.index,
+                height: row.height,
+                hidden: row.hidden,
+            })
+            .collect(),
+        columns: window
+            .columns
+            .into_iter()
+            .map(|column| fub_abi::grid::GridColumn {
+                id: column.id,
+                index: column.index,
+                width: column.width,
+                hidden: column.hidden,
+            })
+            .collect(),
+        cells: window
+            .cells
+            .into_iter()
+            .map(|cell| fub_abi::grid::GridCell {
+                key: from_grid_cell_key(cell.key),
+                snapshot: from_grid_snapshot(cell.snapshot),
+                value: match cell.value {
+                    w_grid::GridCellValue::Blank => fub_abi::grid::GridCellValue::Blank,
+                    w_grid::GridCellValue::Number(value) => {
+                        fub_abi::grid::GridCellValue::Number(value)
+                    }
+                    w_grid::GridCellValue::Text(value) => fub_abi::grid::GridCellValue::Text(value),
+                    w_grid::GridCellValue::Boolean(value) => {
+                        fub_abi::grid::GridCellValue::Boolean(value)
+                    }
+                    w_grid::GridCellValue::Error(error) => {
+                        fub_abi::grid::GridCellValue::Error(match error {
+                            w_grid::GridFormulaError::Parse => {
+                                fub_abi::grid::GridFormulaError::Parse
+                            }
+                            w_grid::GridFormulaError::Ref => fub_abi::grid::GridFormulaError::Ref,
+                            w_grid::GridFormulaError::Name => fub_abi::grid::GridFormulaError::Name,
+                            w_grid::GridFormulaError::Value => {
+                                fub_abi::grid::GridFormulaError::Value
+                            }
+                            w_grid::GridFormulaError::DivZero => {
+                                fub_abi::grid::GridFormulaError::DivZero
+                            }
+                            w_grid::GridFormulaError::Num => fub_abi::grid::GridFormulaError::Num,
+                            w_grid::GridFormulaError::Cycle => {
+                                fub_abi::grid::GridFormulaError::Cycle
+                            }
+                        })
+                    }
+                },
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn to_grid_apply_request(
+    request: fub_abi::grid::GridApplyRequest,
+) -> w_grid::GridApplyRequest {
+    w_grid::GridApplyRequest {
+        patches: request
+            .patches
+            .into_iter()
+            .map(|patch| w_grid::GridCellPatch {
+                cell: to_grid_cell_key(&patch.cell),
+                before: patch.before.as_ref().map(to_grid_snapshot),
+                after: patch.after.as_ref().map(to_grid_snapshot),
+            })
+            .collect(),
+    }
+}
+
+pub(crate) fn from_grid_commit(
+    commit: w_grid::GridCommit,
+) -> Result<fub_abi::grid::GridCommit, PluginError> {
+    Ok(fub_abi::grid::GridCommit {
+        edit: from_edit_request(commit.edit)?,
+        invalidation: match commit.invalidation {
+            w_grid::GridInvalidation::Cells(cells) => fub_abi::grid::GridInvalidation::Cells(
+                cells.into_iter().map(from_grid_cell_key).collect(),
+            ),
+            w_grid::GridInvalidation::All => fub_abi::grid::GridInvalidation::All,
+        },
     })
 }

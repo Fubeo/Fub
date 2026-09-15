@@ -149,7 +149,14 @@ export function mountDocument(d: DocumentDeps): void {
         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
     },
-    evaluateSheet: api.evaluateSheet,
+    gridProvider: {
+      listSurfaces: api.listGridSurfaces,
+      open: api.openGrid,
+      window: api.gridWindow,
+      apply: api.applyGrid,
+      reload: api.reloadGrid,
+      close: api.closeGrid,
+    },
   });
   panesEl = $("#panes");
   sessionEventsStop?.();
@@ -691,8 +698,21 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   r.root.classList.toggle("con-vista", tab?.k === "view");
 
   if (tab?.k === "view") {
-    clearPreview(r.previewEl);
     await mountViewInPane(tab.view, r.id, r.viewEl);
+    const current = r.shown;
+    const stillShown =
+      generation === r.loadGeneration &&
+      current?.k === "view" &&
+      current.view === tab.view;
+    if (!stillShown) {
+      // La mount può aver finito dopo che il riquadro ha cambiato tab. Se la
+      // tab corrente è un'altra view, la mount appena completata appartiene
+      // solo a questo giro e va tolta; una mount più nuova della stessa view
+      // invece resta viva.
+      if (current?.k !== "view" || current.view !== tab.view) {
+        unmountViewFromPane(tab.view, r.id);
+      }
+    }
     return;
   }
   if (!changed) return;

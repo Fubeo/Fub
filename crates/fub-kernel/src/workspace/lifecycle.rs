@@ -62,6 +62,8 @@ pub struct PreparedPluginTeardown {
     owner: Box<str>,
     generation: u64,
     previous_provider_call: bool,
+    grids: Option<Vec<Arc<SharedShelter<Box<dyn GridProvider>>>>>,
+    grids_closed: bool,
     indexes: Option<Vec<(String, SharedIndexProvider)>>,
     removed_indexes: bool,
     indexes_closed: bool,
@@ -69,6 +71,23 @@ pub struct PreparedPluginTeardown {
 }
 
 impl PreparedPluginTeardown {
+    /// Chiude ogni istanza derivata prima di disattivare il corpo del plugin.
+    pub fn invoke_grids(&mut self) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        if let Some(grids) = &mut self.grids {
+            for provider in std::mem::take(grids) {
+                let outcome = crate::safety::external(
+                    "GridProvider::shutdown",
+                    |message| PluginError::Internal(message.into()),
+                    || provider.write().shutdown(),
+                );
+                errors.extend(outcome.err());
+            }
+        }
+        self.grids_closed = self.grids.is_some();
+        errors
+    }
+
     /// Flush e close restano distinti: un errore o panic del primo non salta
     /// il secondo, né gli indici successivi.
     pub fn invoke_indexes(&mut self, host: &mut dyn HostApi) -> Vec<PluginError> {
@@ -168,6 +187,15 @@ impl Workspace {
             owner: owner.into(),
             generation,
             previous_provider_call: self.dispatch.enter_provider_call(),
+            grids: Some(
+                self.providers
+                    .grids
+                    .iter()
+                    .filter(|entry| entry.id == owner)
+                    .map(|entry| Arc::clone(&entry.provider))
+                    .collect(),
+            ),
+            grids_closed: false,
             indexes: None,
             removed_indexes: false,
             indexes_closed: false,
@@ -238,7 +266,7 @@ impl Workspace {
             self.dispatch
                 .restore_provider_call(prepared.previous_provider_call);
         }
-        if !self.valid_teardown(&prepared) || !prepared.indexes_closed {
+        if !self.valid_teardown(&prepared) || !prepared.indexes_closed || !prepared.grids_closed {
             let mut errors = errors;
             errors.push(PluginError::Conflict(
                 "stale or incomplete plugin teardown".into(),
@@ -247,6 +275,11 @@ impl Workspace {
             if let Some(indexes) = prepared.indexes {
                 for (_, index) in indexes {
                     resources.push("unfinished index", index);
+                }
+            }
+            if let Some(grids) = prepared.grids {
+                for grid in grids {
+                    resources.push("unfinished grid", grid);
                 }
             }
             return Ok(RetiredPlugin {
@@ -336,6 +369,7 @@ mod tests {
     }
 
     fn complete_indexes(workspace: &mut Workspace, prepared: &mut PreparedPluginTeardown) {
+        assert!(prepared.invoke_grids().is_empty());
         workspace
             .take_plugin_teardown_indexes(prepared)
             .expect("take once");

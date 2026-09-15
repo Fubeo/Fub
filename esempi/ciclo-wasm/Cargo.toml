@@ -36,3 +36,5 @@ wit-bindgen = "0.60"
 # accorgersi che il corpo non serve a niente e di buttarlo via (vedi `src/lib.rs`).
 strip = true
 opt-level = "s"
+
+[workspace]

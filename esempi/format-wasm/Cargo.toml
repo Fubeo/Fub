@@ -19,3 +19,5 @@ fub-abi = { path = "../../crates/fub-abi" }
 [profile.release]
 strip = true
 opt-level = "s"
+
+[workspace]

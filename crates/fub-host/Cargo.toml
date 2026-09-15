@@ -174,4 +174,5 @@ blocks = ["fub-features/blocks"]
 [dev-dependencies]
 # Il banco del lato host (§16.2).
 fub-testkit = { workspace = true }
+fub-sdk = { workspace = true }
 tempfile = { workspace = true }

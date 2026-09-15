@@ -1,15 +1,11 @@
 [package]
-name = "view-wasm"
+name = "grid-wasm"
 version = "0.0.0"
 edition = "2021"
 publish = false
 
 [lib]
 crate-type = ["cdylib"]
-
-[features]
-active-content = []
-malformed-arena = []
 
 [dependencies]
 wit-bindgen = "0.60"

@@ -521,11 +521,36 @@ export function createFakeHost(options: Options = {}): FakeHost {
           source_kind: "text",
         }));
       },
-      evaluateSheet: (source) =>
+      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve([])),
+      openGrid: (surface, source) =>
         gate(
-          "evaluateSheet",
-          [source],
-          Promise.reject(new Error("host fake: il motore formule Rust non è montato")),
+          "openGrid",
+          [surface, source],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      gridWindow: (surface, instance, request) =>
+        gate(
+          "gridWindow",
+          [surface, instance, request],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      applyGrid: (surface, instance, request) =>
+        gate(
+          "applyGrid",
+          [surface, instance, request],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      reloadGrid: (surface, instance, source) =>
+        gate(
+          "reloadGrid",
+          [surface, instance, source],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      closeGrid: (surface, instance) =>
+        gate(
+          "closeGrid",
+          [surface, instance],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
         ),
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre

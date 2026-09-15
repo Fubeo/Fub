@@ -1,7 +1,8 @@
 //! **Il secondo backend** (§16.1, [M5](../../../docs/project/m5-wasm-runtime.md)):
 //! un componente WASM che il kernel vede come qualunque altro provider.
 //!
-//! Il contratto è congelato dal 2026-08-14 (`fub:abi@0.1.1`), e questo crate è
+//! Il contratto è congelato dal 2026-08-14; la versione corrente è
+//! `fub:abi@0.1.2`, e questo crate è
 //! il primo consumatore che lo attraversa **in esecuzione**. Fino a qui il
 //! confine era stato provato in due modi, tutt'e due statici:
 //! `wit_conformance.rs` legge il WIT e dice che è valido,
@@ -44,7 +45,8 @@ mod translate;
 mod ui;
 
 pub use component::{
-    Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin, WasmViewProvider,
+    Component, LoadError, WasmBundle, WasmCommandProvider, WasmGridProvider, WasmPlugin,
+    WasmViewProvider,
 };
 pub use discovery::{discover, DiscoveredPlugin};
 
@@ -53,7 +55,7 @@ pub use discovery::{discover, DiscoveredPlugin};
 /// Sono l'altra metà di `tools/varco-wasm`: quello genera il guest e lo
 /// compila, questo genera l'host e lo esegue. La sorgente è la stessa —
 /// `crates/fub-abi/wit/fub/abi.wit` — e deliberatamente non è la copia
-/// congelata in `wit/frozen/0.1.1.wit`: la copia congelata è il **presidio**
+/// congelata in `wit/frozen/`: le copie congelate sono il **presidio**
 /// della baseline (nessuno la tocca, e un `diff` dice se qualcuno l'ha fatto),
 /// il file vivo è la **sorgente**. Un host generato dalla copia sarebbe un host
 /// che non si accorge di una rottura del vivo, cioè il presidio girato dalla

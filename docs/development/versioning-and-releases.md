@@ -27,7 +27,7 @@ decisione deliberata e richiede aggiornamento di manifest, CI e guide.
 
 ## Versione ABI
 
-Il contratto corrente è `fub:abi@0.1.1`.
+Il contratto corrente è `fub:abi@0.1.2`.
 
 La regola di caricamento:
 

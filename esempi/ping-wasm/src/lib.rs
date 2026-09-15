@@ -57,7 +57,7 @@ const ID: &str = "demo.ping";
 const ABI: &str = if cfg!(feature = "abi-incompatibile") {
     "99.0.0"
 } else {
-    "0.1.1"
+    "0.1.2"
 };
 
 /// Quando ci siamo attivati, in millisecondi. Il diario del plugin nativo era

@@ -134,6 +134,7 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 use std::sync::Arc;
 
 use fub_abi::command::CommandSpec;
+use fub_abi::grid::{GridProvider, GridSurfaceSpec};
 use fub_abi::traits::{
     CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
 };
@@ -208,6 +209,12 @@ pub(crate) struct RegisteredCommand {
     pub(crate) specs: Vec<CommandSpec>,
 }
 
+pub(crate) struct RegisteredGrid {
+    pub(crate) id: String,
+    pub(crate) provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+    pub(crate) specs: Vec<GridSurfaceSpec>,
+}
+
 /// **Chi è registrato, cosa ha dichiarato, e chi possiede quale nome.**
 ///
 /// Uno dei cinque componenti in cui il §8.1 scompone il `Workspace`. Mette
@@ -272,6 +279,9 @@ pub(crate) struct ProviderRegistry {
     /// view, indici e handler) la macro non troverebbe nessuno dei comandi che
     /// deve comporre.
     pub(crate) commands: ProviderTable<RegisteredCommand>,
+    /// Provider strutturati grid; le spec sono catturate alla registrazione e
+    /// ogni istanza mutabile resta confinata al proprio provider.
+    pub(crate) grids: ProviderTable<RegisteredGrid>,
     /// La catena dei comandi in corso, dal più esterno al più interno: serve a
     /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
     /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
@@ -290,6 +300,7 @@ impl ProviderRegistry {
             exports: ProviderTable::new(),
             views: ProviderTable::new(),
             commands: ProviderTable::new(),
+            grids: ProviderTable::new(),
             command_stack: Vec::new(),
         }
     }

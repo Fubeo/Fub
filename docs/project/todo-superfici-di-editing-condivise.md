@@ -502,16 +502,16 @@ limiti, fallback e nessuna chiamata per battuta.
 
 Soltanto dopo la misura:
 
-- [ ] aggiungere i tipi minimi in `fub-abi`;
-- [ ] aggiornare WIT vivo e verificarne l'additività;
-- [ ] aggiornare mirror TypeScript e fake host;
-- [ ] aggiornare `MemoryHost` e `fub-testkit`;
-- [ ] implementare il proxy in `fub-wasm-host`;
-- [ ] integrare inventario, ownership e lifecycle dei bundle;
-- [ ] creare un esempio WASM con griglia piccola;
-- [ ] provare parità nativo↔WASM;
-- [ ] provare fallback su shell priva della griglia;
-- [ ] documentare limiti, versioni e negoziazione.
+- [x] aggiungere i tipi minimi in `fub-abi`;
+- [x] aggiornare WIT vivo e verificarne l'additività;
+- [x] aggiornare mirror TypeScript e fake host;
+- [x] aggiornare `MemoryHost` e `fub-testkit`;
+- [x] implementare il proxy in `fub-wasm-host`;
+- [x] integrare inventario, ownership e lifecycle dei bundle;
+- [x] creare un esempio WASM con griglia piccola;
+- [x] provare parità nativo↔WASM;
+- [x] provare fallback su shell priva della griglia;
+- [x] documentare limiti, versioni e negoziazione.
 
 Una futura famiglia `structured` per DOCX riusa sessioni, registry, lifecycle,
 comandi e salvataggio, ma non forza CodeMirror a diventare un editor visuale
@@ -540,7 +540,7 @@ rich text.
 
 - [x] nessun import `@codemirror/*` fuori da `apps/client/src/editors/text/`;
 - [ ] ogni binding usa famiglia, profilo e fallback registrati;
-- [ ] ogni famiglia pubblica ha implementazione shell, fallback, mirror,
+- [x] ogni famiglia pubblica ha implementazione shell, fallback, mirror,
   conformità nativa e conformità WASM.
 
 I guard verificano proprietà, non l'ordine estetico dei file.

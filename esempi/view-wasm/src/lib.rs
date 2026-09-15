@@ -65,7 +65,7 @@ impl PluginGuest for Component {
             id: PLUGIN_ID.to_string(),
             name: "Example Declarative View".to_string(),
             version: "0.1.0".to_string(),
-            abi_version: "0.1.1".to_string(),
+            abi_version: "0.1.2".to_string(),
             permissions: PluginPermissions {
                 granted: vec![OptionEntry {
                     key: "fub:read-vault".to_string(),

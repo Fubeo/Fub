@@ -911,14 +911,10 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const known = session ? this.#surfaceDescriptors.get(session) : undefined;
     if (known) return { text, ...known };
 
-    let source: DocumentSource;
-    try {
-      source = await this.#api.readDocument(id);
-    } catch (error) {
+    if (session) {
       // Una bozza ripristinata può essere l'unica copia rimasta. Se il backend
-      // non sa più descriverne la sorgente, la superficie testuale generica la
+      // non sa descriverne la sorgente, la superficie testuale generica la
       // rende comunque accessibile senza attribuirle capacità Markdown finte.
-      if (!session) throw error;
       const fallback: DocumentSurfaceDescriptor = {
         formatId: null,
         sourceKind: "text",
@@ -927,15 +923,9 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return { text, ...fallback };
     }
 
-    const current = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
-    if (current) {
-      this.#surfaceDescriptors.set(current, {
-        formatId: source.format_id,
-        sourceKind: source.source_kind,
-      });
-    }
+    const source = await this.#api.readDocument(id);
     return {
-      text,
+      text: source.text,
       formatId: source.format_id,
       sourceKind: source.source_kind,
     };

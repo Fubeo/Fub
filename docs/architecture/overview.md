@@ -67,7 +67,9 @@ flowchart TD
     features -.-> testkit
     markdown -.-> kernel
     kernel -.-> testkit
+    host -.-> sdk
     host -.-> testkit
+    wasmhost -.-> sdk
     wasmhost -.-> testkit
 ```
 

@@ -36,7 +36,7 @@ use fub::abi::errors::PluginError;
 const ID: &str = "demo.ciclo";
 
 /// La versione del contratto contro cui è scritto, come in `ping-wasm`.
-const ABI: &str = "0.1.1";
+const ABI: &str = "0.1.2";
 
 /// Il bersaglio della scrittura `volatile` del ciclo.
 ///

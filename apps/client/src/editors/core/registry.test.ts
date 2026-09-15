@@ -92,7 +92,14 @@ describe("DocumentSurfaceRegistry", () => {
         searchNotes: async () => [],
         listTags: async () => [],
       },
-      evaluateSheet: async () => ({ cells: [], dependencies: [] }),
+      gridProvider: {
+        listSurfaces: async () => [],
+        open: async () => { throw new Error("not mounted"); },
+        window: async () => { throw new Error("not mounted"); },
+        apply: async () => { throw new Error("not mounted"); },
+        reload: async () => { throw new Error("not mounted"); },
+        close: async () => {},
+      },
     });
 
     expect(registry.resolve({ formatId: "fubsheet", sourceKind: "text" })).toMatchObject({

@@ -59,6 +59,7 @@ pub enum RegistrationKind {
     Export,
     Syntax,
     Renderer,
+    Grid,
     /// Un servizio offerto agli altri plugin (§7.5).
     Service,
 }
@@ -75,6 +76,7 @@ impl RegistrationKind {
             RegistrationKind::Export => "export destination",
             RegistrationKind::Syntax => "syntax rule",
             RegistrationKind::Renderer => "renderer",
+            RegistrationKind::Grid => "grid surface",
             RegistrationKind::Service => "service",
         }
     }

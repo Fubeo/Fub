@@ -54,11 +54,15 @@ pub(crate) fn unmount(
             return Ok(errors);
         }
     };
+    let mut grid_errors = prepared.invoke_grids();
     // Un registry avvelenato vieta di recuperare i corpi, ma non impedisce
     // al kernel sano di ritirare provider e dichiarazioni.
     let (mut body, mut errors) = match registry.write() {
-        Ok(mut registry) => (registry.prepare_stop(id), Vec::new()),
-        Err(error) => (None, vec![error]),
+        Ok(mut registry) => (registry.prepare_stop(id), std::mem::take(&mut grid_errors)),
+        Err(error) => {
+            grid_errors.push(error);
+            (None, grid_errors)
+        }
     };
     let mut host = JobHost::new(workspace.clone(), id);
     if let Some(body) = body.as_mut() {

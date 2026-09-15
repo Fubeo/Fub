@@ -123,9 +123,11 @@ fn prose_normalized(source: &str) -> String {
 // ---------------------------------------------------------------------------
 /// **Perché quel punto di codice può nominare `serialize`.**
 ///
-/// Sono due, e nessuna delle due è «sto modificando un documento». Se la ragione
-/// che ti serve non è qui dentro, la risposta quasi sempre non è aggiungerne una
-/// terza: è che quella modifica va fatta con
+/// Sono tre, e nessuna delle tre è «sto modificando un documento». Le prime due
+/// valgono per i casi generali sopra; la terza è l'eccezione esplicita della
+/// proiezione strutturata della griglia. Se la ragione che ti serve non è qui
+/// dentro, la risposta quasi sempre non è aggiungerne una quarta: è che quella
+/// modifica va fatta con
 #[derive(Debug)]
 enum Reason {
     /// [`HostApi::apply_edit`](fub_abi::traits::HostApi::apply_edit).
@@ -144,6 +146,12 @@ enum Reason {
     /// `FormatProvider::serialize`, ma ciò che quel metodo fa. E da lì un file
     /// non si riscrive comunque — un provider non ha un `HostApi` fra le mani.
     TheFormatThatImplementsIt,
+    /// **La proiezione del workbook della griglia strutturata.** Il `Workbook`
+    /// `.fubsheet` è un modello canonico persistito separato dal `DocumentModel`
+    /// lossy. `SheetGridProvider` serializza solo un workbook clonato e validato
+    /// per derivare un unico diff `EditRequest` protetto dalla revisione; non
+    /// scrive mai direttamente tramite `FormatProvider::serialize` o `HostApi`.
+    StructuredGridWorkbookProjection,
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +204,14 @@ const ALLOWLIST: &[(&str, &str, usize, Reason)] = &[
         "serialize",
         1,
         Reason::AnotherSerialize,
+    ),
+    (
+        // La griglia strutturata proietta un workbook `.fubsheet` canonico in
+        // un unico diff `EditRequest` protetto dalla revisione.
+        "crates/fub-host/src/sheet.rs",
+        ".serialize",
+        1,
+        Reason::StructuredGridWorkbookProjection,
     ),
 ];
 
@@ -462,8 +478,9 @@ fn serialize_is_not_the_way_to_rewrite_an_existing_document() {
          If you are **generating a new document** (a template, \"create\"\n\
          notes) or if it is a `serialize` unrelated to documents (serde),\n\
          then the line should be added here — with its reason in the\n\
-         `Reason` enum, which today has two and neither covers generation.\n\
-         Adding a third is the decision to make, and it is why this file\n\
+         `Reason` enum, which today has three: two general reasons and the\n\
+         explicit structured-grid workbook projection exception.\n\
+         Adding another is the decision to make, and it is why this file\n\
          exists.",
         list(&new)
     );

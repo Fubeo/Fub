@@ -5,13 +5,17 @@ use std::sync::{mpsc, Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::edit::Revision;
+use fub_abi::grid::{
+    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSheet, GridSurfaceSpec,
+    GridWindow, GridWindowRequest, GRID_PROTOCOL_VERSION,
+};
 use fub_abi::traits::{CommandProvider, HostApi, PluginManifest};
 use fub_abi::PluginError;
-use fub_host::registry::{Bundle, BundleRegistry, OnlyProviders, Registrar};
+use fub_host::registry::{Bundle, BundleError, BundleRegistry, OnlyProviders, Registrar};
 use fub_host::Custody;
 use fub_kernel::workspace::PreparedRegistration;
-use fub_kernel::{RegistryError, Trust, Workspace};
-
+use fub_kernel::{RegistrationKind, RegistryError, Trust, Workspace};
 const OWNER: &str = "fub.registration-probe";
 
 struct Probe {
@@ -139,6 +143,96 @@ impl Bundle for ProbeBundle {
         };
         registrar
             .register_command_provider(Box::new(provider))
+            .err()
+            .map(|error| vec![error.to_string()])
+            .unwrap_or_default()
+    }
+}
+struct GridProbe {
+    workspace: Custody<Workspace>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl GridProvider for GridProbe {
+    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
+        assert!(
+            self.workspace.try_write().is_some(),
+            "grid declaration re-entry"
+        );
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        vec![
+            GridSurfaceSpec::new("probe.grid", "probe"),
+            GridSurfaceSpec {
+                id: "probe.grid.unknown.v2".into(),
+                format: "probe".into(),
+                protocol_version: 2,
+            },
+            GridSurfaceSpec {
+                id: "probe.grid.unknown.v999".into(),
+                format: "probe".into(),
+                protocol_version: 999,
+            },
+        ]
+    }
+
+    fn open(&mut self, _: &str, _: &str, _: Revision) -> Result<GridSession, PluginError> {
+        assert!(self.workspace.try_write().is_some(), "grid open re-entry");
+        Ok(GridSession {
+            instance: "probe-instance".into(),
+            sheets: vec![GridSheet {
+                id: "probe-sheet".into(),
+                name: "Probe Sheet".into(),
+                row_count: 1,
+                column_count: 1,
+            }],
+        })
+    }
+
+    fn window(&mut self, _: &str, _: GridWindowRequest) -> Result<GridWindow, PluginError> {
+        Err(PluginError::Unserved("grid window is unserved".into()))
+    }
+
+    fn apply(&mut self, _: &str, _: GridApplyRequest) -> Result<GridCommit, PluginError> {
+        Err(PluginError::Unserved("grid apply is unserved".into()))
+    }
+
+    fn reload(&mut self, _: &str, _: &str, _: Revision) -> Result<GridSession, PluginError> {
+        Err(PluginError::Unserved("grid reload is unserved".into()))
+    }
+
+    fn close(&mut self, _: &str) -> Result<(), PluginError> {
+        Err(PluginError::Unserved("grid close is unserved".into()))
+    }
+
+    fn shutdown(&mut self) -> Result<(), PluginError> {
+        Ok(())
+    }
+}
+
+struct GridBundle {
+    workspace: Custody<Workspace>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl Bundle for GridBundle {
+    fn manifest(&self) -> PluginManifest {
+        PluginManifest::core("fub.registration-grid-probe", "Grid Probe")
+    }
+
+    fn plugin(&self) -> Box<dyn fub_abi::traits::Plugin> {
+        OnlyProviders::boxed(self.manifest())
+    }
+
+    fn trust(&self) -> Trust {
+        Trust::Core
+    }
+
+    fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String> {
+        registrar
+            .register_grid_provider(Box::new(GridProbe {
+                workspace: self.workspace.clone(),
+                calls: self.calls.clone(),
+            }))
             .err()
             .map(|error| vec![error.to_string()])
             .unwrap_or_default()
@@ -400,3 +494,29 @@ fn index_routes_are_captured_once_and_rejected_activation_is_cleaned_outside_gua
     assert!(prepared.dispose_uncommitted(&mut host).is_empty());
     assert!(closed.load(Ordering::SeqCst));
 }
+
+#[test]
+fn grid_registration_captures_surfaces_once_and_calls_outside_guard() {
+    let (_dir, workspace) = workspace();
+    let registry = Custody::new("grid bundle registry test", BundleRegistry::new());
+    let calls = Arc::new(AtomicUsize::new(0));
+    BundleRegistry::remember_guarded(
+        &registry,
+        Arc::new(GridBundle {
+            workspace: workspace.clone(),
+            calls: calls.clone(),
+        }),
+    )
+    .unwrap();
+
+    let error = BundleRegistry::enable_guarded(
+        &registry,
+        &workspace,
+        "fub.registration-grid-probe",
+    )
+    .expect_err("unsupported grid protocol must reject registration");
+    assert!(matches!(error, BundleError::Registration { .. }));
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+
+    assert!(workspace.read().unwrap().grid_surfaces().is_empty());
+    assert!(registry.read().unwrap().ids().is_empty());

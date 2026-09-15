@@ -29,6 +29,9 @@ use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
 use fub_abi::format::SourceKind;
+use fub_abi::grid::{
+    GridApplyRequest, GridCommit, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -289,11 +292,67 @@ fn read_document(
     })
 }
 
-/// Valuta un workbook al confine della shell. Le battute restano nel
-/// `GridEngine`; questa porta riceve soltanto sorgenti già confermati.
 #[tauri::command]
-fn evaluate_sheet(source: String) -> Result<fub_host::sheet::WorkbookEvaluation, PluginError> {
-    fub_host::sheet::evaluate(&source)
+fn list_grid_surfaces(
+    host: State<Host>,
+    vault: Option<String>,
+) -> Result<Vec<GridSurfaceSpec>, PluginError> {
+    host.grid_surfaces(vault.as_deref())
+}
+
+#[tauri::command]
+fn open_grid(
+    host: State<Host>,
+    surface: String,
+    source: String,
+    vault: Option<String>,
+) -> Result<GridSession, PluginError> {
+    let revision = Revision::of(&source);
+    host.grid_open(vault.as_deref(), &surface, &source, revision)
+}
+
+#[tauri::command]
+fn grid_window(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    request: GridWindowRequest,
+    vault: Option<String>,
+) -> Result<GridWindow, PluginError> {
+    host.grid_window(vault.as_deref(), &surface, &instance, request)
+}
+
+#[tauri::command]
+fn apply_grid(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    request: GridApplyRequest,
+    vault: Option<String>,
+) -> Result<GridCommit, PluginError> {
+    host.grid_apply(vault.as_deref(), &surface, &instance, request)
+}
+
+#[tauri::command]
+fn reload_grid(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    source: String,
+    vault: Option<String>,
+) -> Result<GridSession, PluginError> {
+    let revision = Revision::of(&source);
+    host.grid_reload(vault.as_deref(), &surface, &instance, &source, revision)
+}
+
+#[tauri::command]
+fn close_grid(
+    host: State<Host>,
+    surface: String,
+    instance: String,
+    vault: Option<String>,
+) -> Result<(), PluginError> {
+    host.grid_close(vault.as_deref(), &surface, &instance)
 }
 
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
@@ -993,7 +1052,12 @@ pub fn run() {
             initial_vault,
             session_notice,
             read_document,
-            evaluate_sheet,
+            list_grid_surfaces,
+            open_grid,
+            grid_window,
+            apply_grid,
+            reload_grid,
+            close_grid,
             write_document,
             save_draft,
             discard_draft,
