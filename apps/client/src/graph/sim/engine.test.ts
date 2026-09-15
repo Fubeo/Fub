@@ -415,6 +415,31 @@ describe("motore — livelli", () => {
 });
 
 describe("motore — collisions", () => {
+  it("tier 3 skips collision resolution while tier 2 preserves it", () => {
+    const collisionProbe = (n: number): { s: Structure; pool: QuadtreePool } => {
+      const s = structure(n, 0);
+      s.x[0] = 0;
+      s.x[1] = 5;
+      for (let i = 2; i < n; i++) s.x[i] = i * 100;
+      return { s, pool: new QuadtreePool() };
+    };
+    const c = config({
+      gravity: 0,
+      repulsion: 0,
+      springStiffness: 0,
+      collisions: true,
+      friction: 1,
+    });
+
+    const tier3 = collisionProbe(2001);
+    step(tier3.s, c, newState(), build(tier3.s, tier3.pool), DT);
+    expect(tier3.s.x[1] - tier3.s.x[0]).toBe(5);
+
+    const tier2 = collisionProbe(2000);
+    step(tier2.s, c, newState(), build(tier2.s, tier2.pool), DT);
+    const d = Math.hypot(tier2.s.x[1] - tier2.s.x[0], tier2.s.y[1] - tier2.s.y[0]);
+    expect(d).toBeGreaterThan(5);
+  });
   it("due nodi sovrapposti si separano alla distanza di riposo", () => {
     const s = structure(2, 0);
     s.x[0] = 0;

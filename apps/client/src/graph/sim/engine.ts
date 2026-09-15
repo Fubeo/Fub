@@ -84,7 +84,7 @@ export function step(
     s.y[i] += s.vy[i] * dtEff;
   }
 
-  if (config.collisions) collisions(s, config);
+  if (config.collisions && tier < 3) collisions(s, config);
 
   // Raffreddamento per secondo, non per frame: a dt nominale è un passo di
   // raffreddamento, a dt = 1/30 sono due (come due frame a 1/60).

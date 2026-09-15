@@ -192,7 +192,7 @@ function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): (
       saveConfig(c);
       chart.setConfig(c);
     },
-    onWarm: () => chart.warm(0.6),
+    onWarm: () => chart.warm(1),
     onUnpinAll: () => chart.unpinNodes(),
     copy: panelCopy,
     restoreFocus: () => {
