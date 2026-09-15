@@ -1,0 +1,37 @@
+name: Client recovery verification
+
+on:
+  push:
+    branches: [feat/issue11-grid-window-session]
+    paths: [.github/workflows/client-recovery.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  recovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: apps/client
+      - run: npx playwright install chromium
+        working-directory: apps/client
+      - name: Dipendenze pubbliche senza credenziali
+        run: |
+          mkdir -p /tmp/fub-client
+          tar -czf /tmp/fub-client/node-modules.tar.gz -C apps/client node_modules
+          tar -czf /tmp/fub-client/chromium.tar.gz -C "$HOME/.cache" ms-playwright
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: client-offline-${{ github.sha }}
+          path: /tmp/fub-client/*.tar.gz
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
