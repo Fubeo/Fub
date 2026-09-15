@@ -6,28 +6,36 @@ import { openStage, openPage, OUTPUT } from "./stage.mjs";
 const countKinds = (resources) => Object.fromEntries([...new Set(resources)].map((kind) => [kind, resources.filter((entry) => entry === kind).length]));
 
 const REPORT = join(OUTPUT, "graph-scale.json");
-const DEFAULTS = { nodes: 2000, seed: 6, cycles: 3 };
-const ORACLE = Object.freeze({ nodes: 2000, seed: 6, digest: "eeeacc27" });
-const LIMITS = { nodes: [0, 0xffff_ffff], seed: [0, 0xffff_ffff], cycles: [1, 20] };
+const DEFAULTS = { nodes: 2000, seed: 6, cycles: 3, soakWindows: 1 };
+const ORACLES = Object.freeze({
+  "2000:6": "eeeacc27",
+  "10000:6": "abcf614b",
+});
+const LIMITS = { nodes: [0, 0xffff_ffff], seed: [0, 0xffff_ffff], cycles: [1, 20], soakWindows: [1, 20] };
+const READY_SAFETY_TIMEOUT_MS = 30_000;
+const FRAME_SAMPLE_TARGET = 120;
+const FRAME_SAMPLE_SAFETY_TIMEOUT_MS = 30_000;
 
 function args() {
   const out = { ...DEFAULTS };
   for (let i = 2; i < process.argv.length; i++) {
     const token = process.argv[i];
-    const m = /^--(nodes|seed|cycles)(?:=(\d+))?$/.exec(token);
+    const m = /^--(nodes|seed|cycles|soak-windows)(?:=(\d+))?$/.exec(token);
     if (!m) throw new RangeError(`unknown argument: ${token}`);
+    const key = m[1] === "soak-windows" ? "soakWindows" : m[1];
     const value = m[2] ?? process.argv[++i];
     if (!/^\d+$/.test(value ?? "")) throw new RangeError(`invalid ${m[1]}`);
-    out[m[1]] = Number(value);
+    out[key] = Number(value);
   }
   for (const key of Object.keys(LIMITS)) {
     const [min, max] = LIMITS[key];
     if (!Number.isInteger(out[key]) || out[key] < min || out[key] > max) throw new RangeError(`invalid ${key}`);
   }
-  if (out.nodes !== ORACLE.nodes) throw new RangeError(`graph-scale first slice requires nodes=${ORACLE.nodes}; received ${out.nodes}`);
-  if (out.seed !== ORACLE.seed) throw new RangeError(`graph-scale first slice requires seed=${ORACLE.seed}; received ${out.seed}`);
+  const oracleKey = `${out.nodes}:${out.seed}`;
+  if (!(oracleKey in ORACLES)) throw new RangeError(`unsupported graph-scale tuple: nodes=${out.nodes}, seed=${out.seed}`);
   return out;
 }
+
 
 function environmentHost() {
   const cpus = os.cpus();
@@ -188,8 +196,22 @@ async function installProbe(page) {
     };
     window.ResizeObserver = Obs(window.ResizeObserver, "resizeObserver");
     window.MutationObserver = Obs(window.MutationObserver, "mutationObserver");
-    new PerformanceObserver((list) => { for (const e of list.getEntries()) state.longtasks.push(e.duration); }).observe({ type: "longtask", buffered: true });
-    const snapshot = () => ({ resources: [...state.resources].map((record) => record.kind), frameTimes: state.frames.splice(0), longtasks: state.longtasks.splice(0), interaction: state.interaction.splice(0), pointerCaptures: state.pointerCaptures.splice(0) });
+    const longTaskObserver = new PerformanceObserver((list) => { for (const e of list.getEntries()) state.longtasks.push(e.duration); });
+    longTaskObserver.observe({ type: "longtask", buffered: true });
+    const drainLongTasks = () => {
+      for (const entry of longTaskObserver.takeRecords()) state.longtasks.push(entry.duration);
+    };
+    const snapshot = () => {
+      drainLongTasks();
+      return { resources: [...state.resources].map((record) => record.kind), frameTimes: state.frames.splice(0), longtasks: state.longtasks.splice(0), interaction: state.interaction.splice(0), pointerCaptures: state.pointerCaptures.splice(0) };
+    };
+    const discard = () => {
+      drainLongTasks();
+      state.frames.length = 0;
+      state.longtasks.length = 0;
+      state.interaction.length = 0;
+      state.pointerCaptures.length = 0;
+    };
     Object.defineProperty(window, "__graphScaleProbe", { value: Object.freeze({
       begin: () => { state.active = true; state.interaction.length = 0; state.pointerCaptures.length = 0; },
       end: () => { state.active = false; },
@@ -210,6 +232,7 @@ async function installProbe(page) {
         return sample.times;
       },
       snapshot,
+      discard,
       details: () => {
         const describe = (target) => {
           if (target === window) return { kind: "window" };
@@ -231,6 +254,22 @@ const heap = async (session) => {
     const metric = metrics.find((entry) => entry.name === "JSHeapUsedSize");
     return metric && Number.isFinite(metric.value) ? metric.value : { status: "unsupported", reason: "JSHeapUsedSize unavailable" };
   } catch (error) { return { status: "unsupported", reason: String(error?.message ?? error) }; }
+};
+const linearSlope = (values) => {
+  const points = values.map((value, index) => [index + 1, value]).filter(([, y]) => Number.isFinite(y));
+  if (points.length < 2) return null;
+  const meanX = points.reduce((sum, [x]) => sum + x, 0) / points.length;
+  const meanY = points.reduce((sum, [, y]) => sum + y, 0) / points.length;
+  const denominator = points.reduce((sum, [x]) => sum + (x - meanX) ** 2, 0);
+  return denominator ? points.reduce((sum, [x, y]) => sum + (x - meanX) * (y - meanY), 0) / denominator : null;
+};
+const collectHeap = async (session) => {
+  try {
+    await session.send("HeapProfiler.collectGarbage");
+  } catch (error) {
+    return { status: "unsupported", reason: String(error?.message ?? error) };
+  }
+  return heap(session);
 };
 
 async function closeGraph(page) {
@@ -293,14 +332,15 @@ async function main() {
     await cdp.send("Performance.enable");
     await installProbe(page);
     await page.goto(`${stage.base}/?graphNodes=${config.nodes}&graphSeed=${config.seed}`, { waitUntil: "load" });
-    await page.waitForFunction(() => document.documentElement.dataset.bench === "ready", null, { timeout: 15000 });
+    await page.waitForFunction(() => document.documentElement.dataset.bench === "ready", null, { timeout: READY_SAFETY_TIMEOUT_MS });
     const fixture = await page.evaluate(() => globalThis.__fubGraphBench?.fixture ?? null);
     if (!fixture) throw new Error("graph bench metadata is absent");
     if (fixture.nodes.length !== config.nodes || fixture.seed !== config.seed || fixture.edges.length !== config.nodes * 2) throw new Error(`graph bench metadata mismatch: expected ${config.nodes}/${config.seed}/${config.nodes * 2}`);
     report.fixture = { nodes: fixture.nodes.length, edges: fixture.edges.length, seed: fixture.seed, digest: fixture.digest };
-    if (typeof fixture.digest !== "string" || !/^[0-9a-f]{8}$/.test(fixture.digest) || fixture.digest !== ORACLE.digest) {
-      const error = new Error(`graph bench digest mismatch: requested ${ORACLE.digest}, observed ${String(fixture.digest)}`);
-      error.requestedDigest = ORACLE.digest;
+    const expectedDigest = ORACLES[`${config.nodes}:${config.seed}`];
+    if (typeof fixture.digest !== "string" || !/^[0-9a-f]{8}$/.test(fixture.digest) || fixture.digest !== expectedDigest) {
+      const error = new Error(`graph bench digest mismatch: requested ${expectedDigest}, observed ${String(fixture.digest)}`);
+      error.requestedDigest = expectedDigest;
       error.observedDigest = fixture.digest ?? null;
       throw error;
     }
@@ -308,51 +348,92 @@ async function main() {
     await page.mouse.move(1, 1);
     const base = await page.evaluate(() => ({ children: document.querySelector("#panes")?.children.length ?? 0, probe: window.__graphScaleProbe.snapshot() }));
     report.memory.before = await heap(cdp); report.resources.scope = "DOM listeners are tracked only on window/document and elements within canvas.graph-main, canvas.graph-bg, or .graph-panel; timers, rAF, and observers are tracked only when their creation stack contains /src/graph/ or /src/panels/graph.ts while the probe is active."; report.resources.baseline = base.probe.resources.length; report.resources.baselineByKind = countKinds(base.probe.resources);
+    report.soak = {
+      requestedWindows: config.soakWindows,
+      windows: [],
+      totalActiveFrames: 0,
+      heapAvailability: { status: "unsupported", reasons: [] },
+      heapDeltasFromFirst: null,
+      monotonicIncreaseCount: null,
+      linearRegressionSlopeBytesPerWindow: null,
+    };
     for (let i = 0; i < config.cycles; i++) {
-      await page.evaluate(() => window.__graphScaleProbe.begin()); const t0 = performance.now();
+      await page.evaluate(() => window.__graphScaleProbe.begin());
+      const t0 = performance.now();
       await page.locator("#show-graph").dispatchEvent("click");
       await page.waitForSelector("canvas.graph-main");
       await page.waitForFunction(() => { const c = document.querySelector("canvas.graph-main"); return c && c.width > 0 && c.height > 0; });
       const mounted = await page.evaluate(() => window.__graphScaleProbe.snapshot());
       report.timings[`mount${i + 1}Ms`] = performance.now() - t0;
       if (i === 0) {
-        report.memory.mounted = await heap(cdp);
+        const sample = { target: FRAME_SAMPLE_TARGET, deadlineMs: FRAME_SAMPLE_SAFETY_TIMEOUT_MS, deadlineKind: "safety-timeout" };
         const canvas = page.locator("canvas.graph-main");
         const box = await canvas.boundingBox();
         if (!box || box.width <= 0 || box.height <= 0) throw new Error("graph canvas bounding box is unavailable");
         const beforeCanvas = await canvas.evaluate((c) => c.toDataURL());
-        const sample = { target: 120, deadlineMs: 5000 };
-        report.sample = sample;
-        const framePromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
-        const inside = { x: box.x + box.width * 0.5, y: box.y + box.height * 0.5 };
-        await page.mouse.move(inside.x, inside.y);
+
+        await page.evaluate(() => window.__graphScaleProbe.discard());
+        const interactionFramesPromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
+        await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
         await page.mouse.wheel(0, 180);
         await page.mouse.down();
         await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.6);
         await page.mouse.up();
-        const frameTimes = await framePromise;
+        const interactionFrameTimes = await interactionFramesPromise;
         await page.evaluate(() => window.__graphScaleProbe.stopFrames());
-        const postInteraction = await page.evaluate(() => window.__graphScaleProbe.snapshot());
-        const afterCanvas = await canvas.evaluate((c) => c.toDataURL());
-        const eventTypes = new Set(postInteraction.interaction.map((event) => event.type));
-        const wheelEvents = postInteraction.interaction.filter((event) => event.type === "wheel");
-        const pointerEvents = postInteraction.interaction.filter((event) => event.type.startsWith("pointer"));
-        const signals = {
-          wheelDelivered: wheelEvents.length > 0,
-          wheelPrevented: wheelEvents.some((event) => event.defaultPrevented),
-          pointerDelivered: pointerEvents.length > 0,
-          pointerCapture: postInteraction.pointerCaptures.length > 0,
-          eventTypes: [...eventTypes],
+        const interactionObserved = await page.evaluate(() => window.__graphScaleProbe.snapshot());
+        if (interactionFrameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${interactionFrameTimes.length}`);
+        const interactionEntry = {
+          count: interactionFrameTimes.length,
+          intervals: stats(interactionFrameTimes.slice(1).map((v, j) => v - interactionFrameTimes[j])),
         };
-        report.interaction = { signals, events: postInteraction.interaction, pointerCaptures: postInteraction.pointerCaptures };
+        report.sample = sample;
+        report.frames = interactionEntry;
+        report.timings.interactionFrames = interactionEntry.intervals;
+        report.timings.longTasks = { ...stats(interactionObserved.longtasks), over50ms: interactionObserved.longtasks.filter((x) => x > 50).length };
+        report.resources.interaction = interactionObserved.resources.length;
+        const wheelEvents = interactionObserved.interaction.filter((event) => event.type === "wheel");
+        const pointerEvents = interactionObserved.interaction.filter((event) => event.type.startsWith("pointer"));
+        const signals = { wheelDelivered: wheelEvents.length > 0, wheelPrevented: wheelEvents.some((event) => event.defaultPrevented), pointerDelivered: pointerEvents.length > 0, pointerCapture: interactionObserved.pointerCaptures.length > 0, eventTypes: [...new Set(interactionObserved.interaction.map((event) => event.type))] };
+        report.interaction = { signals, events: interactionObserved.interaction, pointerCaptures: interactionObserved.pointerCaptures };
         if (!signals.wheelDelivered || !signals.wheelPrevented || !signals.pointerDelivered || !signals.pointerCapture) throw new Error(`graph interaction handlers not causal: ${JSON.stringify(signals)}`);
-        if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);
-        if (beforeCanvas === afterCanvas) throw new Error("graph interaction did not change canvas");
-        const intervals = frameTimes.slice(1).map((v, j) => v - frameTimes[j]);
-        report.frames = { count: frameTimes.length, intervals: stats(intervals) };
-        report.timings.interactionFrames = stats(intervals);
-        report.timings.longTasks = { ...stats(postInteraction.longtasks), over50ms: postInteraction.longtasks.filter((x) => x > 50).length };
-        report.resources.interaction = postInteraction.resources.length;
+        if (beforeCanvas === await canvas.evaluate((c) => c.toDataURL())) throw new Error("graph interaction did not change canvas");
+
+        for (let windowIndex = 1; windowIndex <= config.soakWindows; windowIndex++) {
+          await page.evaluate(() => window.__graphScaleProbe.discard());
+          const windowStarted = performance.now();
+          const warm = page.locator(".graph-panel-azioni button").first();
+          if (!(await warm.count())) throw new Error("graph physics warm action is absent");
+          await warm.dispatchEvent("click");
+          const framePromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
+          const frameTimes = await framePromise;
+          await page.evaluate(() => window.__graphScaleProbe.stopFrames());
+          const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
+          if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);
+          const heapUsed = await collectHeap(cdp);
+          const entry = {
+            window: windowIndex,
+            wallMs: performance.now() - windowStarted,
+            frames: { count: frameTimes.length, intervals: stats(frameTimes.slice(1).map((v, j) => v - frameTimes[j])) },
+            longTasks: { ...stats(observed.longtasks), over50ms: observed.longtasks.filter((x) => x > 50).length },
+            heapUsed,
+          };
+          report.soak.windows.push(entry);
+          report.soak.totalActiveFrames += frameTimes.length;
+        }
+        await page.evaluate(() => window.__graphScaleProbe.end());
+        const heapSeries = report.soak.windows.map(({ heapUsed }) => typeof heapUsed === "number" ? heapUsed : null);
+        const failures = report.soak.windows.flatMap(({ heapUsed }) => typeof heapUsed === "number" ? [] : [heapUsed?.reason ?? "JSHeapUsedSize unavailable"]);
+        const complete = heapSeries.every((value) => typeof value === "number");
+        const status = complete ? "complete" : heapSeries.some((value) => typeof value === "number") ? "partial" : "unsupported";
+        report.soak.heapAvailability = { status, reasons: [...new Set(failures)] };
+        report.soak.heapSeries = heapSeries;
+        if (complete) {
+          const firstHeap = heapSeries[0];
+          report.soak.heapDeltasFromFirst = heapSeries.map((value) => value - firstHeap);
+          report.soak.monotonicIncreaseCount = heapSeries.slice(1).reduce((count, value, index) => count + (value > heapSeries[index] ? 1 : 0), 0);
+          report.soak.linearRegressionSlopeBytesPerWindow = linearSlope(heapSeries);
+        }
       }
       await page.evaluate(() => window.__graphScaleProbe.end());
       await closeGraph(page);
@@ -363,7 +444,8 @@ async function main() {
         const details = await page.evaluate(() => window.__graphScaleProbe.details());
         throw new Error(`graph resources leaked after close: ${JSON.stringify({ deltaByKind, details })}`);
       }
-      report.resources.cycles ??= []; report.resources.cycles.push({ mounted: mounted.resources.length, mountedByKind: countKinds(mounted.resources), postClose: postClose.resources.length, postCloseByKind: postCloseCounts, delta: postClose.resources.length - base.probe.resources.length, deltaByKind });
+      report.resources.cycles ??= [];
+      report.resources.cycles.push({ mounted: mounted.resources.length, mountedByKind: countKinds(mounted.resources), postClose: postClose.resources.length, postCloseByKind: postCloseCounts, delta: postClose.resources.length - base.probe.resources.length, deltaByKind });
     }
     report.memory.afterCleanup = await heap(cdp);
   } catch (error) {

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { generateGraphFixture, graphFixtureDigest } from "./graph-fixture";
 
+const ORACLE_CASES = [
+  { nodeCount: 2_000 as const, seed: 6, digest: "eeeacc27" },
+  { nodeCount: 10_000 as const, seed: 6, digest: "abcf614b" },
+];
+
 const CASES = [
   { nodeCount: 2_000 as const, digest: "66fd12b7" },
   { nodeCount: 10_000 as const, digest: "62e1ed8b" },
@@ -36,9 +41,12 @@ describe("graph bench fixture", () => {
     },
   );
 
-  it("keeps the seed six 2k oracle stable", () => {
-    expect(generateGraphFixture(2_000, 6).digest).toBe("eeeacc27");
-  });
+  it.each(ORACLE_CASES)(
+    "keeps the seed six $nodeCount oracle stable",
+    ({ nodeCount, seed, digest }) => {
+      expect(generateGraphFixture(nodeCount, seed).digest).toBe(digest);
+    },
+  );
 
   it("is deterministic for one seed and changes with another", () => {
     const first = generateGraphFixture(2_000, 0x1234_5678);
