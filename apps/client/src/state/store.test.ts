@@ -3,11 +3,17 @@
 // ricordare. Sono decisioni, non cablaggio — e una decisione che si prova solo
 // aprendo l'app non la prova nessuno.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { emit, loadActiveSpace, loadExpanded, on, saveExpanded, state } from "./store";
+import {
+  emit,
+  loadActiveSpace,
+  loadExpanded,
+  on,
+  saveExpanded,
+  state,
+} from "./store";
 
 const viewState = vi.fn();
 const setViewState = vi.fn();
-
 
 const notify = vi.fn();
 
@@ -92,7 +98,6 @@ describe("ricordare", () => {
   });
 });
 
-
 describe("il bus sincrono non perde gli errori asincroni", () => {
   it("raccoglie una Promise rifiutata senza fermare gli altri listener", async () => {
     const later = vi.fn();
@@ -111,7 +116,10 @@ describe("il bus sincrono non perde gli errori asincroni", () => {
 
   it("riconosce anche un thenable che non è una Promise", async () => {
     on("organization", () => ({
-      then(_resolve: (value?: unknown) => void, reject: (reason: unknown) => void) {
+      then(
+        _resolve: (value?: unknown) => void,
+        reject: (reason: unknown) => void,
+      ) {
         reject(new Error("thenable fallito"));
       },
     }));
@@ -121,5 +129,34 @@ describe("il bus sincrono non perde gli errori asincroni", () => {
     await Promise.resolve();
     expect(notify).toHaveBeenCalledTimes(1);
     expect(String(notify.mock.calls[0]?.[0])).toContain("thenable fallito");
+  });
+});
+
+describe("durata delle iscrizioni al bus", () => {
+  it("il disposer impedisce le chiamate future ed è idempotente", () => {
+    const listener = vi.fn();
+    const dispose = on("documents", listener);
+
+    emit("documents");
+    dispose();
+    dispose();
+    emit("documents");
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("due iscrizioni della stessa funzione si rimuovono indipendentemente", () => {
+    const listener = vi.fn();
+    const disposeFirst = on("documents", listener);
+    const disposeSecond = on("documents", listener);
+
+    emit("documents");
+    disposeFirst();
+    disposeFirst();
+    emit("documents");
+    disposeSecond();
+    emit("documents");
+
+    expect(listener).toHaveBeenCalledTimes(3);
   });
 });

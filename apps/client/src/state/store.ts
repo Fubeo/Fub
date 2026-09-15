@@ -54,19 +54,37 @@ export interface Signals {
 
 type Listener = (...args: never[]) => unknown;
 
-const listeners = new Map<keyof Signals, Listener[]>();
+type Registration = {
+  listener: Listener;
+};
 
-/// Iscrive un ascoltatore a un segnale. Non si disiscrive: i moduli della shell
-/// vivono quanto la finestra, e un `off()` che nessuno chiama è solo una firma
-/// in più da spiegare. Quando arriveranno i pannelli smontabili (§9.4) sarà
-/// questa la riga da cambiare, in un posto solo.
+const listeners = new Map<keyof Signals, Registration[]>();
+
+/// Iscrive un ascoltatore a un segnale e restituisce il disposer della
+/// registrazione. Ogni chiamata a `on` crea una registrazione distinta, anche
+/// quando riceve la stessa funzione: il disposer rimuove solo quella
+/// registrazione ed è sicuro da chiamare più volte.
 export function on<K extends keyof Signals>(
   signal: K,
   listener: (...args: Signals[K]) => unknown,
-): void {
+): () => void {
+  const registration: Registration = { listener: listener as Listener };
   const list = listeners.get(signal);
-  if (list) list.push(listener as Listener);
-  else listeners.set(signal, [listener as Listener]);
+  if (list) list.push(registration);
+  else listeners.set(signal, [registration]);
+
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+
+    const current = listeners.get(signal);
+    if (!current) return;
+    const index = current.indexOf(registration);
+    if (index === -1) return;
+    current.splice(index, 1);
+    if (current.length === 0) listeners.delete(signal);
+  };
 }
 
 /// Annuncia un segnale a chi si è iscritto.
@@ -76,18 +94,26 @@ export function on<K extends keyof Signals>(
 /// impedire agli altri di aggiornarsi — sarebbe un difetto che si manifesta
 /// come "metà finestra ferma", cioè nel modo più difficile da ricondurre alla
 /// sua causa (§20.3: gli esiti non si buttano via in silenzio).
+
 function isThenable(value: unknown): value is PromiseLike<unknown> {
-  return (typeof value === "object" && value !== null) || typeof value === "function"
+  return (typeof value === "object" && value !== null) ||
+    typeof value === "function"
     ? typeof (value as { then?: unknown }).then === "function"
     : false;
 }
 
 function listenerFailed(signal: keyof Signals, error: unknown): void {
-  notify(t("store.listener_failed", { signal, reason: errorText(error) }), "guasto");
+  notify(
+    t("store.listener_failed", { signal, reason: errorText(error) }),
+    "guasto",
+  );
 }
 
-export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): void {
-  for (const listener of listeners.get(signal) ?? []) {
+export function emit<K extends keyof Signals>(
+  signal: K,
+  ...args: Signals[K]
+): void {
+  for (const { listener } of listeners.get(signal) ?? []) {
     try {
       const result = (listener as (...a: Signals[K]) => unknown)(...args);
       // Il bus resta sincrono: `emit` non aspetta nessuno. Però TypeScript
@@ -95,7 +121,8 @@ export function emit<K extends keyof Signals>(signal: K, ...args: Signals[K]): v
       // una rejection non attraversa il `try` qui sopra. Riconoscere qualunque
       // thenable (non soltanto `instanceof Promise`) evita di trasformarla in
       // una rejection globale senza proprietario.
-      if (isThenable(result)) void Promise.resolve(result).catch((e) => listenerFailed(signal, e));
+      if (isThenable(result))
+        void Promise.resolve(result).catch((e) => listenerFailed(signal, e));
     } catch (e) {
       listenerFailed(signal, e);
     }
@@ -189,7 +216,10 @@ export function saveExpanded(): void {
   // Nessuna cartella aperta si **dimentica** invece di scrivere una lista vuota:
   // è ciò che significa, e il file non si porta dietro una riga per ogni vault
   // che qualcuno ha aperto e richiuso.
-  writeState(EXPANDED_KEY, state.expanded.size > 0 ? [...state.expanded] : null);
+  writeState(
+    EXPANDED_KEY,
+    state.expanded.size > 0 ? [...state.expanded] : null,
+  );
 }
 
 export async function loadActiveSpace(): Promise<void> {
@@ -240,6 +270,6 @@ export function writeState(key: string, value: unknown): void {
   void stateQueue.enqueueByKey(key, () =>
     api.setViewState(key, value).catch(() => {
       notify(t("state.not_remembered"), "info");
-    })
+    }),
   );
 }
