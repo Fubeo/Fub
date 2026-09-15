@@ -40,6 +40,7 @@ const TRASH_ID: &str = "fub.trash";
 pub struct Mounted {
     pub workspace: Workspace,
     pub registry: BundleRegistry,
+    pub format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
     #[cfg(feature = "versioning")]
     pub versions: Option<VersionStore>,
 }
@@ -145,15 +146,63 @@ pub fn mount(
     system_locale: Arc<SystemLocale>,
     levels: &fub_kernel::log::Levels,
 ) -> Result<Mounted, String> {
-    let mut formats = FormatRegistry::new();
-    formats
-        .register(MarkdownProvider::boxed())
-        .map_err(|error| format!("format provider conflict: {error}"))?;
+    mount_with_formats(
+        root,
+        machine,
+        view_states,
+        system_locale,
+        levels,
+        crate::PreparedFormatSource::empty(),
+    )
+}
 
-    let mut ws = Workspace::with_machine_settings(root, formats, machine)
-        .map_err(|error| error.to_string())?
-        .with_view_states(view_states)
-        .with_system_locale(system_locale);
+fn mount_error_with_resource_disposal(
+    primary: String,
+    resources: crate::format_source::FormatResources,
+) -> String {
+    let disposal_errors = crate::format_source::dispose_format_resources(resources);
+    disposal_errors.into_iter().fold(primary, |message, error| {
+        format!("{message}; retained format resource disposal failed: {error}")
+    })
+}
+
+pub(crate) fn mount_with_formats(
+    root: &Utf8Path,
+    machine: Arc<MachineSettings>,
+    view_states: Arc<ViewStates>,
+    system_locale: Arc<SystemLocale>,
+    levels: &fub_kernel::log::Levels,
+    prepared_formats: crate::PreparedFormatSource,
+) -> Result<Mounted, String> {
+    let (providers, resources) = prepared_formats.into_parts();
+    let mut format_resources = Some(resources);
+    let mut formats = FormatRegistry::new();
+    if let Err(error) = formats.register(MarkdownProvider::boxed()) {
+        return Err(mount_error_with_resource_disposal(
+            format!("format provider conflict: {error}"),
+            format_resources.take().unwrap_or_default(),
+        ));
+    }
+    for provider in providers {
+        if let Err(error) = formats.register(provider) {
+            return Err(mount_error_with_resource_disposal(
+                format!("format provider conflict: {error}"),
+                format_resources.take().unwrap_or_default(),
+            ));
+        }
+    }
+
+    let mut ws = match Workspace::with_machine_settings(root, formats, machine) {
+        Ok(ws) => ws
+            .with_view_states(view_states)
+            .with_system_locale(system_locale),
+        Err(error) => {
+            return Err(mount_error_with_resource_disposal(
+                error.to_string(),
+                format_resources.take().unwrap_or_default(),
+            ))
+        }
+    };
 
     #[cfg(feature = "http-client")]
     ws.set_network(Arc::new(crate::net::UreqNetwork::new()));
@@ -234,9 +283,12 @@ pub fn mount(
                 failures
             })
         } else {
-            return Err(format!(
-                "feature '{}' is in the inventory but the mount table does not know what it registers",
-                feature.id
+            return Err(mount_error_with_resource_disposal(
+                format!(
+                    "feature '{}' is in the inventory but the mount table does not know what it registers",
+                    feature.id
+                ),
+                format_resources.take().unwrap_or_default(),
             ));
         };
 
@@ -259,7 +311,7 @@ pub fn mount(
         registry.remember(Arc::clone(bundle));
     }
 
-    let versions = assemble_after_registry(&mut ws, &mut registry, |ws, registry| {
+    let versions = match assemble_after_registry(&mut ws, &mut registry, |ws, registry| {
         // Il core deve esistere prima di leggere `plugins.disabled` e i livelli.
         registry
             .enable(ws, CORE_ID)
@@ -314,13 +366,22 @@ pub fn mount(
         {
             Ok(())
         }
-    })?;
+    }) {
+        Ok(versions) => versions,
+        Err(error) => {
+            return Err(mount_error_with_resource_disposal(
+                error,
+                format_resources.take().unwrap_or_default(),
+            ))
+        }
+    };
     #[cfg(not(feature = "versioning"))]
     let () = versions;
 
     Ok(Mounted {
         workspace: ws,
         registry,
+        format_resources: format_resources.take().unwrap_or_default(),
         #[cfg(feature = "versioning")]
         versions,
     })

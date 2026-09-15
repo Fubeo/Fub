@@ -38,3 +38,15 @@ export async function pickFolder(): Promise<string | null> {
   const choice = await tauriOpen({ directory: true, multiple: false });
   return typeof choice === "string" ? choice : null;
 }
+
+/// Il selettore di un singolo componente WebAssembly: il filtro è intenzionalmente
+/// stretto, perché l'installazione deve partire soltanto da un file scelto dalla
+/// persona. `null` conserva l'annullamento come gesto senza effetti.
+export async function pickFile(): Promise<string | null> {
+  const choice = await tauriOpen({
+    directory: false,
+    multiple: false,
+    filters: [{ name: "WebAssembly", extensions: ["wasm"] }],
+  });
+  return typeof choice === "string" ? choice : null;
+}

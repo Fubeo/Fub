@@ -56,10 +56,11 @@ use crate::custody::Custody;
 use crate::jobs::{
     drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
 };
-use crate::mount::mount;
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
-use crate::registry::{Bundle, BundleInfo, BundleRegistry};
+use crate::registry::{
+    Bundle, BundleClaim, BundleInfo, BundleRegistry, StartupLease, StartupSnapshot, StartupSource,
+};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
 use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
@@ -134,8 +135,11 @@ pub struct VaultSession {
     ///
     /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
-    /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Custody<BundleRegistry>,
+    /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
+    _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    /// Diagnostica tipizzata prodotta dalla sorgente di startup per questa apertura.
+    startup_diagnostics: Vec<PluginError>,
     /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
     /// tenuto per la vita della sessione.
     ///
@@ -202,6 +206,11 @@ impl VaultSession {
         self.versions.as_ref()
     }
 
+    /// Diagnostica tipizzata conservata dall'apertura del vault.
+    pub fn startup_diagnostics(&self) -> Vec<PluginError> {
+        self.startup_diagnostics.clone()
+    }
+
     /// Questo vault ha il rilevamento delle modifiche esterne? (§9.7)
     pub fn is_watching(&self) -> bool {
         self.watcher.is_watching()
@@ -234,6 +243,7 @@ impl VaultSession {
             watcher,
             registry,
             mut runner,
+            _format_resources,
             ..
         } = self;
         // 1. smette di guardare, 2. smette di lavorare, 3. si chiude. I primi
@@ -243,6 +253,9 @@ impl VaultSession {
         errors.extend(runner.stop());
         drop(runner);
         close_session_resources(&workspace, &registry, &mut errors);
+        errors.extend(crate::format_source::dispose_format_resources(
+            _format_resources,
+        ));
         errors
     }
 
@@ -322,20 +335,32 @@ fn close_session_resources(
 struct OpeningTransaction<'a> {
     workspace: Custody<Workspace>,
     registry: Custody<BundleRegistry>,
+    format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    startup_diagnostics: Vec<PluginError>,
     watcher: Option<OpeningWatcher<'a>>,
     runner: Option<JobRunner>,
     session: Option<VaultSession>,
+    startup_lease: Option<StartupLease>,
     published: bool,
 }
 
 impl<'a> OpeningTransaction<'a> {
-    fn new(workspace: &'a Custody<Workspace>, registry: &Custody<BundleRegistry>) -> Self {
+    fn new(
+        workspace: &'a Custody<Workspace>,
+        registry: &Custody<BundleRegistry>,
+        format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+        startup_diagnostics: Vec<PluginError>,
+        startup_lease: Option<StartupLease>,
+    ) -> Self {
         Self {
             workspace: workspace.clone(),
             registry: registry.clone(),
+            format_resources,
+            startup_diagnostics,
             watcher: Some(OpeningWatcher::new(workspace)),
             runner: None,
             session: None,
+            startup_lease,
             published: false,
         }
     }
@@ -382,6 +407,8 @@ impl<'a> OpeningTransaction<'a> {
             root,
             workspace: self.workspace.clone(),
             registry: self.registry.clone(),
+            startup_diagnostics: std::mem::take(&mut self.startup_diagnostics),
+            _format_resources: std::mem::take(&mut self.format_resources),
             unread,
             indexed,
             runner,
@@ -398,13 +425,14 @@ impl<'a> OpeningTransaction<'a> {
             .expect("la pubblicazione richiede una sessione completa")
     }
 
-    fn into_session(mut self) -> VaultSession {
+    fn into_session_with_lease(mut self) -> (VaultSession, Option<StartupLease>) {
         let session = self
             .session
             .take()
             .expect("la pubblicazione richiede una sessione completa");
+        let lease = self.startup_lease.take();
         self.published = true;
-        session
+        (session, lease)
     }
 }
 
@@ -425,6 +453,9 @@ impl Drop for OpeningTransaction<'_> {
                 drop(runner);
             }
             close_session_resources(&self.workspace, &self.registry, &mut errors);
+            errors.extend(crate::format_source::dispose_format_resources(
+                std::mem::take(&mut self.format_resources),
+            ));
             errors
         };
         for error in errors.drain(..) {
@@ -535,6 +566,9 @@ pub struct Host {
     sessions: Custody<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    startup_source: Option<Arc<dyn StartupSource>>,
+    /// Sorgente dei provider di formato, interrogata prima del workspace.
+    format_source: Option<Arc<dyn crate::FormatSource>>,
     /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di
     /// configurazione non si può scrivere — o non c'è» composta da
     /// `install_logging` prima che l'host esistesse. Si tiene qui perché
@@ -664,6 +698,8 @@ impl Host {
             sessions: Custody::empty("le sessioni aperte"),
             watcher,
             sink: None,
+            format_source: None,
+            startup_source: None,
             session_notice: Mutex::new(None),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -737,6 +773,20 @@ impl Host {
     /// Sostituisce il rilevatore. Un e2e headless passa `NoWatcher`.
     pub fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
         self.watcher = watcher;
+        self
+    }
+    /// Imposta la sorgente runtime interrogata per ogni nuova apertura.
+    ///
+    /// La sorgente decide quali bundle richiedere; l'host non persiste né
+    /// reinterpreta quella decisione.
+    pub fn with_startup_source(mut self, source: Arc<dyn StartupSource>) -> Self {
+        self.startup_source = Some(source);
+        self
+    }
+
+    /// Imposta la sorgente dei provider di formato per ogni nuova apertura.
+    pub fn with_format_source(mut self, source: Arc<dyn crate::FormatSource>) -> Self {
+        self.format_source = Some(source);
         self
     }
 
@@ -852,25 +902,88 @@ impl Host {
 
     /// Variante privata che rende iniettabile la sola lettura pre-pubblicazione.
     ///
-    /// Il seam resta dentro il modulo: i test possono far fallire `VaultInfo`
-    /// senza avvelenare un lock o aggiungere una leva all'API pubblica.
     fn mounts_with_info(
         &self,
         root: &Utf8Path,
         session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
     ) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
+        let startup = self
+            .startup_source
+            .as_ref()
+            .map(|source| {
+                fub_kernel::safety::external(
+                    "startup source preparation",
+                    |message| PluginError::Internal(message.into()),
+                    || source.prepare(),
+                )
+            })
+            .unwrap_or_else(|| Ok(StartupSnapshot::new(Vec::new())));
+        let StartupSnapshot {
+            bundles: startup_bundles,
+            formats: mut prepared_formats,
+            diagnostics: startup_diagnostics,
+            validity: startup_validity,
+            lease: startup_lease,
+        } = match startup {
+            Ok(snapshot) => snapshot,
+            Err(error @ (PluginError::Cancelled(_) | PluginError::Conflict(_))) => {
+                return Err(error)
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "fub.host",
+                    startup_source_error = ?error,
+                    "startup source unavailable; continuing without startup bundles"
+                );
+                StartupSnapshot::new(Vec::new())
+            }
+        };
+        for diagnostic in &startup_diagnostics {
+            tracing::warn!(
+                target: "fub.host",
+                startup_diagnostic = ?diagnostic,
+                "startup diagnostic"
+            );
+        }
+        let independent_formats = self
+            .format_source
+            .as_ref()
+            .map(|source| {
+                fub_kernel::safety::external(
+                    "format source preparation",
+                    |message| PluginError::Internal(message.into()),
+                    || source.prepare(),
+                )
+            })
+            .unwrap_or_else(|| Ok(crate::PreparedFormatSource::empty()));
+        let independent_formats = match independent_formats {
+            Ok(formats) => formats,
+            Err(error) => {
+                for cleanup_error in prepared_formats.dispose() {
+                    tracing::error!(
+                        target: "fub.host",
+                        cleanup_error = ?cleanup_error,
+                        "prepared format cleanup failed after independent source error"
+                    );
+                }
+                return Err(error);
+            }
+        };
+        prepared_formats.extend(independent_formats);
         let crate::mount::Mounted {
             workspace: mut ws,
             mut registry,
+            format_resources,
             #[cfg(feature = "versioning")]
             versions,
-        } = mount(
+        } = crate::mount::mount_with_formats(
             &root,
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
             Arc::clone(&self.system_locale),
             &self.levels,
+            prepared_formats,
         )
         // Le tre cose che fanno fallire il montaggio sono un provider di
         // formato in conflitto con sé stesso, un bundle di core che non si
@@ -899,8 +1012,14 @@ impl Host {
             let (themes, errors) = crate::theme::discover_themes(config_dir);
             for theme in themes {
                 let bundle = std::sync::Arc::new(theme);
-                let id = bundle.manifest().id;
-                registry.remember(bundle);
+                let (id, remembered) = registry.remember_first(bundle);
+                if !remembered {
+                    tracing::error!(
+                        target: "fub.host",
+                        "theme `{id}` skipped: id already claimed"
+                    );
+                    continue;
+                }
                 if !disabled.contains(&id) {
                     if let Err(and) = registry.enable(&mut ws, &id) {
                         tracing::error!(target: "fub.host", "theme not mounted: {and}");
@@ -911,6 +1030,32 @@ impl Host {
                 tracing::error!(target: "fub.host", "theme skipped: {problem}");
             }
         }
+        // I bundle del composition root entrano per ultimi: feature ufficiali,
+        // temi di macchina e la prima voce di startup che rivendica un id non
+        // possono essere sostituiti da una voce successiva.
+        let mut requested = Vec::new();
+        for startup in startup_bundles {
+            let (bundle, should_enable, claim) = startup.parts();
+            let (id, known) = BundleRegistry::claimed(bundle, claim);
+            let mut candidate = Some(known);
+            match registry.remember_claimed(&mut candidate) {
+                Ok(_) => {
+                    if should_enable {
+                        requested.push(id);
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(
+                        target: "fub.host",
+                        "startup bundle `{id}` skipped: {error}"
+                    );
+                }
+            }
+        }
+        for (id, error) in registry.enable_in_dependency_order(&mut ws, requested) {
+            tracing::error!(target: "fub.host", "startup bundle `{id}` not mounted: {error}");
+        }
+
         let registry = Custody::new("i componenti montati", registry);
 
         // **I tasti che questo vault propone e che nessuno ha guardato**
@@ -935,7 +1080,13 @@ impl Host {
         // sul workspace. La transazione possiede turno, risorse e thread: ogni
         // uscita prima della pubblicazione libera il turno, ferma watcher e
         // runner, quindi percorre il teardown completo.
-        let mut opening = OpeningTransaction::new(&workspace, &registry);
+        let mut opening = OpeningTransaction::new(
+            &workspace,
+            &registry,
+            format_resources,
+            startup_diagnostics,
+            startup_lease,
+        );
         let watching = {
             let ws = opening.workspace().write()?;
             ws.watch_flag()
@@ -1023,22 +1174,41 @@ impl Host {
                     // informazioni fallisce, la perdente viene trasferita
                     // soltanto dopo e chiusa fuori dal lock.
                     let info = session_info(winner);
-                    (info, Some(opening.into_session()))
+                    let (session, lease) = opening.into_session_with_lease();
+                    (info, Some((session, lease)))
                 }
                 Some(SessionSlot::Closing(_)) => {
                     // La pubblicazione ha perso contro una chiusura iniziata
                     // mentre il mount era in corso. Il marker non si sovrascrive.
-                    (Err(closing_conflict(&root)), Some(opening.into_session()))
+                    let (session, lease) = opening.into_session_with_lease();
+                    (Err(closing_conflict(&root)), Some((session, lease)))
                 }
                 None => match session_info(opening.session()) {
-                    // `VaultInfo` è l'ultima operazione fallibile: solo dopo
-                    // si disarma la transazione e si pubblica la sessione.
+                    // `VaultInfo` è l'ultima operazione fallibile. Il token di
+                    // startup viene letto soltanto dopo: la sua guardia resta
+                    // viva attraverso controllo e inserimento, così una
+                    // invalidazione conclusa non può essere scavalcata.
                     Ok(info) => {
-                        let session = opening.into_session();
-                        sessions
-                            .slots
-                            .insert(root.clone(), SessionSlot::Open(session));
-                        (Ok(info), None)
+                        let validity = startup_validity
+                            .as_ref()
+                            .map(|validity| validity.read())
+                            .transpose()?;
+                        if validity.as_ref().is_some_and(|valid| !**valid) {
+                            (
+                                Err(PluginError::Conflict(
+                                    "La decisione dei componenti è cambiata durante l'apertura."
+                                        .into(),
+                                )),
+                                None,
+                            )
+                        } else {
+                            let (session, lease) = opening.into_session_with_lease();
+                            sessions
+                                .slots
+                                .insert(root.clone(), SessionSlot::Open(session));
+                            drop(lease);
+                            (Ok(info), None)
+                        }
                     }
                     Err(error) => (Err(error), None),
                 },
@@ -1047,10 +1217,11 @@ impl Host {
         // Chiudere la sessione perdente sta **fuori** dal lock delle sessioni,
         // anche quando ha perso contro un marker di chiusura. Ogni errore viene
         // denunciato senza sostituire l'esito primario dell'apertura.
-        if let Some(loser) = loser {
+        if let Some((loser, lease)) = loser {
             for error in loser.close() {
                 tracing::error!(target: "fub.host", "losing session close failed: {error}");
             }
+            drop(lease);
         }
         info
     }
@@ -1236,6 +1407,102 @@ impl Host {
         self.in_session(vault, |s| Ok(s.registry.write()?.inventory()))
     }
 
+    /// Ricorda un bundle runtime senza scrivere alcuna preferenza.
+    pub fn remember_bundle(
+        &self,
+        vault: Option<&str>,
+        bundle: Arc<dyn Bundle>,
+        claim: &BundleClaim,
+    ) -> Result<(), PluginError> {
+        let (_id, known) = BundleRegistry::claimed(bundle, claim.clone());
+        let registry = self.in_session(vault, |session| Ok(session.registry.clone()))?;
+        let mut candidate = Some(known);
+        let remembered = match registry.write() {
+            Ok(mut registry) => registry.remember_claimed(&mut candidate),
+            Err(error) => Err(error),
+        };
+        BundleRegistry::drop_known(candidate);
+        remembered.map(drop)
+    }
+
+    /// Dice se la voce conosciuta appartiene precisamente a `claim`.
+    pub fn bundle_is_owned(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<bool, PluginError> {
+        self.in_session(vault, |session| {
+            Ok(session.registry.read()?.is_owned(id, claim))
+        })
+    }
+
+    /// Dice se l'istanza montata appartiene precisamente a `claim`.
+    pub fn is_bundle_active(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<bool, PluginError> {
+        self.in_session(vault, |session| {
+            Ok(session.registry.read()?.is_active_owned(id, claim))
+        })
+    }
+
+    /// Monta o smonta soltanto la voce posseduta da `claim`, senza toccare
+    /// `plugins.disabled` o alcun inventario installato.
+    pub fn set_bundle_active(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+        active: bool,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        if active {
+            let (workspace, registry) = self.in_session(vault, |session| {
+                Ok((session.workspace.clone(), session.registry.clone()))
+            })?;
+            BundleRegistry::enable_claimed_guarded(&registry, &workspace, id, claim)?;
+            return Ok(Vec::new());
+        }
+
+        let selected = self.in_session(vault, |session| {
+            let mounted = session.registry.read()?.is_active_owned(id, claim);
+            Ok(mounted.then(|| {
+                (
+                    session.workspace.clone(),
+                    session.registry.clone(),
+                    session.runner.shutdown_bundle(id),
+                )
+            }))
+        })?;
+        let Some((workspace, registry, _shutdown)) = selected else {
+            return Ok(Vec::new());
+        };
+        let _turn = workspace.write_turn();
+        let deferred = { workspace.write()?.defer_event_dispatch() };
+        let outcome = crate::teardown::unmount(&workspace, &registry, id);
+        workspace.write()?.restore_event_dispatch(deferred);
+        drain_events(&workspace)?;
+        outcome
+    }
+
+    /// Dimentica soltanto una voce propria già smontata.
+    pub fn forget_bundle(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<(), PluginError> {
+        let registry = self.in_session(vault, |session| Ok(session.registry.clone()))?;
+        let removed = {
+            let mut registry = registry.write()?;
+            registry.forget_claimed(id, claim)?
+        };
+        BundleRegistry::drop_known(Some(removed));
+        Ok(())
+    }
+
     /// **Accende o spegne un componente**, adesso e per i prossimi avvii.
     ///
     /// Due cose, e nessuna delle due basta da sola: il montaggio (o lo
@@ -1273,17 +1540,25 @@ impl Host {
         if !enabled {
             // Il permesso di shutdown è posseduto, quindi anche il guard della
             // mappa sessioni termina prima della callback del plugin.
-            let (workspace, registry, _shutdown) = self.with_session(vault, |session| {
-                (
+            let (workspace, registry, _shutdown) = self.in_session(vault, |session| {
+                if session.registry.read()?.is_claimed(id) {
+                    return Err(PluginError::BadArgs(
+                        format!("`{id}` appartiene a una sorgente runtime.").into(),
+                    ));
+                }
+                Ok((
                     session.workspace.clone(),
                     session.registry.clone(),
                     session.runner.shutdown_bundle(id),
-                )
+                ))
             })?;
-            // Un registry irrecuperabile viene rifiutato prima di persistere
-            // la scelta, come nel percorso sincrono precedente.
-            drop(registry.read()?);
-            let _turn = workspace.write_turn();
+            let _workspace_turn = workspace.write_turn();
+            let _registry_turn = registry.write_turn();
+            if registry.read()?.is_claimed(id) {
+                return Err(PluginError::BadArgs(
+                    format!("`{id}` appartiene a una sorgente runtime.").into(),
+                ));
+            }
             let (deferred, persisted) = {
                 let mut ws = workspace.write()?;
                 let deferred = ws.defer_event_dispatch();
@@ -1303,89 +1578,38 @@ impl Host {
             drain_events(&workspace)?;
             return outcome;
         }
-        // L'accensione usa ancora il mount sincrono. La migrazione di prepare,
-        // activate e registrazione è separata dal teardown qui staccato.
-        self.with_session(vault, |session| {
-            // **Prima i job, poi i prestiti**, e in quest'ordine soltanto.
-            //
-            // Chi esegue un job tiene una copia del bundle finché il job dura
-            // ([`BundleRegistry::body`]), e `Plugin::deactivate` vuole essere
-            // solo: spegnere un componente con un suo job in volo saltava il
-            // commiato e lo diceva in un errore. Aspettarlo qui è la stessa
-            // regola con cui si chiude un vault — chi spegne aspetta chi
-            // lavora ([0032](../../../docs/decisions/0183-composizione-host-kernel.md))
-            // — applicata a un componente invece che a tutti.
-            //
-            // E **prima** dei due prestiti, non dopo: un job dentro `run_job`
-            // chiede il workspace per riconsegnare il proprio esito, e
-            // aspettarlo tenendoglielo sarebbe aspettare sé stessi. Il permesso
-            // si dichiara per primo anche perché cada per ultimo: finché vive,
-            // nessun job di quel bundle riparte da dietro.
-            let _shutdown = (!enabled).then(|| session.runner.shutdown_bundle(id));
-            // Include la preferenza persistente nello stesso turno del mount:
-            // due toggle concorrenti non possono riordinare la scrittura e il
-            // lifecycle pur lasciando libere le guardie durante codice esterno.
-            let _workspace_turn = session.workspace.write_turn();
-            let _registry_turn = session.registry.write_turn();
-            if enabled && !session.registry.read()?.knows(id) {
+        // La preferenza nativa e il mount condividono i writer turn, ma nessuna
+        // callback attraversa il prestito della mappa sessioni.
+        let (workspace, registry) = self.in_session(vault, |session| {
+            Ok((session.workspace.clone(), session.registry.clone()))
+        })?;
+        let _workspace_turn = workspace.write_turn();
+        let _registry_turn = registry.write_turn();
+        {
+            let registry = registry.read()?;
+            if registry.is_claimed(id) {
+                return Err(PluginError::BadArgs(
+                    format!("`{id}` appartiene a una sorgente runtime.").into(),
+                ));
+            }
+            if !registry.knows(id) {
                 return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
             }
+        }
 
-            with_event_drain(&session.workspace, |ws| {
-                // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
-                // mano perché le due memorie non sono la copia di un file (quelle
-                // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
-                // *montaggio*, che è il registry più il kernel.
-                //
-                // Nel verso dello spegnimento l'ordine è gratis e non c'è niente da
-                // scambiare: `unmount` **non fallisce** — raccoglie i guasti del
-                // commiato e li rende, ma smonta comunque — quindi la mossa che può
-                // andare storta è una sola ed è la scrittura, e sta davanti. Se non
-                // riesce non è stato smontato niente: il vuoto fra le due metà non
-                // è più esprimibile.
-                //
-                // Nel verso dell'accensione, invece, di mosse che possono fallire
-                // ne restano due (la scrittura e il montaggio) e l'ordine è una
-                // scelta. Va così, e non al contrario, per due ragioni. La prima:
-                // `plugins.disabled` è ciò che l'utente **vuole**, non lo specchio
-                // di ciò che è montato — non a caso non è `program_writable`. La
-                // seconda: «scritto come acceso, non montato» non è uno stato
-                // inventato qui, è quello che ogni avvio produce quando un bundle
-                // non si monta (`mount.rs`: l'errore si scrive nel log e si tira
-                // avanti), quindi è uno stato che il resto del programma sa già
-                // abitare, e il prossimo avvio ci riprova. Lo stato opposto —
-                // montato adesso, spento nel file — nessun avvio lo sa produrre, e
-                // si disfa da sé alla prima riapertura senza dire niente. Il
-                // commento che stava qui prometteva che «se il montaggio fallisce
-                // non resta scritto che il componente è acceso»: non era vero
-                // nemmeno allora, perché all'avvio resta scritto eccome.
-                let mut disabled = crate::settings::disabled_plugins(ws);
-                disabled.retain(|other| other != id);
-                disabled.sort();
-                ws.set_setting(
-                    crate::settings::PLUGINS_DISABLED,
-                    fub_abi::settings::SettingValue::List(disabled),
-                )?;
+        with_event_drain(&workspace, |ws| {
+            let mut disabled = crate::settings::disabled_plugins(ws);
+            disabled.retain(|other| other != id);
+            disabled.sort();
+            ws.set_setting(
+                crate::settings::PLUGINS_DISABLED,
+                fub_abi::settings::SettingValue::List(disabled),
+            )?;
+            Ok::<_, PluginError>(())
+        })??;
 
-                Ok::<_, PluginError>(())
-            })??;
-
-            if enabled {
-                crate::registry::BundleRegistry::enable_guarded(
-                    &session.registry,
-                    &session.workspace,
-                    id,
-                )
-                .map_err(PluginError::from)?;
-                Ok(Vec::new())
-            } else {
-                Ok(crate::registry::BundleRegistry::unmount_guarded(
-                    &session.registry,
-                    &session.workspace,
-                    id,
-                ))
-            }
-        })?
+        BundleRegistry::enable_guarded(&registry, &workspace, id).map_err(PluginError::from)?;
+        Ok(Vec::new())
     }
 
     // --- i tasti che un vault propone (§23.13) -----------------------------
@@ -1841,6 +2065,13 @@ impl Host {
         // una chiusura panica, gli elementi non ancora visitati vengono
         // comunque lasciati cadere e ritirano ciascuno il proprio marker.
         claimed.into_iter().flat_map(CloseClaim::close).collect()
+    }
+    /// Restituisce la diagnostica tipizzata conservata dall'apertura del vault.
+    pub fn startup_diagnostics(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        self.with_session(vault, VaultSession::startup_diagnostics)
     }
 
     /// I vault aperti, in ordine di path.

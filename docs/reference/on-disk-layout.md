@@ -65,10 +65,11 @@ teardown prima di rimuovere: lo store non possiede le istanze e non monta in
 automatico. `InstalledPluginStore` non salva né scopre componenti installati in
 `.fub/plugins/<id>/` e non cancella quella directory.
 
-La composizione desktop, il mount allo startup dei soli componenti enabled con
-consenso `granted`, lifecycle e IPC restano da completare in
-[#8](https://github.com/Fubeo/Fub/issues/8). La decisione persistente è
-descritta nell'
+Il bootstrap desktop usa la stessa configurazione di log e host. Prima di
+leggere o istanziare un componente seleziona soltanto i record enabled con
+consenso `granted`; al riavvio rilegge queste scelte. Le cinque porte IPC
+desktop delegano a `InstalledPluginManager`, che persiste le decisioni e
+riconcilia i vault aperti. La decisione persistente è nell'
 [ADR 0200](../decisions/0200-inventario-componenti-installati.md).
 
 ## Radice del vault

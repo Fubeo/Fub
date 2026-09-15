@@ -286,6 +286,13 @@ const ALLOWLIST: &[(&str, Why)] = &[
     // stati diversi, e il secondo è l'unico che il kernel sappia dire (0031).
     ("list_bundles", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
+    // Inventario macchina e decisioni persistenti non appartengono al registro
+    // di un vault. Queste porte restano sottili e delegano al manager installato.
+    ("list_installed_plugins", Why::AppSurface),
+    ("install_plugin", Why::AppSurface),
+    ("set_installed_plugin_enabled", Why::AppSurface),
+    ("set_installed_plugin_consent", Why::AppSurface),
+    ("remove_installed_plugin", Why::AppSurface),
     // Fermare un lavoro lungo (§10.3): *elencarli* è una query (`IndexQuery::Jobs`,
     // sono dati), fermarne uno no — e il runner è dell'app, non del kernel (0032).
     ("cancel_job", Why::AppSurface),
@@ -458,6 +465,7 @@ fn defined_commands(src: &str) -> BTreeSet<&str> {
         }
 
         let sig = t.strip_prefix("pub ").unwrap_or(t);
+        let sig = sig.strip_prefix("async ").unwrap_or(sig);
         let rest = sig.strip_prefix("fn ").unwrap_or_else(|| {
             panic!(
                 "line {line_attribute}: after `#[tauri::command]` there is no `fn`, but:\n  {t}\n\
@@ -792,7 +800,9 @@ fn extractor_does_not_count_prose() {
 \n\
 /// Il doc di una funzione, che cita `#[tauri::command]` per spiegarsi.\n\
 #[tauri::command]\n\
-fn real(host: State<Host>) -> bool { true }\n\
+async fn real(host: State<Host>) -> bool { true }\n\
+\n\
+fn not_a_command() {}\n\
 \n\
     // #[tauri::command]\n\
     // fn commented_out() {}\n\
@@ -836,11 +846,12 @@ fn extractor_catches_second_block_written_without_prefix() {
     );
 }
 
-/// E deve fermarsi su ciò che non capisce, invece di far sparire un comando.
+/// E deve fermarsi su token diversi dall'`async` opzionale che sa leggere,
+/// invece di far sparire un comando.
 #[test]
 #[should_panic(expected = "after `#[tauri::command]` there is no `fn`")]
 fn extractor_rejects_what_it_cannot_read() {
-    defined_commands("#[tauri::command]\nstruct SomethingNew;\n");
+    defined_commands("#[tauri::command]\nunsafe fn something_new() {}\n");
 }
 
 /// Il ponte è il ponte: se un giorno ne comparisse un secondo per lo stesso

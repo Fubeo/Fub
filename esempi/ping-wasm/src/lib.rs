@@ -108,6 +108,13 @@ impl Guest for Componente {
     }
 
     fn activate() -> Result<(), PluginError> {
+        if cfg!(feature = "fallisce-attivazione") {
+            return Err(PluginError::Internal(
+                fub::abi::text::Text::Literal(
+                    "attivazione rifiutata dal fixture".to_string(),
+                ),
+            ));
+        }
         // L'orologio è una capacità SENZA permesso (§7.3), ed è la stessa riga
         // che il plugin nativo scrive nel proprio diario. Sta qui e non nel job
         // per la stessa ragione di là: un `activate` che leggesse il vault

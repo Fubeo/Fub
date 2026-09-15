@@ -10,6 +10,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BundleInfo,
+  InstalledPluginInfo,
   CommandOutcome,
   CommandSpec,
   DocumentSource,
@@ -185,6 +186,23 @@ export const api = {
   // può ramificare.
   setPluginEnabled: (id: string, enabled: boolean) =>
     invoke<PluginError[]>("set_plugin_enabled", { id, enabled }),
+  // L'inventario installato è macchina, quindi resta leggibile anche senza un
+  // guest montato. `vault` serve soltanto a riferire lo stato runtime.
+  listInstalledPlugins: (vault?: string) =>
+    invoke<InstalledPluginInfo[]>("list_installed_plugins", { vault: vault ?? null }),
+  installPlugin: (path: string) =>
+    invoke<InstalledPluginInfo>("install_plugin", { path }),
+  // Le mutazioni nominano l'installazione u64, non l'id del manifest: due
+  // sorgenti che dichiarano lo stesso id non possono cambiare l'una l'altra.
+  setInstalledPluginEnabled: (installation: string, enabled: boolean) =>
+    invoke<PluginError[]>("set_installed_plugin_enabled", { installation, enabled }),
+  setInstalledPluginConsent: (
+    installation: string,
+    consent: InstalledPluginInfo["consent"],
+  ) =>
+    invoke<PluginError[]>("set_installed_plugin_consent", { installation, consent }),
+  removeInstalledPlugin: (installation: string) =>
+    invoke<PluginError[]>("remove_installed_plugin", { installation }),
   // I vault che questa macchina conosce, fra un avvio e l'altro: un elenco di
   // vault non sta in nessun vault, quindi vive nel livello macchina.
   knownVaults: () => invoke<KnownVault[]>("known_vaults"),

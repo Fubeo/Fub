@@ -22,6 +22,8 @@ ciò che formerà la prima versione.
 - feature ufficiali abilitate con feature Cargo indipendenti;
 - contratto WIT `fub:abi@0.1.1` con snapshot congelati;
 - runtime WASM per `Plugin` e `CommandProvider`;
+- inventario WASM persistente separato dai dati del vault e avvio desktop dei
+  soli componenti enabled con consenso concesso, prima di caricare il guest;
 - limiti di tempo e memoria per i componenti WASM;
 - test Rust, frontend, visuali, accessibilità e guard architetturali;
 - policy di sicurezza, supply chain e SBOM;

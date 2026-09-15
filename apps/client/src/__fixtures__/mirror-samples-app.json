@@ -136,6 +136,23 @@
       }
     }
   ],
+  "InstalledPluginInfo": [
+    {
+      "id": "com.acme.tasks",
+      "name": "Tasks",
+      "mounted": true,
+      "kind": "component",
+      "trust": "community",
+      "permissions": {
+        "fub:read-vault": true
+      },
+      "installation": "18446744073709551615",
+      "version": "2.1.0",
+      "enabled": true,
+      "consent": "granted",
+      "runtime_known": true
+    }
+  ],
   "VaultEntry": [
     {
       "root": "/vault",

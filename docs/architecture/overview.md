@@ -43,6 +43,7 @@ flowchart TD
     app --> abi
     app --> host
     app --> kernel
+    app --> wasmhost
     host --> abi
     host --> features
     host --> markdown

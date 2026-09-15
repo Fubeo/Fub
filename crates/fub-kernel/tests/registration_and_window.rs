@@ -8,7 +8,7 @@
 use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
-use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
+use fub_abi::command::{Choice, CommandOutcome, CommandSpec, InvokeMode, ParamKind, ParamSpec};
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
@@ -73,10 +73,57 @@ impl ViewProvider for Counter {
         Ok(ViewUpdate::None)
     }
 }
+#[derive(Clone)]
+struct InterestProbe {
+    panic_next: Arc<Mutex<bool>>,
+    calls: Arc<Mutex<u32>>,
+}
+
+impl ViewProvider for InterestProbe {
+    fn interests(&self, _instance: &ViewInstance) -> ViewInterests {
+        *self.calls.lock().unwrap() += 1;
+        if *self.panic_next.lock().unwrap() {
+            *self.panic_next.lock().unwrap() = false;
+            panic!("interests exploded");
+        }
+        ViewInterests::default()
+    }
+
+    fn views(&self) -> Vec<ViewSpec> {
+        vec![
+            ViewSpec::new("prova.interessi", "Interessi", ViewSurface::RightSidebar).with_params(
+                vec![ParamSpec::new(
+                    "mode",
+                    "Mode",
+                    ParamKind::Choice(vec![Choice::new("ok", "OK")]),
+                )
+                .required()],
+            ),
+        ]
+    }
+
+    fn render_view(
+        &self,
+        _instance: &ViewInstance,
+        _host: &dyn ReadApi,
+    ) -> Result<UiNode, PluginError> {
+        Ok(UiNode::text("interessi"))
+    }
+
+    fn on_action(
+        &mut self,
+        _instance: &ViewInstance,
+        _action: UiAction,
+        _host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        Ok(ViewUpdate::None)
+    }
+}
 
 impl CommandProvider for Counter {
     fn commands(&self) -> Vec<CommandSpec> {
         *self.commands.lock().unwrap() += 1;
+
         vec![CommandSpec::new("prova.command", "Command")]
     }
 
@@ -192,6 +239,49 @@ fn specs_are_queried_only_once() {
         "five renders, five actions, five invocations: and nobody asked the \
          provider for what it had already said"
     );
+}
+
+#[test]
+fn view_interests_validates_params_and_contains_provider_panic() {
+    let (_g, mut ws) = workspace(&[]);
+    let panic_next = Arc::new(Mutex::new(false));
+    let calls = Arc::new(Mutex::new(0));
+    let probe = InterestProbe {
+        panic_next: Arc::clone(&panic_next),
+        calls: Arc::clone(&calls),
+    };
+    ws.register_view_provider("prova", Box::new(probe))
+        .expect("registered");
+    *panic_next.lock().unwrap() = true;
+    *calls.lock().unwrap() = 0;
+
+    let invalid = ViewInstance::new(
+        "prova.interessi",
+        "invalid",
+        serde_json::json!({"mode": "not-an-option"}),
+    );
+    assert!(matches!(
+        ws.view_interests(&invalid),
+        Err(PluginError::BadArgs(_))
+    ));
+    assert_eq!(
+        *calls.lock().unwrap(),
+        0,
+        "invalid params never reach interests"
+    );
+
+    let valid = ViewInstance::new(
+        "prova.interessi",
+        "valid",
+        serde_json::json!({"mode": "ok"}),
+    );
+    assert!(matches!(
+        ws.view_interests(&valid),
+        Err(PluginError::Internal(_))
+    ));
+    assert_eq!(*calls.lock().unwrap(), 1);
+    ws.view_interests(&valid).expect("workspace remains usable");
+    assert_eq!(*calls.lock().unwrap(), 2);
 }
 
 /// giri per azione, e con le istanze quel percorso è quello di ogni click.
