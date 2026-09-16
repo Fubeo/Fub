@@ -151,9 +151,10 @@ riscrittura completa autorevole la annulla.
 
 Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
 salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
-valutatore non è disponibile, la griglia resta modificabile e mostra gli input
-grezzi. Nessuna battuta attraversa IPC; la valutazione parte dopo il commit e
-una risposta stantia non sostituisce lo stato corrente.
+valutatore non è disponibile, anche perché il bundle `fub.sheet` è disabilitato,
+la griglia resta modificabile e mostra gli input grezzi. Nessuna battuta
+attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
+sostituisce lo stato corrente.
 
 Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
 `DocumentModel`. Il protocollo della vertical slice è ancora interno: ABI e WIT

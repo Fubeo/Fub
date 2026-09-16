@@ -103,6 +103,8 @@ export interface Options {
   settings?: SettingEntry[];
   /// Le forme sintattiche effettive risposte dal montaggio finto.
   syntaxForms?: SyntaxForm[];
+  /// Risposte controllate per namespace custom; nessun interprete di feature.
+  customQueries?: Record<string, (query: unknown) => unknown>;
   /// Bundle nativi/ufficiali che l'host conosce.
   bundles?: BundleInfo[];
   /// Inventario installato della macchina, compresi elementi spenti o senza
@@ -433,6 +435,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
         };
       case "syntax_forms":
         return { kind: "syntax_forms", value: syntaxForms.map((form) => ({ ...form })) };
+      case "custom": {
+        const handlers = options.customQueries;
+        const handler = handlers && Object.prototype.hasOwnProperty.call(handlers, q.ns) ? handlers[q.ns] : undefined;
+        if (!handler) throw {
+          kind: "unserved", message: `host fake: namespace non montato: ${q.ns}`,
+        } satisfies PluginError;
+        return { kind: "custom", value: handler(q.query) };
+      }
       default:
         throw new Error(`host fake: non so rispondere alla query ${q.kind}`);
     }
@@ -521,12 +531,6 @@ export function createFakeHost(options: Options = {}): FakeHost {
           source_kind: "text",
         }));
       },
-      evaluateSheet: (source) =>
-        gate(
-          "evaluateSheet",
-          [source],
-          Promise.reject(new Error("host fake: il motore formule Rust non è montato")),
-        ),
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
@@ -583,7 +587,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const throttle = throttles.get("invokeCommand");
         return throttle ? throttle.then(execute) : execute();
       },
-      queryIndex: (q) => gate("queryIndex", [q], Promise.resolve(query(q))),
+      queryIndex: (q) => {
+        // Anche una query non servita deve attraversare il gate e restituire
+        // una Promise rifiutata, come l'IPC, non un'eccezione sincrona.
+        let result: Promise<IndexResult>;
+        try {
+          result = Promise.resolve(query(q));
+        } catch (error) {
+          result = Promise.reject(error);
+        }
+        return gate("queryIndex", [q], result);
+      },
       cancelJob: (id) => gate("cancelJob", [id], Promise.resolve()),
       setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),
       setPinned: (id, pinned) => gate("setPinned", [id, pinned], Promise.resolve()),

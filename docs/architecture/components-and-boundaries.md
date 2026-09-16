@@ -19,6 +19,7 @@ flowchart LR
     HOST --> ABI
     HOST --> FEATURES
     HOST --> MARKDOWN
+    HOST --> SHEET["fub-format-sheet"]
     WASM["fub-wasm-host"] --> ABI
     WASM --> HOST
     APP["fub-app"] --> HOST
@@ -40,6 +41,7 @@ del repository verificano le eccezioni.
 | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
 | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
 | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
+| `fub-format-sheet` | workbook persistito, valutatore e sessioni derivate | host, storage, Tauri, Wasmtime |
 | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
 | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
 | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
@@ -103,6 +105,7 @@ indipendenti.
 | composizione | `crates/fub-host/src/mount.rs`, `session.rs`, `registry.rs` |
 | desktop | `crates/fub-app/src/lib.rs` |
 | Markdown | `crates/fub-format-markdown/src/` |
+| foglio | `crates/fub-format-sheet/src/`, `crates/fub-host/src/sheet/` |
 | feature | `crates/fub-features/src/` |
 | runtime WASM | `crates/fub-wasm-host/src/` |
 | seam frontend | `apps/client/src/host/` |

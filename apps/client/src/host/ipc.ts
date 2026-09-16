@@ -22,7 +22,6 @@ import type {
   Locale,
   PluginError,
   SettingValue,
-  SheetEvaluation,
   KnownVault,
   UiNode,
   VaultInfo,
@@ -53,8 +52,6 @@ export const api = {
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
   readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
-  evaluateSheet: (source: string) =>
-    invoke<SheetEvaluation>("evaluate_sheet", { source }),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è

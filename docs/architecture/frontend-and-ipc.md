@@ -273,21 +273,31 @@ guardata; i reload full-text restano il fallback autorevole.
 
 Editor in-cell e formula bar usano due istanze di `TextEngine` con
 `FormulaProfile`, ma nessuna battuta attraversa IPC. Dopo un commit,
-`evaluate_sheet` invia provvisoriamente la sorgente completa a `fub-host`, che
-usa `Workbook::parse()` e `Workbook::evaluate()`. Le generazioni asincrone
-scartano risposte stantie. Se il comando non è montato, la superficie dichiara
-`data-evaluation="unavailable"` e mostra gli input grezzi senza duplicare il
-linguaggio formule in TypeScript.
+`host/sheet.ts` invia la sorgente completa con `query_index`, nel namespace
+`fub.sheet`. Il provider nativo usa `Workbook::parse()` e
+`Workbook::evaluate()`. La richiesta privata ha specie `evaluate`, versione
+intera e campi chiusi; il risultato conserva valori ed errori formula tipizzati.
+La sorgente è limitata a 16 MiB e la risposta JSON, envelope compreso, a 8 MiB.
 
-I tipi di valutazione in `host/contract.ts` e il comando Tauri restano interni
-e provvisori. La misura della
-[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) esclude dal
-contratto pubblico sia la sorgente completa a ogni commit sia il
-`TextOperation` della serializzazione. Il protocollo grid apre una sessione con
-sorgente e revisione, legge finestre limitate e applica patch coordinate
-atomiche; il provider restituisce il diff per la `DocumentSession` e
-un'invalidazione limitata delle celle dipendenti. Famiglia e versione
-sconosciute usano il fallback senza eseguire il provider.
+Il bundle `fub.sheet` possiede la route nel registro. Disabilitarlo ritira la
+valutazione senza rimuovere il formato sorgente; riabilitarlo registra di nuovo
+il provider. Le generazioni asincrone scartano risposte stantie. Se la query
+non è servita, la superficie dichiara `data-evaluation="unavailable"` e mostra
+gli input grezzi senza duplicare il linguaggio formule in TypeScript.
+
+`crates/fub-format-sheet/src/session.rs` possiede il motore derivato per
+apertura, reload atomico e letture a finestre. L'adapter `fub-host::sheet`
+conserva la derivazione comune `Revision::of`; il motore confronta soltanto
+revisioni opache. Il crate formato non dipende dall'host ed è compilabile per
+WASM. La shell non usa ancora questa sessione per il traffico ordinario.
+
+La query della vertical slice resta privata e provvisoria; non introduce una
+nuova porta IPC né estende ABI o WIT. La
+[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) definisce il
+passo successivo: sostituire sorgente e valutazione complete con finestre,
+patch coordinate atomiche e invalidazione limitata, insieme ai consumatori
+nativo e WASM conformi. La compilazione del motore per WASM non dimostra ancora
+quel confine né il lifecycle del provider remoto.
 
 ## Confine CodeMirror
 

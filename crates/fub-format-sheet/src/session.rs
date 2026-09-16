@@ -229,14 +229,7 @@ impl<R: Eq + Serialize> SheetSession<R> {
             columns: &sheet.columns[request.column_start..column_end],
             cells,
         };
-        let mut budget = ByteBudget::new(MAX_WINDOW_RESPONSE_BYTES);
-        if let Err(error) = serde_json::to_writer(&mut budget, &window) {
-            return Err(if budget.exceeded {
-                SheetSessionError::ResponseTooLarge
-            } else {
-                SheetSessionError::Serialization(error)
-            });
-        }
+        check_response_size(&window)?;
         Ok(window)
     }
 
@@ -247,6 +240,19 @@ impl<R: Eq + Serialize> SheetSession<R> {
             Err(SheetSessionError::StaleRevision)
         }
     }
+}
+
+/// Verifica i byte JSON effettivi prima di materializzare una risposta del foglio.
+/// L'adapter passa anche l'envelope del proprio canale, senza clonare i valori.
+pub fn check_response_size(value: &impl Serialize) -> Result<(), SheetSessionError> {
+    let mut budget = ByteBudget::new(MAX_WINDOW_RESPONSE_BYTES);
+    serde_json::to_writer(&mut budget, value).map_err(|error| {
+        if budget.exceeded {
+            SheetSessionError::ResponseTooLarge
+        } else {
+            SheetSessionError::Serialization(error)
+        }
+    })
 }
 
 fn window_end(start: usize, count: usize, length: usize) -> Result<usize, SheetSessionError> {

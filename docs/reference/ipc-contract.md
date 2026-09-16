@@ -30,6 +30,24 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
+## Valutazione del foglio pilota
+
+La shell usa `IndexQuery::Custom` con namespace `fub.sheet`, non una porta Tauri
+dedicata. Il payload privato è `{kind: "evaluate", version: 1, source: string}`:
+versioni, specie o campi sconosciuti sono `BadArgs`. La risposta è
+`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript.
+
+Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
+compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
+Disabilitare il bundle ritira la route: la query restituisce `Unserved` e la
+shell usa il fallback agli input grezzi. Il payload non è il futuro contratto
+pubblico grid a finestre.
+
+Le fonti sono `crates/fub-host/src/sheet/index.rs` e
+`apps/client/src/host/sheet.ts`. La fixture
+`apps/client/src/__fixtures__/sheet-query.json` è generata dal test host reale
+e consumata dai test TypeScript. Nessun interprete formule vive nel fake host.
+
 ## Tipi principali
 
 La shell riceve forme per:

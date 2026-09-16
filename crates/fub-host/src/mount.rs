@@ -245,6 +245,15 @@ pub(crate) fn mount_with_formats(
             register_markdown_transfer,
         )),
         Arc::new(crate::theme::ThemeBundle::series()),
+        Arc::new(CoreBundle::new(
+            crate::sheet::SHEET_ID,
+            "Fub Sheet",
+            |registrar| match registrar.register_index_provider(Box::new(crate::sheet::SheetIndex))
+            {
+                Ok(()) => Vec::new(),
+                Err(error) => vec![format!("sheet index NOT registered: {error}")],
+            },
+        )),
     ];
 
     for feature in fub_features::every_official_feature() {

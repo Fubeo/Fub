@@ -18,6 +18,7 @@
 // La superficie pubblica di questo modulo continua a rispondere alle domande
 // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
 // lo stato mutabile della sessione ai suoi clienti.
+import { evaluateSheet } from "../host/sheet";
 import type { EditorChange } from "../editors/text/engine";
 import {
   createDocumentSurfaceRegistry,
@@ -149,7 +150,7 @@ export function mountDocument(d: DocumentDeps): void {
         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
     },
-    evaluateSheet: api.evaluateSheet,
+    evaluateSheet: (source) => evaluateSheet(api.queryIndex, source),
   });
   panesEl = $("#panes");
   sessionEventsStop?.();

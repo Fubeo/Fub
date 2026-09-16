@@ -289,13 +289,6 @@ fn read_document(
     })
 }
 
-/// Valuta un workbook al confine della shell. Le battute restano nel
-/// `GridEngine`; questa porta riceve soltanto sorgenti già confermati.
-#[tauri::command]
-fn evaluate_sheet(source: String) -> Result<fub_host::sheet::WorkbookEvaluation, PluginError> {
-    fub_host::sheet::evaluate(&source)
-}
-
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
 ///
 /// `base` non è opzionale, e non è una svista: un campo mancante qui è un errore
@@ -993,7 +986,6 @@ pub fn run() {
             initial_vault,
             session_notice,
             read_document,
-            evaluate_sheet,
             write_document,
             save_draft,
             discard_draft,

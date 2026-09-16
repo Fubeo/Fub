@@ -22,8 +22,8 @@
 //! **insiemi**, nelle due direzioni, su due giri concentrici:
 //!
 //! - i **bundle** dichiarati sono esattamente le feature dell'inventario più i
-//!   quattro bundle dell'host: `fub.core`, `fub.maintenance`, `fub.markdown` e
-//!   il tema di serie. Una feature registrata a mano è rossa qui;
+//!   cinque bundle dell'host: `fub.core`, `fub.maintenance`, `fub.markdown`,
+//!   `fub.sheet` e il tema di serie. Una feature registrata a mano è rossa qui;
 //! - le **view** montate sono esattamente quelle che i provider dell'inventario
 //!   dichiarano. Una quinta view registrata a mano è rossa qui.
 //!
@@ -75,6 +75,7 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
             CORE_ID.to_string(),
             fub_kernel::maintenance::MAINTENANCE_ID.to_string(),
             "fub.markdown".to_string(),
+            "fub.sheet".to_string(),
             fub_host::theme::SERIES_ID.to_string(),
         ])
         .collect();
@@ -95,8 +96,8 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
 
     assert_eq!(
         declared.len(),
-        fub_features::every_official_feature().len() + 4,
-        "the only bundles outside `fub-features` are core, maintenance, markdown and the series theme"
+        fub_features::every_official_feature().len() + 5,
+        "the only bundles outside `fub-features` are core, maintenance, markdown, sheet and the series theme"
     );
 }
 

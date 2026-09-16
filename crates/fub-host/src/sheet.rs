@@ -2,7 +2,12 @@
 //!
 //! Il motore della sessione vive nel formato ed è compilabile anche per WASM.
 //! Questo adapter conserva l'API nativa e la derivazione comune `Revision::of`.
-//! Non pubblica un contratto ABI/WIT e non sostituisce la porta provvisoria.
+//! La valutazione della vertical slice usa il canale dati del bundle `fub.sheet`.
+//! La sessione a finestre resta interna fino alla conformità nativa e WASM.
+
+mod index;
+
+pub(crate) use index::{SheetIndex, SHEET_ID};
 
 use fub_abi::{PluginError, Revision};
 use fub_format_sheet::{SheetId, Workbook};
