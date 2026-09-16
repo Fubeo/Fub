@@ -145,9 +145,7 @@ fn every_preimage_is_checked_before_any_mutation() {
     assert!(matches!(result, Err(SheetSessionError::PreimageMismatch)));
     assert_eq!(session.source(), source);
     assert_eq!(session.revision(), &before);
-    let window = session
-        .window(&before, &"s".into(), request(3))
-        .unwrap();
+    let window = session.window(&before, &"s".into(), request(3)).unwrap();
     assert_eq!(window.cells[0].value, &CellValue::Number(1.0));
     assert_eq!(window.cells[1].value, &CellValue::Number(2.0));
 }
@@ -183,7 +181,10 @@ fn additions_removals_and_styled_empty_cells_preserve_presence_semantics() {
     let window = session
         .window(session.revision(), &"s".into(), request(4))
         .unwrap();
-    assert!(window.cells.iter().all(|entry| entry.cell.column.as_ref() != "c3"));
+    assert!(window
+        .cells
+        .iter()
+        .all(|entry| entry.cell.column.as_ref() != "c3"));
 
     let third = *session.revision();
     session
@@ -264,11 +265,9 @@ fn duplicate_unknown_noop_and_stale_operations_leave_the_session_unchanged() {
     let mut session = SheetSession::open(&source, revision).unwrap();
     let before = *session.revision();
     let error = session
-        .commit(
-            &before.wrapping_add(1),
-            &operation(Vec::new()),
-            |_| panic!("stale commits do not derive a revision"),
-        )
+        .commit(&before.wrapping_add(1), &operation(Vec::new()), |_| {
+            panic!("stale commits do not derive a revision")
+        })
         .unwrap_err();
     assert!(matches!(error, SheetSessionError::StaleRevision));
     assert_eq!(session.source(), source);
