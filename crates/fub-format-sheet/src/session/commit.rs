@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::io::{self, Write};
 
 use serde::{Deserialize, Serialize};
 
@@ -112,13 +113,7 @@ impl<R: Clone + Eq + Serialize> SheetSession<R> {
 
         let mut workbook = self.workbook.clone();
         apply_resolved(&mut workbook, &resolved);
-        let source = workbook.serialize().map_err(SheetSessionError::Source)?;
-        if source.len() > MAX_SOURCE_BYTES {
-            return Err(SheetSessionError::Source(SheetError::Limit {
-                what: "source bytes",
-                limit: MAX_SOURCE_BYTES,
-            }));
-        }
+        let source = serialize_workbook(&workbook)?;
 
         // `open` rivalida e valuta la nuova sorgente una volta sola. La vecchia
         // sessione resta intatta finché anche invalidazione e risposta passano.
@@ -240,6 +235,70 @@ fn apply_resolved(workbook: &mut Workbook, patches: &[ResolvedPatch<'_>]) {
             index += 1;
             keep
         });
+    }
+}
+
+fn serialize_workbook(workbook: &Workbook) -> Result<String, SheetSessionError> {
+    serialize_workbook_with_limit(workbook, MAX_SOURCE_BYTES)
+}
+
+fn serialize_workbook_with_limit(
+    workbook: &Workbook,
+    limit: usize,
+) -> Result<String, SheetSessionError> {
+    workbook.validate().map_err(SheetSessionError::Source)?;
+    let mut output = SourceBudget::new(limit);
+    if let Err(error) = serde_json::to_writer_pretty(&mut output, workbook) {
+        return Err(if output.exceeded {
+            SheetSessionError::Source(SheetError::Limit {
+                what: "source bytes",
+                limit,
+            })
+        } else {
+            SheetSessionError::Source(SheetError::Json(error))
+        });
+    }
+    if output.write_all(b"\n").is_err() {
+        return Err(SheetSessionError::Source(SheetError::Limit {
+            what: "source bytes",
+            limit,
+        }));
+    }
+    Ok(String::from_utf8(output.bytes).expect("serde_json writes UTF-8"))
+}
+
+struct SourceBudget {
+    bytes: Vec<u8>,
+    limit: usize,
+    exceeded: bool,
+}
+
+impl SourceBudget {
+    fn new(limit: usize) -> Self {
+        Self {
+            bytes: Vec::new(),
+            limit,
+            exceeded: false,
+        }
+    }
+}
+
+impl Write for SourceBudget {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        let Some(next) = self.bytes.len().checked_add(bytes.len()) else {
+            self.exceeded = true;
+            return Err(io::Error::other("sheet source byte budget exceeded"));
+        };
+        if next > self.limit {
+            self.exceeded = true;
+            return Err(io::Error::other("sheet source byte budget exceeded"));
+        }
+        self.bytes.extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 
@@ -371,6 +430,17 @@ mod tests {
             serde_json::to_value(bounds.borrowed(before, after)).unwrap(),
             serde_json::to_value(bounds.owned(before, after)).unwrap()
         );
+    }
+
+    #[test]
+    fn source_serialization_stops_at_the_limit_instead_of_building_past_it() {
+        let workbook = Workbook::new(Vec::new());
+        let canonical = workbook.serialize().unwrap();
+        let result = serialize_workbook_with_limit(&workbook, canonical.len() - 1);
+        assert!(matches!(
+            result,
+            Err(SheetSessionError::Source(SheetError::Limit { .. }))
+        ));
     }
 
     #[test]
