@@ -286,7 +286,8 @@ fn source_edit_bounds(before: &str, after: &str) -> SourceEditBounds {
     // non si ridefinisce la policy: si estende il diff quando il massimo
     // prefisso/suffisso cadrebbe dentro la coppia, così l'edit che attraversa
     // DocumentSession rispetta la stessa disciplina senza normalizzare il file.
-    while prefix > 0 && (!safe_edit_boundary(before, prefix) || !safe_edit_boundary(after, prefix))
+    while prefix > 0
+        && (!safe_edit_boundary(before, prefix) || !safe_edit_boundary(after, prefix))
     {
         prefix -= 1;
     }
