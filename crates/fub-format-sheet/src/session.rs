@@ -11,7 +11,14 @@ use std::io::{self, Write};
 
 use serde::Serialize;
 
-use crate::{Cell, CellKey, CellValue, Column, Row, SheetError, SheetId, Workbook};
+use crate::{Cell, CellKey, CellValue, Column, Row, RowId, SheetError, SheetId, Workbook};
+
+mod commit;
+
+pub use commit::{
+    SheetCellPatch, SheetCommit, SheetInvalidation, SheetOperation, SheetSourceEdit,
+    MAX_INVALIDATED_CELLS, MAX_OPERATION_INPUT_BYTES, MAX_OPERATION_PATCHES,
+};
 
 pub const MAX_WINDOW_ROWS: usize = 256;
 pub const MAX_WINDOW_COLUMNS: usize = 128;
@@ -57,6 +64,13 @@ pub enum SheetSessionError {
     WindowRange,
     ResponseTooLarge,
     EvaluationMismatch,
+    EmptyOperation,
+    OperationLimit,
+    OperationInputLimit,
+    DuplicatePatch,
+    UnknownCoordinate,
+    PreimageMismatch,
+    NoChange,
     Serialization(serde_json::Error),
 }
 
@@ -68,9 +82,18 @@ impl fmt::Display for SheetSessionError {
             Self::UnknownSheet => formatter.write_str("unknown sheet id"),
             Self::WindowLimit => formatter.write_str("sheet window exceeds its coordinate limits"),
             Self::WindowRange => formatter.write_str("sheet window starts outside its axes"),
-            Self::ResponseTooLarge => formatter.write_str("sheet window response exceeds 8 MiB"),
+            Self::ResponseTooLarge => formatter.write_str("sheet response exceeds 8 MiB"),
             Self::EvaluationMismatch => formatter.write_str("sheet evaluation is incomplete"),
-            Self::Serialization(error) => write!(formatter, "sheet window serialization: {error}"),
+            Self::EmptyOperation => formatter.write_str("sheet operation has no patches"),
+            Self::OperationLimit => formatter.write_str("sheet operation exceeds its patch limit"),
+            Self::OperationInputLimit => {
+                formatter.write_str("sheet operation exceeds its input byte limit")
+            }
+            Self::DuplicatePatch => formatter.write_str("sheet operation patches one cell twice"),
+            Self::UnknownCoordinate => formatter.write_str("sheet patch uses an unknown coordinate"),
+            Self::PreimageMismatch => formatter.write_str("sheet patch preimage is stale"),
+            Self::NoChange => formatter.write_str("sheet patch does not change its cell"),
+            Self::Serialization(error) => write!(formatter, "sheet serialization: {error}"),
         }
     }
 }
@@ -91,8 +114,13 @@ impl std::error::Error for SheetSessionError {
 #[derive(Debug)]
 pub struct SheetSession<R> {
     revision: R,
+    source: String,
     workbook: Workbook,
     values: HashMap<CellKey, CellValue>,
+    dependents: HashMap<CellKey, Vec<CellKey>>,
+    sheet_by_id: HashMap<SheetId, usize>,
+    rows_by_id: Vec<HashMap<RowId, usize>>,
+    columns_by_id: Vec<HashMap<crate::ColumnId, usize>>,
     cells_by_position: Vec<HashMap<(usize, usize), usize>>,
 }
 
@@ -119,19 +147,37 @@ impl<R: Eq + Serialize> SheetSession<R> {
                 )
             })
             .collect();
+        let mut dependents: HashMap<CellKey, Vec<CellKey>> = HashMap::new();
+        for dependency in evaluation.dependencies {
+            for source in dependency.depends_on {
+                dependents
+                    .entry(source)
+                    .or_default()
+                    .push(dependency.cell.clone());
+            }
+        }
+        for cells in dependents.values_mut() {
+            cells.sort();
+            cells.dedup();
+        }
+
+        let mut sheet_by_id = HashMap::with_capacity(workbook.sheets.len());
+        let mut rows_by_id = Vec::with_capacity(workbook.sheets.len());
+        let mut columns_by_id = Vec::with_capacity(workbook.sheets.len());
         let mut cells_by_position = Vec::with_capacity(workbook.sheets.len());
-        for sheet in &workbook.sheets {
+        for (sheet_index, sheet) in workbook.sheets.iter().enumerate() {
+            sheet_by_id.insert(sheet.id.clone(), sheet_index);
             let rows: HashMap<_, _> = sheet
                 .rows
                 .iter()
                 .enumerate()
-                .map(|(index, row)| (&row.id, index))
+                .map(|(index, row)| (row.id.clone(), index))
                 .collect();
             let columns: HashMap<_, _> = sheet
                 .columns
                 .iter()
                 .enumerate()
-                .map(|(index, column)| (&column.id, index))
+                .map(|(index, column)| (column.id.clone(), index))
                 .collect();
             let mut positions = HashMap::with_capacity(sheet.cells.len());
             for (index, cell) in sheet.cells.iter().enumerate() {
@@ -143,18 +189,30 @@ impl<R: Eq + Serialize> SheetSession<R> {
                     .ok_or(SheetSessionError::EvaluationMismatch)?;
                 positions.insert((*row, *column), index);
             }
+            rows_by_id.push(rows);
+            columns_by_id.push(columns);
             cells_by_position.push(positions);
         }
         Ok(Self {
             revision: revision_of(source),
+            source: source.to_owned(),
             workbook,
             values,
+            dependents,
+            sheet_by_id,
+            rows_by_id,
+            columns_by_id,
             cells_by_position,
         })
     }
 
     pub fn revision(&self) -> &R {
         &self.revision
+    }
+
+    /// Sorgente autorevole da cui deriva la sessione corrente.
+    pub fn source(&self) -> &str {
+        &self.source
     }
 
     /// Compare-and-reload: un errore lascia revisione, assi e valori precedenti.
@@ -187,10 +245,9 @@ impl<R: Eq + Serialize> SheetSession<R> {
             return Err(SheetSessionError::WindowLimit);
         }
         let index = self
-            .workbook
-            .sheets
-            .iter()
-            .position(|sheet| &sheet.id == sheet_id)
+            .sheet_by_id
+            .get(sheet_id)
+            .copied()
             .ok_or(SheetSessionError::UnknownSheet)?;
         let sheet = &self.workbook.sheets[index];
         let row_end = window_end(request.row_start, request.row_count, sheet.rows.len())?;
