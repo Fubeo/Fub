@@ -2,8 +2,8 @@
 
 use fub_format_sheet::{Cell, CellStyle, CellValue, Column, Row, Sheet, Workbook};
 use fub_host::sheet::{
-    MAX_WINDOW_COLUMNS, MAX_WINDOW_RESPONSE_BYTES, MAX_WINDOW_ROWS, SheetSession,
-    SheetSessionError, SheetWindowRequest,
+    SheetSession, SheetSessionError, SheetWindowRequest, MAX_WINDOW_COLUMNS,
+    MAX_WINDOW_RESPONSE_BYTES, MAX_WINDOW_ROWS,
 };
 
 fn workbook(rows: usize, columns: usize) -> Workbook {
@@ -148,13 +148,11 @@ fn the_last_window_clamps_but_an_outside_start_is_rejected() {
 #[test]
 fn an_empty_sheet_and_an_unknown_sheet_are_different() {
     let session = SheetSession::open(&workbook(0, 0).serialize().unwrap()).unwrap();
-    assert!(
-        session
-            .window(session.revision(), &"s".into(), request(0, 0, 1, 1))
-            .unwrap()
-            .cells
-            .is_empty()
-    );
+    assert!(session
+        .window(session.revision(), &"s".into(), request(0, 0, 1, 1))
+        .unwrap()
+        .cells
+        .is_empty());
     assert!(matches!(
         session.window(session.revision(), &"missing".into(), request(0, 0, 1, 1)),
         Err(SheetSessionError::UnknownSheet)
@@ -260,6 +258,8 @@ fn oversized_sources_are_rejected_by_the_existing_format_limit() {
     let source = " ".repeat(fub_format_sheet::MAX_SOURCE_BYTES + 1);
     assert!(matches!(
         SheetSession::open(&source),
-        Err(SheetSessionError::Source(fub_format_sheet::SheetError::Limit { .. }))
+        Err(SheetSessionError::Source(
+            fub_format_sheet::SheetError::Limit { .. }
+        ))
     ));
 }
