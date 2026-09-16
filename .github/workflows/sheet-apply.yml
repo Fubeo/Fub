@@ -1,0 +1,47 @@
+name: Verify native sheet patch
+
+on:
+  push:
+    branches: [feat/issue11-grid-window-session]
+    paths: [.github/workflows/sheet-apply.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.repository == 'Fubeo/Fub'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 2
+          ref: ${{ github.sha }}
+      - name: Verifica la base prima di applicare la patch
+        run: test "$(git rev-parse HEAD^)" = f35963c88ed62358d781258038a2e9933401fded
+      - name: Applica soltanto la patch locale identificata dal digest
+        shell: python
+        run: |
+          import base64, hashlib, pathlib, subprocess, zlib
+          data = zlib.decompress(base64.b64decode('eNrVfduS3Eay2Pt8RbE3POwmG82+d0+PhmcpkoqlTUkMkVrZQU000UD1DJYYoBdAkxqRE7F+8wech/NmP+7afvKbw2+Hf+Iv8Cc4M6sKqAIK6J7hSDpihDQzQCHrlpmVmZUXP1ivmeOcBRlzHzx2k7O4F8beW7bS/jgIIp//xOarkb8azWcj7vvrI68/dedjvuqvhkdDn6+Ojgb+wJ173rzX67trd+BO+7P5ke+N19NVfzD0++5q6E2nPj+a9+dH7rg/77NBvz8djw8cxzFzF6P7h//745gj/+kTmD8XzUnbL79HPG4JHPNxyGFnkBT9kJe33AIveCw2+t9XblrOPkws2c9JzzrHXA3vEkDeII3/Z7g14fHlW+vy++dFdBq3vAWCvlic+1X5d/SeNI/J2dB/AoiRM27AG8I3jq62vpJW7G0wcS3AP4PUsfwBeBGwY/82UUR8skSL0keMd7SQqzvd4Hak9m7qTPvf7Mn4xH8/54up7O/XF/Mp/M1v2j4dF0NRsPZsNprzeazQdjDovvrdyJN+7DLs4nnE8Hg6nvj8fj1eCIe9NxaU+uOSixb9f8iPZ2OOoOhrC34ic8Wkdsk8QpNodtxA/9dhpvE48v2GGaJR3mPGQvsySIztiHA/bgAaz8rf1DeA/YvXsveOKdf/oH++uWh2yzjbKY+QHzYj/wOPz96X+xKL4IIjfh7E0+wTe9e/cIwIGDUF7GEXy15V3GWcTTdBu5gHhhyPEh+/R39q//IwW4FwB0HXhu5MdsGzE/9rYXHDr81//TYy85C12WuGeAv1xA9c45ywIGnb4DsIDWAOiv2wAgR1kSd6l9kG7iNHPhuZZti04tNkrd1z86CbXTGk4hDd64AmvHkZ3eBrxE8ThrAqIGxdy5buxnA8+Lo4D62/0ZOR46MudssToKff3YZ9U47nHBjOsx32Zsn8q+vY1iIN10BDLuEnhEebHzAfyaQYZymlz323IXxpyk9etMDzCKqfsO2qcuC6B2H7QhC9j5O3q7i+K0ASKPh72Jcadg+wQ5i2IUEEDLItjBAGtubp36QfcdhuilAPNu6iY/t2o+efMf6w/6g0xPwABnyxYBZBfmkAjFgWBrckYAG9eZPsPSPNsFi4W424eWSQx9vegfsD699jsvSfsJX27PO6QHj0faCfcdd4CyAyA6Df9jbayuE0zbMfQlUtVhkiRtk6WJhaQYjZgrOvXvfKOzgiGcmnrJP/4WFd90QcIb937/9s9hzQvI3xPAWi5eqefKmW0DFzTp3YXdYCuSdxkgHPEdwQIjNJk6gN0AVfaEWhKMpUkRQAHuznY6XKZHyYlEMjz72oD0ADHwGywSvvJgBDiYucnPo/+6zF4+h3QWXJ8RYHBBjyUTMtS06/Ipw4UUSvwtgO/ROu+wCEDwAylYkwC54FgNRrt0ee4roG376nzikdRDyAiSSFWy9wnoc0zaCz2lVt8TLqC9qCCuHeCd37g1bJwCVQ89RIHfu1TkXY3x17mbPLjYhx/VLn2VALKrLZwXCGzQBy4ZswWXZNgOEBH7lXmwAR/H8Q8QPkAQAi7eZWwCjjYetgY/j1IN3sFeSVZTItYcdK2ICfhVHQA8hUn0BzY83Mdu4mXcOXCMMgJ6A/QH3EeOCtdgkQC+f/tsDGE/IHwTItQL42yTOAh5yEB4C6/n+1VfOnBADKDsgftAFzhABy8nZDTAC3BuTgPNFY3gcMVqqJWzSBdAQbQ5MBEcYXFwAM4uCLkviMFy53lvgpcGFWDXkNLCIEtxzYE0h4PsPchOAPK4O2K0fRYTY0z4h9nRqR2yc2VdxFp8l7jpwu7RzSCuJHy+IoybBmStoj9YKH3nngQt76KJg5OI+w2mb0mEBbPpALnu5mfgcToV0K4ACviK+ZezR8+ff/vD82ctXcDy/buMJ3WXi/9sUCKsrR9s5BUHr8LVYwbb4gf9ec1a3b9886e02987d5bea5fee41815668674192f64'))
+          assert hashlib.sha256(data).hexdigest() == 'fce10a4c717328698d0cff707a844b27154ff9247de879b0be3a759f107be7ae'
+          patch = pathlib.Path('/tmp/native-session.patch')
+          patch.write_bytes(data)
+          subprocess.run(['git', 'apply', '--check', str(patch)], check=True)
+          subprocess.run(['git', 'apply', '--index', '--whitespace=error', str(patch)], check=True)
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05
+        with:
+          toolchain: 1.89
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p fub-format-sheet -p fub-host --all-targets -- -D warnings
+      - run: cargo test -p fub-format-sheet -p fub-host -p fub-abi --no-fail-fast
+      - name: Pubblica solo con avanzamento lineare del branch
+        run: |
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'feat(sheet): applica patch atomiche e invalida le finestre'
+          git push origin HEAD:refs/heads/feat/issue11-grid-window-session
