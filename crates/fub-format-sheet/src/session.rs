@@ -90,7 +90,9 @@ impl fmt::Display for SheetSessionError {
                 formatter.write_str("sheet operation exceeds its input byte limit")
             }
             Self::DuplicatePatch => formatter.write_str("sheet operation patches one cell twice"),
-            Self::UnknownCoordinate => formatter.write_str("sheet patch uses an unknown coordinate"),
+            Self::UnknownCoordinate => {
+                formatter.write_str("sheet patch uses an unknown coordinate")
+            }
             Self::PreimageMismatch => formatter.write_str("sheet patch preimage is stale"),
             Self::NoChange => formatter.write_str("sheet patch does not change its cell"),
             Self::Serialization(error) => write!(formatter, "sheet serialization: {error}"),
