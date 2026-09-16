@@ -1,0 +1,876 @@
+diff --git a/apps/client/src/__fixtures__/sheet-query.json b/apps/client/src/__fixtures__/sheet-query.json
+new file mode 100644
+index 00000000..381cc990
+--- /dev/null
++++ b/apps/client/src/__fixtures__/sheet-query.json
+@@ -0,0 +1,103 @@
++{
++  "query": {
++    "kind": "custom",
++    "ns": "fub.sheet",
++    "query": {
++      "kind": "evaluate",
++      "version": 1,
++      "source": "{\"version\":1,\"sheets\":[{\"id\":\"s\",\"name\":\"Foglio\",\"rows\":[{\"id\":\"r\"}],\"columns\":[{\"id\":\"c0\"},{\"id\":\"c1\"},{\"id\":\"c2\"},{\"id\":\"c3\"},{\"id\":\"c4\"},{\"id\":\"c5\"}],\"cells\":[{\"row\":\"r\",\"column\":\"c0\",\"input\":\"2\"},{\"row\":\"r\",\"column\":\"c1\",\"input\":\"=A1+1\"},{\"row\":\"r\",\"column\":\"c2\",\"input\":\"caffè 😀\"},{\"row\":\"r\",\"column\":\"c3\",\"input\":\"=TRUE\"},{\"row\":\"r\",\"column\":\"c4\",\"input\":\"=1/0\"},{\"row\":\"r\",\"column\":\"c5\",\"input\":\"\"}]}]}"
++    }
++  },
++  "result": {
++    "kind": "custom",
++    "value": {
++      "cells": [
++        {
++          "sheet": "s",
++          "row": "r",
++          "column": "c0",
++          "value": {
++            "kind": "number",
++            "value": 2.0
++          }
++        },
++        {
++          "sheet": "s",
++          "row": "r",
++          "column": "c1",
++          "value": {
++            "kind": "number",
++            "value": 3.0
++          }
++        },
++        {
++          "sheet": "s",
++          "row": "r",
++          "column": "c2",
++          "value": {
++            "kind": "text",
++            "value": "caffè 😀"
++          }
++        },
++        {
++          "sheet": "s",
++          "row": "r",
++          "column": "c3",
++          "value": {
++            "kind": "boolean",
++            "value": true
++          }
++        },
++        {
++          "sheet": "s",
++          "row": "r",
++          "column": "c4",
++          "value": {
++            "kind": "error",
++            "value": "div_zero"
++          }
++        },
++        {
++          "sheet": "s",
++          "row": "r",
++          "column": "c5",
++          "value": {
++            "kind": "blank"
++          }
++        }
++      ],
++      "dependencies": [
++        {
++          "cell": {
++            "sheet": "s",
++            "row": "r",
++            "column": "c1"
++          },
++          "depends_on": [
++            {
++              "sheet": "s",
++              "row": "r",
++              "column": "c0"
++            }
++          ]
++        },
++        {
++          "cell": {
++            "sheet": "s",
++            "row": "r",
++            "column": "c3"
++          },
++          "depends_on": []
++        },
++        {
++          "cell": {
++            "sheet": "s",
++            "row": "r",
++            "column": "c4"
++          },
++          "depends_on": []
++        }
++      ]
++    }
++  }
++}
+diff --git a/apps/client/src/host/fake.ts b/apps/client/src/host/fake.ts
+index 680a918b..dc964a02 100644
+--- a/apps/client/src/host/fake.ts
++++ b/apps/client/src/host/fake.ts
+@@ -103,6 +103,8 @@ export interface Options {
+   settings?: SettingEntry[];
+   /// Le forme sintattiche effettive risposte dal montaggio finto.
+   syntaxForms?: SyntaxForm[];
++  /// Risposte controllate per namespace custom; nessun interprete di feature.
++  customQueries?: Record<string, (query: unknown) => unknown>;
+   /// Bundle nativi/ufficiali che l'host conosce.
+   bundles?: BundleInfo[];
+   /// Inventario installato della macchina, compresi elementi spenti o senza
+@@ -433,6 +435,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
+         };
+       case "syntax_forms":
+         return { kind: "syntax_forms", value: syntaxForms.map((form) => ({ ...form })) };
++      case "custom": {
++        const handlers = options.customQueries;
++        const handler = handlers && Object.prototype.hasOwnProperty.call(handlers, q.ns) ? handlers[q.ns] : undefined;
++        if (!handler) throw {
++          kind: "unserved", message: `host fake: namespace non montato: ${q.ns}`,
++        } satisfies PluginError;
++        return { kind: "custom", value: handler(q.query) };
++      }
+       default:
+         throw new Error(`host fake: non so rispondere alla query ${q.kind}`);
+     }
+@@ -521,12 +531,6 @@ export function createFakeHost(options: Options = {}): FakeHost {
+           source_kind: "text",
+         }));
+       },
+-      evaluateSheet: (source) =>
+-        gate(
+-          "evaluateSheet",
+-          [source],
+-          Promise.reject(new Error("host fake: il motore formule Rust non è montato")),
+-        ),
+       writeDocument: (id, source, base) => {
+         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
+         // si compone l'argomento di `gate`, quindi una porta guasta che ci
+@@ -583,7 +587,17 @@ export function createFakeHost(options: Options = {}): FakeHost {
+         const throttle = throttles.get("invokeCommand");
+         return throttle ? throttle.then(execute) : execute();
+       },
+-      queryIndex: (q) => gate("queryIndex", [q], Promise.resolve(query(q))),
++      queryIndex: (q) => {
++        // Anche una query non servita deve attraversare il gate e restituire
++        // una Promise rifiutata, come l'IPC, non un'eccezione sincrona.
++        let result: Promise<IndexResult>;
++        try {
++          result = Promise.resolve(query(q));
++        } catch (error) {
++          result = Promise.reject(error);
++        }
++        return gate("queryIndex", [q], result);
++      },
+       cancelJob: (id) => gate("cancelJob", [id], Promise.resolve()),
+       setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),
+       setPinned: (id, pinned) => gate("setPinned", [id, pinned], Promise.resolve()),
+diff --git a/apps/client/src/host/ipc.ts b/apps/client/src/host/ipc.ts
+index 17c439e0..9dc4b2ae 100644
+--- a/apps/client/src/host/ipc.ts
++++ b/apps/client/src/host/ipc.ts
+@@ -22,7 +22,6 @@ import type {
+   Locale,
+   PluginError,
+   SettingValue,
+-  SheetEvaluation,
+   KnownVault,
+   UiNode,
+   VaultInfo,
+@@ -53,8 +52,6 @@ export const api = {
+   // regola per cui è opaca — due implementazioni della stessa impronta sono due
+   // verità, e la seconda mente in silenzio.
+   readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+-  evaluateSheet: (source: string) =>
+-    invoke<SheetEvaluation>("evaluate_sheet", { source }),
+   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
+   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
+   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è
+diff --git a/apps/client/src/host/sheet.test.ts b/apps/client/src/host/sheet.test.ts
+new file mode 100644
+index 00000000..f899f8a0
+--- /dev/null
++++ b/apps/client/src/host/sheet.test.ts
+@@ -0,0 +1,47 @@
++import { describe, expect, it, vi } from "vitest";
++import sample from "../__fixtures__/sheet-query.json";
++import { createFakeHost } from "./fake";
++import { evaluateSheet } from "./sheet";
++import type { IndexResult, PluginError } from "./contract";
++
++describe("sheet evaluation through the data registry", () => {
++  it("consumes the result emitted by the real Rust host", async () => {
++    const handler = vi.fn(() => sample.result.value);
++    const fake = createFakeHost({ customQueries: { "fub.sheet": handler } });
++    const result = await evaluateSheet(fake.module.api.queryIndex, sample.query.query.source);
++    expect(result).toEqual(sample.result.value);
++    expect(handler).toHaveBeenCalledWith(sample.query.query);
++    expect(fake.atGate("queryIndex")).toEqual([{ gate: "queryIndex", args: [sample.query] }]);
++    expect(fake.atGate("evaluateSheet")).toHaveLength(0);
++  });
++
++  it("preserves typed unserved when the provider is absent, without inventing a result", async () => {
++    const fake = createFakeHost();
++    await expect(evaluateSheet(fake.module.api.queryIndex, "{}")).rejects.toMatchObject({ kind: "unserved" });
++    expect(fake.atGate("queryIndex")).toHaveLength(1);
++  });
++
++  it("does not resolve inherited object properties as namespace handlers", async () => {
++    const fake = createFakeHost({ customQueries: {} });
++    await expect(fake.module.api.queryIndex({ kind: "custom", ns: "toString", query: {} }))
++      .rejects.toMatchObject({ kind: "unserved" });
++  });
++
++  it("propagates the original operational error without string matching", async () => {
++    const error: PluginError = { kind: "bad_args", message: "over budget" };
++    const fake = createFakeHost({ customQueries: { "fub.sheet": () => { throw error; } } });
++    await expect(evaluateSheet(fake.module.api.queryIndex, "{}")).rejects.toBe(error);
++  });
++
++  it.each([
++    { kind: "jobs", value: [] },
++    { kind: "custom", value: null },
++    { kind: "custom", value: { cells: [], dependencies: {} } },
++    { kind: "custom", value: { cells: [{ sheet: "s", row: "r", column: "c", value: { kind: "number", value: NaN } }], dependencies: [] } },
++    { kind: "custom", value: { cells: [{ sheet: "s", row: "r", column: "c", value: { kind: "error", value: "future" } }], dependencies: [] } },
++    { kind: "custom", value: { cells: [], dependencies: [{ cell: {}, depends_on: [] }] } },
++  ])("rejects a malformed response %# before it reaches the grid", async (result) => {
++    await expect(evaluateSheet(async () => result as IndexResult, "{}"))
++      .rejects.toMatchObject({ kind: "internal" });
++  });
++});
+diff --git a/apps/client/src/host/sheet.ts b/apps/client/src/host/sheet.ts
+new file mode 100644
+index 00000000..9eda147e
+--- /dev/null
++++ b/apps/client/src/host/sheet.ts
+@@ -0,0 +1,44 @@
++// Lettura della vertical slice: un payload chiuso nel canale dati esistente.
++// Non interpreta formule e non espone il futuro protocollo a finestre.
++import type { IndexQuery, IndexResult, PluginError, SheetCellValue, SheetEvaluation } from "./contract";
++
++type QueryIndex = (query: IndexQuery) => Promise<IndexResult>;
++
++function record(value: unknown): value is Record<string, unknown> {
++  return typeof value === "object" && value !== null && !Array.isArray(value);
++}
++
++function coordinate(value: unknown): boolean {
++  return record(value) && typeof value.sheet === "string" && typeof value.row === "string"
++    && typeof value.column === "string";
++}
++
++function cellValue(value: unknown): value is SheetCellValue {
++  if (!record(value)) return false;
++  switch (value.kind) {
++    case "blank": return true;
++    case "number": return typeof value.value === "number" && Number.isFinite(value.value);
++    case "text": return typeof value.value === "string";
++    case "boolean": return typeof value.value === "boolean";
++    case "error": return typeof value.value === "string"
++      && ["parse", "ref", "name", "value", "div_zero", "num", "cycle"].includes(value.value);
++    default: return false;
++  }
++}
++
++function evaluation(value: unknown): value is SheetEvaluation {
++  return record(value) && Array.isArray(value.cells) && Array.isArray(value.dependencies)
++    && value.cells.every((cell) => record(cell) && coordinate(cell) && cellValue(cell.value))
++    && value.dependencies.every((entry) => record(entry) && coordinate(entry.cell)
++      && Array.isArray(entry.depends_on) && entry.depends_on.every(coordinate));
++}
++
++export async function evaluateSheet(queryIndex: QueryIndex, source: string): Promise<SheetEvaluation> {
++  const response = await queryIndex({
++    kind: "custom", ns: "fub.sheet", query: { kind: "evaluate", version: 1, source },
++  });
++  if (response.kind !== "custom" || !evaluation(response.value)) {
++    throw { kind: "internal", message: "Invalid sheet evaluation response" } satisfies PluginError;
++  }
++  return response.value;
++}
+diff --git a/apps/client/src/panels/document.ts b/apps/client/src/panels/document.ts
+index 637af779..21a98eee 100644
+--- a/apps/client/src/panels/document.ts
++++ b/apps/client/src/panels/document.ts
+@@ -18,6 +18,7 @@
+ // La superficie pubblica di questo modulo continua a rispondere alle domande
+ // della shell — «apri», «è aperto», «chiudi», «metti in salvo» — senza esporre
+ // lo stato mutabile della sessione ai suoi clienti.
++import { evaluateSheet } from "../host/sheet";
+ import type { EditorChange } from "../editors/text/engine";
+ import {
+   createDocumentSurfaceRegistry,
+@@ -149,7 +150,7 @@ export function mountDocument(d: DocumentDeps): void {
+         (prefix.trim() ? notesByName(prefix) : existingRecentNotes()).catch(() => []),
+       listTags: () => vaultTags(WITHOUT_PAGE).catch(() => []),
+     },
+-    evaluateSheet: api.evaluateSheet,
++    evaluateSheet: (source) => evaluateSheet(api.queryIndex, source),
+   });
+   panesEl = $("#panes");
+   sessionEventsStop?.();
+diff --git a/crates/fub-app/src/lib.rs b/crates/fub-app/src/lib.rs
+index 9c944adf..2b7eff7d 100644
+--- a/crates/fub-app/src/lib.rs
++++ b/crates/fub-app/src/lib.rs
+@@ -289,13 +289,6 @@ fn read_document(
+     })
+ }
+ 
+-/// Valuta un workbook al confine della shell. Le battute restano nel
+-/// `GridEngine`; questa porta riceve soltanto sorgenti già confermati.
+-#[tauri::command]
+-fn evaluate_sheet(source: String) -> Result<fub_host::sheet::WorkbookEvaluation, PluginError> {
+-    fub_host::sheet::evaluate(&source)
+-}
+-
+ /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
+ ///
+ /// `base` non è opzionale, e non è una svista: un campo mancante qui è un errore
+@@ -993,7 +986,6 @@ pub fn run() {
+             initial_vault,
+             session_notice,
+             read_document,
+-            evaluate_sheet,
+             write_document,
+             save_draft,
+             discard_draft,
+diff --git a/crates/fub-format-sheet/src/session.rs b/crates/fub-format-sheet/src/session.rs
+index 2c23a5b5..320c177e 100644
+--- a/crates/fub-format-sheet/src/session.rs
++++ b/crates/fub-format-sheet/src/session.rs
+@@ -229,14 +229,7 @@ impl<R: Eq + Serialize> SheetSession<R> {
+             columns: &sheet.columns[request.column_start..column_end],
+             cells,
+         };
+-        let mut budget = ByteBudget::new(MAX_WINDOW_RESPONSE_BYTES);
+-        if let Err(error) = serde_json::to_writer(&mut budget, &window) {
+-            return Err(if budget.exceeded {
+-                SheetSessionError::ResponseTooLarge
+-            } else {
+-                SheetSessionError::Serialization(error)
+-            });
+-        }
++        check_response_size(&window)?;
+         Ok(window)
+     }
+ 
+@@ -249,6 +242,19 @@ impl<R: Eq + Serialize> SheetSession<R> {
+     }
+ }
+ 
++/// Verifica i byte JSON effettivi prima di materializzare una risposta del foglio.
++/// L'adapter passa anche l'envelope del proprio canale, senza clonare i valori.
++pub fn check_response_size(value: &impl Serialize) -> Result<(), SheetSessionError> {
++    let mut budget = ByteBudget::new(MAX_WINDOW_RESPONSE_BYTES);
++    serde_json::to_writer(&mut budget, value).map_err(|error| {
++        if budget.exceeded {
++            SheetSessionError::ResponseTooLarge
++        } else {
++            SheetSessionError::Serialization(error)
++        }
++    })
++}
++
+ fn window_end(start: usize, count: usize, length: usize) -> Result<usize, SheetSessionError> {
+     if start > length {
+         return Err(SheetSessionError::WindowRange);
+diff --git a/crates/fub-host/src/mount.rs b/crates/fub-host/src/mount.rs
+index 769d213f..c9cc87d9 100644
+--- a/crates/fub-host/src/mount.rs
++++ b/crates/fub-host/src/mount.rs
+@@ -245,6 +245,15 @@ pub(crate) fn mount_with_formats(
+             register_markdown_transfer,
+         )),
+         Arc::new(crate::theme::ThemeBundle::series()),
++        Arc::new(CoreBundle::new(
++            crate::sheet::SHEET_ID,
++            "Fub Sheet",
++            |registrar| match registrar.register_index_provider(Box::new(crate::sheet::SheetIndex))
++            {
++                Ok(()) => Vec::new(),
++                Err(error) => vec![format!("sheet index NOT registered: {error}")],
++            },
++        )),
+     ];
+ 
+     for feature in fub_features::every_official_feature() {
+diff --git a/crates/fub-host/src/sheet.rs b/crates/fub-host/src/sheet.rs
+index 60d6f217..5cd57832 100644
+--- a/crates/fub-host/src/sheet.rs
++++ b/crates/fub-host/src/sheet.rs
+@@ -2,7 +2,12 @@
+ //!
+ //! Il motore della sessione vive nel formato ed è compilabile anche per WASM.
+ //! Questo adapter conserva l'API nativa e la derivazione comune `Revision::of`.
+-//! Non pubblica un contratto ABI/WIT e non sostituisce la porta provvisoria.
++//! La valutazione della vertical slice usa il canale dati del bundle `fub.sheet`.
++//! La sessione a finestre resta interna fino alla conformità nativa e WASM.
++
++mod index;
++
++pub(crate) use index::{SheetIndex, SHEET_ID};
+ 
+ use fub_abi::{PluginError, Revision};
+ use fub_format_sheet::{SheetId, Workbook};
+diff --git a/crates/fub-host/src/sheet/index.rs b/crates/fub-host/src/sheet/index.rs
+new file mode 100644
+index 00000000..bea630b6
+--- /dev/null
++++ b/crates/fub-host/src/sheet/index.rs
+@@ -0,0 +1,107 @@
++//! La query privata della vertical slice passa dal registro, non da IPC bespoke.
++
++use fub_abi::{
++    DocId, DocumentModel, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, PluginError,
++    QueryKind, QueryRoute,
++};
++use fub_format_sheet::session::{check_response_size, SheetSessionError};
++use serde::{Deserialize, Serialize};
++
++use super::WorkbookEvaluation;
++
++pub(crate) const SHEET_ID: &str = "fub.sheet";
++
++/// Non è il futuro protocollo grid: è la sola lettura della vertical slice,
++/// con versione e campi chiusi, trasportata dal canale custom già esistente.
++#[derive(Deserialize)]
++#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
++enum SheetQuery<'a> {
++    Evaluate { version: u32, source: &'a str },
++}
++
++#[derive(Serialize)]
++struct EvaluationEnvelope<'a> {
++    kind: &'static str,
++    value: &'a WorkbookEvaluation,
++}
++
++pub(crate) struct SheetIndex;
++
++impl IndexProvider for SheetIndex {
++    fn routes(&self) -> Vec<QueryRoute> {
++        vec![QueryRoute::Query(QueryKind::Custom(SHEET_ID.into()))]
++    }
++
++    fn activate(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
++        Ok(())
++    }
++
++    fn on_documents_indexed(&mut self, _: &[DocumentModel]) -> Vec<IndexLoss> {
++        Vec::new()
++    }
++
++    fn on_documents_removed(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
++        Vec::new()
++    }
++
++    fn reconcile(&mut self, _: &[DocId]) -> Vec<IndexLoss> {
++        Vec::new()
++    }
++
++    fn close(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
++        Ok(())
++    }
++
++    fn query(&self, request: IndexQuery) -> Result<IndexResult, PluginError> {
++        let IndexQuery::Custom { ns, query } = request else {
++            return Err(PluginError::BadArgs("expected a sheet query".into()));
++        };
++        if ns != SHEET_ID {
++            return Err(PluginError::BadArgs("unexpected sheet namespace".into()));
++        }
++        // Deserialize dal valore preso in prestito: nessuna seconda copia della
++        // sorgente prima del limite imposto dal parser del formato.
++        let SheetQuery::Evaluate { version, source } = SheetQuery::deserialize(&query)
++            .map_err(|error| PluginError::BadArgs(error.to_string().into()))?;
++        if version != 1 {
++            return Err(PluginError::BadArgs(
++                "unsupported sheet query version".into(),
++            ));
++        }
++        let evaluation = super::evaluate(source)?;
++        check_response_size(&EvaluationEnvelope {
++            kind: "custom",
++            value: &evaluation,
++        })
++        .map_err(|error| match error {
++            SheetSessionError::ResponseTooLarge => {
++                PluginError::BadArgs("sheet response exceeds 8 MiB".into())
++            }
++            _ => PluginError::Internal(error.to_string().into()),
++        })?;
++        serde_json::to_value(evaluation)
++            .map(IndexResult::Custom)
++            .map_err(|error| PluginError::Internal(error.to_string().into()))
++    }
++
++    fn flush(&mut self, _: &mut dyn HostApi) -> Result<(), PluginError> {
++        Ok(())
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn budget_counts_the_same_envelope_as_the_real_index_result() {
++        let evaluation = super::super::evaluate(r#"{"version":1,"sheets":[]}"#).unwrap();
++        let borrowed = serde_json::to_value(EvaluationEnvelope {
++            kind: "custom",
++            value: &evaluation,
++        })
++        .unwrap();
++        let actual = IndexResult::Custom(serde_json::to_value(evaluation).unwrap());
++        assert_eq!(borrowed, serde_json::to_value(actual).unwrap());
++    }
++}
+diff --git a/crates/fub-host/tests/headless.rs b/crates/fub-host/tests/headless.rs
+index f23abfe7..5d171d01 100644
+--- a/crates/fub-host/tests/headless.rs
++++ b/crates/fub-host/tests/headless.rs
+@@ -95,7 +95,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
+     // proprietario alle impostazioni dell'app (§11.1), e «dichiarato con zero
+     // registrazioni» è uno stato vero.
+     //
+-    // **Questi diciannove nomi restano scritti a mano di proposito**, e non è una
++    // **Questi venti nomi restano scritti a mano di proposito**, e non è una
+     // svista rispetto alla decisione 0056: quella distingue un elenco su cui un
+     // test *itera* — che smette di coprire in silenzio — da uno con cui un test
+     // *asserisce un'uguaglianza*, che diventa rosso. Questo è il secondo. E la
+@@ -123,6 +123,7 @@ fn the_whole_mounting_table_comes_up_without_a_webview() {
+             "fub.queries",
+             "fub.search",
+             "fub.serie",
++            "fub.sheet",
+             "fub.stats",
+             "fub.tags",
+             "fub.template",
+diff --git a/crates/fub-host/tests/official_views.rs b/crates/fub-host/tests/official_views.rs
+index 1961cfe1..b26e0eb2 100644
+--- a/crates/fub-host/tests/official_views.rs
++++ b/crates/fub-host/tests/official_views.rs
+@@ -22,8 +22,8 @@
+ //! **insiemi**, nelle due direzioni, su due giri concentrici:
+ //!
+ //! - i **bundle** dichiarati sono esattamente le feature dell'inventario più i
+-//!   quattro bundle dell'host: `fub.core`, `fub.maintenance`, `fub.markdown` e
+-//!   il tema di serie. Una feature registrata a mano è rossa qui;
++//!   cinque bundle dell'host: `fub.core`, `fub.maintenance`, `fub.markdown`,
++//!   `fub.sheet` e il tema di serie. Una feature registrata a mano è rossa qui;
+ //! - le **view** montate sono esattamente quelle che i provider dell'inventario
+ //!   dichiarano. Una quinta view registrata a mano è rossa qui.
+ //!
+@@ -75,6 +75,7 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
+             CORE_ID.to_string(),
+             fub_kernel::maintenance::MAINTENANCE_ID.to_string(),
+             "fub.markdown".to_string(),
++            "fub.sheet".to_string(),
+             fub_host::theme::SERIES_ID.to_string(),
+         ])
+         .collect();
+@@ -95,8 +96,8 @@ fn declared_bundles_are_inventory_plus_host_infrastructure() {
+ 
+     assert_eq!(
+         declared.len(),
+-        fub_features::every_official_feature().len() + 4,
+-        "the only bundles outside `fub-features` are core, maintenance, markdown and the series theme"
++        fub_features::every_official_feature().len() + 5,
++        "the only bundles outside `fub-features` are core, maintenance, markdown, sheet and the series theme"
+     );
+ }
+ 
+diff --git a/crates/fub-host/tests/sheet_query.rs b/crates/fub-host/tests/sheet_query.rs
+new file mode 100644
+index 00000000..0cbe6048
+--- /dev/null
++++ b/crates/fub-host/tests/sheet_query.rs
+@@ -0,0 +1,158 @@
++//! La shell e un plugin leggono il medesimo provider posseduto dal bundle.
++//! Rigenera la fixture con UPDATE_MIRROR=1 cargo test -p fub-host --test sheet_query.
++
++use camino::Utf8PathBuf;
++use fub_abi::{DocId, IndexQuery, IndexResult, PluginError};
++use fub_host::{Host, NoWatcher};
++use serde_json::{json, Value};
++
++fn source(inputs: &[&str]) -> String {
++    json!({
++        "version": 1,
++        "sheets": [{
++            "id": "s", "name": "Foglio",
++            "rows": [{"id": "r"}],
++            "columns": (0..inputs.len()).map(|i| json!({"id": format!("c{i}")})).collect::<Vec<_>>(),
++            "cells": inputs.iter().enumerate().map(|(i, input)| json!({
++                "row": "r", "column": format!("c{i}"), "input": input
++            })).collect::<Vec<_>>()
++        }]
++    })
++    .to_string()
++}
++
++fn query(source: &str) -> IndexQuery {
++    IndexQuery::Custom {
++        ns: "fub.sheet".into(),
++        query: json!({"kind": "evaluate", "version": 1, "source": source}),
++    }
++}
++
++fn host() -> (tempfile::TempDir, Utf8PathBuf, Host) {
++    let dir = tempfile::tempdir().unwrap();
++    let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
++    let host = Host::new().with_watcher(Box::new(NoWatcher));
++    host.open(&path).unwrap();
++    host.wait_indexed(None).unwrap();
++    (dir, path, host)
++}
++
++#[test]
++fn real_query_matches_the_typescript_fixture_without_a_dedicated_ipc() {
++    let (_dir, _path, host) = host();
++    let request = query(&source(&["2", "=A1+1", "caffè 😀", "=TRUE", "=1/0", ""]));
++    let result = host.query_index(None, request.clone()).unwrap();
++    let IndexResult::Custom(ref value) = result else {
++        panic!("custom result")
++    };
++    assert_eq!(
++        value["cells"][1]["value"],
++        json!({"kind": "number", "value": 3.0})
++    );
++    assert_eq!(
++        value["cells"][4]["value"],
++        json!({"kind": "error", "value": "div_zero"})
++    );
++    assert_eq!(value["dependencies"][0]["depends_on"][0]["column"], "c0");
++    let actual = json!({"query": request, "result": result});
++    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
++        .join("../../apps/client/src/__fixtures__/sheet-query.json");
++    if std::env::var_os("UPDATE_MIRROR").is_some() {
++        std::fs::write(
++            &path,
++            format!("{}\n", serde_json::to_string_pretty(&actual).unwrap()),
++        )
++        .unwrap();
++    }
++    let expected: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
++    assert_eq!(
++        actual, expected,
++        "regenerate the fixture with UPDATE_MIRROR=1"
++    );
++}
++
++#[test]
++fn disabling_the_owner_retires_only_its_route_and_reenable_restores_it() {
++    let (_dir, path, host) = host();
++    let bytes = source(&["2", "=A1+1"]);
++    std::fs::write(path.join("book.fubsheet"), &bytes).unwrap();
++    let before = host
++        .read_document(None, &DocId::new("book.fubsheet"))
++        .unwrap();
++    let expected = host.query_index(None, query(&bytes)).unwrap();
++    for _ in 0..3 {
++        assert!(host
++            .set_plugin_enabled(None, "fub.sheet", false)
++            .unwrap()
++            .is_empty());
++        assert!(matches!(
++            host.query_index(None, query(&bytes)),
++            Err(PluginError::Unserved(_))
++        ));
++        assert_eq!(
++            host.read_document(None, &DocId::new("book.fubsheet"))
++                .unwrap(),
++            before
++        );
++        assert!(host
++            .set_plugin_enabled(None, "fub.sheet", true)
++            .unwrap()
++            .is_empty());
++        assert_eq!(host.query_index(None, query(&bytes)).unwrap(), expected);
++    }
++    assert_eq!(
++        std::fs::read_to_string(path.join("book.fubsheet")).unwrap(),
++        bytes
++    );
++    assert!(host.close_vault(&path).unwrap().is_empty());
++}
++
++#[test]
++fn request_shape_and_version_are_closed_and_fail_with_typed_errors() {
++    let (_dir, _path, host) = host();
++    let empty = source(&[]);
++    for payload in [
++        json!({"kind":"evaluate","version":2,"source":empty}),
++        json!({"kind":"evaluate","version":1,"source":empty,"extra":true}),
++        json!({"kind":"evaluate","version":1}),
++        json!({"kind":"evaluate","version":1,"source":42}),
++        json!({"kind":"commit","version":1,"source":empty}),
++        json!({"kind":"evaluate","version":1,"source":"{}"}),
++    ] {
++        let request = IndexQuery::Custom {
++            ns: "fub.sheet".into(),
++            query: payload,
++        };
++        assert!(matches!(
++            host.query_index(None, request),
++            Err(PluginError::BadArgs(_))
++        ));
++    }
++    let absent = IndexQuery::Custom {
++        ns: "fub.absent".into(),
++        query: json!({}),
++    };
++    assert!(matches!(
++        host.query_index(None, absent),
++        Err(PluginError::Unserved(_))
++    ));
++    assert!(host.query_index(None, query(&empty)).is_ok());
++}
++
++#[test]
++fn source_and_escaped_response_limits_apply_on_the_real_route() {
++    let (_dir, _path, host) = host();
++    let too_large = " ".repeat(fub_format_sheet::MAX_SOURCE_BYTES + 1);
++    assert!(matches!(
++        host.query_index(None, query(&too_large)),
++        Err(PluginError::BadArgs(_))
++    ));
++    let large = "\u{0001}".repeat(fub_format_sheet::MAX_CELL_INPUT_BYTES);
++    let bytes = source(&[&large, &large]);
++    assert!(bytes.len() < fub_format_sheet::MAX_SOURCE_BYTES);
++    assert!(matches!(
++        host.query_index(None, query(&bytes)),
++        Err(PluginError::BadArgs(_))
++    ));
++    assert!(host.query_index(None, query(&source(&["4"]))).is_ok());
++}
+diff --git a/docs/architecture/components-and-boundaries.md b/docs/architecture/components-and-boundaries.md
+index 41bfc264..67bcbac9 100644
+--- a/docs/architecture/components-and-boundaries.md
++++ b/docs/architecture/components-and-boundaries.md
+@@ -19,6 +19,7 @@ flowchart LR
+     HOST --> ABI
+     HOST --> FEATURES
+     HOST --> MARKDOWN
++    HOST --> SHEET["fub-format-sheet"]
+     WASM["fub-wasm-host"] --> ABI
+     WASM --> HOST
+     APP["fub-app"] --> HOST
+@@ -40,6 +41,7 @@ del repository verificano le eccezioni.
+ | `fub-sdk` | API comoda per autori e host in memoria | composition root dell'app |
+ | `fub-testkit` | fixture e integrazione host/kernel | dipendenze di produzione |
+ | `fub-format-markdown` | parse, render, serialize e transfer Markdown | risoluzione dei path del vault |
++| `fub-format-sheet` | workbook persistito, valutatore e sessioni derivate | host, storage, Tauri, Wasmtime |
+ | `fub-features` | provider ufficiali indipendenti | conoscenza del desktop |
+ | `fub-wasm-host` | Wasmtime, binding, traduzione, store e lifecycle dei plugin installati | policy duplicata |
+ | `frontend` | layout, interazione, resa, editor | accesso diretto al kernel |
+@@ -103,6 +105,7 @@ indipendenti.
+ | composizione | `crates/fub-host/src/mount.rs`, `session.rs`, `registry.rs` |
+ | desktop | `crates/fub-app/src/lib.rs` |
+ | Markdown | `crates/fub-format-markdown/src/` |
++| foglio | `crates/fub-format-sheet/src/`, `crates/fub-host/src/sheet/` |
+ | feature | `crates/fub-features/src/` |
+ | runtime WASM | `crates/fub-wasm-host/src/` |
+ | seam frontend | `apps/client/src/host/` |
+diff --git a/docs/architecture/frontend-and-ipc.md b/docs/architecture/frontend-and-ipc.md
+index e8b49419..12f4d4f6 100644
+--- a/docs/architecture/frontend-and-ipc.md
++++ b/docs/architecture/frontend-and-ipc.md
+@@ -273,21 +273,31 @@ guardata; i reload full-text restano il fallback autorevole.
+ 
+ Editor in-cell e formula bar usano due istanze di `TextEngine` con
+ `FormulaProfile`, ma nessuna battuta attraversa IPC. Dopo un commit,
+-`evaluate_sheet` invia provvisoriamente la sorgente completa a `fub-host`, che
+-usa `Workbook::parse()` e `Workbook::evaluate()`. Le generazioni asincrone
+-scartano risposte stantie. Se il comando non è montato, la superficie dichiara
+-`data-evaluation="unavailable"` e mostra gli input grezzi senza duplicare il
+-linguaggio formule in TypeScript.
+-
+-I tipi di valutazione in `host/contract.ts` e il comando Tauri restano interni
+-e provvisori. La misura della
+-[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) esclude dal
+-contratto pubblico sia la sorgente completa a ogni commit sia il
+-`TextOperation` della serializzazione. Il protocollo grid apre una sessione con
+-sorgente e revisione, legge finestre limitate e applica patch coordinate
+-atomiche; il provider restituisce il diff per la `DocumentSession` e
+-un'invalidazione limitata delle celle dipendenti. Famiglia e versione
+-sconosciute usano il fallback senza eseguire il provider.
++`host/sheet.ts` invia la sorgente completa con `query_index`, nel namespace
++`fub.sheet`. Il provider nativo usa `Workbook::parse()` e
++`Workbook::evaluate()`. La richiesta privata ha specie `evaluate`, versione
++intera e campi chiusi; il risultato conserva valori ed errori formula tipizzati.
++La sorgente è limitata a 16 MiB e la risposta JSON, envelope compreso, a 8 MiB.
++
++Il bundle `fub.sheet` possiede la route nel registro. Disabilitarlo ritira la
++valutazione senza rimuovere il formato sorgente; riabilitarlo registra di nuovo
++il provider. Le generazioni asincrone scartano risposte stantie. Se la query
++non è servita, la superficie dichiara `data-evaluation="unavailable"` e mostra
++gli input grezzi senza duplicare il linguaggio formule in TypeScript.
++
++`crates/fub-format-sheet/src/session.rs` possiede il motore derivato per
++apertura, reload atomico e letture a finestre. L'adapter `fub-host::sheet`
++conserva la derivazione comune `Revision::of`; il motore confronta soltanto
++revisioni opache. Il crate formato non dipende dall'host ed è compilabile per
++WASM. La shell non usa ancora questa sessione per il traffico ordinario.
++
++La query della vertical slice resta privata e provvisoria; non introduce una
++nuova porta IPC né estende ABI o WIT. La
++[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) definisce il
++passo successivo: sostituire sorgente e valutazione complete con finestre,
++patch coordinate atomiche e invalidazione limitata, insieme ai consumatori
++nativo e WASM conformi. La compilazione del motore per WASM non dimostra ancora
++quel confine né il lifecycle del provider remoto.
+ 
+ ## Confine CodeMirror
+ 
+diff --git a/docs/product/editor-and-preview.md b/docs/product/editor-and-preview.md
+index 0cd7281b..c9690c8c 100644
+--- a/docs/product/editor-and-preview.md
++++ b/docs/product/editor-and-preview.md
+@@ -151,9 +151,10 @@ riscrittura completa autorevole la annulla.
+ 
+ Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
+ salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
+-valutatore non è disponibile, la griglia resta modificabile e mostra gli input
+-grezzi. Nessuna battuta attraversa IPC; la valutazione parte dopo il commit e
+-una risposta stantia non sostituisce lo stato corrente.
++valutatore non è disponibile, anche perché il bundle `fub.sheet` è disabilitato,
++la griglia resta modificabile e mostra gli input grezzi. Nessuna battuta
++attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
++sostituisce lo stato corrente.
+ 
+ Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
+ `DocumentModel`. Il protocollo della vertical slice è ancora interno: ABI e WIT
+diff --git a/docs/reference/ipc-contract.md b/docs/reference/ipc-contract.md
+index fb9d68ea..c19af0db 100644
+--- a/docs/reference/ipc-contract.md
++++ b/docs/reference/ipc-contract.md
+@@ -30,6 +30,24 @@ test usano un fake.
+ Le operazioni offerte da provider passano da porte generiche. Una feature non
+ aggiunge una porta soltanto per evitare di usare il proprio registro.
+ 
++## Valutazione del foglio pilota
++
++La shell usa `IndexQuery::Custom` con namespace `fub.sheet`, non una porta Tauri
++dedicata. Il payload privato è `{kind: "evaluate", version: 1, source: string}`:
++versioni, specie o campi sconosciuti sono `BadArgs`. La risposta è
++`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript.
++
++Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
++compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
++Disabilitare il bundle ritira la route: la query restituisce `Unserved` e la
++shell usa il fallback agli input grezzi. Il payload non è il futuro contratto
++pubblico grid a finestre.
++
++Le fonti sono `crates/fub-host/src/sheet/index.rs` e
++`apps/client/src/host/sheet.ts`. La fixture
++`apps/client/src/__fixtures__/sheet-query.json` è generata dal test host reale
++e consumata dai test TypeScript. Nessun interprete formule vive nel fake host.
++
+ ## Tipi principali
+ 
+ La shell riceve forme per:

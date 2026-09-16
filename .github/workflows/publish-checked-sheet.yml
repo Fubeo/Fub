@@ -1,0 +1,91 @@
+name: Publish checked sheet sources
+
+on:
+  push:
+    branches: [feat/issue11-grid-window-session]
+    paths:
+      - .github/patches/sheet-query.patch
+      - .github/workflows/publish-checked-sheet.yml
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: github.repository == 'Fubeo/Fub'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+      # Trasporto una tantum del diff testato localmente: testo Git leggibile,
+      # digest verificato e confronto dell'intero albero, nessun payload compresso.
+      # Questo workflow e la patch sono rimossi prima di pubblicare i sorgenti.
+      - name: Verifica base, diff e albero di destinazione
+        shell: python
+        run: |
+          import hashlib, pathlib, subprocess
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          temporary = {'.github/patches/sheet-query.patch', '.github/workflows/publish-checked-sheet.yml'}
+          assert set(git('diff', '--name-only', '1fc7909663ef43e61a228679b36ab47b1a1ccba2', 'HEAD').splitlines()) == temporary
+          patch = pathlib.Path('.github/patches/sheet-query.patch')
+          assert hashlib.sha256(patch.read_bytes()).hexdigest() == 'fb6b4ad566bff3e1143c01c870a70bf5ba784cc299835a87e1645234d68c9044'
+          subprocess.run(['git', 'apply', '--check', str(patch)], check=True)
+          subprocess.run(['git', 'apply', '--index', '--whitespace=error', str(patch)], check=True)
+          subprocess.run(['git', 'rm', '--', *sorted(temporary)], check=True)
+          assert git('write-tree') == '058d634024dbfbe0e32616686830cb4aca98c879'
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-wasip2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: 22
+      - run: cargo fmt --all --check
+      - run: cargo clippy -p fub-format-sheet -p fub-host --all-targets --locked -- -D warnings
+      - run: cargo test -p fub-format-sheet -p fub-host --locked --no-fail-fast
+      - run: cargo check -p fub-format-sheet --target wasm32-wasip2 --all-targets --locked
+      - name: Il guard IPC originale senza dipendenze webview
+        run: |
+          CARGO_MANIFEST_DIR="$PWD/crates/fub-app" rustc --edition=2021 --test crates/fub-app/tests/lean_ipc.rs -o /tmp/lean-ipc-test
+          /tmp/lean-ipc-test
+      - run: npm ci
+        working-directory: apps/client
+      - run: npm run typecheck
+        working-directory: apps/client
+      - run: npm test
+        working-directory: apps/client
+      - run: npm run build
+        working-directory: apps/client
+      - name: Guard documentali e confini della shell
+        run: |
+          node .github/scripts/check-actions-pinned.mjs
+          node .github/scripts/check-doc-links.mjs
+          node .github/scripts/check-doc-orphans.mjs
+          node .github/scripts/check-doc-size.mjs
+          node .github/scripts/check-markdown-style.mjs
+          node .github/scripts/check-mermaid.mjs --render
+          node .github/scripts/check-prose.mjs
+          node .github/scripts/check-tables.mjs
+          node .github/scripts/check-locale-loop.mjs
+          node .github/scripts/check-codemirror-boundary.mjs
+          node .github/scripts/check-listeners.mjs
+          node .github/scripts/check-races.mjs
+          node .github/scripts/check-npm-copies.mjs
+      - name: Pubblica soltanto l'albero verificato con avanzamento lineare
+        run: |
+          git diff --cached --check
+          git diff --exit-code
+          test "$(git write-tree)" = 058d634024dbfbe0e32616686830cb4aca98c879
+          test "$(git ls-remote origin refs/heads/feat/issue11-grid-window-session | cut -f1)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(sheet): migra la valutazione sul canale dati'
+          git push origin HEAD:refs/heads/feat/issue11-grid-window-session
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
