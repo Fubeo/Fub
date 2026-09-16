@@ -299,7 +299,12 @@ fn operation_limits_are_checked_before_coordinate_or_duplicate_work() {
             })
             .collect(),
     );
-    assert!(5 * MAX_CELL_INPUT_BYTES > MAX_OPERATION_INPUT_BYTES);
+    let input_bytes: usize = oversized
+        .patches
+        .iter()
+        .map(|patch| patch.after.len())
+        .sum();
+    assert!(input_bytes > MAX_OPERATION_INPUT_BYTES);
     assert!(matches!(
         session.commit(&before, &oversized, revision),
         Err(SheetSessionError::OperationInputLimit)

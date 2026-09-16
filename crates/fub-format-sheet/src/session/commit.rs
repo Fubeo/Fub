@@ -374,8 +374,7 @@ fn source_edit_bounds(before: &str, after: &str) -> SourceEditBounds {
     // non si ridefinisce la policy: si estende il diff quando il massimo
     // prefisso/suffisso cadrebbe dentro la coppia, così l'edit che attraversa
     // DocumentSession rispetta la stessa disciplina senza normalizzare il file.
-    while prefix > 0
-        && (!safe_edit_boundary(before, prefix) || !safe_edit_boundary(after, prefix))
+    while prefix > 0 && (!safe_edit_boundary(before, prefix) || !safe_edit_boundary(after, prefix))
     {
         prefix -= 1;
     }
@@ -471,6 +470,10 @@ mod tests {
     fn source_serialization_stops_at_the_limit_instead_of_building_past_it() {
         let workbook = Workbook::new(Vec::new());
         let canonical = workbook.serialize().unwrap();
+        assert_eq!(
+            serialize_workbook_with_limit(&workbook, canonical.len()).unwrap(),
+            canonical
+        );
         let result = serialize_workbook_with_limit(&workbook, canonical.len() - 1);
         assert!(matches!(
             result,
@@ -510,7 +513,7 @@ mod tests {
         let mut dependents = HashMap::new();
         dependents.insert(root.clone(), exact);
         assert!(matches!(
-            invalidation(&[root.clone()], &dependents),
+            invalidation(std::slice::from_ref(&root), &dependents),
             SheetInvalidation::Cells(cells) if cells.len() == MAX_INVALIDATED_CELLS
         ));
         dependents
