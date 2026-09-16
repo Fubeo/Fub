@@ -228,7 +228,12 @@ fn source_edit(before: &str, after: &str) -> SheetSourceEdit {
     while prefix < minimum && before_bytes[prefix] == after_bytes[prefix] {
         prefix += 1;
     }
-    while prefix > 0 && (!before.is_char_boundary(prefix) || !after.is_char_boundary(prefix)) {
+    // Il confine testuale condiviso tratta CRLF come un solo terminatore. Qui
+    // non si ridefinisce la policy: si estende il diff quando il massimo
+    // prefisso/suffisso cadrebbe dentro la coppia, così l'edit che attraversa
+    // DocumentSession rispetta la stessa disciplina senza normalizzare il file.
+    while prefix > 0 && (!safe_edit_boundary(before, prefix) || !safe_edit_boundary(after, prefix))
+    {
         prefix -= 1;
     }
 
@@ -240,8 +245,8 @@ fn source_edit(before: &str, after: &str) -> SheetSourceEdit {
         suffix += 1;
     }
     while suffix > 0
-        && (!before.is_char_boundary(before.len() - suffix)
-            || !after.is_char_boundary(after.len() - suffix))
+        && (!safe_edit_boundary(before, before.len() - suffix)
+            || !safe_edit_boundary(after, after.len() - suffix))
     {
         suffix -= 1;
     }
@@ -254,6 +259,14 @@ fn source_edit(before: &str, after: &str) -> SheetSourceEdit {
         deleted: before[prefix..before_end].to_owned(),
         inserted: after[prefix..after_end].to_owned(),
     }
+}
+
+fn safe_edit_boundary(source: &str, at: usize) -> bool {
+    if !source.is_char_boundary(at) {
+        return false;
+    }
+    let bytes = source.as_bytes();
+    !(at > 0 && at < bytes.len() && bytes[at - 1] == b'\r' && bytes[at] == b'\n')
 }
 
 #[cfg(test)]
@@ -272,11 +285,24 @@ mod tests {
     #[test]
     fn utf8_source_edits_never_split_a_character() {
         let edit = source_edit("caffè 😀\n", "caffé 😀!\n");
-        assert!("caffè 😀\n".is_char_boundary(edit.from));
-        assert!("caffè 😀\n".is_char_boundary(edit.to));
+        assert!(safe_edit_boundary("caffè 😀\n", edit.from));
+        assert!(safe_edit_boundary("caffè 😀\n", edit.to));
         let mut rebuilt = "caffè 😀\n".as_bytes().to_vec();
         rebuilt.splice(edit.from..edit.to, edit.inserted.as_bytes().iter().copied());
         assert_eq!(String::from_utf8(rebuilt).unwrap(), "caffé 😀!\n");
+    }
+
+    #[test]
+    fn source_edits_never_split_crlf_when_canonicalizing_line_endings() {
+        let before = "{\r\n  \"version\": 1\r\n}\r\n";
+        let after = "{\n  \"version\": 2\n}\n";
+        let edit = source_edit(before, after);
+        assert!(safe_edit_boundary(before, edit.from));
+        assert!(safe_edit_boundary(before, edit.to));
+        assert_eq!(&before[edit.from..edit.to], edit.deleted);
+        let mut rebuilt = before.as_bytes().to_vec();
+        rebuilt.splice(edit.from..edit.to, edit.inserted.as_bytes().iter().copied());
+        assert_eq!(String::from_utf8(rebuilt).unwrap(), after);
     }
 
     #[test]
