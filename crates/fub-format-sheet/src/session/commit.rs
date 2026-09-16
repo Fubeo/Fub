@@ -54,6 +54,50 @@ struct ResolvedPatch<'a> {
     after: &'a str,
 }
 
+#[derive(Clone, Copy)]
+struct SourceEditBounds {
+    from: usize,
+    to: usize,
+    after_from: usize,
+    after_to: usize,
+}
+
+#[derive(Serialize)]
+struct BorrowedSourceEdit<'a> {
+    from: usize,
+    to: usize,
+    deleted: &'a str,
+    inserted: &'a str,
+}
+
+#[derive(Serialize)]
+struct BorrowedCommit<'a, R> {
+    revision: &'a R,
+    edit: BorrowedSourceEdit<'a>,
+    invalidation: &'a SheetInvalidation,
+}
+
+impl SourceEditBounds {
+    fn borrowed<'a>(self, before: &'a str, after: &'a str) -> BorrowedSourceEdit<'a> {
+        BorrowedSourceEdit {
+            from: self.from,
+            to: self.to,
+            deleted: &before[self.from..self.to],
+            inserted: &after[self.after_from..self.after_to],
+        }
+    }
+
+    fn owned(self, before: &str, after: &str) -> SheetSourceEdit {
+        let borrowed = self.borrowed(before, after);
+        SheetSourceEdit {
+            from: borrowed.from,
+            to: borrowed.to,
+            deleted: borrowed.deleted.to_owned(),
+            inserted: borrowed.inserted.to_owned(),
+        }
+    }
+}
+
 impl<R: Clone + Eq + Serialize> SheetSession<R> {
     /// Valida tutte le preimmagini prima di toccare il workbook. Qualunque
     /// errore lascia sorgente, revisione, valori e indici della sessione intatti.
@@ -81,12 +125,22 @@ impl<R: Clone + Eq + Serialize> SheetSession<R> {
         let replacement = SheetSession::open(&source, revision_of)?;
         let changed: Vec<_> = resolved.iter().map(|patch| patch.cell.clone()).collect();
         let invalidation = invalidation(&changed, &replacement.dependents);
+        let edit = source_edit_bounds(&self.source, &source);
+
+        // La preview ha esattamente la forma JSON della risposta finale, ma
+        // prende in prestito le due fette di sorgente: escaping UTF-8 e byte
+        // effettivi vengono contati prima di allocare `deleted` e `inserted`.
+        check_response_size(&BorrowedCommit {
+            revision: &replacement.revision,
+            edit: edit.borrowed(&self.source, &source),
+            invalidation: &invalidation,
+        })?;
+
         let result = SheetCommit {
             revision: replacement.revision.clone(),
-            edit: source_edit(&self.source, &source),
+            edit: edit.owned(&self.source, &source),
             invalidation,
         };
-        check_response_size(&result)?;
         *self = replacement;
         Ok(result)
     }
@@ -211,13 +265,13 @@ fn invalidation(
     SheetInvalidation::Cells(cells)
 }
 
-fn source_edit(before: &str, after: &str) -> SheetSourceEdit {
+fn source_edit_bounds(before: &str, after: &str) -> SourceEditBounds {
     if before == after {
-        return SheetSourceEdit {
+        return SourceEditBounds {
             from: before.len(),
             to: before.len(),
-            deleted: String::new(),
-            inserted: String::new(),
+            after_from: after.len(),
+            after_to: after.len(),
         };
     }
 
@@ -251,13 +305,11 @@ fn source_edit(before: &str, after: &str) -> SheetSourceEdit {
         suffix -= 1;
     }
 
-    let before_end = before.len() - suffix;
-    let after_end = after.len() - suffix;
-    SheetSourceEdit {
+    SourceEditBounds {
         from: prefix,
-        to: before_end,
-        deleted: before[prefix..before_end].to_owned(),
-        inserted: after[prefix..after_end].to_owned(),
+        to: before.len() - suffix,
+        after_from: prefix,
+        after_to: after.len() - suffix,
     }
 }
 
@@ -284,25 +336,40 @@ mod tests {
 
     #[test]
     fn utf8_source_edits_never_split_a_character() {
-        let edit = source_edit("caffè 😀\n", "caffé 😀!\n");
-        assert!(safe_edit_boundary("caffè 😀\n", edit.from));
-        assert!(safe_edit_boundary("caffè 😀\n", edit.to));
-        let mut rebuilt = "caffè 😀\n".as_bytes().to_vec();
+        let before = "caffè 😀\n";
+        let after = "caffé 😀!\n";
+        let bounds = source_edit_bounds(before, after);
+        let edit = bounds.owned(before, after);
+        assert!(safe_edit_boundary(before, edit.from));
+        assert!(safe_edit_boundary(before, edit.to));
+        let mut rebuilt = before.as_bytes().to_vec();
         rebuilt.splice(edit.from..edit.to, edit.inserted.as_bytes().iter().copied());
-        assert_eq!(String::from_utf8(rebuilt).unwrap(), "caffé 😀!\n");
+        assert_eq!(String::from_utf8(rebuilt).unwrap(), after);
     }
 
     #[test]
     fn source_edits_never_split_crlf_when_canonicalizing_line_endings() {
         let before = "{\r\n  \"version\": 1\r\n}\r\n";
         let after = "{\n  \"version\": 2\n}\n";
-        let edit = source_edit(before, after);
+        let bounds = source_edit_bounds(before, after);
+        let edit = bounds.owned(before, after);
         assert!(safe_edit_boundary(before, edit.from));
         assert!(safe_edit_boundary(before, edit.to));
         assert_eq!(&before[edit.from..edit.to], edit.deleted);
         let mut rebuilt = before.as_bytes().to_vec();
         rebuilt.splice(edit.from..edit.to, edit.inserted.as_bytes().iter().copied());
         assert_eq!(String::from_utf8(rebuilt).unwrap(), after);
+    }
+
+    #[test]
+    fn borrowed_and_owned_edits_serialize_identically() {
+        let before = "{\"a\":1}";
+        let after = "{\"a\":2}";
+        let bounds = source_edit_bounds(before, after);
+        assert_eq!(
+            serde_json::to_value(bounds.borrowed(before, after)).unwrap(),
+            serde_json::to_value(bounds.owned(before, after)).unwrap()
+        );
     }
 
     #[test]
