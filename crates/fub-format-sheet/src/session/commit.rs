@@ -119,17 +119,21 @@ impl<R: Clone + Eq + Serialize> SheetSession<R> {
         // sessione resta intatta finché anche invalidazione e risposta passano.
         let replacement = SheetSession::open(&source, revision_of)?;
         let changed: Vec<_> = resolved.iter().map(|patch| patch.cell.clone()).collect();
-        let invalidation = invalidation(&changed, &replacement.dependents);
+        let mut invalidation = invalidation(&changed, &replacement.dependents);
         let edit = source_edit_bounds(&self.source, &source);
 
         // La preview ha esattamente la forma JSON della risposta finale, ma
         // prende in prestito le due fette di sorgente: escaping UTF-8 e byte
         // effettivi vengono contati prima di allocare `deleted` e `inserted`.
-        check_response_size(&BorrowedCommit {
-            revision: &replacement.revision,
-            edit: edit.borrowed(&self.source, &source),
-            invalidation: &invalidation,
-        })?;
+        // Se il solo elenco esplicito rende la risposta troppo grande, `all`
+        // conserva la semantica di invalidazione senza rifiutare il commit.
+        fit_commit_response(
+            &replacement.revision,
+            &self.source,
+            &source,
+            edit,
+            &mut invalidation,
+        )?;
 
         let result = SheetCommit {
             revision: replacement.revision.clone(),
@@ -302,6 +306,31 @@ impl Write for SourceBudget {
     }
 }
 
+fn fit_commit_response<R: Serialize>(
+    revision: &R,
+    before: &str,
+    after: &str,
+    edit: SourceEditBounds,
+    invalidation: &mut SheetInvalidation,
+) -> Result<(), SheetSessionError> {
+    let check = |current: &SheetInvalidation| {
+        check_response_size(&BorrowedCommit {
+            revision,
+            edit: edit.borrowed(before, after),
+            invalidation: current,
+        })
+    };
+    match check(invalidation) {
+        Err(SheetSessionError::ResponseTooLarge)
+            if matches!(invalidation, SheetInvalidation::Cells(_)) =>
+        {
+            *invalidation = SheetInvalidation::All;
+            check(invalidation)
+        }
+        result => result,
+    }
+}
+
 fn invalidation(
     changed: &[CellKey],
     dependents: &HashMap<CellKey, Vec<CellKey>>,
@@ -394,6 +423,12 @@ mod tests {
         }
     }
 
+    fn padded_id(prefix: char, index: usize) -> String {
+        let suffix = index.to_string();
+        let fill = 128 - prefix.len_utf8() - suffix.len();
+        format!("{prefix}{}{suffix}", "x".repeat(fill))
+    }
+
     #[test]
     fn utf8_source_edits_never_split_a_character() {
         let before = "caffè 😀\n";
@@ -441,6 +476,31 @@ mod tests {
             result,
             Err(SheetSessionError::Source(SheetError::Limit { .. }))
         ));
+    }
+
+    #[test]
+    fn long_valid_ids_degrade_explicit_invalidation_before_the_response_overflows() {
+        let sheet = SheetId::from("s".repeat(128));
+        let column = ColumnId::from("c".repeat(128));
+        let cells = (0..25_000)
+            .map(|index| CellKey {
+                sheet: sheet.clone(),
+                row: RowId::from(padded_id('r', index)),
+                column: column.clone(),
+            })
+            .collect();
+        let mut invalidation = SheetInvalidation::Cells(cells);
+        let before = "{}";
+        let after = "{}";
+        fit_commit_response(
+            &0u64,
+            before,
+            after,
+            source_edit_bounds(before, after),
+            &mut invalidation,
+        )
+        .unwrap();
+        assert_eq!(invalidation, SheetInvalidation::All);
     }
 
     #[test]
