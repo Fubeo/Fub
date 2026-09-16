@@ -25,6 +25,7 @@ use fub_abi::event::Event;
 use fub_abi::options::permission;
 use fub_abi::traits::JobSpec;
 use fub_abi::PluginError;
+use fub_host::registry::Bundle;
 use fub_host::{Host, NoWatcher};
 use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::WasmBundle;
@@ -249,6 +250,39 @@ fn a_component_with_data_families_round_trips() {
         })
     );
 
+    host.close();
+}
+
+/// Il bundle conserva il componente compilato dai byte consegnati: dopo il
+/// caricamento non dipende più dal file sorgente.
+#[test]
+fn the_bundle_mounts_from_the_exact_received_bytes() {
+    let built = common::ping("");
+    let source_dir = tempfile::tempdir().expect("tempdir");
+    let source = source_dir.path().join("ping.wasm");
+    std::fs::copy(&built, &source).expect("il componente si copia");
+    let bytes = std::fs::read(&source).expect("il componente si legge");
+    let bundle = WasmBundle::from_bytes(&bytes, Trust::Community)
+        .expect("i byte del componente si caricano");
+    assert_eq!(bundle.manifest().id, ID);
+
+    std::fs::write(&source, b"non e piu un componente").expect("il file sorgente cambia");
+
+    let v = Vault::new();
+    let host = Host::new()
+        .with_watcher(Box::new(NoWatcher))
+        .with_job_threads(1);
+    host.open(&v.root).expect("il vault si apre");
+    host.wait_indexed(None).expect("l'apertura ha finito");
+    host.with_session(None, |s| {
+        let mut ws = s.workspace().write().unwrap();
+        s.bundles()
+            .write()
+            .unwrap()
+            .mount(&bundle, &mut ws)
+            .expect("il bundle conserva gli stessi byte compilati");
+    })
+    .expect("aperto");
     host.close();
 }
 

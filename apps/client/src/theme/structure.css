@@ -492,3 +492,81 @@ html, body, #app {
   min-height: 0;
   display: flex;
 }
+
+.grid-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+.grid-formula-bar {
+  display: flex;
+  flex: 0 0 2.25rem;
+  min-width: 0;
+}
+.grid-cell-name {
+  display: inline-flex;
+  flex: 0 0 4.25rem;
+  align-items: center;
+  justify-content: center;
+}
+.grid-formula-editor {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.grid-formula-editor .cm-editor,
+.grid-cell-editor .cm-editor {
+  height: 100%;
+}
+.grid-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+.grid-canvas {
+  position: relative;
+  min-width: 100%;
+  min-height: 100%;
+}
+.grid-cells,
+.grid-column-headers,
+.grid-row-headers {
+  position: absolute;
+  inset: 0;
+}
+.grid-column-headers,
+.grid-row-headers {
+  pointer-events: none;
+}
+.grid-cell,
+.grid-header,
+.grid-corner,
+.grid-cell-editor {
+  position: absolute;
+  box-sizing: border-box;
+}
+.grid-cell {
+  overflow: hidden;
+  padding: 0.3rem 0.45rem;
+  white-space: nowrap;
+}
+.grid-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.grid-column-header,
+.grid-row-header {
+  z-index: 3;
+}
+.grid-corner {
+  z-index: 4;
+}
+.grid-cell-editor {
+  z-index: 5;
+  overflow: hidden;
+}

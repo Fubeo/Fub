@@ -47,7 +47,7 @@ use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{IndexQuery, IndexResult, VaultEntry};
 use fub_abi::FormatProvider;
 use fub_kernel::storage::{DirEntry, FsStorage, Merge, Stat, VaultStorage};
-use fub_kernel::{FormatRegistry, MachineSettings, Subscription, Workspace};
+use fub_kernel::{FormatRegistry, MachineSettings, Subscription, SyncPlan, Workspace};
 
 /// Il disco vero, con un quaderno accanto: **quali path si sono letti e quali
 /// si sono statati**.
@@ -349,12 +349,23 @@ fn an_echo_of_a_save_is_not_reparsed() {
         .ws
         .write_document(&DocId::new("nota.txt"), "second\n", WriteBase::Dictated)
         .expect("save succeeds");
+    let modified = std::fs::metadata(&notes)
+        .expect("saved note metadata")
+        .modified()
+        .expect("saved note mtime")
+        + std::time::Duration::from_secs(1);
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&notes)
+        .expect("open saved note")
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .expect("touch saved note without changing its bytes");
     bench.storage.reset();
     bench.parse.store(0, Ordering::Relaxed);
     let _ = bench.events();
 
     // Le due fasi del lotto, come le fa `ExternalSync::batch`.
-    let plan = bench.ws.plan_sync(&notes);
+    let plan = bench.ws.plan_sync(&notes).map(SyncPlan::invoke);
     assert!(
         !bench
             .ws
@@ -379,6 +390,19 @@ fn an_echo_of_a_save_is_not_reparsed() {
         bench.storage.reads_at(&notes) <= 1,
         "recognizing its own bytes costs one file read: {}",
         bench.storage.reads_at(&notes)
+    );
+    assert_eq!(
+        bench.storage.stats_at(&notes),
+        2,
+        "the detached stable read performs exactly its before/after stats"
+    );
+    assert_eq!(
+        bench.entry().expect("the note stays registered").mtime,
+        modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("after 1970")
+            .as_millis() as u64,
+        "same-content touch refreshes entry metadata without a parse or feed"
     );
 }
 
@@ -428,7 +452,7 @@ fn someone_elses_write_still_enters() {
     let _ = bench.events();
 
     std::fs::write(&notes, "from outside\n").expect("external write");
-    let plan = bench.ws.plan_sync(&notes);
+    let plan = bench.ws.plan_sync(&notes).map(SyncPlan::invoke);
     assert!(
         bench
             .ws

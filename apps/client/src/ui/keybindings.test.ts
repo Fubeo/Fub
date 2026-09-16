@@ -27,7 +27,7 @@ import { SHELL_KEYS } from "./shell-keys.generated";
 /// l'id perché qui non si legge testo: si contano accordi, e un id dice meglio
 /// di un titolo tradotto **chi** sta litigando quando il test diventa rosso.
 function entry(id: string, binding: string | null): CommandEntry {
-  return { id, title: id, description: id, binding, declared: binding, spec: null, run: null };
+  return { id, title: id, description: id, layer: "global", binding, declared: binding, spec: null, run: null };
 }
 
 /// Tutti i comandi che questa app spedisce, da tutti e due i registri.
@@ -94,33 +94,11 @@ describe("gli accordi dei due registri, guardati insieme", () => {
 
 // **Il terzo insieme di accordi: quelli montati dentro l'editor** (§26.2).
 //
-// I due registri di sopra sono dichiarati e riconfigurabili; l'editor ne monta
-// altri due che non lo sono — i quattordici di `obsidianKeymap` e gli
-// ottantotto che CodeMirror porta con `basicSetup` più `indentWithTab` — e
-// finché nessuno li guardava insieme ai primi due, una collisione entrava senza
-// che niente diventasse rosso. Ce ne sono **tre**, misurate e vive: nessun
-// binding di CodeMirror dichiara `stopPropagation`, quindi il tasto risale a
-// `document`, dove `mountKeyboard` lo legge. Un tempo lo passava ad `advance`
-// senza guardare `e.target`, e `Ctrl+F` dentro una nota apriva il pannello di
-// ricerca dell'editor **e** l'overlay della shell. Da 0156 non è più così: il
-// fuoco decide, e dentro l'editor vince l'editor.
-//
-// # Perché questo banco è un lucchetto e non uno zero
-//
-// Le tre collisioni non si riparano qui, e non per pigrizia: la domanda che le
-// risolveva — «quando l'editor ha il fuoco, l'accordo della shell scatta
-// ancora?» — era la §26.1, e adesso è decisa (0156): a runtime decide il fuoco,
-// dentro l'editor vince l'editor, fuori vince la shell. Ma il lucchetto resta,
-// perché la domanda di questo banco è un'altra — i **due registri dichiarano
-// ancora gli stessi tre accordi**, e finché li dichiarano insieme serve un
-// posto che ne nomini il litigio, perché una quarta collisione che entrasse
-// domani non ha una voce che la raccoglie. Quindi si fa come col contrasto
-// (`theme/contrast.test.ts`): l'elenco di ciò che è fuori regola sta scritto
-// **per nome**, con accanto chi litiga con chi, ed è rosso nei due versi — una
-// quarta collisione è rossa perché non è in elenco, e una delle tre che
-// sparisce è rossa perché in elenco c'è rimasta. Il banco che presidia il
-// runtime sta più sotto: è «chi tiene i tre accordi quando l'editor ha il
-// fuoco», e prova `mountKeyboard`.
+// I registri dichiarati e CodeMirror condividono ancora tre accordi. Il banco
+// statico li nomina; a runtime non serve duplicare questa lista: popup e keymap
+// locali elaborano l'evento per primi e `mountKeyboard` rispetta il loro
+// `defaultPrevented`. Se il gestore locale rifiuta il gesto, la shell resta
+// libera di provarlo secondo i propri layer.
 //
 // # La forma letterale non è quella che si cerca
 //
@@ -233,52 +211,33 @@ describe("chi tiene `Mod-Shift-f`", () => {
   });
 });
 
-// **Chi tiene i tre accordi quando l'editor ha il fuoco** (0156).
-//
-// Il lucchetto di sopra dice che i due registri dichiarano gli stessi tre
-// accordi, e li dichiarano ancora: quello è un fatto di elenchi, e non è
-// cambiato. Questo banco prova il runtime — la decisione che la §26.1 ha
-// preso — e la domanda è una sola: quando il tasto nasce dentro l'editor,
-// `mountKeyboard` lo esegue o si ritira? Lo fa solo per i tre che l'editor
-// monta anche lui, e solo quando non c'è una sequenza in corso; per tutto il
-// resto la shell resta attiva, e con l'editor a fuoco come senza.
-describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
+// Popup e keymap locali precedono l'arbitro della shell tramite il verdetto
+// standard dell'evento, non tramite una lista di id o un controllo del target.
+describe("popup ed editor locali precedono la shell", () => {
   const lifetimes: Lifetime[] = [];
 
   beforeEach(() => {
     resetShellCommands();
-    // I tre che l'editor monta anche lui, più uno che l'editor non ha, per
-    // presidiare la metà che resta attiva.
     registerShellCommand({
       id: "shell.doc.search",
       title: "commands.doc.search",
       description: "commands.doc.search.desc",
-      run: () => {},
-    });
-    registerShellCommand({
-      id: "shell.pane.split.down",
-      title: "commands.pane.split.down",
-      description: "commands.pane.split.down.desc",
-      run: () => {},
-    });
-    registerShellCommand({
-      id: "shell.mode.live",
-      title: "commands.mode.live",
-      description: "commands.mode.live.desc",
+      layer: "document",
       run: () => {},
     });
     registerShellCommand({
       id: "shell.palette",
       title: "commands.palette",
       description: "commands.palette.desc",
+      layer: "global",
       run: () => {},
     });
   });
 
   afterEach(() => {
-    for (const v of lifetimes) v.close();
+    for (const lifetime of lifetimes) lifetime.close();
     lifetimes.length = 0;
-    document.querySelectorAll(".cm-editor").forEach((el) => el.remove());
+    document.body.replaceChildren();
   });
 
   function mount(): string[] {
@@ -289,44 +248,48 @@ describe("chi tiene i tre accordi quando l'editor ha il fuoco", () => {
     return executed;
   }
 
-  function editorAFocus(): Element {
-    const editor = document.createElement("div");
-    editor.className = "cm-editor";
-    // Un figlio, non l'editor stesso: `e.target` è il nodo più interno, e
-    // `closest` è la domanda che `dentroLEditor` fa.
-    const child = document.createElement("span");
-    editor.appendChild(child);
-    document.body.appendChild(editor);
-    return child;
+  function target(className?: string, prevent = false): Element {
+    const element = document.createElement("div");
+    if (className) element.className = className;
+    if (prevent) element.addEventListener("keydown", (event) => event.preventDefault());
+    document.body.appendChild(element);
+    return element;
   }
 
-  function keydown(target: Element, key: string, modifiers: { shift?: boolean } = {}): void {
-    target.dispatchEvent(
+  function keydown(element: Element, key: string, shift = false): void {
+    element.dispatchEvent(
       new KeyboardEvent("keydown", {
         key,
         ctrlKey: true,
-        shiftKey: modifiers.shift ?? false,
+        shiftKey: shift,
         bubbles: true,
         cancelable: true,
       }),
     );
   }
 
-  it("`Mod-f` nato dentro l'editor non esegue la ricerca della shell", () => {
+  it("lascia il gesto a una keymap locale che lo ha gestito", () => {
     const executed = mount();
-    keydown(editorAFocus(), "f");
+    keydown(target("cm-editor", true), "f");
     expect(executed).toEqual([]);
   });
 
-  it("lo stesso `Mod-f` nato fuori dall'editor esegue la ricerca della shell", () => {
+  it("lascia il gesto a una modalità transitoria che lo ha gestito", () => {
     const executed = mount();
-    keydown(document.body, "f");
-    expect(executed).toEqual(["shell.doc.search"]);
+    keydown(target("command-palette", true), "p", true);
+    expect(executed).toEqual([]);
   });
 
-  it("un accordo che l'editor non monta resta attivo anche dentro l'editor", () => {
+  it("esegue la shell quando il gestore locale rifiuta il gesto", () => {
     const executed = mount();
-    keydown(editorAFocus(), "p", { shift: true }); // Mod-Shift-p = shell.palette
+    keydown(target("cm-editor"), "p", true);
     expect(executed).toEqual(["shell.palette"]);
+  });
+
+  it("rimuove l'unico listener insieme alla lifetime", () => {
+    const executed = mount();
+    lifetimes[0]!.close();
+    keydown(document.body, "p", true);
+    expect(executed).toEqual([]);
   });
 });

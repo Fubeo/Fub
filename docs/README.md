@@ -34,6 +34,8 @@ flowchart LR
 - [Editor e anteprima](product/editor-and-preview.md)
 - [Ricerca, link e grafo](product/search-links-and-graph.md)
 - [Plugin ed estensioni](product/plugins-and-extensions.md)
+- [Budget prestazionale](product/performance-budget.md)
+- [Criteri di accettazione](product/acceptance.md)
 
 ## Capire l'architettura
 

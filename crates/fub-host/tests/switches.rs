@@ -437,7 +437,7 @@ impl fub_host::registry::Bundle for BundleThatDoesNotMount {
         unreachable!("the mount stops at the contract version")
     }
 
-    fn register(&self, _ws: &mut fub_kernel::Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut fub_host::registry::Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }
@@ -460,10 +460,11 @@ fn turning_on_records_intention_even_when_mounting_fails() {
     let host = headless();
     host.open(&v.root).expect("opens");
     host.with_session(None, |s| {
-        s.bundles()
-            .write()
-            .unwrap()
-            .remember(std::sync::Arc::new(BundleThatDoesNotMount));
+        fub_host::BundleRegistry::remember_guarded(
+            s.bundles(),
+            std::sync::Arc::new(BundleThatDoesNotMount),
+        )
+        .unwrap();
     })
     .expect("open");
 

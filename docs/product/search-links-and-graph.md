@@ -74,11 +74,22 @@ nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
 | posizione e animazione dei nodi | shell |
 | preferenze grafiche | stato della shell |
 
-## Limiti
-
 - la Graph View non sostituisce la ricerca testuale;
 - un arco non prova che il bersaglio sia ancora raggiungibile dopo una modifica
   non indicizzata;
 - il layout visuale non è dato persistente del documento;
-- i target di scala devono essere dimostrati da benchmark, non dalla
-  documentazione.
+- il comando esplicito **Riscalda** riattiva il loop; il runner lo verifica con
+  un campione di 120 frame, senza tenere il lavoro acceso indefinitamente;
+- per cardinalità fino a 400 nodi la repulsione è esatta O(n²); da 401 a 2000
+  nodi usa Barnes–Hut con costo atteso O(n log n) e collisioni; oltre 2000 usa
+  Barnes–Hut atteso e omette le collisioni;
+- lo sleep del loop è preservato quando alpha, camera e trascinamento non
+  richiedono lavoro;
+- i valori osservati e i criteri provvisori sono raccolti nel
+  [budget di performance](performance-budget.md#budget-proposti-e-stato) e nei
+  [criteri di acceptance](acceptance.md);
+- il benchmark misura una fixture deterministica, non ogni grafo possibile:
+  quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
+  O(n²), quindi il risultato a 10k non è una garanzia universale;
+- le issue [#6](https://github.com/Fubeo/Fub/issues/6) e
+  [#12](https://github.com/Fubeo/Fub/issues/12) restano aperte.

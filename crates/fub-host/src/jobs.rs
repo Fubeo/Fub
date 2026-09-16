@@ -56,7 +56,7 @@ use std::sync::Arc;
 use crate::custody::Custody;
 use crate::query::query_workspace;
 
-use fub_abi::command::{CommandOutcome, InvokeMode};
+use fub_abi::command::{CommandOutcome, Failure, InvokeMode, UndoStep};
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::format::DocumentFormat;
 use fub_abi::locale::Locale;
@@ -72,8 +72,10 @@ use fub_abi::traits::{
     ViewStateRead, ViewStateWrite,
 };
 use fub_abi::{Event, PluginError};
-use fub_kernel::host::{authorize_path, Capability, Guard};
-use fub_kernel::workspace::{DeferredEvents, EventDrain};
+use fub_kernel::host::{authorize_path, Capability, Guard, Policy};
+use fub_kernel::workspace::{
+    DeferredEvents, EventDrain, PreparedMaintenanceRebuild, PreparedPluginDataIo,
+};
 use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 
 /// L'[`HostApi`] di un job: intestato a un plugin, servito da un workspace
@@ -81,9 +83,9 @@ use fub_kernel::{authorize_query, filter_query_result, ReadOnly, Workspace};
 ///
 /// Si costruisce sul thread che esegue il job e si passa a
 /// [`Plugin::run_job`](fub_abi::traits::Plugin::run_job). Le capacità sono
-/// quelle del plugin e non quelle di chi esegue: la politica del §7.3 sta
-/// davanti come in ogni altro prestito, perché a metterla è il kernel dentro
-/// `with_host`/`with_read_host`, non questo tipo.
+/// quelle del plugin e non quelle di chi esegue: le porte normali ricevono il
+/// `Guard` del kernel, mentre le callback staccate rileggono la stessa policy
+/// prima della preparazione.
 ///
 /// # Cosa costa
 ///
@@ -207,6 +209,19 @@ impl JobHost {
         Ok(())
     }
 
+    /// Applica la policy corrente del caller prima di staccare una callback dal
+    /// workspace. La decisione resta quella unica di [`Policy`].
+    fn authorize_caller(
+        &self,
+        capability: Capability,
+        action: impl FnOnce() -> String,
+    ) -> Result<(), PluginError> {
+        let policy = self.workspace.read()?.granted_policy(&self.plugin);
+        // Comandi e servizi non hanno uno scope di path: l'helper condiviso
+        // applica quindi soltanto il cancello della famiglia.
+        authorize_path(&policy, capability, "", action)
+    }
+
     /// Una lettura che può **rifiutare**: prima la bandiera, poi il prestito.
     fn read_result<R>(
         &self,
@@ -226,6 +241,182 @@ impl JobHost {
     ) -> Result<R, PluginError> {
         self.stopped()?;
         self.writing(f)?
+    }
+
+    fn prepare_data_io(
+        &self,
+        capability: Capability,
+        path: &str,
+        action: impl Into<String>,
+    ) -> Result<PreparedPluginDataIo, PluginError> {
+        let action = action.into();
+        let workspace = self.workspace.read()?;
+        if self.mode == InvokeMode::DryRun && capability == Capability::DataWrite {
+            authorize_path(
+                &ReadOnly {
+                    why: "simulazione del comando",
+                },
+                capability,
+                path,
+                || action.clone(),
+            )?;
+        }
+        authorize_path(
+            &workspace.granted_policy(&self.plugin),
+            capability,
+            path,
+            || action,
+        )?;
+        workspace.prepare_plugin_data_io(&self.plugin, path)
+    }
+
+    fn mutate_setting_detached(
+        &mut self,
+        key: &str,
+        value: Option<SettingValue>,
+        action: impl Into<String>,
+    ) -> Result<(), PluginError> {
+        self.stopped()?;
+        let action = action.into();
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_family(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::SettingsWrite,
+                    || action.clone(),
+                )?;
+            }
+            authorize_family(
+                &ws.granted_policy(&self.plugin),
+                Capability::SettingsWrite,
+                || action,
+            )?;
+            ws.prepare_program_setting_mutation(key, value)?
+        };
+        let applied = prepared.invoke()?;
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_setting_mutation_deferred(applied)
+        };
+        finish_events(&workspace, deferred)
+    }
+
+    fn write_document_detached(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+        capability: Capability,
+        action: &str,
+        require_new: bool,
+    ) -> Result<Revision, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    capability,
+                    id.as_str(),
+                    || format!("{action} `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                capability,
+                id.as_str(),
+                || format!("{action} `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            if require_new {
+                ws.prepare_document_creation(&id)
+                    .map_err(PluginError::from)?
+            } else {
+                ws.prepare_document_write(&id, base)
+                    .map_err(PluginError::from)?
+            }
+        };
+        let model = prepared.parse(source).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_write(prepared, source, model, before_write)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_write_deferred(pending)
+        };
+        finish_events(&workspace, deferred)
+    }
+
+    fn apply_edit_detached(
+        &mut self,
+        id: &DocId,
+        request: EditRequest,
+    ) -> Result<EditReport, PluginError> {
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        self.apply_edit_detached_inner(id, request)
+    }
+
+    fn apply_edit_detached_inner(
+        &mut self,
+        id: &DocId,
+        request: EditRequest,
+    ) -> Result<EditReport, PluginError> {
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let prepared = {
+            let ws = workspace.read()?;
+            let id = fenced_doc_id(id)?;
+            ws.prepare_document_write(&id, WriteBase::DescendsFrom(request.base.clone()))
+                .map_err(PluginError::from)?
+        };
+        let source = prepared
+            .expected_source()
+            .expect("DescendsFrom keeps the verified source");
+        let (next, report) = request.apply_to(source).map_err(|error| match error {
+            PluginError::Conflict(_) => PluginError::Conflict(id.to_string().into()),
+            other => PluginError::BadArgs(format!("{id}: {other}").into()),
+        })?;
+        if report.is_empty() {
+            return Ok(report);
+        }
+        let model = prepared.parse(&next).map_err(PluginError::from)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut detached = self.for_provider(owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut detached)
+        } else {
+            Ok(())
+        };
+        let base = request.base;
+        let pending = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_edit(prepared, &next, model, before_write, base, &report)
+                .map_err(PluginError::from)?
+        };
+        let pending = pending.invoke_indexes();
+        let deferred = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_edit_deferred(pending, report)
+        };
+        finish_events(&workspace, deferred)
     }
 
     /// Una lettura: prestito **condiviso**, e N job che leggono non si aspettano
@@ -260,6 +451,19 @@ impl JobHost {
                 ws.with_host_mode(&self.plugin, self.mode, f)
             }
         })
+    }
+}
+
+fn authorize_family<P: Policy>(
+    policy: &P,
+    capability: Capability,
+    action: impl FnOnce() -> String,
+) -> Result<(), PluginError> {
+    match policy.denies(capability) {
+        None => Ok(()),
+        Some(why) => Err(PluginError::PermissionDenied(
+            format!("{}: {why}", action()).into(),
+        )),
     }
 }
 
@@ -325,6 +529,80 @@ pub(crate) fn finish_events<T>(
     Ok(ws.finish_deferred_events(deferred))
 }
 
+/// Porta in fondo il solo rebuild di manutenzione con la stessa sequenza a
+/// fasi dell'apertura. Il turno resta unico, mentre ogni callback di formato,
+/// sintassi e indice attraversa il confine senza guardie del workspace.
+pub(crate) fn run_detached_rebuild_index(
+    workspace: &Custody<Workspace>,
+    prepared: PreparedMaintenanceRebuild,
+) -> Result<CommandOutcome, PluginError> {
+    let rebuilding = if prepared.mode().is_dry_run() {
+        None
+    } else {
+        Some((|| {
+            let prepared_scan = {
+                let ws = workspace.read()?;
+                ws.prepare_scan_vault().map_err(|error| {
+                    PluginError::Internal(format!("l'indice non si è rifatto: {error}").into())
+                })?
+            };
+            let completed_scan = prepared_scan.invoke();
+            let mut work = {
+                let mut ws = workspace.write()?;
+                ws.finalize_scan_vault(completed_scan)
+            };
+
+            while !work.finished() {
+                let checked = {
+                    let ws = workspace.read()?;
+                    ws.prepare_index_batch_check(&mut work)
+                }
+                .invoke();
+                let parsed = {
+                    let ws = workspace.read()?;
+                    ws.prepare_index_batch_parse(checked)
+                }
+                .invoke(&mut work);
+                let pending = {
+                    let mut ws = workspace.write()?;
+                    ws.commit_index_batch_prepared(parsed)
+                };
+                let pending = pending.map(|pending| pending.invoke_indexes());
+                if let Some(pending) = pending {
+                    workspace.write()?.finalize_index_batch_prepared(pending);
+                }
+            }
+
+            let graph = {
+                let sources = workspace.read()?.graph_sources();
+                sources.build()
+            };
+            let prepared_finish = {
+                let ws = workspace.read()?;
+                ws.prepare_finish_index_with_graph(work, graph)
+            };
+            let completed_finish = prepared_finish.invoke();
+            let opening = workspace.write()?.finalize_finish_index(completed_finish);
+
+            let _ = crate::teardown::flush_indexes(workspace)?;
+            workspace.read()?.store_entries();
+            if let Err(error) = workspace.read()?.collect_doc_data() {
+                tracing::warn!(
+                    target: "fub.kernel",
+                    "spazi per-documento non raccolti: {error}"
+                );
+            }
+            Ok(opening)
+        })())
+    };
+
+    let deferred = {
+        let mut ws = workspace.write()?;
+        ws.finish_maintenance_rebuild(prepared, rebuilding)
+    };
+    finish_events(workspace, deferred)?
+}
+
 // Le dodici famiglie. Sono righe di delega e nessuna decisione: ogni
 // decisione è già stata presa un livello più in basso (il recinto dei `DocId`,
 // la politica dei permessi, il dispatch degli eventi), e ripeterne una qui
@@ -384,91 +662,397 @@ impl VaultWrite for JobHost {
         source: &str,
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
-        self.stopped()?;
-        let workspace = self.workspace.clone();
-        let _turn = workspace.write_turn();
-        let prepared = {
-            let ws = workspace.read()?;
-            let policy = ws.granted_policy(&self.plugin);
-            authorize_path(&policy, Capability::VaultWrite, id.as_str(), || {
-                format!("writing `{id}`")
-            })?;
-            let id = fenced_doc_id(id)?;
-            ws.prepare_document_write(&id, base)
-                .map_err(PluginError::from)?
-        };
-        let model = prepared.parse(source).map_err(PluginError::from)?;
-        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
-            let mut detached = self.for_provider(owner, InvokeMode::Apply);
-            prepared.invoke_before_write(&mut detached)
-        } else {
-            Ok(())
-        };
-        let pending = {
-            let mut ws = workspace.write()?;
-            ws.commit_document_write(prepared, source, model, before_write)
-                .map_err(PluginError::from)?
-        };
-        let pending = pending.invoke_indexes();
-        let deferred = {
-            let mut ws = workspace.write()?;
-            ws.finish_document_write_deferred(pending)
-        };
-        finish_events(&workspace, deferred)
+        self.write_document_detached(id, source, base, Capability::VaultWrite, "writing", false)
     }
 
     fn apply_edit(&mut self, id: &DocId, request: EditRequest) -> Result<EditReport, PluginError> {
-        self.write_result(|h| h.apply_edit(id, request))
+        self.stopped()?;
+        {
+            let ws = self.workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultWrite,
+                    id.as_str(),
+                    || format!("editing `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultWrite,
+                id.as_str(),
+                || format!("editing `{id}`"),
+            )?;
+        }
+        self.apply_edit_detached(id, request)
     }
 }
 
 impl VaultStructure for JobHost {
     fn create_document(&mut self, id: &DocId, source: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.create_document(id, source))
+        self.write_document_detached(
+            id,
+            source,
+            WriteBase::Dictated,
+            Capability::VaultStructure,
+            "creating",
+            true,
+        )
+        .map(drop)
     }
 
     fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<(), PluginError> {
-        self.write_result(|h| h.rename_document(from, to))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let (prepared_document, prepared_asset) = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    from.as_str(),
+                    || format!("renaming `{from}`"),
+                )?;
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    to.as_str(),
+                    || format!("renaming to `{to}`"),
+                )?;
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultWrite,
+                    "",
+                    || format!("rewriting backlinks after renaming `{from}`"),
+                )?;
+            }
+            let policy = ws.granted_policy(&self.plugin);
+            authorize_path(&policy, Capability::VaultStructure, from.as_str(), || {
+                format!("renaming `{from}`")
+            })?;
+            authorize_path(&policy, Capability::VaultStructure, to.as_str(), || {
+                format!("renaming to `{to}`")
+            })?;
+            authorize_path(&policy, Capability::VaultWrite, "", || {
+                format!("rewriting backlinks after renaming `{from}`")
+            })?;
+            let from = fenced_doc_id(from)?;
+            let to = fenced_doc_id(to)?;
+            let prepared_document = ws
+                .prepare_explicit_rename(&from, &to)
+                .map_err(PluginError::from)?;
+            let prepared_asset = if prepared_document.is_none() {
+                ws.prepare_explicit_asset_rename(&from, &to)
+                    .map_err(PluginError::from)?
+            } else {
+                None
+            };
+            (prepared_document, prepared_asset)
+        };
+        if let Some(prepared) = prepared_document {
+            let parsed = prepared.invoke().map_err(PluginError::from)?;
+            let committed = {
+                let mut ws = workspace.write()?;
+                ws.commit_explicit_rename(parsed)
+                    .map_err(|failure| *failure)
+            };
+            let pending = match committed {
+                Ok(pending) => pending,
+                Err((error, parsed)) => {
+                    parsed.rollback().map_err(PluginError::from)?;
+                    return Err(PluginError::from(error));
+                }
+            };
+            let completed = pending.invoke().invoke_rewrites(|source, request| {
+                self.apply_edit_detached_inner(source, request.clone())
+                    .map(drop)
+            });
+            with_event_drain(&workspace, |ws| ws.finish_explicit_rename(completed))?
+                .map_err(|failure| failure.0)?
+                .map_err(PluginError::from)
+        } else if let Some(prepared) = prepared_asset {
+            let moved = prepared.invoke().map_err(PluginError::from)?;
+            let committed = {
+                let mut ws = workspace.write()?;
+                ws.commit_explicit_asset_rename(moved)
+                    .map_err(|failure| *failure)
+            };
+            let pending = match committed {
+                Ok(pending) => pending,
+                Err((error, moved)) => {
+                    moved.rollback().map_err(PluginError::from)?;
+                    return Err(PluginError::from(error));
+                }
+            };
+            let completed = pending.invoke_rewrites(|source, request| {
+                self.apply_edit_detached_inner(source, request.clone())
+                    .map(drop)
+            });
+            with_event_drain(&workspace, |ws| ws.finish_explicit_asset_rename(completed))?
+                .map_err(|failure| failure.0)?
+                .map_err(PluginError::from)
+        } else {
+            Ok(())
+        }
     }
 
     fn trash_document(&mut self, id: &DocId) -> Result<DocId, PluginError> {
-        self.write_result(|h| h.trash_document(id))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    id.as_str(),
+                    || format!("trashing `{id}`"),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                id.as_str(),
+                || format!("trashing `{id}`"),
+            )?;
+            let id = fenced_doc_id(id)?;
+            ws.prepare_document_deletion(&id)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let committed = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_deletion(completed)
+                .map_err(|failure| *failure)
+        };
+        let committed = match committed {
+            Ok(committed) => committed,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(PluginError::from(error));
+            }
+        };
+        let finalized = committed.invoke();
+        with_event_drain(&workspace, |ws| ws.finish_document_deletion(finalized))?.map_err(
+            |failure| {
+                let (error, _) = *failure;
+                error
+            },
+        )
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        self.write_result(|h| h.restore_document(entry, to))
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let (policy, list_trash) = {
+            let ws = workspace.read()?;
+            let policy = ws.granted_policy(&self.plugin);
+            if self.mode == InvokeMode::DryRun {
+                authorize_family(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    || format!("restoring `{entry}`"),
+                )?;
+            }
+            authorize_family(&policy, Capability::VaultStructure, || {
+                format!("restoring `{entry}`")
+            })?;
+            if let Some(target) = to.as_ref() {
+                if self.mode == InvokeMode::DryRun {
+                    authorize_path(
+                        &ReadOnly {
+                            why: "simulazione del comando",
+                        },
+                        Capability::VaultStructure,
+                        target.as_str(),
+                        || format!("restoring to `{target}`"),
+                    )?;
+                }
+                authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
+                    format!("restoring to `{target}`")
+                })?;
+            }
+            authorize_family(&policy, Capability::VaultRead, || "listing trash".into())?;
+            (policy, ws.detached_trash_listing())
+        };
+        let listed = list_trash()
+            .map_err(PluginError::from)?
+            .into_iter()
+            .filter(|candidate| {
+                policy
+                    .denies_path(Capability::VaultRead, candidate.original.as_str())
+                    .is_none()
+            })
+            .find(|candidate| &candidate.id == entry)
+            .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?;
+        if to.is_none() {
+            let target = &listed.original;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    target.as_str(),
+                    || format!("restoring to `{target}`"),
+                )?;
+            }
+            authorize_path(&policy, Capability::VaultStructure, target.as_str(), || {
+                format!("restoring to `{target}`")
+            })?;
+        }
+        let prepared = {
+            let ws = workspace.read()?;
+            ws.prepare_listed_document_restore(listed, to)
+                .map_err(PluginError::from)?
+        };
+        let completed = prepared.invoke().map_err(PluginError::from)?;
+        let committed = {
+            let mut ws = workspace.write()?;
+            ws.commit_document_restore(completed)
+                .map_err(|failure| *failure)
+        };
+        let pending = match committed {
+            Ok(pending) => pending,
+            Err((error, completed)) => {
+                completed.rollback().map_err(PluginError::from)?;
+                return Err(error);
+            }
+        };
+        let pending = pending.invoke_indexes();
+        let completion = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_restore_deferred(pending)
+                .map_err(|failure| {
+                    let (error, _) = *failure;
+                    error
+                })?
+        };
+        drain_events(&workspace)?;
+        let completion = completion.invoke();
+        let outcome = {
+            let mut ws = workspace.write()?;
+            ws.finish_document_restore_completion(completion)
+        };
+        drain_events(&workspace)?;
+        Ok(outcome)
     }
 
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
-        self.write_result(|h| h.empty_trash())
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+        let prepared = {
+            let ws = workspace.read()?;
+            if self.mode == InvokeMode::DryRun {
+                authorize_path(
+                    &ReadOnly {
+                        why: "simulazione del comando",
+                    },
+                    Capability::VaultStructure,
+                    "",
+                    || "emptying trash".into(),
+                )?;
+            }
+            authorize_path(
+                &ws.granted_policy(&self.plugin),
+                Capability::VaultStructure,
+                "",
+                || "emptying trash".into(),
+            )?;
+            ws.prepare_empty_trash()
+        };
+        prepared
+            .invoke()
+            .map(|count| count as u64)
+            .map_err(PluginError::from)
     }
 }
 
 impl DataRead for JobHost {
     fn data_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.read_result(|h| h.data_read(path))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("empty blob name".into()));
+        }
+        self.prepare_data_io(Capability::DataRead, path, format!("reading blob `{path}`"))?
+            .read_authoritative()
     }
 
     fn data_list(&self, prefix: &str) -> Result<Vec<String>, PluginError> {
-        self.read_result(|h| h.data_list(prefix))
+        self.stopped()?;
+        Ok(self
+            .prepare_data_io(Capability::DataRead, prefix, "listing blobs")?
+            .list_authoritative())
     }
 
     fn cache_read(&self, path: &str) -> Result<Option<Vec<u8>>, PluginError> {
-        self.read_result(|h| h.cache_read(path))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("empty cache blob name".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataRead,
+            path,
+            format!("reading cache blob `{path}`"),
+        )?
+        .read_cache()
     }
 }
 
 impl DataWrite for JobHost {
     fn data_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.write_result(|h| h.data_write(path, bytes))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataWrite,
+            path,
+            format!("writing blob `{path}`"),
+        )?
+        .write_authoritative(bytes)
     }
 
     fn data_remove(&mut self, path: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.data_remove(path))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome del blob vuoto".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataWrite,
+            path,
+            format!("removing blob `{path}`"),
+        )?
+        .remove_authoritative()
     }
 
     fn cache_write(&mut self, path: &str, bytes: &[u8]) -> Result<(), PluginError> {
-        self.write_result(|h| h.cache_write(path, bytes))
+        self.stopped()?;
+        if path.is_empty() {
+            return Err(PluginError::BadArgs("nome della cache vuoto".into()));
+        }
+        self.prepare_data_io(
+            Capability::DataWrite,
+            path,
+            format!("writing cache blob `{path}`"),
+        )?
+        .write_cache(bytes)
     }
 }
 
@@ -500,11 +1084,11 @@ impl SettingsRead for JobHost {
 
 impl SettingsWrite for JobHost {
     fn set_setting(&mut self, key: &str, value: SettingValue) -> Result<(), PluginError> {
-        self.write_result(|h| h.set_setting(key, value.clone()))
+        self.mutate_setting_detached(key, Some(value), format!("writing setting `{key}`"))
     }
 
     fn reset_setting(&mut self, key: &str) -> Result<(), PluginError> {
-        self.write_result(|h| h.reset_setting(key))
+        self.mutate_setting_detached(key, None, format!("resetting setting `{key}`"))
     }
 }
 
@@ -592,6 +1176,7 @@ impl HostCommands for JobHost {
         args: serde_json::Value,
     ) -> Result<CommandOutcome, PluginError> {
         self.stopped()?;
+        self.authorize_caller(Capability::Commands, || format!("invoking `{command}`"))?;
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
         let mut prepared = {
@@ -599,6 +1184,12 @@ impl HostCommands for JobHost {
             match ws.prepare_nested_provider_command(command, args.clone(), self.mode)? {
                 Some(prepared) => prepared,
                 None => {
+                    if let Some(rebuild) =
+                        ws.prepare_maintenance_rebuild(command, args.clone(), self.mode, None)?
+                    {
+                        drop(ws);
+                        return run_detached_rebuild_index(&workspace, rebuild);
+                    }
                     let deferred = ws.defer_event_dispatch();
                     let outcome = ws.invoke_nested_maintenance_command(command, args, self.mode);
                     ws.restore_event_dispatch(deferred);
@@ -627,10 +1218,85 @@ impl HostCommands for JobHost {
         finish_events(&workspace, deferred)?
     }
 
-    /// Come sopra, e per la stessa ragione: annullare è scrivere, quindi entra
-    /// nel giro sincrono invece di portarsi via il vault.
+    /// L'annullamento tiene replay e batch nel token del kernel, ma non il
+    /// prestito del workspace. Ogni passo attraversa così lo stesso percorso
+    /// staccato della capacità corrispondente.
     fn undo_last(&mut self) -> Result<Option<fub_abi::command::Undone>, PluginError> {
-        self.write_result(|h| h.undo_last())
+        self.stopped()?;
+        let workspace = self.workspace.clone();
+        let _turn = workspace.write_turn();
+
+        {
+            let ws = workspace.read()?;
+            let policy = ws.granted_policy(&self.plugin);
+            for capability in std::iter::once(Capability::Commands).chain(
+                Capability::ALL
+                    .into_iter()
+                    .filter(|cap| cap.writes_the_vault()),
+            ) {
+                if let Some(why) = policy.denies(capability) {
+                    return Err(PluginError::PermissionDenied(
+                        format!("undoing: {why}").into(),
+                    ));
+                }
+            }
+            authorize_path(&policy, Capability::VaultWrite, "", || "undoing".into())?;
+        }
+        if self.mode.is_dry_run() {
+            return Err(PluginError::PermissionDenied(
+                "undo: a simulation does not write".into(),
+            ));
+        }
+
+        let Some(mut replay) = ({
+            let mut ws = workspace.write()?;
+            ws.prepare_undo_replay()
+        }) else {
+            return Ok(None);
+        };
+
+        let replayed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            while let Some(step) = replay.next_step() {
+                let outcome = match step {
+                    UndoStep::Edit(planned) => self
+                        .apply_edit_detached(&planned.doc, planned.edit)
+                        .map(|_| ())
+                        .map_err(|and| Failure::of(planned.doc, and)),
+                    UndoStep::Command { command, args } => self
+                        .run_command(&command, args)
+                        .map(|_| ())
+                        .map_err(Failure::other),
+                };
+                replay.finish_step(outcome);
+            }
+        }));
+        if replayed.is_err() {
+            replay.finish_unwind();
+        }
+
+        let deferred = {
+            let mut ws = workspace
+                .write()
+                .expect("un callback di undo gira senza il lock del workspace");
+            ws.finish_undo_replay_deferred(replay)
+        };
+        let drained =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drain_events(&workspace)));
+        let outcome = {
+            let mut ws = workspace
+                .write()
+                .expect("il drain degli eventi gira senza il lock del workspace");
+            ws.finish_undo_replay(deferred)
+        };
+
+        if let Err(payload) = replayed {
+            std::panic::resume_unwind(payload);
+        }
+        match drained {
+            Err(payload) => std::panic::resume_unwind(payload),
+            Ok(Err(error)) => Err(error),
+            Ok(Ok(())) => outcome,
+        }
     }
 }
 
@@ -680,6 +1346,15 @@ impl HostNetwork for JobHost {
     /// controllo, senza aspettare il tetto globale dell'host.
     fn fetch(&self, request: HttpRequest) -> Result<HttpResponse, PluginError> {
         self.stopped()?;
+        if self.mode == InvokeMode::DryRun {
+            authorize_family(
+                &ReadOnly {
+                    why: "simulazione del comando",
+                },
+                Capability::Network,
+                || "performing a network request".into(),
+            )?;
+        }
         let (client, granted) = {
             let ws = self.workspace.read()?;
             (ws.network(), ws.granted_policy(&self.plugin))
@@ -704,6 +1379,18 @@ impl HostServices for JobHost {
         args: serde_json::Value,
     ) -> Result<serde_json::Value, PluginError> {
         self.stopped()?;
+        if self.mode == InvokeMode::DryRun {
+            authorize_family(
+                &ReadOnly {
+                    why: "simulazione del comando",
+                },
+                Capability::Services,
+                || format!("calling `{service}.{method}`"),
+            )?;
+        }
+        self.authorize_caller(Capability::Services, || {
+            format!("calling `{service}.{method}`")
+        })?;
         let workspace = self.workspace.clone();
         let _turn = workspace.write_turn();
         let mut prepared = {
@@ -712,7 +1399,7 @@ impl HostServices for JobHost {
         };
 
         let owner = prepared.owner().to_string();
-        let mut host = self.for_provider(owner, InvokeMode::Apply);
+        let mut host = self.for_provider(owner, self.mode);
         let outcome = prepared.invoke(&mut host);
 
         let deferred = {

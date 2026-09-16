@@ -34,6 +34,7 @@ flowchart TD
     host["fub-host"]
     features["fub-features"]
     markdown["fub-format-markdown"]
+    sheet["fub-format-sheet"]
     wasmhost["fub-wasm-host"]
     sdk["fub-sdk"]
     testkit["fub-testkit"]
@@ -43,9 +44,11 @@ flowchart TD
     app --> abi
     app --> host
     app --> kernel
+    app --> wasmhost
     host --> abi
     host --> features
     host --> markdown
+    host --> sheet
     host --> kernel
     features --> abi
     markdown --> abi

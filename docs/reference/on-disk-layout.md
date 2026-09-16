@@ -31,9 +31,46 @@ La cartella viene scelta in ordine:
 | `themes/<id>/manifest.json` | installato | manifest | identità e compatibilità del tema |
 | `themes/<id>/` | installato | per tema | fogli, skin e asset |
 | `logs/fub.log` | diagnostica | n/a | log del processo |
+| `wasm-plugins/inventory.json` | autorevole | 1 | componenti installati e scelte della macchina |
+| `wasm-plugins/components/<installation>-<sha256>.wasm` | installato | componente | eseguibile verificato |
 
 Se la cartella di configurazione non è disponibile, l'host può lavorare in
 memoria. Un file illeggibile non viene riscritto da uno stato vuoto.
+
+## Componenti WASM installati
+
+`fub_wasm_host::installed::InstalledPluginStore` riceve esplicitamente la
+configurazione scelta dall'host nativo. Dopo `open`, usa la capability della
+directory e non deduce percorsi dal manifest o dai dati del vault.
+
+L'inventario schema 1 conserva `next_installation` e `plugins`. Ogni record
+ha identità monotona, manifest, digest SHA-256, `enabled` e `consent`.
+Contatore e identità attraversano JSON come stringhe decimali. Il consenso
+può essere `undecided`, `denied` o `granted` e riguarda gli esatti byte
+installati; non concede capability. La fiducia resta `Trust::Community`.
+
+Il blob identificato dal contenuto viene pubblicato prima dell'inventario, che
+usa una compare-and-swap (CAS) cooperativa. File `.part` e blob non referenziati
+sono invisibili allo store. Un errore nella pubblicazione lascia intatto
+l'inventario precedente; un file corrotto, illeggibile o con schema futuro non
+viene reinterpretato come vuoto. Il load ricontrolla il digest senza eseguire
+il guest; una validazione attiva esplicita ricontrolla anche il manifest sugli
+esatti byte. Un id duplicato, anche con versione diversa, richiede una scelta
+esplicita.
+
+La rimozione ritira il record prima del cleanup del blob. Un cleanup fallito è
+riportato nell'esito e può lasciare un orfano invisibile. La reinstallazione ha
+nuova identità e nessun consenso ereditato. Il chiamante deve completare il
+teardown prima di rimuovere: lo store non possiede le istanze e non monta in
+automatico. `InstalledPluginStore` non salva né scopre componenti installati in
+`.fub/plugins/<id>/` e non cancella quella directory.
+
+Il bootstrap desktop usa la stessa configurazione di log e host. Prima di
+leggere o istanziare un componente seleziona soltanto i record enabled con
+consenso `granted`; al riavvio rilegge queste scelte. Le cinque porte IPC
+desktop delegano a `InstalledPluginManager`, che persiste le decisioni e
+riconcilia i vault aperti. La decisione persistente è nell'
+[ADR 0200](../decisions/0200-inventario-componenti-installati.md).
 
 ## Radice del vault
 
@@ -55,7 +92,7 @@ eliminato né escluso da un backup senza una scelta esplicita.
 | `.fub/workspace.json` | autorevole | 1 | organizzazione |
 | `.fub/journal.jsonl` | autorevole operativo | 1 | registro mutazioni |
 | `.fub/drafts/` | autorevole | 1 | bozze non consolidate |
-| `.fub/data/entries.json` | derivata | 4 | anagrafe dei file |
+| `.fub/data/entries.json` | derivata | 5 | anagrafe dei file |
 | `.fub/data/trash/*.json` | sidecar | 1 | provenienza del cestino |
 | `.fub/plugins/<id>/` | per-plugin | proprio | storage persistente namespaced |
 
@@ -84,7 +121,26 @@ essere eliminata e ricostruita dai documenti.
 ```
 
 `versions.json` è un indice ricostruibile. `meta.json` e gli snapshot sono
-autorevoli: eliminarli perde la memoria delle versioni.
+autorevoli: eliminarli perde la memoria delle versioni. Ogni `VersionRef`
+nell'indice registra la dimensione in byte e l'impronta FNV-1a del contenuto.
+La lettura per anteprima o `version.restore` verifica che il `VersionRef`
+esista, che il blob sia leggibile e che dimensione e impronta corrispondano ai
+byte dello snapshot, prima di decodificarlo come UTF-8. Se anche una sola
+verifica fallisce, l'operazione restituisce un errore senza scrivere il
+documento corrente o l'indice.
+
+`version.restore` cattura la revisione del documento prima di leggere lo
+snapshot e usa quella revisione per la scrittura condizionata. Il confronto e
+scambio (CAS) impedisce agli writer cooperativi di sovrascrivere una modifica
+intervenuta durante la lettura. Per gli writer esterni è best-effort: una
+modifica già osservabile al confronto produce un conflitto. Il conflitto e gli
+errori di lettura o confronto non modificano documento e indice. Sui file
+regolari sostituibili anche un errore di scrittura preserva i byte precedenti;
+per symlink, hardlink o conteggio dei nomi non disponibile, la scrittura
+in-place preserva l'identità ma un errore può lasciare i byte modificati.
+Quando riesce, il ripristino è una scrittura normale: fotografa prima il
+contenuto sostituito e, se il contenuto cambia, crea una nuova versione; quando
+esiste una versione precedente, il comando dichiara anche il ripristino inverso.
 
 Quindi `.fub/plugins/` non è né tutta cache né tutto dato autorevole.
 
@@ -127,15 +183,28 @@ I file autorevoli seguono:
 
 ## Backup
 
-Un backup completo include:
+Il backup completo del vault comprende documenti, allegati, file sconosciuti,
+`.trash/`, ogni voce autorevole in `.fub/` e lo storage autorevole dei plugin.
+La configurazione macchina è fuori dallo scope del vault e resta esclusa dal
+drill. Il comando focalizzato è:
 
-- documenti, allegati e file sconosciuti;
-- `.trash/`;
-- ogni voce autorevole in `.fub/`;
-- storage autorevole dei plugin;
-- configurazione macchina soltanto quando si vuole ripristinare preferenze e
-  registro locale.
+```bash
+cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+```
 
-Indici, cache e log possono essere omessi se la procedura dimostra la
-ricostruzione. La prova è tracciata in
-[#7](https://github.com/Fubeo/Fub/issues/7).
+Il fixture versionato contiene l'intero scope del vault e il manifesto
+indipendente registra path, classe, dimensione, impronta FNV-1a e schema.
+L'enumerazione rifiuta symlink e file speciali. Il banco lavora offline in un
+parent temporaneo privato ed esclusivo, prepara uno staging adiacente alla
+destinazione e pubblica con un solo rename. Non dimostra no-replace
+concorrente universale né durabilità dopo un crash.
+
+La validazione di un artefatto corrotto o mancante avviene prima dello staging
+e della destinazione. Se la destinazione è occupata, resta invariata e lo
+staging completo resta disponibile. La verifica conclusiva apre il vault con
+`Host` reale, attende l'indicizzazione, legge il documento e chiude l'host.
+
+La feature `fub.backup` annota soltanto le note nello stesso vault: non è il
+flusso completo documentato da questo drill. La prova è tracciata nell'issue
+[#7](https://github.com/Fubeo/Fub/issues/7), ancora aperta finché CI non la
+verifica.

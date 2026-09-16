@@ -18,7 +18,8 @@ use fub_abi::error::PluginError;
 use fub_abi::event::{EventMask, Notice};
 use fub_abi::model::DocId;
 use fub_abi::traits::{
-    EventHandler, HostApi, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
+    EventHandler, HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, QueryKind,
+    QueryRoute, ReadApi, ViewInstance, ViewProvider, ViewSpec, ViewSurface,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_kernel::{FormatRegistry, Workspace};
@@ -171,5 +172,112 @@ fn events_emitted_through_with_host_are_delivered_after_the_closure_returns() {
     assert!(
         !log.lock().unwrap().is_empty(),
         "once the closure returns the queued events are delivered"
+    );
+}
+
+const REENTERING_INDEX: &str = "prova.indice";
+
+struct ReenteringIndex {
+    workspace: Arc<Mutex<Option<Workspace>>>,
+    nested: Arc<Mutex<Option<Vec<PluginError>>>>,
+}
+
+impl IndexProvider for ReenteringIndex {
+    fn routes(&self) -> Vec<QueryRoute> {
+        vec![QueryRoute::Query(QueryKind::Custom(
+            REENTERING_INDEX.into(),
+        ))]
+    }
+
+    fn activate(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn on_documents_indexed(&mut self, _docs: &[fub_abi::model::DocumentModel]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn on_documents_removed(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn reconcile(&mut self, _ids: &[DocId]) -> Vec<IndexLoss> {
+        Vec::new()
+    }
+
+    fn flush(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn close(&mut self, _host: &mut dyn HostApi) -> Result<(), PluginError> {
+        Ok(())
+    }
+
+    fn query(&self, _query: IndexQuery) -> Result<IndexResult, PluginError> {
+        if self.nested.lock().unwrap().is_none() {
+            let errors = self
+                .workspace
+                .lock()
+                .unwrap()
+                .as_mut()
+                .expect("workspace installed")
+                .flush_indexes();
+            *self.nested.lock().unwrap() = Some(errors);
+        }
+        Ok(IndexResult::Custom(serde_json::json!({ "ready": true })))
+    }
+}
+
+#[test]
+fn direct_index_flush_rejects_same_provider_reentry_and_releases_the_guard() {
+    let (_dir, mut ws) = vault();
+    ws.register_core_feature(REENTERING_INDEX, REENTERING_INDEX)
+        .expect("declared");
+    let workspace = Arc::new(Mutex::new(None));
+    let nested = Arc::new(Mutex::new(None));
+    ws.register_index_provider(
+        REENTERING_INDEX,
+        Box::new(ReenteringIndex {
+            workspace: workspace.clone(),
+            nested: nested.clone(),
+        }),
+    )
+    .expect("registered");
+    *workspace.lock().unwrap() = Some(ws);
+
+    let query = IndexQuery::Custom {
+        ns: REENTERING_INDEX.into(),
+        query: serde_json::Value::Null,
+    };
+    let prepared = workspace
+        .lock()
+        .unwrap()
+        .as_ref()
+        .unwrap()
+        .prepare_detached_index_query(&query)
+        .expect("external query is detached");
+    let (_core_dir, core) = vault();
+    prepared
+        .invoke(&core, query.clone())
+        .expect("the outer query resumes after the rejected flush");
+
+    assert!(
+        matches!(
+            nested.lock().unwrap().as_deref(),
+            Some([PluginError::Conflict(_)])
+        ),
+        "the direct flush reports the typed conflict and skips the provider lock"
+    );
+    assert!(
+        matches!(
+            workspace
+                .lock()
+                .unwrap()
+                .as_ref()
+                .unwrap()
+                .query_index(query),
+            Ok(IndexResult::Custom(value)) if value == serde_json::json!({ "ready": true })
+        ),
+        "the guard is released after the outer query"
     );
 }

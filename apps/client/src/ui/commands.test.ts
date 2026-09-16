@@ -61,6 +61,7 @@ function entry(over: Partial<CommandEntry> = {}): CommandEntry {
     id: "a",
     title: "A",
     description: "",
+    layer: "global",
     binding: null,
     declared: null,
     spec: null,
@@ -171,6 +172,7 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
+      layer: "global",
       run: () => {},
     });
     // Prima: quello dichiarato dalla tabella generata.
@@ -192,6 +194,7 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
+      layer: "global",
       run: () => {
         done = true;
       },
@@ -214,6 +217,7 @@ describe("la scorciatoia di un comando di shell si riconfigura", () => {
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
+      layer: "global",
       run: () => {},
     });
     fromBackend.mockResolvedValue([settingEntry("keys.shell.graph", "")]);
@@ -230,6 +234,7 @@ describe("i due registri sono uno solo", () => {
       id: "shell.graph",
       title: "commands.graph",
       description: "commands.graph.desc",
+      layer: "global",
       run: () => {
         done = true;
       },
@@ -257,11 +262,62 @@ describe("i due registri sono uno solo", () => {
         id: "shell.graph",
         title: "commands.graph",
         description: "commands.graph.desc",
+        layer: "global",
         run: () => {},
       });
     }
     expect(allCommands()).toHaveLength(1);
     expect(conflicts(allCommands())).toHaveLength(0);
+  });
+});
+
+describe("l'arbitrato tra strati", () => {
+  it("sceglie superficie, profilo, documento, riquadro e globale in quest'ordine", async () => {
+    const layers = [
+      ["shell.graph", "global"],
+      ["shell.pane.split.right", "pane"],
+      ["shell.doc.search", "document"],
+      ["shell.mode.live", "profile"],
+      ["shell.mode.reading", "surface"],
+    ] as const;
+    for (const [id, layer] of layers) {
+      registerShellCommand({
+        id,
+        title: "commands.graph",
+        description: "commands.graph.desc",
+        layer,
+        run: () => {},
+      });
+    }
+    fromBackend.mockResolvedValue(
+      layers.map(([id]) => settingEntry(keybindingKey(id), "Mod-z")),
+    );
+    await loadKeyOverrides();
+
+    const ordered = allCommands();
+    expect(ordered.map((command) => command.layer)).toEqual([
+      "surface",
+      "profile",
+      "document",
+      "pane",
+      "global",
+    ]);
+    expect(advance(ordered, null, chord({ key: "z", ctrlKey: true }))).toMatchObject({
+      type: "esegue",
+      entry: { id: "shell.mode.reading" },
+    });
+  });
+
+  it("non espone un comando indisponibile", () => {
+    registerShellCommand({
+      id: "shell.mode.live",
+      title: "commands.mode.live",
+      description: "commands.mode.live.desc",
+      layer: "profile",
+      available: () => false,
+      run: () => {},
+    });
+    expect(allCommands()).toEqual([]);
   });
 });
 

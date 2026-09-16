@@ -9,10 +9,11 @@ import {
   type SurfaceEdit,
 } from "./document-session";
 import { operationFromText } from "../editor/text-operation";
+import type { DocumentSource } from "../host/contract";
 
 function fakeApi(): DocumentSessionApi {
   return {
-    readDocument: vi.fn(async (id) => ({ text: `${id}: disco`, revision: "rev-1" })),
+    readDocument: vi.fn(async (id): Promise<DocumentSource> => ({ text: `${id}: disco`, revision: "rev-1", format_id: "markdown", source_kind: "text" })),
     writeDocument: vi.fn(async () => "rev-2"),
     saveDraft: vi.fn(async () => {}),
     discardDraft: vi.fn(async () => {}),
@@ -66,6 +67,38 @@ describe("ownership delle DocumentSession", () => {
       id: "nota.md",
       text: "testo nuovo",
       dirty: true,
+    });
+  });
+
+  it("porta il formato autorevole alla superficie senza sostituire una bozza", async () => {
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({
+      text: "testo sul disco",
+      revision: "rev-1",
+      format_id: "plain",
+      source_kind: "text",
+    }));
+    const sessions = new DocumentSessionCollection(api);
+    sessions.restore("nota.txt", "bozza non salvata", { kind: "dictated" });
+
+    await expect(sessions.readForSurface("nota.txt")).resolves.toEqual({
+      text: "bozza non salvata",
+      formatId: "plain",
+      sourceKind: "text",
+    });
+    expect(api.readDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it("rende leggibile una bozza orfana con il fallback testuale", async () => {
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => {
+      throw new Error("sorgente rimossa");
+    });
+    const sessions = new DocumentSessionCollection(api);
+    sessions.restore("orfana.md", "unica copia", { kind: "dictated" });
+
+    await expect(sessions.readForSurface("orfana.md")).resolves.toEqual({
+      text: "unica copia",
+      formatId: null,
+      sourceKind: "text",
     });
   });
 
@@ -189,10 +222,10 @@ describe("decisioni del ciclo di vita della sessione", () => {
   });
 
   it("aggiorna la sessione prima di restituire una ricarica pulita", async () => {
-    const source = { text: "contenuto esterno", revision: "rev-2" };
+    const source = { text: "contenuto esterno", revision: "rev-2", format_id: "markdown", source_kind: "text" };
     api.readDocument = vi
       .fn()
-      .mockResolvedValueOnce({ text: "contenuto iniziale", revision: "rev-1" })
+      .mockResolvedValueOnce({ text: "contenuto iniziale", revision: "rev-1", format_id: "markdown", source_kind: "text" })
       .mockResolvedValueOnce(source);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
@@ -211,7 +244,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
   });
 
   it("la ricarica forzata pulisce e aggiorna il testo autorevole", async () => {
-    const source = { text: "versione ripristinata", revision: "rev-3" };
+    const source: DocumentSource = { text: "versione ripristinata", revision: "rev-3", format_id: "markdown", source_kind: "text" };
     api.readDocument = vi.fn(async () => source);
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
@@ -381,27 +414,27 @@ describe("decisioni del ciclo di vita della sessione", () => {
   });
 
   it("chiude prima che una lettura lenta possa ricreare la sessione", async () => {
-    let releaseRead!: (source: { text: string; revision: string }) => void;
+    let releaseRead!: (source: DocumentSource) => void;
     api.readDocument = vi.fn(
       () =>
-        new Promise<{ text: string; revision: string }>((resolve) => {
+        new Promise<DocumentSource>((resolve) => {
           releaseRead = resolve;
         }),
     );
     const sessions = new DocumentSessionCollection(api);
     const pending = sessions.read("lenta.md");
     expect(sessions.close("lenta.md")).toEqual({ kind: "missing" });
-    releaseRead({ text: "non deve diventare owner", revision: "rev-1" });
+    releaseRead({ text: "non deve diventare owner", revision: "rev-1", format_id: "markdown", source_kind: "text" });
 
     await pending;
     expect(sessions.get("lenta.md")).toBeUndefined();
   });
 
   it("il rilascio invalida una lettura lenta senza creare un owner orfano", async () => {
-    let releaseRead!: (source: { text: string; revision: string }) => void;
+    let releaseRead!: (source: DocumentSource) => void;
     api.readDocument = vi.fn(
       () =>
-        new Promise<{ text: string; revision: string }>((resolve) => {
+        new Promise<DocumentSource>((resolve) => {
           releaseRead = resolve;
         }),
     );
@@ -409,7 +442,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
     const pending = sessions.read("lenta.md");
 
     expect(await sessions.release("lenta.md")).toEqual({ kind: "missing" });
-    releaseRead({ text: "non deve diventare owner", revision: "rev-1" });
+    releaseRead({ text: "non deve diventare owner", revision: "rev-1", format_id: "markdown", source_kind: "text" });
 
     expect(await pending).toBe("non deve diventare owner");
     expect(sessions.get("lenta.md")).toBeUndefined();
@@ -486,10 +519,10 @@ describe("decisioni del ciclo di vita della sessione", () => {
   });
 
   it("rifiuta la lettura già in volo quando la cancellazione riesce", async () => {
-    let releaseRead!: (source: { text: string; revision: string }) => void;
+    let releaseRead!: (source: DocumentSource) => void;
     api.readDocument = vi.fn(
       () =>
-        new Promise<{ text: string; revision: string }>((resolve) => {
+        new Promise<DocumentSource>((resolve) => {
           releaseRead = resolve;
         }),
     );
@@ -509,7 +542,7 @@ describe("decisioni del ciclo di vita della sessione", () => {
       await deleteFinished;
     });
     await deleteStarted;
-    releaseRead({ text: "testo non più valido", revision: "rev-1" });
+    releaseRead({ text: "testo non più valido", revision: "rev-1", format_id: "markdown", source_kind: "text" });
     finishDelete();
 
     expect(await deleting).toEqual({ kind: "deleted", dirty: false });
@@ -848,7 +881,7 @@ describe("le superfici sottoscritte alla sessione", () => {
     expect(nextTimer).toBe(0);
   });
   it("confronta preimmagine e atteso sulla stessa normalizzazione di terminatori", async () => {
-    api.readDocument = vi.fn(async () => ({ text: "riga1\r\nriga2\n", revision: "rev-1" }));
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: "riga1\r\nriga2\n", revision: "rev-1", format_id: "markdown", source_kind: "text" }));
     const sessions = new DocumentSessionCollection(api);
     await sessions.read("nota.md");
     const log: { surface: string; update: DocumentSurfaceUpdate }[] = [];
@@ -977,7 +1010,7 @@ describe("le superfici sottoscritte alla sessione", () => {
     sessions.attachSurface("nota.md", recordingSurface("riquadro-a", log));
     sessions.attachSurface("nota.md", recordingSurface("riquadro-b", log));
 
-    api.readDocument = vi.fn(async () => ({ text: "testo nuovo dal disco", revision: "rev-2" }));
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => ({ text: "testo nuovo dal disco", revision: "rev-2", format_id: "markdown", source_kind: "text" }));
     const reloaded = await sessions.reloadIfClean("nota.md");
     expect(reloaded).toMatchObject({ kind: "reloaded", changed: true });
     expect(log.map((entry) => entry.surface).sort()).toEqual(["riquadro-a", "riquadro-b"]);

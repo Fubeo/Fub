@@ -1,7 +1,8 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** `main` al commit
-> `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, 9 settembre 2026.
+> **Stato aggiornato per:** tree live certificato
+> `9c5a4db2382d45ee709ada4668a840465d871c64`, 13 settembre 2026;
+> `ARCH-001` e G3 chiusi su questo SHA.
 
 ## Governance di integrazione
 
@@ -21,41 +22,58 @@ come un nuovo bug.
 Gli incrementi vengono riconciliati e verificati sulla linea audit, senza
 sovrascriverne i contratti. Il passaggio a `main` richiede G0–G14 e un G15/GO
 esplicito sul candidato corrente, seguito dalla verifica dello SHA integrato.
-Il piano audit non è completato: la matrice conserva finding senza evidenza
-finale. Nessun gate viene spuntato per effetto di questo riallineamento.
+`ARCH-001` e G3 sono chiusi, ma il piano audit non è completato e i finding
+ancora privi di evidenza finale restano aperti.
 
-## Candidati della linea audit
+## G3 chiuso sul tree live certificato
 
-La [PR #25](https://github.com/Fubeo/Fub/pull/25) è stata integrata nella sola
-linea audit con fast-forward a `65a0cce5ed849fc8eba46b12f88a6aa23a07a0eb`,
-dopo il verde completo delle run push e PR sullo stesso SHA. Preserva #22,
-i 284 commit esclusivi audit e i due esclusivi di `main`.
+La [PR #32](https://github.com/Fubeo/Fub/pull/32) è **OPEN, DRAFT**, con base
+`fix/audit-integration` e head `fix/lifecycle-mount-detached`. Il fetch live del
+13 settembre 2026 conferma come head remoto esatto
+`9c5a4db2382d45ee709ada4668a840465d871c64`.
 
-Il candidato di questa documentazione include anche la sola discovery della
-[PR #26](https://github.com/Fubeo/Fub/pull/26), al commit
-`77e1b8783fbba75364644078b0735a5b709de28d`. Le prove e il gate di integrazione
-sono registrati nella PR: il codice di discovery non completa il lifecycle.
-Ogni avanzamento della linea audit richiede i controlli applicabili sullo SHA
-effettivo; nessuna di queste integrazioni autorizza a spostare `main`.
+`ARCH-001` e G3 sono **`CLOSED` sul tree `9c5a4db…`**. Sul medesimo SHA sono
+verdi entrambe le CI:
 
-Il candidato CAS `4b3bd77e2b7af5584a56ba3a3556e1ade99e5976` corregge l'apertura
-concorrente del lock nuovo. La diagnostica precedente identifica `open_lock`
-come stadio dell'errore `ENOENT`; il protocollo usa creazione esclusiva e apre
-un file esistente soltanto dopo `AlreadyExists`. I due test CAS sono verdi sui
-tre sistemi nelle run
-[push](https://github.com/Fubeo/Fub/actions/runs/34388493276) e
-[PR](https://github.com/Fubeo/Fub/actions/runs/34388497315), entrambe concluse
-con successo in tutti gli otto job. Anche il candidato di riconciliazione
-`65a0cce` ha superato entrambe le run
-[push](https://github.com/Fubeo/Fub/actions/runs/34391260104) e
-[PR](https://github.com/Fubeo/Fub/actions/runs/34391266023).
-Queste prove non certificano automaticamente un successivo SHA.
+- [run CI PR 34746750247](https://github.com/Fubeo/Fub/actions/runs/34746750247):
+  `completed/success`, 8 job su 8;
+- [run CI push 34746748272](https://github.com/Fubeo/Fub/actions/runs/34746748272):
+  `completed/success`.
 
-C-04/G3 resta aperto: oltre al banco WASM, anche mount, abilitazione, rollback
-e teardown di produzione richiedono callback fuori da `Custody<Workspace>`.
-La revisione deve includere le chiamate indirette e i disposer dei provider.
-G14 conserva specifiche originali non ricostruite: la ricerca nella cronologia
-e nei tracker accessibili non consente di assegnarle per intuizione.
+Tra `fbe9676a…` e il tree live certificato sono già presenti questi sei commit,
+in ordine:
+
+| Commit | Correzione |
+|---|---|
+| `d8e86e83` | rollback delle opening non pubblicate |
+| `8a9a530f` | avvio atomico dei worker |
+| `0e0441ef` | pubblicazione atomica della sessione |
+| `78a89f92` | contenimento dei panic nella preparazione dei bundle |
+| `440bd410` | rollback dei mount parziali |
+| `9c5a4db` | isolamento dei fallimenti della scansione su nomi non UTF-8 |
+
+Il tree certificato completa il distacco verificato delle callback di
+produzione: ripristino staged con mossa e rollback fuori custodia; rename
+esplicita di documenti e asset; watcher in fasi prepare/invoke/finalize; rebuild
+di manutenzione staccato; flush degli indici tramite token e protezione
+`IndexCall`; `BeforeWrite` eseguito e protetto dal panic prima di ogni scrittura.
+Opening, pubblicazione della sessione, avvio dei worker, preparazione dei bundle,
+mount, rollback, teardown e scansione non UTF-8 sono inclusi nel tree sul quale
+la CI è verde.
+
+Questa certificazione non completa l'audit. #8, #10, G14 e G15/GO restano
+**OPEN**; in particolare G14 non ha ancora la matrice finale 56/56. La PR #32
+resta draft. La decisione è **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN
+`main`**.
+
+Restano vincolanti i WIT frozen e le guardie dell'audit: niente `allow` per
+Clippy, test ignorati o saltati, `sleep` usati come sincronizzazione o mutex
+globale introdotto per serializzare le suite.
+
+Il rischio residuo reale è il rollback di una rename in concorrenza con un
+processo esterno: `VaultStorage` non offre rename condizionale né reservation.
+Il candidato verifica l'identità osservata del file, ma non promette una
+transazione globale contro modifiche esterne.
 
 ## Release corrente
 
@@ -74,12 +92,17 @@ La regressione del fallback dei blocchi Markdown personalizzati è risolta in
 baseline visuali e accessibilità. La correzione non rigenera le immagini e non
 cambia le soglie del banco.
 
-[#17](https://github.com/Fubeo/Fub/issues/17) resta il tracker unico delle
-baseline; #16 è stata assorbita come duplicata. Prima della chiusura servono
-provenienza e revisione delle immagini, esame del foglio di contatto nelle due
-luci, due esecuzioni consecutive nello stesso ambiente, confronto delle
-soglie, diagnosi del drift e correzione del commento storico del banco.
-Il verde automatico non sostituisce queste evidenze.
+La provenienza e la stabilità delle baseline di
+[#17](https://github.com/Fubeo/Fub/issues/17) sono certificate sul candidato:
+il commit `7463f725` le ha rigenerate sul runner `ubuntu-latest`, ha spiegato
+l'allineamento delle fixture e la neutralizzazione del puntatore e ha ripetuto
+il banco 42/42 senza modificare le soglie. Il foglio di contatto canonico è
+stato riesaminato nelle due luci. Le run `34966343591` e `34966348108` sullo
+stesso SHA hanno poi completato consecutivamente banco visuale e accessibilità
+nello stesso ambiente. Un controllo locale fuori dal runner ha isolato il
+drift a rasterizzazione di testo e canvas, senza promuoverlo a baseline. #16
+resta assorbita; #17 si chiude con l'integrazione autorizzata di queste
+evidenze.
 
 ## Implementato
 
@@ -124,11 +147,12 @@ Il verde automatico non sostituisce queste evidenze.
 - discovery, installazione e teardown end-to-end;
 - esempio non banale.
 
-La [PR #23](https://github.com/Fubeo/Fub/pull/23) propone il primo incremento
-nativo di discovery e lifecycle. La CI del suo candidato `66141ad` è conclusa
-con successo, ma la PR resta draft: il banco deve usare i confini di mount e
-invocazione della linea audit senza callback sotto `Custody<Workspace>`.
-Non è una capacità consegnata su `main` e non chiude #8.
+La PR #32 contiene il lifecycle conforme al confine G3, ma non è una capacità
+consegnata su `main` e non chiude #8. Il prossimo incremento funzionale è lo
+slice inventory/installazione di #8, avviato dal tree `9c5a4db…`: portare
+semanticamente dalla PR #30 il solo inventario installato, mantenendo gli
+eseguibili fuori da `.fub/plugins`. Non eseguire merge né cherry-pick
+dell'intera PR #30; #8 e #10 restano aperte.
 
 Issue:
 
@@ -150,34 +174,45 @@ Issue:
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11 le fasi 0–4 sono concluse su `main`. Il prossimo passo è
-`DocumentSurfaceRegistry`; seguono modalità e tastiera, `.fubsheet`, griglia,
-misura del protocollo e soltanto dopo ABI/WIT. Il TODO conserva i criteri delle
-fasi 5–10: l'estrazione iniziale non va ripetuta.
+Per #11 le fasi 0–9 sono concluse nello stack candidato. Il pannello monta
+Markdown, plain text e `.fubsheet` attraverso `DocumentSurfaceRegistry`, con
+collisioni, fallback e teardown posseduto; modalità e comandi sono dichiarati
+dalle superfici e arbitrati prima dei layer profilo, documento, riquadro e
+globale.
+
+`fub-format-sheet` possiede il formato JSON v1 e il valutatore autorevole di
+formule. `GridEngine` offre viewport virtualizzata, identità stabili, tastiera,
+editor condivisi, TSV, operazioni atomiche, undo locale e ARIA senza chiamate
+per battuta. La [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md)
+registra le misure della slice e sceglie sessioni derivate, finestre limitate,
+patch coordinate e invalidazioni dipendenti. `DocumentModel` resta agnostico;
+la fase 10 porta i tipi minimi in ABI/WIT e ne prova i due clienti nativo e
+WASM.
 
 ## Bloccato
 
-Il merge in `main` è bloccato dal gate audit, non dal semplice stato della
-CI M5. La PR #23 richiede inoltre l'adattamento al lifecycle `BundleMount`
-della linea audit. Compilazione e test possono proseguire su branch dedicate;
-non certificano automaticamente un candidato ottenuto integrando due linee.
+Il merge in `main` resta bloccato dai gate audit successivi. `ARCH-001` e G3
+sono `CLOSED` sul tree live certificato `9c5a4db…`, con CI PR e push verdi sul
+medesimo SHA. La PR #32 resta **OPEN, DRAFT**; #8, #10, G14 e G15/GO restano
+aperti. Decisione: **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
 
 ## Prossimi passi
 
-1. completare i gate del candidato audit dopo #25, discovery #26 e port
-   documentale #28; adattare il lifecycle #23 a C-04 in produzione;
-2. chiudere il percorso prodotto M5 delle issue #8 e #10;
-3. completare ripristino atomico e backup/restore #5/#7;
-4. separare e misurare la Graph View con #12/#6;
-5. completare le evidenze manuali e ripetibili di #17;
-6. proseguire dalle fasi 5–10 del
+1. avviare da `9c5a4db…` lo slice inventory/installazione di #8 con un port
+   semantico del solo inventario installato dalla PR #30, senza merge o
+   cherry-pick dell'intera PR e senza eseguibili in `.fub/plugins`; mantenere
+   aperte #8 e #10;
+2. completare ripristino atomico e backup/restore #5/#7;
+3. separare e misurare la Graph View con #12/#6;
+4. completare le evidenze manuali e ripetibili di #17;
+5. proseguire dalle fasi 7–10 del
    [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md),
-   tracciato in #11, senza rifare le fasi 0–4;
-7. completare il contratto dei temi #13;
-8. decidere esplicitamente se #9 blocca la prima release e verificarla oppure
+   tracciato in #11, senza rifare le fasi 0–6;
+6. completare il contratto dei temi #13;
+7. decidere esplicitamente se #9 blocca la prima release e verificarla oppure
    motivarne il rinvio senza chiuderla artificialmente;
-9. preparare la prima release secondo le regole di versionamento correnti e
-   completare G14/G15 prima di autorizzare il merge finale in `main`.
+8. completare la matrice G14 e ottenere un G15/GO esplicito prima di
+   autorizzare qualunque merge finale in `main`.
 
 ## Fonti
 

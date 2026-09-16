@@ -1,0 +1,103 @@
+{
+  "query": {
+    "kind": "custom",
+    "ns": "fub.sheet",
+    "query": {
+      "kind": "evaluate",
+      "version": 1,
+      "source": "{\"version\":1,\"sheets\":[{\"id\":\"s\",\"name\":\"Foglio\",\"rows\":[{\"id\":\"r\"}],\"columns\":[{\"id\":\"c0\"},{\"id\":\"c1\"},{\"id\":\"c2\"},{\"id\":\"c3\"},{\"id\":\"c4\"},{\"id\":\"c5\"}],\"cells\":[{\"row\":\"r\",\"column\":\"c0\",\"input\":\"2\"},{\"row\":\"r\",\"column\":\"c1\",\"input\":\"=A1+1\"},{\"row\":\"r\",\"column\":\"c2\",\"input\":\"caffè 😀\"},{\"row\":\"r\",\"column\":\"c3\",\"input\":\"=TRUE\"},{\"row\":\"r\",\"column\":\"c4\",\"input\":\"=1/0\"},{\"row\":\"r\",\"column\":\"c5\",\"input\":\"\"}]}]}"
+    }
+  },
+  "result": {
+    "kind": "custom",
+    "value": {
+      "cells": [
+        {
+          "sheet": "s",
+          "row": "r",
+          "column": "c0",
+          "value": {
+            "kind": "number",
+            "value": 2.0
+          }
+        },
+        {
+          "sheet": "s",
+          "row": "r",
+          "column": "c1",
+          "value": {
+            "kind": "number",
+            "value": 3.0
+          }
+        },
+        {
+          "sheet": "s",
+          "row": "r",
+          "column": "c2",
+          "value": {
+            "kind": "text",
+            "value": "caffè 😀"
+          }
+        },
+        {
+          "sheet": "s",
+          "row": "r",
+          "column": "c3",
+          "value": {
+            "kind": "boolean",
+            "value": true
+          }
+        },
+        {
+          "sheet": "s",
+          "row": "r",
+          "column": "c4",
+          "value": {
+            "kind": "error",
+            "value": "div_zero"
+          }
+        },
+        {
+          "sheet": "s",
+          "row": "r",
+          "column": "c5",
+          "value": {
+            "kind": "blank"
+          }
+        }
+      ],
+      "dependencies": [
+        {
+          "cell": {
+            "sheet": "s",
+            "row": "r",
+            "column": "c1"
+          },
+          "depends_on": [
+            {
+              "sheet": "s",
+              "row": "r",
+              "column": "c0"
+            }
+          ]
+        },
+        {
+          "cell": {
+            "sheet": "s",
+            "row": "r",
+            "column": "c3"
+          },
+          "depends_on": []
+        },
+        {
+          "cell": {
+            "sheet": "s",
+            "row": "r",
+            "column": "c4"
+          },
+          "depends_on": []
+        }
+      ]
+    }
+  }
+}

@@ -234,7 +234,8 @@ export function mulberry32(seed: number): () => number {
 /// ha verificato. Gli id duplicati si tengono una volta sola: un payload
 /// storto arriva da un provider, e un provider può essere di terzi.
 export function createStructure(data: GraphData, config: PhysicsConfig, seed: number): Structure {
-  const n = data.nodes.length;
+  const ids = [...new Set(data.nodes)].sort();
+  const n = ids.length;
   const s: Structure = {
     x: new Float32Array(n),
     y: new Float32Array(n),
@@ -249,7 +250,7 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
     degree: new Uint16Array(n),
     fixed: new Uint8Array(n),
     dragged: -1,
-    id: [],
+    id: ids,
     from: new Uint32Array(data.edges.length),
     to: new Uint32Array(data.edges.length),
     curvature: new Float32Array(data.edges.length),
@@ -257,12 +258,31 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
     m: 0,
   };
   const index = new Map<string, number>();
-  for (const id of data.nodes) {
-    if (index.has(id)) continue;
+  for (const id of ids) {
     index.set(id, s.n);
-    s.id.push(id);
     s.n++;
   }
+  const edges = data.edges
+    .filter((e) => {
+      const fromIndex = index.get(e.from);
+      const toIndex = index.get(e.to);
+      return (
+        fromIndex !== undefined &&
+        toIndex !== undefined &&
+        fromIndex !== toIndex
+      );
+    })
+    .sort((a, b) =>
+      a.from < b.from
+        ? -1
+        : a.from > b.from
+          ? 1
+          : a.to < b.to
+            ? -1
+            : a.to > b.to
+              ? 1
+              : 0,
+    );
   const rng = mulberry32(seed);
   // Semina a girasole (fibonacci sunflower): distribuzione uniforme sul
   // disco, niente anelli concentrici, e col jitter deterministico nessun
@@ -275,10 +295,9 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
     s.x[i] = r * Math.cos(t);
     s.y[i] = r * Math.sin(t);
   }
-  for (const e of data.edges) {
-    const fromIndex = index.get(e.from);
-    const toIndex = index.get(e.to);
-    if (fromIndex === undefined || toIndex === undefined || fromIndex === toIndex) continue;
+  for (const e of edges) {
+    const fromIndex = index.get(e.from)!;
+    const toIndex = index.get(e.to)!;
     s.from[s.m] = fromIndex;
     s.to[s.m] = toIndex;
     s.degree[fromIndex]++;
@@ -299,7 +318,7 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
 /// grafo partono identiche; un documento nuovo cambia il disegno, ed è
 /// giusto che lo cambi.
 export function seedOf(data: GraphData): number {
-  return fnv1a([...data.nodes].sort().join("\n"));
+  return fnv1a([...new Set(data.nodes)].sort().join("\n"));
 }
 
 /// Grado in uscita e in entrata di un nodo: per il tooltip e le etichette,

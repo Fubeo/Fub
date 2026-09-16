@@ -97,3 +97,54 @@
   background: var(--doc-bg);
   color: var(--doc-fg);
 }
+
+.grid-surface {
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+}
+.grid-formula-bar {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft, var(--bg));
+}
+.grid-cell-name {
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-viewport {
+  background: var(--doc-bg);
+  outline: none;
+}
+.grid-viewport:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+.grid-cell,
+.grid-header,
+.grid-corner {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.grid-header,
+.grid-corner {
+  background: var(--bg-soft, var(--bg));
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-cell {
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-mono);
+}
+.grid-cell.selected {
+  background: var(--overlay-hover);
+}
+.grid-cell.active {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.grid-cell-editor {
+  border: 2px solid var(--accent);
+  background: var(--doc-bg);
+}

@@ -1,0 +1,20 @@
+[package]
+name = "view-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+active-content = []
+malformed-arena = []
+
+[dependencies]
+wit-bindgen = "0.60"
+fub-abi = { path = "../../crates/fub-abi" }
+
+[profile.release]
+strip = true
+opt-level = "s"

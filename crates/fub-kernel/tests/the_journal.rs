@@ -33,7 +33,7 @@ use fub_abi::edit::WriteBase;
 use fub_abi::edit::{EditRequest, Revision, TextEdit};
 use fub_abi::model::DocId;
 use fub_kernel::{JournalOp, KernelError, Workspace};
-use fub_testkit::Bench;
+use fub_testkit::{restore_document, Bench};
 
 fn fixture_root() -> Utf8PathBuf {
     Utf8PathBuf::from_path_buf(std::env::current_dir().expect("current dir"))
@@ -65,7 +65,7 @@ fn every_kernel_mutation_leaves_its_own_line() {
         .write_document(&doc("a.md"), "two", WriteBase::Dictated)
         .unwrap();
     let trashed = bench.delete_document(&doc("a.md")).unwrap();
-    bench.restore_from_trash(&trashed, None).unwrap();
+    restore_document(&mut bench, &trashed, None).unwrap();
     bench.rename_document(&doc("a.md"), &doc("b.md")).unwrap();
 
     let ops = ops(&bench);
@@ -516,7 +516,7 @@ fn the_journal_does_not_carry_the_document_inside() {
             _ => None,
         })
         .expect("the deletion left its line");
-    bench.restore_from_trash(&trashed, None).unwrap();
+    restore_document(&mut bench, &trashed, None).unwrap();
 
     // Che ci siano davvero passate tutte: senza questa riga il presidio
     // tornerebbe a dire «le varianti che mi è capitato di produrre», che è

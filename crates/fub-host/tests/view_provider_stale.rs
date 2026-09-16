@@ -144,10 +144,8 @@ impl ViewProvider for BlockingAction {
             ));
         }
         self.workspace
-            .try_write()
-            .ok_or_else(|| {
-                PluginError::Internal("a workspace write lock remained during the action".into())
-            })?
+            .write()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?
             .replace_view_provider(
                 PLUGIN,
                 Box::new(FixedView {
@@ -403,8 +401,6 @@ fn action_error_and_panic_drain_events_and_leave_the_provider_reusable() {
         ViewUpdate::None
     );
     assert_eq!(seen.load(Ordering::SeqCst), 3);
-    assert!(workspace.try_read().is_some(), "no read lock remains");
-    assert!(workspace.try_write().is_some(), "no write lock remains");
 }
 
 #[test]

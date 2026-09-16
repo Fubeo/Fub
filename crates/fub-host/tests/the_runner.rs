@@ -210,7 +210,7 @@ impl Bundle for BundleWorker {
         })
     }
 
-    fn register(&self, _ws: &mut fub_kernel::Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut fub_host::registry::Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }
@@ -233,16 +233,14 @@ fn bench(v: &Vault, steps: &Steps) -> (Host, Subscription) {
         .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
         .expect("aperto");
     host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(
-                &BundleWorker {
-                    steps: steps.clone(),
-                },
-                &mut ws,
-            )
+        fub_host::BundleRegistry::remember_guarded(
+            s.bundles(),
+            Arc::new(BundleWorker {
+                steps: steps.clone(),
+            }),
+        )
+        .unwrap();
+        fub_host::BundleRegistry::enable_guarded(s.bundles(), s.workspace(), SPY)
             .expect("il bundle si mount");
     })
     .expect("aperto");
@@ -646,7 +644,7 @@ impl Bundle for BundleWithTimer {
         Box::new(TimerPlugin)
     }
 
-    fn register(&self, _ws: &mut fub_kernel::Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut fub_host::registry::Registrar<'_>) -> Vec<String> {
         Vec::new()
     }
 }
@@ -690,11 +688,8 @@ fn a_alarm_declared_rings_from_single() {
         .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
         .expect("aperto");
     host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(&BundleWithTimer, &mut ws)
+        fub_host::BundleRegistry::remember_guarded(s.bundles(), Arc::new(BundleWithTimer)).unwrap();
+        fub_host::BundleRegistry::enable_guarded(s.bundles(), s.workspace(), "test.timer")
             .expect("il bundle si mount");
     })
     .expect("aperto");

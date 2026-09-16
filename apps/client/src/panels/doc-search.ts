@@ -74,6 +74,7 @@ export function mountDocSearch(): void {
     id: "shell.doc.search",
     title: "commands.doc.search",
     description: "commands.doc.search.desc",
+    layer: "document",
     run: () => openInDocumentSearch(),
   });
 }

@@ -35,6 +35,54 @@ impl Drop for Live {
     }
 }
 
+struct ClosingGate {
+    watching: Arc<AtomicBool>,
+    entered: Option<std::sync::mpsc::Sender<()>>,
+    release: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+}
+
+impl VaultWatcher for ClosingGate {
+    fn is_watching(&self) -> bool {
+        self.watching.load(Ordering::Relaxed)
+    }
+}
+
+impl Drop for ClosingGate {
+    fn drop(&mut self) {
+        let release = self.release.get_mut().expect("release gate").take();
+        if let (Some(entered), Some(release)) = (self.entered.take(), release) {
+            entered.send(()).expect("the close observer is alive");
+            release
+                .recv_timeout(TIMEOUT)
+                .expect("the test releases watcher teardown");
+        }
+        self.watching.store(false, Ordering::Relaxed);
+    }
+}
+
+struct ClosingGateFactory {
+    starts: Arc<AtomicUsize>,
+    entered: Mutex<Option<std::sync::mpsc::Sender<()>>>,
+    release: Mutex<Option<std::sync::mpsc::Receiver<()>>>,
+}
+
+impl WatcherFactory for ClosingGateFactory {
+    fn start(
+        &self,
+        _root: &Utf8Path,
+        _workspace: Custody<Workspace>,
+        watching: Arc<AtomicBool>,
+    ) -> Result<Box<dyn VaultWatcher>, String> {
+        watching.store(true, Ordering::Relaxed);
+        self.starts.fetch_add(1, Ordering::SeqCst);
+        Ok(Box::new(ClosingGate {
+            watching,
+            entered: self.entered.lock().expect("entered gate").take(),
+            release: Mutex::new(self.release.lock().expect("release gate").take()),
+        }))
+    }
+}
+
 #[derive(Clone, Copy)]
 enum FirstCall {
     Succeeds,
@@ -68,6 +116,25 @@ impl Probe {
             .try_write()
             .expect("WatcherFactory::start must not inherit a read or write lock");
         drop(write);
+    }
+
+    fn assert_rolled_back(workspace: &Custody<Workspace>) {
+        Self::assert_released(workspace);
+        let ws = workspace
+            .read()
+            .expect("the failed workspace remains readable");
+        assert!(
+            ws.is_closed(),
+            "the failed opening did not close its workspace"
+        );
+        assert!(
+            ws.plugins().is_empty() && ws.commands().is_empty(),
+            "the failed opening did not retire plugin declarations and providers"
+        );
+        assert!(
+            !ws.watch_flag().load(Ordering::Relaxed),
+            "the failed opening did not stop its watcher"
+        );
     }
 }
 
@@ -157,6 +224,78 @@ fn close_with_timeout(host: Arc<Host>) -> Vec<PluginError> {
 }
 
 #[test]
+fn opening_the_same_root_conflicts_while_teardown_owns_the_slot() {
+    let (_dir, root) = root();
+    let root = root.canonicalize_utf8().expect("tempdir exists");
+    let starts = Arc::new(AtomicUsize::new(0));
+    let (entered_tx, entered_rx) = channel();
+    let (release_tx, release_rx) = channel();
+    let host = Arc::new(Host::new().with_watcher(Box::new(ClosingGateFactory {
+        starts: Arc::clone(&starts),
+        entered: Mutex::new(Some(entered_tx)),
+        release: Mutex::new(Some(release_rx)),
+    })));
+    host.open(&root).expect("the first session opens");
+    host.wait_indexed(None).expect("initial indexing finishes");
+    assert_eq!(host.current().as_deref(), Some(root.as_path()));
+
+    let closing_host = Arc::clone(&host);
+    let closing_root = root.clone();
+    let closing = std::thread::spawn(move || closing_host.close_vault(&closing_root));
+    entered_rx
+        .recv_timeout(TIMEOUT)
+        .expect("watcher teardown reaches its gate");
+
+    let opening_host = Arc::clone(&host);
+    let opening_root = root.clone();
+    let (opened_tx, opened_rx) = channel();
+    let opening = std::thread::spawn(move || {
+        opened_tx
+            .send(opening_host.open(&opening_root))
+            .expect("the opening observer is alive");
+    });
+    let outcome = opened_rx
+        .recv_timeout(TIMEOUT)
+        .expect("open does not wait for the sessions lock");
+    assert!(
+        matches!(&outcome, Err(PluginError::Conflict(message))
+            if message
+                .as_literal()
+                .is_some_and(|message| message.contains("chiusura"))),
+        "the closing marker rejects a second mount"
+    );
+    opening.join().expect("conflicting opening joins");
+    assert_eq!(
+        starts.load(Ordering::SeqCst),
+        1,
+        "a conflicting open must not start another watcher"
+    );
+    let repeated_close = host.close_vault(&root);
+    assert!(
+        matches!(&repeated_close, Err(PluginError::Conflict(message))
+            if message
+                .as_literal()
+                .is_some_and(|message| message.contains("chiusura"))),
+        "the marker cannot be claimed twice"
+    );
+
+    release_tx.send(()).expect("release watcher teardown");
+    assert!(closing
+        .join()
+        .expect("closing thread joins")
+        .expect("the claimed session closes")
+        .is_empty());
+
+    host.open(&root).expect("the root reopens after teardown");
+    assert_eq!(starts.load(Ordering::SeqCst), 2);
+    assert_eq!(host.current().as_deref(), Some(root.as_path()));
+    assert!(host
+        .close_vault(&root)
+        .expect("the reopened session closes")
+        .is_empty());
+}
+
+#[test]
 fn watcher_start_has_no_workspace_lock_and_can_take_both_guards() {
     let (_dir, root) = root();
     let probe = Arc::new(Probe::new(FirstCall::Succeeds));
@@ -167,7 +306,22 @@ fn watcher_start_has_no_workspace_lock_and_can_take_both_guards() {
     assert_eq!(probe.calls.load(Ordering::SeqCst), 1);
     assert_eq!(probe.reentries.load(Ordering::SeqCst), 1);
     assert!(host.is_watching(None));
+    let transferred = probe
+        .workspaces
+        .lock()
+        .expect("probe workspace list")
+        .first()
+        .expect("successful workspace was recorded")
+        .clone();
+    assert!(
+        !transferred.read().expect("published workspace").is_closed(),
+        "publishing must disarm opening rollback"
+    );
     assert!(close_with_timeout(host).is_empty());
+    assert!(
+        transferred.read().expect("closed workspace").is_closed(),
+        "the transferred session closes exactly on its owner path"
+    );
 }
 
 #[test]
@@ -192,15 +346,7 @@ fn watcher_start_error_leaves_no_session_and_the_host_can_retry() {
         .first()
         .expect("failed workspace was recorded")
         .clone();
-    Probe::assert_released(&abandoned);
-    assert!(
-        !abandoned
-            .read()
-            .expect("failed workspace remains readable")
-            .watch_flag()
-            .load(Ordering::Relaxed),
-        "the failed start must roll back its watching flag"
-    );
+    Probe::assert_rolled_back(&abandoned);
 
     open_with_timeout(Arc::clone(&host), root).expect("the same host retries");
     assert_eq!(probe.calls.load(Ordering::SeqCst), 2);
@@ -228,15 +374,7 @@ fn watcher_start_panic_is_contained_and_the_host_can_retry() {
         .first()
         .expect("failed workspace was recorded")
         .clone();
-    Probe::assert_released(&abandoned);
-    assert!(
-        !abandoned
-            .read()
-            .expect("failed workspace remains readable")
-            .watch_flag()
-            .load(Ordering::Relaxed),
-        "the panicking start must roll back its watching flag"
-    );
+    Probe::assert_rolled_back(&abandoned);
 
     open_with_timeout(Arc::clone(&host), root).expect("the same host retries after the panic");
     assert_eq!(probe.calls.load(Ordering::SeqCst), 2);
@@ -247,6 +385,88 @@ fn watcher_start_panic_is_contained_and_the_host_can_retry() {
 struct ArcProbe(Arc<Probe>);
 
 impl WatcherFactory for ArcProbe {
+    fn start(
+        &self,
+        root: &Utf8Path,
+        workspace: Custody<Workspace>,
+        watching: Arc<AtomicBool>,
+    ) -> Result<Box<dyn VaultWatcher>, String> {
+        self.0.start(root, workspace, watching)
+    }
+}
+
+#[cfg(unix)]
+struct FailsScanAfterStart {
+    calls: Arc<AtomicUsize>,
+    workspaces: Mutex<Vec<Custody<Workspace>>>,
+}
+
+#[cfg(unix)]
+impl WatcherFactory for FailsScanAfterStart {
+    fn start(
+        &self,
+        root: &Utf8Path,
+        workspace: Custody<Workspace>,
+        watching: Arc<AtomicBool>,
+    ) -> Result<Box<dyn VaultWatcher>, String> {
+        watching.store(true, Ordering::Relaxed);
+        self.workspaces
+            .lock()
+            .expect("scan failure workspaces")
+            .push(workspace);
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            use std::os::unix::ffi::OsStringExt;
+            let invalid = std::ffi::OsString::from_vec(vec![0xff]);
+            std::fs::write(root.as_std_path().join(invalid), b"invalid utf8")
+                .map_err(|error| error.to_string())?;
+        }
+        Ok(Box::new(Live(watching)))
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_scan_error_after_watcher_start_rolls_back_the_whole_opening() {
+    let (_dir, root) = root();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let factory = Arc::new(FailsScanAfterStart {
+        calls: Arc::clone(&calls),
+        workspaces: Mutex::new(Vec::new()),
+    });
+    let host = Arc::new(Host::new().with_watcher(Box::new(ArcScanFailure(Arc::clone(&factory)))));
+
+    let error = open_with_timeout(Arc::clone(&host), root.clone()).expect_err("the scan must fail");
+    assert!(matches!(error, PluginError::Io(_)), "{error:?}");
+    assert!(
+        host.debug_workspace(None).is_err(),
+        "a failed scan must not publish a session"
+    );
+    let abandoned = factory
+        .workspaces
+        .lock()
+        .expect("scan failure workspaces")
+        .first()
+        .expect("the first workspace was recorded")
+        .clone();
+    Probe::assert_rolled_back(&abandoned);
+
+    use std::os::unix::ffi::OsStringExt;
+    let invalid = std::ffi::OsString::from_vec(vec![0xff]);
+    match std::fs::remove_file(root.as_std_path().join(invalid)) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => panic!("remove invalid scan entry: {error}"),
+    }
+    open_with_timeout(Arc::clone(&host), root).expect("the same host retries after scan failure");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(close_with_timeout(host).is_empty());
+}
+
+#[cfg(unix)]
+struct ArcScanFailure(Arc<FailsScanAfterStart>);
+
+#[cfg(unix)]
+impl WatcherFactory for ArcScanFailure {
     fn start(
         &self,
         root: &Utf8Path,

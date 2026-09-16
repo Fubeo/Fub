@@ -599,16 +599,9 @@ impl Shared {
         let opening = with_event_drain(&self.workspace, |ws| {
             ws.finalize_finish_index(completed_finish)
         })?;
-        // **Il flush degli indici è una fase sua** (difetto 0113), come la
-        // terza fase di `ExternalSync::batch`: un prestito esclusivo separato
-        // da quello della chiusura dell'indicizzazione. Fra i due prestiti il
-        // lucchetto si rilascia, e un lettore concorrente non aspetta la somma
-        // delle fasi — riconciliazione, ricongiungimento, flush, anagrafe —
-        // ma la sola che sta correndo. Il flush tocca solo gli indici e il
-        // disco, non lo stato condiviso del workspace.
-        with_event_drain(&self.workspace, |ws| {
-            let _ = ws.flush_indexes();
-        })?;
+        // Il flush è una fase esterna separata: il token conserva gli indici,
+        // mentre i lettori e la re-entry possono progredire senza guard Workspace.
+        let _ = crate::teardown::flush_indexes(&self.workspace)?;
         // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
         // entrambe sotto prestito condiviso.**
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
@@ -1058,6 +1051,55 @@ impl Shared {
     }
 }
 
+/// Il via dei worker è una decisione del pool, non del singolo thread.
+///
+/// Finché tutti i thread richiesti non esistono nessuno può entrare nel
+/// workspace: se una `spawn` fallisce, chi è già nato riceve invece
+/// l'annullamento e termina senza toccare il lavoro dell'apertura.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum WorkerStart {
+    Waiting,
+    Running,
+    Cancelled,
+}
+
+struct WorkerStartGate {
+    state: Mutex<WorkerStart>,
+    changed: Condvar,
+}
+
+impl WorkerStartGate {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(WorkerStart::Waiting),
+            changed: Condvar::new(),
+        }
+    }
+
+    /// Torna `true` soltanto quando il pool è nato per intero.
+    fn wait(&self) -> bool {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        while *state == WorkerStart::Waiting {
+            state = self
+                .changed
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        *state == WorkerStart::Running
+    }
+
+    fn release(&self, state: WorkerStart) {
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = state;
+        self.changed.notify_all();
+    }
+}
+
 /// Il pool che esegue i job di un vault.
 pub struct JobRunner {
     shared: Arc<Shared>,
@@ -1096,15 +1138,57 @@ impl JobRunner {
             alarms: Custody::empty("le sveglie del vault"),
             in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
         });
-        let workers = (0..threads.max(1))
-            .map(|n| {
-                let shared = Arc::clone(&shared);
-                std::thread::Builder::new()
-                    .name(format!("fub-job-{n}"))
-                    .spawn(move || shared.work())
-                    .expect("thread del pool")
-            })
-            .collect();
+        Self::start_workers_with(shared, threads, |builder, worker| builder.spawn(worker))
+    }
+
+    /// Il solo giunto privato della creazione dei thread.
+    ///
+    /// La funzione iniettata permette al presidio di far fallire una `spawn`
+    /// precisa; in produzione resta esattamente `Builder::spawn`.
+    fn start_workers_with<S>(
+        shared: Arc<Shared>,
+        threads: usize,
+        mut spawn: S,
+    ) -> Result<Self, PluginError>
+    where
+        S: FnMut(
+            std::thread::Builder,
+            Box<dyn FnOnce() + Send + 'static>,
+        ) -> std::io::Result<JoinHandle<()>>,
+    {
+        let gate = Arc::new(WorkerStartGate::new());
+        let mut workers = Vec::with_capacity(threads.max(1));
+        for n in 0..threads.max(1) {
+            let worker_shared = Arc::clone(&shared);
+            let worker_gate = Arc::clone(&gate);
+            let worker = Box::new(move || {
+                if worker_gate.wait() {
+                    worker_shared.work();
+                }
+            });
+            match spawn(
+                std::thread::Builder::new().name(format!("fub-job-{n}")),
+                worker,
+            ) {
+                Ok(worker) => workers.push(worker),
+                Err(error) => {
+                    let root = PluginError::Io(
+                        format!("impossibile avviare il thread del pool: {error}").into(),
+                    );
+                    // Non è `stop`: nessun worker ha ancora ricevuto il via,
+                    // dunque non c'è lavoro da annullare né un'apertura da
+                    // avanzare. Il chiamante conserva la propria transazione
+                    // e ne percorre il rollback dopo che tutti i nati sono
+                    // stati raccolti.
+                    gate.release(WorkerStart::Cancelled);
+                    for worker in workers {
+                        let _ = worker.join();
+                    }
+                    return Err(root);
+                }
+            }
+        }
+        gate.release(WorkerStart::Running);
         Ok(JobRunner { shared, workers })
     }
 
@@ -1386,6 +1470,105 @@ mod tests {
         assert!(
             *end.0.lock().unwrap(),
             "chi aspettava l'indicizzazione non è stato svegliato"
+        );
+    }
+
+    /// Una `spawn` fallita **dopo** che un worker è nato non gli consegna una
+    /// fetta dell'apertura e non prova a fermarlo attraverso il workspace.
+    ///
+    /// Il turno resta intenzionalmente in mano al chiamante, come dentro
+    /// `OpeningTransaction`: il vecchio rollback chiamava `stop`, poi aspettava
+    /// il worker che a sua volta aspettava questo turno. I due canali mettono in
+    /// scena il punto esatto senza sonni: il secondo tentativo fallisce soltanto
+    /// dopo che il primo thread è davvero entrato nella propria closure.
+    #[test]
+    fn partial_spawn_cancels_and_joins_before_touching_the_opening() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let _opening_turn = shared.workspace.write_turn();
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(0);
+        let (exited_tx, exited_rx) = std::sync::mpsc::channel();
+        let mut entered_tx = Some(entered_tx);
+        let mut exited_tx = Some(exited_tx);
+        let mut attempts = 0;
+
+        let started = JobRunner::start_workers_with(Arc::clone(&shared), 2, |builder, worker| {
+            attempts += 1;
+            if attempts == 2 {
+                entered_rx.recv().expect("il primo worker è realmente nato");
+                let opening = shared.opening.read().expect("l'apertura è leggibile");
+                let opening = opening.as_ref().expect("l'apertura resta al chiamante");
+                assert_eq!(
+                    opening.work.done(),
+                    0,
+                    "un worker ha portato avanti l'apertura prima del rollback"
+                );
+                assert!(
+                    shared
+                        .workspace
+                        .read()
+                        .expect("il workspace è leggibile")
+                        .documents()
+                        .is_empty(),
+                    "un worker ha pubblicato documenti prima del rollback"
+                );
+                return Err(std::io::Error::other("spawn di prova"));
+            }
+
+            let entered = entered_tx.take().expect("un solo worker nasce");
+            let exited = exited_tx.take().expect("un solo worker termina");
+            builder.spawn(move || {
+                entered.send(()).expect("il test osserva il worker");
+                worker();
+                exited.send(()).expect("il test osserva l'uscita");
+            })
+        });
+        let error = match started {
+            Err(error) => error,
+            Ok(mut runner) => {
+                drop(_opening_turn);
+                runner.stop();
+                panic!("il secondo spawn doveva fallire");
+            }
+        };
+
+        assert_eq!(attempts, 2, "il guasto arriva dopo un worker reale");
+        assert_eq!(
+            error,
+            PluginError::Io(
+                "impossibile avviare il thread del pool: spawn di prova"
+                    .to_string()
+                    .into()
+            ),
+            "il rollback non deve sostituire il guasto di spawn"
+        );
+        exited_rx
+            .recv()
+            .expect("il worker parziale termina prima del ritorno");
+        assert!(
+            matches!(
+                exited_rx.try_recv(),
+                Err(std::sync::mpsc::TryRecvError::Disconnected)
+            ),
+            "il worker parziale ha lasciato vivo il proprio canale"
+        );
+        let opening = shared.opening.read().expect("l'apertura è leggibile");
+        assert_eq!(
+            opening
+                .as_ref()
+                .expect("l'apertura non è stata consumata")
+                .work
+                .done(),
+            0,
+            "il rollback ha avanzato l'apertura"
+        );
+        assert!(
+            shared
+                .workspace
+                .read()
+                .expect("il workspace è leggibile")
+                .documents()
+                .is_empty(),
+            "il rollback ha modificato il workspace"
         );
     }
 

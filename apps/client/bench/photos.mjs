@@ -61,21 +61,14 @@
 // # Perché solo Linux
 //
 // Un browser pinnato garantisce lo stesso motore, non da solo gli stessi
-// **caratteri resi**. Fino alla §31.3 la scala che questa shell chiede
-// (`--font-ui`) si risolveva nel carattere di sistema, diverso su tre sistemi
-// operativi: fotografare su macOS avrebbe voluto dire un secondo insieme di
-// baseline che nessuno confronta col primo. La 0168 ha portato i tre
-// caratteri in bundle — la variabile che questo commento nominava non c'è
-// più — ma la riga resta locale lo stesso: le baseline che l'app porta oggi
-// sono state scattate su una macchina che Playwright stesso segnala come non
-// supportata (build di ripiego), non sul runner `ubuntu-latest` che userebbe
-// la CI. È probabile che un font incorporato renda identico sulle due
-// macchine — Chromium usa la propria pipeline di font shaping per un webfont,
-// non quella di sistema — ma questo file misura invece di argomentare
-// ([0167](../../docs/decisions/0192-impostazioni-locale-e-temi.md)), e nessuno
-// l'ha ancora misurato da dentro `ubuntu-latest`. Il confronto entra in CI
-// quando qualcuno rigenera le baseline lì, o accetta che un primo tentativo
-// possa uscire rosso per drift ambientale e non per un difetto vero.
+// caratteri resi. Le baseline canoniche sono quindi un solo insieme Linux:
+// il commit `7463f725` le ha rigenerate su `ubuntu-latest` con la revisione
+// Playwright del lockfile, dopo aver incorporato i font e neutralizzato il
+// puntatore fra le scene. Quel commit ha ripetuto il banco 42/42 senza
+// allargare `COLOR_THRESHOLD` o `DIFF_THRESHOLD`; la CI continua a verificare
+// le stesse immagini e poi l'accessibilità nello stesso job `ubuntu-latest`.
+// Un esito locale diverso su una distribuzione o build di ripiego è drift
+// ambientale da diagnosticare, non un motivo per riscrivere i PNG.
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
@@ -142,7 +135,7 @@ async function aPhoto(page, scene, light, base) {
     await prepareScene(page, scene, light, base, sceneUrl);
     shot = await stillShot(page);
   } catch (e) {
-    row.result = OUTCOMES.unstable;
+    row.outcome = OUTCOMES.unstable;
     row.reason = e.message.split("\n")[0];
     console.error(`✗ ${name}: ${row.reason}`);
     return row;
@@ -168,7 +161,7 @@ async function aPhoto(page, scene, light, base) {
   const now = PNG.sync.read(shot);
   if (before.width !== now.width || before.height !== now.height) {
     row.outcome = OUTCOMES.changed;
-    row.reason = `misura diversa: ${first.width}×${first.height} → ${now.width}×${now.height}`;
+    row.reason = `misura diversa: ${before.width}×${before.height} → ${now.width}×${now.height}`;
     console.error(`✗ ${name}: ${row.reason}`);
     return row;
   }
@@ -225,8 +218,8 @@ async function sideBySide(report) {
               ? `<p class="guasto">${esc(r.reason ?? "non fotografata")}</p>`
               : `<img loading="lazy" src="attuale/${r.name}" alt="${esc(scene.title)} — ${r.light}">`;
           return `<figure class="luce-${r.light}">
-        <figcaption>${r.light === "dark" ? "scuro" : "chiaro"} · <span class="esito esito-${slug(r.outcome)}">${esc(r.result)}</span>${
-          r.reason && r.result !== OUTCOMES.unstable ? ` · ${esc(r.reason)}` : ""
+        <figcaption>${r.light === "dark" ? "scuro" : "chiaro"} · <span class="esito esito-${slug(r.outcome)}">${esc(r.outcome)}</span>${
+          r.reason && r.outcome !== OUTCOMES.unstable ? ` · ${esc(r.reason)}` : ""
         }</figcaption>
         ${image}
         ${difference ? `<img loading="lazy" class="differenza" src="differenze/${r.name}" alt="differenza">` : ""}

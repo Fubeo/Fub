@@ -17,6 +17,7 @@ use fub_abi::model::DocId;
 use fub_features::{VersionStore, VersioningHandler, VERSIONING_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{data_root, FormatRegistry, Workspace};
+use fub_testkit::restore_document;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -216,7 +217,7 @@ fn a_restore_from_a_folder_reunites_the_notes_with_its_history() {
         .unwrap();
 
     let trashed = ws.delete_document(&notes).unwrap();
-    let restored = ws.restore_from_trash(&trashed, None).unwrap();
+    let restored = restore_document(&mut ws, &trashed, None).unwrap();
 
     // Il sidecar riporta la nota NELLA SUA CARTELLA: la storia è ancora sotto
     // la stessa chiave, con lo snapshot del ripristino in coda — niente storia
@@ -243,9 +244,7 @@ fn a_restore_under_a_new_name_migrates_the_history() {
     ws.write_document(&notes, "usurpatrice\n", WriteBase::Dictated)
         .unwrap();
 
-    let restored = ws
-        .restore_from_trash(&trashed, Some(DocId::new("Nota 1.md")))
-        .unwrap();
+    let restored = restore_document(&mut ws, &trashed, Some(DocId::new("Nota 1.md"))).unwrap();
 
     assert_eq!(restored, DocId::new("Nota 1.md"));
     // La storia della prima vita ha seguito la nota sul nuovo path (il

@@ -27,6 +27,7 @@ function entry(over: Partial<CommandSpec> = {}): CommandEntry {
     id: s.id,
     title: s.title,
     description: s.description,
+    layer: s.scope.reach === "document" ? "document" : "global",
     binding: s.keybinding,
     declared: s.keybinding,
     spec: s,

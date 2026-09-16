@@ -103,6 +103,7 @@ export function mountQuickSwitcher(): void {
     id: "shell.switcher",
     title: "commands.switcher",
     description: "commands.switcher.desc",
+    layer: "global",
     run: () => openQuickSwitcher(),
   });
   // **Cancellare la memoria**, e perché il comando è di *shell* e non del
@@ -123,6 +124,7 @@ export function mountQuickSwitcher(): void {
     id: "shell.history.clear",
     title: "commands.history_clear",
     description: "commands.history_clear.desc",
+    layer: "global",
     run: () => {
       forgetAll();
       notify(t("history.cleared"), "info");

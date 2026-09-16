@@ -76,13 +76,21 @@ ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
 
 ### Proseguire le superfici condivise
 
-Le fasi 0–4 del piano sono concluse su `main`: il motore testuale ha già il
-secondo cliente e `DocumentSession` è estratta. Il seguito parte dalla fase 5,
-`DocumentSurfaceRegistry`, con risoluzione, collisioni esplicite e fallback.
+Le fasi 0–9 del piano sono concluse nello stack candidato: il motore testuale ha
+il secondo cliente, `DocumentSession` è estratta, `DocumentSurfaceRegistry`
+risolve formato, specie della sorgente e fallback senza collisioni silenziose e
+ogni superficie dichiara le proprie modalità. La tastiera arbitra popup,
+editor, superficie, profilo, documento, riquadro e globale senza listener
+aggiuntivi nei renderer.
 
-Seguono modalità e tastiera per superficie, formato pilota `.fubsheet`,
-vertical slice della griglia e misura del protocollo. L'estensione ABI/WIT
-resta l'ultima fase, dopo casi reali, limiti e teardown verificati.
+Il formato pilota `.fubsheet` dispone di schema testuale v1, identità stabili,
+limiti e proiezioni comuni. La vertical slice `GridEngine` aggiunge viewport
+virtualizzata, editor condivisi, operazioni atomiche, undo separato, TSV,
+accessibilità e valutazione Rust autorevole. La misura del protocollo è fissata
+nella [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md):
+sessione derivata, finestre limitate, patch coordinate e invalidazioni
+dipendenti sostituiscono sorgente e valutazione complete a ogni commit. La fase
+10 pubblica soltanto questi tipi minimi in ABI/WIT con clienti nativo e WASM.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:

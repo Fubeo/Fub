@@ -28,6 +28,7 @@ use std::sync::Arc;
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::format::SourceKind;
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
@@ -35,6 +36,8 @@ use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
 use fub_host::{doc_id, Delivery, EventSink, Host};
+use fub_wasm_host::installed::Consent;
+use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -43,6 +46,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
 pub use fub_host::{BundleInfo, EmbedContent, UnreadDoc, VaultEntry, VaultInfo};
+pub use fub_wasm_host::managed::InstalledPluginInfo;
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
 /// `apps/client/src/host/contract.ts`.
@@ -53,6 +57,68 @@ pub use fub_host::{BundleInfo, EmbedContent, UnreadDoc, VaultEntry, VaultInfo};
 pub struct OpenVaults {
     pub roots: Vec<String>,
     pub current: Option<String>,
+}
+
+enum InstalledAvailability {
+    Ready(Arc<InstalledPluginManager>),
+    NotConfigured,
+    Failed(PluginError),
+}
+
+struct InstalledPlugins {
+    availability: InstalledAvailability,
+}
+
+impl InstalledPlugins {
+    fn new(availability: InstalledAvailability) -> Self {
+        Self { availability }
+    }
+
+    fn manager(&self) -> Result<Arc<InstalledPluginManager>, PluginError> {
+        match &self.availability {
+            InstalledAvailability::Ready(manager) => Ok(manager.clone()),
+            InstalledAvailability::NotConfigured => Err(PluginError::Unserved(
+                "installed plugin storage is unavailable without a machine configuration path"
+                    .into(),
+            )),
+            InstalledAvailability::Failed(error) => Err(error.clone()),
+        }
+    }
+
+    fn manager_for_legacy(&self) -> Option<Arc<InstalledPluginManager>> {
+        match &self.availability {
+            InstalledAvailability::Ready(manager) => Some(manager.clone()),
+            InstalledAvailability::NotConfigured | InstalledAvailability::Failed(_) => None,
+        }
+    }
+
+    fn begin_shutdown(&self) -> Result<Option<InstalledShutdown>, PluginError> {
+        match &self.availability {
+            InstalledAvailability::Ready(manager) => manager.begin_shutdown().map(Some),
+            InstalledAvailability::NotConfigured | InstalledAvailability::Failed(_) => Ok(None),
+        }
+    }
+}
+
+async fn run_installed<T, F>(app: AppHandle, action: F) -> Result<T, PluginError>
+where
+    T: Send + 'static,
+    F: FnOnce(&InstalledOperation, &Host) -> Result<T, PluginError> + Send + 'static,
+{
+    let installed = app.state::<InstalledPlugins>();
+    let manager = installed.manager()?;
+    let operation = manager.begin_operation()?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        action(&operation, &host)
+    })
+    .await
+    .map_err(|error| {
+        PluginError::Internal(
+            format!("installed plugin operation did not complete: {error}").into(),
+        )
+    })?
 }
 
 /// Il ponte eventi verso il webview: l'unica implementazione di [`EventSink`]
@@ -187,21 +253,20 @@ fn session_notice(host: State<Host>) -> Option<fub_abi::Notice> {
 // La **capacità** omonima resta dov'era (`VaultRead::list_documents`): quella
 // la `Page` la prende, ed è l'elenco dei plugin, non quello della shell.
 
-/// Il sorgente di un documento **e la revisione che lo nomina** (§18.1):
-/// rispecchiato da `DocumentSource` in `apps/client/src/host/contract.ts`.
+/// Il sorgente di un documento, la revisione che lo nomina e i metadati con
+/// cui la shell sceglie la superficie (§18.1, §11.4): rispecchiato da
+/// `DocumentSource` in `apps/client/src/host/contract.ts`.
 ///
-/// Due campi e non uno perché chi apre un documento è chi lo salverà, e per
-/// salvarlo in sicurezza deve poter dire da cosa era partito. Viaggiano
-/// **insieme** e non in due porte per la ragione per cui la revisione è opaca
-/// (`fub_abi::edit`): l'alternativa a riceverla è ricalcolarla di là dal
-/// confine, cioè una seconda implementazione di come questo host deriva le
-/// impronte — due implementazioni che a un certo punto divergono, e la seconda
-/// mente in silenzio. Qui la deriva chi ha appena letto il file, dallo stesso
-/// testo, senza rileggere niente.
+/// Viaggiano **insieme**: chi apre il documento deve sia salvarlo contro la
+/// revisione letta, sia montare la superficie dichiarata dal registro dei
+/// formati. Separarli in più porte aggiungerebbe un viaggio IPC e potrebbe
+/// associare al buffer metadati letti dopo un cambio di registro.
 #[derive(serde::Serialize)]
 pub struct DocumentSource {
     pub text: String,
     pub revision: String,
+    pub format_id: Option<String>,
+    pub source_kind: SourceKind,
 }
 
 #[tauri::command]
@@ -210,10 +275,17 @@ fn read_document(
     id: String,
     vault: Option<String>,
 ) -> Result<DocumentSource, PluginError> {
-    let (text, revision) = host.read_document(vault.as_deref(), &doc_id(&id)?)?;
+    let id = doc_id(&id)?;
+    let (text, revision, format) = host.read_document_with_format(vault.as_deref(), &id)?;
+    let format_id = format.as_ref().map(|known| known.descriptor.id.clone());
+    let source_kind = format
+        .map(|known| known.descriptor.source)
+        .unwrap_or(SourceKind::Text);
     Ok(DocumentSource {
         text,
         revision: revision.0,
+        format_id,
+        source_kind,
     })
 }
 
@@ -686,17 +758,102 @@ fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleIn
     host.bundles(vault.as_deref())
 }
 
-/// Accende o spegne un componente, adesso e per i prossimi avvii. Restituisce
-/// ciò che è andato storto **spegnendo**, che non è un motivo per non spegnere:
-/// gli errori interi, come `close_vault`, e per la stessa ragione.
+fn parse_installation(installation: &str) -> Result<u64, PluginError> {
+    if installation.is_empty() || !installation.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(PluginError::BadArgs(
+            format!("invalid installation id: `{installation}`").into(),
+        ));
+    }
+    installation.parse::<u64>().map_err(|_| {
+        PluginError::BadArgs(format!("invalid installation id: `{installation}`").into())
+    })
+}
+
 #[tauri::command]
-fn set_plugin_enabled(
-    host: State<Host>,
+async fn list_installed_plugins(
+    app: AppHandle,
+    vault: Option<String>,
+) -> Result<Vec<InstalledPluginInfo>, PluginError> {
+    run_installed(app, move |manager, host| {
+        manager.list(host, vault.as_deref())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn install_plugin(app: AppHandle, path: String) -> Result<InstalledPluginInfo, PluginError> {
+    run_installed(app, move |manager, _host| {
+        manager.install(&Utf8PathBuf::from(path))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_installed_plugin_enabled(
+    app: AppHandle,
+    installation: String,
+    enabled: bool,
+) -> Result<Vec<PluginError>, PluginError> {
+    let installation = parse_installation(&installation)?;
+    run_installed(app, move |manager, host| {
+        manager.set_enabled(host, installation, enabled)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn set_installed_plugin_consent(
+    app: AppHandle,
+    installation: String,
+    consent: Consent,
+) -> Result<Vec<PluginError>, PluginError> {
+    let installation = parse_installation(&installation)?;
+    run_installed(app, move |manager, host| {
+        manager.set_consent(host, installation, consent)
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_installed_plugin(
+    app: AppHandle,
+    installation: String,
+) -> Result<Vec<PluginError>, PluginError> {
+    let installation = parse_installation(&installation)?;
+    run_installed(app, move |manager, host| manager.remove(host, installation)).await
+}
+
+/// Conserva il comando storico per i bundle ufficiali e nativi. Il manager
+/// prende autorità soltanto quando il runtime selezionato appartiene al claim
+/// installato; un record collidente o non noto continua sul percorso nativo.
+#[tauri::command]
+async fn set_plugin_enabled(
+    app: AppHandle,
     id: String,
     enabled: bool,
     vault: Option<String>,
 ) -> Result<Vec<PluginError>, PluginError> {
-    host.set_plugin_enabled(vault.as_deref(), &id, enabled)
+    let installed = app.state::<InstalledPlugins>();
+    let operation = installed
+        .manager_for_legacy()
+        .map(|manager| manager.begin_operation())
+        .transpose()?;
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let host = app.state::<Host>();
+        if let Some(operation) = operation {
+            if let Some(errors) =
+                operation.set_enabled_by_id(&host, vault.as_deref(), &id, enabled)?
+            {
+                return Ok(errors);
+            }
+        }
+        host.set_plugin_enabled(vault.as_deref(), &id, enabled)
+    })
+    .await
+    .map_err(|error| {
+        PluginError::Internal(format!("plugin toggle did not complete: {error}").into())
+    })?
 }
 
 /// I vault che questa macchina conosce: preferiti, poi recenti.
@@ -754,33 +911,59 @@ fn discard_keybindings(host: State<Host>, vault: Option<String>) -> Result<(), P
 }
 
 pub fn run() {
-    // Il collettore del log si installa **prima** di tutto: le righe che
-    // `Host::installed` scrive aprendo i file della macchina devono avere un
-    // posto dove andare (§17.3, decisione 0062). L'`Arc` torna qui e passa
-    // all'host, perché è lo stesso su cui il montaggio cambierà il livello
-    // leggendo le impostazioni.
-    let (levels, warning) = fub_host::install_logging();
+    // Il bootstrap sceglie la cartella canonica una volta sola. Log, host e
+    // store installato ricevono lo stesso valore: nessun proprietario riapre
+    // l'ambiente o deduce una seconda posizione.
+    let config_dir = fub_host::config_dir();
+    let (levels, warning) = fub_host::install_logging(config_dir.as_deref());
+    let installed_availability = match config_dir.as_deref() {
+        Some(dir) => {
+            tracing::info!(
+                target: "fub.app",
+                config_dir = %dir,
+                "opening installed plugin manager"
+            );
+            match InstalledPluginManager::open(dir) {
+                Ok(manager) => InstalledAvailability::Ready(Arc::new(manager)),
+                Err(error) => {
+                    tracing::error!(
+                        target: "fub.app",
+                        config_dir = %dir,
+                        error = %error,
+                        "installed plugin manager unavailable"
+                    );
+                    InstalledAvailability::Failed(error)
+                }
+            }
+        }
+        None => InstalledAvailability::NotConfigured,
+    };
+
     // Il sink è un parametro del montaggio, quindi l'host si costruisce qui e
     // non nel `setup`; l'handle che gli manca ce lo mette il `setup` (vedi
     // `WebviewEvents`).
     let sink = Arc::new(WebviewEvents::default());
     let bridge = sink.clone();
+    let mut host = Host::new();
+    if let Some(dir) = config_dir.as_deref() {
+        host = host.with_config_dir(dir);
+    }
+    host = host
+        .with_session_notice(warning)
+        .with_levels(levels)
+        .with_sink(sink);
+    // Keep the manager alive in `InstalledPlugins`; the startup source is the
+    // sole host integration point and its snapshot also carries formats.
+    if let InstalledAvailability::Ready(manager) = &installed_availability {
+        host = host.with_startup_source(manager.clone());
+    }
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        // `installed()` e non `new()`: è qui che Fub è un'**installazione** —
-        // con una cartella di configurazione, un livello macchina e un registro
-        // dei vault. Un test o un e2e headless costruiscono `Host::new()`, che
-        // lavora in memoria e non tocca la configurazione di chi lo esegue.
-        // L'avviso di `install_logging` entra da qui: è nato prima dell'host,
-        // e questo è il punto più basso che lo può tenere fino al tiraggio
-        // della shell (§25.5).
-        .manage(
-            Host::installed()
-                .with_session_notice(warning)
-                .with_levels(levels)
-                .with_sink(sink),
-        )
+        .manage(host)
+        .manage(InstalledPlugins::new(installed_availability));
+
+    builder
         .setup(move |app| {
             let _ = bridge.0.set(app.handle().clone());
             let zoom = app
@@ -824,6 +1007,11 @@ pub fn run() {
             view_state,
             set_view_state,
             list_bundles,
+            list_installed_plugins,
+            install_plugin,
+            set_installed_plugin_enabled,
+            set_installed_plugin_consent,
+            remove_installed_plugin,
             set_plugin_enabled,
             known_vaults,
             set_vault_favorite,
@@ -847,6 +1035,7 @@ pub fn run() {
         // chiuderli.
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
+                let shutdown = app.state::<InstalledPlugins>().begin_shutdown();
                 for and in app.state::<Host>().close() {
                     // L'app sta uscendo: il ponte verso la shell sta morendo e
                     // non c'è nessuno che disegna un evento. Resta il log, che è
@@ -856,6 +1045,41 @@ pub fn run() {
                     // ancora riparare a schermo spento (0062).
                     tracing::warn!(target: "fub.app", "vault closure: {and}");
                 }
+                match shutdown {
+                    Ok(Some(shutdown)) => {
+                        if let Err(and) = shutdown.finish() {
+                            tracing::error!(
+                                target: "fub.app",
+                                "installed plugin manager did not drain: {and}"
+                            );
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(and) => tracing::error!(
+                        target: "fub.app",
+                        "installed plugin manager did not begin shutdown; host closure completed: {and}"
+                    ),
+                }
             }
         });
+}
+
+#[cfg(test)]
+mod installed_ipc_tests {
+    use super::*;
+
+    #[test]
+    fn installation_ids_are_strict_decimal_u64_strings() {
+        assert_eq!(parse_installation("0").unwrap(), 0);
+        assert_eq!(
+            parse_installation("18446744073709551615").unwrap(),
+            u64::MAX
+        );
+        for invalid in ["", "-1", "+1", " 1", "1 ", "١", "18446744073709551616"] {
+            assert!(
+                matches!(parse_installation(invalid), Err(PluginError::BadArgs(_))),
+                "{invalid:?} deve essere rifiutato"
+            );
+        }
+    }
 }

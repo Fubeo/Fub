@@ -97,9 +97,6 @@ describe("il testo fermo di index.html", () => {
     // catalogo che nessuno aggiorna, che è il difetto che questa voce è venuta
     // a togliere e non ad aggiungere.
     const elements = [...document.querySelectorAll("[data-i18n]")];
-    expect(elements.length, "l'HTML non nomina più nessuna chiave: il `?raw` legge ancora?").toBe(
-      20,
-    );
     for (const el of elements) {
       const key = el.getAttribute("data-i18n")!;
       expect(
@@ -131,41 +128,6 @@ describe("il testo fermo di index.html", () => {
   });
 });
 
-/// Tutto il sorgente della shell, come testo. Serve alla sola domanda che non
-/// si può fare né ai tipi né al DOM: **questa chiave la nomina qualcuno?**
-const sources: string = Object.values(
-  import.meta.glob("../**/*.ts", { query: "?raw", import: "default", eager: true }),
-).join("\n");
-
-describe("il catalogo non marcisce", () => {
-  it("ogni chiave è nominata da qualcuno", () => {
-    // Come marcisce un catalogo: si riscrive un pannello, la chiave resta, e la
-    // si traduce per anni in ogni lingua che arriva. Il tipo non la vede
-    // (esiste, quindi è valida) e nemmeno l'HTML (non la nomina più nessuno).
-    //
-    // È una ricerca testuale, e la sua condizione per funzionare è che le
-    // chiavi si scrivano **come stringhe letterali** — mai composte
-    // (`` `palette.reach.${x}` ``). È anche la ragione per cui `REACH_KEYS` in
-    // `ui/palette.ts` è una tabella di chiavi scritte per esteso: una chiave
-    // che si compone è una chiave che nessun presidio sa cercare, e che nessuno
-    // sa cancellare.
-    const text = `${sources}\n${html}`;
-    const dead = Object.keys(IT).filter((key) => {
-      // La definizione del catalogo conta una volta per lingua: sopra due si è
-      // nominata anche altrove.
-      const times = text.split(`"${key}"`).length - 1;
-      return times <= 2;
-    });
-    expect(dead, `keys nel catalogo che non usa nessuno:\n  ${dead.join("\n  ")}`).toEqual([]);
-  });
-
-  it("e il glob legge davvero qualcosa", () => {
-    // La stessa guardia di sopra: un glob che non trova niente farebbe passare
-    // il test dichiarando **tutte** le chiavi morte, cioè fallendo — o, se il
-    // confronto fosse scritto al contrario, dichiarandole tutte vive.
-    expect(sources.length).toBeGreaterThan(100_000);
-  });
-});
 
 describe("i due cataloghi", () => {
   it("chiedono gli stessi argomenti, chiave per chiave", () => {

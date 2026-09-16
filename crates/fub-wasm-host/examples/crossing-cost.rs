@@ -86,7 +86,7 @@ use fub_abi::traits::{HostApi, JobSpec, Plugin, PluginManifest, PluginPermission
 use fub_abi::PluginError;
 use fub_host::registry::Bundle;
 use fub_host::{Host, NoWatcher};
-use fub_kernel::{Subscription, Trust, Workspace};
+use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::{Component, WasmBundle};
 
 /// L'id che i due backend si contendono. È **lo stesso** di proposito: due
@@ -319,7 +319,7 @@ impl Bundle for NativeBundle {
         Box::new(PingNativo { on: 0 })
     }
 
-    fn register(&self, _ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, _registrar: &mut fub_host::registry::Registrar<'_>) -> Vec<String> {
         // Vuoto come quello del `WasmBundle`: il quarto passo del montaggio non
         // attraversa ancora il confine, e registrare un `CommandProvider` di
         // qua e non di là renderebbe i due montaggi due cose diverse.

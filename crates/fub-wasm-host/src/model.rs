@@ -31,8 +31,10 @@
 //! e sarà un altro passo con le sue domande (gli indici fuori range, che di
 //! qua sono impossibili per costruzione e di là sono dato di un estraneo).
 
+use fub_abi::arena;
+use fub_abi::format::ParseContext;
 use fub_abi::model as rm;
-use fub_abi::PluginError;
+use fub_abi::{FormatError, PluginError};
 
 use crate::contract::fub::abi::model as wm;
 use crate::translate as tr;
@@ -75,7 +77,6 @@ pub(crate) const MAX_DEPTH: u32 = rm::MAX_DOCUMENT_DEPTH;
 /// Fallisce solo per l'albero: le tabelle piatte (outline, link, tag, ancore) e
 /// il frontmatter sono conversioni totali, l'unica domanda che può ricevere un
 /// «no» è quanto è profondo il corpo.
-/// «no» è quanto è profondo il corpo.
 pub(crate) fn to_document(m: rm::DocumentModel) -> Result<wm::DocumentModel, PluginError> {
     if exceeds_depth(&m.body) {
         discard_document_model(m);
@@ -94,6 +95,635 @@ pub(crate) fn to_document(m: rm::DocumentModel) -> Result<wm::DocumentModel, Plu
     })
 }
 
+/// Reconstituisce un modello consegnato da un guest, dopo averlo trattato come
+/// input non fidato. `source` è la sorgente dalla quale il provider ha
+/// calcolato gli span: non accettiamo coordinate in un altro spazio.
+pub(crate) fn from_document(
+    m: wm::DocumentModel,
+    ctx: &ParseContext,
+    source: &fub_abi::format::DocumentSource,
+) -> Result<rm::DocumentModel, FormatError> {
+    if m.id != ctx.doc_id {
+        return Err(parse_error(format!(
+            "document id {:?} does not match parse context {:?}",
+            m.id, ctx.doc_id
+        )));
+    }
+    let frontmatter: serde_json::Value = serde_json::from_str(&m.frontmatter)
+        .map_err(|e| parse_error(format!("invalid frontmatter JSON: {e}")))?;
+    let frontmatter = frontmatter
+        .as_object()
+        .cloned()
+        .ok_or_else(|| parse_error("frontmatter JSON must be an object"))?;
+    validate_metadata(&m, source)?;
+    preflight(&m.body, source)?;
+    let body = arena_tree(&m.body)?
+        .rebuild()
+        .map_err(|e| parse_error(e.to_string()))?;
+    Ok(rm::DocumentModel {
+        id: rm::DocId::new(m.id),
+        frontmatter: rm::Frontmatter(frontmatter),
+        body,
+        outline: m
+            .outline
+            .into_iter()
+            .map(from_heading)
+            .collect::<Result<_, _>>()?,
+        links: m
+            .links
+            .into_iter()
+            .map(from_link)
+            .collect::<Result<_, _>>()?,
+        tags: m.tags.into_iter().map(from_tag).collect::<Result<_, _>>()?,
+        anchors: m
+            .anchors
+            .into_iter()
+            .map(from_anchor)
+            .collect::<Result<_, _>>()?,
+        text: m.text,
+        frontmatter_present: m.frontmatter_present,
+    })
+}
+
+fn parse_error(message: impl Into<String>) -> FormatError {
+    FormatError::Parse(message.into())
+}
+
+fn span(s: wm::Span, source: &fub_abi::format::DocumentSource) -> Result<arena::Span, FormatError> {
+    let bytes = source.bytes();
+    if s.start > s.end || s.end > bytes.len() as u64 {
+        return Err(parse_error(format!(
+            "invalid span [{}, {})",
+            s.start, s.end
+        )));
+    }
+    if let Some(text) = source.text() {
+        let (start, end) = (s.start as usize, s.end as usize);
+        if !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+            return Err(parse_error(format!(
+                "span [{}, {}) is not on UTF-8 boundaries",
+                s.start, s.end
+            )));
+        }
+    }
+    Ok(arena::Span {
+        start: s.start,
+        end: s.end,
+    })
+}
+
+fn validate_span(s: wm::Span, source: &fub_abi::format::DocumentSource) -> Result<(), FormatError> {
+    span(s, source).map(|_| ())
+}
+
+fn validate_metadata(
+    m: &wm::DocumentModel,
+    source: &fub_abi::format::DocumentSource,
+) -> Result<(), FormatError> {
+    for h in &m.outline {
+        validate_span(h.span, source)?;
+    }
+    for l in &m.links {
+        validate_span(l.span, source)?;
+    }
+    for t in &m.tags {
+        validate_span(t.span, source)?;
+    }
+    for a in &m.anchors {
+        validate_span(a.span, source)?;
+        validate_span(a.marker, source)?;
+    }
+    Ok(())
+}
+
+fn arena_tree(t: &wm::DocumentTree) -> Result<arena::DocumentTree, FormatError> {
+    Ok(arena::DocumentTree {
+        blocks: t.blocks.iter().map(from_block).collect::<Result<_, _>>()?,
+        inlines: t
+            .inlines
+            .iter()
+            .map(from_inline)
+            .collect::<Result<_, _>>()?,
+        roots: t.roots.iter().copied().map(arena::BlockRef).collect(),
+    })
+}
+
+fn from_span(s: wm::Span) -> Result<rm::Span, FormatError> {
+    arena::Span {
+        start: s.start,
+        end: s.end,
+    }
+    .try_into()
+    .map_err(|e: arena::ArenaError| parse_error(e.to_string()))
+}
+fn from_target(t: wm::LinkTarget) -> rm::LinkTarget {
+    match t {
+        wm::LinkTarget::Wiki(v) => rm::LinkTarget::Wiki {
+            page: v.page,
+            heading: v.heading,
+            block: v.block,
+        },
+        wm::LinkTarget::Url(v) => rm::LinkTarget::Url(v),
+        wm::LinkTarget::Path(v) => rm::LinkTarget::Path(v),
+    }
+}
+fn from_heading(h: wm::Heading) -> Result<rm::Heading, FormatError> {
+    Ok(rm::Heading {
+        level: h.level,
+        text: h.text,
+        slug: h.slug,
+        span: from_span(h.span)?,
+        explicit_anchor: h.explicit_anchor,
+    })
+}
+fn from_link(l: wm::Link) -> Result<rm::Link, FormatError> {
+    Ok(rm::Link {
+        target: from_target(l.target),
+        embed: l.embed,
+        span: from_span(l.span)?,
+        context: l.context,
+    })
+}
+fn from_tag(t: wm::Tag) -> Result<rm::Tag, FormatError> {
+    Ok(rm::Tag {
+        name: t.name,
+        span: from_span(t.span)?,
+    })
+}
+fn from_anchor(a: wm::Anchor) -> Result<rm::Anchor, FormatError> {
+    Ok(rm::Anchor {
+        id: a.id,
+        span: from_span(a.span)?,
+        marker: from_span(a.marker)?,
+    })
+}
+
+fn from_inline(i: &wm::Inline) -> Result<arena::Inline, FormatError> {
+    Ok(match i {
+        wm::Inline::Text(v) => arena::Inline::Text(v.clone()),
+        wm::Inline::Emph(v) => {
+            arena::Inline::Emph(v.iter().copied().map(arena::InlineRef).collect())
+        }
+        wm::Inline::Strong(v) => {
+            arena::Inline::Strong(v.iter().copied().map(arena::InlineRef).collect())
+        }
+        wm::Inline::Code(v) => arena::Inline::Code(v.clone()),
+        wm::Inline::Link(v) => arena::Inline::Link {
+            target: from_target(v.target.clone()),
+            label: v
+                .label
+                .as_ref()
+                .map(|x| x.iter().copied().map(arena::InlineRef).collect()),
+            embed: v.embed,
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Inline::TagRef(v) => arena::Inline::TagRef {
+            name: v.name.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Inline::Custom(v) => arena::Inline::Custom {
+            custom_kind: v.custom_kind.clone(),
+            attrs: serde_json::from_str(&v.attrs)
+                .map_err(|e| parse_error(format!("invalid custom attrs JSON: {e}")))?,
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Inline::Superscript(v) => {
+            arena::Inline::Superscript(v.iter().copied().map(arena::InlineRef).collect())
+        }
+        wm::Inline::Strikethrough(v) => {
+            arena::Inline::Strikethrough(v.iter().copied().map(arena::InlineRef).collect())
+        }
+        wm::Inline::HardBreak => arena::Inline::HardBreak,
+        wm::Inline::SoftBreak => arena::Inline::SoftBreak,
+    })
+}
+
+fn from_row(r: &wm::TableRow) -> Result<arena::TableRow, FormatError> {
+    Ok(arena::TableRow {
+        cells: r
+            .cells
+            .iter()
+            .map(|c| {
+                Ok(arena::TableCell {
+                    inlines: c.inlines.iter().copied().map(arena::InlineRef).collect(),
+                    span: arena::Span {
+                        start: c.span.start,
+                        end: c.span.end,
+                    },
+                })
+            })
+            .collect::<Result<_, FormatError>>()?,
+    })
+}
+fn from_block(b: &wm::Block) -> Result<arena::Block, FormatError> {
+    Ok(match b {
+        wm::Block::Heading(v) => arena::Block::Heading {
+            level: v.level,
+            inlines: v.inlines.iter().copied().map(arena::InlineRef).collect(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+            explicit_anchor: v.explicit_anchor.clone(),
+        },
+        wm::Block::Paragraph(v) => arena::Block::Paragraph {
+            inlines: v.inlines.iter().copied().map(arena::InlineRef).collect(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Block::List(v) => arena::Block::List {
+            ordered: v.ordered,
+            items: v
+                .items
+                .iter()
+                .map(|x| arena::ListItem {
+                    blocks: x.blocks.iter().copied().map(arena::BlockRef).collect(),
+                    task: x.task.as_ref().map(|t| arena::TaskMarker {
+                        symbol: t.symbol,
+                        span: arena::Span {
+                            start: t.span.start,
+                            end: t.span.end,
+                        },
+                    }),
+                    span: arena::Span {
+                        start: x.span.start,
+                        end: x.span.end,
+                    },
+                })
+                .collect(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+            start: v.start,
+        },
+        wm::Block::CodeBlock(v) => arena::Block::CodeBlock {
+            lang: v.lang.clone(),
+            code: v.code.clone(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Block::Quote(v) => arena::Block::Quote {
+            blocks: v.blocks.iter().copied().map(arena::BlockRef).collect(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Block::ThematicBreak(v) => arena::Block::ThematicBreak {
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Block::Custom(v) => arena::Block::Custom {
+            custom_kind: v.custom_kind.clone(),
+            attrs: serde_json::from_str(&v.attrs)
+                .map_err(|e| parse_error(format!("invalid custom attrs JSON: {e}")))?,
+            blocks: v.blocks.iter().copied().map(arena::BlockRef).collect(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Block::Table(v) => arena::Block::Table {
+            head: v.head.as_ref().map(from_row).transpose()?,
+            rows: v.rows.iter().map(from_row).collect::<Result<_, _>>()?,
+            align: v
+                .align
+                .iter()
+                .map(|a| match a {
+                    wm::ColumnAlign::None => rm::ColumnAlign::None,
+                    wm::ColumnAlign::Left => rm::ColumnAlign::Left,
+                    wm::ColumnAlign::Center => rm::ColumnAlign::Center,
+                    wm::ColumnAlign::Right => rm::ColumnAlign::Right,
+                })
+                .collect(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+        wm::Block::ReferenceDefinition(v) => arena::Block::ReferenceDefinition {
+            label: v.label.clone(),
+            url: v.url.clone(),
+            title: v.title.clone(),
+            anchor: v.anchor.clone(),
+            span: arena::Span {
+                start: v.span.start,
+                end: v.span.end,
+            },
+        },
+    })
+}
+
+#[derive(Copy, Clone)]
+enum GuestNode {
+    Block(usize),
+    Inline(usize),
+}
+
+/// Host-side upper bound for the amount of guest-owned materialisation.
+///
+/// Costs are memoized per arena node, while root occurrences and repeated
+/// edges are charged separately.  Thus ordinary DAG reuse remains valid, but
+/// a compact graph whose rebuild would amplify exponentially is rejected before
+/// `DocumentTree::rebuild`.
+const MAX_MATERIALIZATION_UNITS: u64 = 8 * 1024 * 1024;
+
+fn preflight(
+    t: &wm::DocumentTree,
+    source: &fub_abi::format::DocumentSource,
+) -> Result<(), FormatError> {
+    let block_count = t.blocks.len();
+    let inline_count = t.inlines.len();
+    let total = block_count
+        .checked_add(inline_count)
+        .ok_or_else(|| parse_error("document tree is too large"))?;
+    let mut colour = vec![0u8; total];
+    let mut height = vec![0u32; total];
+    let mut cost = vec![0u64; total];
+    let mut roots = Vec::with_capacity(t.roots.len());
+    let mut root_seen = vec![false; block_count];
+
+    for root in &t.roots {
+        let at = usize::try_from(*root)
+            .map_err(|_| parse_error("root reference does not fit host usize"))?;
+        if at >= block_count {
+            return Err(parse_error(format!("dangling block reference {root}")));
+        }
+        root_seen[at] = true;
+        roots.push(at);
+    }
+    let _ = root_seen;
+
+    let mut work = Vec::new();
+    for start in 0..total {
+        let node = if start < block_count {
+            GuestNode::Block(start)
+        } else {
+            GuestNode::Inline(start - block_count)
+        };
+        if colour[start] != 0 {
+            continue;
+        }
+        work.push((node, false));
+        while let Some((node, leaving)) = work.pop() {
+            let at = match node {
+                GuestNode::Block(i) => i,
+                GuestNode::Inline(i) => block_count + i,
+            };
+            if leaving {
+                let mut children = Vec::new();
+                let local = match node {
+                    GuestNode::Block(i) => {
+                        block_children(&t.blocks[i], source, block_count, &mut children)?;
+                        block_cost(&t.blocks[i])
+                    }
+                    GuestNode::Inline(i) => {
+                        inline_children(&t.inlines[i], source, block_count, &mut children)?;
+                        inline_cost(&t.inlines[i])
+                    }
+                };
+                let mut h = 1u32;
+                let mut c = local;
+                for child in children {
+                    h = h.max(height[child].saturating_add(1));
+                    c = c.saturating_add(cost[child]);
+                }
+                if h > MAX_DEPTH {
+                    return Err(parse_error(format!(
+                        "document tree exceeds {MAX_DEPTH} levels of nesting"
+                    )));
+                }
+                height[at] = h;
+                cost[at] = c;
+                colour[at] = 2;
+                continue;
+            }
+            if colour[at] == 1 {
+                return Err(parse_error("document tree contains a cycle"));
+            }
+            if colour[at] == 2 {
+                continue;
+            }
+            colour[at] = 1;
+            work.push((node, true));
+            let mut children = Vec::new();
+            match node {
+                GuestNode::Block(i) => {
+                    block_children(&t.blocks[i], source, block_count, &mut children)?
+                }
+                GuestNode::Inline(i) => {
+                    inline_children(&t.inlines[i], source, block_count, &mut children)?
+                }
+            }
+            for child in children.into_iter().rev() {
+                if child >= total {
+                    return Err(parse_error("document tree contains a dangling reference"));
+                }
+                if colour[child] == 1 {
+                    return Err(parse_error("document tree contains a cycle"));
+                }
+                if colour[child] == 0 {
+                    work.push((
+                        if child < block_count {
+                            GuestNode::Block(child)
+                        } else {
+                            GuestNode::Inline(child - block_count)
+                        },
+                        false,
+                    ));
+                }
+            }
+        }
+    }
+
+    let mut materialized = 0u64;
+    for root in roots {
+        materialized = materialized.saturating_add(cost[root]);
+        if materialized > MAX_MATERIALIZATION_UNITS {
+            return Err(parse_error(format!(
+                "document tree materialization exceeds host budget \
+                 ({MAX_MATERIALIZATION_UNITS} units)"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn block_children(
+    b: &wm::Block,
+    source: &fub_abi::format::DocumentSource,
+    blocks: usize,
+    out: &mut Vec<usize>,
+) -> Result<(), FormatError> {
+    let mut refs = |r: &u32| {
+        out.push(usize::try_from(*r).unwrap_or(usize::MAX));
+    };
+    match b {
+        wm::Block::Heading(v) => {
+            validate_span(v.span, source)?;
+            v.inlines.iter().for_each(|r| {
+                out.push(blocks.saturating_add(usize::try_from(*r).unwrap_or(usize::MAX)))
+            });
+        }
+        wm::Block::Paragraph(v) => {
+            validate_span(v.span, source)?;
+            v.inlines.iter().for_each(|r| {
+                out.push(blocks.saturating_add(usize::try_from(*r).unwrap_or(usize::MAX)))
+            });
+        }
+        wm::Block::List(v) => {
+            validate_span(v.span, source)?;
+            for item in &v.items {
+                validate_span(item.span, source)?;
+                if let Some(task) = item.task {
+                    validate_span(task.span, source)?;
+                }
+                item.blocks.iter().for_each(&mut refs);
+            }
+        }
+        wm::Block::CodeBlock(v) => validate_span(v.span, source)?,
+        wm::Block::Quote(v) => {
+            validate_span(v.span, source)?;
+            v.blocks.iter().for_each(&mut refs);
+        }
+        wm::Block::ThematicBreak(v) => validate_span(v.span, source)?,
+        wm::Block::Custom(v) => {
+            validate_span(v.span, source)?;
+            serde_json::from_str::<serde_json::Value>(&v.attrs)
+                .map_err(|e| parse_error(format!("invalid custom attrs JSON: {e}")))?;
+            v.blocks.iter().for_each(&mut refs);
+        }
+        wm::Block::Table(v) => {
+            validate_span(v.span, source)?;
+            for row in v.head.iter().chain(v.rows.iter()) {
+                for cell in &row.cells {
+                    validate_span(cell.span, source)?;
+                    cell.inlines.iter().for_each(|r| {
+                        out.push(blocks.saturating_add(usize::try_from(*r).unwrap_or(usize::MAX)))
+                    });
+                }
+            }
+        }
+        wm::Block::ReferenceDefinition(v) => validate_span(v.span, source)?,
+    }
+    Ok(())
+}
+
+fn inline_children(
+    i: &wm::Inline,
+    source: &fub_abi::format::DocumentSource,
+    blocks: usize,
+    out: &mut Vec<usize>,
+) -> Result<(), FormatError> {
+    let mut refs = |r: &u32| {
+        out.push(blocks.saturating_add(usize::try_from(*r).unwrap_or(usize::MAX)));
+    };
+    match i {
+        wm::Inline::Emph(v)
+        | wm::Inline::Strong(v)
+        | wm::Inline::Superscript(v)
+        | wm::Inline::Strikethrough(v) => v.iter().for_each(&mut refs),
+        wm::Inline::Link(v) => {
+            validate_span(v.span, source)?;
+            if let Some(label) = &v.label {
+                label.iter().for_each(&mut refs);
+            }
+        }
+        wm::Inline::TagRef(v) => validate_span(v.span, source)?,
+        wm::Inline::Custom(v) => {
+            validate_span(v.span, source)?;
+            serde_json::from_str::<serde_json::Value>(&v.attrs)
+                .map_err(|e| parse_error(format!("invalid custom attrs JSON: {e}")))?;
+        }
+        wm::Inline::Text(_)
+        | wm::Inline::Code(_)
+        | wm::Inline::HardBreak
+        | wm::Inline::SoftBreak => {}
+    }
+    Ok(())
+}
+
+fn block_cost(b: &wm::Block) -> u64 {
+    1u64.saturating_add(match b {
+        wm::Block::CodeBlock(v) => (v.lang.as_ref().map_or(0, String::len) as u64)
+            .saturating_add(v.code.len() as u64)
+            .saturating_add(v.anchor.as_ref().map_or(0, String::len) as u64),
+        wm::Block::Heading(v) => v
+            .anchor
+            .as_ref()
+            .map_or(0, String::len)
+            .saturating_add(v.explicit_anchor.as_ref().map_or(0, String::len))
+            as u64,
+        wm::Block::Paragraph(v) => v.anchor.as_ref().map_or(0, String::len) as u64,
+        wm::Block::List(v) => (v.items.len() as u64)
+            .saturating_add(v.anchor.as_ref().map_or(0, String::len) as u64)
+            .saturating_add(v.items.iter().map(|i| u64::from(i.task.is_some())).sum()),
+        wm::Block::Quote(v) => v.anchor.as_ref().map_or(0, String::len) as u64,
+        wm::Block::Custom(v) => (v.custom_kind.len() as u64)
+            .saturating_add(v.attrs.len() as u64)
+            .saturating_add(v.anchor.as_ref().map_or(0, String::len) as u64),
+        wm::Block::Table(v) => {
+            let cells = v
+                .head
+                .iter()
+                .chain(v.rows.iter())
+                .flat_map(|r| r.cells.iter())
+                .count() as u64;
+            (v.rows.len() as u64)
+                .saturating_add(cells)
+                .saturating_add(v.align.len() as u64)
+                .saturating_add(v.anchor.as_ref().map_or(0, String::len) as u64)
+        }
+        wm::Block::ThematicBreak(v) => v.anchor.as_ref().map_or(0, String::len) as u64,
+        wm::Block::ReferenceDefinition(v) => (v.label.len() as u64)
+            .saturating_add(v.url.len() as u64)
+            .saturating_add(v.title.as_ref().map_or(0, String::len) as u64)
+            .saturating_add(v.anchor.as_ref().map_or(0, String::len) as u64),
+    })
+}
+
+fn target_cost(t: &wm::LinkTarget) -> u64 {
+    match t {
+        wm::LinkTarget::Wiki(v) => (v.page.len() as u64)
+            .saturating_add(v.heading.as_ref().map_or(0, String::len) as u64)
+            .saturating_add(v.block.as_ref().map_or(0, String::len) as u64),
+        wm::LinkTarget::Url(v) | wm::LinkTarget::Path(v) => v.len() as u64,
+    }
+}
+
+fn inline_cost(i: &wm::Inline) -> u64 {
+    1u64.saturating_add(match i {
+        wm::Inline::Text(v) | wm::Inline::Code(v) => v.len() as u64,
+        wm::Inline::Link(v) => target_cost(&v.target),
+        wm::Inline::TagRef(v) => v.name.len() as u64,
+        wm::Inline::Custom(v) => (v.custom_kind.len() as u64).saturating_add(v.attrs.len() as u64),
+        _ => 0,
+    })
+}
 enum Pending<'a> {
     Blocks(&'a [rm::Block], u32),
     Inlines(&'a [rm::Inline], u32),
@@ -656,6 +1286,7 @@ fn too_deep() -> PluginError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fub_abi::format::DocumentSource;
 
     fn span() -> rm::Span {
         rm::Span::new(0, 0)
@@ -695,7 +1326,6 @@ mod tests {
 
     /// Il tetto è quello dichiarato: l'ultimo livello ammesso passa, il primo di
     /// troppo riceve un errore che nomina il numero invece di un `SIGSEGV`.
-    /// troppo riceve un errore che nomina il numero invece di un `SIGSEGV`.
     #[test]
     fn a_too_deep_tree_is_rejected_instead_of_crashing_the_stack() {
         // Le radici stanno a 1, e il testo dentro il paragrafo occupa un livello
@@ -719,11 +1349,229 @@ mod tests {
 
     /// Duemila `>` in testa a una riga sono due kilobyte di file, e trentuno
     /// volte il tetto: senza il tetto questo test non fallirebbe, **morirebbe**.
-    /// volte il tetto: senza il tetto questo test non fallirebbe, **morirebbe**.
     #[test]
     fn a_malformed_document_does_not_bring_down_the_thread() {
         let error = to_tree(&[quotes(2_000)]).expect_err("no tree that deep passes");
         assert!(matches!(error, PluginError::Internal(_)));
+    }
+
+    #[test]
+    fn inbound_roundtrip_rebuilds_a_nontrivial_model() {
+        let mut model = rm::DocumentModel::empty(rm::DocId::new("nota.md"));
+        model.text = "hello".into();
+        model.body.push(rm::Block::Paragraph {
+            inlines: vec![
+                rm::Inline::Strong(vec![rm::Inline::Text("hello".into())]),
+                rm::Inline::SoftBreak,
+            ],
+            anchor: Some("p".into()),
+            span: rm::Span::new(0, 5),
+        });
+        let wire = to_document(model.clone()).expect("native model translates");
+        let got = from_document(
+            wire,
+            &ParseContext::bare("nota.md"),
+            &DocumentSource::Text("hello".into()),
+        )
+        .expect("guest model rebuilds");
+        assert_eq!(got, model);
+    }
+    #[test]
+    fn inbound_rejects_compact_doubling_dag_by_materialization_budget() {
+        let mut wire = to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        let mut child = 0u32;
+        wire.body
+            .blocks
+            .push(wm::Block::Paragraph(wm::BlockParagraph {
+                inlines: vec![],
+                anchor: None,
+                span: wm::Span { start: 0, end: 0 },
+            }));
+        for _ in 0..32 {
+            let index = u32::try_from(wire.body.blocks.len()).expect("test arena fits u32");
+            wire.body.blocks.push(wm::Block::Quote(wm::BlockQuote {
+                blocks: vec![child, child],
+                anchor: None,
+                span: wm::Span { start: 0, end: 0 },
+            }));
+            child = index;
+        }
+        wire.body.roots = vec![child];
+        let error = from_document(
+            wire,
+            &ParseContext::bare("nota.md"),
+            &DocumentSource::Text(String::new()),
+        )
+        .expect_err("exponential rebuild must be bounded");
+        assert!(
+            matches!(&error, FormatError::Parse(message) if message.contains("materialization")),
+            "expected materialization budget error, got {error}"
+        );
+    }
+
+    #[test]
+    fn inbound_preflight_charges_repeated_url_payload_before_rebuild() {
+        let mut wire = to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        let url = "u".repeat((MAX_MATERIALIZATION_UNITS / 2 + 1) as usize);
+        wire.body.inlines.push(wm::Inline::Link(wm::InlineLink {
+            target: wm::LinkTarget::Url(url),
+            label: None,
+            embed: false,
+            span: wm::Span { start: 0, end: 0 },
+        }));
+        wire.body
+            .blocks
+            .push(wm::Block::Paragraph(wm::BlockParagraph {
+                inlines: vec![0, 0],
+                anchor: None,
+                span: wm::Span { start: 0, end: 0 },
+            }));
+        wire.body.roots = vec![0];
+
+        let error = preflight(&wire.body, &DocumentSource::Text(String::new()))
+            .expect_err("repeated URL payload must exceed the materialization budget");
+        assert!(
+            matches!(&error, FormatError::Parse(message) if message.contains("materialization")),
+            "expected materialization budget error, got {error}"
+        );
+    }
+
+    #[test]
+    fn inbound_rejects_a_mismatched_document_id() {
+        let wire = to_document(rm::DocumentModel::empty(rm::DocId::new("guest.md"))).unwrap();
+        let error = from_document(
+            wire,
+            &ParseContext::bare("ctx.md"),
+            &DocumentSource::Text(String::new()),
+        )
+        .expect_err("id mismatch");
+        assert!(matches!(error, FormatError::Parse(message) if message.contains("does not match")));
+    }
+
+    #[test]
+    fn inbound_rejects_dangling_and_cyclic_references() {
+        let mut dangling =
+            to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        dangling.body.roots.push(9);
+        assert!(
+            matches!(from_document(dangling, &ParseContext::bare("nota.md"), &DocumentSource::Text(String::new())), Err(FormatError::Parse(m)) if m.contains("dangling"))
+        );
+
+        let mut cyclic = to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        cyclic.body.blocks.push(wm::Block::Quote(wm::BlockQuote {
+            blocks: vec![0],
+            anchor: None,
+            span: wm::Span { start: 0, end: 0 },
+        }));
+        cyclic.body.roots.push(0);
+        assert!(
+            matches!(from_document(cyclic, &ParseContext::bare("nota.md"), &DocumentSource::Text(String::new())), Err(FormatError::Parse(m)) if m.contains("cycle"))
+        );
+    }
+
+    #[test]
+    fn inbound_accepts_dag_reuse_and_rejects_depth_json_and_spans() {
+        let mut dag = to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        dag.body
+            .blocks
+            .push(wm::Block::Paragraph(wm::BlockParagraph {
+                inlines: vec![],
+                anchor: None,
+                span: wm::Span { start: 0, end: 0 },
+            }));
+        dag.body.blocks.push(wm::Block::Quote(wm::BlockQuote {
+            blocks: vec![0, 0],
+            anchor: None,
+            span: wm::Span { start: 0, end: 0 },
+        }));
+        dag.body.roots.push(1);
+        assert!(from_document(
+            dag,
+            &ParseContext::bare("nota.md"),
+            &DocumentSource::Text(String::new())
+        )
+        .is_ok());
+        let bytes_wire = to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        assert!(from_document(
+            bytes_wire,
+            &ParseContext::bare("nota.md"),
+            &DocumentSource::Bytes(vec![0xff])
+        )
+        .is_ok());
+
+        let mut bad_json =
+            to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        bad_json.frontmatter = "[]".into();
+        assert!(matches!(
+            from_document(
+                bad_json,
+                &ParseContext::bare("nota.md"),
+                &DocumentSource::Text(String::new())
+            ),
+            Err(FormatError::Parse(_))
+        ));
+
+        let mut bad_span =
+            to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        bad_span.outline.push(wm::Heading {
+            level: 1,
+            text: "x".into(),
+            slug: "x".into(),
+            span: wm::Span { start: 0, end: 1 },
+            explicit_anchor: None,
+        });
+        assert!(matches!(
+            from_document(
+                bad_span,
+                &ParseContext::bare("nota.md"),
+                &DocumentSource::Text("".into())
+            ),
+            Err(FormatError::Parse(_))
+        ));
+    }
+    #[test]
+    fn inbound_enforces_depth_and_custom_json() {
+        fn nested_quotes(n: u32) -> wm::DocumentModel {
+            let mut wire =
+                to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+            let mut child = None;
+            for _ in 0..n {
+                let index = wire.body.blocks.len() as u32;
+                let blocks = child.into_iter().collect();
+                wire.body.blocks.push(wm::Block::Quote(wm::BlockQuote {
+                    blocks,
+                    anchor: None,
+                    span: wm::Span { start: 0, end: 0 },
+                }));
+                child = Some(index);
+            }
+            wire.body.roots = child.into_iter().collect();
+            wire
+        }
+
+        assert!(from_document(
+            nested_quotes(MAX_DEPTH),
+            &ParseContext::bare("nota.md"),
+            &DocumentSource::Text(String::new())
+        )
+        .is_ok());
+        assert!(matches!(
+            from_document(nested_quotes(MAX_DEPTH + 1), &ParseContext::bare("nota.md"), &DocumentSource::Text(String::new())),
+            Err(FormatError::Parse(message)) if message.contains("64")
+        ));
+
+        let mut bad = to_document(rm::DocumentModel::empty(rm::DocId::new("nota.md"))).unwrap();
+        bad.body.blocks.push(wm::Block::Custom(wm::BlockCustom {
+            custom_kind: "x".into(),
+            attrs: "{not-json".into(),
+            blocks: vec![],
+            anchor: None,
+            span: wm::Span { start: 0, end: 0 },
+        }));
+        bad.body.roots.push(0);
+        assert!(
+            matches!(from_document(bad, &ParseContext::bare("nota.md"), &DocumentSource::Text(String::new())), Err(FormatError::Parse(message)) if message.contains("JSON"))
+        );
     }
 
     #[test]

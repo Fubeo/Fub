@@ -252,12 +252,23 @@ fn assert_workspace_is_free(workspace: &Custody<Workspace>) {
     );
     drop(read);
 
-    let write = workspace.try_write();
-    assert!(
-        write.is_some(),
-        "IndexProvider::query held a read guard on Custody<Workspace>"
-    );
-    drop(write);
+    // A non-blocking write also observes the independent writer-turn queue,
+    // so it can report contention even when no Workspace guard is alive.
+    // Let a real writer queue normally: it must complete while the provider
+    // is suspended, which directly proves that no read guard crosses the call.
+    let probe = workspace.clone();
+    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
+    let writer = std::thread::spawn(move || {
+        let result = probe.write().map(drop);
+        completed_tx
+            .send(result)
+            .expect("workspace writer result is observed");
+    });
+    completed_rx
+        .recv_timeout(TIMEOUT)
+        .expect("IndexProvider::query held a read guard on Custody<Workspace>")
+        .expect("workspace remains writable");
+    writer.join().expect("workspace writer does not panic");
 }
 
 fn assert_result(

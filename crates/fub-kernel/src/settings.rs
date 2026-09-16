@@ -67,6 +67,7 @@
 //! database di comodo.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -377,6 +378,11 @@ pub struct MachineSettings {
     /// corrompe.
     write: Shelter<()>,
     values: RwLock<BTreeMap<String, SettingValue>>,
+    /// Exact revisions of writes made through this shared machine-settings
+    /// instance. They distinguish a mount's temporary denial from a later
+    /// write of the same value without changing the persistent settings schema.
+    revisions: RwLock<BTreeMap<String, u64>>,
+    next_revision: AtomicU64,
     /// Lo schema delle chiavi di macchina. Dietro un lock come i valori, e per
     /// la stessa ragione: l'`Arc` è condiviso da ogni vault aperto, e chi
     /// dichiara è l'host una volta sola all'avvio.
@@ -398,6 +404,8 @@ impl MachineSettings {
                 path: Some(path.to_owned()),
                 write: Shelter::new(()),
                 values: RwLock::new(values),
+                revisions: RwLock::new(BTreeMap::new()),
+                next_revision: AtomicU64::new(1),
                 specs: RwLock::new(BTreeMap::new()),
             }),
             warning,
@@ -410,6 +418,8 @@ impl MachineSettings {
             path: None,
             write: Shelter::new(()),
             values: RwLock::new(BTreeMap::new()),
+            revisions: RwLock::new(BTreeMap::new()),
+            next_revision: AtomicU64::new(1),
             specs: RwLock::new(BTreeMap::new()),
         })
     }
@@ -488,6 +498,7 @@ impl MachineSettings {
             return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
         }
         self.write(key, Some(value))
+            .map(|_| ())
             .map_err(|and| PluginError::Internal(and.into()))
     }
 
@@ -496,7 +507,74 @@ impl MachineSettings {
     pub fn reset(&self, key: &str) -> Result<(), PluginError> {
         self.spec_of(key)?;
         self.write(key, None)
+            .map(|_| ())
             .map_err(|and| PluginError::Internal(and.into()))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_if_default_tracked(
+        &self,
+        key: &str,
+        value: SettingValue,
+    ) -> Result<Option<MachineSettingRevision>, PluginError> {
+        let spec = self.spec_of(key)?;
+        if let Some(why) = spec.kind.rejects(&value) {
+            return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
+        }
+        self.set_validated_if_default_tracked(key, value)
+    }
+
+    fn set_validated_if_default_tracked(
+        &self,
+        key: &str,
+        value: SettingValue,
+    ) -> Result<Option<MachineSettingRevision>, PluginError> {
+        let _turn = self.write.acquire();
+        if self
+            .values
+            .read()
+            .expect("livello macchina")
+            .contains_key(key)
+        {
+            return Ok(None);
+        }
+        self.write_locked(key, Some(value))
+            .map(|revision| {
+                Some(MachineSettingRevision {
+                    key: key.to_owned(),
+                    revision,
+                })
+            })
+            .map_err(|error| PluginError::Internal(error.into()))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn reset_if_current(
+        &self,
+        receipt: &MachineSettingRevision,
+    ) -> Result<bool, PluginError> {
+        self.spec_of(&receipt.key)?;
+        self.reset_validated_if_current(receipt)
+    }
+
+    fn reset_validated_if_current(
+        &self,
+        receipt: &MachineSettingRevision,
+    ) -> Result<bool, PluginError> {
+        let _turn = self.write.acquire();
+        if self
+            .revisions
+            .read()
+            .expect("revisioni del livello macchina")
+            .get(&receipt.key)
+            .copied()
+            != Some(receipt.revision)
+        {
+            return Ok(false);
+        }
+        self.write_locked(&receipt.key, None)
+            .map(|_| true)
+            .map_err(|error| PluginError::Internal(error.into()))
     }
 
     fn spec_of(&self, key: &str) -> Result<SettingSpec, PluginError> {
@@ -559,8 +637,12 @@ impl MachineSettings {
     /// aveva tolto al file, rientrata dalla porta della memoria. Il lock del
     /// file serializza le installazioni; questo serializza i thread, che quel
     /// lock non li vede nemmeno.
-    fn write(&self, key: &str, value: Option<SettingValue>) -> Result<(), String> {
+    fn write(&self, key: &str, value: Option<SettingValue>) -> Result<u64, String> {
         let _turn = self.write.acquire();
+        self.write_locked(key, value)
+    }
+
+    fn write_locked(&self, key: &str, value: Option<SettingValue>) -> Result<u64, String> {
         let Some(path) = &self.path else {
             let mut values = self.values.write().expect("livello macchina");
             match value {
@@ -571,11 +653,32 @@ impl MachineSettings {
                     values.remove(key);
                 }
             }
-            return Ok(());
+            drop(values);
+            return Ok(self.note_write(key));
         };
         let zone = store(path, key, value)?;
         *self.values.write().expect("livello macchina") = zone;
-        Ok(())
+        Ok(self.note_write(key))
+    }
+
+    fn note_write(&self, key: &str) -> u64 {
+        let revision = self.next_revision.fetch_add(1, Ordering::Relaxed);
+        self.revisions
+            .write()
+            .expect("revisioni del livello macchina")
+            .insert(key.to_owned(), revision);
+        revision
+    }
+}
+
+pub(crate) struct MachineSettingRevision {
+    key: String,
+    revision: u64,
+}
+
+impl MachineSettingRevision {
+    pub(crate) fn key(&self) -> &str {
+        &self.key
     }
 }
 
@@ -888,10 +991,11 @@ impl SettingsStore {
         value: Option<SettingValue>,
     ) -> Result<SettingScope, PluginError> {
         match spec.scope {
-            SettingScope::Machine => self
-                .machine
-                .write(&spec.key, value)
-                .map_err(|and| PluginError::Internal(and.into()))?,
+            SettingScope::Machine => {
+                self.machine
+                    .write(&spec.key, value)
+                    .map_err(|and| PluginError::Internal(and.into()))?;
+            }
             SettingScope::Vault => {
                 // Su disco prima, in memoria dopo: non più perché lo dica
                 // questo commento, ma perché `Durable` non sa esprimere
@@ -931,6 +1035,36 @@ impl SettingsStore {
     /// installazione.
     pub fn machine(&self) -> &Arc<MachineSettings> {
         &self.machine
+    }
+
+    pub(crate) fn initialize_machine_default_tracked(
+        &self,
+        key: &str,
+        value: SettingValue,
+    ) -> Result<Option<MachineSettingRevision>, PluginError> {
+        let declared = self.declared(key)?;
+        if declared.spec.scope != SettingScope::Machine {
+            return Err(PluginError::BadArgs(
+                format!("`{key}` is not a machine setting").into(),
+            ));
+        }
+        if let Some(why) = declared.spec.kind.rejects(&value) {
+            return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
+        }
+        self.machine.set_validated_if_default_tracked(key, value)
+    }
+
+    pub(crate) fn rollback_machine_if_current(
+        &self,
+        receipt: &MachineSettingRevision,
+    ) -> Result<bool, PluginError> {
+        let declared = self.declared(receipt.key())?;
+        if declared.spec.scope != SettingScope::Machine {
+            return Err(PluginError::BadArgs(
+                format!("`{}` is not a machine setting", receipt.key()).into(),
+            ));
+        }
+        self.machine.reset_validated_if_current(receipt)
     }
 }
 
@@ -1391,6 +1525,50 @@ mod tests {
         assert!(
             warnings.iter().any(|w| w.contains("privacy.telemetry")),
             "e non in silenzio: {warnings:?}"
+        );
+    }
+
+    #[test]
+    fn tracked_machine_rollback_does_not_erase_a_later_aba_write() {
+        let machine = MachineSettings::in_memory();
+        machine
+            .declare(&[SettingSpec::toggle("permission", "Permission", false).for_machine()])
+            .unwrap();
+        let receipt = machine
+            .set_if_default_tracked("permission", SettingValue::Toggle(false))
+            .unwrap()
+            .expect("the default-deny write happened");
+
+        machine
+            .set("permission", SettingValue::Toggle(true))
+            .unwrap();
+        machine
+            .set("permission", SettingValue::Toggle(false))
+            .unwrap();
+
+        assert!(!machine.reset_if_current(&receipt).unwrap());
+        assert_eq!(
+            machine.effective("permission").unwrap(),
+            (SettingValue::Toggle(false), SettingSource::Machine),
+            "the later explicit false is distinct from the mount's false"
+        );
+    }
+
+    #[test]
+    fn tracked_machine_rollback_removes_its_unchanged_write() {
+        let machine = MachineSettings::in_memory();
+        machine
+            .declare(&[SettingSpec::toggle("permission", "Permission", false).for_machine()])
+            .unwrap();
+        let receipt = machine
+            .set_if_default_tracked("permission", SettingValue::Toggle(false))
+            .unwrap()
+            .expect("the default-deny write happened");
+
+        assert!(machine.reset_if_current(&receipt).unwrap());
+        assert_eq!(
+            machine.effective("permission").unwrap(),
+            (SettingValue::Toggle(false), SettingSource::Default)
         );
     }
 

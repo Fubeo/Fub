@@ -894,7 +894,7 @@ impl VaultStructure for MemoryHost {
         // documenti rifiuta apposta: chi lo valida è la ricerca fra le voci del
         // cestino, appena sopra. Il `to` invece atterra nel vault, ed è un nome
         // che **nasce**: senza `to` torna quello che c'era, e quello non si
-        // rigiudica (è la stessa asimmetria di `Workspace::restore_from_trash`).
+        // rigiudica (è la stessa asimmetria del protocollo staged del kernel).
         let target = match to {
             Some(to) => born_here(&fenced_doc_id(&to)?)?,
             None => entry.original,

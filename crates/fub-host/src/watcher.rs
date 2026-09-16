@@ -22,14 +22,18 @@
 //! (`IndexQuery::VaultStatus`).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::{PluginError, Severity};
-use fub_kernel::{ParsedChange, Workspace};
+use fub_kernel::workspace::{ParsedExternalDocumentRename, PreparedExternalDocumentRename};
+use fub_kernel::{
+    ExternalRenamePlan, ParsedChange, ParsedExternalAssetRename, ParsedExternalRename,
+    PreparedExternalAssetRename, PreparedIgnoreCheck, SyncPlan, Workspace,
+};
 
 use crate::custody::{Custody, WriteTurn};
-use crate::jobs::with_event_drain;
+use crate::jobs::{drain_events, with_event_drain};
 
 /// Un rilevatore vivo: si tiene, e quando cade smette di guardare.
 ///
@@ -224,6 +228,18 @@ impl<'a> OpeningWatcher<'a> {
             .take()
             .expect("an opening watcher is finished only after start")
     }
+
+    /// Ritira un watcher d'apertura senza perdere l'errore del suo arresto.
+    ///
+    /// Il turno viene liberato per primo: un worker già accodato come writer
+    /// deve poter terminare prima che il suo `Drop` venga raggiunto.
+    pub(crate) fn rollback(mut self) -> Result<(), PluginError> {
+        drop(self.turn.take());
+        match self.watcher.take() {
+            Some(watcher) => watcher.stop(),
+            None => Ok(()),
+        }
+    }
 }
 
 impl Drop for OpeningWatcher<'_> {
@@ -310,6 +326,85 @@ pub enum ExternalChange {
     Renamed { from: Utf8PathBuf, to: Utf8PathBuf },
 }
 
+/// Ciclo di vita condiviso fra il debouncer e il sincronizzatore.
+///
+/// Il contatore permette al proprietario del watcher di chiudere gli ingressi
+/// e aspettare le sole operazioni già accettate. La `Condvar` rilascia il mutex
+/// mentre aspetta.
+struct SyncLifecycle {
+    state: Mutex<SyncLifecycleState>,
+    settled: Condvar,
+}
+
+struct SyncLifecycleState {
+    accepting: bool,
+    in_flight: usize,
+}
+
+impl SyncLifecycle {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(SyncLifecycleState {
+                accepting: true,
+                in_flight: 0,
+            }),
+            settled: Condvar::new(),
+        }
+    }
+
+    fn enter(self: &Arc<Self>) -> Option<SyncOperation> {
+        let mut state = self.state.lock().unwrap_or_else(|and| and.into_inner());
+        if !state.accepting {
+            return None;
+        }
+        state.in_flight += 1;
+        Some(SyncOperation {
+            lifecycle: Arc::clone(self),
+        })
+    }
+
+    fn invalidate_and_wait(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|and| and.into_inner());
+        state.accepting = false;
+        self.settled.notify_all();
+        while state.in_flight != 0 {
+            state = self
+                .settled
+                .wait(state)
+                .unwrap_or_else(|and| and.into_inner());
+        }
+    }
+
+    #[cfg(test)]
+    fn wait_until_invalidated(&self) {
+        let mut state = self.state.lock().unwrap_or_else(|and| and.into_inner());
+        while state.accepting {
+            state = self
+                .settled
+                .wait(state)
+                .unwrap_or_else(|and| and.into_inner());
+        }
+    }
+}
+
+struct SyncOperation {
+    lifecycle: Arc<SyncLifecycle>,
+}
+
+impl Drop for SyncOperation {
+    fn drop(&mut self) {
+        let mut state = self
+            .lifecycle
+            .state
+            .lock()
+            .unwrap_or_else(|and| and.into_inner());
+        state.in_flight -= 1;
+        if state.in_flight == 0 {
+            self.lifecycle.settled.notify_all();
+        }
+    }
+}
+
 /// Chi porta nel workspace ciò che è cambiato da fuori, **un lotto alla volta**.
 ///
 /// # Perché è un tipo e non una funzione
@@ -325,6 +420,12 @@ pub enum ExternalChange {
 /// già dovuto scrivere in prosa una volta. Qui la dice il prestito: da un
 /// `&mut ExternalSync` non se ne ricava un secondo, quindi due lotti sullo
 /// stesso sincronizzatore non compilano.
+///
+/// # Ciclo di vita
+///
+/// Lo shutdown impedisce nuovi ingressi e aspetta quelli già in volo senza
+/// conservare il mutex durante l'attesa. Un lotto accettato completa tutte le
+/// sue fasi, compreso il flush, prima che il teardown possa tornare.
 ///
 /// # Le tre fasi, e perché sono tre
 ///
@@ -356,13 +457,183 @@ pub enum ExternalChange {
 /// dal prestito esclusivo. Ciò che si compra tenendola in una fase sua è che
 /// chi aspetta non aspetta più il lotto **intero**: fra la 2 e la 3 il lucchetto
 /// si rilascia, e i lettori in coda passano.
+enum WatcherPreflight {
+    Sync {
+        path: Utf8PathBuf,
+        ignore: PreparedIgnoreCheck,
+    },
+    Rename {
+        from: Utf8PathBuf,
+        from_ignore: PreparedIgnoreCheck,
+        to: Utf8PathBuf,
+        to_ignore: PreparedIgnoreCheck,
+    },
+}
+
+enum PreflightedWatcherChange {
+    Sync {
+        path: Utf8PathBuf,
+        admitted: bool,
+    },
+    Rename {
+        from: Utf8PathBuf,
+        from_admitted: bool,
+        to: Utf8PathBuf,
+        to_admitted: bool,
+    },
+}
+
+impl WatcherPreflight {
+    fn invoke(self) -> PreflightedWatcherChange {
+        match self {
+            WatcherPreflight::Sync { path, ignore } => PreflightedWatcherChange::Sync {
+                path,
+                admitted: !ignore.invoke(),
+            },
+            WatcherPreflight::Rename {
+                from,
+                from_ignore,
+                to,
+                to_ignore,
+            } => PreflightedWatcherChange::Rename {
+                from,
+                from_admitted: !from_ignore.invoke(),
+                to,
+                to_admitted: !to_ignore.invoke(),
+            },
+        }
+    }
+}
+
+impl PreflightedWatcherChange {
+    fn plan(self, workspace: &Workspace) -> Vec<PlannedWatcherChange> {
+        match self {
+            PreflightedWatcherChange::Sync { path, admitted } => {
+                let plan = admitted
+                    .then(|| workspace.plan_sync_admitted(&path))
+                    .flatten();
+                vec![PlannedWatcherChange::Sync(path, plan)]
+            }
+            PreflightedWatcherChange::Rename {
+                from,
+                from_admitted,
+                to,
+                to_admitted,
+            } => match workspace.plan_external_rename_admitted(
+                &from,
+                from_admitted,
+                &to,
+                to_admitted,
+            ) {
+                ExternalRenamePlan::Asset(plan) => {
+                    vec![PlannedWatcherChange::Asset(*plan)]
+                }
+                ExternalRenamePlan::Document(plan) => {
+                    vec![PlannedWatcherChange::Document(Box::new(*plan))]
+                }
+                ExternalRenamePlan::Sync(plans) => plans
+                    .into_iter()
+                    .map(|(path, plan)| PlannedWatcherChange::Sync(path, plan))
+                    .collect(),
+            },
+        }
+    }
+}
+
+enum PlannedWatcherChange {
+    Sync(Utf8PathBuf, Option<SyncPlan>),
+    Asset(PreparedExternalAssetRename),
+    Document(Box<PreparedExternalDocumentRename>),
+}
+
+enum InvokedWatcherChange {
+    Sync(Utf8PathBuf, Option<ParsedChange>),
+    Asset(ParsedExternalAssetRename),
+    Document(ParsedExternalDocumentRename),
+}
+
+impl PlannedWatcherChange {
+    fn invoke(self) -> Vec<InvokedWatcherChange> {
+        match self {
+            PlannedWatcherChange::Sync(path, plan) => {
+                vec![InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke))]
+            }
+            PlannedWatcherChange::Asset(plan) => match plan.invoke() {
+                ParsedExternalRename::Asset(parsed) => {
+                    vec![InvokedWatcherChange::Asset(*parsed)]
+                }
+                ParsedExternalRename::Sync(changes) => changes
+                    .into_iter()
+                    .map(|(path, parsed)| InvokedWatcherChange::Sync(path, parsed))
+                    .collect(),
+            },
+            PlannedWatcherChange::Document(plan) => {
+                vec![InvokedWatcherChange::Document((*plan).invoke())]
+            }
+        }
+    }
+}
+
+/// Ripristina sempre il frame di dispatch aperto dal lotto, anche se una fase
+/// preparata restituisce un errore o propaga un panico. Il distruttore prende
+/// soltanto il breve prestito necessario al kernel: il drain, che può invocare
+/// provider, resta esplicitamente fuori.
+struct EventDispatchGuard {
+    workspace: Custody<Workspace>,
+    deferred: Option<fub_kernel::workspace::EventDispatchDeferral>,
+}
+
+impl EventDispatchGuard {
+    fn new(workspace: &Custody<Workspace>) -> Result<Self, PluginError> {
+        let deferred = workspace.write()?.defer_event_dispatch();
+        Ok(Self {
+            workspace: workspace.clone(),
+            deferred: Some(deferred),
+        })
+    }
+
+    fn restore(mut self) -> Result<(), PluginError> {
+        let mut workspace = self.workspace.write()?;
+        workspace.restore_event_dispatch(
+            self.deferred
+                .take()
+                .expect("il guard di dispatch è ancora armato"),
+        );
+        Ok(())
+    }
+}
+
+impl Drop for EventDispatchGuard {
+    fn drop(&mut self) {
+        let Some(deferred) = self.deferred.take() else {
+            return;
+        };
+        if let Ok(mut workspace) = self.workspace.write() {
+            workspace.restore_event_dispatch(deferred);
+        }
+    }
+}
+
+struct BatchApply {
+    outcome: Result<(), PluginError>,
+    mutated: bool,
+}
+
 pub struct ExternalSync {
     workspace: Custody<Workspace>,
+    lifecycle: Arc<SyncLifecycle>,
 }
 
 impl ExternalSync {
     pub fn new(workspace: Custody<Workspace>) -> Self {
-        ExternalSync { workspace }
+        ExternalSync {
+            workspace,
+            lifecycle: Arc::new(SyncLifecycle::new()),
+        }
+    }
+
+    fn lifecycle(&self) -> Arc<SyncLifecycle> {
+        Arc::clone(&self.lifecycle)
     }
 
     /// Applica un lotto di cambiamenti. Vedi le tre fasi nel doc del tipo.
@@ -371,42 +642,59 @@ impl ExternalSync {
     /// porta, una volta sola. Ciò che si perde è il rilevamento — cioè un
     /// derivato — su un vault che è già irrecuperabile.
     pub fn batch(&mut self, changes: &[ExternalChange]) {
+        let Some(_operation) = self.lifecycle.enter() else {
+            return;
+        };
         if changes.is_empty() {
             return;
         }
-        // Fase 1 — il disco, sotto prestito condiviso. Un piano è `None` per i
-        // rami che non leggono niente (un path ignorato, un file di un'altra
-        // specie, un file sparito) e per una lettura che non è riuscita: la
-        // fase 2 li rifà per intero, dove stavano già.
-        let prepared: Vec<Option<ParsedChange>> = {
+        // Fase 1a — politica e handle owned, senza I/O, sotto read.
+        let preflights = {
             let Ok(ws) = self.workspace.read() else {
                 return;
             };
             changes
                 .iter()
                 .map(|change| match change {
-                    ExternalChange::Touched(path) => ws.plan_sync(path),
-                    ExternalChange::Renamed { .. } => None,
+                    ExternalChange::Touched(path) => WatcherPreflight::Sync {
+                        path: path.clone(),
+                        ignore: ws.prepare_is_ignored(path),
+                    },
+                    ExternalChange::Renamed { from, to } => WatcherPreflight::Rename {
+                        from: from.clone(),
+                        from_ignore: ws.prepare_is_ignored(from),
+                        to: to.clone(),
+                        to_ignore: ws.prepare_is_ignored(to),
+                    },
                 })
-                .collect()
+                .collect::<Vec<_>>()
         };
-        // Fase 2 — la memoria, sotto prestito esclusivo.
-        let Ok(()) = with_event_drain(&self.workspace, |ws| {
-            for (change, plan) in changes.iter().zip(prepared) {
-                match change {
-                    ExternalChange::Touched(path) => {
-                        let _ = ws.sync_path_prepared(path, plan);
-                    }
-                    ExternalChange::Renamed { from, to } => {
-                        let _ = ws.sync_renamed_path(from, to);
-                    }
-                }
-            }
-        }) else {
-            return;
+        // Fase 1b — l'eventuale stat file/cartella, fuori da Custody.
+        let preflighted = preflights
+            .into_iter()
+            .map(WatcherPreflight::invoke)
+            .collect::<Vec<_>>();
+        // Fase 1c — routing e piani puri sotto read, dai soli esiti del filtro.
+        let planned = {
+            let Ok(ws) = self.workspace.read() else {
+                return;
+            };
+            preflighted
+                .into_iter()
+                .flat_map(|change| change.plan(&ws))
+                .collect::<Vec<_>>()
         };
-        // Fase 3 — la durevolezza.
-        self.flush();
+        // Fase 1d — stat/read/parse e side-data restano fuori da Custody.
+        let invoked = planned.into_iter().flat_map(PlannedWatcherChange::invoke);
+        let BatchApply { outcome, mutated } = self.apply_batch_prepared(invoked);
+        // Fase 3 — la durevolezza è un finally soltanto dopo una mutazione:
+        // un errore di prepare pulito non ha feed staged da flushare.
+        let flushed = if outcome.is_ok() || mutated {
+            self.flush()
+        } else {
+            Ok(())
+        };
+        let _ = outcome.and(flushed);
     }
 
     /// **Il primo lotto del rilevatore, calcolato per differenza** (§15.7).
@@ -424,36 +712,155 @@ impl ExternalSync {
     /// dopo su un path già allineato non trova niente da fare (l'impronta è la
     /// stessa, difetto 0196).
     ///
-    /// Le tre fasi sono quelle di [`batch`](ExternalSync::batch): leggere e
-    /// parsare sotto prestito condiviso, mutare sotto quello esclusivo, rendere
-    /// durevole da sé. Anche un vault senza rilevatore la chiama: la finestra
-    /// c'è per ogni fabbrica, e ciò che il rilevatore avrebbe visto se fosse
-    /// stato acceso lo vede il workspace stesso.
+    /// La scansione, la lettura, il parse e i feed agli indici attraversano
+    /// soltanto token owned fuori da `Custody`; sotto prestito restano le
+    /// fotografie e le brevi mutazioni del core. Anche un vault senza
+    /// rilevatore la chiama: la finestra c'è per ogni fabbrica, e ciò che il
+    /// rilevatore avrebbe visto se fosse stato acceso lo vede il workspace.
     pub fn catch_up(&mut self) {
+        let Some(_operation) = self.lifecycle.enter() else {
+            return;
+        };
         let _phase = tracing::info_span!(target: "fub.opening", "catch_up").entered();
-        // Fase 1 — i piani, sotto prestito condiviso. Come in `batch`, un piano
-        // `None` sta per i rami che non leggono niente (un file sparito, un
-        // path di un'altra specie, una lettura fallita): la fase 2 li rifà per
-        // intero, dove stavano già.
-        let prepared = {
+        // Fase 1a — soltanto handle e cache owned sotto prestito condiviso.
+        let scan = {
             let Ok(ws) = self.workspace.read() else {
                 return;
             };
-            ws.plan_catch_up()
+            ws.prepare_catch_up()
         };
-        if prepared.is_empty() {
+        // Fase 1b — camminata e filtro delle impronte fuori da Custody.
+        let snapshot = match scan.invoke() {
+            Ok(snapshot) => snapshot,
+            Err(error) => {
+                if let Ok(mut ws) = self.workspace.write() {
+                    ws.note_catch_up_failure(error);
+                }
+                let _ = drain_events(&self.workspace);
+                return;
+            }
+        };
+        // Fase 1c — piani puri sullo stato corrente del kernel.
+        let plans = {
+            let Ok(ws) = self.workspace.read() else {
+                return;
+            };
+            ws.plan_catch_up(snapshot)
+        };
+        if plans.is_empty() {
             return;
         }
-        // Fase 2 — la memoria, sotto prestito esclusivo.
-        let Ok(()) = with_event_drain(&self.workspace, |ws| {
-            for (path, plan) in prepared {
-                let _ = ws.sync_path_prepared(&path, plan);
-            }
-        }) else {
-            return;
+        // Fase 1d — stat-read-stat e Format/Syntax fuori da Custody.
+        let prepared = plans
+            .into_iter()
+            .map(|(path, plan)| InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke)));
+        let BatchApply { outcome, mutated } = self.apply_batch_prepared(prepared);
+        // Fase 3 — come per un lotto notificato, i feed già riusciti vanno resi
+        // durevoli anche se un piano successivo ha fallito.
+        let flushed = if outcome.is_ok() || mutated {
+            self.flush()
+        } else {
+            Ok(())
         };
-        // Fase 3 — la durevolezza.
-        self.flush();
+        let _ = outcome.and(flushed);
+    }
+
+    // Il lotto conserva un solo drain, ma ogni feed/rimozione lascia il guard
+    // prima di notificare gli indici. Il turno conserva la stessa unità di
+    // scrittura.
+    fn apply_batch_prepared(
+        &self,
+        changes: impl IntoIterator<Item = InvokedWatcherChange>,
+    ) -> BatchApply {
+        let _turn = self.workspace.write_turn();
+        let dispatch = match EventDispatchGuard::new(&self.workspace) {
+            Ok(dispatch) => dispatch,
+            Err(error) => {
+                return BatchApply {
+                    outcome: Err(error),
+                    mutated: false,
+                };
+            }
+        };
+        let mut mutated = false;
+        let outcome = (|| {
+            for change in changes {
+                match change {
+                    InvokedWatcherChange::Sync(path, parsed) => {
+                        let pending = self
+                            .workspace
+                            .write()?
+                            .prepare_sync_path_prepared(&path, parsed)?;
+                        let Some(pending) = pending else {
+                            continue;
+                        };
+                        let completed = pending.invoke();
+                        match self.workspace.write()?.finish_sync_path_prepared(completed) {
+                            Ok(true) => mutated = true,
+                            Ok(false) => continue,
+                            Err(failure) => {
+                                let (error, completed) = *failure;
+                                drop(completed);
+                                return Err(error);
+                            }
+                        }
+                    }
+                    InvokedWatcherChange::Asset(parsed) => {
+                        let pending = self
+                            .workspace
+                            .write()?
+                            .prepare_external_asset_rename(parsed);
+                        let Some(pending) = pending else {
+                            continue;
+                        };
+                        let completed = pending.invoke();
+                        match self
+                            .workspace
+                            .write()?
+                            .finish_external_asset_rename(completed)
+                        {
+                            Ok(true) => mutated = true,
+                            Ok(false) => continue,
+                            Err(failure) => {
+                                let (error, completed) = *failure;
+                                drop(completed);
+                                return Err(error);
+                            }
+                        }
+                    }
+                    InvokedWatcherChange::Document(parsed) => {
+                        let pending = self
+                            .workspace
+                            .write()?
+                            .prepare_external_document_rename(parsed)?;
+                        let Some(pending) = pending else {
+                            continue;
+                        };
+                        let completed = pending.invoke();
+                        match self
+                            .workspace
+                            .write()?
+                            .finish_external_document_rename(completed)
+                        {
+                            Ok(true) => mutated = true,
+                            Ok(false) => continue,
+                            Err(failure) => {
+                                let (error, completed) = *failure;
+                                drop(completed);
+                                return Err(error);
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        })();
+        let restored = dispatch.restore();
+        let drained = drain_events(&self.workspace);
+        BatchApply {
+            outcome: outcome.and(restored).and(drained),
+            mutated,
+        }
     }
 
     /// Fine del lotto: è il punto tranquillo in cui rendere durevoli gli indici.
@@ -464,22 +871,23 @@ impl ExternalSync {
     /// perdita che l'utente ha il diritto di sapere: chi cerca, fino alla
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
-    fn flush(&mut self) {
+    fn flush(&mut self) -> Result<(), PluginError> {
+        let flush_errors = crate::teardown::flush_indexes(&self.workspace)?;
+        if flush_errors.is_empty() {
+            return Ok(());
+        }
+        for error in &flush_errors {
+            tracing::warn!(target: "fub.host", "flush index: {error}");
+        }
         let _ = with_event_drain(&self.workspace, |ws| {
-            let flush_errors = ws.flush_indexes();
-            if flush_errors.is_empty() {
-                return;
-            }
-            for and in &flush_errors {
-                tracing::warn!(target: "fub.host", "flush index: {and}");
-            }
-            for and in flush_errors {
+            for error in flush_errors {
                 ws.report_host_trouble(
                     Severity::Warning,
-                    PluginError::Internal(format!("flush index: {and}").into()),
+                    PluginError::Internal(format!("flush index: {error}").into()),
                 );
             }
         });
+        Ok(())
     }
 
     /// **Il rilevamento è finito, e da adesso si vede** (§9.7). Un errore del
@@ -513,6 +921,7 @@ pub use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
+    use std::collections::HashMap;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
@@ -525,7 +934,7 @@ mod notify_watcher {
     use notify::{RecommendedWatcher, RecursiveMode};
     use notify_debouncer_full::{new_debouncer, DebounceEventResult, Debouncer, RecommendedCache};
 
-    use super::{ExternalChange, ExternalSync, VaultWatcher, WatcherFactory};
+    use super::{ExternalChange, ExternalSync, SyncLifecycle, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
     pub struct NotifyWatcher;
@@ -551,6 +960,7 @@ mod notify_watcher {
         debouncer: Option<Debouncer<RecommendedWatcher, RecommendedCache>>,
         /// La bandiera del kernel, che questo debouncer possiede finché è vivo.
         watching: Arc<AtomicBool>,
+        lifecycle: Arc<SyncLifecycle>,
     }
 
     impl VaultWatcher for Debounced {
@@ -566,28 +976,18 @@ mod notify_watcher {
         /// sessione che non guarda più niente, che è la stessa bugia di prima
         /// spostata di un momento (§9.7).
         ///
-        /// L'altra metà è la 0159. Distruggere il debouncer *non lo aspettava*:
-        /// il suo `Drop` alza una bandiera di stop e torna, e il thread che
-        /// consegna i lotti la legge al giro dopo — se in quel momento sta
-        /// dentro un lotto, lo finisce. Solo che «finire un lotto» qui vuol dire
-        /// [`ExternalSync::batch`](super::ExternalSync::batch): prendere il
-        /// workspace in scrittura e rendere durevoli gli indici. Chi chiudeva un
-        /// vault tornava quindi con una scrittura ancora in volo verso `.fub/`,
-        /// che è precisamente ciò che l'ordine di `VaultSession::close` — «prima
-        /// smette di guardare» — dichiara di impedire: la dichiarazione c'era, e
-        /// la riga che la teneva non la teneva. `stop` invece **aspetta** il
-        /// thread, e al ritorno di questa riga nessuno sta più scrivendo là
-        /// dentro.
-        ///
-        /// Si paga con l'attesa di un tick — un quarto dei 300 ms del debounce,
-        /// cioè 75 — più il lotto in corso, una volta per chiusura di vault. Non
-        /// è un'attesa che si toglie andando più veloci: è il tempo che ci mette
-        /// a essere vero ciò che la chiusura dice di sé.
+        /// L'altra metà è la 0159. Prima lo shutdown dipendeva soltanto dal
+        /// comportamento interno del debouncer. Adesso chiude gli ingressi di
+        /// [`ExternalSync`] e aspetta che le consegne già accettate completino
+        /// anche la propria durevolezza; solo dopo ferma il worker e abbassa la
+        /// bandiera. La `Condvar` rilascia il proprio mutex mentre aspetta,
+        /// quindi un lotto in volo può uscire e notificare la chiusura.
         fn drop(&mut self) {
+            self.lifecycle.invalidate_and_wait();
             if let Some(debouncer) = self.debouncer.take() {
                 debouncer.stop();
             }
-            self.watching.store(false, Ordering::Relaxed);
+            self.watching.store(false, Ordering::Release);
         }
     }
 
@@ -607,14 +1007,35 @@ mod notify_watcher {
 
     /// Il vocabolario di `notify` tradotto in quello del lotto.
     ///
-    /// Un rename accoppiato (`paths = [from, to]`) è una migrazione d'identità e
-    /// non remove+add; tutto il resto è un path toccato, e cosa gli sia successo
-    /// lo scopre il kernel guardando il disco.
+    /// `Both` porta già i due path ed è una migrazione esplicita. Due metà
+    /// `From`/`To` diventano una migrazione soltanto quando lo stesso tracker
+    /// non nullo identifica esattamente una partenza e un arrivo nel lotto.
+    /// Metà orfane, tracker assenti e tracker ambigui restano path toccati: i
+    /// byte uguali non sono una prova d'identità.
     fn changes(events: Vec<notify_debouncer_full::DebouncedEvent>) -> Vec<ExternalChange> {
+        let mut halves: HashMap<usize, (Option<usize>, Option<usize>, bool)> = HashMap::new();
+        for (index, event) in events.iter().enumerate() {
+            let slot = match &event.kind {
+                EventKind::Modify(ModifyKind::Name(RenameMode::From)) => 0,
+                EventKind::Modify(ModifyKind::Name(RenameMode::To)) => 1,
+                _ => continue,
+            };
+            let Some(tracker) = event.tracker() else {
+                continue;
+            };
+            let pair = halves.entry(tracker).or_default();
+            let occupied = if slot == 0 {
+                pair.0.replace(index).is_some()
+            } else {
+                pair.1.replace(index).is_some()
+            };
+            pair.2 |= occupied;
+        }
+
         let mut out = Vec::new();
-        for event in events {
+        for (index, event) in events.iter().enumerate() {
             if matches!(
-                event.kind,
+                &event.kind,
                 EventKind::Modify(ModifyKind::Name(RenameMode::Both))
             ) && event.paths.len() == 2
             {
@@ -626,6 +1047,30 @@ mod notify_watcher {
                     continue;
                 }
             }
+
+            if matches!(
+                &event.kind,
+                EventKind::Modify(ModifyKind::Name(RenameMode::From | RenameMode::To))
+            ) {
+                if let Some((Some(from_index), Some(to_index), false)) =
+                    event.tracker().and_then(|tracker| halves.get(&tracker))
+                {
+                    let from = &events[*from_index];
+                    let to = &events[*to_index];
+                    if from.paths.len() == 1 && to.paths.len() == 1 {
+                        if let (Ok(from), Ok(to)) = (
+                            Utf8PathBuf::from_path_buf(from.paths[0].clone()),
+                            Utf8PathBuf::from_path_buf(to.paths[0].clone()),
+                        ) {
+                            if index == *from_index {
+                                out.push(ExternalChange::Renamed { from, to });
+                            }
+                            continue;
+                        }
+                    }
+                }
+            }
+
             for path in &event.paths {
                 if let Ok(p) = Utf8PathBuf::from_path_buf(path.clone()) {
                     out.push(ExternalChange::Touched(p));
@@ -659,6 +1104,7 @@ mod notify_watcher {
             // in cui l'ordine dei lotti smette di dipendere da quanti thread
             // `notify` decide di usare (vedi il doc di `ExternalSync`).
             let mut sync = ExternalSync::new(workspace);
+            let lifecycle = sync.lifecycle();
             let mut debouncer = new_debouncer(
                 Duration::from_millis(300),
                 None,
@@ -690,6 +1136,9 @@ mod notify_watcher {
                         sync.batch(&changes(events));
                     }
                     Err(errors) => {
+                        let Some(_operation) = sync.lifecycle.enter() else {
+                            return;
+                        };
                         // Il rilevamento è finito, e da adesso si vede (§9.7):
                         // il perché sta sul metodo che lo racconta.
                         failed.store(false, Ordering::Relaxed);
@@ -713,6 +1162,7 @@ mod notify_watcher {
             Ok(Box::new(Debounced {
                 debouncer: Some(debouncer),
                 watching,
+                lifecycle,
             }))
         }
     }
@@ -731,33 +1181,31 @@ mod notify_watcher {
         /// partito continuava per conto suo a sincronizzare e a scrivere indici
         /// dentro un vault chiuso.
         ///
-        /// Qui la consegna dura, e chi lascia andare il rilevatore la trova
-        /// finita. Rimesso il `drop` che non aspetta, la riga nomina il difetto.
-        ///
-        /// Gli eventi li fa il filesystem, perché è il solo modo di far partire
-        /// una consegna vera; non è però un banco di **quanto ci mette**: la
-        /// scrittura si ripete finché la consegna non è partita, e ciò che si
-        /// pretende è un ordine fra due fatti, non un tempo (§23.16).
+        /// Qui una consegna — riuscita o fallita — resta aperta su un canale.
+        /// Il teardown raggiunge deterministicamente l'invalidazione e non può
+        /// tornare né abbassare `watching` finché il test non la libera. Nessuno
+        /// `sleep` trasforma il tempo della macchina in un segnale.
         #[test]
         fn dropping_the_watcher_waits_for_the_in_flight_delivery() {
             let dir = tempfile::tempdir().expect("a folder to watch");
-            let (sender, receiver) = std::sync::mpsc::channel();
+            let (inside_tx, inside_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let lifecycle = Arc::new(SyncLifecycle::new());
+            let callback_lifecycle = Arc::clone(&lifecycle);
+            let observed_lifecycle = Arc::clone(&lifecycle);
             let delivered = Arc::new(AtomicBool::new(false));
-            let batch_done = delivered.clone();
+            let batch_done = Arc::clone(&delivered);
             let mut debouncer = new_debouncer(
                 Duration::from_millis(20),
                 None,
-                move |result: DebounceEventResult| {
-                    if result.is_err() {
+                move |_result: DebounceEventResult| {
+                    let Some(operation) = callback_lifecycle.enter() else {
                         return;
-                    }
-                    let _ = sender.send(());
-                    // Ciò che un lotto vero fa qui è `ExternalSync::batch`: il
-                    // workspace in scrittura e gli indici resi durevoli. Quanto
-                    // duri non conta, conta che stia ancora durando.
-                    // **L'anello che si chiudeva.** Questi sono gli eventi che inotify
-                    std::thread::sleep(Duration::from_millis(300));
+                    };
+                    inside_tx.send(()).expect("the test waits for the callback");
+                    release_rx.recv().expect("the test releases the callback");
                     batch_done.store(true, Ordering::SeqCst);
+                    drop(operation);
                 },
             )
             .expect("the debouncer starts");
@@ -767,35 +1215,38 @@ mod notify_watcher {
             let watching = Arc::new(AtomicBool::new(true));
             let watcher = Debounced {
                 debouncer: Some(debouncer),
-                watching: watching.clone(),
+                watching: Arc::clone(&watching),
+                lifecycle,
             };
 
-            let mut started = false;
-            for n in 0..100 {
-                std::fs::write(dir.path().join(format!("note-{n}.md")), b"hello")
-                    .expect("a file that changes");
-                if receiver.recv_timeout(Duration::from_millis(100)).is_ok() {
-                    started = true;
-                    break;
-                }
-            }
-            assert!(
-                started,
-                "the watcher never delivered: without a batch in flight \
-                 this test proves nothing"
-            );
+            std::fs::write(dir.path().join("note.md"), b"hello").expect("a file that changes");
+            inside_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("the watcher enters its callback");
 
-            drop(watcher);
+            let (stopped_tx, stopped_rx) = std::sync::mpsc::channel();
+            let stopping = std::thread::spawn(move || {
+                drop(watcher);
+                stopped_tx.send(()).expect("the test waits for teardown");
+            });
+            observed_lifecycle.wait_until_invalidated();
+            assert!(
+                stopped_rx.try_recv().is_err() && watching.load(Ordering::Acquire),
+                "teardown returned or lowered watching while a callback was still in flight"
+            );
+            release_tx.send(()).expect("the callback can finish");
+            stopped_rx
+                .recv_timeout(Duration::from_secs(10))
+                .expect("teardown finishes after the callback");
+            stopping.join().expect("teardown does not panic");
 
             assert!(
                 delivered.load(Ordering::SeqCst),
-                "the vault closed with a batch still in flight: in a moment it \
-                 will take the workspace for writing and make indices durable \
-                 inside a vault nobody watches any more"
+                "the vault closed with a batch still in flight"
             );
             assert!(
-                !watching.load(Ordering::Relaxed),
-                "the one that stopped watching did not say so"
+                !watching.load(Ordering::Acquire),
+                "the watcher lowered its flag before teardown completed"
             );
         }
 
@@ -832,6 +1283,54 @@ mod notify_watcher {
             ] {
                 assert!(is_a_change_kind(&kind), "{kind:?} is a change");
             }
+        }
+
+        fn rename_half(
+            mode: RenameMode,
+            tracker: Option<usize>,
+            paths: &[&str],
+        ) -> notify_debouncer_full::DebouncedEvent {
+            let mut event = notify::Event::new(EventKind::Modify(ModifyKind::Name(mode)));
+            for path in paths {
+                event = event.add_path((*path).into());
+            }
+            if let Some(tracker) = tracker {
+                event = event.set_tracker(tracker);
+            }
+            notify_debouncer_full::DebouncedEvent::new(event, std::time::Instant::now())
+        }
+
+        #[test]
+        fn rename_halves_require_one_shared_tracker_in_the_same_batch() {
+            let changes = changes(vec![
+                rename_half(RenameMode::From, Some(7), &["tracked-from.md"]),
+                rename_half(RenameMode::To, Some(7), &["tracked-to.md"]),
+                rename_half(RenameMode::From, None, &["untracked-from.md"]),
+                rename_half(RenameMode::To, None, &["untracked-to.md"]),
+                rename_half(RenameMode::From, Some(9), &["ambiguous-a.md"]),
+                rename_half(RenameMode::From, Some(9), &["ambiguous-b.md"]),
+                rename_half(RenameMode::To, Some(9), &["ambiguous-to.md"]),
+                rename_half(RenameMode::Both, None, &["both-from.md", "both-to.md"]),
+            ]);
+
+            assert_eq!(
+                changes,
+                vec![
+                    ExternalChange::Renamed {
+                        from: "tracked-from.md".into(),
+                        to: "tracked-to.md".into(),
+                    },
+                    ExternalChange::Touched("untracked-from.md".into()),
+                    ExternalChange::Touched("untracked-to.md".into()),
+                    ExternalChange::Touched("ambiguous-a.md".into()),
+                    ExternalChange::Touched("ambiguous-b.md".into()),
+                    ExternalChange::Touched("ambiguous-to.md".into()),
+                    ExternalChange::Renamed {
+                        from: "both-from.md".into(),
+                        to: "both-to.md".into(),
+                    },
+                ]
+            );
         }
 
         /// caduta).

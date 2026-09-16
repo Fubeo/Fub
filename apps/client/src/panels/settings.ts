@@ -26,10 +26,19 @@
 // stessa strada, o l'utente non potrebbe cambiare le proprie impostazioni di
 // privacy, o un plugin potrebbe.
 import { api } from "../host/ipc";
+import { confirm, pickFile } from "../host/dialog";
 import { Race } from "../ui/race";
 import { settings } from "../host/query";
-import type { BundleInfo, SettingEntry, SettingValue, KnownVault } from "../host/contract";
+import type {
+  BundleInfo,
+  InstalledPluginInfo,
+  PluginError,
+  SettingEntry,
+  SettingValue,
+  KnownVault,
+} from "../host/contract";
 import { onEvent } from "../state/kernel";
+import { state } from "../state/store";
 import { $ } from "../ui/dom";
 import { trapFocus } from "../ui/a11y";
 import { notify } from "../ui/notify";
@@ -141,6 +150,7 @@ export function mountSettings(nextHooks: Hooks): void {
   for (const button of tabsEl.querySelectorAll<HTMLButtonElement>("button[data-tab]")) {
     button.addEventListener("click", () => {
       tab = button.dataset.tab as SettingsTab;
+      componentsGeneration++;
       void render();
     });
   }
@@ -177,6 +187,8 @@ async function open(): Promise<void> {
 
 function close(): void {
   release?.();
+  race.cancel();
+  componentsGeneration++;
   release = null;
   exitSurface(panelEl, () => {
     panelEl.hidden = true;
@@ -720,25 +732,114 @@ async function renderShortcuts(): Promise<HTMLElement[]> {
 
 // --- la scheda dei componenti -----------------------------------------------
 
+const pendingComponents = new Set<string>();
+let componentsGeneration = 0;
+
 async function renderComponents(): Promise<HTMLElement[]> {
-  // Le due domande insieme, e non una per componente: i permessi sono
-  // impostazioni come le altre, quindi arrivano tutti dalla stessa risposta che
-  // il pannello già chiedeva. Chiederne una per componente sarebbe N chiamate
-  // per disegnare una scheda.
-  const [bundles, entries] = await Promise.all([api.listBundles(), settings()]);
-  const forKey = new Map(entries.map((e) => [e.spec.key, e]));
-  return [
+  // L'inventario installato non viene ricavato dai bundle runtime: così restano
+  // visibili anche una scelta negata, un componente spento e un vault chiuso.
+  // Le letture legate al vault sono indipendenti: se non c'è un guest, la loro
+  // diagnosi non deve trasformare l'inventario macchina in una scheda vuota.
+  const [installedResult, bundleResult, entryResult] = await Promise.allSettled([
+    api.listInstalledPlugins(state.vaultRoot || undefined),
+    api.listBundles(),
+    settings(),
+  ]);
+  const installed = installedResult.status === "fulfilled" ? installedResult.value : [];
+  const bundles = bundleResult.status === "fulfilled" ? bundleResult.value : [];
+  const entries = entryResult.status === "fulfilled" ? entryResult.value : [];
+  const forKey = new Map(entries.map((entry) => [entry.spec.key, entry]));
+  // `runtime_known` è la prova del claim dell'installazione. Un filtro per solo
+  // id nasconderebbe invece una feature ufficiale omonima, proprio quando
+  // l'installazione è stata rifiutata per collisione.
+  const installedRuntimeIds = new Set(
+    installed.filter((plugin) => plugin.runtime_known).map((plugin) => plugin.id),
+  );
+  const native = bundles.filter((bundle) => !installedRuntimeIds.has(bundle.id));
+  const nodes: HTMLElement[] = [
+    installAction(),
     row("muted", t("settings.components_hint")),
-    ...bundles.flatMap((b) => renderComponent(b, forKey)),
   ];
+  if (bundleResult.status === "rejected") {
+    nodes.push(row("muted", t("settings.read_failed", { reason: errorText(bundleResult.reason) })));
+  }
+  if (entryResult.status === "rejected") {
+    nodes.push(row("muted", t("settings.read_failed", { reason: errorText(entryResult.reason) })));
+  }
+
+  if (native.length > 0) {
+    nodes.push(sectionTitle("settings.components.bundled"));
+    for (const bundle of native) nodes.push(...renderComponent(bundle, forKey));
+  }
+
+  nodes.push(sectionTitle("settings.components.installed"));
+  if (installedResult.status === "rejected") {
+    nodes.push(row("muted", t("settings.read_failed", { reason: errorText(installedResult.reason) })));
+  } else if (installed.length === 0) {
+    nodes.push(row("muted", t("settings.components.installed.none")));
+  } else {
+    for (const plugin of installed) nodes.push(...renderInstalledComponent(plugin, forKey));
+  }
+  return nodes;
 }
 
-/// Un componente: la sua riga, e sotto ciò che ha dichiarato di voler fare.
-///
-/// Torna **più** nodi e non un blocco annidato perché le righe dei permessi
-/// sono righe di impostazione come tutte le altre — stessa classe, stessa
-/// colonna del controllo — e infilarle dentro un contenitore proprio le
-/// allineerebbe diversamente da ogni altra casella di questo pannello.
+function sectionTitle(key: Key): HTMLElement {
+  const title = document.createElement("div");
+  title.className = "panel-title";
+  title.setAttribute("role", "heading");
+  title.setAttribute("aria-level", "3");
+  title.textContent = t(key);
+  return title;
+}
+
+function installAction(): HTMLElement {
+  const el = document.createElement("div");
+  el.className = "setting-row";
+  const text = document.createElement("div");
+  text.className = "setting-text";
+  const label = document.createElement("div");
+  label.textContent = t("settings.components.install");
+  text.append(label, row("setting-source", t("settings.components.install.hint")));
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = t("settings.components.install.pick");
+  button.disabled = pendingComponents.has("install");
+  button.addEventListener("click", () => {
+    if (pendingComponents.has("install")) return;
+    const generation = componentsGeneration;
+    pendingComponents.add("install");
+    setPending([el], true);
+    void (async () => {
+      const path = await pickFile().catch((error: unknown) => {
+        notify(t("settings.components.install_failed", { reason: errorText(error) }), "guasto");
+        return null;
+      });
+      if (
+        path === null ||
+        generation !== componentsGeneration ||
+        release === null ||
+        panelEl.hidden ||
+        tab !== "components"
+      ) {
+        pendingComponents.delete("install");
+        if (generation === componentsGeneration && el.isConnected) await render();
+        return;
+      }
+      await completeComponentAction(
+        "install",
+        [el],
+        () => api.installPlugin(path),
+        "settings.components.install_failed",
+      );
+    })();
+  });
+  el.append(text, button);
+  return el;
+}
+
+/// Un componente distribuito con Fub conserva il proprio interruttore runtime e
+/// le preferenze granulari dei permessi. Il percorso installato sotto è
+/// separato: l'autorità persistita è l'identità dell'installazione.
 function renderComponent(bundle: BundleInfo, forKey: EntryMap): HTMLElement[] {
   const el = document.createElement("div");
   el.className = "setting-row";
@@ -747,32 +848,20 @@ function renderComponent(bundle: BundleInfo, forKey: EntryMap): HTMLElement[] {
   const label = document.createElement("label");
   label.textContent = bundle.name;
   label.htmlFor = `bundle-${bundle.id}`;
-  // Di chi ci si sta fidando sta accanto all'id e non fra i permessi: è la
-  // premessa con cui si leggono, non una riga dell'elenco.
   text.append(label, row("muted", `${bundle.id} · ${t(TRUST_LABELS[bundle.trust])}`));
   const input = document.createElement("input");
   input.type = "checkbox";
   input.id = `bundle-${bundle.id}`;
   input.checked = bundle.mounted;
+  const pendingKey = `bundle:${bundle.id}`;
+  input.disabled = pendingComponents.has(pendingKey);
   input.addEventListener("change", () => {
-    void (async () => {
-      try {
-        // Ciò che torna sono gli errori **dello spegnimento**, che non sono un
-        // motivo per non spegnere: si dicono e basta. Arrivano interi — specie
-        // e frase (decisione 0041) — e qui si stampa la frase con la stessa
-        // funzione di ogni altro guasto: `${p}` su un oggetto direbbe
-        // «[object Object]», ed è il tipo a non lasciarlo scrivere.
-        const errors = await api.setPluginEnabled(bundle.id, input.checked);
-        for (const p of errors) notify(errorText(p), "guasto");
-        // Il montaggio è già avvenuto lato host; qui si riallinea **il resto
-        // della finestra**, o le view di un componente spento resterebbero
-        // appese nella sidebar e i suoi comandi nella palette.
-        await settingsHooks.reloadProvider();
-      } catch (e) {
-        notify(t("settings.component_not_changed", { reason: errorText(e) }), "guasto");
-      }
-      await render();
-    })();
+    beginComponentAction(
+      pendingKey,
+      [el],
+      () => api.setPluginEnabled(bundle.id, input.checked),
+      "settings.component_not_changed",
+    );
   });
   el.append(text, input);
 
@@ -780,38 +869,239 @@ function renderComponent(bundle: BundleInfo, forKey: EntryMap): HTMLElement[] {
   if (permissions.length === 0) {
     return [el, row("muted setting-sub", t("settings.permissions.none"))];
   }
-  const title = document.createElement("div");
-  title.className = "panel-title setting-sub";
-  title.textContent = t("settings.permissions");
-  const nodes = [el, title, row("muted setting-sub", t("settings.permissions.hint"))];
-  // Un componente **spento** non è dichiarato nel kernel, quindi le chiavi con
-  // cui si negano i suoi permessi non esistono: si legge cosa chiederebbe, e
-  // per deciderlo lo si accende. Dirlo è meglio che mostrare interruttori che
-  // non risponderebbero — e mostrare l'elenco lo stesso è il punto, perché
-  // «cosa chiederebbe se lo accendessi» è una domanda che ci si pone **prima**.
+  const nodes = [
+    el,
+    sectionTitle("settings.permissions"),
+    row("muted setting-sub", t("settings.permissions.hint")),
+  ];
+  nodes[1].classList.add("setting-sub");
   if (!bundle.mounted) {
     nodes.push(row("muted setting-sub", t("settings.permissions.off_hint")));
   }
-  for (const p of permissions) nodes.push(renderPermission(p, forKey.get(p.key)));
+  for (const permission of permissions) {
+    nodes.push(renderPermission(permission, forKey.get(permission.key)));
+  }
   return nodes;
 }
 
-/// Una riga di permesso: la frase, il suo parametro, e l'interruttore.
-///
-/// L'interruttore c'è solo quando c'è qualcosa da negare — cioè quando l'host
-/// conosce il permesso **e** il componente è acceso, che è quando la chiave è
-/// dichiarata. Un interruttore che non risponde insegna a non fidarsi degli
-/// interruttori, ed è la stessa riga con cui questo pannello nasconde «azzera»
-/// dove non c'è niente da azzerare.
+const CONSENT_LABELS: Record<InstalledPluginInfo["consent"], Key> = {
+  undecided: "settings.components.consent.undecided",
+  denied: "settings.components.consent.denied",
+  granted: "settings.components.consent.granted",
+};
+
+function renderInstalledComponent(plugin: InstalledPluginInfo, forKey: EntryMap): HTMLElement[] {
+  const key = `installed:${plugin.installation}`;
+  const pending = pendingComponents.has(key);
+  const nodes: HTMLElement[] = [];
+
+  const header = document.createElement("div");
+  header.className = "setting-row";
+  const text = document.createElement("div");
+  text.className = "setting-text";
+  const name = document.createElement("div");
+  name.setAttribute("role", "heading");
+  name.setAttribute("aria-level", "4");
+  name.textContent = plugin.name;
+  text.append(
+    name,
+    row(
+      "muted",
+      t("settings.components.identity", {
+        id: plugin.id,
+        version: plugin.version,
+        trust: t(TRUST_LABELS[plugin.trust]),
+      }),
+    ),
+    row(
+      "setting-source",
+      t(plugin.mounted ? "settings.components.runtime.mounted" : "settings.components.runtime.off"),
+    ),
+  );
+  header.append(text);
+  nodes.push(header);
+
+  const enabledRow = document.createElement("div");
+  enabledRow.className = "setting-row setting-sub";
+  const enabledText = document.createElement("div");
+  enabledText.className = "setting-text";
+  const enabledLabel = document.createElement("label");
+  const enabledId = `installed-enabled-${plugin.installation}`;
+  enabledLabel.htmlFor = enabledId;
+  enabledLabel.textContent = t("settings.components.enabled");
+  enabledText.append(enabledLabel, row("setting-source", t("settings.components.enabled.hint")));
+  const enabled = document.createElement("input");
+  enabled.type = "checkbox";
+  enabled.id = enabledId;
+  enabled.checked = plugin.enabled;
+  enabled.disabled = pending;
+  enabled.addEventListener("change", () => {
+    beginComponentAction(
+      key,
+      nodes,
+      () => api.setInstalledPluginEnabled(plugin.installation, enabled.checked),
+      "settings.components.enabled_failed",
+    );
+  });
+  enabledRow.append(enabledText, enabled);
+  nodes.push(enabledRow);
+
+  const consentRow = document.createElement("div");
+  consentRow.className = "setting-row setting-sub";
+  const consentText = document.createElement("div");
+  consentText.className = "setting-text";
+  const consentLabel = document.createElement("label");
+  const consentId = `installed-consent-${plugin.installation}`;
+  consentLabel.htmlFor = consentId;
+  consentLabel.textContent = t("settings.components.consent");
+  consentText.append(consentLabel, row("setting-source", t("settings.components.consent.hint")));
+  const consent = document.createElement("select");
+  consent.id = consentId;
+  consent.disabled = pending;
+  for (const value of ["undecided", "denied", "granted"] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = t(CONSENT_LABELS[value]);
+    option.selected = value === plugin.consent;
+    consent.append(option);
+  }
+  consent.addEventListener("change", () => {
+    beginComponentAction(
+      key,
+      nodes,
+      () =>
+        api.setInstalledPluginConsent(
+          plugin.installation,
+          consent.value as InstalledPluginInfo["consent"],
+        ),
+      "settings.components.consent_failed",
+    );
+  });
+  consentRow.append(consentText, consent);
+  nodes.push(consentRow);
+
+  const permissions = rows(plugin);
+  nodes.push(sectionTitle("settings.permissions"));
+  nodes[nodes.length - 1]!.classList.add("setting-sub");
+  nodes.push(row("muted setting-sub", t("settings.components.permissions.hint")));
+  if (permissions.length === 0) {
+    nodes.push(row("muted setting-sub", t("settings.permissions.none")));
+  } else {
+    for (const permission of permissions) {
+      nodes.push(renderPermission(permission, plugin.runtime_known ? forKey.get(permission.key) : undefined));
+    }
+  }
+
+  const removeRow = document.createElement("div");
+  removeRow.className = "setting-row setting-sub";
+  const removeText = document.createElement("div");
+  removeText.className = "setting-text";
+  const removeLabel = document.createElement("div");
+  removeLabel.textContent = t("settings.components.remove");
+  removeText.append(removeLabel, row("setting-source", t("settings.components.remove.hint")));
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.textContent = t("settings.components.remove");
+  remove.disabled = pending || plugin.enabled;
+  if (plugin.enabled) {
+    remove.setAttribute("aria-describedby", `installed-remove-hint-${plugin.installation}`);
+    const disabledHint = row("setting-source", t("settings.components.remove.disabled"));
+    disabledHint.id = `installed-remove-hint-${plugin.installation}`;
+    removeText.append(disabledHint);
+  }
+  remove.addEventListener("click", () => {
+    if (plugin.enabled || pendingComponents.has(key)) return;
+    pendingComponents.add(key);
+    setPending(nodes, true);
+    void (async () => {
+      const accepted = await confirm(t("settings.components.remove.confirm", { name: plugin.name }), {
+        title: t("settings.components.remove.title"),
+        okLabel: t("settings.components.remove"),
+        danger: true,
+      }).catch((error: unknown) => {
+        notify(t("settings.components.remove_failed", { reason: errorText(error) }), "guasto");
+        return false;
+      });
+      if (!accepted || !remove.isConnected || tab !== "components" || release === null) {
+        pendingComponents.delete(key);
+        if (remove.isConnected && release !== null && tab === "components") await render();
+        return;
+      }
+      await completeComponentAction(
+        key,
+        nodes,
+        () => api.removeInstalledPlugin(plugin.installation),
+        "settings.components.remove_failed",
+      );
+    })();
+  });
+  removeRow.append(removeText, remove);
+  nodes.push(removeRow);
+  return nodes;
+}
+
+function beginComponentAction(
+  key: string,
+  nodes: HTMLElement[],
+  action: () => Promise<unknown>,
+  failure: Key,
+): void {
+  if (pendingComponents.has(key)) return;
+  pendingComponents.add(key);
+  setPending(nodes, true);
+  void completeComponentAction(key, nodes, action, failure);
+}
+
+async function completeComponentAction(
+  key: string,
+  nodes: HTMLElement[],
+  action: () => Promise<unknown>,
+  failure: Key,
+): Promise<void> {
+  try {
+    const result = await action();
+    if (Array.isArray(result)) {
+      for (const error of result as PluginError[]) notify(errorText(error), "guasto");
+    }
+  } catch (error) {
+    notify(t(failure, { reason: errorText(error) }), "guasto");
+  }
+  try {
+    await settingsHooks.reloadProvider();
+  } catch (error) {
+    notify(t("settings.components.reload_failed", { reason: errorText(error) }), "guasto");
+  }
+  pendingComponents.delete(key);
+  if (release !== null && !panelEl.hidden && tab === "components") {
+    await render();
+  } else {
+    setPending(nodes, false);
+  }
+}
+
+function setPending(nodes: HTMLElement[], pending: boolean): void {
+  for (const node of nodes) {
+    node.setAttribute("aria-busy", String(pending));
+    for (const control of node.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLButtonElement>(
+      "input, select, button",
+    )) {
+      control.disabled = pending;
+    }
+  }
+}
+
+/// Una riga di permesso: la frase, il suo parametro e l'interruttore granulare
+/// quando l'owner runtime corrisponde e la relativa impostazione esiste.
 function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row setting-sub";
   const text = document.createElement("div");
   text.className = "setting-text";
-  const label = document.createElement("label");
-  label.textContent = p.message;
-  label.htmlFor = `permission-${p.key}`;
-  text.append(label);
+  const interactive = entry !== undefined && p.known;
+  const description = document.createElement(interactive ? "label" : "div");
+  description.textContent = p.message;
+  if (interactive) (description as HTMLLabelElement).htmlFor = `permission-${p.key}`;
+  text.append(description);
   if (p.detail) text.append(row("setting-source", p.detail));
   el.append(text);
 
@@ -822,18 +1112,11 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   input.type = "checkbox";
   input.id = `permission-${p.key}`;
   input.checked = granted;
-  // La frase è già l'etichetta visibile, ma è lunga e comincia tutta uguale
-  // («Può leggere…»): chi ascolta la lista dei controlli sentirebbe undici
-  // caselle che si somigliano. Il nome accessibile porta quindi la frase
-  // dentro una che dice cosa fa la casella.
-  input.setAttribute("aria-label", t("settings.permission.grant", { thing: p.message }));
+  input.setAttribute("aria-label", t("settings.permission.grant", { cosa: p.message }));
   input.addEventListener("change", () => {
     void write(() => api.setSetting(p.key, input.checked), "settings.permission_not_changed");
   });
   el.append(input);
-  // Che sia stato **l'utente** a toglierlo è l'informazione che distingue «non
-  // lo chiede» da «gliel'ho tolto io», e senza di essa una riga spenta si legge
-  // come una riga che il componente non ha dichiarato.
   if (!granted) text.append(row("setting-source", t("settings.permission.denied")));
   return el;
 }

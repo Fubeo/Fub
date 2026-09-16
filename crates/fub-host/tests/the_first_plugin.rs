@@ -49,7 +49,7 @@ use fub_abi::traits::{
 use fub_abi::PluginError;
 use fub_host::registry::Bundle;
 use fub_host::{Host, NoWatcher};
-use fub_kernel::{Subscription, Trust, Workspace};
+use fub_kernel::{Subscription, Trust};
 
 const ID: &str = "demo.ping";
 const COMMAND: &str = "demo.ping:ping";
@@ -90,19 +90,18 @@ fn bench(v: &Vault, permissions: bool) -> (Host, Subscription, Journal) {
         .expect("open");
     let journal: Journal = Arc::default();
     host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(
-                &BundleDemoPing {
-                    journal: journal.clone(),
-                    permissions,
-                },
-                &mut ws,
-            )
+        fub_host::BundleRegistry::remember_guarded(
+            s.bundles(),
+            Arc::new(BundleDemoPing {
+                journal: journal.clone(),
+                permissions,
+            }),
+        )
+        .unwrap();
+        fub_host::BundleRegistry::enable_guarded(s.bundles(), s.workspace(), ID)
             .expect("the bundle mounts");
         if permissions {
+            let mut ws = s.workspace().write().unwrap();
             ws.set_setting(
                 &permission_key(ID, permission::READ_VAULT),
                 SettingValue::Toggle(true),
@@ -237,9 +236,9 @@ impl Bundle for BundleDemoPing {
         })
     }
 
-    fn register(&self, ws: &mut Workspace) -> Vec<String> {
+    fn register(&self, registrar: &mut fub_host::registry::Registrar<'_>) -> Vec<String> {
         let mut warnings = Vec::new();
-        if let Err(and) = ws.register_command_provider(ID, Box::new(PingProvider)) {
+        if let Err(and) = registrar.register_command_provider(Box::new(PingProvider)) {
             warnings.push(format!("command: {and}"));
         }
         warnings
@@ -302,8 +301,8 @@ fn a_plugin_live_for_contract_is_mounts_lives_and_is_unmounts() {
     );
 
     host.with_session(None, |s| {
+        let errors = fub_host::BundleRegistry::unmount_guarded(s.bundles(), s.workspace(), ID);
         let mut ws = s.workspace().write().unwrap();
-        let errors = s.bundles().write().unwrap().unmount(&mut ws, ID);
         assert!(errors.is_empty(), "nothing went wrong: {errors:?}");
         assert!(
             !ws.commands().iter().any(|c| c.id == COMMAND),

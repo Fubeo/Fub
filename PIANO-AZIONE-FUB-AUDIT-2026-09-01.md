@@ -1022,29 +1022,78 @@ cargo clippy --workspace --all-targets -- -D warnings
 
 ## 3.9 Review manuale obbligatoria
 
-Per ogni callsite:
+Sul candidato di codice `1b0f13f125450b98170cf4ae17acc0b163506007`
+la revisione finale del call graph di produzione che attraversa
+`Custody<Workspace>` è `PASS`. I fix host-only integrati fino all'HEAD locale
+`e8428be9729fd2489bbf00e445329d27ec74bb58` non modificano quel call graph.
+Per ogni callsite è stato verificato che:
 
-- [ ] il guard termina prima della callback;
-- [ ] il proxy non espone il workspace generico;
-- [ ] non viene passato un riferimento che prolunga il prestito;
-- [ ] panic/error ripristinano lo stato;
-- [ ] finalize verifica staleness;
-- [ ] eventi sono drenati nel punto previsto;
-- [ ] nessuna callback indiretta resta sotto lock;
-- [ ] il test attraversa il percorso reale.
+- [x] il guard termina prima della callback;
+- [x] il proxy non espone il workspace generico;
+- [x] non viene passato un riferimento che prolunga il prestito;
+- [x] panic/error ripristinano lo stato;
+- [x] finalize verifica staleness;
+- [x] eventi sono drenati nel punto previsto;
+- [x] nessuna callback indiretta resta sotto lock;
+- [x] il test attraversa il percorso reale.
 
 ## 3.10 Gate `G3 — Callback provider fuori lock`
 
-- [ ] call graph completo delle callback;
-- [ ] tutti i percorsi usano prepare/call/finalize o equivalente dimostrabile;
-- [ ] nessun provider è chiamato dentro `read_workspace`/`write_workspace`;
-- [ ] test di re-entry verde;
-- [ ] test stale verde;
-- [ ] error/panic cleanup verificato;
-- [ ] `Host::workspace` non è stato usato come scorciatoia;
-- [ ] Clippy `-D warnings` verde;
-- [ ] commit semantico ispezionato;
-- [ ] `ARCH-001` aggiornato nella matrice.
+Stato del candidato di codice: **`CLOSED`** sul tree live certificato
+`9c5a4db2382d45ee709ada4668a840465d871c64`. Le prove locali e remote
+autorizzano la chiusura di `ARCH-001` e G3:
+
+- [x] call graph completo delle callback;
+- [x] tutti i percorsi usano prepare/call/finalize o equivalente dimostrabile;
+- [x] nessun provider è chiamato dentro `read_workspace`/`write_workspace`;
+- [x] test di re-entry verde;
+- [x] test stale verde;
+- [x] error/panic cleanup verificato;
+- [x] `Host::workspace` non è stato usato come scorciatoia;
+- [x] Clippy `-D warnings` verde senza `allow`;
+- [x] commit semantici ispezionati;
+- [x] `ARCH-001` aggiornato nella matrice;
+- [x] CI completa PR e push verde sul medesimo SHA `9c5a4db…`.
+
+Dopo il fetch live del 13 settembre 2026, la PR #32 è **OPEN, DRAFT** e l'head
+remoto di `fix/lifecycle-mount-detached` e `pull/32/head` è
+`9c5a4db2382d45ee709ada4668a840465d871c64`.
+
+Sul medesimo SHA sono verdi:
+
+- la [run CI PR 34746750247](https://github.com/Fubeo/Fub/actions/runs/34746750247),
+  `completed/success`, 8 job su 8;
+- la [run CI push 34746748272](https://github.com/Fubeo/Fub/actions/runs/34746748272),
+  `completed/success`.
+
+Il tree live contiene già i sei commit successivi a `fbe9676a…`:
+
+| Commit | Correzione |
+|---|---|
+| `d8e86e83` | rollback delle opening non pubblicate |
+| `8a9a530f` | avvio atomico dei worker |
+| `0e0441ef` | pubblicazione atomica della sessione |
+| `78a89f92` | contenimento dei panic nella preparazione dei bundle |
+| `440bd410` | rollback dei mount parziali |
+| `9c5a4db` | isolamento dei fallimenti della scansione su nomi non UTF-8 |
+
+La certificazione riguarda il tree `9c5a4db…`, non gli SHA intermedi
+`f626dfca…`, `fbe9676a…` o `c17467ed…`. Non chiude #8 o #10, non dichiara
+completa la matrice G14 56/56 e non autorizza G15/GO. I WIT frozen restano
+immutati; sono vietati `allow` per Clippy, skip dei test, `sleep` come
+sincronizzazione e mutex globale per serializzare le suite.
+
+La decisione resta **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
+Il prossimo passo funzionale è avviare dal tree `9c5a4db…` lo slice
+inventory/installazione di #8: portare semanticamente dalla PR #30 soltanto
+l'inventario installato, mantenere gli eseguibili fuori da `.fub/plugins` e non
+fare merge né cherry-pick dell'intera PR #30. #8 e #10 restano aperte.
+
+Il rischio residuo reale non viene nascosto: il rollback di una rename può
+correre contro un processo esterno, perché `VaultStorage` non offre rename
+condizionale né reservation. Il candidato vincola il rollback all'identità
+osservata del file, ma non può trasformare quel limite del filesystem in una
+transazione globale.
 
 ## 3.11 Condizioni di stop
 
@@ -2650,7 +2699,7 @@ Compilare una riga per ogni ID.
 
 | ID | Specifica ricostruita | Stato iniziale | Commit | Test/guardia | Docs | Rischio | CI |
 |---|---|---|---|---|---|---|---|
-| ARCH-001 | provider fuori lock con prepare/call/finalize | `OPEN` |  | re-entry/progresso |  |  |  |
+| ARCH-001 | provider fuori lock con prepare/call/finalize | `CLOSED` sul tree live certificato `9c5a4db2382d45ee709ada4668a840465d871c64` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...`, `ca0896ca...`, `e8428be9...`, `f626dfca...`, `d8e86e83...`, `8a9a530f...`, `0e0441ef...`, `78a89f92...`, `440bd410...`, `9c5a4db...` | call graph production `Custody` PASS; CI PR `34746750247` 8/8 e CI push `34746748272` verdi sul medesimo SHA | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni; #8, #10, G14 e G15/GO aperti | `PASS` su `9c5a4db…`; PR #32 `OPEN, DRAFT`; decisione `NO-GO` |
 | ARCH-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
 | ARCH-004 | servizi indipendenti progrediscono sotto write lock Workspace | `OPEN/REASSESS` |  | progresso |  |  |  |

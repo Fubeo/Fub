@@ -43,7 +43,6 @@
 // ha un valore alla volta, un layout ne ha uno per nome*. Il primo oggetto un
 // nome non ce l'ha, quindi non è un layout in quel senso — ed è così che il
 // «terzo stato senza contenitore» del §11.2 si scopre non essere terzo.
-import type { PaneMode } from "../host/contract";
 import { MAIN_PANE } from "../host/contract";
 import { emit, readState, writeState } from "./store";
 
@@ -80,13 +79,12 @@ export interface PaneState {
   /// stesso riquadro non sono vietate, e con un path non si saprebbe quale
   /// delle due è davanti.
   active: number;
-  /// La modalità di **questo** riquadro (FEATURES 4.1).
+  /// La modalità interna della superficie mostrata in questo riquadro.
   ///
-  /// Era una chiave sola di stato di vista, ed era giusto finché il riquadro era
-  /// uno. Con N riquadri la modalità è di ciascuno, e per una ragione che si
-  /// vede al primo uso: la disposizione che serve davvero è la nota di lato in
-  /// Lettura e la nota che si scrive in Live Preview.
-  mode: PaneMode;
+  /// È una stringa stabile dichiarata dalla superficie, non il `PaneMode`
+  /// congelato dell'ABI. La proiezione sul vecchio contesto è responsabilità
+  /// della superficie attiva.
+  mode: string;
 }
 
 /// Come sono disposti i riquadri.
@@ -103,11 +101,11 @@ export interface Layout {
   focus: string;
 }
 
-export const DEFAULT_MODE: PaneMode = "live_preview";
+export const DEFAULT_MODE = "live_preview";
 
 /// La finestra come nasce quando non c'è niente da ricordare: un riquadro, il
 /// primo, senza niente dentro.
-export function defaultLayout(mode: PaneMode = DEFAULT_MODE): Layout {
+export function defaultLayout(mode: string = DEFAULT_MODE): Layout {
   return {
     tree: { k: "leaf", pane: MAIN_PANE },
     panes: { [MAIN_PANE]: { tabs: [], active: -1, mode } },
@@ -367,7 +365,7 @@ export function removeEverywhere(doc: string, l: Layout = layout): void {
 }
 
 /// Cambia la modalità di un riquadro.
-export function setMode(id: string, mode: PaneMode, l: Layout = layout): void {
+export function setMode(id: string, mode: string, l: Layout = layout): void {
   const p = l.panes[id];
   if (!p || p.mode === mode) return;
   p.mode = mode;
@@ -486,8 +484,8 @@ export async function loadLayout(): Promise<void> {
   layout = parseLayout(saved) ?? defaultLayout(validMode(inheritedMode));
 }
 
-function validMode(v: unknown): PaneMode {
-  return v === "source" || v === "reading" || v === "live_preview" ? v : DEFAULT_MODE;
+function validMode(v: unknown): string {
+  return typeof v === "string" && v.trim() !== "" ? v : DEFAULT_MODE;
 }
 
 /// Da JSON a `Layout`, o `null` se ciò che c'è scritto non è un layout.

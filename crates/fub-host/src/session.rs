@@ -42,6 +42,7 @@ use std::sync::{Arc, Mutex};
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
 use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::format::DocumentFormat;
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
 use fub_abi::traits::{JobId, ViewInstance, ViewSpec};
@@ -53,11 +54,14 @@ use fub_kernel::{Guard, MachineSettings, ReadOnly, SystemLocale, ViewStates, Wor
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
-use crate::jobs::{drain_events, finish_events, with_event_drain, JobHost};
-use crate::mount::mount;
+use crate::jobs::{
+    drain_events, finish_events, run_detached_rebuild_index, with_event_drain, JobHost,
+};
 use crate::query::query_workspace;
 use crate::records::{UnreadDoc, VaultInfo};
-use crate::registry::{Bundle, BundleInfo, BundleRegistry};
+use crate::registry::{
+    Bundle, BundleClaim, BundleInfo, BundleRegistry, StartupLease, StartupSnapshot, StartupSource,
+};
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
 use crate::vaults::{VaultEntry, VaultRegistry};
 use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
@@ -132,8 +136,11 @@ pub struct VaultSession {
     ///
     /// Condiviso col runner, che da qui prende il **corpo** di un job. Il lock
     /// lo si tiene per il tempo di una `body`, mai per la durata di un job: chi
-    /// chiude deve poterci passare mentre un export cammina il vault.
     registry: Custody<BundleRegistry>,
+    /// Risorse preparate dalla `FormatSource`, vive quanto la sessione.
+    _format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    /// Diagnostica tipizzata prodotta dalla sorgente di startup per questa apertura.
+    startup_diagnostics: Vec<PluginError>,
     /// **Cosa questa apertura non ha letto** (§15.7): l'esito dell'apertura,
     /// tenuto per la vita della sessione.
     ///
@@ -200,6 +207,11 @@ impl VaultSession {
         self.versions.as_ref()
     }
 
+    /// Diagnostica tipizzata conservata dall'apertura del vault.
+    pub fn startup_diagnostics(&self) -> Vec<PluginError> {
+        self.startup_diagnostics.clone()
+    }
+
     /// Questo vault ha il rilevamento delle modifiche esterne? (§9.7)
     pub fn is_watching(&self) -> bool {
         self.watcher.is_watching()
@@ -232,6 +244,7 @@ impl VaultSession {
             watcher,
             registry,
             mut runner,
+            _format_resources,
             ..
         } = self;
         // 1. smette di guardare, 2. smette di lavorare, 3. si chiude. I primi
@@ -240,57 +253,10 @@ impl VaultSession {
         let mut errors: Vec<PluginError> = watcher.stop().err().into_iter().collect();
         errors.extend(runner.stop());
         drop(runner);
-        // Il turno conserva una sola chiusura logica, ma non è il `RwLock`:
-        // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
-        // La prepare alza `closed` e accoda il terminale; il drain ripristina
-        // sempre tabella, attore e flag prima che la finalize ritiri i provider.
-        // Questo non rivendica le altre callback di chiusura: flush/close degli
-        // indici e `Plugin::deactivate` restano nel seguito sincrono censito.
-        let _closing_turn = workspace.write_turn();
-        let prepared = match workspace.write() {
-            Ok(mut ws) => ws.prepare_close(),
-            Err(and) => {
-                errors.push(and);
-                return errors;
-            }
-        };
-        let Some(prepared) = prepared else {
-            return errors;
-        };
-        if let Err(and) = drain_events(&workspace) {
-            errors.push(and);
-        }
-
-        // Dopo la prepare non ci sono uscite anticipate: anche un errore del
-        // drain viene raccolto prima di tentare l'epilogo. Se è il registry a
-        // essere avvelenato, i corpi host non sono più affidabili e il loro
-        // `Plugin::deactivate` viene saltato; il workspace è però sano, quindi
-        // il kernel deve comunque ritirare provider e dichiarazioni. Se invece
-        // è morto il workspace stesso, la politica di `Custody` ne vieta il
-        // recupero: provare la presa registra l'errore, ma non può finalizzare
-        // uno stato lasciato a metà. In quel ramo il token viene abbandonato e
-        // la custodia resta esplicitamente irrecuperabile.
-        let finalized = match workspace.write() {
-            Ok(mut ws) => match registry.write() {
-                Ok(mut reg) => {
-                    Some(ws.finish_close_with(prepared, |workspace, id| reg.stop(workspace, id)))
-                }
-                Err(and) => {
-                    errors.push(and);
-                    Some(ws.finish_close_with(prepared, |_, _| Vec::new()))
-                }
-            },
-            Err(and) => {
-                errors.push(and);
-                None
-            }
-        };
-        if let Some(result) = finalized {
-            match result {
-                Ok(close_errors) => errors.extend(close_errors),
-                Err((_prepared, and)) => errors.push(and),
-            }
-        }
+        close_session_resources(&workspace, &registry, &mut errors);
+        errors.extend(crate::format_source::dispose_format_resources(
+            _format_resources,
+        ));
         errors
     }
 
@@ -302,14 +268,264 @@ impl VaultSession {
     }
 }
 
-/// I vault aperti, **in ordine d'uso**.
+/// Esegue il protocollo condiviso da chiusura pubblicata e rollback
+/// pre-pubblicazione, quando workspace e registry sono ancora vivi.
+fn close_session_resources(
+    workspace: &Custody<Workspace>,
+    registry: &Custody<BundleRegistry>,
+    errors: &mut Vec<PluginError>,
+) {
+    // Il turno conserva una sola chiusura logica, ma non è il `RwLock`:
+    // `VaultClosed` può così rientrare nelle capacità del proprio plugin.
+    // La prepare alza `closed` e accoda il terminale; il drain ripristina
+    // sempre tabella, attore e flag prima che la finalize ritiri i provider.
+    // Il seguito usa token propri anche per flush, deactivate e close;
+    // nessuna di queste callback conserva il guard del workspace.
+    let _closing_turn = workspace.write_turn();
+    let prepared = match workspace.write() {
+        Ok(mut ws) => ws.prepare_close(),
+        Err(error) => {
+            errors.push(error);
+            return;
+        }
+    };
+    let Some(prepared) = prepared else {
+        return;
+    };
+    if let Err(error) = drain_events(workspace) {
+        errors.push(error);
+    }
+
+    // Flush globale, corpi plugin e indici sono callback distinte. Ogni
+    // errore viene raccolto, senza saltare il resto del teardown.
+    match crate::teardown::flush_indexes(workspace) {
+        Ok(found) => errors.extend(found),
+        Err(error) => errors.push(error),
+    }
+    let plugins = match workspace.read() {
+        Ok(ws) => ws.closing_plugins(&prepared),
+        Err(error) => Err(error),
+    };
+    match plugins {
+        Ok(plugins) => {
+            for id in plugins {
+                match crate::teardown::unmount(workspace, registry, &id) {
+                    Ok(found) => errors.extend(found),
+                    Err(error) => errors.push(error),
+                }
+            }
+        }
+        Err(error) => errors.push(error),
+    }
+    match workspace.write() {
+        Ok(mut ws) => {
+            if let Err((_prepared, error)) = ws.finish_detached_close(prepared) {
+                errors.push(error);
+            }
+        }
+        Err(error) => errors.push(error),
+    }
+}
+
+/// Possesso transazionale di tutte le risorse fra mount e pubblicazione.
+///
+/// Un'uscita anticipata libera il turno di apertura, ferma watcher e runner e
+/// percorre lo stesso teardown di [`VaultSession::close`]. Gli errori di
+/// rollback vengono registrati senza sostituire l'errore che ha interrotto
+/// l'apertura.
+struct OpeningTransaction<'a> {
+    workspace: Custody<Workspace>,
+    registry: Custody<BundleRegistry>,
+    format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+    startup_diagnostics: Vec<PluginError>,
+    watcher: Option<OpeningWatcher<'a>>,
+    runner: Option<JobRunner>,
+    session: Option<VaultSession>,
+    startup_lease: Option<StartupLease>,
+    published: bool,
+}
+
+impl<'a> OpeningTransaction<'a> {
+    fn new(
+        workspace: &'a Custody<Workspace>,
+        registry: &Custody<BundleRegistry>,
+        format_resources: Vec<Box<dyn std::any::Any + Send + Sync>>,
+        startup_diagnostics: Vec<PluginError>,
+        startup_lease: Option<StartupLease>,
+    ) -> Self {
+        Self {
+            workspace: workspace.clone(),
+            registry: registry.clone(),
+            format_resources,
+            startup_diagnostics,
+            watcher: Some(OpeningWatcher::new(workspace)),
+            runner: None,
+            session: None,
+            startup_lease,
+            published: false,
+        }
+    }
+
+    fn workspace(&self) -> &Custody<Workspace> {
+        &self.workspace
+    }
+
+    fn registry(&self) -> &Custody<BundleRegistry> {
+        &self.registry
+    }
+
+    fn watcher(&mut self) -> &mut OpeningWatcher<'a> {
+        self.watcher
+            .as_mut()
+            .expect("la transazione non ha ancora costruito la sessione")
+    }
+
+    fn set_runner(&mut self, runner: JobRunner) {
+        assert!(
+            self.runner.replace(runner).is_none(),
+            "una apertura avvia un solo runner"
+        );
+    }
+
+    fn finish_session(
+        &mut self,
+        root: Utf8PathBuf,
+        unread: Custody<Vec<UnreadDoc>>,
+        indexed: Arc<(Mutex<bool>, std::sync::Condvar)>,
+        #[cfg(feature = "versioning")] versions: Option<VersionStore>,
+    ) {
+        assert!(
+            self.session.is_none() && self.watcher.is_some() && self.runner.is_some(),
+            "la sessione nasce una sola volta dopo watcher e runner"
+        );
+        let watcher = self
+            .watcher
+            .take()
+            .expect("il watcher è stato verificato")
+            .finish();
+        let runner = self.runner.take().expect("il runner è stato verificato");
+        self.session = Some(VaultSession {
+            root,
+            workspace: self.workspace.clone(),
+            registry: self.registry.clone(),
+            startup_diagnostics: std::mem::take(&mut self.startup_diagnostics),
+            _format_resources: std::mem::take(&mut self.format_resources),
+            unread,
+            indexed,
+            runner,
+            #[cfg(feature = "versioning")]
+            versions,
+            watcher,
+            used: 0,
+        });
+    }
+
+    fn session(&self) -> &VaultSession {
+        self.session
+            .as_ref()
+            .expect("la pubblicazione richiede una sessione completa")
+    }
+
+    fn into_session_with_lease(mut self) -> (VaultSession, Option<StartupLease>) {
+        let session = self
+            .session
+            .take()
+            .expect("la pubblicazione richiede una sessione completa");
+        let lease = self.startup_lease.take();
+        self.published = true;
+        (session, lease)
+    }
+}
+
+impl Drop for OpeningTransaction<'_> {
+    fn drop(&mut self) {
+        if self.published {
+            return;
+        }
+        let mut errors = if let Some(session) = self.session.take() {
+            session.close()
+        } else {
+            let mut errors = Vec::new();
+            if let Some(watcher) = self.watcher.take() {
+                errors.extend(watcher.rollback().err());
+            }
+            if let Some(mut runner) = self.runner.take() {
+                errors.extend(runner.stop());
+                drop(runner);
+            }
+            close_session_resources(&self.workspace, &self.registry, &mut errors);
+            errors.extend(crate::format_source::dispose_format_resources(
+                std::mem::take(&mut self.format_resources),
+            ));
+            errors
+        };
+        for error in errors.drain(..) {
+            tracing::error!(target: "fub.host", "opening rollback failed: {error}");
+        }
+    }
+}
+
+/// Uno slot pubblicato per una radice.
+///
+/// `Closing` resta nella mappa per tutta la durata del teardown: è il confine
+/// atomico che impedisce a un'apertura concorrente di montare una seconda
+/// sessione sulla stessa radice.
+enum SessionSlot {
+    Open(VaultSession),
+    Closing(Arc<ClosingToken>),
+}
+
+/// Identità opaca di una singola chiusura.
+struct ClosingToken;
+
+/// Possesso esclusivo del teardown di una sessione.
+///
+/// Il marker viene ritirato da `Drop`, quindi anche un panic proveniente da un
+/// provider non lascia la radice permanentemente in chiusura. L'identità evita
+/// che una chiusura vecchia possa rimuovere lo slot di un'operazione successiva.
+struct CloseClaim<'a> {
+    sessions: &'a Custody<Sessions>,
+    root: Utf8PathBuf,
+    token: Arc<ClosingToken>,
+    session: Option<VaultSession>,
+}
+
+impl CloseClaim<'_> {
+    fn close(mut self) -> Vec<PluginError> {
+        self.session
+            .take()
+            .expect("una pretesa di chiusura possiede la sessione")
+            .close()
+    }
+}
+
+impl Drop for CloseClaim<'_> {
+    fn drop(&mut self) {
+        let Ok(mut sessions) = self.sessions.write() else {
+            return;
+        };
+        let owned = matches!(
+            sessions.slots.get(&self.root),
+            Some(SessionSlot::Closing(token)) if Arc::ptr_eq(token, &self.token)
+        );
+        if owned {
+            sessions.slots.remove(&self.root);
+        }
+    }
+}
+
+fn closing_conflict(root: &Utf8Path) -> PluginError {
+    PluginError::Conflict(format!("Il vault su {root} è in chiusura.").into())
+}
+
+/// I vault aperti, **in ordine d'uso**, e quelli il cui teardown è in corso.
 ///
 /// Il vault "corrente" è **della shell**: serve a chi non ne nomina uno, e non
-/// è un'assunzione del backend. Chi chiude il corrente ne lascia un altro
-/// corrente se ce n'è, e nessuno se non ce n'è.
+/// è un'assunzione del backend. Uno slot `Closing` non è più aperto e non può
+/// quindi essere corrente, ma resta pubblicato finché il teardown termina.
 #[derive(Default)]
 struct Sessions {
-    open: BTreeMap<Utf8PathBuf, VaultSession>,
+    slots: BTreeMap<Utf8PathBuf, SessionSlot>,
     /// Quanti «diventa corrente» sono passati di qui. È un **contatore** e non
     /// un orologio: la domanda è *chi è stato usato dopo chi*, e a un ordine
     /// non serve sapere che ore erano — un orologio di sistema, che può
@@ -318,33 +534,30 @@ struct Sessions {
 }
 
 impl Sessions {
-    /// **Il vault corrente**: il più recente fra gli aperti.
-    ///
-    /// È un'espressione e non un campo, ed è la differenza che conta: un campo
-    /// va tenuto allineato alla mappa, e chi lo aggiornava lo faceva con un
-    /// criterio suo — chiudendo il corrente toccava al primo path in ordine,
-    /// che è l'ordine della [`BTreeMap`] e non una politica che qualcuno abbia
-    /// scelto. Qui chi non è aperto non può essere corrente, e chi chiude il
-    /// corrente lascia il posto al più recente di chi resta senza che nessuno
-    /// scelga niente.
+    /// **Il vault corrente**: il più recente fra quelli ancora aperti.
     fn current(&self) -> Option<&Utf8PathBuf> {
-        self.open
+        self.slots
             .iter()
+            .filter_map(|(root, slot)| match slot {
+                SessionSlot::Open(session) => Some((root, session)),
+                SessionSlot::Closing(_) => None,
+            })
             .max_by_key(|(_, session)| session.used)
             .map(|(root, _)| root)
     }
 
-    /// Questo vault è il più recente. `false` se non è aperto — ed è la
-    /// risposta di chi lo chiede per un path che nessuno ha aperto.
-    fn make_current(&mut self, root: &Utf8Path) -> bool {
+    /// Questo vault è il più recente. `Ok(false)` se non è aperto; una
+    /// chiusura ancora in corso resta invece un conflitto osservabile.
+    fn make_current(&mut self, root: &Utf8Path) -> Result<bool, PluginError> {
         self.usi += 1;
         let usi = self.usi;
-        match self.open.get_mut(root) {
-            Some(session) => {
+        match self.slots.get_mut(root) {
+            Some(SessionSlot::Open(session)) => {
                 session.used = usi;
-                true
+                Ok(true)
             }
-            None => false,
+            Some(SessionSlot::Closing(_)) => Err(closing_conflict(root)),
+            None => Ok(false),
         }
     }
 }
@@ -354,6 +567,9 @@ pub struct Host {
     sessions: Custody<Sessions>,
     watcher: Box<dyn WatcherFactory>,
     sink: Option<Arc<dyn EventSink>>,
+    startup_source: Option<Arc<dyn StartupSource>>,
+    /// Sorgente dei provider di formato, interrogata prima del workspace.
+    format_source: Option<Arc<dyn crate::FormatSource>>,
     /// **L'avviso di sessione** (§25.5): la diagnosi «la cartella di
     /// configurazione non si può scrivere — o non c'è» composta da
     /// `install_logging` prima che l'host esistesse. Si tiene qui perché
@@ -438,6 +654,36 @@ fn with_read_version_host<R>(
     Ok(workspace.with_read_host(VERSIONING_ID, f))
 }
 
+/// Esegue una mutazione dell'organizzazione dopo avere estratto lo store owned:
+/// il sidecar non attraversa mai il prestito di `Custody<Workspace>`.
+fn update_organization<R>(
+    workspace: &Custody<Workspace>,
+    update: impl FnOnce(&fub_kernel::OrganizationStore) -> Result<R, String>,
+) -> Result<R, PluginError> {
+    let store = {
+        let workspace = workspace.read()?;
+        workspace.organization_store()
+    };
+    update(&store).map_err(|error| PluginError::Io(error.into()))
+}
+
+/// Salva lo stato di vista dopo avere estratto path e store owned dal workspace.
+fn update_view_state(
+    workspace: &Custody<Workspace>,
+    owner: &str,
+    instance: &str,
+    key: &str,
+    value: Option<serde_json::Value>,
+) -> Result<(), PluginError> {
+    let (root, states) = {
+        let workspace = workspace.read()?;
+        (workspace.root().to_string(), workspace.view_states())
+    };
+    states
+        .set(&root, owner, instance, key, value)
+        .map_err(|error| PluginError::Io(error.into()))
+}
+
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
     ///
@@ -453,6 +699,8 @@ impl Host {
             sessions: Custody::empty("le sessioni aperte"),
             watcher,
             sink: None,
+            format_source: None,
+            startup_source: None,
             session_notice: Mutex::new(None),
             machine: with_the_schema(MachineSettings::in_memory()),
             view_states: ViewStates::in_memory(),
@@ -526,6 +774,20 @@ impl Host {
     /// Sostituisce il rilevatore. Un e2e headless passa `NoWatcher`.
     pub fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
         self.watcher = watcher;
+        self
+    }
+    /// Imposta la sorgente runtime interrogata per ogni nuova apertura.
+    ///
+    /// La sorgente decide quali bundle richiedere; l'host non persiste né
+    /// reinterpreta quella decisione.
+    pub fn with_startup_source(mut self, source: Arc<dyn StartupSource>) -> Self {
+        self.startup_source = Some(source);
+        self
+    }
+
+    /// Imposta la sorgente dei provider di formato per ogni nuova apertura.
+    pub fn with_format_source(mut self, source: Arc<dyn crate::FormatSource>) -> Self {
+        self.format_source = Some(source);
         self
     }
 
@@ -615,7 +877,11 @@ impl Host {
 
         let already_open = {
             let sessions = self.sessions.read()?;
-            sessions.open.get(&root).map(info_of).transpose()?
+            match sessions.slots.get(&root) {
+                Some(SessionSlot::Open(session)) => Some(info_of(session)?),
+                Some(SessionSlot::Closing(_)) => return Err(closing_conflict(&root)),
+                None => None,
+            }
         };
         let info = match already_open {
             Some(info) => info,
@@ -632,18 +898,93 @@ impl Host {
     /// fa chi l'ha chiamata, con la stessa riga che lo fa per un vault che era
     /// già aperto.
     fn mounts(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
+        self.mounts_with_info(root, info_of)
+    }
+
+    /// Variante privata che rende iniettabile la sola lettura pre-pubblicazione.
+    ///
+    fn mounts_with_info(
+        &self,
+        root: &Utf8Path,
+        session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
+    ) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
+        let startup = self
+            .startup_source
+            .as_ref()
+            .map(|source| {
+                fub_kernel::safety::external(
+                    "startup source preparation",
+                    |message| PluginError::Internal(message.into()),
+                    || source.prepare(),
+                )
+            })
+            .unwrap_or_else(|| Ok(StartupSnapshot::new(Vec::new())));
+        let StartupSnapshot {
+            bundles: startup_bundles,
+            formats: mut prepared_formats,
+            diagnostics: startup_diagnostics,
+            validity: startup_validity,
+            lease: startup_lease,
+        } = match startup {
+            Ok(snapshot) => snapshot,
+            Err(error @ (PluginError::Cancelled(_) | PluginError::Conflict(_))) => {
+                return Err(error)
+            }
+            Err(error) => {
+                tracing::warn!(
+                    target: "fub.host",
+                    startup_source_error = ?error,
+                    "startup source unavailable; continuing without startup bundles"
+                );
+                StartupSnapshot::new(Vec::new())
+            }
+        };
+        for diagnostic in &startup_diagnostics {
+            tracing::warn!(
+                target: "fub.host",
+                startup_diagnostic = ?diagnostic,
+                "startup diagnostic"
+            );
+        }
+        let independent_formats = self
+            .format_source
+            .as_ref()
+            .map(|source| {
+                fub_kernel::safety::external(
+                    "format source preparation",
+                    |message| PluginError::Internal(message.into()),
+                    || source.prepare(),
+                )
+            })
+            .unwrap_or_else(|| Ok(crate::PreparedFormatSource::empty()));
+        let independent_formats = match independent_formats {
+            Ok(formats) => formats,
+            Err(error) => {
+                for cleanup_error in prepared_formats.dispose() {
+                    tracing::error!(
+                        target: "fub.host",
+                        cleanup_error = ?cleanup_error,
+                        "prepared format cleanup failed after independent source error"
+                    );
+                }
+                return Err(error);
+            }
+        };
+        prepared_formats.extend(independent_formats);
         let crate::mount::Mounted {
             workspace: mut ws,
             mut registry,
+            format_resources,
             #[cfg(feature = "versioning")]
             versions,
-        } = mount(
+        } = crate::mount::mount_with_formats(
             &root,
             Arc::clone(&self.machine),
             Arc::clone(&self.view_states),
             Arc::clone(&self.system_locale),
             &self.levels,
+            prepared_formats,
         )
         // Le tre cose che fanno fallire il montaggio sono un provider di
         // formato in conflitto con sé stesso, un bundle di core che non si
@@ -672,8 +1013,14 @@ impl Host {
             let (themes, errors) = crate::theme::discover_themes(config_dir);
             for theme in themes {
                 let bundle = std::sync::Arc::new(theme);
-                let id = bundle.manifest().id;
-                registry.remember(bundle);
+                let (id, remembered) = registry.remember_first(bundle);
+                if !remembered {
+                    tracing::error!(
+                        target: "fub.host",
+                        "theme `{id}` skipped: id already claimed"
+                    );
+                    continue;
+                }
                 if !disabled.contains(&id) {
                     if let Err(and) = registry.enable(&mut ws, &id) {
                         tracing::error!(target: "fub.host", "theme not mounted: {and}");
@@ -684,6 +1031,32 @@ impl Host {
                 tracing::error!(target: "fub.host", "theme skipped: {problem}");
             }
         }
+        // I bundle del composition root entrano per ultimi: feature ufficiali,
+        // temi di macchina e la prima voce di startup che rivendica un id non
+        // possono essere sostituiti da una voce successiva.
+        let mut requested = Vec::new();
+        for startup in startup_bundles {
+            let (bundle, should_enable, claim) = startup.parts();
+            let (id, known) = BundleRegistry::claimed(bundle, claim);
+            let mut candidate = Some(known);
+            match registry.remember_claimed(&mut candidate) {
+                Ok(_) => {
+                    if should_enable {
+                        requested.push(id);
+                    }
+                }
+                Err(error) => {
+                    tracing::error!(
+                        target: "fub.host",
+                        "startup bundle `{id}` skipped: {error}"
+                    );
+                }
+            }
+        }
+        for (id, error) in registry.enable_in_dependency_order(&mut ws, requested) {
+            tracing::error!(target: "fub.host", "startup bundle `{id}` not mounted: {error}");
+        }
+
         let registry = Custody::new("i componenti montati", registry);
 
         // **I tasti che questo vault propone e che nessuno ha guardato**
@@ -705,21 +1078,30 @@ impl Host {
         // Il turno di apertura serializza ogni writer fino a subscriber e job
         // installati, ma non è il `RwLock`: sia `IndexProvider::up_to_date` sia
         // `WatcherFactory::start` girano fuori dalla guardia e possono rientrare
-        // sul workspace. `OpeningWatcher` possiede il turno insieme al watcher:
-        // su ogni errore successivo libera **prima** il turno, poi ferma/raggiunge
-        // i thread del watcher, che possono già essere in attesa di scrivere.
-        let mut opening = OpeningWatcher::new(&workspace);
+        // sul workspace. La transazione possiede turno, risorse e thread: ogni
+        // uscita prima della pubblicazione libera il turno, ferma watcher e
+        // runner, quindi percorre il teardown completo.
+        let mut opening = OpeningTransaction::new(
+            &workspace,
+            &registry,
+            format_resources,
+            startup_diagnostics,
+            startup_lease,
+        );
         let watching = {
-            let ws = workspace.write()?;
+            let ws = opening.workspace().write()?;
             ws.watch_flag()
         };
-        opening.start(self.watcher.as_ref(), &root, workspace.clone(), watching)?;
+        let watcher_workspace = opening.workspace().clone();
+        opening
+            .watcher()
+            .start(self.watcher.as_ref(), &root, watcher_workspace, watching)?;
         let prepared_scan = {
-            let ws = workspace.write()?;
+            let ws = opening.workspace().write()?;
             ws.prepare_scan_vault().map_err(PluginError::from)?
         };
         let completed_scan = prepared_scan.invoke();
-        let (work, index_job, work_total, live) = with_event_drain(&workspace, |ws| {
+        let (work, index_job, work_total, live) = with_event_drain(opening.workspace(), |ws| {
             let work = ws.finalize_scan_vault(completed_scan);
             let work_total = work.total();
             let live = if self.sink.is_some() {
@@ -751,27 +1133,19 @@ impl Host {
 
         // Il pool parte dopo la scansione e riceve la seconda fase dell'apertura.
         let runner = JobRunner::start(
-            workspace.clone(),
-            registry.clone(),
+            opening.workspace().clone(),
+            opening.registry().clone(),
             self.job_threads,
             Some(in_progress),
         )?;
-        let watcher = opening.finish();
-
-        let session = VaultSession {
-            root: root.clone(),
-            workspace,
-            registry,
+        opening.set_runner(runner);
+        opening.finish_session(
+            root.clone(),
             unread,
             indexed,
-            runner,
             #[cfg(feature = "versioning")]
             versions,
-            watcher,
-            // Aperta, non ancora corrente: lo diventa quando l'apertura è
-            // finita, e a dirlo è una riga sola per tutte e due le vie.
-            used: 0,
-        };
+        );
 
         // **Chi arriva secondo lascia cadere ciò che ha montato.** Il controllo
         // in cima non basta: fra lì e qui il lock delle sessioni è libero — deve
@@ -794,25 +1168,63 @@ impl Host {
         // ha tolto il tutto-o-niente, non la sincronia.
         let (info, loser) = {
             let mut sessions = self.sessions.write()?;
-            let loser = if sessions.open.contains_key(&root) {
-                // Ha vinto l'altro: la sessione buona è la sua — riaprire un
-                // vault già aperto non lo riapre, e vale anche quando il
-                // "già" è di un istante fa.
-                Some(session)
-            } else {
-                sessions.open.insert(root.clone(), session);
-                None
-            };
-            let winner = sessions.open.get(&root).expect("appena inserita, o già lì");
-            let info = info_of(winner)?;
-            (info, loser)
+            match sessions.slots.get(&root) {
+                Some(SessionSlot::Open(winner)) => {
+                    // Ha vinto l'altro: la sessione buona è la sua — riaprire
+                    // un vault già aperto non lo rimonta. Anche se leggerne le
+                    // informazioni fallisce, la perdente viene trasferita
+                    // soltanto dopo e chiusa fuori dal lock.
+                    let info = session_info(winner);
+                    let (session, lease) = opening.into_session_with_lease();
+                    (info, Some((session, lease)))
+                }
+                Some(SessionSlot::Closing(_)) => {
+                    // La pubblicazione ha perso contro una chiusura iniziata
+                    // mentre il mount era in corso. Il marker non si sovrascrive.
+                    let (session, lease) = opening.into_session_with_lease();
+                    (Err(closing_conflict(&root)), Some((session, lease)))
+                }
+                None => match session_info(opening.session()) {
+                    // `VaultInfo` è l'ultima operazione fallibile. Il token di
+                    // startup viene letto soltanto dopo: la sua guardia resta
+                    // viva attraverso controllo e inserimento, così una
+                    // invalidazione conclusa non può essere scavalcata.
+                    Ok(info) => {
+                        let validity = startup_validity
+                            .as_ref()
+                            .map(|validity| validity.read())
+                            .transpose()?;
+                        if validity.as_ref().is_some_and(|valid| !**valid) {
+                            (
+                                Err(PluginError::Conflict(
+                                    "La decisione dei componenti è cambiata durante l'apertura."
+                                        .into(),
+                                )),
+                                None,
+                            )
+                        } else {
+                            let (session, lease) = opening.into_session_with_lease();
+                            sessions
+                                .slots
+                                .insert(root.clone(), SessionSlot::Open(session));
+                            drop(lease);
+                            (Ok(info), None)
+                        }
+                    }
+                    Err(error) => (Err(error), None),
+                },
+            }
         };
-        // Chiudere sta **fuori** dal lock delle sessioni, per la stessa ragione
-        // di [`close_vault`](Host::close_vault): chiudere chiama i provider.
-        if let Some(loser) = loser {
-            loser.close();
+        // Chiudere la sessione perdente sta **fuori** dal lock delle sessioni,
+        // anche quando ha perso contro un marker di chiusura. Ogni errore viene
+        // denunciato senza sostituire l'esito primario dell'apertura.
+        if let Some((loser, lease)) = loser {
+            for error in loser.close() {
+                tracing::error!(target: "fub.host", "losing session close failed: {error}");
+            }
+            drop(lease);
         }
-        Ok(info)
+        info
     }
 
     /// **Un vault diventa il corrente**, e questa è l'unica riga che lo dice.
@@ -837,7 +1249,7 @@ impl Host {
     /// un elenco di recenti pieno di cartelle che non aprono è peggio di un
     /// elenco vuoto.
     fn become_current(&self, root: &Utf8Path) -> Result<(), PluginError> {
-        if !self.sessions.write()?.make_current(root) {
+        if !self.sessions.write()?.make_current(root)? {
             return Err(PluginError::NotFound(
                 format!("Nessun vault aperto su {root}.").into(),
             ));
@@ -898,7 +1310,7 @@ impl Host {
     fn knows(&self, root: &Utf8Path) -> bool {
         self.sessions
             .read()
-            .is_ok_and(|sessions| sessions.open.contains_key(root))
+            .is_ok_and(|sessions| sessions.slots.contains_key(root))
             || self.vaults.knows(root)
     }
 
@@ -996,6 +1408,102 @@ impl Host {
         self.in_session(vault, |s| Ok(s.registry.write()?.inventory()))
     }
 
+    /// Ricorda un bundle runtime senza scrivere alcuna preferenza.
+    pub fn remember_bundle(
+        &self,
+        vault: Option<&str>,
+        bundle: Arc<dyn Bundle>,
+        claim: &BundleClaim,
+    ) -> Result<(), PluginError> {
+        let (_id, known) = BundleRegistry::claimed(bundle, claim.clone());
+        let registry = self.in_session(vault, |session| Ok(session.registry.clone()))?;
+        let mut candidate = Some(known);
+        let remembered = match registry.write() {
+            Ok(mut registry) => registry.remember_claimed(&mut candidate),
+            Err(error) => Err(error),
+        };
+        BundleRegistry::drop_known(candidate);
+        remembered.map(drop)
+    }
+
+    /// Dice se la voce conosciuta appartiene precisamente a `claim`.
+    pub fn bundle_is_owned(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<bool, PluginError> {
+        self.in_session(vault, |session| {
+            Ok(session.registry.read()?.is_owned(id, claim))
+        })
+    }
+
+    /// Dice se l'istanza montata appartiene precisamente a `claim`.
+    pub fn is_bundle_active(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<bool, PluginError> {
+        self.in_session(vault, |session| {
+            Ok(session.registry.read()?.is_active_owned(id, claim))
+        })
+    }
+
+    /// Monta o smonta soltanto la voce posseduta da `claim`, senza toccare
+    /// `plugins.disabled` o alcun inventario installato.
+    pub fn set_bundle_active(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+        active: bool,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        if active {
+            let (workspace, registry) = self.in_session(vault, |session| {
+                Ok((session.workspace.clone(), session.registry.clone()))
+            })?;
+            BundleRegistry::enable_claimed_guarded(&registry, &workspace, id, claim)?;
+            return Ok(Vec::new());
+        }
+
+        let selected = self.in_session(vault, |session| {
+            let mounted = session.registry.read()?.is_active_owned(id, claim);
+            Ok(mounted.then(|| {
+                (
+                    session.workspace.clone(),
+                    session.registry.clone(),
+                    session.runner.shutdown_bundle(id),
+                )
+            }))
+        })?;
+        let Some((workspace, registry, _shutdown)) = selected else {
+            return Ok(Vec::new());
+        };
+        let _turn = workspace.write_turn();
+        let deferred = { workspace.write()?.defer_event_dispatch() };
+        let outcome = crate::teardown::unmount(&workspace, &registry, id);
+        workspace.write()?.restore_event_dispatch(deferred);
+        drain_events(&workspace)?;
+        outcome
+    }
+
+    /// Dimentica soltanto una voce propria già smontata.
+    pub fn forget_bundle(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<(), PluginError> {
+        let registry = self.in_session(vault, |session| Ok(session.registry.clone()))?;
+        let removed = {
+            let mut registry = registry.write()?;
+            registry.forget_claimed(id, claim)?
+        };
+        BundleRegistry::drop_known(Some(removed));
+        Ok(())
+    }
+
     /// **Accende o spegne un componente**, adesso e per i prossimi avvii.
     ///
     /// Due cose, e nessuna delle due basta da sola: il montaggio (o lo
@@ -1030,85 +1538,79 @@ impl Host {
                 format!("`{id}` non si spegne: è chi tiene l'elenco di ciò che è spento").into(),
             ));
         }
-        self.with_session(vault, |session| {
-            // **Prima i job, poi i prestiti**, e in quest'ordine soltanto.
-            //
-            // Chi esegue un job tiene una copia del bundle finché il job dura
-            // ([`BundleRegistry::body`]), e `Plugin::deactivate` vuole essere
-            // solo: spegnere un componente con un suo job in volo saltava il
-            // commiato e lo diceva in un errore. Aspettarlo qui è la stessa
-            // regola con cui si chiude un vault — chi spegne aspetta chi
-            // lavora ([0032](../../../docs/decisions/0183-composizione-host-kernel.md))
-            // — applicata a un componente invece che a tutti.
-            //
-            // E **prima** dei due prestiti, non dopo: un job dentro `run_job`
-            // chiede il workspace per riconsegnare il proprio esito, e
-            // aspettarlo tenendoglielo sarebbe aspettare sé stessi. Il permesso
-            // si dichiara per primo anche perché cada per ultimo: finché vive,
-            // nessun job di quel bundle riparte da dietro.
-            let _shutdown = (!enabled).then(|| session.runner.shutdown_bundle(id));
-            with_event_drain(&session.workspace, |ws| {
-                let mut registry = session.registry.write()?;
-
-                // **La domanda mal posta si respinge prima di toccare qualunque
-                // cosa.** Accendere un id che nessuno conosce non è un guasto a
-                // metà strada: è un id scritto male, e la risposta è la stessa che
-                // dà [`BundleRegistry::enable`] — solo, arriva *prima* della
-                // scrittura invece che dopo. È l'unico pezzo di `enable` che non
-                // ha bisogno del workspace per rispondere, ed è quello che va
-                // portato davanti al punto di non ritorno: ciò che resta dietro è
-                // il montaggio, che il workspace lo tocca per forza.
-                if enabled && !registry.knows(id) {
-                    return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
+        if !enabled {
+            // Il permesso di shutdown è posseduto, quindi anche il guard della
+            // mappa sessioni termina prima della callback del plugin.
+            let (workspace, registry, _shutdown) = self.in_session(vault, |session| {
+                if session.registry.read()?.is_claimed(id) {
+                    return Err(PluginError::BadArgs(
+                        format!("`{id}` appartiene a una sorgente runtime.").into(),
+                    ));
                 }
-
-                // **Il disco prima, la memoria dopo** — la riga di famiglia, qui a
-                // mano perché le due memorie non sono la copia di un file (quelle
-                // le tiene `Durevole`): sono la riga in `plugins.disabled` e il
-                // *montaggio*, che è il registry più il kernel.
-                //
-                // Nel verso dello spegnimento l'ordine è gratis e non c'è niente da
-                // scambiare: `unmount` **non fallisce** — raccoglie i guasti del
-                // commiato e li rende, ma smonta comunque — quindi la mossa che può
-                // andare storta è una sola ed è la scrittura, e sta davanti. Se non
-                // riesce non è stato smontato niente: il vuoto fra le due metà non
-                // è più esprimibile.
-                //
-                // Nel verso dell'accensione, invece, di mosse che possono fallire
-                // ne restano due (la scrittura e il montaggio) e l'ordine è una
-                // scelta. Va così, e non al contrario, per due ragioni. La prima:
-                // `plugins.disabled` è ciò che l'utente **vuole**, non lo specchio
-                // di ciò che è montato — non a caso non è `program_writable`. La
-                // seconda: «scritto come acceso, non montato» non è uno stato
-                // inventato qui, è quello che ogni avvio produce quando un bundle
-                // non si monta (`mount.rs`: l'errore si scrive nel log e si tira
-                // avanti), quindi è uno stato che il resto del programma sa già
-                // abitare, e il prossimo avvio ci riprova. Lo stato opposto —
-                // montato adesso, spento nel file — nessun avvio lo sa produrre, e
-                // si disfa da sé alla prima riapertura senza dire niente. Il
-                // commento che stava qui prometteva che «se il montaggio fallisce
-                // non resta scritto che il componente è acceso»: non era vero
-                // nemmeno allora, perché all'avvio resta scritto eccome.
-                let mut disabled = crate::settings::disabled_plugins(ws);
-                disabled.retain(|d| d != id);
-                if !enabled {
-                    disabled.push(id.to_string());
-                }
+                Ok((
+                    session.workspace.clone(),
+                    session.registry.clone(),
+                    session.runner.shutdown_bundle(id),
+                ))
+            })?;
+            let _workspace_turn = workspace.write_turn();
+            let _registry_turn = registry.write_turn();
+            if registry.read()?.is_claimed(id) {
+                return Err(PluginError::BadArgs(
+                    format!("`{id}` appartiene a una sorgente runtime.").into(),
+                ));
+            }
+            let (deferred, persisted) = {
+                let mut ws = workspace.write()?;
+                let deferred = ws.defer_event_dispatch();
+                let mut disabled = crate::settings::disabled_plugins(&ws);
+                disabled.retain(|other| other != id);
+                disabled.push(id.to_string());
                 disabled.sort();
-                ws.set_setting(
+                let persisted = ws.set_setting(
                     crate::settings::PLUGINS_DISABLED,
                     fub_abi::settings::SettingValue::List(disabled),
-                )?;
+                );
+                (deferred, persisted)
+            };
+            let outcome =
+                persisted.and_then(|()| crate::teardown::unmount(&workspace, &registry, id));
+            workspace.write()?.restore_event_dispatch(deferred);
+            drain_events(&workspace)?;
+            return outcome;
+        }
+        // La preferenza nativa e il mount condividono i writer turn, ma nessuna
+        // callback attraversa il prestito della mappa sessioni.
+        let (workspace, registry) = self.in_session(vault, |session| {
+            Ok((session.workspace.clone(), session.registry.clone()))
+        })?;
+        let _workspace_turn = workspace.write_turn();
+        let _registry_turn = registry.write_turn();
+        {
+            let registry = registry.read()?;
+            if registry.is_claimed(id) {
+                return Err(PluginError::BadArgs(
+                    format!("`{id}` appartiene a una sorgente runtime.").into(),
+                ));
+            }
+            if !registry.knows(id) {
+                return Err(crate::registry::BundleError::Unknown(id.to_string()).into());
+            }
+        }
 
-                let mut errors = Vec::new();
-                if enabled {
-                    registry.enable(ws, id).map_err(PluginError::from)?;
-                } else {
-                    errors.extend(registry.unmount(ws, id));
-                }
-                Ok(errors)
-            })?
-        })?
+        with_event_drain(&workspace, |ws| {
+            let mut disabled = crate::settings::disabled_plugins(ws);
+            disabled.retain(|other| other != id);
+            disabled.sort();
+            ws.set_setting(
+                crate::settings::PLUGINS_DISABLED,
+                fub_abi::settings::SettingValue::List(disabled),
+            )?;
+            Ok::<_, PluginError>(())
+        })??;
+
+        BundleRegistry::enable_guarded(&registry, &workspace, id).map_err(PluginError::from)?;
+        Ok(Vec::new())
     }
 
     // --- i tasti che un vault propone (§23.13) -----------------------------
@@ -1491,23 +1993,35 @@ impl Host {
         // nome dato questa riga chiede al disco: e il lock che ferma ogni
         // comando dell'host non attraversa una domanda al filesystem.
         let root = self.key(root)?;
+        let token = Arc::new(ClosingToken);
         let session = {
             let mut sessions = self.sessions.write()?;
-            let Some(session) = sessions.open.remove(&root) else {
+            let Some(slot) = sessions.slots.get_mut(&root) else {
                 return Err(PluginError::NotFound(
                     format!("Nessun vault aperto su {root}.").into(),
                 ));
             };
-            // Chi è corrente adesso non si decide qui, e non c'era modo di
-            // deciderlo bene: il corrente è il più recente degli aperti, e
-            // togliere una sessione dalla mappa toglie con lei il suo posto
-            // nell'ordine. Prima toccava al primo path in ordine — l'ordine
-            // della `BTreeMap`, che nessuno aveva scelto come politica.
-            session
+            match slot {
+                SessionSlot::Open(_) => {
+                    let SessionSlot::Open(session) =
+                        std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
+                    else {
+                        unreachable!("lo slot verificato era aperto")
+                    };
+                    session
+                }
+                SessionSlot::Closing(_) => return Err(closing_conflict(&root)),
+            }
         };
-        // Fuori dal lock delle sessioni: chiudere chiama i provider, e un
-        // provider che chiedesse un altro vault si troverebbe davanti sé stesso.
-        Ok(session.close())
+        // Il claim conserva il marker, ma non la guardia della mappa: watcher,
+        // runner e provider terminano tutti fuori dal lock delle sessioni.
+        Ok(CloseClaim {
+            sessions: &self.sessions,
+            root,
+            token,
+            session: Some(session),
+        }
+        .close())
     }
 
     /// Chiude **tutti** i vault aperti: è ciò che fa chi spegne l'app.
@@ -1520,21 +2034,45 @@ impl Host {
     /// L'ordine che conta è dentro ciascuno — l'inverso della dichiarazione dei
     /// suoi plugin — e lo tiene [`Workspace::close`].
     pub fn close(&self) -> Vec<PluginError> {
-        let sessions = {
-            // La mappa non è più leggibile: non si sa più *cosa* chiudere, e
-            // rispondere con un elenco vuoto vorrebbe dire «chiuso tutto».
+        let claimed = {
             let mut sessions = match self.sessions.write() {
                 Ok(sessions) => sessions,
                 Err(and) => return vec![and],
             };
-            // Svuotare la mappa è già «non c'è più un corrente»: non c'è un
-            // secondo campo da azzerare, e quindi non c'è modo di scordarselo.
-            std::mem::take(&mut sessions.open)
+            let mut claimed = Vec::new();
+            for (root, slot) in &mut sessions.slots {
+                if matches!(slot, SessionSlot::Open(_)) {
+                    let token = Arc::new(ClosingToken);
+                    let SessionSlot::Open(session) =
+                        std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
+                    else {
+                        unreachable!("lo slot verificato era aperto")
+                    };
+                    claimed.push((root.clone(), token, session));
+                }
+            }
+            claimed
         };
-        sessions
-            .into_values()
-            .flat_map(VaultSession::close)
-            .collect()
+        let claimed: Vec<_> = claimed
+            .into_iter()
+            .map(|(root, token, session)| CloseClaim {
+                sessions: &self.sessions,
+                root,
+                token,
+                session: Some(session),
+            })
+            .collect();
+        // Costruire prima tutti i claim è parte della garanzia di unwind: se
+        // una chiusura panica, gli elementi non ancora visitati vengono
+        // comunque lasciati cadere e ritirano ciascuno il proprio marker.
+        claimed.into_iter().flat_map(CloseClaim::close).collect()
+    }
+    /// Restituisce la diagnostica tipizzata conservata dall'apertura del vault.
+    pub fn startup_diagnostics(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        self.with_session(vault, VaultSession::startup_diagnostics)
     }
 
     /// I vault aperti, in ordine di path.
@@ -1545,7 +2083,13 @@ impl Host {
         // ancora, che è niente.
         self.sessions
             .read()
-            .map(|s| s.open.keys().cloned().collect())
+            .map(|s| {
+                s.slots
+                    .iter()
+                    .filter(|(_, slot)| matches!(slot, SessionSlot::Open(_)))
+                    .map(|(root, _)| root.clone())
+                    .collect()
+            })
             .unwrap_or_default()
     }
 
@@ -1591,10 +2135,13 @@ impl Host {
                 .cloned()
                 .ok_or_else(|| PluginError::NotFound("Nessun vault aperto.".into()))?,
         };
-        let session = sessions.open.get(&key).ok_or_else(|| {
-            PluginError::NotFound(format!("Nessun vault aperto su {key}.").into())
-        })?;
-        Ok(f(session))
+        match sessions.slots.get(&key) {
+            Some(SessionSlot::Open(session)) => Ok(f(session)),
+            Some(SessionSlot::Closing(_)) => Err(closing_conflict(&key)),
+            None => Err(PluginError::NotFound(
+                format!("Nessun vault aperto su {key}.").into(),
+            )),
+        }
     }
 
     /// Come [`with_session`](Host::with_session), per chi **dentro** la sessione
@@ -1636,6 +2183,19 @@ impl Host {
     ) -> Result<R, PluginError> {
         self.in_session(vault, |session| with_event_drain(&session.workspace, f)?)
     }
+    /// Sorgente, revisione e formato dalla stessa fotografia del workspace.
+    pub fn read_document_with_format(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<(String, Revision, Option<DocumentFormat>), PluginError> {
+        self.read_workspace(vault, |workspace| {
+            let source = workspace.read_source(id).map_err(PluginError::from)?;
+            let revision = Revision::of(&source);
+            let format = workspace.format_of(id);
+            Ok((source, revision, format))
+        })
+    }
 
     /// Sorgente e revisione dalla stessa lettura.
     pub fn read_document(
@@ -1643,11 +2203,8 @@ impl Host {
         vault: Option<&str>,
         id: &DocId,
     ) -> Result<(String, Revision), PluginError> {
-        self.read_workspace(vault, |workspace| {
-            let source = workspace.read_source(id).map_err(PluginError::from)?;
-            let revision = Revision::of(&source);
-            Ok((source, revision))
-        })
+        self.read_document_with_format(vault, id)
+            .map(|(source, revision, _format)| (source, revision))
     }
 
     pub fn write_document(
@@ -1658,6 +2215,19 @@ impl Host {
         base: WriteBase,
     ) -> Result<Revision, PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        self.write_document_in(workspace, id, source, base)
+    }
+
+    /// Scrive sul vault già risolto dal chiamante. Le operazioni composte
+    /// (come il ripristino di una versione) usano questa porta per non
+    /// risolvere due volte il vault corrente fra lettura e scrittura.
+    fn write_document_in(
+        &self,
+        workspace: Custody<Workspace>,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision, PluginError> {
         let _turn = workspace.write_turn();
         let prepared = {
             let ws = workspace.read()?;
@@ -1780,6 +2350,15 @@ impl Host {
             match ws.prepare_provider_command(command, args.clone(), mode, Actor::User)? {
                 Some(prepared) => prepared,
                 None => {
+                    if let Some(rebuild) = ws.prepare_maintenance_rebuild(
+                        command,
+                        args.clone(),
+                        mode,
+                        Some(Actor::User),
+                    )? {
+                        drop(ws);
+                        return run_detached_rebuild_index(&workspace, rebuild);
+                    }
                     let deferred = ws.defer_event_dispatch();
                     let outcome = ws.invoke_command(command, args, mode, Actor::User);
                     ws.restore_event_dispatch(deferred);
@@ -1828,11 +2407,8 @@ impl Host {
         key: &str,
         value: Option<serde_json::Value>,
     ) -> Result<(), PluginError> {
-        self.read_workspace(vault, |workspace| {
-            workspace
-                .set_view_state(owner, instance, key, value)
-                .map_err(|error| PluginError::Io(error.into()))
-        })
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_view_state(&workspace, owner, instance, key, value)
     }
 
     /// Accesso al workspace soltanto nei build di debug, per i banchi interni.
@@ -1911,10 +2487,15 @@ impl Host {
         id: &DocId,
         ts: u64,
     ) -> Result<String, PluginError> {
-        let store = self.versions(vault)?;
-        self.read_workspace(vault, |workspace| {
-            workspace.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
-        })
+        let (workspace, store) = self.in_session(vault, |session| {
+            let store = session
+                .versions
+                .clone()
+                .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
+            Ok((session.workspace.clone(), store))
+        })?;
+        let workspace = workspace.read()?;
+        workspace.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
@@ -1927,10 +2508,20 @@ impl Host {
         id: &DocId,
         ts: u64,
     ) -> Result<(), PluginError> {
-        let source = self.read_version(vault, id, ts)?;
+        let (workspace, store) = self.in_session(vault, |session| {
+            let store = session
+                .versions
+                .clone()
+                .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
+            Ok((session.workspace.clone(), store))
+        })?;
+        let source = {
+            let ws = workspace.read()?;
+            ws.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))?
+        };
         // **Detta**, come l'importer (§18.1): un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce **apposta**.
-        self.write_document(vault, id, &source, WriteBase::Dictated)
+        self.write_document_in(workspace, id, &source, WriteBase::Dictated)
             .map(|_| ())
     }
 
@@ -1949,13 +2540,8 @@ impl Host {
         path: &str,
         icon: Option<String>,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_icon(path, icon.clone())
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_icon(path, icon))
     }
 
     /// Appunta o spunta una nota.
@@ -1965,13 +2551,8 @@ impl Host {
         id: &str,
         pinned: bool,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_pinned(id, pinned)
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_pinned(id, pinned))
     }
 
     /// Registra o toglie una cartella dagli spazi.
@@ -1981,13 +2562,8 @@ impl Host {
         path: &str,
         is_space: bool,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_space(path, is_space)
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_space(path, is_space))
     }
 
     /// L'ordine scelto a mano dei figli di una cartella (vuoto = alfabetico).
@@ -1997,13 +2573,8 @@ impl Host {
         folder: &str,
         names: Vec<String>,
     ) -> Result<(), PluginError> {
-        self.with_session(vault, |s| {
-            s.workspace
-                .read()
-                .unwrap()
-                .set_order(folder, names.clone())
-                .map_err(|and| PluginError::Io(and.into()))
-        })?
+        let workspace = self.with_session(vault, |session| session.workspace.clone())?;
+        update_organization(&workspace, |store| store.set_order(folder, names))
     }
 }
 
@@ -2071,6 +2642,266 @@ fn root_forms(root: &Utf8Path) -> Vec<Utf8PathBuf> {
 pub fn doc_id(raw: &str) -> Result<DocId, PluginError> {
     fub_kernel::valid_doc_id(raw).map_err(PluginError::from)
 }
+#[cfg(test)]
+mod opening_publication_tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use super::*;
+    use crate::watcher::{VaultWatcher, WatcherFactory};
+
+    struct DropProbe {
+        drops: Arc<AtomicUsize>,
+        panic_on_drop: bool,
+    }
+
+    impl VaultWatcher for DropProbe {
+        fn is_watching(&self) -> bool {
+            false
+        }
+    }
+
+    impl Drop for DropProbe {
+        fn drop(&mut self) {
+            self.drops.fetch_add(1, Ordering::SeqCst);
+            assert!(!self.panic_on_drop, "planned watcher close failure");
+        }
+    }
+
+    struct DropProbeFactory {
+        drops: Arc<AtomicUsize>,
+        starts: AtomicUsize,
+        panic_on_second: bool,
+    }
+
+    impl WatcherFactory for DropProbeFactory {
+        fn start(
+            &self,
+            _root: &Utf8Path,
+            _workspace: Custody<Workspace>,
+            _watching: Arc<std::sync::atomic::AtomicBool>,
+        ) -> Result<Box<dyn VaultWatcher>, String> {
+            let start = self.starts.fetch_add(1, Ordering::SeqCst);
+            Ok(Box::new(DropProbe {
+                drops: Arc::clone(&self.drops),
+                panic_on_drop: self.panic_on_second && start == 1,
+            }))
+        }
+    }
+
+    fn vault_root() -> (tempfile::TempDir, Utf8PathBuf) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf())
+            .expect("utf8")
+            .canonicalize_utf8()
+            .expect("the vault root exists");
+        std::fs::write(root.join("Nota.md"), "# Nota\n").expect("writes a note");
+        (dir, root)
+    }
+
+    #[test]
+    fn info_failure_rolls_back_before_publishing_the_session() {
+        let (_dir, root) = vault_root();
+        let drops = Arc::new(AtomicUsize::new(0));
+        let host = Host::new()
+            .with_watcher(Box::new(DropProbeFactory {
+                drops: Arc::clone(&drops),
+                starts: AtomicUsize::new(0),
+                panic_on_second: false,
+            }))
+            .with_job_threads(1);
+
+        let outcome = host.mounts_with_info(&root, |_| {
+            Err(PluginError::Internal("planned VaultInfo failure".into()))
+        });
+
+        assert!(outcome.is_err(), "the injected info failure is returned");
+        assert!(
+            host.vaults().is_empty(),
+            "a session whose info failed was published"
+        );
+        assert_eq!(
+            drops.load(Ordering::SeqCst),
+            1,
+            "rollback stopped the candidate watcher"
+        );
+
+        host.open(&root)
+            .expect("the cleaned resources allow the vault to reopen");
+        assert!(host.close().is_empty(), "the reopened vault closes cleanly");
+    }
+
+    #[test]
+    fn loser_close_errors_are_logged_without_masking_the_winner() {
+        let (_dir, root) = vault_root();
+        let drops = Arc::new(AtomicUsize::new(0));
+        let host = Host::new()
+            .with_watcher(Box::new(DropProbeFactory {
+                drops,
+                starts: AtomicUsize::new(0),
+                panic_on_second: true,
+            }))
+            .with_job_threads(1);
+        host.open(&root).expect("the winning session opens");
+        host.wait_indexed(None)
+            .expect("the winner finishes indexing");
+
+        let (outcome, log) =
+            fub_kernel::log::captured_default(|| host.mounts_with_info(&root, info_of));
+
+        outcome.expect("loser cleanup does not mask the winning open result");
+        assert!(
+            log.iter().any(|line| {
+                line.contains("fub.host losing session close failed:")
+                    && line.contains("planned watcher close failure")
+            }),
+            "the loser close error was not reported: {log:?}"
+        );
+        assert!(
+            host.close().is_empty(),
+            "the winning session closes cleanly"
+        );
+    }
+}
+
+#[cfg(test)]
+mod side_data_lock_tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
+    use fub_kernel::{FormatRegistry, MemStorage};
+
+    use super::*;
+
+    struct BlockingUpdateStorage {
+        inner: MemStorage,
+        armed: AtomicBool,
+        entered: mpsc::SyncSender<()>,
+        release: Mutex<mpsc::Receiver<()>>,
+    }
+
+    impl VaultStorage for BlockingUpdateStorage {
+        fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+            self.inner.read(path)
+        }
+
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+            self.inner.write(path, bytes)
+        }
+
+        fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+            if self.armed.load(Ordering::Acquire) {
+                self.entered
+                    .send(())
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+                self.release
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .recv()
+                    .map_err(|error| std::io::Error::other(error.to_string()))?;
+            }
+            self.inner.update(path, merge)
+        }
+
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.inner.append(path, bytes)
+        }
+
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.inner.rename(from, to)
+        }
+
+        fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.inner.rename_no_replace(from, to)
+        }
+
+        fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove(path)
+        }
+
+        fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+            self.inner.list(dir)
+        }
+
+        fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+            self.inner.stat(path)
+        }
+
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove_empty_dir(dir)
+        }
+    }
+
+    #[test]
+    fn host_side_data_update_releases_workspace_custody_during_storage_io() {
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let storage = Arc::new(BlockingUpdateStorage {
+            inner: MemStorage::new(),
+            armed: AtomicBool::new(false),
+            entered: entered_tx,
+            release: Mutex::new(release_rx),
+        });
+        let root = Utf8PathBuf::from("/side-data-lock-test");
+        let workspace = Workspace::on(
+            &root,
+            FormatRegistry::new(),
+            Arc::clone(&storage) as Arc<dyn VaultStorage>,
+            MachineSettings::in_memory(),
+        )
+        .expect("the workspace opens on the blocking storage");
+        storage.armed.store(true, Ordering::Release);
+        let workspace = Custody::new("the side-data test workspace", workspace);
+        let worker_workspace = workspace.clone();
+        let worker = std::thread::spawn(move || {
+            update_organization(&worker_workspace, |store| {
+                store.set_icon("Nota.md", Some("📌".into()))
+            })
+        });
+
+        entered_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("the organization update reaches storage");
+        let read = workspace.try_read();
+        let read_progressed = read.is_some();
+        drop(read);
+        let write = workspace.try_write();
+        let write_progressed = write.is_some();
+        drop(write);
+        release_tx.send(()).expect("the storage update resumes");
+
+        worker
+            .join()
+            .expect("the host-side update thread does not panic")
+            .expect("the organization update succeeds");
+        storage.armed.store(false, Ordering::Release);
+        assert!(
+            read_progressed,
+            "Host side-data I/O retained a write guard on Custody<Workspace>"
+        );
+        assert!(
+            write_progressed,
+            "Host side-data I/O retained a read or write guard on Custody<Workspace>"
+        );
+
+        let reopened = Workspace::on(
+            &root,
+            FormatRegistry::new(),
+            storage as Arc<dyn VaultStorage>,
+            MachineSettings::in_memory(),
+        )
+        .expect("the persisted organization reopens");
+        assert_eq!(
+            reopened
+                .organization()
+                .icons
+                .get("Nota.md")
+                .map(String::as_str),
+            Some("📌")
+        );
+    }
+}
 
 #[cfg(test)]
 mod vanished_session_key_tests {
@@ -2096,9 +2927,13 @@ mod vanished_session_key_tests {
 
         {
             let mut sessions = host.sessions.write().expect("sessions");
-            let mut session = sessions.open.remove(&live).expect("the live session");
+            let Some(SessionSlot::Open(mut session)) = sessions.slots.remove(&live) else {
+                panic!("the live session is open")
+            };
             session.root = vanished.clone();
-            sessions.open.insert(vanished.clone(), session);
+            sessions
+                .slots
+                .insert(vanished.clone(), SessionSlot::Open(session));
         }
 
         assert_eq!(

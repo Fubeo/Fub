@@ -81,6 +81,7 @@ mod bridge;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
 pub mod custody;
+pub mod format_source;
 pub mod jobs;
 pub mod mount;
 /// Il filo verso fuori (§23.3), dietro la cargo feature `http-client` per la
@@ -94,7 +95,9 @@ pub mod registry;
 pub mod runner;
 pub mod session;
 pub mod settings;
+pub mod sheet;
 pub mod shell;
+mod teardown;
 pub mod theme;
 pub mod vaults;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
@@ -103,10 +106,14 @@ pub mod watcher;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use custody::Custody;
+pub use format_source::{FormatSource, PreparedFormatSource};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
 pub use records::{EmbedContent, UnreadDoc, VaultInfo};
-pub use registry::{Bundle, BundleError, BundleInfo, BundleRegistry, OnlyProviders};
+pub use registry::{
+    Bundle, BundleClaim, BundleError, BundleInfo, BundleRegistry, OnlyProviders, StartupBundle,
+    StartupLease, StartupSnapshot, StartupSource, StartupValidity,
+};
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};

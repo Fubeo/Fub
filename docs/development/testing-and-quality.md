@@ -61,6 +61,34 @@ I guard del contratto verificano:
 - proiezioni TypeScript;
 - enum e fixture generate;
 - dipendenze vietate.
+### Drill backup/restore
+
+Il banco d'integrazione eseguibile è:
+
+```bash
+cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+```
+
+Il fixture copre l'intero vault: documenti Markdown, allegati binari, file
+sconosciuti, `.trash/` e stato autorevole sotto `.fub/`, inclusi storage di
+plugin e versioning. La configurazione macchina resta esclusa. Il manifesto
+indipendente verifica per ogni path classe, dimensione, impronta FNV-1a e
+schema; la scansione rifiuta symlink e file speciali.
+
+Il drill opera offline in un parent temporaneo privato ed esclusivo. Copia
+l'albero in uno staging adiacente alla destinazione e pubblica con un solo
+rename. Questo dimostra il flusso del banco, non una garanzia universale di
+no-replace concorrente o di durabilità dopo un crash.
+
+Un artefatto corrotto o mancante viene validato prima di creare lo staging e
+prima di toccare la destinazione. Una destinazione occupata resta invariata e
+lo staging completo resta disponibile. La verifica finale usa `Host` reale:
+apertura, attesa dell'indicizzazione e lettura del documento, poi chiusura.
+
+`fub.backup` riguarda soltanto le note nello stesso vault; non è il backup
+completo esercitato da questo drill. Il banco documenta il comportamento
+presente, mentre l'issue resta aperta fino alla verifica CI.
+
 
 ## Frontend
 
@@ -83,6 +111,31 @@ Aree importanti:
 
 Il banco visuale usa scene deterministiche e baseline del runner Linux. In caso
 di differenza, la CI conserva immagini attuali, diff e foglio di contatto.
+
+Le 42 baseline canoniche discendono dal commit
+[`7463f725`](https://github.com/Fubeo/Fub/commit/7463f72587291a61459b8815c1357b584eb166c0):
+furono rigenerate su `ubuntu-latest` con Chromium installato dalla revisione
+Playwright del lockfile, dopo l'allineamento delle fixture host e la
+neutralizzazione del puntatore fra le scene. Il foglio di contatto affianca
+sempre luce scura e chiara; la revisione ha confermato contenuto, geometria,
+stati, contrasto e assenza di tooltip residui in tutte le 21 scene.
+
+La soglia colore resta `0.01` e una foto passa soltanto con al massimo lo
+`0.1%` di pixel diversi. Il campione che ha introdotto tali valori misurava,
+nella scena peggiore di due corse uguali, `0.008%` a soglia colore zero e
+`0.003%` a `0.01`; un cambio di tavolozza produceva invece `99.3%` a `0.01`.
+Il commit canonico ha ripetuto il banco 42/42. Sul candidato
+`08fe214b44273a1c6a620cf90f8ef4c457f92c88`, le run
+[`34966343591`](https://github.com/Fubeo/Fub/actions/runs/34966343591) e
+[`34966348108`](https://github.com/Fubeo/Fub/actions/runs/34966348108) hanno
+poi eseguito consecutivamente nello stesso job `ubuntu-latest` banco visuale e
+accessibilità, entrambi verdi.
+
+Un confronto locale fuori dal runner canonico può superare il limite per
+rasterizzazione di testo o canvas pur senza una regressione applicativa. Va
+esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
+richiede invece revisione del foglio, spiegazione delle scene coinvolte e
+rigenerazione su `ubuntu-latest`.
 
 L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
 colori.
