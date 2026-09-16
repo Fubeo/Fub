@@ -133,11 +133,14 @@ impl<R: Clone + Eq + Serialize> SheetSession<R> {
                 .copied()
                 .ok_or(SheetSessionError::UnknownCoordinate)?;
             let cell_index = self.cells_by_position[sheet].get(&(row, column)).copied();
-            let current = cell_index.map(|index| self.workbook.sheets[sheet].cells[index].input.as_str());
+            let current =
+                cell_index.map(|index| self.workbook.sheets[sheet].cells[index].input.as_str());
             if patch.before.as_deref() != current {
                 return Err(SheetSessionError::PreimageMismatch);
             }
-            if current == Some(patch.after.as_str()) || (current.is_none() && patch.after.is_empty()) {
+            if current == Some(patch.after.as_str())
+                || (current.is_none() && patch.after.is_empty())
+            {
                 return Err(SheetSessionError::NoChange);
             }
             resolved.push(ResolvedPatch {
