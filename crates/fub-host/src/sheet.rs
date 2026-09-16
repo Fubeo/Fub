@@ -8,8 +8,8 @@ use fub_abi::{PluginError, Revision};
 use fub_format_sheet::{SheetId, Workbook};
 
 pub use fub_format_sheet::session::{
-    SheetSessionError, SheetWindowCell, SheetWindowRequest, MAX_WINDOW_CELLS,
-    MAX_WINDOW_COLUMNS, MAX_WINDOW_RESPONSE_BYTES, MAX_WINDOW_ROWS,
+    SheetSessionError, SheetWindowCell, SheetWindowRequest, MAX_WINDOW_CELLS, MAX_WINDOW_COLUMNS,
+    MAX_WINDOW_RESPONSE_BYTES, MAX_WINDOW_ROWS,
 };
 pub use fub_format_sheet::WorkbookEvaluation;
 
