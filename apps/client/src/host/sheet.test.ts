@@ -21,6 +21,17 @@ describe("sheet evaluation through the data registry", () => {
     expect(fake.atGate("queryIndex")).toHaveLength(1);
   });
 
+  it("keeps a throttled rejection handled until the caller can receive it", async () => {
+    const fake = createFakeHost();
+    const release = fake.throttle("queryIndex");
+    const reply = evaluateSheet(fake.module.api.queryIndex, "{}");
+    const outcome = reply.catch((error: PluginError) => error);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(fake.atGate("queryIndex")).toHaveLength(1);
+    release();
+    await expect(outcome).resolves.toMatchObject({ kind: "unserved" });
+  });
+
   it("does not resolve inherited object properties as namespace handlers", async () => {
     const fake = createFakeHost({ customQueries: {} });
     await expect(fake.module.api.queryIndex({ kind: "custom", ns: "toString", query: {} }))

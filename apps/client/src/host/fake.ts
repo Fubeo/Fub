@@ -596,6 +596,9 @@ export function createFakeHost(options: Options = {}): FakeHost {
         } catch (error) {
           result = Promise.reject(error);
         }
+        // Il throttle può trattenere la consegna: osserva subito il rifiuto,
+        // ma restituisce la Promise originale, con lo stesso errore al caller.
+        void result.catch(() => {});
         return gate("queryIndex", [q], result);
       },
       cancelJob: (id) => gate("cancelJob", [id], Promise.resolve()),
