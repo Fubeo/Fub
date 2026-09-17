@@ -9,10 +9,15 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{Choice, CommandOutcome, CommandSpec, InvokeMode, ParamKind, ParamSpec};
+use fub_abi::edit::Revision;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions,
+};
+use fub_abi::grid::{
+    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSheet, GridSurfaceSpec,
+    GridWindow, GridWindowRequest,
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
@@ -21,11 +26,6 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
-use fub_abi::edit::Revision;
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSheet, GridSurfaceSpec, GridWindow,
-    GridWindowRequest,
-};
 use fub_kernel::{FormatRegistry, RegistryError, Workspace};
 
 // --- un provider che conta quante volte gli si chiede cosa offre ------------
@@ -37,7 +37,6 @@ struct Counter {
     /// La seconda view compare solo dopo che qualcuno l'ha annunciata.
     second: Arc<Mutex<bool>>,
 }
-
 
 #[derive(Clone)]
 struct IncompatibleGrid {
@@ -111,7 +110,9 @@ struct OwnedGrid {
 
 impl OwnedGrid {
     fn new(surface: &str) -> Self {
-        Self { surface: surface.to_owned() }
+        Self {
+            surface: surface.to_owned(),
+        }
     }
 
     fn instance(&self) -> String {
@@ -175,7 +176,9 @@ impl GridProvider for OwnedGrid {
         if instance == self.instance() {
             Ok(())
         } else {
-            Err(PluginError::NotFound("instance belongs to another surface".into()))
+            Err(PluginError::NotFound(
+                "instance belongs to another surface".into(),
+            ))
         }
     }
 
@@ -508,12 +511,11 @@ fn incompatible_grid_surface_falls_back_without_invoking_provider() {
     let (_g, mut ws) = workspace(&[]);
     let calls = Arc::new(Mutex::new(0));
     let permit = ws.registration_permit("prova").expect("declared");
-    let mut prepared = fub_kernel::workspace::PreparedRegistration::grid(Box::new(
-        IncompatibleGrid {
+    let mut prepared =
+        fub_kernel::workspace::PreparedRegistration::grid(Box::new(IncompatibleGrid {
             calls: Arc::clone(&calls),
-        },
-    ))
-    .expect("surface declaration is structurally valid");
+        }))
+        .expect("surface declaration is structurally valid");
     ws.commit_registration(&permit, &mut prepared)
         .expect("grid provider registered");
 
@@ -536,30 +538,28 @@ fn incompatible_grid_surface_falls_back_without_invoking_provider() {
 #[test]
 fn grid_surface_owner_collision_and_cross_surface_instance_are_rejected() {
     let (_g, mut ws) = workspace(&[]);
-    ws.register_core_feature("second", "second").expect("declared");
+    ws.register_core_feature("second", "second")
+        .expect("declared");
 
     let first_permit = ws.registration_permit("prova").expect("declared");
-    let mut first = fub_kernel::workspace::PreparedRegistration::grid(Box::new(
-        OwnedGrid::new("prova.sheet"),
-    ))
-    .expect("first surface is valid");
+    let mut first =
+        fub_kernel::workspace::PreparedRegistration::grid(Box::new(OwnedGrid::new("prova.sheet")))
+            .expect("first surface is valid");
     ws.commit_registration(&first_permit, &mut first)
         .expect("first provider registered");
 
     let second_permit = ws.registration_permit("second").expect("declared");
-    let mut duplicate = fub_kernel::workspace::PreparedRegistration::grid(Box::new(
-        OwnedGrid::new("prova.sheet"),
-    ))
-    .expect("duplicate declaration is structurally valid");
+    let mut duplicate =
+        fub_kernel::workspace::PreparedRegistration::grid(Box::new(OwnedGrid::new("prova.sheet")))
+            .expect("duplicate declaration is structurally valid");
     let error = ws
         .commit_registration(&second_permit, &mut duplicate)
         .expect_err("a surface has one owner");
     assert!(matches!(error, RegistryError::Claimed { id, .. } if id == "prova.sheet"));
 
-    let mut second = fub_kernel::workspace::PreparedRegistration::grid(Box::new(
-        OwnedGrid::new("second.sheet"),
-    ))
-    .expect("second surface is valid");
+    let mut second =
+        fub_kernel::workspace::PreparedRegistration::grid(Box::new(OwnedGrid::new("second.sheet")))
+            .expect("second surface is valid");
     ws.commit_registration(&second_permit, &mut second)
         .expect("second provider registered under its own surface");
 

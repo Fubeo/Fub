@@ -48,7 +48,9 @@ impl GridSurfaceSpec {
             || self.family.is_empty()
             || self.protocol_version == 0
         {
-            return Err(PluginError::BadArgs("grid surface has an empty identity".into()));
+            return Err(PluginError::BadArgs(
+                "grid surface has an empty identity".into(),
+            ));
         }
         Ok(())
     }
@@ -331,7 +333,9 @@ pub struct GridSourceEdit {
 impl GridSourceEdit {
     pub fn validate(&self) -> Result<(), PluginError> {
         if self.from > self.to {
-            return Err(PluginError::BadArgs("grid source diff has inverted bounds".into()));
+            return Err(PluginError::BadArgs(
+                "grid source diff has inverted bounds".into(),
+            ));
         }
         Ok(())
     }
@@ -347,7 +351,9 @@ pub struct GridCommit {
 impl GridCommit {
     pub fn validate(&self) -> Result<(), PluginError> {
         if self.revision.0.is_empty() {
-            return Err(PluginError::BadArgs("grid commit has an empty revision".into()));
+            return Err(PluginError::BadArgs(
+                "grid commit has an empty revision".into(),
+            ));
         }
         self.edit.validate()?;
         self.invalidation.validate()?;

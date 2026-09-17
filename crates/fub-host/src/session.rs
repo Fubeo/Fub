@@ -46,8 +46,8 @@ use fub_abi::format::DocumentFormat;
 use fub_abi::grid::{
     GridApplyRequest, GridCommit, GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
 };
-use fub_abi::session::ViewContext;
 use fub_abi::model::DocId;
+use fub_abi::session::ViewContext;
 use fub_abi::traits::{JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Notice, PluginError};
@@ -2210,10 +2210,7 @@ impl Host {
             .map(|(source, revision, _format)| (source, revision))
     }
 
-    pub fn grid_surfaces(
-        &self,
-        vault: Option<&str>,
-    ) -> Result<Vec<GridSurfaceSpec>, PluginError> {
+    pub fn grid_surfaces(&self, vault: Option<&str>) -> Result<Vec<GridSurfaceSpec>, PluginError> {
         self.read_workspace(vault, |workspace| Ok(workspace.grid_surfaces()))
     }
 
@@ -2221,9 +2218,7 @@ impl Host {
         &self,
         vault: Option<&str>,
         surface: &str,
-        call: impl FnOnce(
-            &fub_kernel::workspace::PreparedGridCall,
-        ) -> Result<R, PluginError>,
+        call: impl FnOnce(&fub_kernel::workspace::PreparedGridCall) -> Result<R, PluginError>,
     ) -> Result<R, PluginError> {
         let workspace = self.with_session(vault, |session| session.workspace.clone())?;
         let prepared = {
@@ -2252,7 +2247,9 @@ impl Host {
         instance: &str,
         request: GridWindowRequest,
     ) -> Result<GridWindow, PluginError> {
-        self.with_grid(vault, surface, |provider| provider.window(instance, request))
+        self.with_grid(vault, surface, |provider| {
+            provider.window(instance, request)
+        })
     }
 
     pub fn grid_apply(

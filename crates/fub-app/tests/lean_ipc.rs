@@ -912,7 +912,8 @@ fn grid_surface_uses_only_named_typed_ports() {
         );
     }
     assert!(
-        !ipc.lines().any(|line| line.contains("grid") && line.contains("invoke_command")),
+        !ipc.lines()
+            .any(|line| line.contains("grid") && line.contains("invoke_command")),
         "Grid must not tunnel through the generic invoke_command bridge"
     );
 }

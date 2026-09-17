@@ -14,7 +14,8 @@ const RELOADED: &str = r#"{"version":1,"sheets":[{"id":"s","name":"Foglio","rows
 
 fn wasm_grid(feature: &str) -> Result<Box<dyn GridProvider>, String> {
     let wasm = common::component("grid-wasm", "grid_wasm", feature);
-    let bundle = WasmBundle::from_file(&wasm, Trust::Community).map_err(|error| error.to_string())?;
+    let bundle =
+        WasmBundle::from_file(&wasm, Trust::Community).map_err(|error| error.to_string())?;
     bundle
         .grid_provider()
         .map_err(|error| error.to_string())?
@@ -63,14 +64,12 @@ fn native_and_wasm_grid_have_protocol_parity_and_clean_lifecycle() {
         native
             .window(&native_open.instance, window_request.clone())
             .expect("native window"),
-        wasm.window(&wasm_open.instance, window_request).expect("wasm window")
+        wasm.window(&wasm_open.instance, window_request)
+            .expect("wasm window")
     );
 
     let native_commit = native
-        .apply(
-            &native_open.instance,
-            patch_request(revision.clone(), "3"),
-        )
+        .apply(&native_open.instance, patch_request(revision.clone(), "3"))
         .expect("native apply");
     let wasm_commit = wasm
         .apply(&wasm_open.instance, patch_request(revision.clone(), "3"))
@@ -108,22 +107,32 @@ fn native_and_wasm_grid_have_protocol_parity_and_clean_lifecycle() {
     native.shutdown().expect("native shutdown");
     wasm.shutdown().expect("wasm shutdown");
 
-    assert!(native.window(&native_second.instance, GridWindowRequest {
-        revision: Revision::of(SOURCE),
-        sheet: "s".to_owned(),
-        row_start: 0,
-        row_count: 1,
-        column_start: 0,
-        column_count: 1,
-    }).is_err());
-    assert!(wasm.window(&wasm_second.instance, GridWindowRequest {
-        revision: Revision::of(SOURCE),
-        sheet: "s".to_owned(),
-        row_start: 0,
-        row_count: 1,
-        column_start: 0,
-        column_count: 1,
-    }).is_err());
+    assert!(native
+        .window(
+            &native_second.instance,
+            GridWindowRequest {
+                revision: Revision::of(SOURCE),
+                sheet: "s".to_owned(),
+                row_start: 0,
+                row_count: 1,
+                column_start: 0,
+                column_count: 1,
+            }
+        )
+        .is_err());
+    assert!(wasm
+        .window(
+            &wasm_second.instance,
+            GridWindowRequest {
+                revision: Revision::of(SOURCE),
+                sheet: "s".to_owned(),
+                row_start: 0,
+                row_count: 1,
+                column_start: 0,
+                column_count: 1,
+            }
+        )
+        .is_err());
 }
 
 #[test]
@@ -155,8 +164,9 @@ fn unknown_grid_family_is_rejected_before_open_and_traps_become_fallback_errors(
     assert!(error
         .to_string()
         .contains("malformed grid provider response"));
-    malformed.shutdown().expect("teardown after malformed response");
-
+    malformed
+        .shutdown()
+        .expect("teardown after malformed response");
 
     let mut trapped = wasm_grid("trap-on-window").expect("trap component loads");
     let opened = trapped

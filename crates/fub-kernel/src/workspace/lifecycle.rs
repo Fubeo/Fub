@@ -68,7 +68,6 @@ pub struct PreparedPluginTeardown {
     grids_closed: bool,
     indexes_closed: bool,
     frame_active: bool,
-
 }
 
 impl PreparedPluginTeardown {
@@ -232,9 +231,7 @@ impl Workspace {
         &mut self,
         prepared: &mut PreparedPluginTeardown,
     ) -> std::result::Result<(), PluginError> {
-        if !self.valid_teardown(prepared)
-            || prepared.indexes.is_some()
-            || prepared.grids.is_some()
+        if !self.valid_teardown(prepared) || prepared.indexes.is_some() || prepared.grids.is_some()
         {
             return Err(PluginError::Conflict("stale plugin teardown".into()));
         }
@@ -271,10 +268,7 @@ impl Workspace {
             self.dispatch
                 .restore_provider_call(prepared.previous_provider_call);
         }
-        if !self.valid_teardown(&prepared)
-            || !prepared.indexes_closed
-            || !prepared.grids_closed
-        {
+        if !self.valid_teardown(&prepared) || !prepared.indexes_closed || !prepared.grids_closed {
             let mut errors = errors;
             errors.push(PluginError::Conflict(
                 "stale or incomplete plugin teardown".into(),

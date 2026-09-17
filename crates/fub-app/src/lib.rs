@@ -309,12 +309,7 @@ fn open_grid(
     revision: String,
     vault: Option<String>,
 ) -> Result<GridSession, PluginError> {
-    host.grid_open(
-        vault.as_deref(),
-        &surface,
-        &source,
-        Revision(revision),
-    )
+    host.grid_open(vault.as_deref(), &surface, &source, Revision(revision))
 }
 
 #[tauri::command]
@@ -367,7 +362,6 @@ fn close_grid(
 ) -> Result<(), PluginError> {
     host.grid_close(vault.as_deref(), &surface, &instance)
 }
-
 
 /// **Scrive un documento intero** dichiarando da cosa parte (§18.1, §23.11).
 ///

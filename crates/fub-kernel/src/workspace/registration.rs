@@ -268,7 +268,9 @@ fn validate_grid_window_response(
             || !columns.contains(&cell.key.column)
             || !cells.insert(cell.key.clone())
         {
-            return Err(provider_response("grid window has invalid cell coordinates"));
+            return Err(provider_response(
+                "grid window has invalid cell coordinates",
+            ));
         }
     }
     Ok(())
@@ -287,8 +289,11 @@ fn validate_grid_commit_response(
     if usize::try_from(commit.edit.from).is_err() || usize::try_from(commit.edit.to).is_err() {
         return Err(provider_response("grid source diff offset overflows usize"));
     }
-    let changed: std::collections::HashSet<_> =
-        request.patches.iter().map(|patch| patch.cell.clone()).collect();
+    let changed: std::collections::HashSet<_> = request
+        .patches
+        .iter()
+        .map(|patch| patch.cell.clone())
+        .collect();
     match &commit.invalidation {
         GridInvalidation::All => {}
         GridInvalidation::Cells(cells) => {
@@ -302,7 +307,6 @@ fn validate_grid_commit_response(
     }
     Ok(())
 }
-
 
 impl Workspace {
     pub fn registration_permit(
@@ -353,10 +357,7 @@ impl Workspace {
             || spec.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
         {
             return Err(PluginError::Unserved(
-                format!(
-                    "grid surface `{surface}` uses unsupported family/version"
-                )
-                .into(),
+                format!("grid surface `{surface}` uses unsupported family/version").into(),
             ));
         }
         Ok(PreparedGridCall {
@@ -576,7 +577,6 @@ impl PreparedPluginDeactivation {
         }
         errors
     }
-
 
     pub fn close_indexes(&self, host: &mut dyn HostApi) -> Vec<PluginError> {
         let mut errors = Vec::new();

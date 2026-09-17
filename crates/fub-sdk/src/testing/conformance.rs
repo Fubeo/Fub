@@ -1283,7 +1283,10 @@ pub fn a_grid_supports_the_lifecycle(
         surface.protocol_version, GRID_PROTOCOL_VERSION,
         "fixture surface must use the current protocol"
     );
-    assert_eq!(surface.family, "grid", "fixture surface must declare its family");
+    assert_eq!(
+        surface.family, "grid",
+        "fixture surface must declare its family"
+    );
 
     let session = provider
         .open(

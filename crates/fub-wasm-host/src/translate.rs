@@ -37,8 +37,7 @@ use fub_abi::PluginError;
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
 use crate::contract::exports::fub::abi::{
-    command as w_command, format as x_format, grid as w_grid, plugin as w_plugin,
-    view as w_view,
+    command as w_command, format as x_format, grid as w_grid, plugin as w_plugin, view as w_view,
 };
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
@@ -916,7 +915,6 @@ fn from_grid_horizontal(
     }
 }
 
-
 fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle {
     fub_abi::grid::GridCellStyle {
         bold: style.bold,
@@ -928,10 +926,7 @@ fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle
     }
 }
 
-
-fn from_grid_formula_error(
-    error: w_grid::GridFormulaError,
-) -> fub_abi::grid::GridFormulaError {
+fn from_grid_formula_error(error: w_grid::GridFormulaError) -> fub_abi::grid::GridFormulaError {
     match error {
         w_grid::GridFormulaError::Parse => fub_abi::grid::GridFormulaError::Parse,
         w_grid::GridFormulaError::Ref => fub_abi::grid::GridFormulaError::Ref,
@@ -942,7 +937,6 @@ fn from_grid_formula_error(
         w_grid::GridFormulaError::Cycle => fub_abi::grid::GridFormulaError::Cycle,
     }
 }
-
 
 fn from_grid_value(value: w_grid::GridCellValue) -> fub_abi::grid::GridCellValue {
     match value {
@@ -955,7 +949,6 @@ fn from_grid_value(value: w_grid::GridCellValue) -> fub_abi::grid::GridCellValue
         }
     }
 }
-
 
 fn from_grid_row(row: w_grid::GridRow) -> fub_abi::grid::GridRow {
     fub_abi::grid::GridRow {
@@ -1015,7 +1008,6 @@ pub(crate) fn to_grid_window_request(
     }
 }
 
-
 fn to_grid_patch(patch: &fub_abi::grid::GridCellPatch) -> w_grid::GridCellPatch {
     w_grid::GridCellPatch {
         cell: to_grid_key(&patch.cell),
@@ -1043,7 +1035,6 @@ fn from_grid_invalidation(
         w_grid::GridInvalidation::All => fub_abi::grid::GridInvalidation::All,
     }
 }
-
 
 pub(crate) fn from_grid_commit(
     commit: w_grid::GridCommit,

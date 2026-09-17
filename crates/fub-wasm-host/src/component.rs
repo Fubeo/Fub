@@ -5,8 +5,8 @@
 //! istanza» fra chiamate: non esiste quindi uno stato temporale implicito che un
 //! secondo montaggio o una chiamata fuori sequenza possa sovrascrivere.
 
-use std::collections::HashSet;
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 thread_local! {
     static ACTIVE_INSTANCES: RefCell<Vec<*const ()>> = const { RefCell::new(Vec::new()) };
@@ -52,8 +52,8 @@ use fub_abi::format::{
     RenderOptions,
 };
 use fub_abi::grid::{
-    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider, GridSession,
-    GridSurfaceSpec, GridWindow, GridWindowRequest,
+    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
+    GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
 };
 use fub_abi::model::DocumentModel;
 use fub_abi::traits::{
@@ -403,7 +403,6 @@ fn grid_call<R>(
     call(grid, store)
 }
 
-
 fn failure(error: wasmtime::Error) -> PluginError {
     if error.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
         return PluginError::Internal(
@@ -539,7 +538,9 @@ fn validate_grid_window_response(
         || window.row_start != request.row_start
         || window.column_start != request.column_start
     {
-        return Err(grid_response_error("grid window does not match its request"));
+        return Err(grid_response_error(
+            "grid window does not match its request",
+        ));
     }
     if window.rows.len() != request.row_count as usize
         || window.columns.len() != request.column_count as usize
@@ -571,7 +572,9 @@ fn validate_grid_window_response(
                     .checked_add(offset as u32)
                     .ok_or_else(|| grid_response_error("grid column index overflows"))?
         {
-            return Err(grid_response_error("grid window has invalid column metadata"));
+            return Err(grid_response_error(
+                "grid window has invalid column metadata",
+            ));
         }
     }
     let mut cells = HashSet::with_capacity(window.cells.len());
@@ -581,7 +584,9 @@ fn validate_grid_window_response(
             || !columns.contains(&cell.key.column)
             || !cells.insert(cell.key.clone())
         {
-            return Err(grid_response_error("grid window has invalid cell coordinates"));
+            return Err(grid_response_error(
+                "grid window has invalid cell coordinates",
+            ));
         }
     }
     Ok(())
@@ -598,9 +603,15 @@ fn validate_grid_commit_response(
         ));
     }
     if usize::try_from(commit.edit.from).is_err() || usize::try_from(commit.edit.to).is_err() {
-        return Err(grid_response_error("grid source diff offset overflows usize"));
+        return Err(grid_response_error(
+            "grid source diff offset overflows usize",
+        ));
     }
-    let changed: HashSet<_> = request.patches.iter().map(|patch| patch.cell.clone()).collect();
+    let changed: HashSet<_> = request
+        .patches
+        .iter()
+        .map(|patch| patch.cell.clone())
+        .collect();
     match &commit.invalidation {
         GridInvalidation::All => {}
         GridInvalidation::Cells(cells) => {
@@ -1025,8 +1036,8 @@ impl WasmBundle {
     fn grid_provider_from_inner(
         inner: Arc<Mutex<Instance>>,
     ) -> Result<Option<Box<dyn GridProvider>>, PluginError> {
-        let specs = Self::declared_grids(&inner)
-            .map_err(|error| PluginError::Internal(error.into()))?;
+        let specs =
+            Self::declared_grids(&inner).map_err(|error| PluginError::Internal(error.into()))?;
         if specs.is_empty() {
             return Ok(None);
         }

@@ -71,8 +71,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandSpec, Failure, InvokeMode, Partial, UndoStep, Undone,
 };
-use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
+use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::DocChanges;
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions, SourceKind};
 use fub_abi::locale::Locale;

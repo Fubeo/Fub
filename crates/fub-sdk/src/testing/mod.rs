@@ -24,12 +24,12 @@ pub mod conformance;
 
 use fub_abi::command::CommandOutcome;
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
+use fub_abi::event::Event;
+use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
 use fub_abi::grid::{
     validate_grid_source, GridApplyRequest, GridCommit, GridProvider, GridSession, GridSurfaceSpec,
     GridWindow, GridWindowRequest,
 };
-use fub_abi::event::Event;
-use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::net::{HttpRequest, HttpResponse};
@@ -1448,7 +1448,9 @@ impl GridProvider for MemoryHost {
             ));
         }
         if revision.0.is_empty() {
-            return Err(PluginError::BadArgs("grid revision must not be empty".into()));
+            return Err(PluginError::BadArgs(
+                "grid revision must not be empty".into(),
+            ));
         }
         let instance = format!(
             "grid-memory-{}",
@@ -1477,9 +1479,15 @@ impl GridProvider for MemoryHost {
         request: GridWindowRequest,
     ) -> Result<GridWindow, PluginError> {
         request.validate()?;
-        let session = self.grid_sessions.lock().unwrap().get(instance).cloned().ok_or_else(|| {
-            PluginError::Unserved(format!("grid instance `{instance}` is not open").into())
-        })?;
+        let session = self
+            .grid_sessions
+            .lock()
+            .unwrap()
+            .get(instance)
+            .cloned()
+            .ok_or_else(|| {
+                PluginError::Unserved(format!("grid instance `{instance}` is not open").into())
+            })?;
         if session.revision != request.revision {
             return Err(PluginError::Conflict(
                 format!("grid instance `{instance}` revision is stale").into(),
@@ -1531,9 +1539,7 @@ impl GridProvider for MemoryHost {
             .get(instance)
             .cloned()
             .ok_or_else(|| {
-                PluginError::Unserved(
-                    format!("no scripted grid commit for `{instance}`").into(),
-                )
+                PluginError::Unserved(format!("no scripted grid commit for `{instance}`").into())
             })?;
         commit.validate()?;
         if commit.revision == request.revision {
@@ -1558,7 +1564,9 @@ impl GridProvider for MemoryHost {
     ) -> Result<GridSession, PluginError> {
         validate_grid_source(source)?;
         if revision.0.is_empty() {
-            return Err(PluginError::BadArgs("grid revision must not be empty".into()));
+            return Err(PluginError::BadArgs(
+                "grid revision must not be empty".into(),
+            ));
         }
         let mut sessions = self.grid_sessions.lock().unwrap();
         let session = sessions.get_mut(instance).ok_or_else(|| {
@@ -1578,7 +1586,13 @@ impl GridProvider for MemoryHost {
     }
 
     fn close(&mut self, instance: &str) -> Result<(), PluginError> {
-        if self.grid_sessions.lock().unwrap().remove(instance).is_none() {
+        if self
+            .grid_sessions
+            .lock()
+            .unwrap()
+            .remove(instance)
+            .is_none()
+        {
             return Err(PluginError::Unserved(
                 format!("grid instance `{instance}` is not open").into(),
             ));

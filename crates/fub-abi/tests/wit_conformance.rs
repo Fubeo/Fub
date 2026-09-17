@@ -78,9 +78,10 @@ use fub_abi::format::{
 };
 use fub_abi::gate::Gate;
 use fub_abi::grid::{
-    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue, GridColumn,
-    GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridProvider, GridRow,
-    GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow, GridWindowRequest,
+    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue,
+    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridProvider,
+    GridRow, GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
+    GridWindowRequest,
 };
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
