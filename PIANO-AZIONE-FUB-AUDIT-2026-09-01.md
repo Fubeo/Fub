@@ -2651,145 +2651,105 @@ Ogni finding deve avere almeno:
 5. CI finale multipiattaforma verde.
 
 ## 14.2 Registro completo
-
-Compilare una riga per ogni ID.
-
+Il vecchio handoff/mapping degli ID non è reperibile. Il registro seguente è quindi una **nuova baseline rebaselined**, proprietaria del piano al **2026-09-17**: integra i contratti sopravvissuti e le evidenze del tree, ma non finge equivalenza storica con la semantica originaria dei finding. La patch comune della baseline è `d9591ac7`. `VERIFIED_LOCAL` indica che implementazione, prova locale e documentazione sono state verificate nel tree; `ACCEPTED_RISK` indica un limite reale esplicitato nella riga. La CI remota non è stata eseguita: ogni riga riporta `pending`.
 ### Sicurezza
-
-| ID | Specifica ricostruita | Stato | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| SEC-001 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| SEC-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| SEC-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| SEC-004 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-
+| SEC-001 | Lo storage di produzione opera tramite capability di directory aperta; sostituire la root ambientale non reindirizza l’I/O e i path fuori radice sono rifiutati. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-kernel/tests/path_fence.rs`; `rooted.rs` capability test | `docs/reference/permissions-and-security.md` § Path fence | Dipende dalle primitive capability e dal filesystem/OS; non copre la compromissione del processo. | `pending` |
+| SEC-002 | Capability, fiducia e scope passano da un solo `Guard`; il rifiuto è `PermissionDenied` prima di storage/provider, con policy nativa e WASM coerente. | `VERIFIED_LOCAL` | `d9591ac7` | `invoke_command.rs`; `crates/fub-host/src/legacy_tests/the_first_plugin.rs` gate permission | `docs/decisions/0185-capability-un-solo-guard.md`; `docs/reference/permissions-and-security.md` | Nuove famiglie restano sicure solo se registrate nel Guard; configurazioni errate dei permessi sono possibili. | `pending` |
+| SEC-003 | Ogni chiamata WASM rinnova una deadline di circa 5 s e ogni memoria lineare è limitata a 64 MiB; timeout o memoria eccessiva non bloccano l’host. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-wasm-host/tests/component_timing.rs` timeout/memory; Rust locale 2153 pass/3 ignored | `docs/reference/permissions-and-security.md` § Runtime WASM; `docs/architecture/plugin-runtime.md` | Il limite è per memoria lineare, non quota totale; scheduler e tolleranze dipendono dall’ambiente. | `pending` |
+| SEC-004 | La supply chain dichiara sorgenti/licenze, blocca advisory e crate yanked, pinna le action, controlla versioni duplicate e genera SBOM Rust/npm. | `VERIFIED_LOCAL` | `d9591ac7` | `check-actions-pinned.mjs`, `check-cargo-versions.mjs`, docs/static guard, `npm audit` (0) | `docs/decisions/0179-supply-chain-verificata.md`; `docs/reference/permissions-and-security.md` § Supply chain | Advisory database, registry e tool possono essere incompleti o indisponibili; SBOM non prova assenza di vulnerabilità. | `pending` |
 ### Dati
-
-| ID | Specifica ricostruita | Stato iniziale noto | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| DATA-001 | storage capability/CAS e correlati da riconciliare | `PARTIAL` |  |  |  |  |  |
-| DATA-002 | revisioni SHA-256 con lettura FNV legacy verificata sui byte | `VERIFIED_LOCAL` storico | `d17eb1f...` | `fub-abi`, `guarded_write` |  |  |  |
-| DATA-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-004 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-005 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-006 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-007 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-008 | parse preserva `DocId` richiesto | `VERIFIED_LOCAL` storico | `9487543...` | regressioni positive/negative |  |  |  |
-| DATA-009 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-010 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| DATA-011 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-
-> La tranche digest/identità/rejoin non va assegnata a specifici ID DATA senza ricostruzione documentata.
-
+| DATA-001 | `write_if_unchanged` confronta e pubblica sotto lo stesso lock stabile per target, con un vincitore fra writer Fub cooperativi. | `ACCEPTED_RISK` | `d9591ac7` | `crates/fub-kernel/tests/rooted_cas.rs` winner/lock identity/unopenable lock | `docs/architecture/storage-and-identity.md` § CAS cooperativa | CAS esatta solo per writer cooperativi; writer esterni che ignorano il lock possono correre col confronto/pubblicazione. | `pending` |
+| DATA-002 | Le revisioni nuove sono SHA-256 prefissati; FNV-1a legacy verifica gli stessi byte senza indebolire il conflitto. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-abi/tests/one_fingerprint.rs`; `guarded_write.rs` FNV migration | `docs/architecture/document-model.md`; `docs/reference/on-disk-layout.md` | SHA-256 identifica contenuto, non firma; FNV legacy ha collision resistance inferiore. | `pending` |
+| DATA-003 | Scrittura autorevole usa temporaneo, flush/sync e sostituzione quando sicuro: il lettore vede valore precedente o nuovo, non una metà. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-kernel/tests/durability.rs` atomicity/rewrite/durable write | `docs/architecture/storage-and-identity.md` § Lettura e scrittura; `docs/reference/on-disk-layout.md` | Symlink/hardlink o nomi ignoti impongono percorso conservativo in-place, con possibile errore dopo byte modificati. | `pending` |
+| DATA-004 | Una scrittura con revisione base rilegge l’autorità su disco e rifiuta modifiche/cancellazioni stale; la scrittura cieca è esplicita. | `VERIFIED_LOCAL` | `d9591ac7` | `guarded_write.rs` foreign view/registry trust/vanished document | `docs/architecture/document-model.md` § Modifiche; `docs/architecture/storage-and-identity.md` | La variante `Dictated` sovrascrive intenzionalmente; il chiamante deve scegliere la semantica corretta. | `pending` |
+| DATA-005 | Dati autorevoli plugin e cache ricostruibili hanno radici namespaced distinte; plugin diversi e path fuori spazio sono isolati. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-kernel/tests/plugin_data.rs` root isolation/path fence | `docs/reference/on-disk-layout.md` § Storage plugin; `docs/architecture/storage-and-identity.md` | La classificazione dello storage terzo resta responsabilità del plugin; errore dichiarativo può elevare dati ricostruibili. | `pending` |
+| DATA-006 | Ogni formato persistente applica schema: autorevole futuro/corrotto è rifiutato o migrato, derivato incompatibile è ricostruito senza stato inventato. | `VERIFIED_LOCAL` | `d9591ac7` | `organization.rs` future file; `search.rs` corrupt index rebuild | `docs/reference/on-disk-layout.md` § Versioni di schema; `docs/decisions/0187-autorita-e-schemi-su-disco.md` | Dipende dalla corretta classificazione autorità/derivato e dalla manutenzione delle migrazioni. | `pending` |
+| DATA-007 | Il rename di dominio cambia `DocId`, muove il file, migra/invalida derivati, riscrive riferimenti e pubblica un fatto ricongiunto. | `ACCEPTED_RISK` | `d9591ac7` | `rename_and_events.rs`; `slow_rename.rs` identity/event | `docs/architecture/storage-and-identity.md` § Rename; `docs/architecture/plugin-runtime.md` | Rename staged non è transazione globale: writer esterno può intervenire fra le fasi nonostante riconvalida e generazioni. | `pending` |
+| DATA-008 | Rename case-only e collisioni usano identità e no-replace; concorrente tardivo non è sovrascritto né produce falso rename. | `VERIFIED_LOCAL` | `d9591ac7` | `case_only_rename.rs` case correction/late collision/no-replace | `docs/decisions/0188-identita-path-e-rename.md`; `docs/architecture/storage-and-identity.md` | Case folding e no-replace variano per filesystem; restano mutazioni esterne non cooperative. | `pending` |
+| DATA-009 | Temporanei di scritture interrotte sono esclusi dal modello e ripuliti solo oltre soglia; una scrittura viva non è rimossa. | `VERIFIED_LOCAL` | `d9591ac7` | `crash_leaves_no_trace.rs` stale cleanup/live write | `docs/reference/on-disk-layout.md` § Scrittura | La soglia temporale è euristica: clock anomalo o operazioni lunghe possono lasciare residui. | `pending` |
+| DATA-010 | Inventario WASM è autorevole e CAS: blob digest prima del record, nessun mount automatico, load ricontrolla digest/manifest/trust sui byte esatti. | `VERIFIED_LOCAL` | `d9591ac7` | `installed_inventory.rs`; `managed.rs` corrupt guest/choice validation | `docs/reference/on-disk-layout.md` § Componenti WASM installati; `docs/decisions/0200-inventario-componenti-installati.md` | CAS eredita il limite cooperativo; cleanup fallito può lasciare blob orfani e consenso non attesta sicurezza guest. | `pending` |
+| DATA-011 | Backup/restore include contenuto, sconosciuti, cestino e dati plugin autorevoli; valida manifesto, pubblica da staging e apre col vero Host. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/backup_restore_drill.rs` drill completo e rifiuti senza mutazione | `docs/reference/on-disk-layout.md` § Backup | Drill offline e rename non provano no-replace concorrente o durabilità post-crash; configurazione macchina fuori scope. | `pending` |
 ### UI
-
-| ID | Specifica ricostruita | Stato | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| UI-001 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-004 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-005 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-006 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-007 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-008 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| UI-009 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-
+| UI-001 | `apps/client/bench/a11y.mjs` esegue axe completo su ogni scena e luce; nessun passaggio è valido su zero elementi e la matrice ha 42/42 scene, 6526 elementi. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/bench/a11y.mjs` `axe.run`; full axe locale 42/42 scene, 6526 elementi | `docs/development/testing-and-quality.md` § Visuale e accessibilità | Gli `incomplete` sono riportati e la resa assistiva reale resta dipendente da browser/Tauri e tecnologia assistiva. | `pending` |
+| UI-002 | Le modali confinano Tab/Shift-Tab, Escape chiude, il focus torna all’origine e l’ultima modale sovrapposta prevale. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/ui/a11y.test.ts` focus trap/stack | `docs/architecture/frontend-and-ipc.md` § Stato della shell | Prova DOM, non ordine di tabulazione in browser/Tauri reale. | `pending` |
+| UI-003 | Ogni nodo azionabile ha nome/ruolo raggiungibile; Invio/Spazio equivalgono al click e azione rimossa esce dal tab order. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/ui/a11y.test.ts`; fixture `mirror-samples.json` `mountTree`/`checkAccessibility` | `docs/decisions/0191-ui-dichiarativa-e-renderer.md` | Guardia su fixture non sostituisce screen reader/browser reale. | `pending` |
+| UI-004 | Ogni listener/disposer appartiene a `Lifetime`: close idempotente, LIFO, error-isolated, nessuna registrazione tardiva o durante teardown. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/ui/lifetime.test.ts`; `.github/scripts/check-listeners.mjs` | `docs/decisions/0193-ownership-lifecycle-e-teardown.md` | happy-dom non verifica fedelmente ogni opzione di `removeEventListener`. | `pending` |
+| UI-005 | Una race asincrona applica solo l’ultima esecuzione valida; risultato/errore scaduto non scrive, errore dell’ultima resta osservabile. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/ui/race.test.ts` promise controllate e `Race.cancel()` | `docs/decisions/0193-ownership-lifecycle-e-teardown.md` | Ogni nuovo caller deve usare `expected()` a ogni sospensione; la primitiva è deterministica. | `pending` |
+| UI-006 | La griglia scarta valutazioni tardive, invalida open/reload su generazione o destroy e chiude l’istanza arrivata troppo tardi. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/editors/grid/engine.test.ts`; generation/abort guard | `docs/decisions/0201-superfici-strutturate-a-finestre.md` | Il test copre evaluator legacy; non tutti gli interleaving di rete dei provider sono esercitati. | `pending` |
+| UI-007 | La griglia è ARIA navigabile: ruoli/conteggi, frecce/Tab sugli assi visibili, Escape restituisce focus e `aria-activedescendant` sparisce senza celle. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/editors/grid/engine.test.ts` selection/hidden axes/active descendant | `docs/decisions/0201-superfici-strutturate-a-finestre.md` | DOM sintetico, non tecnologia assistiva reale o viewport Tauri. | `pending` |
+| UI-008 | Il bundle tema valida tutto e sostituisce foglio+pelle atomically; rifiuto conserva precedente e produce Trouble localizzato. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/theme/gate.test.ts`, `loader.ts`; `sanitize-css.test.ts` | `docs/decisions/0192-impostazioni-locale-e-temi.md` | Soglie statiche non coprono ogni combinazione di resa; axe è evidenza per tutte le scene ma non garanzia visiva universale. | `pending` |
+| UI-009 | La shell si smonta/rimonta senza duplicare gesti; cancellazione lenta blocca input e invalida letture/timer/code senza far risorgere buffer o bozze. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/shell.e2e.test.ts`; `state/document-session.test.ts`; client 92 file/1335 test | `docs/architecture/frontend-and-ipc.md`; `docs/decisions/0190-sessioni-documento-e-undo.md` | E2E usa fake host/DOM; race coperte sono quelle costruite dai casi presenti. | `pending` |
 ### Architettura
-
-| ID | Specifica ricostruita | Stato iniziale | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| ARCH-001 | provider fuori lock con prepare/call/finalize | `CLOSED` sul tree live certificato `9c5a4db2382d45ee709ada4668a840465d871c64` | `ba78d17d...`, `5debdbbe...`, `7e6bfc0e...`, `e2c8dff2...`, `89ac082b...`, `47a7f38a...`, `0f3e4961...`, `774b56b4...`, `9839ee6b...`, `6b1058dd...`, `35c69d35...`, `1b0f13f...`, `ca0896ca...`, `e8428be9...`, `f626dfca...`, `d8e86e83...`, `8a9a530f...`, `0e0441ef...`, `78a89f92...`, `440bd410...`, `9c5a4db...` | call graph production `Custody` PASS; CI PR `34746750247` 8/8 e CI push `34746748272` verdi sul medesimo SHA | `docs/architecture/plugin-runtime.md`, `docs/project/status.md` | rollback rename concorrente con processi esterni; #8, #10, G14 e G15/GO aperti | `PASS` su `9c5a4db…`; PR #32 `OPEN, DRAFT`; decisione `NO-GO` |
-| ARCH-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| ARCH-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| ARCH-004 | servizi indipendenti progrediscono sotto write lock Workspace | `OPEN/REASSESS` |  | progresso |  |  |  |
-| ARCH-005 | nessun `Host::workspace` generico pubblico | `OPEN/REASSESS` |  | boundary guard |  |  |  |
-| ARCH-006 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| ARCH-007 | famiglie query tipizzate nella shell | `OPEN/REASSESS` |  | routing |  |  |  |
-
+| ARCH-001 | Nessuna callback/provider gira sotto `Custody<Workspace>`: prepare sotto lock, call fuori lock, finalize con token e riconvalida sotto lock. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/index_feed_lock.rs`; `crates/fub-host/src/legacy_tests/lifecycle_teardown_lock.rs`; graph 2k e soak 10k | `docs/architecture/runtime-events-and-jobs.md` § Rientranza; `docs/architecture/plugin-runtime.md` | Nuovi caller devono usare le porte staccate; i casi provati non esauriscono ogni futuro callback. | `pending` |
+| ARCH-002 | Consumer e API pubbliche non espongono `Workspace`; l’accesso passa da porte strette e acquisizioni restano nel composition root. | `VERIFIED_LOCAL` | `d9591ac7` | `.github/scripts/check-host-workspace-boundary.mjs`; `cargo check` locale | `docs/architecture/components-and-boundaries.md` § Composizione | Guardia regex può essere elusa da alias/macro o radici future non censite. | `pending` |
+| ARCH-003 | IPC resta sottile: letture indicizzate via `query_index`; comandi dedicati residui hanno categoria esplicita, incluse Grid tipizzate. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-app/tests/lean_ipc.rs`; adapter `lib.rs::query_index` | `docs/architecture/frontend-and-ipc.md` § Porte generiche | Inventario/allowlist non prova da solo l’assenza di business logic nelle eccezioni. | `pending` |
+| ARCH-004 | `VaultRegistry` è memoria di macchina distinta dalle sessioni: canonicalizza per radice, ordina preferiti/recenza, limita recenti e persiste atomicamente senza sovrascrivere file illeggibile. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/vaults.rs` round-trip, ordering, broken-file tests | `docs/decisions/0183-composizione-host-kernel.md`; rustdoc `vaults.rs` | Registro non è autorità sullo stato aperto; lock/file semantics dipendono dal filesystem. | `pending` |
+| ARCH-005 | Scrittori concorrenti rileggono sotto lock e riapplicano la mutazione, evitando perdita di vault, preferiti e shortcut. | `VERIFIED_LOCAL` | `d9591ac7` | `vaults.rs` two-installations merge tests | `docs/decisions/0195-versioni-indipendenti.md`; rustdoc `VaultRegistry` | I test modellano istanze nello stesso processo; crash/power loss e lock multiprocesso OS-specifici restano fuori garanzia. | `pending` |
+| ARCH-006 | Apertura lunga pubblica `JobProgress` con totale noto, stato recuperabile e compattazione per id senza confondere job. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/phased_opening.rs`; `bridge.rs` `Grain::Progress(id)`; WIT conformance | `docs/architecture/runtime-events-and-jobs.md`; `docs/decisions/0184-eventi-accodati-e-job.md` | Progresso informativo e compattabile; non garantisce frequenza o completamento senza `JobDone`. | `pending` |
+| ARCH-007 | `BundleRegistry` possiede mount/teardown; callback/deactivate/drop sono fuori custody e panic/errori non impediscono il ritiro delle risorse restanti. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/lifecycle_teardown_{lock,drop,events,missing_owner}.rs`; `crates/fub-host/src/legacy_tests/mounting.rs` rollback | `docs/decisions/0193-ownership-lifecycle-e-teardown.md`; `docs/architecture/plugin-runtime.md` | Fault/re-entry coperti sono quelli costruiti; non si rivendica isolamento assoluto di plugin ostile. | `pending` |
 ### ABI
-
-| ID | Specifica ricostruita | Stato | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| ABI-001 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| ABI-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| ABI-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-
+| ABI-001 | ABI `0.1.2` accetta solo versioni canoniche complete: stessa major, minor guest non superiore; forme parziali/future/overflow sono rifiutate. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-abi/src/traits.rs` canonical version test; Rust locale 2153 pass/3 ignored | `docs/reference/abi-and-wit.md` § Compatibilità | La regola dipende dall’additività effettiva del WIT; incompatibilità semantiche possono restare. | `pending` |
+| ABI-002 | WIT vivo `fub:abi@0.1.2` rispecchia tipi, ordine, alias, firme e world Rust; receiver/capability sono elisi e alberi ricorsivi attraversano arena. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-abi/tests/wit_conformance.rs` mirror/drift/invalid WIT | `docs/reference/abi-and-wit.md` §§ Mappatura, Alberi, Host API | Conformità strutturale non prova ogni esecuzione guest o compatibilità binaria di ogni toolchain. | `pending` |
+| ABI-003 | Il contratto cresce solo per aggiunta rispetto ai frozen compatibili; nome/versione package coincidono e baseline assente o senza major servita fallisce. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-abi/tests/wit_additivity.rs`; frozen `0.1.0.wit`/`0.1.1.wit`; ABI checks verdi | `crates/fub-abi/wit/frozen/README.md`; `docs/reference/abi-and-wit.md` | Live `0.1.2` non ha snapshot omonimo: il presidio copre baseline pubblicati precedenti. | `pending` |
 ### WASM
-
-| ID | Specifica ricostruita | Stato | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| WASM-001 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| WASM-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| WASM-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-
+| WASM-001 | Componente reale senza WASI diretto attraversa Plugin/Command/Format/Grid/View; bundle e formato differito condividono validità/istanza e rollbackano snapshot stale. | `VERIFIED_LOCAL` | `d9591ac7` | `the_first_component.rs`; `format_crosses.rs` load/parse/render/stale snapshot; target WASM build | `docs/architecture/plugin-runtime.md` §§ Formati e confine host | Parità limitata alle rotte esercitate; export/import/service/syntax/renderer non sono implicati. | `pending` |
+| WASM-002 | `IndexProvider` e `EventHandler` inbound restano non esposti finché componenti reali non provano feed/query/flush/close e reazione a `Notice`; outbound non equivale inbound. | `ACCEPTED_RISK` | `d9591ac7` | `component.rs`, `events.rs` assenza inbound; `a_component_that_talks.rs` outbound | `docs/architecture/plugin-runtime.md`; `docs/development/plugin-authoring.md` | Plugin WASM che richiedono indice custom o notice inbound non sono supportati. | `pending` |
+| WASM-003 | Ogni store abilita epoch interruption, deadline di 50 tick su heartbeat 100 ms e 64 MiB per memoria; trap/timeout confinati, host vivo. | `ACCEPTED_RISK` | `d9591ac7` | `component_timing.rs` timeout/memory; fixture `esempi/ciclo-wasm`; feature builds WASM verdi | `docs/architecture/plugin-runtime.md` § Sandbox | Deadline cooperativa; 64 MiB per memoria, non quota totale; nessun limite assoluto CPU/RAM processo. | `pending` |
 ### Build e CI
-
-| ID | Specifica ricostruita | Stato iniziale noto | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| BUILD-001 |  | `REASSESS` |  |  |  |  |  |
-| BUILD-002 |  | `REASSESS` |  |  |  |  |  |
-| CI-001 | pin action/permessi/toolchain e contratto originario da ricostruire | `IMPLEMENTED_UNVERIFIED_FINAL` | `375306b...`, `2ad66b9...` | pin guard |  |  |  |
-
+| BUILD-001 | `fub-wasm-host` è membro workspace; fixture `wasm32-unknown-unknown`/`wasm32-wasip2` sono escluse deliberatamente e compilate da harness reali. | `VERIFIED_LOCAL` | `d9591ac7` | `workspace-members.mjs`; `common/mod.rs::component`; target/feature builds WASM verdi | `CONTRIBUTING.md` § Matrice prove; commenti `Cargo.toml` | Fixture fuori workspace dipendono dall’harness che installa target e artefatti; `cargo test --workspace` da solo non basta. | `pending` |
+| BUILD-002 | Wasmtime root `36.0.14`, no default feature, solo `cranelift/runtime/component-model`; host eredita, ABI/kernel restano agnostici. | `VERIFIED_LOCAL` | `d9591ac7` | `Cargo.toml`; `dependency_invariant.rs`; `check-cargo-versions.mjs`; fmt/check/clippy verdi | `AGENTS.md` § Confini crate; `docs/architecture/plugin-runtime.md` | Guardie provano centralizzazione corrente, non allowlist universale per ogni crate futuro. | `pending` |
+| CI-001 | Workflow dichiarano `contents: read`, Rust 1.89, target WASM e action SHA-pinnate; invariants esegue pin, WIT, additività e dipendenze. | `VERIFIED_LOCAL` | `d9591ac7` | `check-actions-pinned.mjs`; workflow locale; docs/static guard verdi | `CONTRIBUTING.md`; `docs/development/workflow.md` | Configurazione locale soltanto: CI remota non osservata; SHA pin non prova provenienza/assenza compromissione. | `pending` |
 ### Documentazione
-
-| ID | Specifica ricostruita | Stato | Commit | Test/guardia | Rischio | CI |
-|---|---|---|---|---|---|---|
-| DOC-001 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-003 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-004 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-005 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-006 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-007 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-008 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-009 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-010 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-011 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-012 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-| DOC-013 |  | `NOT_RECONSTRUCTED` |  |  |  |  |
-
-### Tema e piano
-
-| ID | Specifica ricostruita | Stato | Commit | Test/guardia | Docs | Rischio | CI |
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
 |---|---|---|---|---|---|---|---|
-| THEME-001 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| THEME-002 |  | `NOT_RECONSTRUCTED` |  |  |  |  |  |
-| PLAN-001 | stato/roadmap coerente con garanzie reali | `OPEN` |  | doc guards | piano |  |  |
-
+| DOC-001 | Accessi vault relativi alla capability; canonicalizzazione, `..`, symlink, separatori e case non eludono la root. | `VERIFIED_LOCAL` | `d9591ac7` | `opening_verifies_the_root.rs`; check-doc-links | `docs/reference/permissions-and-security.md` § Path fence | Primitive filesystem per piattaforma e mutazioni esterne restano dipendenze. | `pending` |
+| DOC-002 | CAS esatta fra writer cooperativi Fub con lock stabile, best-effort contro writer esterni che ignorano protocollo. | `ACCEPTED_RISK` | `d9591ac7` | `guarded_write.rs`; check-prose | `docs/architecture/storage-and-identity.md` § CAS; `docs/product/vault-and-files.md` | Writer esterno può cambiare file fuori finestra osservabile; rischio dichiarato, non eliminato. | `pending` |
+| DOC-003 | Mount bundle all-or-nothing: activate/registrazione falliti rollbackano senza registrazioni parziali. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/mounting.rs` activate/rollback failures | `docs/architecture/plugin-runtime.md` §§ Modello, Invarianti | Cleanup/disposer fallibili sono errori riportabili; non assenza assoluta di effetti plugin esterni. | `pending` |
+| DOC-004 | `requires`/`provides` determina ordine indipendente inventory; dipendenze mancanti/cicliche sono errori, non mount parziali. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/mounting.rs` inventory/dependency cases; check-mermaid | `docs/architecture/plugin-runtime.md`; `docs/product/plugins-and-extensions.md` | Nuove famiglie servizio richiedono nuovi casi; vale per resolver corrente. | `pending` |
+| DOC-005 | Callback provider fuori lock workspace/registry con prepare/invoke/finalize, token e riconvalida. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/index_feed_lock.rs`; `crates/fub-host/src/legacy_tests/lifecycle_teardown_lock.rs`; check-mermaid | `docs/architecture/runtime-events-and-jobs.md`; `docs/architecture/plugin-runtime.md` | Percorsi futuri devono usare porte staccate; test coprono percorsi enumerati. | `pending` |
+| DOC-006 | Porte provider strette: registrar/token posseduti, finalize verifica workspace/owner/generazione e rifiuta stale. | `VERIFIED_LOCAL` | `d9591ac7` | `provider_reentrancy.rs`; `deactivation.rs` token swap | `docs/architecture/plugin-runtime.md`; `docs/architecture/runtime-events-and-jobs.md` | Correttezza dipende da ogni caller che resti sull’API a token. | `pending` |
+| DOC-007 | Contratto corrente `fub:abi@0.1.2`; fonti Rust/WIT/mirror dichiarate e frozen trattati come baseline immutabili additive. | `VERIFIED_LOCAL` | `d9591ac7` | `wit_conformance.rs`; `wit_additivity.rs`; check-doc-links | `docs/reference/abi-and-wit.md` §§ Sorgenti, Compatibilità | Additività meccanica non prova compatibilità semantica di plugin non nei banchi. | `pending` |
+| DOC-008 | Host accetta stessa major e minor guest non superiore; versioni incompatibili rifiutate prima activate, senza probing permissivo. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/src/legacy_tests/mounting.rs`; `installed_inventory.rs` collision/invalid component | `docs/reference/abi-and-wit.md`; `docs/product/plugins-and-extensions.md` | Version rule non sostituisce frozen/conformance né equivalenza comportamentale. | `pending` |
+| DOC-009 | Runtime WASM non collega WASI né filesystem/rete diretti; memory/deadline/depth e trap/timeout mantengono vivo host nei casi coperti. | `VERIFIED_LOCAL` | `d9591ac7` | `component_timing.rs`; `the_model_crosses.rs`; check-prose | `docs/architecture/plugin-runtime.md` § Sandbox; `docs/reference/permissions-and-security.md` | Limiti/recovery sono quelli esercitati, non prova contro ogni consumo ostile. | `pending` |
+| DOC-010 | Eventi plugin sono notifiche accodate non autorevoli; verità resta risposta/stato job e callback non rientra durante guest call. | `VERIFIED_LOCAL` | `d9591ac7` | `a_component_that_talks.rs`; `provider_reentrancy.rs` delayed events | `docs/architecture/runtime-events-and-jobs.md`; `docs/reference/ipc-contract.md` | Queue può compattare; consumer non inferisca completamento dal solo evento. | `pending` |
+| DOC-011 | Docs prodotto enumerano solo capacità realmente servite; `IndexProvider`/`EventHandler` inbound deferred e consenso/enabled/capability distinti. | `VERIFIED_LOCAL` | `d9591ac7` | `managed.rs`; `format_crosses.rs`; check-prose | `docs/product/plugins-and-extensions.md`; `docs/development/plugin-authoring.md` | “Presente” vale per questa baseline e rotte coperte, non per ogni famiglia futura. | `pending` |
+| DOC-012 | Editor espone solo modalità/fallback reali; registry usa override→formato→source→testo/byte→errore e distrugge istanze owner rimosso. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/editors/core/registry.test.ts`; `check-codemirror-boundary.mjs` | `docs/product/editor-and-preview.md` §§ Modalità, Superfici | Fallback dipende dai binding runtime; formato non servito degrada o dà errore esplicito. | `pending` |
+| DOC-013 | Preview/UI non fidata non diventa codice attivo: sanitizer limita tag/attributi/style/URL, separa ID contenuto/shell e rifiuta HTML/WebView community. | `VERIFIED_LOCAL` | `d9591ac7` | `sanitize.test.ts`; `sanitize.dom.test.ts`; `view_boundary_failures.rs` | `docs/product/editor-and-preview.md`; `docs/reference/permissions-and-security.md` | Policy deve evolvere con renderer, scheme URL e hook futuri. | `pending` |
+### Tema e piano
+| ID | Specifica rebaselined | Stato | Patch | Test/guardia locale | Docs | Rischio residuo | CI |
+|---|---|---|---|---|---|---|---|
+| THEME-001 | Bundle `theme-1` usa la stessa porta per tema serie/installato; engine futuro, permessi, ID/path insicuri, collisioni e symlink sono rifiutati prima publish. | `VERIFIED_LOCAL` | `d9591ac7` | `crates/fub-host/tests/themes.rs`; check-doc-links | `docs/reference/on-disk-layout.md`; `apps/client/theme/author/README.md` | Discovery/install non certificano resa/accessibilità CSS; controlli client separati. | `pending` |
+| THEME-002 | Client valida CSS, ruoli, hook e contrasto prima mount atomico; rifiuto conserva precedente; light/dark esplicito prevale sistema, ignoto ricade sistema. | `VERIFIED_LOCAL` | `d9591ac7` | `apps/client/src/theme/gate.test.ts`; `sanitize-css.test.ts`; `theme.test.ts` | `apps/client/theme/author/README.md`; `docs/decisions/0192-impostazioni-locale-e-temi.md` | Contratto autore evolutivo; AA nei casi dichiarati non garantisce qualità visiva su ogni piattaforma. | `pending` |
+| PLAN-001 | Baseline/provenienza sono le specifiche rebaselined proprietarie del 2026-09-17; G14 non è chiuso, Phase 9/main sono NO-GO e G15/GO manca. | `ACCEPTED_RISK` | `d9591ac7` | docs/link/orphan/size/mermaid/markdown/prose/tables/locale guards verdi | `docs/project/status.md`; `docs/project/roadmap.md`; questo piano § 14.2–14.4 | Rischi CAS/rename, deferred WASM, tracker aperti, CI pending e nessuna garanzia merge/release. | `pending` |
 ## 14.3 Controllo di completezza
-
-Contare le righe:
-
-```text
-4 SEC
-+ 11 DATA
-+ 9 UI
-+ 7 ARCH
-+ 3 ABI
-+ 3 WASM
-+ 2 BUILD
-+ 1 CI
-+ 13 DOC
-+ 2 THEME
-+ 1 PLAN
-= 56
-```
-
-Il registro deve contenere esattamente 56 ID unici.
-
+Il registro contiene esattamente questi ID unici: 4 SEC + 11 DATA + 9 UI + 7 ARCH + 3 ABI + 3 WASM + 2 BUILD + 1 CI + 13 DOC + 2 THEME + 1 PLAN = **56**. Le verifiche locali dichiarate per la baseline sono reali: Rust **2153 pass/3 ignored**, client **92 file/1335 test**, axe completo **42/42 scene e 6526 elementi**, graph **2k** e soak **10k**, docs/static guard verdi, `npm audit` **0**, fmt/check/clippy verdi, target WASM e feature builds verdi. Questi risultati non sono CI remota e non chiudono G14.
 ## 14.4 Gate `G14 — Ogni finding ha evidenza completa`
-
-- [ ] 56/56 righe presenti;
-- [ ] 0 `NOT_RECONSTRUCTED`;
-- [ ] 0 `PARTIAL`;
-- [ ] 0 `IMPLEMENTED_UNVERIFIED`;
-- [ ] eventuali `ACCEPTED_RISK` approvati esplicitamente;
-- [ ] ogni riga ha commit;
-- [ ] ogni riga ha test/guardia;
-- [ ] ogni riga ha docs coerenti;
-- [ ] ogni riga punta alla CI finale;
-- [ ] nessuna evidenza si riferisce soltanto a un commit storico precedente al candidato.
+- [x] 56/56 righe presenti e ID unici.
+- [x] 0 `NOT_RECONSTRUCTED`.
+- [x] 0 `PARTIAL`.
+- [x] 0 `IMPLEMENTED_UNVERIFIED`.
+- [x] Ogni riga usa la patch `d9591ac7`.
+- [x] Ogni riga ha specifica, test/guardia locale, docs e rischio residuo esplicito.
+- [x] Ogni riga indica CI `pending`, senza claim di CI remota.
+- [x] Verifiche locali aggregate riportate in § 14.3.
+- [ ] CI finale multipiattaforma eseguita e verde.
+- [ ] G14 chiuso: resta non superato finché la CI finale è `pending`.
+- [ ] Eventuali `ACCEPTED_RISK` accettati nel gate G15: lo stato non equivale a chiusura automatica.
+- [ ] Nessun finding può essere promosso a `VERIFIED_CI` prima dell’evidenza remota sullo stesso commit.
 
 ---
 
