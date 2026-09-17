@@ -248,12 +248,15 @@ Ogni superficie dichiara almeno una `SurfaceMode`: id estensibile, etichetta,
 presentazione editabile o resa e proiezione sul `PaneMode` ABI già congelato.
 Il layout conserva qualunque id non vuoto; se la superficie attuale non lo
 supporta, il pannello usa il primo modo dichiarato senza sovrascrivere la
-preferenza persistita.
+preferenza persistita. Il toggle `Mod-E` sceglie soltanto fra le modalità che la
+superficie dichiara; quando manca una coppia edit/render non mostra un controllo
+falso. La command palette usa la stessa proiezione e non conosce nomi di profilo.
 
-Il router della shell ordina i comandi nei layer superficie, profilo, documento,
-riquadro e globale. Popup e keymap locale vincono prima del router tramite
-`defaultPrevented`; i renderer non aggiungono listener globali. Questi tipi e
-l'arbitrato restano interni a TypeScript e non modificano WIT o ABI.
+La tastiera è ordinata per contesto: il popup di completamento e le keymap
+CodeMirror precedono il layer della superficie; poi vengono profilo, documento,
+riquadro e globale. La shell monta un solo listener globale e lo rimuove al
+rimontaggio. Le callback di superficie diventano comandi nella stessa pipeline,
+non un secondo sistema di tasti.
 
 ### Workbook e vertical slice della griglia
 
@@ -285,19 +288,39 @@ il provider. Le generazioni asincrone scartano risposte stantie. Se la query
 non è servita, la superficie dichiara `data-evaluation="unavailable"` e mostra
 gli input grezzi senza duplicare il linguaggio formule in TypeScript.
 
-`crates/fub-format-sheet/src/session.rs` possiede il motore derivato per
-apertura, reload atomico e letture a finestre. L'adapter `fub-host::sheet`
-conserva la derivazione comune `Revision::of`; il motore confronta soltanto
-revisioni opache. Il crate formato non dipende dall'host ed è compilabile per
-WASM. La shell non usa ancora questa sessione per il traffico ordinario.
+`crates/fub-format-sheet/src/session.rs` possiede il motore derivato. Apertura e
+reload costruiscono una sola valutazione e gli indici delle coordinate; le
+letture successive restituiscono soltanto la finestra richiesta. Il commit
+interno riceve fino a 16.384 patch e 4 MiB complessivi di preimmagini e nuovi
+input. Valida revisione, coordinate, duplicati e tutte le preimmagini prima di
+mutare; un errore lascia sorgente, revisione, valori e indici precedenti.
 
-La query della vertical slice resta privata e provvisoria; non introduce una
-nuova porta IPC né estende ABI o WIT. La
-[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) definisce il
-passo successivo: sostituire sorgente e valutazione complete con finestre,
-patch coordinate atomiche e invalidazione limitata, insieme ai consumatori
-nativo e WASM conformi. La compilazione del motore per WASM non dimostra ancora
-quel confine né il lifecycle del provider remoto.
+Un commit riuscito serializza il workbook autorevole una volta, rivalida la
+sessione e restituisce un diff testuale con offset in byte UTF-8 e preimmagine.
+Il diff non spezza caratteri multibyte né la coppia `\r\n`. La risposta viene
+misurata, escaping JSON compreso, entro 8 MiB usando fette prese in prestito:
+`deleted` e `inserted` vengono allocati soltanto dopo il controllo. La prima
+canonicalizzazione di una sorgente non canonica può quindi fallire in modo
+esplicito senza sostituire la sessione.
+
+L'invalidazione include le coordinate modificate e le dipendenti transitive del
+nuovo workbook, comprese formule che puntavano a celle prima assenti. Fino a
+32.768 coordinate restituisce l'elenco ordinato; oltre la soglia restituisce
+`all`. L'adapter `fub-host::sheet` conserva la derivazione comune
+`Revision::of` ed espone la stessa semantica nativa. Il crate formato non
+dipende dall'host ed è compilabile per WASM.
+
+Questi tipi restano interni a Rust. La shell continua a usare la query privata
+con sorgente e valutazione complete: non riceve ancora finestre, patch o il diff
+in byte e non deve confonderlo con `TextOperation`, i cui offset interni sono
+UTF-16 JavaScript. Non sono stati estesi ABI, WIT o mirror TypeScript.
+
+La [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) definisce
+il passo successivo: collegare questa sessione al traffico reale della
+superficie e promuovere il contratto soltanto insieme ai consumatori nativo e
+WASM conformi, con ownership, unload, negoziazione e fallback verificati. La
+compilazione del motore per WASM non dimostra ancora quel confine né il lifecycle
+del provider remoto.
 
 ## Confine CodeMirror
 
@@ -328,14 +351,10 @@ Gli altri guard del frontend impediscono:
 - `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
 - `apps/client/src/editors/text/profiles/plain-text.ts`
 - `apps/client/src/editors/text/profiles/formula.ts`
+- `apps/client/src/editors/text/surface.ts`
+- `apps/client/src/editors/grid/engine.ts`
+- `apps/client/src/editors/grid/surface.ts`
 - `apps/client/src/editor/text-operation.ts`
-- `apps/client/src/editor/editor.ts`
-- `apps/client/src/panels/document.ts`
+- `apps/client/src/state/document-session.ts`
 - `apps/client/src/host/contract.ts`
 - `apps/client/src/host/ipc.ts`
-- `apps/client/src/host/dialog.ts`
-- `apps/client/src/panels/`
-- `apps/client/src/state/`
-- `apps/client/src/ui/`
-- `crates/fub-app/src/lib.rs`
-- `crates/fub-format-sheet/src/lib.rs`
