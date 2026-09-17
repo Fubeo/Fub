@@ -1,0 +1,33 @@
+name: source-export
+
+on:
+  push:
+    branches:
+      - chore/issue11-source-export-20260917
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout audit integration with full history
+        uses: actions/checkout@v4
+        with:
+          ref: fix/audit-integration
+          fetch-depth: 0
+
+      - name: Fetch historical phase-10 candidate
+        run: git fetch origin feat/issue11-grid-abi:refs/remotes/origin/feat/issue11-grid-abi
+
+      - name: Archive checkout including Git metadata
+        run: tar -czf "$RUNNER_TEMP/fub-source.tgz" .
+
+      - name: Upload source checkout
+        uses: actions/upload-artifact@v4
+        with:
+          name: fub-source-${{ github.run_id }}
+          path: ${{ runner.temp }}/fub-source.tgz
+          retention-days: 1
+          if-no-files-found: error
