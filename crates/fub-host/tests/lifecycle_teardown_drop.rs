@@ -282,6 +282,7 @@ fn finish_manual(
             .take_plugin_teardown_indexes(&mut prepared)?;
         errors.extend(prepared.invoke_indexes(&mut host));
     }
+    errors.extend(prepared.invoke_grids());
     let retired = workspace
         .write()?
         .finish_plugin_teardown(prepared, Vec::new())
