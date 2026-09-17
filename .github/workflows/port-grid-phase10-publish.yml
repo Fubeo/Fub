@@ -33,10 +33,13 @@ jobs:
           test "$(git rev-parse origin/fix/audit-integration)" = "$TARGET_BASE"
           test "$(git rev-parse origin/feat/issue11-grid-abi)" = "$EXPECTED_OLD_HEAD"
           git checkout --detach "$TARGET_BASE"
-          if git cherry-pick "$SOURCE_COMMIT"; then
-            echo 'Il port non ha più i conflitti attesi; rivedere la procedura.' >&2
-            exit 1
-          fi
+          python <<'PY'
+          import os
+          import subprocess
+          result = subprocess.run(['git', 'cherry-pick', os.environ['SOURCE_COMMIT']], check=False)
+          if result.returncode == 0:
+              raise SystemExit('Il port non ha più i conflitti attesi; rivedere la procedura.')
+          PY
           python <<'PY'
           from pathlib import Path
 
