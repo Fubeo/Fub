@@ -20,8 +20,8 @@ ciò che formerà la prima versione.
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, query, view ed eventi attraverso registri generici;
 - feature ufficiali abilitate con feature Cargo indipendenti;
-- contratto WIT `fub:abi@0.1.1` con snapshot congelati;
-- runtime WASM per `Plugin` e `CommandProvider`;
+- contratto WIT `fub:abi@0.1.2` con snapshot congelati e famiglia Grid v1
+  verificata su provider nativo e proxy WASM;
 - inventario WASM persistente separato dai dati del vault e avvio desktop dei
   soli componenti enabled con consenso concesso, prima di caricare il guest;
 - limiti di tempo e memoria per i componenti WASM;

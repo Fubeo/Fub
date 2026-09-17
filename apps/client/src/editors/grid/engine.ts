@@ -46,6 +46,7 @@ export const GRID_OVERSCAN = 2;
 
 export interface GridHost {
   readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
+  readonly openGrid: (surface: string, source: string, revision: string) => Promise<GridSession>;
   readonly gridWindow: (surface: string, instance: string, request: GridWindowRequest) => Promise<GridWindow>;
   readonly applyGrid: (surface: string, instance: string, request: GridApplyRequest) => Promise<GridCommit>;
   readonly reloadGrid: (surface: string, instance: string, source: string, revision: string) => Promise<GridSession>;

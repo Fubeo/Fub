@@ -78,10 +78,13 @@ transazione globale contro modifiche esterne.
 ## Release corrente
 
 Fub non ha ancora pubblicato un tag. Il workspace e la shell dichiarano
-`0.1.0`; il contratto plugin è `fub:abi@0.1.1`.
+`0.1.0`; il contratto plugin è `fub:abi@0.1.2`, con Grid v1 in ABI/WIT e mirror
+TypeScript. Il protocollo Grid negozia famiglia e versione prima dell'invocazione
+e mantiene fallback, limiti e parità nativo/WASM.
 
 Milestone 1–4 sono assorbite nel prodotto e nell'architettura correnti.
-Milestone 5, runtime WASM, è in corso.
+Milestone 5, runtime WASM, è in corso; la checklist della fase 10 resta aperta
+finché il lavoro non è entrato in `main`.
 
 ## CI e qualità visuale
 

@@ -25,7 +25,15 @@ La dichiarazione di un provider è codice esterno: `commands`, `views`,
 `Workspace::commit_registration` applica namespace, collisioni e fiducia host
 senza richiamare il provider. Un rifiuto lascia il provider nel token, da
 distruggere dopo aver rilasciato la guardia. Il token è consumabile una sola
-volta. La porta copre comandi, view, import, export, handler, sintassi e renderer.
+volta. La porta copre comandi, view, import, export, handler, sintassi e
+renderer.
+La famiglia Grid usa la stessa cattura preparata: `surfaces()` viene chiamata
+fuori da `Custody<Workspace>`, il commit pubblica soltanto la dichiarazione
+verificata e `open/window/apply/reload/close/shutdown` passano da un token
+detached. Nessuna chiamata al provider Grid o al guest WASM vive sotto il lock;
+il risultato viene finalizzato dopo la riconvalida di workspace, owner e
+generazione. Il binding espone famiglia/versione e il registro conserva
+fallback e disposer per l'unload.
 La cattura conserva il corpo fuori dalla rete di panic della dichiarazione:
 anche un errore di `Drop` successivo viene isolato, senza un doppio panic.
 

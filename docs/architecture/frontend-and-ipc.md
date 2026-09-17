@@ -310,17 +310,15 @@ nuovo workbook, comprese formule che puntavano a celle prima assenti. Fino a
 `Revision::of` ed espone la stessa semantica nativa. Il crate formato non
 dipende dall'host ed è compilabile per WASM.
 
-Questi tipi restano interni a Rust. La shell continua a usare la query privata
-con sorgente e valutazione complete: non riceve ancora finestre, patch o il diff
-in byte e non deve confonderlo con `TextOperation`, i cui offset interni sono
-UTF-16 JavaScript. Non sono stati estesi ABI, WIT o mirror TypeScript.
-
-La [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md) definisce
-il passo successivo: collegare questa sessione al traffico reale della
-superficie e promuovere il contratto soltanto insieme ai consumatori nativo e
-WASM conformi, con ownership, unload, negoziazione e fallback verificati. La
-compilazione del motore per WASM non dimostra ancora quel confine né il lifecycle
-del provider remoto.
+Questi tipi attraversano ora il contratto Rust↔WIT↔TypeScript e le porte IPC
+tipizzate della famiglia Grid. La shell non riceve DOM, callback JavaScript o
+oggetti CodeMirror: possiede rendering, input, clipboard, selezione e stato
+visuale, mentre il provider possiede parsing, formule e dipendenze.
+`query_index` resta read-only; per `.fubsheet` serve soltanto la valutazione
+privata completa e non è il percorso delle finestre, patch, invalidazioni o
+lifecycle Grid. Limiti, coordinate, fallback, diff UTF-8 e parità nativo/WASM
+sono normati in [ABI e WIT](../reference/abi-and-wit.md) e nel [contratto
+IPC](../reference/ipc-contract.md). Nessuna battuta genera IPC o WASM.
 
 ## Confine CodeMirror
 

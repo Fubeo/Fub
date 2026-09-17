@@ -468,6 +468,37 @@ mod tests {
     }
 
     #[test]
+    fn source_patch_and_invalidation_limits_are_bounded() {
+        let source = "x".repeat(MAX_GRID_SOURCE_BYTES);
+        assert!(validate_grid_source(&source).is_ok());
+        assert!(validate_grid_source(&format!("{source}x")).is_err());
+
+        let patch = GridCellPatch {
+            cell: key(),
+            before: None,
+            after: String::new(),
+        };
+        let mut request = GridApplyRequest {
+            revision: Revision("r1".into()),
+            patches: vec![patch; MAX_GRID_PATCHES],
+        };
+        assert!(request.validate().is_ok());
+        request.patches.push(GridCellPatch {
+            cell: key(),
+            before: None,
+            after: String::new(),
+        });
+        assert!(request.validate().is_err());
+
+        let mut invalidation = GridInvalidation::Cells(vec![key(); MAX_GRID_INVALIDATED_CELLS]);
+        assert!(invalidation.validate().is_ok());
+        if let GridInvalidation::Cells(cells) = &mut invalidation {
+            cells.push(key());
+        }
+        assert!(invalidation.validate().is_err());
+    }
+
+    #[test]
     fn surface_validation_accepts_future_family_versions_for_negotiation() {
         let mut spec = GridSurfaceSpec::new("future.sheet", "future-format");
         spec.family = "future-grid".into();

@@ -513,6 +513,13 @@ Soltanto dopo la misura:
 - [ ] provare fallback su shell priva della griglia;
 - [ ] documentare limiti, versioni e negoziazione.
 
+Sul branch candidato integrato, il protocollo Grid v1 è già esercitato dai
+provider nativo e WASM e dalle porte IPC tipizzate: famiglia/versione e
+fallback precedono l'invocazione; coordinate, limiti, invalidazione, diff
+UTF-8, lifecycle e parità sono verificati. Le caselle della fase 10 restano
+intenzionalmente non spuntate: la regola di consegna consente di chiuderle
+soltanto quando il comportamento è entrato in `main`.
+
 Una futura famiglia `structured` per DOCX riusa sessioni, registry, lifecycle,
 comandi e salvataggio, ma non forza CodeMirror a diventare un editor visuale
 rich text.
@@ -566,7 +573,7 @@ ABI, WIT, SDK, proxy WASM, esempio e rimozione degli adapter.
 | Rischio | Segnale | Risposta |
 |---|---|---|
 | astrazione nominale | il core riceve ancora tipi Markdown | secondo profilo obbligatorio |
-| ABI prematura | ogni modifica alla griglia cambia il WIT | protocollo interno fino al vertical slice |
+| ABI prematura | la griglia cambia senza misura, limiti o consumatori | ADR 0201, protocollo Grid v1 promosso solo con clienti nativo/WASM e additività WIT |
 | dipendenza plugin→plugin | il foglio importa Markdown | entrambi consumano servizi della shell |
 | chiamata per battuta | lag o code IPC | bozza locale e commit esplicito |
 | due verità | frontend e Rust calcolano formule diverse | evaluatore autorevole unico |

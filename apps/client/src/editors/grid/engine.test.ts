@@ -113,7 +113,7 @@ function protocolHost(
     reloadGrid: async (_surface, _instance, _source, _revision) => {
       calls.push("reload");
       return {
-        instance: openedInstances.at(-1) ?? "grid-test-missing",
+        instance: openedInstances[openedInstances.length - 1] ?? "grid-test-missing",
         revision: currentRevision,
         sheets: [{ id: "main", name: "Main", row_count: 100, column_count: 50 }],
       };
