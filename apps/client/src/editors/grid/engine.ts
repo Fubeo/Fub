@@ -1,5 +1,16 @@
+import type {
+  GridApplyRequest,
+  GridCommit,
+  GridInvalidation,
+  GridSession,
+  GridSurfaceSpec,
+  GridWindow,
+  GridWindowRequest,
+  SheetCellValue,
+  SheetEvaluation,
+} from "../../host/contract";
+import type { TextOperation } from "../../editor/text-operation";
 import type { Theme } from "../../theme/theme";
-import type { SheetCellValue, SheetEvaluation } from "../../host/contract";
 import { createTextEngine, type EditorChangeOrigin, type TextEngine } from "../text/engine";
 import { createFormulaProfile } from "../text/profiles/formula";
 import {
@@ -12,6 +23,7 @@ import {
   type GridSelection,
   type GridSheet,
   type GridWorkbook,
+  type GridCell,
 } from "./model";
 import {
   applyGridPatches,
@@ -32,6 +44,15 @@ const COLUMN_HEADER_HEIGHT = 28;
 const EMPTY_SHEET: GridSheet = { id: "", name: "", rows: [], columns: [] };
 export const GRID_OVERSCAN = 2;
 
+export interface GridHost {
+  readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
+  readonly openGrid: (surface: string, source: string, revision: string) => Promise<GridSession>;
+  readonly gridWindow: (instance: string, request: GridWindowRequest) => Promise<GridWindow>;
+  readonly applyGrid: (instance: string, request: GridApplyRequest) => Promise<GridCommit>;
+  readonly reloadGrid: (instance: string, source: string, revision: string) => Promise<GridSession>;
+  readonly closeGrid: (instance: string) => Promise<void>;
+}
+
 export interface GridChange {
   readonly text: string;
   readonly operation: GridOperation;
@@ -40,12 +61,15 @@ export interface GridChange {
 
 export interface GridEngineOptions {
   readonly surfaceId: string;
+  readonly formatId?: string | null;
+  readonly revision?: string;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
-  readonly evaluate: (source: string) => Promise<SheetEvaluation>;
+  /** Kept for isolated legacy engine tests; production uses the GridHost. */
+  readonly evaluate?: (source: string) => Promise<SheetEvaluation>;
+  readonly grid?: GridHost;
   readonly theme?: Theme;
 }
-
 interface AxisLayout {
   readonly offsets: number[];
   readonly sizes: number[];
@@ -130,7 +154,86 @@ function samePosition(left: GridPosition, right: GridPosition): boolean {
 function clamp(value: number, maximum: number): number {
   return Math.max(0, Math.min(maximum, value));
 }
+function utf16Offset(source: string, byteOffset: number): number {
+  const bytes = new TextEncoder().encode(source);
+  if (!Number.isInteger(byteOffset) || byteOffset < 0 || byteOffset > bytes.length) {
+    throw new Error("grid source diff offset is out of bounds");
+  }
+  return new TextDecoder().decode(bytes.slice(0, byteOffset)).length;
+}
 
+function applySourceEdit(source: string, edit: GridCommit["edit"]): string {
+  const bytes = new TextEncoder().encode(source);
+  if (edit.from > edit.to || edit.to > bytes.length) throw new Error("grid source diff is out of bounds");
+  const deleted = new TextDecoder().decode(bytes.slice(Number(edit.from), Number(edit.to)));
+  if (deleted !== edit.deleted) throw new Error("grid source diff preimage mismatch");
+  const inserted = new TextEncoder().encode(edit.inserted);
+  const result = new Uint8Array(Number(edit.from) + inserted.length + bytes.length - Number(edit.to));
+  result.set(bytes.slice(0, Number(edit.from)), 0);
+  result.set(inserted, Number(edit.from));
+  result.set(bytes.slice(Number(edit.to)), Number(edit.from) + inserted.length);
+  return new TextDecoder().decode(result);
+}
+
+function operationFromCommit(source: string, commit: GridCommit, patches: readonly GridCellPatch[]): GridOperation {
+  const after = applySourceEdit(source, commit.edit);
+  const edit = {
+    from: utf16Offset(source, Number(commit.edit.from)),
+    to: utf16Offset(source, Number(commit.edit.to)),
+    deleted: commit.edit.deleted,
+    inserted: commit.edit.inserted,
+  };
+  const operation: TextOperation = {
+    beforeLength: source.length,
+    afterLength: after.length,
+    edits: [edit],
+  };
+  return { ...operation, kind: "grid", patches };
+}
+
+function rowFromProtocol(row: { id: string; index: number; height: number | null; hidden: boolean }) {
+  return { id: row.id, height: row.height ?? undefined, hidden: row.hidden };
+}
+
+function columnFromProtocol(column: { id: string; index: number; width: number | null; hidden: boolean }) {
+  return { id: column.id, width: column.width ?? undefined, hidden: column.hidden };
+}
+
+function workbookFromWindows(
+  session: GridSession,
+  windows: readonly GridWindow[],
+): GridWorkbook {
+  const sheets = session.sheets.map((sheet) => {
+    const sheetWindows = windows.filter((window) => window.sheet === sheet.id);
+    const rows = [...new Map(sheetWindows.flatMap((window) => window.rows.map((row) => [row.index, row]))).values()]
+      .sort((left, right) => left.index - right.index)
+      .map(rowFromProtocol);
+    const columns = [...new Map(sheetWindows.flatMap((window) => window.columns.map((column) => [column.index, column]))).values()]
+      .sort((left, right) => left.index - right.index)
+      .map(columnFromProtocol);
+    const cells = sheetWindows.flatMap((window) => window.cells.map((cell): GridCell => ({
+      row: cell.key.row,
+      column: cell.key.column,
+      input: cell.input,
+      style: {
+        bold: cell.style.bold,
+        italic: cell.style.italic,
+        text_color: cell.style.text_color ?? undefined,
+        fill_color: cell.style.fill_color ?? undefined,
+        horizontal: cell.style.horizontal ?? undefined,
+        number_format: cell.style.number_format ?? undefined,
+      },
+    })));
+    return { id: sheet.id, name: sheet.name, rows, columns, cells };
+  });
+  return { version: 1, sheets };
+}
+
+function valuesFromWindows(windows: readonly GridWindow[]): Map<string, SheetCellValue> {
+  return new Map(
+    windows.flatMap((window) => window.cells.map((cell) => [key(cell.key.sheet, cell.key.row, cell.key.column), cell.value] as const)),
+  );
+}
 export class GridEngine {
   readonly #root: HTMLElement;
   readonly #formulaHost: HTMLElement;
@@ -148,6 +251,9 @@ export class GridEngine {
   #workbook: GridWorkbook | null = null;
   #sheetIndex = 0;
   #source = "";
+  #revision = "";
+  #instance: string | null = null;
+  #provider = false;
   #selection: GridSelection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
   #values = new Map<string, SheetCellValue>();
   #rows: AxisLayout = { offsets: [0], sizes: [], total: 0 };
@@ -156,6 +262,7 @@ export class GridEngine {
   #readOnly = false;
   #destroyed = false;
   #evaluationGeneration = 0;
+  #protocolGeneration = 0;
   #undo: GridCellPatch[][] = [];
   #redo: GridCellPatch[][] = [];
   #pointerAnchor: GridPosition | null = null;
@@ -244,7 +351,12 @@ export class GridEngine {
   setDoc(source: string): void {
     if (this.#destroyed) return;
     this.#finishEditing(false, "input", false);
+    const previousInstance = this.#instance;
+    if (previousInstance && this.#options.grid) void this.#options.grid.closeGrid(previousInstance).catch(() => {});
+    this.#instance = null;
+    this.#provider = false;
     this.#source = source;
+    this.#revision = this.#options.revision ?? "";
     this.#workbook = parseWorkbook(source);
     this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
     this.#selection = this.#clampedSelection(this.#selection);
@@ -254,19 +366,24 @@ export class GridEngine {
     this.#selection = this.#visibleSelection(this.#selection);
     this.#syncFormulaBar();
     this.#render();
-    this.#evaluate();
+    if (this.#options.grid) void this.#openProtocol(source);
+    else void this.#evaluateLegacy();
   }
 
-  syncDoc(update: { readonly text: string; readonly operation: import("../../editor/text-operation").TextOperation | null } | string): void {
+  syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
     if (this.#destroyed) return;
     const source = typeof update === "string" ? update : update.text;
     const operation = typeof update === "string" ? null : update.operation;
+    if (this.#provider) {
+      this.#source = source;
+      void this.#reloadProtocol(source);
+      return;
+    }
     const stable = this.#activeCoordinate();
     let reloaded = false;
     if (operation && isGridOperation(operation) && this.#workbook) {
-      if (applyGridPatches(this.#workbook, operation.patches)) {
-        this.#source = source;
-      } else {
+      if (applyGridPatches(this.#workbook, operation.patches)) this.#source = source;
+      else {
         this.#workbook = parseWorkbook(source);
         this.#source = source;
         reloaded = true;
@@ -290,7 +407,7 @@ export class GridEngine {
     this.#selection = this.#visibleSelection(this.#selection);
     if (!this.#editing) this.#syncFormulaBar();
     this.#render();
-    this.#evaluate();
+    if (!this.#options.grid) void this.#evaluateLegacy();
   }
 
   getDoc(): string { return this.#source; }
@@ -344,7 +461,11 @@ export class GridEngine {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#protocolGeneration++;
     this.#abort.abort();
+    const instance = this.#instance;
+    if (instance && this.#options.grid) void this.#options.grid.closeGrid(instance).catch(() => {});
+    this.#instance = null;
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();
     this.#root.remove();
@@ -683,6 +804,7 @@ export class GridEngine {
 
   #commit(patches: readonly GridCellPatch[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
     if (!this.#workbook || this.#readOnly) return false;
+    const beforeSource = this.#source;
     const committed = commitGridPatches(this.#workbook, this.#source, patches);
     if (!committed) return false;
     this.#source = committed.source;
@@ -690,9 +812,21 @@ export class GridEngine {
       this.#undo.push([...patches]);
       this.#redo = [];
     }
-    this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
     this.#render();
-    this.#evaluate();
+    if (this.#provider && this.#instance && this.#options.grid) {
+      const request: GridApplyRequest = {
+        revision: this.#revision,
+        patches: patches.map((patch) => ({
+          cell: patch.coordinate,
+          before: patch.before?.input ?? null,
+          after: patch.after?.input ?? "",
+        })),
+      };
+      void this.#applyProvider(request, beforeSource, patches, origin);
+    } else {
+      this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
+      void this.#evaluateLegacy();
+    }
     return true;
   }
 
@@ -770,8 +904,8 @@ export class GridEngine {
     if (top < this.#viewport.scrollTop + COLUMN_HEADER_HEIGHT) this.#viewport.scrollTop = Math.max(0, top - COLUMN_HEADER_HEIGHT);
     else if (bottom > this.#viewport.scrollTop + this.#viewport.clientHeight) this.#viewport.scrollTop = bottom - this.#viewport.clientHeight;
   }
-
-  async #evaluate(): Promise<void> {
+  async #evaluateLegacy(): Promise<void> {
+    if (!this.#options.evaluate) return;
     const generation = ++this.#evaluationGeneration;
     const source = this.#source;
     try {
@@ -786,6 +920,188 @@ export class GridEngine {
       this.#root.dataset.evaluation = "unavailable";
       this.#render();
     }
+  }
+
+  async #openProtocol(source: string): Promise<void> {
+    const host = this.#options.grid;
+    if (!host || !this.#options.revision) return;
+    const generation = ++this.#protocolGeneration;
+    try {
+      const surfaces = await host.listGridSurfaces();
+      const surface = surfaces.find((candidate) =>
+        candidate.family === "grid"
+        && candidate.protocol_version === 1
+        && (this.#options.formatId == null || candidate.format === this.#options.formatId),
+      );
+      if (!surface) throw new Error("grid provider unavailable or incompatible");
+      const session = await host.openGrid(surface.id, source, this.#options.revision);
+      if (generation !== this.#protocolGeneration || this.#destroyed) {
+        await host.closeGrid(session.instance).catch(() => {});
+        return;
+      }
+      const windows = await this.#readWindows(session);
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      this.#instance = session.instance;
+      this.#revision = session.revision;
+      this.#provider = true;
+      this.#values = valuesFromWindows(windows);
+      this.#workbook = workbookFromWindows(session, windows);
+      this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
+      this.#selection = this.#visibleSelection(this.#clampedSelection(this.#selection));
+      this.#rebuildLayout();
+      this.#syncFormulaBar();
+      delete this.#root.dataset.evaluation;
+      this.#root.dataset.gridProtocol = "v1";
+      this.#render();
+    } catch {
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      this.#provider = false;
+      this.#instance = null;
+      this.#root.dataset.evaluation = "unavailable";
+      this.#root.dataset.gridProtocol = "fallback";
+      this.#render();
+    }
+  }
+
+  async #readWindows(session: GridSession): Promise<GridWindow[]> {
+    const host = this.#options.grid;
+    if (!host) return [];
+    const windows: GridWindow[] = [];
+    for (const sheet of session.sheets) {
+      for (let row = 0; row < sheet.row_count; row += 256) {
+        for (let column = 0; column < sheet.column_count; column += 128) {
+          windows.push(await host.gridWindow(session.instance, {
+            revision: session.revision,
+            sheet: sheet.id,
+            row_start: row,
+            row_count: Math.min(256, sheet.row_count - row),
+            column_start: column,
+            column_count: Math.min(128, sheet.column_count - column),
+          }));
+        }
+      }
+    }
+    return windows;
+  }
+
+  async #reloadProtocol(source: string): Promise<void> {
+    const host = this.#options.grid;
+    const instance = this.#instance;
+    if (!host || !instance || !this.#revision) return;
+    const generation = ++this.#protocolGeneration;
+    try {
+      const session = await host.reloadGrid(instance, source, this.#revision);
+      const windows = await this.#readWindows(session);
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      this.#revision = session.revision;
+      this.#values = valuesFromWindows(windows);
+      this.#workbook = workbookFromWindows(session, windows);
+      this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
+      this.#selection = this.#visibleSelection(this.#clampedSelection(this.#selection));
+      this.#provider = true;
+      this.#rebuildLayout();
+      this.#syncFormulaBar();
+      this.#render();
+    } catch {
+      this.#provider = false;
+      this.#instance = null;
+      this.#root.dataset.gridProtocol = "fallback";
+    }
+  }
+
+  async #applyProvider(
+    request: GridApplyRequest,
+    beforeSource: string,
+    patches: readonly GridCellPatch[],
+    origin: EditorChangeOrigin,
+  ): Promise<void> {
+    const host = this.#options.grid;
+    const instance = this.#instance;
+    if (!host || !instance) return;
+    try {
+      const commit = await host.applyGrid(instance, request);
+      const source = applySourceEdit(beforeSource, commit.edit);
+      if (this.#destroyed) return;
+      this.#revision = commit.revision;
+      this.#source = source;
+      this.#options.onChange({
+        text: source,
+        operation: operationFromCommit(beforeSource, commit, patches),
+        origin,
+      });
+      await this.#readInvalidation(commit.invalidation);
+    } catch {
+      if (this.#destroyed) return;
+      const stale = this.#instance;
+      this.#provider = false;
+      this.#instance = null;
+      if (stale) void host.closeGrid(stale).catch(() => {});
+      this.#source = beforeSource;
+      this.#workbook = parseWorkbook(beforeSource);
+      this.#rebuildLayout();
+      this.#render();
+    }
+  }
+
+  async #readInvalidation(invalidation: GridInvalidation): Promise<void> {
+    const host = this.#options.grid;
+    const instance = this.#instance;
+    if (!host || !instance || !this.#workbook) return;
+    if (invalidation.kind === "all") {
+      const session: GridSession = {
+        instance,
+        revision: this.#revision,
+        sheets: this.#workbook.sheets.map((sheet) => ({
+          id: sheet.id,
+          name: sheet.name,
+          row_count: sheet.rows.length,
+          column_count: sheet.columns.length,
+        })),
+      };
+      const windows = await this.#readWindows(session);
+      this.#values = valuesFromWindows(windows);
+      this.#workbook = workbookFromWindows(session, windows);
+    } else {
+      const requests = invalidation.cells.map((cell) => {
+        const sheet = this.#workbook!.sheets.find((candidate) => candidate.id === cell.sheet);
+        const row = Math.max(0, sheet?.rows.findIndex((candidate) => candidate.id === cell.row) ?? 0);
+        const column = Math.max(0, sheet?.columns.findIndex((candidate) => candidate.id === cell.column) ?? 0);
+        const rowStart = Math.floor(row / 256) * 256;
+        const columnStart = Math.floor(column / 128) * 128;
+        return host.gridWindow(instance, {
+          revision: this.#revision,
+          sheet: cell.sheet,
+          row_start: rowStart,
+          row_count: Math.min(256, Math.max(1, (sheet?.rows.length ?? 1) - rowStart)),
+          column_start: columnStart,
+          column_count: Math.min(128, Math.max(1, (sheet?.columns.length ?? 1) - columnStart)),
+        });
+      });
+      const windows = await Promise.all(requests);
+      for (const window of windows) {
+        const sheet = this.#workbook.sheets.find((candidate) => candidate.id === window.sheet);
+        if (!sheet) continue;
+        for (const cell of window.cells) {
+          this.#values.set(key(cell.key.sheet, cell.key.row, cell.key.column), cell.value);
+          const existing = cellAt(sheet, {
+            row: window.rows.findIndex((row) => row.id === cell.key.row),
+            column: window.columns.findIndex((column) => column.id === cell.key.column),
+          });
+          if (existing) {
+            existing.input = cell.input;
+            existing.style = {
+              bold: cell.style.bold,
+              italic: cell.style.italic,
+              text_color: cell.style.text_color ?? undefined,
+              fill_color: cell.style.fill_color ?? undefined,
+              horizontal: cell.style.horizontal ?? undefined,
+              number_format: cell.style.number_format ?? undefined,
+            };
+          }
+        }
+      }
+    }
+    this.#render();
   }
 }
 

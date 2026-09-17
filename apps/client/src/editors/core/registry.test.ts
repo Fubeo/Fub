@@ -92,7 +92,6 @@ describe("DocumentSurfaceRegistry", () => {
         searchNotes: async () => [],
         listTags: async () => [],
       },
-      evaluateSheet: async () => ({ cells: [], dependencies: [] }),
     });
 
     expect(registry.resolve({ formatId: "fubsheet", sourceKind: "text" })).toMatchObject({

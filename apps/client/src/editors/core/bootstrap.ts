@@ -1,6 +1,7 @@
 import { createEditor, type Editor } from "../../editor/editor";
 import type { CompletionSources } from "../../editor/completions";
-import type { SheetEvaluation, SyntaxForm } from "../../host/contract";
+import type { SyntaxForm } from "../../host/contract";
+import type { GridHost } from "../grid/engine";
 import { t } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
@@ -28,7 +29,7 @@ export interface SurfaceBootstrapOptions extends SurfaceCallbacks {
   readonly onOpenWikilink: (page: string, heading: string | null, block: string | null) => void;
   readonly onSearchTag: (tag: string) => void;
   readonly completions: CompletionSources;
-  readonly evaluateSheet: (source: string) => Promise<SheetEvaluation>;
+  readonly gridHost?: GridHost;
 }
 
 const MARKDOWN_MODES = [
@@ -206,9 +207,11 @@ export function createDocumentSurfaceRegistry(
         if (profile !== "sheet") throw new Error(`grid surface profile ${profile} is not registered`);
         const engine = new GridEngine(context.parent, {
           surfaceId: context.paneId,
+          formatId: context.formatId,
+          revision: context.revision,
           onChange: (change) => options.onChange(context.paneId, change),
           onSelectionChange: () => options.onSelectionChange(context.paneId),
-          evaluate: options.evaluateSheet,
+          grid: options.gridHost,
           theme: currentTheme(),
         });
         return {
