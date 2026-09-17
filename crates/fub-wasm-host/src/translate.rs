@@ -37,7 +37,8 @@ use fub_abi::PluginError;
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
 use crate::contract::exports::fub::abi::{
-    command as w_command, format as x_format, plugin as w_plugin, view as w_view,
+    command as w_command, format as x_format, grid as w_grid, plugin as w_plugin,
+    view as w_view,
 };
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
@@ -834,6 +835,231 @@ fn from_context_mask(m: Vec<w_session::ContextKind>) -> fub_abi::session::Contex
             })
             .collect(),
     )
+}
+
+// ---------------------------------------------------------------------------
+// Grid provider
+// ---------------------------------------------------------------------------
+
+pub(crate) fn from_grid_surface(
+    surface: w_grid::GridSurfaceSpec,
+) -> Result<fub_abi::grid::GridSurfaceSpec, PluginError> {
+    let surface = fub_abi::grid::GridSurfaceSpec {
+        id: surface.id,
+        format: surface.format,
+        family: surface.family,
+        protocol_version: surface.protocol_version,
+    };
+    surface.validate()?;
+    if surface.family != fub_abi::grid::GRID_FAMILY
+        || surface.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+    {
+        return Err(PluginError::BadArgs(
+            "unsupported grid family or protocol version".into(),
+        ));
+    }
+    Ok(surface)
+}
+
+fn from_grid_revision(revision: String) -> fub_abi::Revision {
+    fub_abi::Revision(revision)
+}
+
+pub(crate) fn to_grid_revision(revision: &fub_abi::Revision) -> String {
+    revision.0.clone()
+}
+
+fn from_grid_sheet(sheet: w_grid::GridSheet) -> fub_abi::grid::GridSheet {
+    fub_abi::grid::GridSheet {
+        id: sheet.id,
+        name: sheet.name,
+        row_count: sheet.row_count,
+        column_count: sheet.column_count,
+    }
+}
+
+pub(crate) fn from_grid_session(
+    session: w_grid::GridSession,
+) -> Result<fub_abi::grid::GridSession, PluginError> {
+    let session = fub_abi::grid::GridSession {
+        instance: session.instance,
+        revision: from_grid_revision(session.revision),
+        sheets: session.sheets.into_iter().map(from_grid_sheet).collect(),
+    };
+    session.validate()?;
+    Ok(session)
+}
+
+fn from_grid_key(key: w_grid::GridCellKey) -> fub_abi::grid::GridCellKey {
+    fub_abi::grid::GridCellKey {
+        sheet: key.sheet,
+        row: key.row,
+        column: key.column,
+    }
+}
+
+fn to_grid_key(key: &fub_abi::grid::GridCellKey) -> w_grid::GridCellKey {
+    w_grid::GridCellKey {
+        sheet: key.sheet.clone(),
+        row: key.row.clone(),
+        column: key.column.clone(),
+    }
+}
+
+fn from_grid_horizontal(
+    horizontal: w_grid::GridHorizontalAlign,
+) -> fub_abi::grid::GridHorizontalAlign {
+    match horizontal {
+        w_grid::GridHorizontalAlign::Start => fub_abi::grid::GridHorizontalAlign::Start,
+        w_grid::GridHorizontalAlign::Center => fub_abi::grid::GridHorizontalAlign::Center,
+        w_grid::GridHorizontalAlign::End => fub_abi::grid::GridHorizontalAlign::End,
+    }
+}
+
+
+fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle {
+    fub_abi::grid::GridCellStyle {
+        bold: style.bold,
+        italic: style.italic,
+        text_color: style.text_color,
+        fill_color: style.fill_color,
+        horizontal: style.horizontal.map(from_grid_horizontal),
+        number_format: style.number_format,
+    }
+}
+
+
+fn from_grid_formula_error(
+    error: w_grid::GridFormulaError,
+) -> fub_abi::grid::GridFormulaError {
+    match error {
+        w_grid::GridFormulaError::Parse => fub_abi::grid::GridFormulaError::Parse,
+        w_grid::GridFormulaError::Ref => fub_abi::grid::GridFormulaError::Ref,
+        w_grid::GridFormulaError::Name => fub_abi::grid::GridFormulaError::Name,
+        w_grid::GridFormulaError::Value => fub_abi::grid::GridFormulaError::Value,
+        w_grid::GridFormulaError::DivZero => fub_abi::grid::GridFormulaError::DivZero,
+        w_grid::GridFormulaError::Num => fub_abi::grid::GridFormulaError::Num,
+        w_grid::GridFormulaError::Cycle => fub_abi::grid::GridFormulaError::Cycle,
+    }
+}
+
+
+fn from_grid_value(value: w_grid::GridCellValue) -> fub_abi::grid::GridCellValue {
+    match value {
+        w_grid::GridCellValue::Blank => fub_abi::grid::GridCellValue::Blank,
+        w_grid::GridCellValue::Number(value) => fub_abi::grid::GridCellValue::Number(value),
+        w_grid::GridCellValue::Text(value) => fub_abi::grid::GridCellValue::Text(value),
+        w_grid::GridCellValue::Boolean(value) => fub_abi::grid::GridCellValue::Boolean(value),
+        w_grid::GridCellValue::Error(error) => {
+            fub_abi::grid::GridCellValue::Error(from_grid_formula_error(error))
+        }
+    }
+}
+
+
+fn from_grid_row(row: w_grid::GridRow) -> fub_abi::grid::GridRow {
+    fub_abi::grid::GridRow {
+        id: row.id,
+        index: row.index,
+        height: row.height,
+        hidden: row.hidden,
+    }
+}
+
+fn from_grid_column(column: w_grid::GridColumn) -> fub_abi::grid::GridColumn {
+    fub_abi::grid::GridColumn {
+        id: column.id,
+        index: column.index,
+        width: column.width,
+        hidden: column.hidden,
+    }
+}
+
+fn from_grid_cell(cell: w_grid::GridCell) -> fub_abi::grid::GridCell {
+    fub_abi::grid::GridCell {
+        key: from_grid_key(cell.key),
+        input: cell.input,
+        style: from_grid_style(cell.style),
+        value: from_grid_value(cell.value),
+    }
+}
+
+pub(crate) fn from_grid_window(
+    window: w_grid::GridWindow,
+) -> Result<fub_abi::grid::GridWindow, PluginError> {
+    let window = fub_abi::grid::GridWindow {
+        revision: from_grid_revision(window.revision),
+        sheet: window.sheet,
+        row_start: window.row_start,
+        column_start: window.column_start,
+        total_rows: window.total_rows,
+        total_columns: window.total_columns,
+        rows: window.rows.into_iter().map(from_grid_row).collect(),
+        columns: window.columns.into_iter().map(from_grid_column).collect(),
+        cells: window.cells.into_iter().map(from_grid_cell).collect(),
+    };
+    window.validate()?;
+    Ok(window)
+}
+
+pub(crate) fn to_grid_window_request(
+    request: &fub_abi::grid::GridWindowRequest,
+) -> w_grid::GridWindowRequest {
+    w_grid::GridWindowRequest {
+        revision: to_grid_revision(&request.revision),
+        sheet: request.sheet.clone(),
+        row_start: request.row_start,
+        row_count: request.row_count,
+        column_start: request.column_start,
+        column_count: request.column_count,
+    }
+}
+
+
+fn to_grid_patch(patch: &fub_abi::grid::GridCellPatch) -> w_grid::GridCellPatch {
+    w_grid::GridCellPatch {
+        cell: to_grid_key(&patch.cell),
+        before: patch.before.clone(),
+        after: patch.after.clone(),
+    }
+}
+
+pub(crate) fn to_grid_apply_request(
+    request: &fub_abi::grid::GridApplyRequest,
+) -> w_grid::GridApplyRequest {
+    w_grid::GridApplyRequest {
+        revision: to_grid_revision(&request.revision),
+        patches: request.patches.iter().map(to_grid_patch).collect(),
+    }
+}
+
+fn from_grid_invalidation(
+    invalidation: w_grid::GridInvalidation,
+) -> fub_abi::grid::GridInvalidation {
+    match invalidation {
+        w_grid::GridInvalidation::Cells(cells) => {
+            fub_abi::grid::GridInvalidation::Cells(cells.into_iter().map(from_grid_key).collect())
+        }
+        w_grid::GridInvalidation::All => fub_abi::grid::GridInvalidation::All,
+    }
+}
+
+
+pub(crate) fn from_grid_commit(
+    commit: w_grid::GridCommit,
+) -> Result<fub_abi::grid::GridCommit, PluginError> {
+    let commit = fub_abi::grid::GridCommit {
+        revision: from_grid_revision(commit.revision),
+        edit: fub_abi::grid::GridSourceEdit {
+            from: commit.edit.from,
+            to: commit.edit.to,
+            deleted: commit.edit.deleted,
+            inserted: commit.edit.inserted,
+        },
+        invalidation: from_grid_invalidation(commit.invalidation),
+    };
+    commit.validate()?;
+    Ok(commit)
 }
 
 pub(crate) fn from_view_spec(
