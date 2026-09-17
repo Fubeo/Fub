@@ -78,7 +78,10 @@ pub(crate) fn unmount(
         ws.take_plugin_teardown_indexes(&mut prepared)
     };
     match extracted {
-        Ok(()) => errors.extend(prepared.invoke_indexes(&mut host)),
+        Ok(()) => {
+            errors.extend(prepared.invoke_grids());
+            errors.extend(prepared.invoke_indexes(&mut host));
+        }
         Err(error) => errors.push(error),
     }
     let finalized = {

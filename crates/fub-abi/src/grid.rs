@@ -50,9 +50,6 @@ impl GridSurfaceSpec {
         {
             return Err(PluginError::BadArgs("grid surface has an empty identity".into()));
         }
-        if self.family != GRID_FAMILY {
-            return Err(PluginError::BadArgs("grid surface has an unknown family".into()));
-        }
         Ok(())
     }
 }
@@ -271,11 +268,10 @@ impl GridApplyRequest {
         }
         let mut bytes = 0usize;
         for patch in &self.patches {
-            for coordinate in [&patch.cell.sheet, &patch.cell.row, &patch.cell.column] {
-                bytes = bytes
-                    .checked_add(coordinate.len())
-                    .ok_or_else(|| PluginError::BadArgs("grid patch input size overflow".into()))?;
-            }
+            bytes = bytes
+                .checked_add(patch.before.as_ref().map_or(0, String::len))
+                .and_then(|bytes| bytes.checked_add(patch.after.len()))
+                .ok_or_else(|| PluginError::BadArgs("grid patch input size overflow".into()))?;
             if patch.cell.sheet.is_empty()
                 || patch.cell.row.is_empty()
                 || patch.cell.column.is_empty()
@@ -284,10 +280,6 @@ impl GridApplyRequest {
                     "grid patch has an empty coordinate".into(),
                 ));
             }
-            bytes = bytes
-                .checked_add(patch.before.as_ref().map_or(0, String::len))
-                .and_then(|bytes| bytes.checked_add(patch.after.len()))
-                .ok_or_else(|| PluginError::BadArgs("grid patch input size overflow".into()))?;
         }
         if bytes > MAX_GRID_PATCH_INPUT_BYTES {
             return Err(PluginError::BadArgs(
@@ -392,6 +384,7 @@ pub trait GridProvider: Send + Sync {
     fn reload(
         &mut self,
         instance: &str,
+        expected: Revision,
         source: &str,
         revision: Revision,
     ) -> Result<GridSession, PluginError>;
@@ -443,13 +436,14 @@ mod tests {
     }
 
     #[test]
-    fn patch_input_limit_counts_coordinates_and_input_only_preimages() {
-        let oversized = "x".repeat(MAX_GRID_PATCH_INPUT_BYTES + 1);
+    fn patch_input_limit_counts_only_preimages_and_new_inputs() {
+        let oversized_coordinate = "x".repeat(MAX_GRID_PATCH_INPUT_BYTES + 1);
+
         assert!(GridApplyRequest {
             revision: Revision("r1".into()),
             patches: vec![GridCellPatch {
                 cell: GridCellKey {
-                    sheet: oversized,
+                    sheet: oversized_coordinate,
                     row: "row-1".into(),
                     column: "column-1".into(),
                 },
@@ -458,7 +452,27 @@ mod tests {
             }],
         }
         .validate()
+        .is_ok());
+
+        let oversized_input = "x".repeat(MAX_GRID_PATCH_INPUT_BYTES + 1);
+        assert!(GridApplyRequest {
+            revision: Revision("r1".into()),
+            patches: vec![GridCellPatch {
+                cell: key(),
+                before: None,
+                after: oversized_input,
+            }],
+        }
+        .validate()
         .is_err());
+    }
+
+    #[test]
+    fn surface_validation_accepts_future_family_versions_for_negotiation() {
+        let mut spec = GridSurfaceSpec::new("future.sheet", "future-format");
+        spec.family = "future-grid".into();
+        spec.protocol_version = 2;
+        assert!(spec.validate().is_ok());
     }
 
     #[test]

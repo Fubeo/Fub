@@ -174,6 +174,7 @@ impl GridProvider for GridHarness {
     fn reload(
         &mut self,
         instance: &str,
+        expected: Revision,
         source: &str,
         revision: Revision,
     ) -> Result<GridSession, PluginError> {
@@ -185,6 +186,9 @@ impl GridProvider for GridHarness {
             .sessions
             .get_mut(instance)
             .ok_or_else(|| Self::missing("grid session is not open"))?;
+        if session.revision != expected {
+            return Err(PluginError::Conflict("grid session revision changed".into()));
+        }
         session.revision = revision.clone();
         self.calls.push(GridCall::Reload {
             instance: instance.to_owned(),

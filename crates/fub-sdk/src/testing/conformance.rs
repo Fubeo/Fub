@@ -1360,6 +1360,7 @@ pub fn a_grid_supports_the_lifecycle(
     provider
         .reload(
             &session.instance,
+            commit.revision.clone(),
             fixture.source,
             Revision::of(fixture.source),
         )

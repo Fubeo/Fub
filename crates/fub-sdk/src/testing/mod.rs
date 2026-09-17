@@ -1552,6 +1552,7 @@ impl GridProvider for MemoryHost {
     fn reload(
         &mut self,
         instance: &str,
+        expected: Revision,
         source: &str,
         revision: Revision,
     ) -> Result<GridSession, PluginError> {
@@ -1563,6 +1564,11 @@ impl GridProvider for MemoryHost {
         let session = sessions.get_mut(instance).ok_or_else(|| {
             PluginError::Unserved(format!("grid instance `{instance}` is not open").into())
         })?;
+        if session.revision != expected {
+            return Err(PluginError::Conflict(
+                format!("grid instance `{instance}` revision is stale").into(),
+            ));
+        }
         session.revision = revision;
         self.grid_calls
             .lock()

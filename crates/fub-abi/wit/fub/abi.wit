@@ -3160,7 +3160,7 @@ interface grid {
     open: func(surface: string, source: string, revision: revision) -> result<grid-session, plugin-error>;
     window: func(instance: string, request: grid-window-request) -> result<grid-window, plugin-error>;
     apply: func(instance: string, request: grid-apply-request) -> result<grid-commit, plugin-error>;
-    reload: func(instance: string, source: string, revision: revision) -> result<grid-session, plugin-error>;
+    reload: func(instance: string, expected: revision, source: string, revision: revision) -> result<grid-session, plugin-error>;
     close: func(instance: string) -> result<_, plugin-error>;
     shutdown: func() -> result<_, plugin-error>;
 }

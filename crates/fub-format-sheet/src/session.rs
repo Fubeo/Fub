@@ -216,6 +216,12 @@ impl<R: Eq + Serialize> SheetSession<R> {
     pub fn source(&self) -> &str {
         &self.source
     }
+    /// Metadati persistiti già posseduti dalla sessione, senza riparsare la
+    /// sorgente né duplicare gli indici derivati.
+    pub fn sheets(&self) -> &[crate::Sheet] {
+        &self.workbook.sheets
+    }
+
 
     /// Compare-and-reload: un errore lascia revisione, assi e valori precedenti.
     pub fn reload(
@@ -237,7 +243,9 @@ impl<R: Eq + Serialize> SheetSession<R> {
         request: SheetWindowRequest,
     ) -> Result<SheetWindow<'_, R>, SheetSessionError> {
         self.check_revision(expected)?;
-        if request.row_count > MAX_WINDOW_ROWS
+        if request.row_count == 0
+            || request.column_count == 0
+            || request.row_count > MAX_WINDOW_ROWS
             || request.column_count > MAX_WINDOW_COLUMNS
             || request
                 .row_count

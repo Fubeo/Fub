@@ -144,6 +144,13 @@ impl Registrar<'_> {
         self.publish(PreparedRegistration::views(provider).map_err(RegistryError::External)?)
     }
 
+    pub fn register_grid_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::grid::GridProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::grid(provider).map_err(RegistryError::External)?)
+    }
+
     pub fn register_event_handler(
         &mut self,
         provider: Box<dyn fub_abi::traits::EventHandler>,

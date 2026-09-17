@@ -5352,10 +5352,11 @@ fn conform(source: &str) -> Result<(), String> {
             as fn(
                 &'static mut dyn GridProvider,
                 &'static str,
+                Revision,
                 &'static str,
                 Revision,
             ) -> Result<GridSession, PluginError>,
-        &["instance", "source", "revision"],
+        &["instance", "expected", "source", "revision"],
     );
     contract.method(
         "grid",

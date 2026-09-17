@@ -63,12 +63,32 @@ pub struct PreparedPluginTeardown {
     generation: u64,
     previous_provider_call: bool,
     indexes: Option<Vec<(String, SharedIndexProvider)>>,
+    grids: Option<Vec<Arc<SharedShelter<Box<dyn fub_abi::grid::GridProvider>>>>>,
     removed_indexes: bool,
+    grids_closed: bool,
     indexes_closed: bool,
     frame_active: bool,
+
 }
 
 impl PreparedPluginTeardown {
+    /// Chiude tutte le istanze grid fuori dalla guardia del workspace.
+    pub fn invoke_grids(&mut self) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        if let Some(grids) = &mut self.grids {
+            for provider in std::mem::take(grids) {
+                let result = crate::safety::external(
+                    "grid provider shutdown",
+                    |message| PluginError::Internal(message.into()),
+                    || provider.write().shutdown(),
+                );
+                errors.extend(result.err());
+            }
+        }
+        self.grids_closed = self.grids.is_some();
+        errors
+    }
+
     /// Flush e close restano distinti: un errore o panic del primo non salta
     /// il secondo, né gli indici successivi.
     pub fn invoke_indexes(&mut self, host: &mut dyn HostApi) -> Vec<PluginError> {
@@ -169,7 +189,9 @@ impl Workspace {
             generation,
             previous_provider_call: self.dispatch.enter_provider_call(),
             indexes: None,
+            grids: None,
             removed_indexes: false,
+            grids_closed: false,
             indexes_closed: false,
             frame_active: true,
         })
@@ -210,7 +232,10 @@ impl Workspace {
         &mut self,
         prepared: &mut PreparedPluginTeardown,
     ) -> std::result::Result<(), PluginError> {
-        if !self.valid_teardown(prepared) || prepared.indexes.is_some() {
+        if !self.valid_teardown(prepared)
+            || prepared.indexes.is_some()
+            || prepared.grids.is_some()
+        {
             return Err(PluginError::Conflict("stale plugin teardown".into()));
         }
         if !prepared.frame_active {
@@ -220,6 +245,14 @@ impl Workspace {
         let indexes = self.indexes.remove(&prepared.owner);
         prepared.removed_indexes = !indexes.is_empty();
         prepared.indexes = Some(indexes);
+        let grids = self
+            .providers
+            .grids
+            .extract(|entry| entry.id == prepared.owner.as_ref())
+            .into_iter()
+            .map(|entry| entry.provider)
+            .collect();
+        prepared.grids = Some(grids);
         Ok(())
     }
 
@@ -238,7 +271,10 @@ impl Workspace {
             self.dispatch
                 .restore_provider_call(prepared.previous_provider_call);
         }
-        if !self.valid_teardown(&prepared) || !prepared.indexes_closed {
+        if !self.valid_teardown(&prepared)
+            || !prepared.indexes_closed
+            || !prepared.grids_closed
+        {
             let mut errors = errors;
             errors.push(PluginError::Conflict(
                 "stale or incomplete plugin teardown".into(),
@@ -247,6 +283,11 @@ impl Workspace {
             if let Some(indexes) = prepared.indexes {
                 for (_, index) in indexes {
                     resources.push("unfinished index", index);
+                }
+            }
+            if let Some(grids) = prepared.grids {
+                for grid in grids {
+                    resources.push("unfinished grid", grid);
                 }
             }
             return Ok(RetiredPlugin {
