@@ -2,6 +2,8 @@
 
 use super::*;
 
+type RetiredGridProvider = Arc<SharedShelter<Box<dyn fub_abi::grid::GridProvider>>>;
+
 /// Provider già ritirati dal kernel. Il proprietario li distrugge fuori guard;
 /// un disposer difettoso non impedisce il rilascio degli altri.
 #[must_use = "i provider ritirati devono essere distrutti fuori dal guard del workspace"]
@@ -55,6 +57,13 @@ impl RetiredResources {
         table.restore(retained);
     }
 }
+/// Fallimento raro della finalizzazione: il token resta disponibile al chiamante
+/// mentre l'errore viaggia in un involucro piccolo.
+pub struct PluginTeardownFailure {
+    pub prepared: PreparedPluginTeardown,
+    pub error: PluginError,
+}
+
 
 /// Diritto monouso a ritirare una precisa dichiarazione di plugin.
 pub struct PreparedPluginTeardown {
@@ -63,7 +72,7 @@ pub struct PreparedPluginTeardown {
     generation: u64,
     previous_provider_call: bool,
     indexes: Option<Vec<(String, SharedIndexProvider)>>,
-    grids: Option<Vec<Arc<SharedShelter<Box<dyn fub_abi::grid::GridProvider>>>>>,
+    grids: Option<Vec<RetiredGridProvider>>,
     removed_indexes: bool,
     grids_closed: bool,
     indexes_closed: bool,
@@ -257,12 +266,12 @@ impl Workspace {
         &mut self,
         prepared: PreparedPluginTeardown,
         errors: Vec<PluginError>,
-    ) -> std::result::Result<RetiredPlugin, (PreparedPluginTeardown, PluginError)> {
+    ) -> std::result::Result<RetiredPlugin, Box<PluginTeardownFailure>> {
         if prepared.workspace_id != self.workspace_id {
-            return Err((
+            return Err(Box::new(PluginTeardownFailure {
                 prepared,
-                PluginError::Conflict("teardown belongs to another workspace".into()),
-            ));
+                error: PluginError::Conflict("teardown belongs to another workspace".into()),
+            }));
         }
         if prepared.frame_active {
             self.dispatch
@@ -374,6 +383,7 @@ mod tests {
         workspace
             .take_plugin_teardown_indexes(prepared)
             .expect("take once");
+        assert!(prepared.invoke_grids().is_empty());
         let mut host = workspace.host_for(OWNER, InvokeMode::Apply);
         assert!(prepared.invoke_indexes(&mut host).is_empty());
     }
@@ -384,15 +394,16 @@ mod tests {
         let mut other = workspace();
         let mut prepared = original.prepare_plugin_teardown(OWNER).expect("prepare");
         complete_indexes(&mut original, &mut prepared);
-        let Err((prepared, error)) = other.finish_plugin_teardown(prepared, Vec::new()) else {
+        let Err(failure) = other.finish_plugin_teardown(prepared, Vec::new()) else {
             panic!("wrong workspace accepted");
         };
+        let PluginTeardownFailure { prepared, error } = *failure;
         assert!(matches!(error, PluginError::Conflict(_)));
         assert!(other.providers.plugins.get(OWNER).is_some());
         assert!(!other.dispatch.in_provider_call());
         assert!(original
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)
+            .map_err(|failure| failure.error)
             .expect("correct workspace")
             .dispose()
             .is_empty());
@@ -415,7 +426,7 @@ mod tests {
             .expect("replacement generation");
         let errors = workspace
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)
+            .map_err(|failure| failure.error)
             .expect("same workspace finalizes its frame")
             .dispose();
         assert!(matches!(errors.as_slice(), [PluginError::Conflict(_)]));
@@ -438,7 +449,7 @@ mod tests {
         let prepared = workspace.prepare_plugin_teardown(OWNER).expect("prepare");
         let errors = workspace
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)
+            .map_err(|failure| failure.error)
             .expect("same workspace")
             .dispose();
         assert!(matches!(errors.as_slice(), [PluginError::Conflict(_)]));

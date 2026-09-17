@@ -54,7 +54,7 @@ pub use registration::{
     RegistrationPermit,
 };
 mod lifecycle;
-pub use lifecycle::{PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin};
+pub use lifecycle::{PreparedIndexFlush, PreparedPluginTeardown, PluginTeardownFailure, RetiredPlugin};
 mod removal;
 pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
@@ -3573,7 +3573,7 @@ impl Workspace {
         let outcome = self
             .finish_plugin_teardown(prepared, errors)
             .map(RetiredPlugin::dispose)
-            .map_err(|(_, error)| RegistryError::Activate(error));
+            .map_err(|failure| RegistryError::Activate(failure.error));
         self.dispatch_pending();
         outcome
     }

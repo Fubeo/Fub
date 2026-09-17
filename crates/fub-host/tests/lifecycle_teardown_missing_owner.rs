@@ -133,7 +133,7 @@ fn exercise(busy: bool, panic_on_drop: bool) {
                 .unwrap()
                 .finish_plugin_teardown(prepared, Vec::new())
         };
-        let retired = finalized.map_err(|(_, error)| error).unwrap();
+        let retired = finalized.map_err(|failure| failure.error).unwrap();
         assert!(matches!(
             retired.dispose().as_slice(),
             [PluginError::Conflict(_)]

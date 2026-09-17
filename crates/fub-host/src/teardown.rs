@@ -88,7 +88,7 @@ pub(crate) fn unmount(
         let mut ws = workspace.write()?;
         ws.finish_plugin_teardown(prepared, errors)
     };
-    let retired = finalized.map_err(|(_, error)| error)?;
+    let retired = finalized.map_err(|failure| failure.error)?;
     let mut errors = retired.dispose();
     errors.extend(drain_events(workspace).err());
     Ok(errors)

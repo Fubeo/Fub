@@ -267,7 +267,7 @@ fn finish_manual(
         let retired = workspace
             .write()?
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)?;
+            .map_err(|failure| failure.error)?;
         errors = retired.dispose();
         assert!(
             workspace.read()?.trust_of(OWNER).is_some(),
@@ -285,7 +285,7 @@ fn finish_manual(
     let retired = workspace
         .write()?
         .finish_plugin_teardown(prepared, Vec::new())
-        .map_err(|(_, error)| error)?;
+        .map_err(|failure| failure.error)?;
     errors.extend(retired.dispose());
     Ok(errors)
 }
