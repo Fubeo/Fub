@@ -97,3 +97,7 @@ pub fn component(example: &str, artifact: &str, feature: &str) -> Utf8PathBuf {
 pub fn ping(feature: &str) -> Utf8PathBuf {
     component("ping-wasm", "ping_wasm", feature)
 }
+/// Il componente grid che usa il motore `SheetSession` condiviso col provider nativo.
+pub fn grid() -> Utf8PathBuf {
+    component("grid-wasm", "grid_wasm", "")
+}

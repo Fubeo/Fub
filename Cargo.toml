@@ -43,6 +43,7 @@ exclude = [
     "esempi/eventi-wasm",
     "esempi/format-wasm",
     "esempi/view-wasm",
+    "esempi/grid-wasm",
 ]
 
 [workspace.package]
