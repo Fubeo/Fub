@@ -65,6 +65,7 @@ export interface DocumentSessionApi {
 export interface DocumentSurfaceDescriptor {
   readonly formatId: string | null;
   readonly sourceKind: SourceKind;
+  readonly revision?: string;
 }
 
 export interface DocumentSurfaceSource extends DocumentSurfaceDescriptor {
@@ -901,6 +902,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
     this.#surfaceDescriptors.set(session, {
       formatId: source.format_id,
       sourceKind: source.source_kind,
+      revision: source.revision,
     });
     return session.text();
   }
@@ -909,7 +911,11 @@ export class DocumentSessionCollection implements DraftBufferStore {
     const text = await this.read(id);
     const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
     const known = session ? this.#surfaceDescriptors.get(session) : undefined;
-    if (known) return { text, ...known };
+    if (known) {
+      const base = session?.snapshot().base;
+      const revision = base?.kind === "descends_from" ? base.value : known.revision;
+      return { text, ...known, revision };
+    }
 
     let source: DocumentSource;
     try {
@@ -922,6 +928,7 @@ export class DocumentSessionCollection implements DraftBufferStore {
       const fallback: DocumentSurfaceDescriptor = {
         formatId: null,
         sourceKind: "text",
+        revision: "",
       };
       this.#surfaceDescriptors.set(session, fallback);
       return { text, ...fallback };
@@ -932,12 +939,14 @@ export class DocumentSessionCollection implements DraftBufferStore {
       this.#surfaceDescriptors.set(current, {
         formatId: source.format_id,
         sourceKind: source.source_kind,
+        revision: source.revision,
       });
     }
     return {
       text,
       formatId: source.format_id,
       sourceKind: source.source_kind,
+      revision: source.revision,
     };
   }
 

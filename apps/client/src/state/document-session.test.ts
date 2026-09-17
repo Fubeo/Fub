@@ -84,6 +84,7 @@ describe("ownership delle DocumentSession", () => {
       text: "bozza non salvata",
       formatId: "plain",
       sourceKind: "text",
+      revision: "rev-1",
     });
     expect(api.readDocument).toHaveBeenCalledTimes(1);
   });
@@ -99,6 +100,7 @@ describe("ownership delle DocumentSession", () => {
       text: "unica copia",
       formatId: null,
       sourceKind: "text",
+      revision: "",
     });
   });
 

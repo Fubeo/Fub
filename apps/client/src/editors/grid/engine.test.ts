@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
 import { parseWorkbook } from "./model";
 import { commitGridPatches, inputPatch } from "./operation";
-import { GridEngine, type GridChange, type GridEngineOptions } from "./engine";
+import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
 
 function workbook(rows = 100, columns = 50): string {
   return JSON.stringify({
@@ -20,6 +20,7 @@ function workbook(rows = 100, columns = 50): string {
 
 function mounted(
   evaluator: GridEngineOptions["evaluate"] = async () => ({ cells: [], dependencies: [] }),
+  grid?: GridHost,
 ) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -27,9 +28,12 @@ function mounted(
   const evaluate = vi.fn(evaluator);
   const engine = new GridEngine(host, {
     surfaceId: "test",
+    formatId: "fubsheet",
+    revision: "rev-1",
     onChange: (change) => changes.push(change),
     onSelectionChange: () => {},
     evaluate,
+    grid,
   });
   const viewport = host.querySelector<HTMLElement>(".grid-viewport")!;
   Object.defineProperties(viewport, {
@@ -39,7 +43,54 @@ function mounted(
   engine.setDoc(workbook());
   return { engine, host, viewport, changes, evaluate };
 }
-
+function protocolHost(source: string): GridHost & { calls: string[] } {
+  const calls: string[] = [];
+  let value = "1";
+  const session = {
+    instance: "grid-test-1",
+    revision: "rev-1",
+    sheets: [{ id: "main", name: "Main", row_count: 100, column_count: 50 }],
+  };
+  const rows = Array.from({ length: 100 }, (_, index) => ({ id: `r${index}`, index, height: null, hidden: false }));
+  const columns = Array.from({ length: 50 }, (_, index) => ({ id: `c${index}`, index, width: null, hidden: false }));
+  const window = () => ({
+    revision: session.revision,
+    sheet: "main",
+    row_start: 0,
+    column_start: 0,
+    total_rows: 100,
+    total_columns: 50,
+    rows,
+    columns,
+    cells: [{
+      key: { sheet: "main", row: "r0", column: "c0" },
+      input: value,
+      style: { bold: false, italic: false, text_color: null, fill_color: null, horizontal: null, number_format: null },
+      value: { kind: "number" as const, value: Number(value === "1" ? 1 : 2) },
+    }],
+  });
+  const start = new TextEncoder().encode(source.slice(0, source.indexOf('"1"') + 1)).length;
+  return {
+    calls,
+    listGridSurfaces: async () => {
+      calls.push("list");
+      return [{ id: "sheet", format: "fubsheet", family: "grid", protocol_version: 1 }];
+    },
+    openGrid: async () => { calls.push("open"); return session; },
+    gridWindow: async () => { calls.push("window"); return window(); },
+    applyGrid: async () => {
+      calls.push("apply");
+      value = "X";
+      return {
+        revision: "rev-2",
+        edit: { from: start, to: start + 1, deleted: "1", inserted: "X" },
+        invalidation: { kind: "cells" as const, cells: [{ sheet: "main", row: "r0", column: "c0" }] },
+      };
+    },
+    reloadGrid: async () => { calls.push("reload"); return session; },
+    closeGrid: async () => { calls.push("close"); },
+  };
+}
 afterEach(() => {
   document.body.replaceChildren();
 });
@@ -104,6 +155,30 @@ describe("GridEngine", () => {
     expect(afterUndo.cells?.find((cell) => cell.row === "r2" && cell.column === "c2")?.input).toBe("peer");
     expect(changes).toHaveLength(2);
     expect(changes[1].origin).toBe("undo");
+    engine.destroy();
+  });
+  it("negozia Grid v1, non chiama l'host per battuta e applica il diff guardato", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    const { engine, host, viewport, changes } = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const windowsBeforeTyping = grid.calls.filter((call) => call === "window").length;
+    viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    expect(grid.calls.filter((call) => call === "apply")).toHaveLength(0);
+    host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(grid.calls.filter((call) => call === "window").length).toBeGreaterThan(windowsBeforeTyping);
+    expect(grid.calls.filter((call) => call === "apply")).toHaveLength(1);
+    expect(changes).toHaveLength(1);
+    expect(changes[0].text).toContain('"X"');
+    expect(engine.getDoc()).toContain('"X"');
     engine.destroy();
   });
 
