@@ -531,6 +531,37 @@ export function createFakeHost(options: Options = {}): FakeHost {
           source_kind: "text",
         }));
       },
+      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve([])),
+      openGrid: (surface, source, revision) =>
+        gate(
+          "openGrid",
+          [surface, source, revision],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      gridWindow: (instance, request) =>
+        gate(
+          "gridWindow",
+          [instance, request],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      applyGrid: (instance, request) =>
+        gate(
+          "applyGrid",
+          [instance, request],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      reloadGrid: (instance, source, revision) =>
+        gate(
+          "reloadGrid",
+          [instance, source, revision],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
+      closeGrid: (instance) =>
+        gate(
+          "closeGrid",
+          [instance],
+          Promise.reject(new Error("host fake: la famiglia grid non è montata")),
+        ),
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci

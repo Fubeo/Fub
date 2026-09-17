@@ -903,6 +903,118 @@ export interface SheetEvaluation {
   cells: SheetEvaluatedCell[];
   dependencies: SheetCellDependency[];
 }
+// Dati strutturati a finestre per la famiglia grid. La shell possiede
+// rendering, input e clipboard; il provider possiede parsing, formule e
+// serializzazione. Nessun DOM, callback o oggetto CodeMirror attraversa questo
+// contratto.
+export const GRID_FAMILY = "grid";
+export const GRID_PROTOCOL_VERSION = 1;
+
+export interface GridSurfaceSpec {
+  id: string;
+  format: string;
+  family: string;
+  protocol_version: number;
+}
+
+export interface GridSession {
+  instance: string;
+  revision: string;
+  sheets: GridSheet[];
+}
+
+export interface GridSheet {
+  id: string;
+  name: string;
+  row_count: number;
+  column_count: number;
+}
+
+export interface GridRow {
+  id: string;
+  index: number;
+  height: number | null;
+  hidden: boolean;
+}
+
+export interface GridColumn {
+  id: string;
+  index: number;
+  width: number | null;
+  hidden: boolean;
+}
+
+export type GridCellKey = SheetCellKey;
+
+export interface GridCellStyle {
+  bold: boolean;
+  italic: boolean;
+  text_color: string | null;
+  fill_color: string | null;
+  horizontal: "start" | "center" | "end" | null;
+  number_format: string | null;
+}
+
+export type GridFormulaError = SheetFormulaError;
+
+export type GridCellValue = SheetCellValue;
+
+export interface GridCell {
+  key: GridCellKey;
+  input: string;
+  style: GridCellStyle;
+  value: GridCellValue;
+}
+
+export interface GridWindowRequest {
+  revision: string;
+  sheet: string;
+  row_start: number;
+  row_count: number;
+  column_start: number;
+  column_count: number;
+}
+
+export interface GridWindow {
+  revision: string;
+  sheet: string;
+  row_start: number;
+  column_start: number;
+  total_rows: number;
+  total_columns: number;
+  rows: GridRow[];
+  columns: GridColumn[];
+  cells: GridCell[];
+}
+
+/** Patch atomica input-only: lo stile resta intatto e il valore si ricalcola. */
+export interface GridCellPatch {
+  cell: GridCellKey;
+  before: string | null;
+  after: string;
+}
+
+export interface GridApplyRequest {
+  revision: string;
+  patches: GridCellPatch[];
+}
+
+export type GridInvalidation =
+  | { kind: "cells"; cells: SheetCellKey[] }
+  | { kind: "all" };
+
+export interface GridSourceEdit {
+  from: number;
+  to: number;
+  deleted: string;
+  inserted: string;
+}
+
+export interface GridCommit {
+  revision: string;
+  edit: GridSourceEdit;
+  invalidation: GridInvalidation;
+}
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
 // Tag adiacente (`kind` + `value`) come `LinkTarget`: un caso porta uno scalare

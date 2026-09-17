@@ -15,6 +15,12 @@ import type {
   CommandSpec,
   DocumentSource,
   FieldValue,
+  GridApplyRequest,
+  GridCommit,
+  GridSession,
+  GridSurfaceSpec,
+  GridWindow,
+  GridWindowRequest,
   IndexQuery,
   IndexResult,
   InvokeMode,
@@ -52,6 +58,16 @@ export const api = {
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
   readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+  listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
+  openGrid: (surface: string, source: string, revision: string) =>
+    invoke<GridSession>("open_grid", { surface, source, revision }),
+  gridWindow: (instance: string, request: GridWindowRequest) =>
+    invoke<GridWindow>("grid_window", { instance, request }),
+  applyGrid: (instance: string, request: GridApplyRequest) =>
+    invoke<GridCommit>("apply_grid", { instance, request }),
+  reloadGrid: (instance: string, source: string, revision: string) =>
+    invoke<GridSession>("reload_grid", { instance, source, revision }),
+  closeGrid: (instance: string) => invoke<void>("close_grid", { instance }),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è

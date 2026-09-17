@@ -1,5 +1,6 @@
 // Senza la cargo feature `versioning` (§16.3) questo banco non ha soggetto.
 #![cfg(feature = "versioning")]
+#![recursion_limit = "256"]
 //! I mirror TS↔Rust, legati da una **fixture generata dai tipi Rust**.
 //!
 //! `UiNode`, `ViewUpdate`, `KernelEvent`/`Event`, `Span`, `VersionRef`,
@@ -23,6 +24,11 @@
 //! (`tests/ts_mirror_app.rs`), che scrive la sua fixture accanto a questa:
 //! questo crate non può dipendere da `fub-app`.
 
+use fub_abi::grid::{
+    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue,
+    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
 use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     Failure, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
@@ -1099,12 +1105,154 @@ fn setting_spec_samples() -> Vec<Value> {
         .collect()
 }
 
+fn grid_samples() -> Vec<Value> {
+    let key = GridCellKey {
+        sheet: "sheet-1".into(),
+        row: "row-1".into(),
+        column: "column-1".into(),
+    };
+    let style = GridCellStyle {
+        bold: true,
+        italic: false,
+        text_color: Some("#111".into()),
+        fill_color: None,
+        horizontal: Some(GridHorizontalAlign::Center),
+        number_format: Some("0.00".into()),
+    };
+    let revision = Revision::of("rev-1");
+    let window = GridWindow {
+        revision: revision.clone(),
+        sheet: "sheet-1".into(),
+        row_start: 0,
+        column_start: 0,
+        total_rows: 4,
+        total_columns: 3,
+        rows: vec![GridRow {
+            id: "row-1".into(),
+            index: 0,
+            height: Some(24.0),
+            hidden: false,
+        }],
+        columns: vec![GridColumn {
+            id: "column-1".into(),
+            index: 0,
+            width: Some(120.0),
+            hidden: false,
+        }],
+        cells: vec![GridCell {
+            key: key.clone(),
+            input: "=1+1".into(),
+            style: style.clone(),
+            value: GridCellValue::Number(2.0),
+        }],
+    };
+    vec![
+        to_value(GridSurfaceSpec::new("sheet", "fubsheet")),
+        to_value(GridSession {
+            instance: "grid-1".into(),
+            revision: revision.clone(),
+            sheets: vec![GridSheet {
+                id: "sheet-1".into(),
+                name: "Foglio 1".into(),
+                row_count: 4,
+                column_count: 3,
+            }],
+        }),
+        to_value(GridSheet {
+            id: "sheet-1".into(),
+            name: "Foglio 1".into(),
+            row_count: 4,
+            column_count: 3,
+        }),
+        to_value(GridRow {
+            id: "row-1".into(),
+            index: 0,
+            height: Some(24.0),
+            hidden: false,
+        }),
+        to_value(GridColumn {
+            id: "column-1".into(),
+            index: 0,
+            width: Some(120.0),
+            hidden: false,
+        }),
+        to_value(key.clone()),
+        to_value(style),
+        to_value(GridCell {
+            key: key.clone(),
+            input: "=1+1".into(),
+            style: GridCellStyle {
+                bold: false,
+                italic: false,
+                text_color: None,
+                fill_color: None,
+                horizontal: None,
+                number_format: None,
+            },
+            value: GridCellValue::Error(GridFormulaError::Ref),
+        }),
+        to_value(GridWindowRequest {
+            revision: revision.clone(),
+            sheet: "sheet-1".into(),
+            row_start: 0,
+            row_count: 1,
+            column_start: 0,
+            column_count: 1,
+        }),
+        to_value(window),
+        to_value(GridCellPatch {
+            cell: key.clone(),
+            before: Some("=1+1".into()),
+            after: "=2+2".into(),
+        }),
+        to_value(GridApplyRequest {
+            revision: revision.clone(),
+            patches: vec![GridCellPatch {
+                cell: key.clone(),
+                before: Some("=1+1".into()),
+                after: "=2+2".into(),
+            }],
+        }),
+        to_value(GridSourceEdit {
+            from: 0,
+            to: 3,
+            deleted: "=1".into(),
+            inserted: "=2".into(),
+        }),
+        to_value(GridCommit {
+            revision: Revision::of("rev-2"),
+            edit: GridSourceEdit {
+                from: 0,
+                to: 3,
+                deleted: "=1".into(),
+                inserted: "=2".into(),
+            },
+            invalidation: GridInvalidation::Cells(vec![key]),
+        }),
+    ]
+}
+
 /// La fixture attesa, costruita dai tipi Rust.
 fn expected() -> Value {
     // Un errore concreto per provare che anche `PluginError` (dentro `JobDone`)
     // ha una forma che il lato TS può trattare come opaca.
     let _ = PluginError::BadArgs("x".into());
+    let grid = grid_samples();
     json!({
+        "GridSurfaceSpec": [grid[0].clone()],
+        "GridSession": [grid[1].clone()],
+        "GridSheet": [grid[2].clone()],
+        "GridRow": [grid[3].clone()],
+        "GridColumn": [grid[4].clone()],
+        "GridCellKey": [grid[5].clone()],
+        "GridCellStyle": [grid[6].clone()],
+        "GridCell": [grid[7].clone()],
+        "GridWindowRequest": [grid[8].clone()],
+        "GridWindow": [grid[9].clone()],
+        "GridCellPatch": [grid[10].clone()],
+        "GridApplyRequest": [grid[11].clone()],
+        "GridSourceEdit": [grid[12].clone()],
+        "GridCommit": [grid[13].clone()],
         "UiNode": ui_node_samples(),
         "ViewUpdate": view_update_samples(),
         "KernelEvent": event_samples(),

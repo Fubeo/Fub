@@ -77,6 +77,11 @@ use fub_abi::format::{
     ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 use fub_abi::gate::Gate;
+use fub_abi::grid::{
+    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue, GridColumn,
+    GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridProvider, GridRow,
+    GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{
     Anchor, ColumnAlign, DocId, DocumentModel, Frontmatter, Heading, Link, LinkTarget,
@@ -252,6 +257,7 @@ wit_type! {
     dyn ArtifactSink => SINK,
     dyn FormatProvider => SELF,
     dyn CommandProvider => SELF,
+    dyn GridProvider => SELF,
     dyn ViewProvider => SELF,
     dyn IndexProvider => SELF,
     dyn EventHandler => SELF,
@@ -344,6 +350,24 @@ wit_kebab! {
     DocumentSource,
     FormatError,
 
+    GridSurfaceSpec,
+    GridSession,
+    GridSheet,
+    GridRow,
+    GridColumn,
+    GridCellKey,
+    GridHorizontalAlign,
+    GridCellStyle,
+    GridFormulaError,
+    GridCellValue,
+    GridCell,
+    GridWindowRequest,
+    GridWindow,
+    GridCellPatch,
+    GridApplyRequest,
+    GridInvalidation,
+    GridSourceEdit,
+    GridCommit,
     // La mappa con namespace: al confine è una lista di coppie, perché WIT non
     // ha mappe. È lo stesso tipo in tutte e quattro le sedi del §3.5 — e che
     // sia lo STESSO è metà della risposta.
@@ -3369,6 +3393,334 @@ fn conform(source: &str) -> Result<(), String> {
         &[("target", wit(&target)), ("options", wit(&options))],
     );
 
+    let GridSurfaceSpec {
+        id,
+        format,
+        family,
+        protocol_version,
+    } = GridSurfaceSpec::new("", "");
+    contract.record(
+        "grid-surface-spec",
+        &[
+            ("id", wit(&id)),
+            ("format", wit(&format)),
+            ("family", wit(&family)),
+            ("protocol-version", wit(&protocol_version)),
+        ],
+    );
+
+    let GridSession {
+        instance,
+        revision,
+        sheets,
+    } = GridSession {
+        instance: String::new(),
+        revision: Revision::of(""),
+        sheets: Vec::new(),
+    };
+    contract.record(
+        "grid-session",
+        &[
+            ("instance", wit(&instance)),
+            ("revision", wit(&revision)),
+            ("sheets", wit(&sheets)),
+        ],
+    );
+
+    let GridSheet {
+        id,
+        name,
+        row_count,
+        column_count,
+    } = GridSheet {
+        id: String::new(),
+        name: String::new(),
+        row_count: 0,
+        column_count: 0,
+    };
+    contract.record(
+        "grid-sheet",
+        &[
+            ("id", wit(&id)),
+            ("name", wit(&name)),
+            ("row-count", wit(&row_count)),
+            ("column-count", wit(&column_count)),
+        ],
+    );
+
+    let GridRow {
+        id,
+        index,
+        height,
+        hidden,
+    } = GridRow {
+        id: String::new(),
+        index: 0,
+        height: None,
+        hidden: false,
+    };
+    contract.record(
+        "grid-row",
+        &[
+            ("id", wit(&id)),
+            ("index", wit(&index)),
+            ("height", wit(&height)),
+            ("hidden", wit(&hidden)),
+        ],
+    );
+
+    let GridColumn {
+        id,
+        index,
+        width,
+        hidden,
+    } = GridColumn {
+        id: String::new(),
+        index: 0,
+        width: None,
+        hidden: false,
+    };
+    contract.record(
+        "grid-column",
+        &[
+            ("id", wit(&id)),
+            ("index", wit(&index)),
+            ("width", wit(&width)),
+            ("hidden", wit(&hidden)),
+        ],
+    );
+
+    let GridCellKey { sheet, row, column } = GridCellKey {
+        sheet: String::new(),
+        row: String::new(),
+        column: String::new(),
+    };
+    contract.record(
+        "grid-cell-key",
+        &[
+            ("sheet", wit(&sheet)),
+            ("row", wit(&row)),
+            ("column", wit(&column)),
+        ],
+    );
+    contract.enumeration_from("grid-horizontal-align", ("grid.rs", "GridHorizontalAlign"));
+
+    let GridCellStyle {
+        bold,
+        italic,
+        text_color,
+        fill_color,
+        horizontal,
+        number_format,
+    } = GridCellStyle::default();
+    contract.record(
+        "grid-cell-style",
+        &[
+            ("bold", wit(&bold)),
+            ("italic", wit(&italic)),
+            ("text-color", wit(&text_color)),
+            ("fill-color", wit(&fill_color)),
+            ("horizontal", wit(&horizontal)),
+            ("number-format", wit(&number_format)),
+        ],
+    );
+    contract.enumeration_from("grid-formula-error", ("grid.rs", "GridFormulaError"));
+
+    let grid_value_case = |value: &GridCellValue| match value {
+        GridCellValue::Blank => case("blank"),
+        GridCellValue::Number(value) => case_ty("number", wit(value)),
+        GridCellValue::Text(value) => case_ty("text", wit(value)),
+        GridCellValue::Boolean(value) => case_ty("boolean", wit(value)),
+        GridCellValue::Error(error) => case_ty("error", wit(error)),
+    };
+    contract.variant_src(
+        "grid-cell-value",
+        ("grid.rs", "GridCellValue"),
+        &[
+            grid_value_case(&GridCellValue::Blank),
+            grid_value_case(&GridCellValue::Number(0.0)),
+            grid_value_case(&GridCellValue::Text(String::new())),
+            grid_value_case(&GridCellValue::Boolean(false)),
+            grid_value_case(&GridCellValue::Error(GridFormulaError::Parse)),
+        ],
+    );
+
+    let GridCell {
+        key,
+        input,
+        style,
+        value,
+    } = GridCell {
+        key: GridCellKey {
+            sheet: String::new(),
+            row: String::new(),
+            column: String::new(),
+        },
+        input: String::new(),
+        style: GridCellStyle::default(),
+        value: GridCellValue::Blank,
+    };
+    contract.record(
+        "grid-cell",
+        &[
+            ("key", wit(&key)),
+            ("input", wit(&input)),
+            ("style", wit(&style)),
+            ("value", wit(&value)),
+        ],
+    );
+
+    let GridWindowRequest {
+        revision,
+        sheet,
+        row_start,
+        row_count,
+        column_start,
+        column_count,
+    } = GridWindowRequest {
+        revision: Revision::of(""),
+        sheet: String::new(),
+        row_start: 0,
+        row_count: 0,
+        column_start: 0,
+        column_count: 0,
+    };
+    contract.record(
+        "grid-window-request",
+        &[
+            ("revision", wit(&revision)),
+            ("sheet", wit(&sheet)),
+            ("row-start", wit(&row_start)),
+            ("row-count", wit(&row_count)),
+            ("column-start", wit(&column_start)),
+            ("column-count", wit(&column_count)),
+        ],
+    );
+
+    let GridWindow {
+        revision,
+        sheet,
+        row_start,
+        column_start,
+        total_rows,
+        total_columns,
+        rows,
+        columns,
+        cells,
+    } = GridWindow {
+        revision: Revision::of(""),
+        sheet: String::new(),
+        row_start: 0,
+        column_start: 0,
+        total_rows: 0,
+        total_columns: 0,
+        rows: Vec::new(),
+        columns: Vec::new(),
+        cells: Vec::new(),
+    };
+    contract.record(
+        "grid-window",
+        &[
+            ("revision", wit(&revision)),
+            ("sheet", wit(&sheet)),
+            ("row-start", wit(&row_start)),
+            ("column-start", wit(&column_start)),
+            ("total-rows", wit(&total_rows)),
+            ("total-columns", wit(&total_columns)),
+            ("rows", wit(&rows)),
+            ("columns", wit(&columns)),
+            ("cells", wit(&cells)),
+        ],
+    );
+
+    let GridCellPatch {
+        cell,
+        before,
+        after,
+    } = GridCellPatch {
+        cell: GridCellKey {
+            sheet: String::new(),
+            row: String::new(),
+            column: String::new(),
+        },
+        before: None,
+        after: String::new(),
+    };
+    contract.record(
+        "grid-cell-patch",
+        &[
+            ("cell", wit(&cell)),
+            ("before", wit(&before)),
+            ("after", wit(&after)),
+        ],
+    );
+
+    let GridApplyRequest { revision, patches } = GridApplyRequest {
+        revision: Revision::of(""),
+        patches: Vec::new(),
+    };
+    contract.record(
+        "grid-apply-request",
+        &[("revision", wit(&revision)), ("patches", wit(&patches))],
+    );
+
+    let invalidation_case = |value: &GridInvalidation| match value {
+        GridInvalidation::Cells(cells) => case_ty("cells", wit(cells)),
+        GridInvalidation::All => case("all"),
+    };
+    contract.variant_src(
+        "grid-invalidation",
+        ("grid.rs", "GridInvalidation"),
+        &[
+            invalidation_case(&GridInvalidation::Cells(Vec::new())),
+            invalidation_case(&GridInvalidation::All),
+        ],
+    );
+
+    let GridSourceEdit {
+        from,
+        to,
+        deleted,
+        inserted,
+    } = GridSourceEdit {
+        from: 0,
+        to: 0,
+        deleted: String::new(),
+        inserted: String::new(),
+    };
+    contract.record(
+        "grid-source-edit",
+        &[
+            ("from", wit(&from)),
+            ("to", wit(&to)),
+            ("deleted", wit(&deleted)),
+            ("inserted", wit(&inserted)),
+        ],
+    );
+
+    let GridCommit {
+        revision,
+        edit,
+        invalidation,
+    } = GridCommit {
+        revision: Revision::of(""),
+        edit: GridSourceEdit {
+            from: 0,
+            to: 0,
+            deleted: String::new(),
+            inserted: String::new(),
+        },
+        invalidation: GridInvalidation::All,
+    };
+    contract.record(
+        "grid-commit",
+        &[
+            ("revision", wit(&revision)),
+            ("edit", wit(&edit)),
+            ("invalidation", wit(&invalidation)),
+        ],
+    );
+
     // --- i due innesti: chi aggiunge la sintassi (§3.1), chi disegna il blocco
     //     che ne esce (§3.2)
 
@@ -4954,6 +5306,73 @@ fn conform(source: &str) -> Result<(), String> {
     );
 
     contract.method(
+        "grid",
+        "surfaces",
+        <dyn GridProvider>::surfaces as fn(&'static dyn GridProvider) -> Vec<GridSurfaceSpec>,
+        &[],
+    );
+    contract.method(
+        "grid",
+        "open",
+        <dyn GridProvider>::open
+            as fn(
+                &'static mut dyn GridProvider,
+                &'static str,
+                &'static str,
+                Revision,
+            ) -> Result<GridSession, PluginError>,
+        &["surface", "source", "revision"],
+    );
+    contract.method(
+        "grid",
+        "window",
+        <dyn GridProvider>::window
+            as fn(
+                &'static mut dyn GridProvider,
+                &'static str,
+                GridWindowRequest,
+            ) -> Result<GridWindow, PluginError>,
+        &["instance", "request"],
+    );
+    contract.method(
+        "grid",
+        "apply",
+        <dyn GridProvider>::apply
+            as fn(
+                &'static mut dyn GridProvider,
+                &'static str,
+                GridApplyRequest,
+            ) -> Result<GridCommit, PluginError>,
+        &["instance", "request"],
+    );
+    contract.method(
+        "grid",
+        "reload",
+        <dyn GridProvider>::reload
+            as fn(
+                &'static mut dyn GridProvider,
+                &'static str,
+                &'static str,
+                Revision,
+            ) -> Result<GridSession, PluginError>,
+        &["instance", "source", "revision"],
+    );
+    contract.method(
+        "grid",
+        "close",
+        <dyn GridProvider>::close
+            as fn(&'static mut dyn GridProvider, &'static str) -> Result<(), PluginError>,
+        &["instance"],
+    );
+    contract.method(
+        "grid",
+        "shutdown",
+        <dyn GridProvider>::shutdown
+            as fn(&'static mut dyn GridProvider) -> Result<(), PluginError>,
+        &[],
+    );
+
+    contract.method(
         "syntax",
         "spec",
         <dyn SyntaxRule>::spec as fn(&'static dyn SyntaxRule) -> SyntaxRuleSpec,
@@ -5542,6 +5961,7 @@ fn conform(source: &str) -> Result<(), String> {
     let expected_exports: BTreeSet<String> = [
         "plugin",
         "format",
+        "grid",
         // I due innesti del §3.1 e del §3.2: separati da `format` perché un
         // plugin può implementarne uno senza l'altro — ed è esattamente ciò che
         // «mezzo plugin» significa.
