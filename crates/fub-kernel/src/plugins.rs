@@ -61,10 +61,10 @@ pub enum RegistrationKind {
     Renderer,
     /// Un servizio offerto agli altri plugin (§7.5).
     Service,
+    Grid,
 }
 
 impl RegistrationKind {
-    /// Come si chiama in un messaggio d'errore.
     pub fn what(self) -> &'static str {
         match self {
             RegistrationKind::View => "view",
@@ -76,6 +76,7 @@ impl RegistrationKind {
             RegistrationKind::Syntax => "syntax rule",
             RegistrationKind::Renderer => "renderer",
             RegistrationKind::Service => "service",
+            RegistrationKind::Grid => "grid surface",
         }
     }
 

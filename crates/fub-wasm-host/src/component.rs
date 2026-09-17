@@ -6,8 +6,8 @@
 //! secondo montaggio o una chiamata fuori sequenza possa sovrascrivere.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
-
 thread_local! {
     static ACTIVE_INSTANCES: RefCell<Vec<*const ()>> = const { RefCell::new(Vec::new()) };
 }
@@ -51,22 +51,27 @@ use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions,
 };
+use fub_abi::grid::{
+    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
+    GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
 use fub_abi::model::DocumentModel;
 use fub_abi::traits::{
     CommandProvider, HostApi, Plugin, PluginManifest, ReadApi, ViewInstance, ViewInterests,
     ViewProvider, ViewSpec,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
-use fub_abi::{FormatError, PluginError};
+use fub_abi::{FormatError, PluginError, Revision};
 use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
 use fub_kernel::Trust;
 use wasmtime::component::types::ComponentItem;
-use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType};
+use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType, Val};
 use wasmtime::{Engine, Store};
 
 use crate::borrow::{with_guest, with_read_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
 use crate::contract::exports::fub::abi::format as w_format;
+use crate::contract::exports::fub::abi::grid as w_grid;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
 use crate::contract::exports::fub::abi::view as w_view;
 use crate::guest::add_to_linker;
@@ -84,6 +89,16 @@ const FORMAT_INTERFACE: &str = "fub:abi/format";
 const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
 const VIEW_INTERFACE: &str = "fub:abi/view";
 const VIEW_EXPORT: &str = "fub:abi/view@0.1.1";
+const GRID_INTERFACE: &str = "fub:abi/grid";
+const GRID_EXPORT: &str = "fub:abi/grid@0.1.1";
+
+fn is_supported_grid_export(name: &str) -> bool {
+    name == GRID_INTERFACE
+        || name == GRID_EXPORT
+        || name
+            .strip_prefix(GRID_INTERFACE)
+            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+}
 fn is_supported_view_export(name: &str) -> bool {
     name == VIEW_INTERFACE
         || name == VIEW_EXPORT
@@ -144,6 +159,7 @@ pub struct Component {
     indices: w_plugin::GuestIndices,
     command_indices: Option<w_command::GuestIndices>,
     format_indices: Option<w_format::GuestIndices>,
+    grid_indices: Option<w_grid::GuestIndices>,
     view_indices: Option<w_view::GuestIndices>,
 }
 
@@ -189,6 +205,10 @@ impl Component {
             .component_type()
             .exports(&engine)
             .any(|(name, _)| is_supported_view_export(name));
+        let grid_export_present = component
+            .component_type()
+            .exports(&engine)
+            .any(|(name, _)| is_supported_grid_export(name));
         let pre = linker
             .instantiate_pre(&component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
@@ -197,6 +217,8 @@ impl Component {
         let command_indices = w_command::GuestIndices::new(&pre).ok();
         let format_indices =
             resolve_format_indices(format_export_present, || w_format::GuestIndices::new(&pre))?;
+        let grid_indices =
+            resolve_format_indices(grid_export_present, || w_grid::GuestIndices::new(&pre))?;
         let view_indices =
             resolve_format_indices(view_export_present, || w_view::GuestIndices::new(&pre))?;
         Ok(Self {
@@ -204,6 +226,7 @@ impl Component {
             indices,
             command_indices,
             format_indices,
+            grid_indices,
             view_indices,
         })
     }
@@ -235,6 +258,14 @@ impl Component {
             ),
             None => None,
         };
+        let grid = match &self.grid_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
         let view = match &self.view_indices {
             Some(indices) => Some(
                 indices
@@ -249,6 +280,7 @@ impl Component {
                 plugin,
                 commands,
                 format,
+                grid,
                 view,
             },
         })
@@ -264,6 +296,19 @@ fn cap_the_rest(
 ) -> wasmtime::Result<()> {
     let ty = component.component_type();
     for (name, item) in ty.imports(engine) {
+        if name == "wasi:random/random@0.2.3" {
+            let mut instance = linker.instance(name)?;
+            instance.func_new("get-random-bytes", |_, _, results| {
+                results[0] = Val::List(
+                    [0x13_u8, 0x37, 0x5a, 0x7d, 0x91, 0xb4, 0xd6, 0xf8]
+                        .into_iter()
+                        .map(Val::U8)
+                        .collect(),
+                );
+                Ok(())
+            })?;
+            continue;
+        }
         if FAMILIES_SERVED
             .iter()
             .any(|served| name.starts_with(served))
@@ -302,6 +347,7 @@ struct Interfaces {
     plugin: w_plugin::Guest,
     commands: Option<w_command::Guest>,
     format: Option<w_format::Guest>,
+    grid: Option<w_grid::Guest>,
     view: Option<w_view::Guest>,
 }
 
@@ -338,6 +384,23 @@ fn call_read<R>(
     let Instance { store, interfaces } = &mut *inner;
     let interfaces = &*interfaces;
     with_read_guest(store, host, |store| call(interfaces, store))
+}
+fn grid_call<R>(
+    inner: &Mutex<Instance>,
+    call: impl FnOnce(&w_grid::Guest, &mut Store<State>) -> Result<R, PluginError>,
+) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let mut inner = inner
+        .lock()
+        .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+    let Instance { store, interfaces } = &mut *inner;
+    let grid = interfaces
+        .grid
+        .as_ref()
+        .ok_or_else(|| PluginError::Internal("il componente non esporta `fub:abi/grid`".into()))?;
+    crate::limits::renew(&mut *store);
+    call(grid, store)
 }
 
 fn failure(error: wasmtime::Error) -> PluginError {
@@ -437,6 +500,232 @@ impl CommandProvider for WasmCommandProvider {
                 .map_err(failure)?
                 .map_err(tr::from_error)?;
             tr::from_command_outcome(outcome)
+        })
+    }
+}
+
+/// Proxy `GridProvider` sopra la stessa istanza del `WasmPlugin` montato.
+pub struct WasmGridProvider {
+    inner: Arc<Mutex<Instance>>,
+    specs: Vec<GridSurfaceSpec>,
+}
+
+fn grid_response_error(error: impl std::fmt::Display) -> PluginError {
+    PluginError::Internal(format!("malformed grid provider response: {error}").into())
+}
+
+fn validate_grid_session_response(
+    session: &GridSession,
+    expected: &Revision,
+    operation: &str,
+) -> Result<(), PluginError> {
+    session.validate().map_err(grid_response_error)?;
+    if &session.revision != expected {
+        return Err(grid_response_error(format!(
+            "grid {operation} returned an unexpected revision"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_grid_window_response(
+    window: &GridWindow,
+    request: &GridWindowRequest,
+) -> Result<(), PluginError> {
+    window.validate().map_err(grid_response_error)?;
+    if window.revision != request.revision
+        || window.sheet != request.sheet
+        || window.row_start != request.row_start
+        || window.column_start != request.column_start
+    {
+        return Err(grid_response_error(
+            "grid window does not match its request",
+        ));
+    }
+    if window.rows.len() != request.row_count as usize
+        || window.columns.len() != request.column_count as usize
+    {
+        return Err(grid_response_error(
+            "grid window axes do not match the requested dimensions",
+        ));
+    }
+    let mut rows = HashSet::with_capacity(window.rows.len());
+    for (offset, row) in window.rows.iter().enumerate() {
+        if row.id.is_empty()
+            || !rows.insert(&row.id)
+            || row.index
+                != request
+                    .row_start
+                    .checked_add(offset as u32)
+                    .ok_or_else(|| grid_response_error("grid row index overflows"))?
+        {
+            return Err(grid_response_error("grid window has invalid row metadata"));
+        }
+    }
+    let mut columns = HashSet::with_capacity(window.columns.len());
+    for (offset, column) in window.columns.iter().enumerate() {
+        if column.id.is_empty()
+            || !columns.insert(&column.id)
+            || column.index
+                != request
+                    .column_start
+                    .checked_add(offset as u32)
+                    .ok_or_else(|| grid_response_error("grid column index overflows"))?
+        {
+            return Err(grid_response_error(
+                "grid window has invalid column metadata",
+            ));
+        }
+    }
+    let mut cells = HashSet::with_capacity(window.cells.len());
+    for cell in &window.cells {
+        if cell.key.sheet != window.sheet
+            || !rows.contains(&cell.key.row)
+            || !columns.contains(&cell.key.column)
+            || !cells.insert(cell.key.clone())
+        {
+            return Err(grid_response_error(
+                "grid window has invalid cell coordinates",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_grid_commit_response(
+    commit: &GridCommit,
+    request: &GridApplyRequest,
+) -> Result<(), PluginError> {
+    commit.validate().map_err(grid_response_error)?;
+    if commit.revision == request.revision {
+        return Err(PluginError::Conflict(
+            "grid provider commit did not advance revision".into(),
+        ));
+    }
+    if usize::try_from(commit.edit.from).is_err() || usize::try_from(commit.edit.to).is_err() {
+        return Err(grid_response_error(
+            "grid source diff offset overflows usize",
+        ));
+    }
+    let changed: HashSet<_> = request
+        .patches
+        .iter()
+        .map(|patch| patch.cell.clone())
+        .collect();
+    match &commit.invalidation {
+        GridInvalidation::All => {}
+        GridInvalidation::Cells(cells) => {
+            let invalidated: HashSet<_> = cells.iter().cloned().collect();
+            if !changed.is_subset(&invalidated) {
+                return Err(grid_response_error(
+                    "grid commit does not invalidate every changed cell",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+impl GridProvider for WasmGridProvider {
+    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.specs.clone()
+    }
+
+    fn open(
+        &mut self,
+        surface: &str,
+        source: &str,
+        revision: Revision,
+    ) -> Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        if Revision::of(source) != revision {
+            return Err(PluginError::Conflict(
+                "grid source does not match its declared revision".into(),
+            ));
+        }
+        let revision_wit = tr::to_grid_revision(&revision);
+        let session = grid_call(&self.inner, |grid, store| {
+            grid.call_open(store, surface, source, &revision_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let session = tr::from_grid_session(session).map_err(grid_response_error)?;
+        validate_grid_session_response(&session, &revision, "open")?;
+        Ok(session)
+    }
+
+    fn window(
+        &mut self,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> Result<GridWindow, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_window_request(&request);
+        let window = grid_call(&self.inner, |grid, store| {
+            grid.call_window(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let window = tr::from_grid_window(window).map_err(grid_response_error)?;
+        validate_grid_window_response(&window, &request)?;
+        Ok(window)
+    }
+
+    fn apply(
+        &mut self,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> Result<GridCommit, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_apply_request(&request);
+        let commit = grid_call(&self.inner, |grid, store| {
+            grid.call_apply(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let commit = tr::from_grid_commit(commit).map_err(grid_response_error)?;
+        validate_grid_commit_response(&commit, &request)?;
+        Ok(commit)
+    }
+
+    fn reload(
+        &mut self,
+        instance: &str,
+        expected: Revision,
+        source: &str,
+        revision: Revision,
+    ) -> Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        if Revision::of(source) != revision {
+            return Err(PluginError::Conflict(
+                "grid source does not match its declared revision".into(),
+            ));
+        }
+        let expected_wit = tr::to_grid_revision(&expected);
+        let revision_wit = tr::to_grid_revision(&revision);
+        let session = grid_call(&self.inner, |grid, store| {
+            grid.call_reload(store, instance, &expected_wit, source, &revision_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let session = tr::from_grid_session(session).map_err(grid_response_error)?;
+        validate_grid_session_response(&session, &revision, "reload")?;
+        Ok(session)
+    }
+
+    fn close(&mut self, instance: &str) -> Result<(), PluginError> {
+        grid_call(&self.inner, |grid, store| {
+            grid.call_close(store, instance)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })
+    }
+
+    fn shutdown(&mut self) -> Result<(), PluginError> {
+        grid_call(&self.inner, |grid, store| {
+            grid.call_shutdown(store)
+                .map_err(failure)?
+                .map_err(tr::from_error)
         })
     }
 }
@@ -676,6 +965,24 @@ impl WasmBundle {
             .collect::<Result<_, _>>()
             .map_err(|error| format!("view non traducibili: {error}"))
     }
+    fn declared_grids(inner: &Mutex<Instance>) -> Result<Vec<GridSurfaceSpec>, String> {
+        let mut instance = inner
+            .lock()
+            .map_err(|_| "component instance is poisoned".to_string())?;
+        let Instance { store, interfaces } = &mut *instance;
+        let Some(grid) = interfaces.grid.as_ref() else {
+            return Ok(Vec::new());
+        };
+        crate::limits::renew(&mut *store);
+        let surfaces = grid
+            .call_surfaces(&mut *store)
+            .map_err(|error| format!("grid non dichiarate: il componente è caduto: {error:#}"))?;
+        surfaces
+            .into_iter()
+            .map(tr::from_grid_surface)
+            .collect::<Result<_, _>>()
+            .map_err(|error| format!("grid non traducibili: {error}"))
+    }
 
     fn instantiate_plugin(&self) -> Box<dyn Plugin> {
         match self.component.instantiate() {
@@ -726,6 +1033,26 @@ impl WasmBundle {
         Self::format_provider_from_inner(Arc::new(Mutex::new(instance)))
     }
 
+    fn grid_provider_from_inner(
+        inner: Arc<Mutex<Instance>>,
+    ) -> Result<Option<Box<dyn GridProvider>>, PluginError> {
+        let specs =
+            Self::declared_grids(&inner).map_err(|error| PluginError::Internal(error.into()))?;
+        if specs.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(WasmGridProvider { inner, specs })))
+    }
+
+    /// Prepara il provider grid opzionale e ne congela il binding negoziato.
+    pub fn grid_provider(&self) -> Result<Option<Box<dyn GridProvider>>, PluginError> {
+        let instance = self
+            .component
+            .instantiate()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+        Self::grid_provider_from_inner(Arc::new(Mutex::new(instance)))
+    }
+
     pub(crate) fn prepare_opening(self) -> WasmOpeningBundle {
         let instance = self
             .component
@@ -757,6 +1084,7 @@ fn bundle_mount(
     });
     let command_specs = WasmBundle::declared_commands(&inner);
     let view_specs = WasmBundle::declared_views(&inner);
+    let grid_specs = WasmBundle::declared_grids(&inner);
     BundleMount::new(plugin, move |registrar| {
         let command_specs = match &command_specs {
             Ok(specs) => specs.clone(),
@@ -766,6 +1094,19 @@ fn bundle_mount(
             Ok(specs) => specs.clone(),
             Err(error) => return RegistrationReport::failed(error.clone()),
         };
+        let grid_specs = match &grid_specs {
+            Ok(specs) => specs.clone(),
+            Err(error) => return RegistrationReport::failed(error.clone()),
+        };
+        if !grid_specs.is_empty() {
+            let provider = WasmGridProvider {
+                inner: Arc::clone(&inner),
+                specs: grid_specs,
+            };
+            if let Err(error) = registrar.register_grid_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("grid non registrato: {error}"));
+            }
+        }
         if !command_specs.is_empty() {
             let provider = WasmCommandProvider {
                 inner: Arc::clone(&inner),

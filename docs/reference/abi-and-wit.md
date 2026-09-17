@@ -17,7 +17,7 @@
 Il package WIT corrente è:
 
 ```wit
-package fub:abi@0.1.1;
+package fub:abi@0.1.2;
 ```
 
 ## Superficie Rust
@@ -86,6 +86,34 @@ funzioni importate.
 
 Le famiglie vengono linkate in base ai servizi disponibili. Nessuna funzione
 host implica accesso diretto a filesystem, rete o orologio.
+
+## Famiglia `grid`
+
+La famiglia `grid` è il primo contratto strutturato a finestre. Il binding
+negozia prima `family = "grid"` e `protocol_version = 1`; famiglia, versione
+ABI e versione del formato `.fubsheet` restano indipendenti. Una shell che non
+conosce la coppia esatta non invoca il provider: conserva gli altri binding,
+mostra un notice e usa il fallback registrato (testo UTF-8, viewer per byte o
+errore esplicito).
+
+Le coordinate pubbliche sono sempre `SheetId + RowId + ColumnId`. L'apertura e
+il reload accettano la sorgente completa fino a 16 MiB; le finestre rispettano
+256 righe, 128 colonne e 32.768 coordinate. Un'operazione accetta al massimo
+16.384 patch e 4 MiB complessivi di preimmagini e nuovi input. Risposta e
+envelope JSON sono limitati a 8 MiB. L'invalidazione elenca coordinate
+modificate e dipendenti fino a 32.768 elementi; oltre usa `all`.
+
+Le patch sono input-only con preimmagine; il provider resta l'autorità per
+stile, formule, valori e dipendenze. Il commit restituisce un diff conseguente
+con offset in byte UTF-8, senza spezzare caratteri multibyte o `\r\n`.
+Provider nativo e proxy WASM usano gli stessi tipi, limiti, errori e lifecycle.
+DOM, oggetti CodeMirror e callback JavaScript non compaiono in Rust, WIT o
+mirror TypeScript; il testo resta locale e nessuna battuta genera IPC o WASM.
+
+La famiglia è una porta tipizzata del contratto, non una capability di
+sicurezza. `query_index` resta il canale read-only per dati indicizzati e per
+la query privata di valutazione `.fubsheet`; non è il percorso delle finestre,
+delle patch o del lifecycle Grid.
 
 ## Errori
 

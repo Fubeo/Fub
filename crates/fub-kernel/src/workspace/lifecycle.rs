@@ -2,6 +2,8 @@
 
 use super::*;
 
+type RetiredGridProvider = Arc<SharedShelter<Box<dyn fub_abi::grid::GridProvider>>>;
+
 /// Provider già ritirati dal kernel. Il proprietario li distrugge fuori guard;
 /// un disposer difettoso non impedisce il rilascio degli altri.
 #[must_use = "i provider ritirati devono essere distrutti fuori dal guard del workspace"]
@@ -55,6 +57,12 @@ impl RetiredResources {
         table.restore(retained);
     }
 }
+/// Fallimento raro della finalizzazione: il token resta disponibile al chiamante
+/// mentre l'errore viaggia in un involucro piccolo.
+pub struct PluginTeardownFailure {
+    pub prepared: PreparedPluginTeardown,
+    pub error: PluginError,
+}
 
 /// Diritto monouso a ritirare una precisa dichiarazione di plugin.
 pub struct PreparedPluginTeardown {
@@ -63,12 +71,31 @@ pub struct PreparedPluginTeardown {
     generation: u64,
     previous_provider_call: bool,
     indexes: Option<Vec<(String, SharedIndexProvider)>>,
+    grids: Option<Vec<RetiredGridProvider>>,
     removed_indexes: bool,
+    grids_closed: bool,
     indexes_closed: bool,
     frame_active: bool,
 }
 
 impl PreparedPluginTeardown {
+    /// Chiude tutte le istanze grid fuori dalla guardia del workspace.
+    pub fn invoke_grids(&mut self) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        if let Some(grids) = &mut self.grids {
+            for provider in std::mem::take(grids) {
+                let result = crate::safety::external(
+                    "grid provider shutdown",
+                    |message| PluginError::Internal(message.into()),
+                    || provider.write().shutdown(),
+                );
+                errors.extend(result.err());
+            }
+        }
+        self.grids_closed = self.grids.is_some();
+        errors
+    }
+
     /// Flush e close restano distinti: un errore o panic del primo non salta
     /// il secondo, né gli indici successivi.
     pub fn invoke_indexes(&mut self, host: &mut dyn HostApi) -> Vec<PluginError> {
@@ -169,7 +196,9 @@ impl Workspace {
             generation,
             previous_provider_call: self.dispatch.enter_provider_call(),
             indexes: None,
+            grids: None,
             removed_indexes: false,
+            grids_closed: false,
             indexes_closed: false,
             frame_active: true,
         })
@@ -210,7 +239,8 @@ impl Workspace {
         &mut self,
         prepared: &mut PreparedPluginTeardown,
     ) -> std::result::Result<(), PluginError> {
-        if !self.valid_teardown(prepared) || prepared.indexes.is_some() {
+        if !self.valid_teardown(prepared) || prepared.indexes.is_some() || prepared.grids.is_some()
+        {
             return Err(PluginError::Conflict("stale plugin teardown".into()));
         }
         if !prepared.frame_active {
@@ -220,6 +250,14 @@ impl Workspace {
         let indexes = self.indexes.remove(&prepared.owner);
         prepared.removed_indexes = !indexes.is_empty();
         prepared.indexes = Some(indexes);
+        let grids = self
+            .providers
+            .grids
+            .extract(|entry| entry.id == prepared.owner.as_ref())
+            .into_iter()
+            .map(|entry| entry.provider)
+            .collect();
+        prepared.grids = Some(grids);
         Ok(())
     }
 
@@ -227,18 +265,18 @@ impl Workspace {
         &mut self,
         prepared: PreparedPluginTeardown,
         errors: Vec<PluginError>,
-    ) -> std::result::Result<RetiredPlugin, (PreparedPluginTeardown, PluginError)> {
+    ) -> std::result::Result<RetiredPlugin, Box<PluginTeardownFailure>> {
         if prepared.workspace_id != self.workspace_id {
-            return Err((
+            return Err(Box::new(PluginTeardownFailure {
                 prepared,
-                PluginError::Conflict("teardown belongs to another workspace".into()),
-            ));
+                error: PluginError::Conflict("teardown belongs to another workspace".into()),
+            }));
         }
         if prepared.frame_active {
             self.dispatch
                 .restore_provider_call(prepared.previous_provider_call);
         }
-        if !self.valid_teardown(&prepared) || !prepared.indexes_closed {
+        if !self.valid_teardown(&prepared) || !prepared.indexes_closed || !prepared.grids_closed {
             let mut errors = errors;
             errors.push(PluginError::Conflict(
                 "stale or incomplete plugin teardown".into(),
@@ -247,6 +285,11 @@ impl Workspace {
             if let Some(indexes) = prepared.indexes {
                 for (_, index) in indexes {
                     resources.push("unfinished index", index);
+                }
+            }
+            if let Some(grids) = prepared.grids {
+                for grid in grids {
+                    resources.push("unfinished grid", grid);
                 }
             }
             return Ok(RetiredPlugin {
@@ -339,6 +382,7 @@ mod tests {
         workspace
             .take_plugin_teardown_indexes(prepared)
             .expect("take once");
+        assert!(prepared.invoke_grids().is_empty());
         let mut host = workspace.host_for(OWNER, InvokeMode::Apply);
         assert!(prepared.invoke_indexes(&mut host).is_empty());
     }
@@ -349,15 +393,16 @@ mod tests {
         let mut other = workspace();
         let mut prepared = original.prepare_plugin_teardown(OWNER).expect("prepare");
         complete_indexes(&mut original, &mut prepared);
-        let Err((prepared, error)) = other.finish_plugin_teardown(prepared, Vec::new()) else {
+        let Err(failure) = other.finish_plugin_teardown(prepared, Vec::new()) else {
             panic!("wrong workspace accepted");
         };
+        let PluginTeardownFailure { prepared, error } = *failure;
         assert!(matches!(error, PluginError::Conflict(_)));
         assert!(other.providers.plugins.get(OWNER).is_some());
         assert!(!other.dispatch.in_provider_call());
         assert!(original
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)
+            .map_err(|failure| failure.error)
             .expect("correct workspace")
             .dispose()
             .is_empty());
@@ -380,7 +425,7 @@ mod tests {
             .expect("replacement generation");
         let errors = workspace
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)
+            .map_err(|failure| failure.error)
             .expect("same workspace finalizes its frame")
             .dispose();
         assert!(matches!(errors.as_slice(), [PluginError::Conflict(_)]));
@@ -403,7 +448,7 @@ mod tests {
         let prepared = workspace.prepare_plugin_teardown(OWNER).expect("prepare");
         let errors = workspace
             .finish_plugin_teardown(prepared, Vec::new())
-            .map_err(|(_, error)| error)
+            .map_err(|failure| failure.error)
             .expect("same workspace")
             .dispose();
         assert!(matches!(errors.as_slice(), [PluginError::Conflict(_)]));

@@ -44,7 +44,8 @@ mod translate;
 mod ui;
 
 pub use component::{
-    Component, LoadError, WasmBundle, WasmCommandProvider, WasmPlugin, WasmViewProvider,
+    Component, LoadError, WasmBundle, WasmCommandProvider, WasmGridProvider, WasmPlugin,
+    WasmViewProvider,
 };
 pub use discovery::{discover, DiscoveredPlugin};
 

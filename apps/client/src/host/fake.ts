@@ -45,6 +45,10 @@ import type {
   InstalledPluginInfo,
   CommandSpec,
   DraftInfo,
+  GridCommit,
+  GridSession,
+  GridSurfaceSpec,
+  GridWindow,
   IndexQuery,
   IndexResult,
   KernelEvent,
@@ -85,33 +89,28 @@ interface Trashed {
   text: string;
 }
 
+export interface GridFake {
+  surface: GridSurfaceSpec;
+  session: GridSession;
+  windows: GridWindow[];
+  commits?: GridCommit[];
+}
+
 export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
   file?: Record<string, string>;
-  /// La radice da aprire all'avvio, o `null` per una finestra vuota.
   root?: string | null;
-  /// L'avviso di sessione (§25.5) che il pull risponde, o `null` (default)
-  /// per una sessione sana.
   sessionNotice?: KernelNotice | null;
-  /// Le view che i provider dichiarano. Vuoto = nessun provider registrato,
-  /// che è uno stato legittimo e non un vault a metà.
   view?: ViewSpec[];
-  /// I comandi del registro **oltre** ai cinque strutturali.
   commands?: CommandSpec[];
-  /// Le impostazioni risolte che il canale dati risponde.
   settings?: SettingEntry[];
-  /// Le forme sintattiche effettive risposte dal montaggio finto.
   syntaxForms?: SyntaxForm[];
-  /// Risposte controllate per namespace custom; nessun interprete di feature.
   customQueries?: Record<string, (query: unknown) => unknown>;
-  /// Bundle nativi/ufficiali che l'host conosce.
   bundles?: BundleInfo[];
-  /// Inventario installato della macchina, compresi elementi spenti o senza
-  /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
-  /// File che il selettore può consegnare all'installazione nei test.
   installablePlugins?: Record<string, InstalledPluginInfo>;
+  grid?: GridFake;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -168,6 +167,12 @@ export interface FakeHost {
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
+  const grid = options.grid;
+  const gridInstances = new Map<string, GridSession>();
+  const gridWindows = new Map(
+    (grid?.windows ?? []).map((window) => [`${grid?.session.instance}\u0000${window.sheet}\u0000${window.row_start}\u0000${window.column_start}`, window]),
+  );
+  let gridCommit = 0;
   const docs = new Map<string, Document>();
   const trash = new Map<string, Trashed>();
   const viewStates = new Map<string, unknown>();
@@ -531,6 +536,36 @@ export function createFakeHost(options: Options = {}): FakeHost {
           source_kind: "text",
         }));
       },
+      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
+      openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
+        if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
+        const session = { ...grid.session, revision: revision || grid.session.revision };
+        gridInstances.set(session.instance, session);
+        return session;
+      })),
+      gridWindow: (_surface, instance, request) => gate("gridWindow", [instance, request], Promise.resolve().then(() => {
+        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const window = gridWindows.get(`${instance}\u0000${request.sheet}\u0000${request.row_start}\u0000${request.column_start}`);
+        if (!window) throw new Error("host fake: grid window unavailable");
+        return { ...window, revision: request.revision };
+      })),
+      applyGrid: (_surface, instance, request) => gate("applyGrid", [instance, request], Promise.resolve().then(() => {
+        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const commit = grid?.commits?.[gridCommit++];
+        if (!commit) throw new Error("host fake: grid commit unavailable");
+        const session = gridInstances.get(instance)!;
+        gridInstances.set(instance, { ...session, revision: commit.revision });
+        return commit;
+      })),
+      reloadGrid: (_surface, instance, source, revision) => gate("reloadGrid", [instance, source, revision], Promise.resolve().then(() => {
+        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const session = { ...grid!.session, instance, revision };
+        gridInstances.set(instance, session);
+        return session;
+      })),
+      closeGrid: (_surface, instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
+        gridInstances.delete(instance);
+      })),
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci

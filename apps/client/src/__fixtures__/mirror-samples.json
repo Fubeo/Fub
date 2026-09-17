@@ -1,4 +1,203 @@
 {
+  "GridSurfaceSpec": [
+    {
+      "id": "sheet",
+      "format": "fubsheet",
+      "family": "grid",
+      "protocol_version": 1
+    }
+  ],
+  "GridSession": [
+    {
+      "instance": "grid-1",
+      "revision": "sha256:a6d1d4ea8e5a4fa08e8438c91ab01e2055faf19e5134fddd3a61efc0c133aa46",
+      "sheets": [
+        {
+          "id": "sheet-1",
+          "name": "Foglio 1",
+          "row_count": 4,
+          "column_count": 3
+        }
+      ]
+    }
+  ],
+  "GridSheet": [
+    {
+      "id": "sheet-1",
+      "name": "Foglio 1",
+      "row_count": 4,
+      "column_count": 3
+    }
+  ],
+  "GridRow": [
+    {
+      "id": "row-1",
+      "index": 0,
+      "height": 24.0,
+      "hidden": false
+    }
+  ],
+  "GridColumn": [
+    {
+      "id": "column-1",
+      "index": 0,
+      "width": 120.0,
+      "hidden": false
+    }
+  ],
+  "GridCellKey": [
+    {
+      "sheet": "sheet-1",
+      "row": "row-1",
+      "column": "column-1"
+    }
+  ],
+  "GridCellStyle": [
+    {
+      "bold": true,
+      "italic": false,
+      "text_color": "#111",
+      "fill_color": null,
+      "horizontal": "center",
+      "number_format": "0.00"
+    }
+  ],
+  "GridCell": [
+    {
+      "key": {
+        "sheet": "sheet-1",
+        "row": "row-1",
+        "column": "column-1"
+      },
+      "input": "=1+1",
+      "style": {
+        "bold": false,
+        "italic": false,
+        "text_color": null,
+        "fill_color": null,
+        "horizontal": null,
+        "number_format": null
+      },
+      "value": {
+        "kind": "error",
+        "value": "ref"
+      }
+    }
+  ],
+  "GridWindowRequest": [
+    {
+      "revision": "sha256:a6d1d4ea8e5a4fa08e8438c91ab01e2055faf19e5134fddd3a61efc0c133aa46",
+      "sheet": "sheet-1",
+      "row_start": 0,
+      "row_count": 1,
+      "column_start": 0,
+      "column_count": 1
+    }
+  ],
+  "GridWindow": [
+    {
+      "revision": "sha256:a6d1d4ea8e5a4fa08e8438c91ab01e2055faf19e5134fddd3a61efc0c133aa46",
+      "sheet": "sheet-1",
+      "row_start": 0,
+      "column_start": 0,
+      "total_rows": 4,
+      "total_columns": 3,
+      "rows": [
+        {
+          "id": "row-1",
+          "index": 0,
+          "height": 24.0,
+          "hidden": false
+        }
+      ],
+      "columns": [
+        {
+          "id": "column-1",
+          "index": 0,
+          "width": 120.0,
+          "hidden": false
+        }
+      ],
+      "cells": [
+        {
+          "key": {
+            "sheet": "sheet-1",
+            "row": "row-1",
+            "column": "column-1"
+          },
+          "input": "=1+1",
+          "style": {
+            "bold": true,
+            "italic": false,
+            "text_color": "#111",
+            "fill_color": null,
+            "horizontal": "center",
+            "number_format": "0.00"
+          },
+          "value": {
+            "kind": "number",
+            "value": 2.0
+          }
+        }
+      ]
+    }
+  ],
+  "GridCellPatch": [
+    {
+      "cell": {
+        "sheet": "sheet-1",
+        "row": "row-1",
+        "column": "column-1"
+      },
+      "before": "=1+1",
+      "after": "=2+2"
+    }
+  ],
+  "GridApplyRequest": [
+    {
+      "revision": "sha256:a6d1d4ea8e5a4fa08e8438c91ab01e2055faf19e5134fddd3a61efc0c133aa46",
+      "patches": [
+        {
+          "cell": {
+            "sheet": "sheet-1",
+            "row": "row-1",
+            "column": "column-1"
+          },
+          "before": "=1+1",
+          "after": "=2+2"
+        }
+      ]
+    }
+  ],
+  "GridSourceEdit": [
+    {
+      "from": 0,
+      "to": 3,
+      "deleted": "=1",
+      "inserted": "=2"
+    }
+  ],
+  "GridCommit": [
+    {
+      "revision": "sha256:c64a4543ce76fcbcade5797b53bedc08e6d81e9e031a72380c03a07cb788efce",
+      "edit": {
+        "from": 0,
+        "to": 3,
+        "deleted": "=1",
+        "inserted": "=2"
+      },
+      "invalidation": {
+        "kind": "cells",
+        "cells": [
+          {
+            "sheet": "sheet-1",
+            "row": "row-1",
+            "column": "column-1"
+          }
+        ]
+      }
+    }
+  ],
   "UiNode": [
     {
       "key": "k",

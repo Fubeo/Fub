@@ -27,7 +27,9 @@ decisione deliberata e richiede aggiornamento di manifest, CI e guide.
 
 ## Versione ABI
 
-Il contratto corrente è `fub:abi@0.1.1`.
+Il contratto corrente è `fub:abi@0.1.2`. La minor aggiunge la famiglia Grid v1
+e le sue forme WIT; la versione di protocollo Grid resta indipendente da ABI e
+formato.
 
 La regola di caricamento:
 

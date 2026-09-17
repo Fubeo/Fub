@@ -7,6 +7,11 @@
 
 use super::*;
 use fub_abi::custom::{CustomRendererSpec, SyntaxRuleSpec};
+use fub_abi::grid::{
+    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
+    GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
+use fub_abi::{PluginError, Revision};
 
 /// Authority to publish providers for one live plugin declaration.
 ///
@@ -28,6 +33,7 @@ impl RegistrationPermit {
 enum Declaration {
     Commands(Vec<CommandSpec>, Box<dyn CommandProvider>),
     Views(Vec<ViewSpec>, Box<dyn ViewProvider>),
+    Grid(Vec<GridSurfaceSpec>, Box<dyn GridProvider>),
     Export(Vec<String>, Box<dyn ExportProvider>),
     Import(Box<dyn ImportProvider>),
     Handler(Box<dyn EventHandler>),
@@ -61,6 +67,20 @@ impl PreparedRegistration {
             crate::providers::declared_specs(provider)
         })?;
         Ok(Self::new(Declaration::Views(specs, provider)))
+    }
+
+    /// Calls `surfaces` exactly once, without borrowing a workspace.
+    pub fn grid(provider: Box<dyn GridProvider>) -> std::result::Result<Self, PluginError> {
+        let (specs, provider) = capture(provider, |provider| provider.surfaces())?;
+        if specs.is_empty() {
+            return Err(PluginError::BadArgs(
+                "a grid provider must declare at least one surface".into(),
+            ));
+        }
+        for spec in &specs {
+            spec.validate()?;
+        }
+        Ok(Self::new(Declaration::Grid(specs, provider)))
     }
 
     /// Calls `targets` exactly once, without borrowing a workspace.
@@ -98,6 +118,196 @@ impl PreparedRegistration {
     }
 }
 
+/// A provider borrowed without retaining the workspace custody guard.
+pub struct PreparedGridCall {
+    provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+}
+
+impl PreparedGridCall {
+    fn invoke<R>(
+        &self,
+        operation: &'static str,
+        call: impl FnOnce(&mut dyn GridProvider) -> std::result::Result<R, PluginError>,
+    ) -> std::result::Result<R, PluginError> {
+        crate::safety::external(
+            operation,
+            |message| PluginError::Internal(message.into()),
+            || {
+                let mut provider = self.provider.write();
+                call(provider.as_mut())
+            },
+        )
+    }
+
+    pub fn open(
+        &self,
+        surface: &str,
+        source: &str,
+        revision: Revision,
+    ) -> std::result::Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        let session = self.invoke("grid open", |provider| {
+            provider.open(surface, source, revision.clone())
+        })?;
+        validate_grid_session_response(&session, Some(&revision), "open")?;
+        Ok(session)
+    }
+
+    pub fn window(
+        &self,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> std::result::Result<GridWindow, PluginError> {
+        request.validate()?;
+        let window = self.invoke("grid window", |provider| {
+            provider.window(instance, request.clone())
+        })?;
+        validate_grid_window_response(&window, &request)?;
+        Ok(window)
+    }
+
+    pub fn apply(
+        &self,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> std::result::Result<GridCommit, PluginError> {
+        request.validate()?;
+        let commit = self.invoke("grid apply", |provider| {
+            provider.apply(instance, request.clone())
+        })?;
+        validate_grid_commit_response(&commit, &request)?;
+        Ok(commit)
+    }
+
+    pub fn reload(
+        &self,
+        instance: &str,
+        expected: Revision,
+        source: &str,
+        revision: Revision,
+    ) -> std::result::Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        let session = self.invoke("grid reload", |provider| {
+            provider.reload(instance, expected, source, revision.clone())
+        })?;
+        validate_grid_session_response(&session, Some(&revision), "reload")?;
+        Ok(session)
+    }
+
+    pub fn close(&self, instance: &str) -> std::result::Result<(), PluginError> {
+        self.invoke("grid close", |provider| provider.close(instance))
+    }
+}
+fn provider_response(message: impl std::fmt::Display) -> PluginError {
+    PluginError::Internal(format!("malformed grid provider response: {message}").into())
+}
+
+fn validate_grid_session_response(
+    session: &GridSession,
+    expected: Option<&Revision>,
+    operation: &str,
+) -> std::result::Result<(), PluginError> {
+    session.validate().map_err(provider_response)?;
+    if expected.is_some_and(|revision| revision != &session.revision) {
+        return Err(provider_response(format!(
+            "grid {operation} returned an unexpected revision"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_grid_window_response(
+    window: &GridWindow,
+    request: &GridWindowRequest,
+) -> std::result::Result<(), PluginError> {
+    window.validate().map_err(provider_response)?;
+    if window.revision != request.revision
+        || window.sheet != request.sheet
+        || window.row_start != request.row_start
+        || window.column_start != request.column_start
+    {
+        return Err(provider_response("grid window does not match its request"));
+    }
+    if window.rows.len() != request.row_count as usize
+        || window.columns.len() != request.column_count as usize
+    {
+        return Err(provider_response(
+            "grid window axes do not match the requested dimensions",
+        ));
+    }
+    let mut rows = std::collections::HashSet::with_capacity(window.rows.len());
+    for (offset, row) in window.rows.iter().enumerate() {
+        if row.id.is_empty()
+            || !rows.insert(&row.id)
+            || row.index
+                != request
+                    .row_start
+                    .checked_add(offset as u32)
+                    .ok_or_else(|| provider_response("grid row index overflows"))?
+        {
+            return Err(provider_response("grid window has invalid row metadata"));
+        }
+    }
+    let mut columns = std::collections::HashSet::with_capacity(window.columns.len());
+    for (offset, column) in window.columns.iter().enumerate() {
+        if column.id.is_empty()
+            || !columns.insert(&column.id)
+            || column.index
+                != request
+                    .column_start
+                    .checked_add(offset as u32)
+                    .ok_or_else(|| provider_response("grid column index overflows"))?
+        {
+            return Err(provider_response("grid window has invalid column metadata"));
+        }
+    }
+    let mut cells = std::collections::HashSet::with_capacity(window.cells.len());
+    for cell in &window.cells {
+        if cell.key.sheet != window.sheet
+            || !rows.contains(&cell.key.row)
+            || !columns.contains(&cell.key.column)
+            || !cells.insert(cell.key.clone())
+        {
+            return Err(provider_response(
+                "grid window has invalid cell coordinates",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_grid_commit_response(
+    commit: &GridCommit,
+    request: &GridApplyRequest,
+) -> std::result::Result<(), PluginError> {
+    commit.validate().map_err(provider_response)?;
+    if commit.revision == request.revision {
+        return Err(PluginError::Conflict(
+            "grid provider commit did not advance revision".into(),
+        ));
+    }
+    if usize::try_from(commit.edit.from).is_err() || usize::try_from(commit.edit.to).is_err() {
+        return Err(provider_response("grid source diff offset overflows usize"));
+    }
+    let changed: std::collections::HashSet<_> = request
+        .patches
+        .iter()
+        .map(|patch| patch.cell.clone())
+        .collect();
+    match &commit.invalidation {
+        GridInvalidation::All => {}
+        GridInvalidation::Cells(cells) => {
+            let invalidated: std::collections::HashSet<_> = cells.iter().cloned().collect();
+            if !changed.is_subset(&invalidated) {
+                return Err(provider_response(
+                    "grid commit does not invalidate every changed cell",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
 impl Workspace {
     pub fn registration_permit(
         &self,
@@ -115,6 +325,43 @@ impl Workspace {
             workspace_id: self.workspace_id,
             owner: owner.to_owned(),
             generation,
+        })
+    }
+
+    pub fn grid_surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.providers
+            .grids
+            .iter()
+            .flat_map(|entry| entry.specs.iter().cloned())
+            .collect()
+    }
+
+    pub fn prepare_grid_call(
+        &self,
+        surface: &str,
+    ) -> std::result::Result<PreparedGridCall, PluginError> {
+        let registered = self
+            .providers
+            .grids
+            .iter()
+            .find(|entry| entry.specs.iter().any(|spec| spec.id == surface))
+            .ok_or_else(|| {
+                PluginError::Unserved(format!("grid surface `{surface}` is unavailable").into())
+            })?;
+        let spec = registered
+            .specs
+            .iter()
+            .find(|spec| spec.id == surface)
+            .expect("surface found above");
+        if spec.family != fub_abi::grid::GRID_FAMILY
+            || spec.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+        {
+            return Err(PluginError::Unserved(
+                format!("grid surface `{surface}` uses unsupported family/version").into(),
+            ));
+        }
+        Ok(PreparedGridCall {
+            provider: Arc::clone(&registered.provider),
         })
     }
 
@@ -203,6 +450,10 @@ impl Workspace {
                 RegistrationKind::View,
                 specs.iter().map(|s| s.id.clone()).collect(),
             ),
+            Declaration::Grid(specs, _) => (
+                RegistrationKind::Grid,
+                specs.iter().map(|spec| spec.id.clone()).collect(),
+            ),
             Declaration::Export(ids, _) => (RegistrationKind::Export, ids.clone()),
             Declaration::Import(_) => (RegistrationKind::Import, Vec::new()),
             Declaration::Handler(_) => (RegistrationKind::EventHandler, Vec::new()),
@@ -212,8 +463,6 @@ impl Workspace {
         };
         self.providers.plugins.admit(plugin, kind, &ids)?;
         if let Declaration::Commands(specs, _) = declaration {
-            // Keybindings are synthesized by the host, after name admission
-            // and before publication: a rejected command must not declare keys.
             let keys = self.keybinding_specs(specs);
             self.settings
                 .write()
@@ -258,6 +507,11 @@ impl Workspace {
                 generation: Arc::new(()),
                 trust,
             }),
+            Declaration::Grid(specs, provider) => self.providers.grids.push(RegisteredGrid {
+                id: plugin.to_owned(),
+                specs,
+                provider: Arc::new(SharedShelter::new(provider)),
+            }),
             Declaration::Export(_, provider) => {
                 self.providers.exports.push((plugin.to_owned(), provider))
             }
@@ -279,6 +533,7 @@ impl Workspace {
 enum RetiredProvider {
     Command(Arc<dyn CommandProvider>),
     View(Arc<SharedShelter<Box<dyn ViewProvider>>>),
+    Grid(Arc<SharedShelter<Box<dyn GridProvider>>>),
     Handler(Box<dyn EventHandler>),
     Service(Arc<dyn ServiceProvider>),
     Import(Box<dyn ImportProvider>),
@@ -303,6 +558,24 @@ pub struct PreparedPluginDeactivation {
 impl PreparedPluginDeactivation {
     pub fn owner(&self) -> &str {
         &self.owner
+    }
+
+    pub fn close_grids(&self) -> Vec<PluginError> {
+        let mut errors = Vec::new();
+        for provider in &self.providers {
+            let RetiredProvider::Grid(provider) = provider else {
+                continue;
+            };
+            let result = crate::safety::external(
+                "grid provider shutdown",
+                |message| PluginError::Internal(message.into()),
+                || provider.write().shutdown(),
+            );
+            if let Err(error) = result {
+                errors.push(error);
+            }
+        }
+        errors
     }
 
     pub fn close_indexes(&self, host: &mut dyn HostApi) -> Vec<PluginError> {
@@ -369,6 +642,7 @@ impl PreparedPluginDeactivation {
                     match provider {
                         RetiredProvider::Command(provider) => drop(provider),
                         RetiredProvider::View(provider) => drop(provider),
+                        RetiredProvider::Grid(provider) => drop(provider),
                         RetiredProvider::Handler(provider) => drop(provider),
                         RetiredProvider::Service(provider) => drop(provider),
                         RetiredProvider::Import(provider) => drop(provider),
@@ -404,12 +678,19 @@ impl Workspace {
 
         let indexes = self.indexes.remove(&permit.owner);
         let removed_indexes = !indexes.is_empty();
+        let grids = self
+            .providers
+            .grids
+            .extract(|entry| entry.id == permit.owner)
+            .into_iter()
+            .map(|entry| RetiredProvider::Grid(entry.provider))
+            .collect();
         Ok(PreparedPluginDeactivation {
             owner: permit.owner.clone(),
             workspace_id: permit.workspace_id,
             generation: permit.generation,
             indexes,
-            providers: Vec::new(),
+            providers: grids,
             removed_indexes,
         })
     }

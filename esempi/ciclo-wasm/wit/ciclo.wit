@@ -16,5 +16,5 @@
 package esempio:ciclo@0.1.0;
 
 world ciclo {
-    export fub:abi/plugin@0.1.1;
+    export fub:abi/plugin@0.1.2;
 }

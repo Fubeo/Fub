@@ -22,11 +22,11 @@
 package esempio:ping@0.1.0;
 
 world ping {
-    import fub:abi/host-env@0.1.1;
-    import fub:abi/host-vault-read@0.1.1;
+    import fub:abi/host-env@0.1.2;
+    import fub:abi/host-vault-read@0.1.2;
 
-    export fub:abi/plugin@0.1.1;
-    export fub:abi/command@0.1.1;
+    export fub:abi/plugin@0.1.2;
+    export fub:abi/command@0.1.2;
 }
 
 // Lo stesso ping, che in più chiede la rete. Non esiste per fare qualcosa:
@@ -37,20 +37,20 @@ world ping {
 // test `una_famiglia_non_servita_si_fa_nominare` pretende che il caricamento la
 // nomini invece di montare un plugin che cadrà a metà lavoro.
 world ping-con-rete {
-    import fub:abi/host-env@0.1.1;
-    import fub:abi/host-vault-read@0.1.1;
-    import fub:abi/host-network@0.1.1;
+    import fub:abi/host-env@0.1.2;
+    import fub:abi/host-vault-read@0.1.2;
+    import fub:abi/host-network@0.1.2;
 
-    export fub:abi/plugin@0.1.1;
+    export fub:abi/plugin@0.1.2;
 }
 
 // Lo stesso ping, che in più attraversa i dati persistiti e la cache privata:
 // scrive, rilegge e lista tramite entrambe le famiglie host-data.
 world ping-con-dati {
-    import fub:abi/host-env@0.1.1;
-    import fub:abi/host-vault-read@0.1.1;
-    import fub:abi/host-data-read@0.1.1;
-    import fub:abi/host-data-write@0.1.1;
+    import fub:abi/host-env@0.1.2;
+    import fub:abi/host-vault-read@0.1.2;
+    import fub:abi/host-data-read@0.1.2;
+    import fub:abi/host-data-write@0.1.2;
 
-    export fub:abi/plugin@0.1.1;
+    export fub:abi/plugin@0.1.2;
 }

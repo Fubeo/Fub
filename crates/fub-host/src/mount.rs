@@ -248,10 +248,20 @@ pub(crate) fn mount_with_formats(
         Arc::new(CoreBundle::new(
             crate::sheet::SHEET_ID,
             "Fub Sheet",
-            |registrar| match registrar.register_index_provider(Box::new(crate::sheet::SheetIndex))
-            {
-                Ok(()) => Vec::new(),
-                Err(error) => vec![format!("sheet index NOT registered: {error}")],
+            |registrar| {
+                let mut errors = match registrar
+                    .register_grid_provider(Box::new(crate::sheet::SheetGridProvider::new()))
+                {
+                    Ok(()) => Vec::new(),
+                    Err(error) => vec![format!("sheet grid NOT registered: {error}")],
+                };
+                match registrar.register_index_provider(Box::new(crate::sheet::SheetIndex)) {
+                    Ok(()) => errors,
+                    Err(error) => {
+                        errors.push(format!("sheet index NOT registered: {error}"));
+                        errors
+                    }
+                }
             },
         )),
     ];

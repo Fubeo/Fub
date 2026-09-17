@@ -157,8 +157,10 @@ attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
 sostituisce lo stato corrente.
 
 Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
-`DocumentModel`. Il protocollo della vertical slice è ancora interno: ABI e WIT
-saranno estesi soltanto dopo la misura di finestre, operazioni e lifecycle.
+`DocumentModel`. Il protocollo Grid v1 è promosso in ABI/WIT e mirror
+TypeScript insieme ai consumatori nativo e WASM; famiglia, versione e fallback
+sono negoziati prima dell'invocazione. Limiti, coordinate, diff UTF-8 e
+invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 
 ## Dove si trova
 

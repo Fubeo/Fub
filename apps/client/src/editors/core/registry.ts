@@ -32,8 +32,9 @@ export interface SurfaceMountContext {
   readonly paneId: string;
   readonly documentId: string;
   readonly parent: HTMLElement;
+  readonly formatId?: string | null;
+  readonly revision?: string;
 }
-
 /** A mounted shell-owned surface. No DOM or CodeMirror value crosses its boundary. */
 export interface EditorSurface {
   readonly family: SurfaceFamily;

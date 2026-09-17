@@ -50,10 +50,13 @@
 
 mod registration;
 pub use registration::{
-    PreparedIndexRegistration, PreparedPluginDeactivation, PreparedRegistration, RegistrationPermit,
+    PreparedGridCall, PreparedIndexRegistration, PreparedPluginDeactivation, PreparedRegistration,
+    RegistrationPermit,
 };
 mod lifecycle;
-pub use lifecycle::{PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin};
+pub use lifecycle::{
+    PluginTeardownFailure, PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin,
+};
 mod removal;
 pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
@@ -123,7 +126,9 @@ use crate::occurrences;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
 use crate::poison::{SharedShelter, Shelter};
-use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
+use crate::providers::{
+    ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredGrid, RegisteredView,
+};
 use crate::registry::FormatRegistry;
 use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
@@ -3562,14 +3567,15 @@ impl Workspace {
         let mut prepared = self.prepare_plugin_teardown(plugin)?;
         self.take_plugin_teardown_indexes(&mut prepared)
             .map_err(RegistryError::Activate)?;
-        let errors = {
+        let mut errors = prepared.invoke_grids();
+        {
             let mut host = self.host_for(plugin, InvokeMode::Apply);
-            prepared.invoke_indexes(&mut host)
-        };
+            errors.extend(prepared.invoke_indexes(&mut host));
+        }
         let outcome = self
             .finish_plugin_teardown(prepared, errors)
             .map(RetiredPlugin::dispose)
-            .map_err(|(_, error)| RegistryError::Activate(error));
+            .map_err(|failure| RegistryError::Activate(failure.error));
         self.dispatch_pending();
         outcome
     }

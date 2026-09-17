@@ -133,16 +133,16 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 
 use std::sync::Arc;
 
+use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
+use crate::poison::SharedShelter;
+use crate::workspace::Trust;
 use fub_abi::command::CommandSpec;
+use fub_abi::grid::{GridProvider, GridSurfaceSpec};
 use fub_abi::traits::{
     CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
 use fub_abi::PluginError;
-
-use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
-use crate::poison::SharedShelter;
-use crate::workspace::Trust;
 
 /// Un provider registrato, con **ciò che ha dichiarato al momento della
 /// registrazione**.
@@ -206,6 +206,12 @@ pub(crate) struct RegisteredCommand {
     pub(crate) id: String,
     pub(crate) provider: Arc<dyn CommandProvider>,
     pub(crate) specs: Vec<CommandSpec>,
+}
+
+pub(crate) struct RegisteredGrid {
+    pub(crate) id: String,
+    pub(crate) provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+    pub(crate) specs: Vec<GridSurfaceSpec>,
 }
 
 /// **Chi è registrato, cosa ha dichiarato, e chi possiede quale nome.**
@@ -272,6 +278,8 @@ pub(crate) struct ProviderRegistry {
     /// view, indici e handler) la macro non troverebbe nessuno dei comandi che
     /// deve comporre.
     pub(crate) commands: ProviderTable<RegisteredCommand>,
+    /// Provider grid strutturati; le superfici sono catturate alla registrazione.
+    pub(crate) grids: ProviderTable<RegisteredGrid>,
     /// La catena dei comandi in corso, dal più esterno al più interno: serve a
     /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
     /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
@@ -290,6 +298,7 @@ impl ProviderRegistry {
             exports: ProviderTable::new(),
             views: ProviderTable::new(),
             commands: ProviderTable::new(),
+            grids: ProviderTable::new(),
             command_stack: Vec::new(),
         }
     }

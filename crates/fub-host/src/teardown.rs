@@ -78,14 +78,17 @@ pub(crate) fn unmount(
         ws.take_plugin_teardown_indexes(&mut prepared)
     };
     match extracted {
-        Ok(()) => errors.extend(prepared.invoke_indexes(&mut host)),
+        Ok(()) => {
+            errors.extend(prepared.invoke_grids());
+            errors.extend(prepared.invoke_indexes(&mut host));
+        }
         Err(error) => errors.push(error),
     }
     let finalized = {
         let mut ws = workspace.write()?;
         ws.finish_plugin_teardown(prepared, errors)
     };
-    let retired = finalized.map_err(|(_, error)| error)?;
+    let retired = finalized.map_err(|failure| failure.error)?;
     let mut errors = retired.dispose();
     errors.extend(drain_events(workspace).err());
     Ok(errors)

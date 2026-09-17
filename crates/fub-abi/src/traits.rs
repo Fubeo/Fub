@@ -3935,7 +3935,7 @@ impl PluginPermissions {
 
 /// La versione del contratto che QUESTO abi definisce. È la stessa del
 /// `package fub:abi@…` nel WIT (il test di conformità le confronta).
-pub const ABI_VERSION: &str = "0.1.1";
+pub const ABI_VERSION: &str = "0.1.2";
 
 // Niente `Eq`: i permessi portano un parametro JSON, e `serde_json::Value` non
 // è `Eq` (contiene numeri in virgola mobile). È lo stesso motivo per cui
