@@ -43,18 +43,26 @@ function mounted(
   engine.setDoc(workbook());
   return { engine, host, viewport, changes, evaluate };
 }
-function protocolHost(source: string): GridHost & { calls: string[] } {
+function protocolHost(
+  source: string,
+  onClose?: (instance: string) => void,
+): GridHost & {
+  calls: string[];
+  openedInstances: string[];
+  closedInstances: string[];
+  activeInstances: Set<string>;
+} {
   const calls: string[] = [];
+  const openedInstances: string[] = [];
+  const closedInstances: string[] = [];
+  const activeInstances = new Set<string>();
+  let openCount = 0;
   let value = "1";
-  const session = {
-    instance: "grid-test-1",
-    revision: "rev-1",
-    sheets: [{ id: "main", name: "Main", row_count: 100, column_count: 50 }],
-  };
+  let currentRevision = "rev-1";
   const rows = Array.from({ length: 100 }, (_, index) => ({ id: `r${index}`, index, height: null, hidden: false }));
   const columns = Array.from({ length: 50 }, (_, index) => ({ id: `c${index}`, index, width: null, hidden: false }));
   const window = () => ({
-    revision: session.revision,
+    revision: currentRevision,
     sheet: "main",
     row_start: 0,
     column_start: 0,
@@ -72,23 +80,50 @@ function protocolHost(source: string): GridHost & { calls: string[] } {
   const start = new TextEncoder().encode(source.slice(0, source.indexOf('"1"'))).length;
   return {
     calls,
+    openedInstances,
+    closedInstances,
+    activeInstances,
     listGridSurfaces: async () => {
       calls.push("list");
       return [{ id: "sheet", format: "fubsheet", family: "grid", protocol_version: 1 }];
     },
-    openGrid: async () => { calls.push("open"); return session; },
-    gridWindow: async (_surface, _instance, request) => { calls.push("window"); return window(); },
+    openGrid: async () => {
+      calls.push("open");
+      openCount += 1;
+      const instance = `grid-test-${openCount}`;
+      openedInstances.push(instance);
+      activeInstances.add(instance);
+      return {
+        instance,
+        revision: currentRevision,
+        sheets: [{ id: "main", name: "Main", row_count: 100, column_count: 50 }],
+      };
+    },
+    gridWindow: async (_surface, _instance, _request) => { calls.push("window"); return window(); },
     applyGrid: async () => {
       calls.push("apply");
       value = "X";
+      currentRevision = "rev-2";
       return {
-        revision: "rev-2",
+        revision: currentRevision,
         edit: { from: start, to: start + 3, deleted: '"1"', inserted: '"X"' },
         invalidation: { kind: "cells", cells: [{ sheet: "main", row: "r0", column: "c0" }] },
       };
     },
-    reloadGrid: async (_surface, _instance, _source, _revision) => { calls.push("reload"); return session; },
-    closeGrid: async (_surface, _instance) => { calls.push("close"); },
+    reloadGrid: async (_surface, _instance, _source, _revision) => {
+      calls.push("reload");
+      return {
+        instance: openedInstances.at(-1) ?? "grid-test-missing",
+        revision: currentRevision,
+        sheets: [{ id: "main", name: "Main", row_count: 100, column_count: 50 }],
+      };
+    },
+    closeGrid: async (_surface, instance) => {
+      calls.push("close");
+      closedInstances.push(instance);
+      activeInstances.delete(instance);
+      onClose?.(instance);
+    },
   };
 }
 afterEach(() => {
@@ -295,6 +330,7 @@ describe("GridEngine", () => {
     latest.sheets[0].cells[0].input = "2";
     engine.setDoc(JSON.stringify(latest));
 
+
     pending[1]!({
       cells: [{ sheet: "main", row: "r0", column: "c0", value: { kind: "number", value: 22 } }],
       dependencies: [],
@@ -313,6 +349,67 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("sceglie deterministicamente la prima superficie compatibile dichiarata", async () => {
+    const grid = protocolHost(workbook());
+    let selected: string | null = null;
+    const open = grid.openGrid;
+    Object.assign(grid, {
+      listGridSurfaces: async () => [
+        { id: "first", format: "fubsheet", family: "grid", protocol_version: 1 },
+        { id: "second", format: "fubsheet", family: "grid", protocol_version: 1 },
+      ],
+      openGrid: async (surface: string, source: string, revision: string) => {
+        selected = surface;
+        return open(surface, source, revision);
+      },
+    });
+    const { engine } = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(selected).toBe("first");
+    engine.destroy();
+  });
+
+  it("chiude prima del teardown e riapre con un'istanza nuova senza residui", async () => {
+    let mountedAtClose = false;
+    const grid = protocolHost(workbook(), () => {
+      mountedAtClose = document.querySelector(".grid-surface") !== null;
+    });
+    const first = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    first.engine.destroy();
+    expect(grid.openedInstances).toEqual(["grid-test-1"]);
+    expect(grid.closedInstances).toEqual(["grid-test-1"]);
+    expect(grid.activeInstances.size).toBe(0);
+    expect(mountedAtClose).toBe(true);
+    expect(first.host.querySelector(".grid-surface")).toBeNull();
+
+    const second = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.openedInstances).toEqual(["grid-test-1", "grid-test-2"]);
+    expect(grid.activeInstances).toEqual(new Set(["grid-test-2"]));
+    const callsAfterSecondOpen = grid.calls.length;
+    first.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    await Promise.resolve();
+    expect(grid.calls.length).toBe(callsAfterSecondOpen);
+    expect(grid.closedInstances).toEqual(["grid-test-1"]);
+
+    second.engine.destroy();
+    expect(grid.closedInstances).toEqual(["grid-test-1", "grid-test-2"]);
+    expect(grid.activeInstances.size).toBe(0);
+    expect(second.host.querySelector(".grid-surface")).toBeNull();
+    const callsAfterDestroy = grid.calls.length;
+    second.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    await Promise.resolve();
+    expect(grid.calls.length).toBe(callsAfterDestroy);
+  });
   it("rifiuta famiglia o versione sconosciuta prima di aprire una sessione", async () => {
     const source = workbook();
     const grid = protocolHost(source);
