@@ -69,7 +69,7 @@ function protocolHost(source: string): GridHost & { calls: string[] } {
       value: { kind: "number" as const, value: Number(value === "1" ? 1 : 2) },
     }],
   });
-  const start = new TextEncoder().encode(source.slice(0, source.indexOf('"1"') + 1)).length;
+  const start = new TextEncoder().encode(source.slice(0, source.indexOf('"1"'))).length;
   return {
     calls,
     listGridSurfaces: async () => {
@@ -77,18 +77,18 @@ function protocolHost(source: string): GridHost & { calls: string[] } {
       return [{ id: "sheet", format: "fubsheet", family: "grid", protocol_version: 1 }];
     },
     openGrid: async () => { calls.push("open"); return session; },
-    gridWindow: async () => { calls.push("window"); return window(); },
+    gridWindow: async (_surface, _instance, request) => { calls.push("window"); return window(); },
     applyGrid: async () => {
       calls.push("apply");
       value = "X";
       return {
         revision: "rev-2",
-        edit: { from: start, to: start + 1, deleted: "1", inserted: "X" },
-        invalidation: { kind: "cells" as const, cells: [{ sheet: "main", row: "r0", column: "c0" }] },
+        edit: { from: start, to: start + 3, deleted: '"1"', inserted: '"X"' },
+        invalidation: { kind: "cells", cells: [{ sheet: "main", row: "r0", column: "c0" }] },
       };
     },
-    reloadGrid: async () => { calls.push("reload"); return session; },
-    closeGrid: async () => { calls.push("close"); },
+    reloadGrid: async (_surface, _instance, _source, _revision) => { calls.push("reload"); return session; },
+    closeGrid: async (_surface, _instance) => { calls.push("close"); },
   };
 }
 afterEach(() => {
@@ -173,7 +173,9 @@ describe("GridEngine", () => {
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await Promise.resolve();
     await Promise.resolve();
-
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(grid.calls.filter((call) => call === "window").length).toBeGreaterThan(windowsBeforeTyping);
     expect(grid.calls.filter((call) => call === "apply")).toHaveLength(1);
     expect(changes).toHaveLength(1);
@@ -308,6 +310,83 @@ describe("GridEngine", () => {
     await Promise.resolve();
     expect(host.querySelector<HTMLElement>('.grid-cell[data-row="0"][data-column="0"]')!.textContent)
       .toBe("22");
+    engine.destroy();
+  });
+
+  it("rifiuta famiglia o versione sconosciuta prima di aprire una sessione", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    Object.assign(grid, {
+      listGridSurfaces: async () => [
+        { id: "wrong-family", format: "fubsheet", family: "other", protocol_version: 1 },
+        { id: "wrong-version", format: "fubsheet", family: "grid", protocol_version: 2 },
+      ],
+    });
+    const { engine, host } = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.calls.filter((call) => call === "open")).toHaveLength(0);
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("fallback");
+    engine.destroy();
+  });
+
+  it("chiude la sessione se il provider cade nella prima finestra", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    Object.assign(grid, {
+      gridWindow: async () => {
+        throw new Error("provider trap");
+      },
+    });
+    const { engine, host } = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.calls.filter((call) => call === "open")).toHaveLength(1);
+    expect(grid.calls.filter((call) => call === "close")).toHaveLength(1);
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("fallback");
+    engine.destroy();
+  });
+
+  it("chiude la sessione e ricostruisce il fallback se reload fallisce", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    const { engine, host } = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    Object.assign(grid, {
+      reloadGrid: async () => {
+        throw new Error("provider trap");
+      },
+    });
+    const next = JSON.stringify({
+      version: 1,
+      sheets: [{
+        id: "main",
+        name: "Main",
+        rows: [{ id: "r0" }],
+        columns: [{ id: "c0" }],
+        cells: [{ row: "r0", column: "c0", input: "reloaded" }],
+      }],
+    });
+    engine.syncDoc(next);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.calls.filter((call) => call === "close")).toHaveLength(1);
+    expect(engine.getDoc()).toBe(next);
+    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("fallback");
+    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="0"][data-column="0"]')!.textContent)
+      .toBe("reloaded");
     engine.destroy();
   });
 

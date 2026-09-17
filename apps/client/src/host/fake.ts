@@ -543,13 +543,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gridInstances.set(session.instance, session);
         return session;
       })),
-      gridWindow: (instance, request) => gate("gridWindow", [instance, request], Promise.resolve().then(() => {
+      gridWindow: (_surface, instance, request) => gate("gridWindow", [instance, request], Promise.resolve().then(() => {
         if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
         const window = gridWindows.get(`${instance}\u0000${request.sheet}\u0000${request.row_start}\u0000${request.column_start}`);
         if (!window) throw new Error("host fake: grid window unavailable");
         return { ...window, revision: request.revision };
       })),
-      applyGrid: (instance, request) => gate("applyGrid", [instance, request], Promise.resolve().then(() => {
+      applyGrid: (_surface, instance, request) => gate("applyGrid", [instance, request], Promise.resolve().then(() => {
         if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
         const commit = grid?.commits?.[gridCommit++];
         if (!commit) throw new Error("host fake: grid commit unavailable");
@@ -557,13 +557,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gridInstances.set(instance, { ...session, revision: commit.revision });
         return commit;
       })),
-      reloadGrid: (instance, source, revision) => gate("reloadGrid", [instance, source, revision], Promise.resolve().then(() => {
+      reloadGrid: (_surface, instance, source, revision) => gate("reloadGrid", [instance, source, revision], Promise.resolve().then(() => {
         if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
         const session = { ...grid!.session, instance, revision };
         gridInstances.set(instance, session);
         return session;
       })),
-      closeGrid: (instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
+      closeGrid: (_surface, instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
         gridInstances.delete(instance);
       })),
       writeDocument: (id, source, base) => {

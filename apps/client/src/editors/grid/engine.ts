@@ -46,11 +46,10 @@ export const GRID_OVERSCAN = 2;
 
 export interface GridHost {
   readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
-  readonly openGrid: (surface: string, source: string, revision: string) => Promise<GridSession>;
-  readonly gridWindow: (instance: string, request: GridWindowRequest) => Promise<GridWindow>;
-  readonly applyGrid: (instance: string, request: GridApplyRequest) => Promise<GridCommit>;
-  readonly reloadGrid: (instance: string, source: string, revision: string) => Promise<GridSession>;
-  readonly closeGrid: (instance: string) => Promise<void>;
+  readonly gridWindow: (surface: string, instance: string, request: GridWindowRequest) => Promise<GridWindow>;
+  readonly applyGrid: (surface: string, instance: string, request: GridApplyRequest) => Promise<GridCommit>;
+  readonly reloadGrid: (surface: string, instance: string, source: string, revision: string) => Promise<GridSession>;
+  readonly closeGrid: (surface: string, instance: string) => Promise<void>;
 }
 
 export interface GridChange {
@@ -253,6 +252,7 @@ export class GridEngine {
   #source = "";
   #revision = "";
   #instance: string | null = null;
+  #surface: string | null = null;
   #provider = false;
   #selection: GridSelection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
   #values = new Map<string, SheetCellValue>();
@@ -350,10 +350,14 @@ export class GridEngine {
 
   setDoc(source: string): void {
     if (this.#destroyed) return;
-    this.#finishEditing(false, "input", false);
+    this.#protocolGeneration++;
     const previousInstance = this.#instance;
-    if (previousInstance && this.#options.grid) void this.#options.grid.closeGrid(previousInstance).catch(() => {});
+    const previousSurface = this.#surface;
+    if (previousInstance && previousSurface && this.#options.grid) {
+      void this.#options.grid.closeGrid(previousSurface, previousInstance).catch(() => {});
+    }
     this.#instance = null;
+    this.#surface = null;
     this.#provider = false;
     this.#source = source;
     this.#revision = this.#options.revision ?? "";
@@ -464,8 +468,12 @@ export class GridEngine {
     this.#protocolGeneration++;
     this.#abort.abort();
     const instance = this.#instance;
-    if (instance && this.#options.grid) void this.#options.grid.closeGrid(instance).catch(() => {});
+    const surface = this.#surface;
+    if (instance && surface && this.#options.grid) {
+      void this.#options.grid.closeGrid(surface, instance).catch(() => {});
+    }
     this.#instance = null;
+    this.#surface = null;
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();
     this.#root.remove();
@@ -822,7 +830,7 @@ export class GridEngine {
           after: patch.after?.input ?? "",
         })),
       };
-      void this.#applyProvider(request, beforeSource, patches, origin);
+      void this.#applyProvider(request, beforeSource, patches, origin, this.#protocolGeneration);
     } else {
       this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
       void this.#evaluateLegacy();
@@ -926,6 +934,8 @@ export class GridEngine {
     const host = this.#options.grid;
     if (!host || !this.#options.revision) return;
     const generation = ++this.#protocolGeneration;
+    let opened: GridSession | null = null;
+    let openedSurface: string | null = null;
     try {
       const surfaces = await host.listGridSurfaces();
       const surface = surfaces.find((candidate) =>
@@ -935,14 +945,24 @@ export class GridEngine {
       );
       if (!surface) throw new Error("grid provider unavailable or incompatible");
       const session = await host.openGrid(surface.id, source, this.#options.revision);
+      opened = session;
+      openedSurface = surface.id;
       if (generation !== this.#protocolGeneration || this.#destroyed) {
-        await host.closeGrid(session.instance).catch(() => {});
+        await host.closeGrid(surface.id, session.instance).catch(() => {});
+        opened = null;
+        openedSurface = null;
         return;
       }
-      const windows = await this.#readWindows(session);
-      if (generation !== this.#protocolGeneration || this.#destroyed) return;
-      this.#instance = session.instance;
+      const windows = await this.#readWindows(surface.id, session);
+      if (generation !== this.#protocolGeneration || this.#destroyed) {
+        await host.closeGrid(surface.id, session.instance).catch(() => {});
+        opened = null;
+        openedSurface = null;
+        return;
+      }
       this.#revision = session.revision;
+      this.#instance = session.instance;
+      this.#surface = surface.id;
       this.#provider = true;
       this.#values = valuesFromWindows(windows);
       this.#workbook = workbookFromWindows(session, windows);
@@ -953,7 +973,12 @@ export class GridEngine {
       delete this.#root.dataset.evaluation;
       this.#root.dataset.gridProtocol = "v1";
       this.#render();
+      opened = null;
+      openedSurface = null;
     } catch {
+      if (opened && openedSurface) {
+        await host.closeGrid(openedSurface, opened.instance).catch(() => {});
+      }
       if (generation !== this.#protocolGeneration || this.#destroyed) return;
       this.#provider = false;
       this.#instance = null;
@@ -963,14 +988,14 @@ export class GridEngine {
     }
   }
 
-  async #readWindows(session: GridSession): Promise<GridWindow[]> {
+  async #readWindows(surface: string, session: GridSession): Promise<GridWindow[]> {
     const host = this.#options.grid;
     if (!host) return [];
     const windows: GridWindow[] = [];
     for (const sheet of session.sheets) {
       for (let row = 0; row < sheet.row_count; row += 256) {
         for (let column = 0; column < sheet.column_count; column += 128) {
-          windows.push(await host.gridWindow(session.instance, {
+          windows.push(await host.gridWindow(surface, session.instance, {
             revision: session.revision,
             sheet: sheet.id,
             row_start: row,
@@ -987,11 +1012,12 @@ export class GridEngine {
   async #reloadProtocol(source: string): Promise<void> {
     const host = this.#options.grid;
     const instance = this.#instance;
-    if (!host || !instance || !this.#revision) return;
+    const surface = this.#surface;
+    if (!host || !instance || !surface || !this.#revision) return;
     const generation = ++this.#protocolGeneration;
     try {
-      const session = await host.reloadGrid(instance, source, this.#revision);
-      const windows = await this.#readWindows(session);
+      const session = await host.reloadGrid(surface, instance, source, this.#revision);
+      const windows = await this.#readWindows(surface, session);
       if (generation !== this.#protocolGeneration || this.#destroyed) return;
       this.#revision = session.revision;
       this.#values = valuesFromWindows(windows);
@@ -1003,9 +1029,22 @@ export class GridEngine {
       this.#syncFormulaBar();
       this.#render();
     } catch {
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      const stale = this.#instance;
       this.#provider = false;
       this.#instance = null;
+      this.#surface = null;
+      if (stale) await host.closeGrid(surface, stale).catch(() => {});
+      this.#workbook = parseWorkbook(source);
+      this.#values.clear();
+      this.#selection = this.#clampedSelection(this.#selection);
+      this.#rebuildLayout();
+      this.#selection = this.#visibleSelection(this.#selection);
+      this.#syncFormulaBar();
+      this.#root.dataset.evaluation = "unavailable";
       this.#root.dataset.gridProtocol = "fallback";
+      this.#render();
+      void this.#evaluateLegacy();
     }
   }
 
@@ -1014,39 +1053,49 @@ export class GridEngine {
     beforeSource: string,
     patches: readonly GridCellPatch[],
     origin: EditorChangeOrigin,
+    generation: number,
   ): Promise<void> {
     const host = this.#options.grid;
     const instance = this.#instance;
-    if (!host || !instance) return;
+    const surface = this.#surface;
+    if (!host || !instance || !surface) return;
+    let committedSource: string | null = null;
     try {
-      const commit = await host.applyGrid(instance, request);
+      const commit = await host.applyGrid(surface, instance, request);
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
       const source = applySourceEdit(beforeSource, commit.edit);
-      if (this.#destroyed) return;
       this.#revision = commit.revision;
       this.#source = source;
+      committedSource = source;
       this.#options.onChange({
         text: source,
         operation: operationFromCommit(beforeSource, commit, patches),
         origin,
       });
-      await this.#readInvalidation(commit.invalidation);
+      await this.#readInvalidation(commit.invalidation, generation);
     } catch {
-      if (this.#destroyed) return;
       const stale = this.#instance;
+      this.#protocolGeneration++;
       this.#provider = false;
       this.#instance = null;
-      if (stale) void host.closeGrid(stale).catch(() => {});
-      this.#source = beforeSource;
-      this.#workbook = parseWorkbook(beforeSource);
+      this.#surface = null;
+      if (stale) await host.closeGrid(surface, stale).catch(() => {});
+      this.#source = committedSource ?? beforeSource;
+      this.#values.clear();
+      this.#workbook = parseWorkbook(this.#source);
+      this.#root.dataset.evaluation = "unavailable";
+      this.#root.dataset.gridProtocol = "fallback";
       this.#rebuildLayout();
       this.#render();
+      void this.#evaluateLegacy();
     }
   }
 
-  async #readInvalidation(invalidation: GridInvalidation): Promise<void> {
+  async #readInvalidation(invalidation: GridInvalidation, generation: number): Promise<void> {
     const host = this.#options.grid;
     const instance = this.#instance;
-    if (!host || !instance || !this.#workbook) return;
+    const surface = this.#surface;
+    if (!host || !instance || !surface || !this.#workbook) return;
     if (invalidation.kind === "all") {
       const session: GridSession = {
         instance,
@@ -1058,7 +1107,8 @@ export class GridEngine {
           column_count: sheet.columns.length,
         })),
       };
-      const windows = await this.#readWindows(session);
+      const windows = await this.#readWindows(surface, session);
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
       this.#values = valuesFromWindows(windows);
       this.#workbook = workbookFromWindows(session, windows);
     } else {
@@ -1068,7 +1118,7 @@ export class GridEngine {
         const column = Math.max(0, sheet?.columns.findIndex((candidate) => candidate.id === cell.column) ?? 0);
         const rowStart = Math.floor(row / 256) * 256;
         const columnStart = Math.floor(column / 128) * 128;
-        return host.gridWindow(instance, {
+        return host.gridWindow(surface, instance, {
           revision: this.#revision,
           sheet: cell.sheet,
           row_start: rowStart,
@@ -1078,6 +1128,7 @@ export class GridEngine {
         });
       });
       const windows = await Promise.all(requests);
+      if (generation !== this.#protocolGeneration || this.#destroyed) return;
       for (const window of windows) {
         const sheet = this.#workbook.sheets.find((candidate) => candidate.id === window.sheet);
         if (!sheet) continue;

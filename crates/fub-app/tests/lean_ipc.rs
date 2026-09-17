@@ -180,6 +180,10 @@ enum Why {
     /// legge. Il canale dati la discovery non ce l'ha, ed è la ragione per cui
     /// `query_index` è uno solo: la domanda è un dato anche lei.
     Bridge,
+    /// Le operazioni Grid attraversano una porta tipata distinta: la shell
+    /// negozia la superficie e mantiene l'istanza, senza un comando generico
+    /// che possa invocare provider arbitrari.
+    Grid,
     /// **La capacità e la sua porta.** L'atto è già nell'elenco chiuso
     /// dell'`HostApi` (0013), e la shell **non è un plugin**: non ha un manifest
     /// a cui concederlo, quindi lo raggiunge da una porta col suo nome invece
@@ -316,6 +320,13 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_commands", Why::Bridge),
     ("invoke_command", Why::Bridge),
     ("query_index", Why::Bridge),
+    // --- Grid v1: discovery, sessioni e finestre tipate ----------------------
+    ("list_grid_surfaces", Why::Grid),
+    ("open_grid", Why::Grid),
+    ("grid_window", Why::Grid),
+    ("apply_grid", Why::Grid),
+    ("reload_grid", Why::Grid),
+    ("close_grid", Why::Grid),
     // --- le capacità dell'elenco chiuso, affacciate sull'IPC ----------------
     (
         "read_document",
@@ -875,6 +886,34 @@ fn bridges_stay_six() {
          question is data too. A seventh bridge means a new channel, and a new\n\
          channel is a decision to write into a record, not one more line here.",
         bridges.len()
+    );
+}
+
+#[test]
+fn grid_surface_uses_only_named_typed_ports() {
+    const GRID: &[&str] = &[
+        "list_grid_surfaces",
+        "open_grid",
+        "grid_window",
+        "apply_grid",
+        "reload_grid",
+        "close_grid",
+    ];
+    let app = include_str!("../src/lib.rs");
+    let ipc = include_str!("../../../apps/client/src/host/ipc.ts");
+    for command in GRID {
+        assert!(
+            app.contains(&format!("fn {command}(")),
+            "missing typed Tauri command `{command}`"
+        );
+        assert!(
+            ipc.contains(&format!("\"{command}\"")),
+            "client must invoke the typed Grid command `{command}`"
+        );
+    }
+    assert!(
+        !ipc.lines().any(|line| line.contains("grid") && line.contains("invoke_command")),
+        "Grid must not tunnel through the generic invoke_command bridge"
     );
 }
 
