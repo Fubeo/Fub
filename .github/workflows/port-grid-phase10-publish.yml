@@ -1,0 +1,90 @@
+name: Publish grid phase 10 port
+
+on:
+  push:
+    branches: [automation/issue11-grid-port-20260917]
+    paths: [.github/workflows/port-grid-phase10-publish.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  port:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05
+        with:
+          toolchain: 1.89
+          components: rustfmt
+      - name: Ricostruisce il commit sopra la linea audit
+        shell: bash
+        env:
+          TARGET_BASE: 25b2e161a1c49ff26e0b286b54b3b0d5009d610a
+          SOURCE_COMMIT: d06d15be02c7b40dab4a3532520e77425c57860e
+          EXPECTED_OLD_HEAD: d06d15be02c7b40dab4a3532520e77425c57860e
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch origin "$TARGET_BASE" "$SOURCE_COMMIT" feat/issue11-grid-abi
+          test "$(git rev-parse origin/fix/audit-integration)" = "$TARGET_BASE"
+          test "$(git rev-parse origin/feat/issue11-grid-abi)" = "$EXPECTED_OLD_HEAD"
+          git checkout --detach "$TARGET_BASE"
+          set +e
+          git cherry-pick "$SOURCE_COMMIT"
+          result=$?
+          set -e
+          test "$result" -ne 0
+          python <<'PY'
+          from pathlib import Path
+
+          choose_theirs = [
+              Path('apps/client/src/host/fake.ts'),
+              Path('apps/client/src/host/ipc.ts'),
+              Path('apps/client/src/panels/document.ts'),
+              Path('crates/fub-app/src/lib.rs'),
+          ]
+          for path in choose_theirs:
+              lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+              output = []
+              state = 'normal'
+              for line in lines:
+                  if line.startswith('<<<<<<< '):
+                      assert state == 'normal'
+                      state = 'ours'
+                  elif line.startswith('======='):
+                      assert state == 'ours'
+                      state = 'theirs'
+                  elif line.startswith('>>>>>>> '):
+                      assert state == 'theirs'
+                      state = 'normal'
+                  elif state in {'normal', 'theirs'}:
+                      output.append(line)
+              assert state == 'normal', path
+              path.write_text(''.join(output), encoding='utf-8')
+          PY
+          git checkout --theirs -- crates/fub-host/src/sheet.rs
+          python <<'PY'
+          from pathlib import Path
+          path = Path('crates/fub-host/tests/registration_lock.rs')
+          text = path.read_text(encoding='utf-8')
+          if text.rstrip().endswith('assert!(registry.read().unwrap().ids().is_empty());'):
+              path.write_text(text.rstrip() + '\n}\n', encoding='utf-8')
+          PY
+          test -z "$(git diff --name-only --diff-filter=U)"
+          git add -A
+          GIT_EDITOR=true git cherry-pick --continue
+          cargo fmt --all
+          git add -A
+          git commit --amend --no-edit
+          cargo fmt --all --check
+          git diff --check "$TARGET_BASE" HEAD
+          test ! -e .github/workflows/port-grid-phase10-diagnose.yml
+          test ! -e .github/workflows/port-grid-phase10-publish.yml
+          git push --force-with-lease=refs/heads/feat/issue11-grid-abi:"$EXPECTED_OLD_HEAD" origin HEAD:refs/heads/feat/issue11-grid-abi
+          git rev-parse HEAD >> "$GITHUB_STEP_SUMMARY"
+          git rev-parse 'HEAD^{tree}' >> "$GITHUB_STEP_SUMMARY"
