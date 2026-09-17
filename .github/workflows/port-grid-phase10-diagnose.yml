@@ -1,0 +1,62 @@
+name: Diagnose grid phase 10 port
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [automation/issue11-grid-port-20260917]
+    paths: [.github/workflows/port-grid-phase10-diagnose.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Prova il cherry-pick sopra la linea audit
+        shell: bash
+        run: |
+          set -u
+          git config user.name 'grid-port-diagnostic'
+          git config user.email 'grid-port-diagnostic@invalid'
+          git fetch origin d06d15be02c7b40dab4a3532520e77425c57860e
+          mkdir -p /tmp/grid-port/files
+          set +e
+          git cherry-pick d06d15be02c7b40dab4a3532520e77425c57860e
+          result=$?
+          set -e
+          git status --short > /tmp/grid-port/status.txt
+          git diff --name-only --diff-filter=U > /tmp/grid-port/conflicts.txt
+          git diff --cc > /tmp/grid-port/conflicts.diff || true
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            mkdir -p "/tmp/grid-port/files/$(dirname "$file")"
+            cp "$file" "/tmp/grid-port/files/$file"
+            {
+              echo "===== $file ====="
+              grep -n -B 12 -A 30 '^<<<<<<<\|^|||||||\|^=======\|^>>>>>>>' "$file" || true
+            } >> /tmp/grid-port/markers.txt
+          done < /tmp/grid-port/conflicts.txt
+          printf '%s\n' "$result" > /tmp/grid-port/cherry-pick-exit.txt
+          cat /tmp/grid-port/status.txt
+          echo '--- conflicts ---'
+          cat /tmp/grid-port/conflicts.txt
+          echo '--- markers ---'
+          cat /tmp/grid-port/markers.txt 2>/dev/null || true
+          git cherry-pick --abort 2>/dev/null || true
+      - name: Pubblica la diagnosi
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: grid-phase10-port-diagnosis-${{ github.sha }}
+          path: /tmp/grid-port/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+      - name: Nessun conflitto ammesso
+        run: test ! -s /tmp/grid-port/conflicts.txt
