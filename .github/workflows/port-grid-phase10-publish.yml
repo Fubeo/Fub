@@ -18,7 +18,6 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@1d1eb14921d9c2d8ea575663e5fe3a0b57868a05
         with:
-          toolchain: 1.89
           components: rustfmt
       - name: Ricostruisce il commit sopra la linea audit
         shell: bash
@@ -34,11 +33,10 @@ jobs:
           test "$(git rev-parse origin/fix/audit-integration)" = "$TARGET_BASE"
           test "$(git rev-parse origin/feat/issue11-grid-abi)" = "$EXPECTED_OLD_HEAD"
           git checkout --detach "$TARGET_BASE"
-          set +e
-          git cherry-pick "$SOURCE_COMMIT"
-          result=$?
-          set -e
-          test "$result" -ne 0
+          if git cherry-pick "$SOURCE_COMMIT"; then
+            echo 'Il port non ha più i conflitti attesi; rivedere la procedura.' >&2
+            exit 1
+          fi
           python <<'PY'
           from pathlib import Path
 
