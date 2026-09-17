@@ -54,7 +54,9 @@ pub use registration::{
     RegistrationPermit,
 };
 mod lifecycle;
-pub use lifecycle::{PreparedIndexFlush, PreparedPluginTeardown, PluginTeardownFailure, RetiredPlugin};
+pub use lifecycle::{
+    PluginTeardownFailure, PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin,
+};
 mod removal;
 pub use removal::{
     CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,

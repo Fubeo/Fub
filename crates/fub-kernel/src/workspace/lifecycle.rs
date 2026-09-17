@@ -64,7 +64,6 @@ pub struct PluginTeardownFailure {
     pub error: PluginError,
 }
 
-
 /// Diritto monouso a ritirare una precisa dichiarazione di plugin.
 pub struct PreparedPluginTeardown {
     workspace_id: u64,
