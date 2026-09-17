@@ -14,8 +14,9 @@ use fub_abi::format::{
 use fub_abi::model::{Block, DocId, DocumentModel, Frontmatter, Inline, Span};
 use fub_abi::traits::ViewInstance;
 use fub_abi::PluginError;
-use fub_host::{Host, NoWatcher, StartupSnapshot, StartupSource, StartupValidity};
-use fub_kernel::{KernelError, Trust};
+use fub_abi::Text;
+use fub_host::{Host, StartupSnapshot, StartupSource, StartupValidity};
+use fub_kernel::Trust;
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::InstalledPluginManager;
 
@@ -154,8 +155,7 @@ impl Vault {
 }
 
 fn host_with_manager(manager: Arc<InstalledPluginManager>) -> Host {
-    Host::new()
-        .with_watcher(Box::new(NoWatcher))
+    Host::without_watcher()
         .with_job_threads(1)
         .with_startup_source(manager)
 }
@@ -261,8 +261,7 @@ fn invalidated_format_snapshot_is_not_published() {
         release: Mutex::new(release_rx),
     });
     let host = Arc::new(
-        Host::new()
-            .with_watcher(Box::new(NoWatcher))
+        Host::without_watcher()
             .with_job_threads(1)
             .with_startup_source(source),
     );
@@ -329,7 +328,8 @@ fn invalidated_format_snapshot_is_not_published() {
         "disable has no diagnostics"
     );
     assert!(
-        host.with_session(None, |_| ()).is_err(),
+        host.query_index(None, fub_abi::traits::IndexQuery::VaultStatus)
+            .is_err(),
         "invalidated opening leaves no published session"
     );
 }
@@ -391,7 +391,8 @@ fn host_open_is_cancelled_before_publishing_when_manager_shuts_down() {
         "startup must observe manager cancellation"
     );
     assert!(
-        host.with_session(None, |_| ()).is_err(),
+        host.query_index(None, fub_abi::traits::IndexQuery::VaultStatus)
+            .is_err(),
         "cancelled startup must not publish a vault"
     );
 
@@ -402,19 +403,17 @@ fn host_open_is_cancelled_before_publishing_when_manager_shuts_down() {
 fn installed_wasm_format_crosses_parse_and_render_routes() {
     let vault = Vault::new();
     let (_manager, host) = enabled_manager(&vault);
-    let workspace = host.debug_workspace(None).expect("workspace is published");
-    let workspace = workspace.write().expect("workspace write");
-
-    let format = workspace
-        .format_of(&DocId::new(FILE))
+    let (_, _, format) = host
+        .read_document_with_format(None, &DocId::new(FILE))
         .expect("installed provider claims extension");
+    let format = format.expect("installed provider claims extension");
     assert_eq!(format.descriptor.id, ID);
     assert_eq!(format.descriptor.name, "Example Format");
     assert_eq!(format.descriptor.extensions, vec!["fubfmt"]);
     assert_eq!(format.descriptor.source, fub_abi::format::SourceKind::Text);
 
-    let model = workspace
-        .read_model(&DocId::new(FILE))
+    let model = host
+        .read_model(None, &DocId::new(FILE))
         .expect("WASM provider parses source");
     assert_eq!(model.id, DocId::new(FILE));
     assert_eq!(model.text, SOURCE);
@@ -424,8 +423,8 @@ fn installed_wasm_format_crosses_parse_and_render_routes() {
             if matches!(inlines.as_slice(), [Inline::Text(text)] if text == SOURCE)
     ));
 
-    let rendered = workspace
-        .render_preview(&DocId::new(FILE))
+    let rendered = host
+        .render_preview(None, &DocId::new(FILE))
         .expect("WASM provider renders preview");
     assert!(
         rendered.html.contains("example-format"),
@@ -437,7 +436,6 @@ fn installed_wasm_format_crosses_parse_and_render_routes() {
         "rendered HTML: {}",
         rendered.html
     );
-    drop(workspace);
     host.close();
 }
 
@@ -445,15 +443,11 @@ fn installed_wasm_format_crosses_parse_and_render_routes() {
 fn stateful_wasm_format_observes_plugin_activation_on_same_opening() {
     let vault = Vault::new();
     let (_manager, host) = enabled_manager_variant(&vault, "stateful-activation");
-    let workspace = host.debug_workspace(None).expect("workspace is published");
-    let workspace = workspace.write().expect("workspace write");
-
-    let model = workspace
-        .read_model(&DocId::new(FILE))
+    let model = host
+        .read_model(None, &DocId::new(FILE))
         .expect("format instance observes activation from plugin instance");
     assert_eq!(model.text, SOURCE);
 
-    drop(workspace);
     assert!(host.close().is_empty(), "stateful session closes cleanly");
 }
 
@@ -461,21 +455,17 @@ fn stateful_wasm_format_observes_plugin_activation_on_same_opening() {
 fn guest_declared_parse_error_crosses_host_as_format_parse() {
     let vault = Vault::with_source("PARSE_ERROR");
     let (_manager, host) = enabled_manager(&vault);
-    let workspace = host.debug_workspace(None).expect("workspace is published");
-    let workspace = workspace.write().expect("workspace write");
-
-    let error = workspace
-        .read_model(&DocId::new(FILE))
+    let error = host
+        .read_model(None, &DocId::new(FILE))
         .expect_err("guest-declared parse error must reach the host");
     assert!(
         matches!(
             &error,
-            KernelError::Format(FormatError::Parse(message))
-                if message == "declared example parse error"
+            PluginError::Internal(Text::Literal(message))
+                if message == "parse failed: declared example parse error"
         ),
         "expected typed guest parse error, got {error:?}"
     );
-    drop(workspace);
     host.close();
 }
 
@@ -568,17 +558,13 @@ fn assert_bad_variant_is_recoverable(variant: &str) {
     host.open(&vault.root).expect("variant session opens");
     host.wait_indexed(None).expect("variant indexing completes");
 
-    let workspace = host
-        .debug_workspace(None)
-        .expect("workspace remains published");
-    let workspace = workspace.write().expect("workspace write");
-    assert!(workspace.read_model(&DocId::new(FILE)).is_err());
-    assert!(workspace.render_preview(&DocId::new(FILE)).is_err());
-    drop(workspace);
+    assert!(host.read_model(None, &DocId::new(FILE)).is_err());
+    assert!(host.render_preview(None, &DocId::new(FILE)).is_err());
     host.close_vault(&vault.root)
         .expect("variant session closes");
     assert!(
-        host.with_session(None, |_| ()).is_err(),
+        host.query_index(None, fub_abi::traits::IndexQuery::VaultStatus)
+            .is_err(),
         "close releases session ownership"
     );
 }

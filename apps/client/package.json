@@ -38,9 +38,9 @@
     "pixelmatch": "7.2.0",
     "playwright": "1.61.1",
     "pngjs": "7.0.0",
+    "postcss": "8.5.26",
     "typescript": "^5.7.2",
     "vite": "^6.0.7",
-    "vitest": "^4.1.10",
-    "postcss": "8.5.26"
+    "vitest": "^5.0.1"
   }
 }

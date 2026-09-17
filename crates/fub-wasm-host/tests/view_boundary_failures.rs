@@ -11,9 +11,9 @@ use fub_abi::traits::ViewInstance;
 use fub_abi::ui::UiAction;
 use fub_abi::PluginError;
 use fub_host::Host;
-use fub_host::NoWatcher;
 use fub_kernel::Trust;
 use fub_wasm_host::WasmBundle;
+use std::sync::Arc;
 
 const PLUGIN: &str = "example.view";
 const VIEW: &str = "example.view:panel";
@@ -35,25 +35,18 @@ impl Vault {
 fn bench(vault: &Vault, feature: &str) -> Host {
     let wasm = common::component("view-wasm", "view_wasm", feature);
     let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("view component loads");
-    let host = Host::new()
-        .with_watcher(Box::new(NoWatcher))
-        .with_job_threads(1);
+    let host = Host::without_watcher().with_job_threads(1);
     host.open(&vault.root).expect("vault opens");
     host.wait_indexed(None).expect("indexing completes");
-    host.with_session(None, |session| {
-        let mut workspace = session.workspace().write().unwrap();
-        session
-            .bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut workspace)
-            .expect("community view mounts through Bundle/Registrar");
-        assert!(
-            workspace.plugins().iter().any(|plugin| plugin.id == PLUGIN),
-            "the mounted component is declared in the workspace"
-        );
-    })
-    .expect("open session");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("community view mounts through Bundle/Registrar");
+    assert!(
+        host.plugin_ids(None)
+            .expect("plugin inventory")
+            .iter()
+            .any(|id| id == PLUGIN),
+        "the mounted component is declared in the workspace"
+    );
     host
 }
 
@@ -68,7 +61,8 @@ fn instance() -> ViewInstance {
 fn close_and_assert_session_is_gone(host: &Host) -> Vec<PluginError> {
     let errors = host.close();
     assert!(
-        host.with_session(None, |_| ()).is_err(),
+        host.query_index(None, fub_abi::traits::IndexQuery::VaultStatus)
+            .is_err(),
         "close removes the session and every live registration"
     );
     errors
@@ -85,11 +79,7 @@ fn community_view_interests_trap_is_contained_and_recovery_stays_usable() {
     );
 
     let error = host
-        .with_session(None, |session| {
-            let workspace = session.workspace().read().expect("workspace");
-            workspace.view_interests(&trapped)
-        })
-        .expect("session")
+        .view_interests(None, &trapped)
         .expect_err("the fixture intentionally traps while computing interests");
     assert!(
         matches!(error, PluginError::Internal(_)),

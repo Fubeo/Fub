@@ -12,7 +12,7 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_host::registry::BundleKind;
-use fub_host::{Host, NoWatcher};
+use fub_host::Host;
 
 /// L'albero di un tema installabile: manifest valido + un foglio qualsiasi.
 /// Il contenuto del foglio non conta (i cancelli CSS girano nella shell), ma
@@ -33,9 +33,7 @@ fn folders() -> (tempfile::TempDir, Utf8PathBuf) {
 }
 
 fn installed(config: &Utf8Path) -> Host {
-    Host::new()
-        .with_watcher(Box::new(NoWatcher))
-        .with_config_dir(config)
+    Host::without_watcher().with_config_dir(config)
 }
 
 fn vault() -> (tempfile::TempDir, Utf8PathBuf) {

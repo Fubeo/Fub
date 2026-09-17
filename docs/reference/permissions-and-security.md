@@ -88,9 +88,10 @@ non può ottenere:
 - listener globali;
 - estensioni CodeMirror.
 
-Ogni albero WASM deve passare dalla validazione non fidata prima della
-serializzazione IPC. Il percorso end-to-end è lavoro aperto in
-[#10](https://github.com/Fubeo/Fub/issues/10).
+Ogni albero WASM passa dalla validazione non fidata prima della serializzazione
+IPC. Il percorso `ViewProvider` è consegnato nella base audit corrente; l'issue
+[#10](https://github.com/Fubeo/Fub/issues/10) resta il tracker per la chiusura
+formale e per i provider ancora deferred, non un bypass della validazione.
 
 ## Webview
 

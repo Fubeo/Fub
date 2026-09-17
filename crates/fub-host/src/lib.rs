@@ -24,10 +24,9 @@
 //!
 //! Ciò che di un'app vera *non* può stare qui non è il montaggio: sono i tre
 //! punti in cui il montaggio tocca il mondo, e ognuno ha un trait.
-//!
-//! - [`WatcherFactory`]/[`VaultWatcher`] — chi vede le scritture altrui. Il
-//!   debouncer di `notify` è **un'**implementazione (dietro la cargo feature
-//!   `notify-watcher`, accesa di default), [`NoWatcher`] è l'altra.
+//! - Il watcher interno — `notify` quando disponibile, nessun rilevamento
+//!   altrimenti — osserva le scritture altrui senza esporre il lock del
+//!   workspace.
 //! - [`EventSink`] — dove finiscono gli eventi del kernel una volta usciti.
 //!   Per l'app è il webview; per una CLI è stdout; per gli e2e è niente.
 //! - [`Host::open`] — chi decide *quando* si apre. L'host non apre da sé.
@@ -80,7 +79,7 @@
 mod bridge;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
-pub mod custody;
+mod custody;
 pub mod format_source;
 pub mod jobs;
 pub mod mount;
@@ -102,10 +101,15 @@ pub mod theme;
 pub mod vaults;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
 mod wall;
-pub mod watcher;
+mod watcher;
+extern crate self as fub_host;
+pub use custody::Custody;
+#[cfg(test)]
+pub(crate) use watcher::{ExternalChange, ExternalSync, NoWatcher, VaultWatcher, WatcherFactory};
+#[cfg(test)]
+mod legacy_tests;
 
 pub use config::{config_dir, install_logging, log_path};
-pub use custody::Custody;
 pub use format_source::{FormatSource, PreparedFormatSource};
 pub use jobs::JobHost;
 pub use mount::{mount, Mounted};
@@ -118,7 +122,3 @@ pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use vaults::{VaultEntry, VaultRegistry};
-pub use watcher::{ExternalChange, ExternalSync, NoWatcher, VaultWatcher, WatcherFactory};
-
-#[cfg(feature = "notify-watcher")]
-pub use watcher::NotifyWatcher;

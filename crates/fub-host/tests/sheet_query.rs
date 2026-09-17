@@ -3,7 +3,7 @@
 
 use camino::Utf8PathBuf;
 use fub_abi::{DocId, IndexQuery, IndexResult, PluginError};
-use fub_host::{Host, NoWatcher};
+use fub_host::Host;
 use serde_json::{json, Value};
 
 fn source(inputs: &[&str]) -> String {
@@ -31,7 +31,7 @@ fn query(source: &str) -> IndexQuery {
 fn host() -> (tempfile::TempDir, Utf8PathBuf, Host) {
     let dir = tempfile::tempdir().unwrap();
     let path = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).unwrap();
-    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    let host = Host::without_watcher();
     host.open(&path).unwrap();
     host.wait_indexed(None).unwrap();
     (dir, path, host)

@@ -634,7 +634,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
 // Il cammino sui sorgenti
 // ---------------------------------------------------------------------------
 
-const NOT_IS_ENTERS: &[&str] = &["target", "node_modules", ".git", ".fub"];
+const NOT_IS_ENTERS: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

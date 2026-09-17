@@ -58,7 +58,7 @@ use crate::jobs::{drain_events, with_event_drain};
 /// proprio `Drop`; chi non ne ha — [`NoWatcher`] — non ha niente da aspettare.
 ///
 /// [decisione 0120]: ../../../docs/decisions/README.md
-pub trait VaultWatcher: Send + Sync {
+pub(crate) trait VaultWatcher: Send + Sync {
     /// `true` se questo vault ha il rilevamento delle modifiche esterne
     /// **adesso**.
     ///
@@ -74,7 +74,7 @@ pub trait VaultWatcher: Send + Sync {
 ///
 /// Sta separato dal watcher perché è la parte che si sceglie **prima** di avere
 /// un vault: `Host::with_watcher` la prende una volta, e ogni apertura la usa.
-pub trait WatcherFactory: Send + Sync {
+pub(crate) trait WatcherFactory: Send + Sync {
     /// Avvia il rilevamento su `root`, sincronizzando `workspace` a ogni
     /// cambiamento. L'apertura chiama questo metodo senza un read-lock o un
     /// write-lock del workspace: una fabbrica può quindi verificarlo, leggere o
@@ -285,7 +285,7 @@ fn start_safely(
 /// ciò che doveva provare.
 ///
 /// Serve sia da fabbrica sia da rilevatore: non c'è niente da tenere vivo.
-pub struct NoWatcher;
+pub(crate) struct NoWatcher;
 
 impl VaultWatcher for NoWatcher {
     fn is_watching(&self) -> bool {
@@ -315,7 +315,7 @@ impl WatcherFactory for NoWatcher {
 /// il rilevamento di una piattaforma diversa — o un test, che è il primo
 /// cliente non-`notify` che questo tipo ha.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExternalChange {
+pub(crate) enum ExternalChange {
     /// Un path che è cambiato: creato, riscritto, sparito. Chi lo riceve non sa
     /// quale dei tre, e non deve: lo scopre il kernel guardando il disco.
     Touched(Utf8PathBuf),
@@ -619,13 +619,13 @@ struct BatchApply {
     mutated: bool,
 }
 
-pub struct ExternalSync {
+pub(crate) struct ExternalSync {
     workspace: Custody<Workspace>,
     lifecycle: Arc<SyncLifecycle>,
 }
 
 impl ExternalSync {
-    pub fn new(workspace: Custody<Workspace>) -> Self {
+    pub(crate) fn new(workspace: Custody<Workspace>) -> Self {
         ExternalSync {
             workspace,
             lifecycle: Arc::new(SyncLifecycle::new()),
@@ -641,7 +641,7 @@ impl ExternalSync {
     /// smette in silenzio *qui*: la riga che dice perché l'ha già scritta la
     /// porta, una volta sola. Ciò che si perde è il rilevamento — cioè un
     /// derivato — su un vault che è già irrecuperabile.
-    pub fn batch(&mut self, changes: &[ExternalChange]) {
+    pub(crate) fn batch(&mut self, changes: &[ExternalChange]) {
         let Some(_operation) = self.lifecycle.enter() else {
             return;
         };
@@ -717,7 +717,8 @@ impl ExternalSync {
     /// fotografie e le brevi mutazioni del core. Anche un vault senza
     /// rilevatore la chiama: la finestra c'è per ogni fabbrica, e ciò che il
     /// rilevatore avrebbe visto se fosse stato acceso lo vede il workspace.
-    pub fn catch_up(&mut self) {
+    #[cfg(test)]
+    pub(crate) fn catch_up(&mut self) {
         let Some(_operation) = self.lifecycle.enter() else {
             return;
         };
@@ -901,7 +902,7 @@ impl ExternalSync {
     /// È `pub` come `batch`, e per la stessa ragione: le due cose che un
     /// rilevatore ha da dire al workspace sono «ecco cosa è cambiato» e «ho
     /// smesso di vedere», e la seconda non è meno di `notify` della prima.
-    pub fn watch_died(&mut self, reasons: Vec<String>) {
+    pub(crate) fn watch_died(&mut self, reasons: Vec<String>) {
         // I motivi si scrivono nel log **prima** del prestito: se il vault è
         // avvelenato il canale degli eventi non c'è più, e la ragione per cui
         // il rilevamento è morto resterebbe l'unica cosa che nessuno ha detto.
@@ -917,7 +918,7 @@ impl ExternalSync {
 }
 
 #[cfg(feature = "notify-watcher")]
-pub use notify_watcher::NotifyWatcher;
+pub(crate) use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
@@ -937,7 +938,7 @@ mod notify_watcher {
     use super::{ExternalChange, ExternalSync, SyncLifecycle, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
-    pub struct NotifyWatcher;
+    pub(crate) struct NotifyWatcher;
 
     /// Il debouncer vivo, **e il thread che consegna i lotti**.
     ///

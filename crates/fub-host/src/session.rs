@@ -4,9 +4,9 @@
 //! La differenza non è il nome: è che le tre cose che rendevano quel tipo
 //! inutilizzabile fuori dall'app — il montaggio cablato dentro un comando, il
 //! watcher costruito sul posto e il ponte eventi che parlava a un webview —
-//! adesso sono [`mount`](crate::mount()), un [`WatcherFactory`] e un
-//! [`EventSink`]. Chi non ha un webview passa un `NoWatcher` e nessun sink, e
-//! ottiene lo stesso vault.
+//! adesso il montaggio sceglie il watcher internamente e il ponte resta un
+//! [`EventSink`]. Chi non ha un webview usa [`Host::without_watcher`] e nessun
+//! sink, e ottiene lo stesso vault.
 //!
 //! **Le sessioni sono una mappa** (§9.6,
 //! [decisione 0029](../../../docs/decisions/0183-composizione-host-kernel.md)).
@@ -48,12 +48,15 @@ use fub_abi::grid::{
 };
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
-use fub_abi::traits::{JobId, ViewInstance, ViewSpec};
+use fub_abi::traits::{JobId, JobSpec, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Notice, PluginError};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
-use fub_kernel::{Guard, MachineSettings, ReadOnly, SystemLocale, ViewStates, Workspace};
+use fub_kernel::{
+    Capability, Guard, JournalRead, MachineSettings, Policy, ReadOnly, Subscription, SystemLocale,
+    ViewStates, Workspace,
+};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
@@ -193,15 +196,15 @@ impl VaultSession {
     pub fn root(&self) -> &Utf8Path {
         &self.root
     }
-
-    pub fn workspace(&self) -> &Custody<Workspace> {
+    #[cfg(test)]
+    pub(crate) fn workspace(&self) -> &Custody<Workspace> {
         &self.workspace
     }
 
-    /// Chi possiede i bundle di questo vault (§9.3): serve a chi ne monta uno a
     /// mano — un test, e a M5 il caricatore che installa un plugin a vault già
     /// aperto.
-    pub fn bundles(&self) -> &Custody<BundleRegistry> {
+    #[cfg(test)]
+    pub(crate) fn bundles(&self) -> &Custody<BundleRegistry> {
         &self.registry
     }
 
@@ -230,8 +233,8 @@ impl VaultSession {
     ///
     /// «Smette di guardare» vuol dire **e ha smesso**: lasciarlo andare aspetta
     /// il suo thread di consegna, ed è una riga del rilevatore e non di qui
-    /// ([`crate::watcher::VaultWatcher`], difetto 0159). Prima non lo aspettava,
-    /// e questo commento raccontava un ordine che la riga sotto non teneva.
+    /// (difetto 0159). Prima non lo aspettava, e questo commento raccontava un
+    /// ordine che la riga sotto non teneva.
     ///
     /// La chiusura passa dal registry e non dal workspace, ed è l'unica
     /// differenza col §9.5: l'ordine resta quello di [`Workspace::close`] —
@@ -689,10 +692,10 @@ fn update_view_state(
 
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
-    ///
     /// Il rilevatore di default è `notify` se la cargo feature
-    /// `notify-watcher` è accesa (lo è), e [`NoWatcher`](crate::NoWatcher)
-    /// altrimenti — cioè su PWA e mobile, dove `notify` non esiste affatto.
+    /// `notify-watcher` è accesa (lo è), e l'implementazione interna senza
+    /// rilevamento altrimenti — cioè su PWA e mobile, dove `notify` non esiste
+    /// affatto.
     pub fn new() -> Self {
         #[cfg(feature = "notify-watcher")]
         let watcher: Box<dyn WatcherFactory> = Box::new(crate::watcher::NotifyWatcher);
@@ -774,11 +777,167 @@ impl Host {
         self
     }
 
-    /// Sostituisce il rilevatore. Un e2e headless passa `NoWatcher`.
-    pub fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
+    /// Sostituisce il rilevatore con l'implementazione interna che non osserva
+    /// il filesystem. È la variante pubblica per host senza un backend watcher:
+    /// il trait e la capacità del workspace restano confinati al crate.
+    pub fn without_watcher() -> Self {
+        let mut host = Self::new();
+        host.watcher = Box::new(crate::watcher::NoWatcher);
+        host
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
         self.watcher = watcher;
         self
     }
+    /// Registers an unclaimed native bundle in the selected vault without
+    /// exposing the workspace or registry locks to callers.
+    pub fn remember_unclaimed_bundle(
+        &self,
+        vault: Option<&str>,
+        bundle: Arc<dyn Bundle>,
+    ) -> Result<(), PluginError> {
+        let registry = self.in_session(vault, |session| Ok(session.registry.clone()))?;
+        BundleRegistry::remember_guarded(&registry, bundle)
+    }
+
+    /// Mounts a native bundle through the host's typed registration boundary.
+    pub fn mount_bundle(
+        &self,
+        vault: Option<&str>,
+        bundle: Arc<dyn Bundle>,
+    ) -> Result<(), PluginError> {
+        let id = bundle.manifest().id;
+        self.remember_unclaimed_bundle(vault, bundle)?;
+        self.set_plugin_enabled(vault, &id, true).map(|_| ())
+    }
+
+    /// Unmounts a previously mounted bundle without exposing custody handles.
+    pub fn unmount_bundle(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        let (workspace, registry) = self.in_session(vault, |session| {
+            Ok((session.workspace.clone(), session.registry.clone()))
+        })?;
+        Ok(BundleRegistry::unmount_guarded(&registry, &workspace, id))
+    }
+
+    /// Queues a job for a mounted plugin through its typed host port.
+    pub fn spawn_job(
+        &self,
+        vault: Option<&str>,
+        plugin: &str,
+        job: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<JobId, PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace.with_host(plugin, |host| {
+                host.spawn_job(JobSpec {
+                    job: job.into(),
+                    payload,
+                })
+            })
+        })
+    }
+    /// Invokes one plugin job directly through the detached host boundary.
+    pub fn invoke_job(
+        &self,
+        vault: Option<&str>,
+        plugin: &str,
+        job: &str,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        let (workspace, body) = self.in_session(vault, |session| {
+            let body = session.registry.read()?.body(plugin).ok_or_else(|| {
+                PluginError::NotFound(format!("plugin not mounted: {plugin}").into())
+            })?;
+            Ok((session.workspace.clone(), body))
+        })?;
+        let mut detached = JobHost::new(workspace, plugin.to_owned());
+        body.run_job(job, payload, &mut detached)
+    }
+
+    /// Subscribes to events from the selected vault without exposing its bus.
+    pub fn subscribe(&self, vault: Option<&str>) -> Result<Subscription, PluginError> {
+        self.read_workspace(vault, |workspace| Ok(workspace.bus().subscribe()))
+    }
+
+    /// Emits one event through the selected vault's typed event port.
+    pub fn emit_event(
+        &self,
+        vault: Option<&str>,
+        event: fub_abi::Event,
+    ) -> Result<(), PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.bus().emit(Notice::of(event));
+            Ok(())
+        })
+    }
+
+    /// IDs of plugins declared by the selected vault.
+    pub fn plugin_ids(&self, vault: Option<&str>) -> Result<Vec<String>, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            Ok(workspace
+                .plugins()
+                .into_iter()
+                .map(|plugin| plugin.id)
+                .collect())
+        })
+    }
+
+    /// Declares a native plugin manifest in the selected vault.
+    pub fn declare_plugin(
+        &self,
+        vault: Option<&str>,
+        manifest: fub_abi::traits::PluginManifest,
+        trust: fub_kernel::Trust,
+    ) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace
+                .register_plugin(manifest, trust)
+                .map_err(|error| PluginError::BadArgs(error.to_string().into()))
+        })
+    }
+
+    /// Reports whether a plugin currently has a capability permission.
+    pub fn permission_granted(
+        &self,
+        vault: Option<&str>,
+        plugin: &str,
+        permission: &str,
+    ) -> Result<bool, PluginError> {
+        let capability = Capability::ALL
+            .into_iter()
+            .find(|capability| capability.permission() == Some(permission))
+            .ok_or_else(|| {
+                PluginError::BadArgs(format!("unknown permission: {permission}").into())
+            })?;
+        self.read_workspace(vault, |workspace| {
+            Ok(workspace
+                .granted_policy(plugin)
+                .denies(capability)
+                .is_none())
+        })
+    }
+
+    /// Reads the journal snapshot for the selected vault.
+    pub fn journal(&self, vault: Option<&str>) -> Result<JournalRead, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.journal().map_err(PluginError::from)
+        })
+    }
+    /// Returns the interest declaration for one view instance.
+    pub fn view_interests(
+        &self,
+        vault: Option<&str>,
+        instance: &ViewInstance,
+    ) -> Result<fub_abi::traits::ViewInterests, PluginError> {
+        self.read_workspace(vault, |workspace| workspace.view_interests(instance))
+    }
+
     /// Imposta la sorgente runtime interrogata per ogni nuova apertura.
     ///
     /// La sorgente decide quali bundle richiedere; l'host non persiste né
@@ -1846,7 +2005,7 @@ impl Host {
                 self.machine_settings(),
             ));
         }
-        self.in_session(vault, |session| query_workspace(session.workspace(), query))
+        self.in_session(vault, |session| query_workspace(&session.workspace, query))
     }
 
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
@@ -2119,7 +2278,7 @@ impl Host {
     /// È il punto unico in cui «quale vault» si risolve, ed è per questo che
     /// nessun chiamante deve saperlo: la shell passa ciò che ha (spesso niente),
     /// e chi ne ha due passa quale.
-    pub fn with_session<R>(
+    pub(crate) fn with_session<R>(
         &self,
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> R,
@@ -2154,7 +2313,7 @@ impl Host {
     /// Esiste per non lasciare in giro `Result<Result<_, _>, _>`: due errori
     /// della stessa specie, uno dentro l'altro, si appiattiscono qui una volta
     /// invece che a ogni chiamante.
-    pub fn in_session<R>(
+    pub(crate) fn in_session<R>(
         &self,
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> Result<R, PluginError>,
@@ -2210,6 +2369,27 @@ impl Host {
             .map(|(source, revision, _format)| (source, revision))
     }
 
+    /// Reads the parsed model through the host's typed document port.
+    pub fn read_model(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<fub_abi::model::DocumentModel, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.read_model(id).map_err(PluginError::from)
+        })
+    }
+
+    /// Renders a document preview through the host's typed document port.
+    pub fn render_preview(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<fub_kernel::RenderedDocument, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.render_preview(id).map_err(PluginError::from)
+        })
+    }
     pub fn grid_surfaces(&self, vault: Option<&str>) -> Result<Vec<GridSurfaceSpec>, PluginError> {
         self.read_workspace(vault, |workspace| Ok(workspace.grid_surfaces()))
     }
@@ -2489,15 +2669,14 @@ impl Host {
         update_view_state(&workspace, owner, instance, key, value)
     }
 
-    /// Accesso al workspace soltanto nei build di debug, per i banchi interni.
-    /// La shell e i consumer di produzione non ricevono più questa capacità.
-    #[cfg(debug_assertions)]
-    #[doc(hidden)]
-    pub fn debug_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
+    /// La radice del vault (o del corrente).
+    #[cfg(test)]
+    pub(crate) fn debug_workspace(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |session| session.workspace.clone())
     }
-
-    /// La radice del vault (o del corrente).
     pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
     }

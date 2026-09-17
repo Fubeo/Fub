@@ -102,7 +102,7 @@ impl IndexProvider for BlockingCustomIndex {
     custom_index_contract!();
 
     fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        assert_eq!(request, crate::query());
+        assert_eq!(request, query());
         self.entered
             .send(())
             .map_err(|_| PluginError::Internal("query probe receiver disappeared".into()))?;
@@ -149,7 +149,7 @@ impl IndexProvider for FixedCustomIndex {
     custom_index_contract!();
 
     fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        assert_eq!(request, crate::query());
+        assert_eq!(request, query());
         Ok(answer(self.value.clone()))
     }
 }
@@ -162,7 +162,7 @@ impl IndexProvider for ErrorThenSuccessIndex {
     custom_index_contract!();
 
     fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        assert_eq!(request, crate::query());
+        assert_eq!(request, query());
         if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
             return Err(PluginError::BadArgs(
                 "errore intenzionale del provider".into(),
@@ -180,7 +180,7 @@ impl IndexProvider for PanicThenSuccessIndex {
     custom_index_contract!();
 
     fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        assert_eq!(request, crate::query());
+        assert_eq!(request, query());
         if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
             panic!("panic intenzionale della query");
         }
@@ -197,7 +197,7 @@ impl IndexProvider for ReentrantCustomIndex {
     custom_index_contract!();
 
     fn query(&self, request: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
-        assert_eq!(request, crate::query());
+        assert_eq!(request, query());
         self.reenter
             .send(())
             .map_err(|_| PluginError::Internal("re-entry receiver disappeared".into()))?;

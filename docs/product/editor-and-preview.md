@@ -112,9 +112,11 @@ la decisione non risolve.
 La preview usa le forme prodotte dal provider e le policy della webview. HTML
 grezzo o contenuto attivo non deve diventare automaticamente codice eseguibile.
 
-La UI dichiarativa di un plugin WASM dovrà passare da
-`UiNode::validate_untrusted()` prima di raggiungere la shell; questo lavoro è
-tracciato nell'issue [#10](https://github.com/Fubeo/Fub/issues/10).
+La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
+prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
+`Trust::Community`. Il percorso è consegnato nella base audit corrente con
+`ViewProvider`; l'issue [#10](https://github.com/Fubeo/Fub/issues/10) resta il
+tracker per la chiusura formale, non un'indicazione che la validazione manchi.
 
 ## Superfici condivise
 

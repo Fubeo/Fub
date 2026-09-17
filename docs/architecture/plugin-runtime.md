@@ -351,14 +351,20 @@ Schema, atomicità e rimozione sono descritti nel
 |---|---|
 | lifecycle `Plugin` | presente |
 | `CommandProvider` | presente |
+| `FormatProvider` | presente: parse/render/serialize e validazione |
+| `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
+| `GridProvider` | presente: ABI/WIT v1, nativo/WASM, finestre e patch |
 | lettura modello | presente |
 | eventi host | presente |
 | timeout e memoria | presenti |
 | capability negate | presenti |
-| `ViewProvider` | presente: spec/interests/render/`Replace`/`Patch` |
 | altri provider | `IndexProvider` e `EventHandler` inbound deferred |
-| discovery, store installato e startup autorizzato | presenti; gestione desktop da completare |
+| inventario, installazione, consenso, enabled, restart e remove | presenti |
+| startup autorizzato e gestione desktop | presenti |
 | UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
+
+Queste capacità sono presenti nella base audit corrente `2cc2e44c`; la loro
+promozione in `main` resta subordinata a G14 e G15/GO.
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 
