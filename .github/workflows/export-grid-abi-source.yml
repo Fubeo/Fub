@@ -1,0 +1,27 @@
+name: Export grid ABI source
+
+on:
+  push:
+    branches: [automation/export-grid-abi-20260917]
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Archivia il tree senza metadati o workflow effimero
+        run: |
+          tar --exclude=.git --exclude=.github/workflows/export-grid-abi-source.yml -czf /tmp/Fub-grid-abi-source.tar.gz .
+          test -s /tmp/Fub-grid-abi-source.tar.gz
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: Fub-grid-abi-source-${{ github.sha }}
+          path: /tmp/Fub-grid-abi-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
