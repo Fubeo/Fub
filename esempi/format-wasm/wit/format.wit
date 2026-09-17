@@ -2,6 +2,6 @@
 package esempio:format@0.1.0;
 
 world format {
-    export fub:abi/plugin@0.1.1;
-    export fub:abi/format@0.1.1;
+    export fub:abi/plugin@0.1.2;
+    export fub:abi/format@0.1.2;
 }
