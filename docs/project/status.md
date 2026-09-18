@@ -1,7 +1,6 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** `main` al commit
-> `7c263d2950176846bc45d85381c72f46b822bfd8`, 18 settembre 2026.
+> **Stato aggiornato per `main` al commit `7c263d…`, 18 settembre 2026.**
 
 ## Stato post-merge
 
