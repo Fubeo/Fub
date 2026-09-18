@@ -67,7 +67,6 @@ flowchart LR
 - [Stato corrente](project/status.md)
 - [Roadmap](project/roadmap.md)
 - [M5: runtime WASM](project/m5-wasm-runtime.md)
-- [TODO: superfici di editing condivise](project/todo-superfici-di-editing-condivise.md)
 
 ## Capire le decisioni
 

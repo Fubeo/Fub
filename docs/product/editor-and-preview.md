@@ -13,7 +13,9 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 - **lettura**, che mostra la resa senza cursore di testo.
 
 La superficie plain text offre soltanto **sorgente**: non simula capacità
-Markdown. Il commutatore della shell legge la dichiarazione della superficie
+Markdown. I documenti `.fubsheet` usano invece la modalità **foglio** della
+famiglia Grid; se il provider Grid non è servito, la stessa superficie resta
+navigabile e mostra gli input grezzi senza un secondo valutatore formule. Il commutatore della shell legge la dichiarazione della superficie
 attiva; cambiando tab cambia anche l'insieme dei pulsanti e delle scorciatoie
 disponibili.
 

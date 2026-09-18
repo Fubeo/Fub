@@ -45,9 +45,10 @@ Tauri, Wasmtime o Markdown; `fub-host` non conosce Tauri; soltanto
   famiglia Grid v1 e consumatori nativo/WASM;
 - runtime WASM funzionante per `Plugin`, `CommandProvider` e provider Grid;
 
-M5 non è ancora conclusa: discovery, installazione end-to-end, provider WASM
-aggiuntivi e validazione della UI non fidata restano tracciati nelle issue e in
-[`docs/project/m5-wasm-runtime.md`](docs/project/m5-wasm-runtime.md).
+M5 è consegnata in `main`: installazione, consenso, lifecycle, UI non fidata e
+i provider WASM esercitati sono documentati nella
+[retrospettiva M5](docs/project/m5-wasm-runtime.md). I provider inbound differiti
+e i limiti di quota hanno tracker dedicati.
 
 ## Avvio
 

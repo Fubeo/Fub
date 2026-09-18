@@ -162,6 +162,7 @@ export function createDocumentSurfaceRegistry(
     owner: "fub.shell.text",
     family: "text",
     defaultProfile: "plain-text",
+    profiles: ["markdown"],
     formats: { markdown: "markdown" },
     sources: { text: "plain-text" },
     factory: {

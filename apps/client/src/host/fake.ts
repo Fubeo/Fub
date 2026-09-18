@@ -269,7 +269,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
   /// dichiara: è la regola del §14.1, e vale anche qui perché la shell la
   /// legge dalla risposta e non dalla propria testa.
   function entryKind(id: string): VaultEntry["kind"] {
-    return id.endsWith(".md") ? "document" : "asset";
+    return id.endsWith(".md") || id.endsWith(".markdown") || id.endsWith(".fubsheet") ? "document" : "asset";
   }
 
   function entry(id: string): VaultEntry {
@@ -519,7 +519,7 @@ export function createFakeHost(options: Options = {}): FakeHost {
       sessionNotice: () =>
         gate("sessionNotice", [], Promise.resolve(options.sessionNotice ?? null)),
       openVault: (path) => {
-        const info: VaultInfo = { root: path, extensions: ["md"], plugins: [], unread: [] };
+        const info: VaultInfo = { root: path, extensions: ["md", "markdown", "fubsheet"], plugins: [], unread: [] };
         return gate("openVault", [path], Promise.resolve(info));
       },
       readDocument: (id) => {

@@ -9,7 +9,7 @@ anticipa alcun gate successivo a G3.
 Prima di modificare il repository, leggere:
 
 1. [`PIANO-AZIONE-FUB-AUDIT-2026-09-01.md`](PIANO-AZIONE-FUB-AUDIT-2026-09-01.md), che governa i 56 finding, C-01..C-10 e G0..G15;
-2. [`docs/project/todo-superfici-di-editing-condivise.md`](docs/project/todo-superfici-di-editing-condivise.md), che governa le superfici condivise;
+2. il piano storico `docs/project/todo-superfici-di-editing-condivise.md`, poi rimosso alla chiusura di #11; le invarianti correnti vivono nelle pagine canoniche di frontend, editor, runtime plugin e ADR 0201;
 3. `AGENTS.md`, `CONTRIBUTING.md` e la documentazione canonica dell'area toccata.
 
 Valgono sempre le regole più restrittive dell'audit: nessun callback provider o

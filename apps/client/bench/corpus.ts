@@ -22,9 +22,35 @@
 // al banco non è quel testo — è che ce ne sia tanto e che sia sempre lo stesso.
 // Il generatore è deterministico e non usa `Math.random`.
 
+const SHEET_WORKBOOK = JSON.stringify({
+  version: 1,
+  sheets: [{
+    id: "budget",
+    name: "Budget 2026",
+    rows: Array.from({ length: 24 }, (_, index) => ({ id: `r${index}`, hidden: false })),
+    columns: Array.from({ length: 10 }, (_, index) => ({ id: `c${index}`, hidden: false })),
+    cells: [
+      { row: "r0", column: "c0", input: "Voce" },
+      { row: "r0", column: "c1", input: "Gennaio" },
+      { row: "r0", column: "c2", input: "Febbraio" },
+      { row: "r1", column: "c0", input: "Ricavi" },
+      { row: "r1", column: "c1", input: "12500" },
+      { row: "r1", column: "c2", input: "13200" },
+      { row: "r2", column: "c0", input: "Costi" },
+      { row: "r2", column: "c1", input: "7800" },
+      { row: "r2", column: "c2", input: "8100" },
+      { row: "r3", column: "c0", input: "Margine" },
+      { row: "r3", column: "c1", input: "=B2-B3" },
+      { row: "r3", column: "c2", input: "=C2-C3" },
+    ],
+  }],
+});
+
 /// I file del vault: path → sorgente. Le cartelle si deducono dai path, come
 /// sul disco e come nell'host finto.
 export const CORPUS: Record<string, string> = {
+  "Dati/Budget.fubsheet": SHEET_WORKBOOK,
+
   "Benvenuto.md": [
     "# Benvenuto in Fub",
     "",
