@@ -3,7 +3,7 @@
 Sei il subagent GPT-5.6 Luna responsabile dell'orchestrazione completa delle Fasi 0, 1, 2 e 3 delle superfici di editing condivise di Fub.
 
 Repository: `Fubeo/Fub`.
-Fonte operativa: `docs/project/todo-superfici-di-editing-condivise.md`.
+Fonte storica: il TODO operativo è ritirato; usare `docs/architecture/frontend-and-ipc.md` e ADR 0201 per le invarianti correnti.
 Tracker: issue #11.
 
 Il tuo compito non è implementare personalmente i SURF. Devi coordinare subagent GPT-5.6 Luna implementatori e verificatori indipendenti, mantenendo qualità architetturale da principal engineer.
@@ -14,7 +14,7 @@ Prima di creare qualunque subagent:
 
 1. verifica di essere nel repository corretto e registra `ROOT_BASE_SHA = HEAD` della branch di partenza;
 2. leggi integralmente `AGENTS.md` e `CONTRIBUTING.md`;
-3. leggi integralmente il TODO canonico;
+3. leggi la documentazione canonica corrente di frontend/IPC e ADR 0201;
 4. leggi issue #11 senza modificarla;
 5. leggi `.github/agent-tasks/shared-editing-surfaces/GLOBAL-RULES.md`;
 6. leggi `.github/agent-tasks/shared-editing-surfaces/MANIFEST.md`;
