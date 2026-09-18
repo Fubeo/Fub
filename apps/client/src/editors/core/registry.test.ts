@@ -63,7 +63,9 @@ describe("DocumentSurfaceRegistry", () => {
     registry.register({
       owner: "core.text",
       family: "text",
+      profiles: ["plain-text", "markdown"],
       defaultProfile: "plain-text",
+      fallbackProfile: "plain-text",
       factory: factory("text", [], []),
       formats: { markdown: "markdown" },
       sources: { text: "plain-text" },
@@ -71,7 +73,9 @@ describe("DocumentSurfaceRegistry", () => {
     registry.register({
       owner: "plugin.grid",
       family: "grid",
+      profiles: ["sheet"],
       defaultProfile: "sheet",
+      fallbackProfile: "sheet",
       factory: factory("grid", [], []),
     });
 
@@ -88,6 +92,36 @@ describe("DocumentSurfaceRegistry", () => {
       family: "text",
       profile: "plain-text",
     });
+    expect(
+      registry.resolve({
+        formatId: "markdown",
+        sourceKind: "text",
+        override: { family: "text", profile: "not-registered" },
+      }),
+    ).toMatchObject({
+      owner: "core.text",
+      family: "text",
+      profile: "plain-text",
+    });
+  });
+
+  it("rejects bindings and fallbacks that name profiles the family did not register", () => {
+    const registry = new DocumentSurfaceRegistry();
+    const base = {
+      owner: "core.text",
+      family: "text" as const,
+      profiles: ["plain-text"],
+      defaultProfile: "plain-text",
+      fallbackProfile: "plain-text",
+      factory: factory("text", [], []),
+    };
+
+    expect(() =>
+      registry.register({ ...base, formats: { markdown: "markdown" } }),
+    ).toThrow("format binding markdown uses unregistered profile markdown");
+    expect(() =>
+      registry.register({ ...base, fallbackProfile: "markdown" }),
+    ).toThrow("fallback profile markdown is not registered");
   });
 
   it("routes the fubsheet format to the grid sheet surface", () => {
@@ -114,7 +148,9 @@ describe("DocumentSurfaceRegistry", () => {
     registry.register({
       owner: "core.text",
       family: "text",
+      profiles: ["plain-text", "markdown"],
       defaultProfile: "plain-text",
+      fallbackProfile: "plain-text",
       factory: factory("text", [], []),
       sources: { text: "plain-text" },
     });
@@ -137,7 +173,9 @@ describe("DocumentSurfaceRegistry", () => {
     registry.register({
       owner: "first.owner",
       family: "text",
+      profiles: ["plain-text", "markdown"],
       defaultProfile: "plain-text",
+      fallbackProfile: "plain-text",
       factory: factory("text", [], []),
       formats: { markdown: "markdown" },
       sources: { text: "plain-text" },
@@ -146,7 +184,9 @@ describe("DocumentSurfaceRegistry", () => {
     expect(() =>
       registry.register({
         owner: "second.owner",
+        profiles: ["other"],
         defaultProfile: "other",
+        fallbackProfile: "other",
         factory: factory(incoming.family, [], []),
         ...incoming,
       }),
@@ -166,14 +206,18 @@ describe("DocumentSurfaceRegistry", () => {
     const unregisterMarkdown = registry.register({
       owner: "plugin.markdown",
       family: "structured",
+      profiles: ["markdown"],
       defaultProfile: "markdown",
+      fallbackProfile: "markdown",
       factory: factory("structured", destroyed, profiles),
       formats: { markdown: "markdown" },
     });
     registry.register({
       owner: "core.text",
       family: "text",
+      profiles: ["plain-text", "markdown"],
       defaultProfile: "plain-text",
+      fallbackProfile: "plain-text",
       factory: factory("text", destroyed, profiles),
       sources: { text: "plain-text" },
     });
@@ -208,7 +252,9 @@ describe("DocumentSurfaceRegistry", () => {
     registry.register({
       owner: "core.error",
       family: "error",
+      profiles: ["unsupported"],
       defaultProfile: "unsupported",
+      fallbackProfile: "unsupported",
       factory: factory("error", [], []),
     });
 
@@ -226,7 +272,9 @@ describe("DocumentSurfaceRegistry", () => {
     registry.register({
       owner: "core.text",
       family: "text",
+      profiles: ["plain-text", "markdown"],
       defaultProfile: "plain-text",
+      fallbackProfile: "plain-text",
       sources: { text: "plain-text" },
       factory: {
         mount(profile, context) {
