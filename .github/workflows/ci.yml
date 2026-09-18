@@ -184,6 +184,8 @@ jobs:
         working-directory: apps/client
       - name: il confine CodeMirror resta nel package testuale
         run: node .github/scripts/check-codemirror-boundary.mjs
+      - name: ogni famiglia pubblica ha shell fallback mirror nativo e WASM
+        run: node .github/scripts/check-surface-family-coverage.mjs
       - name: ogni ascoltatore globale della shell ha una Vita
         run: node .github/scripts/check-listeners.mjs
       - name: dentro un giro non si aspetta di nascosto
