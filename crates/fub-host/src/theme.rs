@@ -1118,14 +1118,16 @@ fn open_themes_root(config_dir: &Utf8Path, id: &str) -> Result<Option<ThemesRoot
             path: current.to_string(),
         });
     }
-    let canonical_metadata = std::fs::metadata(&canonical)
-        .map_err(|error| ThemeError::Io(format!("{canonical}: {error}")))?;
     #[cfg(unix)]
-    if !same_file(&identity, &canonical_metadata) {
-        return Err(ThemeError::Traversal {
-            id: id.to_string(),
-            path: themes.to_string(),
-        });
+    {
+        let canonical_metadata = std::fs::metadata(&canonical)
+            .map_err(|error| ThemeError::Io(format!("{canonical}: {error}")))?;
+        if !same_file(&identity, &canonical_metadata) {
+            return Err(ThemeError::Traversal {
+                id: id.to_string(),
+                path: themes.to_string(),
+            });
+        }
     }
     Ok(Some(ThemesRoot {
         path: canonical,
@@ -1155,14 +1157,16 @@ fn verify_themes_root(root: &ThemesRoot, id: &str) -> Result<(), ThemeError> {
             path: canonical.to_string(),
         });
     }
-    let canonical_metadata = std::fs::metadata(&canonical)
-        .map_err(|error| ThemeError::Io(format!("{canonical}: {error}")))?;
     #[cfg(unix)]
-    if !same_file(&root.identity, &canonical_metadata) {
-        return Err(ThemeError::Traversal {
-            id: id.to_string(),
-            path: root.path.to_string(),
-        });
+    {
+        let canonical_metadata = std::fs::metadata(&canonical)
+            .map_err(|error| ThemeError::Io(format!("{canonical}: {error}")))?;
+        if !same_file(&root.identity, &canonical_metadata) {
+            return Err(ThemeError::Traversal {
+                id: id.to_string(),
+                path: root.path.to_string(),
+            });
+        }
     }
     Ok(())
 }
