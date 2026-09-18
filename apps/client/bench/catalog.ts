@@ -1,4 +1,4 @@
-// Le tre scene che non sono schermate ma **cataloghi** (§31.1).
+// Le scene che non sono schermate ma **cataloghi** (§31.1).
 //
 // Una schermata mostra un caso; un catalogo esaurisce un elenco. Servono a due
 // cose diverse, e la seconda è quella che manca oggi: quando la §31.2 rifarà i
@@ -30,6 +30,7 @@ import { contrast } from "../src/theme/contrast";
 import { mountTree } from "../src/ui/node";
 import { COMPONENTS } from "../src/theme/serie/anatomia";
 import { SAMPLES } from "./samples";
+import { GridEngine } from "../src/editors/grid/engine";
 
 const params = new URLSearchParams(window.location.search);
 const LIGHT = params.get("light") === "light" ? "light" : "dark";
@@ -212,6 +213,67 @@ function palette(): void {
   }
 }
 
+
+// ---------------------------------------------------------------------------
+// Grid v1.
+// ---------------------------------------------------------------------------
+
+function grid(): void {
+  header("Grid v1");
+
+  const section = el("section", "sezione");
+  section.append(el("h2", undefined, "Superficie .fubsheet reale"));
+  const host = el("div", "catalog-grid-host");
+  host.style.height = "520px";
+  host.style.minWidth = "900px";
+  section.append(host);
+  root.append(section);
+
+  const rows = Array.from({ length: 24 }, (_, index) => ({
+    id: `r${index}`,
+    hidden: false,
+    ...(index === 0 ? { height: 34 } : {}),
+  }));
+  const columns = Array.from({ length: 10 }, (_, index) => ({
+    id: `c${index}`,
+    hidden: false,
+    width: index === 0 ? 180 : 128,
+  }));
+  const cells = [
+    { row: "r0", column: "c0", input: "Voce", style: { bold: true } },
+    { row: "r0", column: "c1", input: "Q1", style: { bold: true } },
+    { row: "r0", column: "c2", input: "Q2", style: { bold: true } },
+    { row: "r0", column: "c3", input: "Totale", style: { bold: true } },
+    { row: "r1", column: "c0", input: "Ricavi" },
+    { row: "r1", column: "c1", input: "1200" },
+    { row: "r1", column: "c2", input: "1480" },
+    { row: "r1", column: "c3", input: "=B2+C2" },
+    { row: "r2", column: "c0", input: "Costi" },
+    { row: "r2", column: "c1", input: "760" },
+    { row: "r2", column: "c2", input: "810" },
+    { row: "r2", column: "c3", input: "=B3+C3" },
+    { row: "r3", column: "c0", input: "Margine", style: { bold: true } },
+    { row: "r3", column: "c1", input: "=B2-B3" },
+    { row: "r3", column: "c2", input: "=C2-C3" },
+    { row: "r3", column: "c3", input: "=D2-D3", style: { bold: true } },
+  ];
+
+  const engine = new GridEngine(host, {
+    surfaceId: "bench.grid",
+    formatId: "fubsheet",
+    revision: "bench-grid-1",
+    onChange: () => {},
+    onSelectionChange: () => {},
+    evaluate: async () => ({ cells: [], dependencies: [] }),
+    theme: LIGHT,
+  });
+  engine.setDoc(JSON.stringify({
+    version: 1,
+    sheets: [{ id: "main", name: "Budget", rows, columns, cells }],
+  }));
+  engine.focus();
+}
+
 // ---------------------------------------------------------------------------
 // Campionario.
 // ---------------------------------------------------------------------------
@@ -304,13 +366,13 @@ function samples(): void {
 
 // ---------------------------------------------------------------------------
 
-const CATALOGS: Record<string, () => void> = { components, palette, samples };
+const CATALOGS: Record<string, () => void> = { components, palette, grid, samples };
 
 const draw = CATALOGS[WHICH];
 if (!draw) {
   // Un catalogo che non esiste è un errore del fotografo, non uno stato da
   // fotografare: si vede subito e dice quali ce ne sono.
-  root.textContent = `Non esiste il catalogo «${WHICH}». Ce ne sono tre: ${Object.keys(CATALOGS).join(", ")}.`;
+  root.textContent = `Non esiste il catalogo «${WHICH}». Disponibili: ${Object.keys(CATALOGS).join(", ")}.`;
 } else {
   draw();
 }
