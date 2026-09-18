@@ -151,8 +151,13 @@ ogni plugin.
 
 ## Verifica
 
-I test di conformità Rust↔WIT↔TypeScript verificano forma, versioni e limiti. I
-banchi nativo e WASM eseguono apertura, finestra, patch, invalidazione, reload e
+I test di conformità Rust↔WIT↔TypeScript verificano forma, versioni e limiti.
+`public_surface_family_delivery` enumera le costanti pubbliche `*_FAMILY` e
+impone, per ciascuna, shell, fallback, mirror TypeScript, provider nativo e
+percorso WASM: una famiglia nuova non può essere pubblicata a metà. Il registry
+client rifiuta inoltre binding verso profili non dichiarati e ignora override
+con profilo sconosciuto prima di applicare i fallback registrati. I banchi
+nativo e WASM eseguono apertura, finestra, patch, invalidazione, reload e
 chiusura sugli stessi casi. I test del registro verificano collisione, versione
 sconosciuta, fallback e unload; lo smoke della shell verifica che la tastiera
 resti locale e che il DOM contenga soltanto la finestra con overscan.
