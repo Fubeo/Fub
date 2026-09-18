@@ -1,0 +1,66 @@
+name: Verify issue56 target
+
+on:
+  push:
+    branches:
+      - fix/issue56-graph-heap-gate
+
+permissions:
+  contents: read
+
+jobs:
+  graph:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: c6d6c79dcf74bd9f6fb275b463f5831f447d9c22
+      - name: verifica lo SHA esercitato
+        run: test "$(git rev-parse HEAD)" = "c6d6c79dcf74bd9f6fb275b463f5831f447d9c22"
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: apps/client/package-lock.json
+      - run: npm ci
+        working-directory: apps/client
+      - run: npx playwright install --with-deps chromium
+        working-directory: apps/client
+      - name: esecuzione 1 — 2k
+        run: |
+          npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+          cp bench/.output/graph-scale.json bench/.output/verify-1-2k.json
+        working-directory: apps/client
+      - name: esecuzione 1 — 10k osservativa
+        run: |
+          npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+          cp bench/.output/graph-scale.json bench/.output/verify-1-10k-8.json
+        working-directory: apps/client
+      - name: esecuzione 1 — 10k hard
+        run: |
+          npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+          cp bench/.output/graph-scale.json bench/.output/verify-1-10k-16.json
+        working-directory: apps/client
+      - name: esecuzione 2 — 2k
+        run: |
+          npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+          cp bench/.output/graph-scale.json bench/.output/verify-2-2k.json
+        working-directory: apps/client
+      - name: esecuzione 2 — 10k osservativa
+        run: |
+          npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+          cp bench/.output/graph-scale.json bench/.output/verify-2-10k-8.json
+        working-directory: apps/client
+      - name: esecuzione 2 — 10k hard
+        run: |
+          npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+          cp bench/.output/graph-scale.json bench/.output/verify-2-10k-16.json
+        working-directory: apps/client
+      - name: evidenza completa
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: verify-issue56-c6d6c79
+          path: apps/client/bench/.output/verify-*.json
+          include-hidden-files: true
+          if-no-files-found: warn
