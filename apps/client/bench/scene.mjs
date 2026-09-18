@@ -253,7 +253,7 @@ export const SCENE = [
     prepare: async (page) => {
       await openFolder(page, "Dati");
       await page.click('#file-list .tree-row.note[data-path="Dati/Budget.fubsheet"]');
-      await page.waitForSelector('.grid-surface[data-grid-protocol="grid"]');
+      await page.waitForSelector('.grid-surface[data-grid-protocol="v1"]');
       await page.waitForFunction(() => {
         const grid = document.querySelector(".grid-surface");
         return grid?.getAttribute("data-evaluation") !== "unavailable"
