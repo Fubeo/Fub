@@ -203,6 +203,10 @@ jobs:
         id: graph_scale
         run: npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
         working-directory: apps/client
+      - name: conserva il referto 2k
+        if: ${{ steps.graph_scale.outcome == 'success' }}
+        run: cp bench/.output/graph-scale.json bench/.output/graph-scale-2k.json
+        working-directory: apps/client
       - name: referto della scala del grafo
         if: ${{ failure() && steps.graph_scale.outcome == 'failure' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
@@ -215,11 +219,39 @@ jobs:
         id: graph_scale_10k
         run: npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
         working-directory: apps/client
+      - name: conserva il referto 10k osservativo
+        if: ${{ steps.graph_scale_10k.outcome == 'success' }}
+        run: cp bench/.output/graph-scale.json bench/.output/graph-scale-10k-8.json
+        working-directory: apps/client
       - name: referto del soak grafo a 10k
         if: ${{ failure() && steps.graph_scale_10k.outcome == 'failure' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: banco-grafo-10k-${{ github.sha }}
+          path: apps/client/bench/.output/graph-scale.json
+          if-no-files-found: error
+          include-hidden-files: true
+      - name: la coda heap del grafo 10k si stabilizza
+        id: graph_heap_stability
+        run: npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+        working-directory: apps/client
+      - name: conserva il referto 10k prolungato
+        if: ${{ steps.graph_heap_stability.outcome == 'success' }}
+        run: cp bench/.output/graph-scale.json bench/.output/graph-scale-10k-16.json
+        working-directory: apps/client
+      - name: pubblica le evidenze Graph riuscite
+        if: ${{ steps.graph_heap_stability.outcome == 'success' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: evidenza-grafo-${{ github.sha }}
+          path: apps/client/bench/.output/graph-scale-*.json
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: referto del gate heap grafo a 10k
+        if: ${{ failure() && steps.graph_heap_stability.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: heap-grafo-10k-${{ github.sha }}
           path: apps/client/bench/.output/graph-scale.json
           if-no-files-found: error
           include-hidden-files: true
