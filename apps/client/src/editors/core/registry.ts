@@ -76,7 +76,7 @@ export interface ResolvedSurface {
 }
 
 interface RegistrationRecord extends SurfaceRegistration {
-  readonly profiles: ReadonlySet<string>;
+  readonly profileSet: ReadonlySet<string>;
   readonly formats: Readonly<Record<string, string>>;
   readonly sources: Readonly<Partial<Record<SourceKind, string>>>;
 }
@@ -166,7 +166,7 @@ export class DocumentSurfaceRegistry {
       owner,
       family,
       defaultProfile,
-      profiles,
+      profileSet: profiles,
       factory: registration.factory,
       formats,
       sources,
@@ -192,7 +192,7 @@ export class DocumentSurfaceRegistry {
       const overridden = this.#families.get(request.override.family);
       if (overridden) {
         const profile = request.override.profile ?? overridden.defaultProfile;
-        if (overridden.profiles.has(profile)) return this.#resolved(overridden, profile);
+        if (overridden.profileSet.has(profile)) return this.#resolved(overridden, profile);
       }
     }
     if (request.formatId) {
