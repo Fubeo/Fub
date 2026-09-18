@@ -149,7 +149,12 @@ Ogni `Pane` possiede invece una `EditorSurface`.
 `DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
 `source_kind`, applicando override, formato, specie, fallback testuale, viewer
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
-riquadro o l'owner vengono smontati.
+riquadro o l'owner vengono smontati. Ogni famiglia dichiara anche l'insieme dei
+profili che sa montare: `formats`, `sources` e override possono selezionare
+soltanto profili registrati. Un profilo di override sconosciuto non crea una
+superficie implicita: la risoluzione continua lungo formato, specie e fallback.
+Il test del registro rende questa regola un gate, insieme a collisioni,
+unregister e teardown delle istanze.
 
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
