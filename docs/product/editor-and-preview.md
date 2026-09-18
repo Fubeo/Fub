@@ -123,7 +123,9 @@ tracker per la chiusura formale, non un'indicazione che la validazione manchi.
 `DocumentSurfaceRegistry` sceglie la superficie con precedenza esplicita:
 override dell'utente, formato, specie della sorgente, fallback testuale, viewer
 per byte ed errore. Le collisioni nominano entrambi gli owner; la rimozione di
-un owner distrugge le istanze che possiede.
+un owner distrugge le istanze che possiede. Ogni famiglia registra
+esplicitamente i profili che sa montare e il proprio fallback: un binding o un
+override non può inventare un profilo fuori da quell'insieme.
 
 `TextEngine` è il motore testuale condiviso. Markdown e plain text sono percorsi
 utente distinti montati dal registro sullo stesso motore; `FormulaProfile`
