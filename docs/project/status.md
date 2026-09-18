@@ -1,81 +1,56 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** candidato `audit-close` della
-> [PR #50](https://github.com/Fubeo/Fub/pull/50), basato su
-> `fix/audit-integration`, 18 settembre 2026.
-> La remediation è completa localmente; questo non è ancora `main`.
+> **Stato aggiornato per `main` al commit `7c263d…`, 18 settembre 2026.**
 
-## Governance di integrazione
+## Stato post-merge
 
-Il piano `PIANO-AZIONE-FUB-AUDIT-2026-09-01.md` della linea
-`fix/audit-integration` resta l'autorità. La [PR #50](https://github.com/Fubeo/Fub/pull/50)
-raccoglie il candidato riconciliato: registro G14 56/56, WIT frozen preservati,
-remediation e prove locali complete.
+L'integrazione audit è conclusa:
 
-**NOT READY FOR PHASE 9 — NON MERGIARE IN `main` FINO AL G15/GO.**
+- G14 è completato **56/56**, senza finding nelle classi
+  `NOT_RECONSTRUCTED`, `PARTIAL` o `IMPLEMENTED_UNVERIFIED`;
+- G15/GO è registrato sulla
+  [PR #53](https://github.com/Fubeo/Fub/pull/53);
+- la PR #53 è stata integrata in `main` con merge commit
+  `7c263d2950176846bc45d85381c72f46b822bfd8`;
+- le due run push post-merge sullo stesso SHA sono verdi;
+- i rischi residui accettati da G15 restano espliciti e tracciati, ma non sono
+  gate di merge retroattivi.
 
-Il passaggio a `main` richiede i required checks Linux/macOS/Windows e supply
-chain sullo stesso commit finale, la chiusura G14 e una decisione G15/GO
-esplicita registrata sulla PR. Un run storico o relativo a uno SHA precedente
-non soddisfa il gate.
-
-## Stato della base audit
-
-La base `fix/audit-integration` contiene le consegne M5 e fase 10 già integrate;
-la PR #50 aggiunge la chiusura della matrice audit e le remediation emerse dalla
-review conclusiva. Il candidato serve `FormatProvider`, `ViewProvider` e
-`GridProvider` nei percorsi nativo/WASM coperti, con lifecycle, fallback,
-limiti e parità verificati.
-
-#8 e #10 restano tracker aperti fino alla registrazione della decisione finale:
-la presenza dell'implementazione non sostituisce G14/G15 né i check sullo SHA
-di merge.
-
-La decisione resta **NO-GO** finché i check finali o G15 mancano. Dopo il verde
-completo, i rischi residui espliciti del registro — writer esterni non
-cooperativi, rename staged, famiglie WASM inbound differite e limiti sandbox —
-devono essere accettati o dichiarati bloccanti nel record G15.
-
-Restano vincolanti i WIT frozen e le guardie dell'audit: niente `allow` per
-Clippy, test ignorati o saltati, `sleep` usati come sincronizzazione o mutex
-globale introdotto per serializzare le suite.
-
-Il rischio residuo reale è il rollback di una rename in concorrenza con un
-processo esterno: `VaultStorage` non offre rename condizionale né reservation.
-Il candidato verifica l'identità osservata del file, ma non promette una
-transazione globale contro modifiche esterne.
-
+Non esiste più un blocco globale di integrazione audit. Il record della baseline
+post-merge è l'[issue #54](https://github.com/Fubeo/Fub/issues/54).
 
 ## Release corrente
 
 Fub non ha ancora pubblicato un tag. Il workspace e la shell dichiarano
-`0.1.0`; il contratto plugin è `fub:abi@0.1.2`, con Grid v1 in ABI/WIT e mirror
-TypeScript. Il protocollo Grid negozia famiglia e versione prima dell'invocazione
-e mantiene fallback, limiti e parità nativo/WASM.
+`0.1.0`; il contratto plugin è `fub:abi@0.1.2`, con Grid v1 in ABI/WIT e
+mirror TypeScript. Il protocollo Grid negozia famiglia e versione prima
+dell'invocazione e mantiene fallback, limiti e parità nativo/WASM nei percorsi
+coperti.
 
-Milestone 1–4 sono assorbite nel prodotto e nell'architettura correnti.
-M5, fase 10 e remediation audit sono presenti nel candidato PR #50; diventano
-consegna di `main` solo dopo G15/GO, merge e verifica post-merge.
+Le milestone 1–4 sono assorbite nel prodotto e nell'architettura correnti.
+**M5, fase 10 delle superfici condivise e remediation audit sono implementate
+in `main`** tramite la PR #53 e il merge SHA sopra indicato.
 
-## CI e qualità visuale
+## CI post-merge
 
-Sul candidato locale: Rust 2171 pass/3 ignored in 168 suite; client 95 file e
-1380 test; build e typecheck verdi; `npm audit` 0; axe 42/42 scene, 48.612
-elementi, 0 failure e 0 debito dichiarato. I 388 `incomplete` axe sono
-indeterminati riportati, non violazioni soppresse. L'autorità remota resta il
-rollup dei required checks della PR #50 sul commit finale.
+Le evidenze autorevoli per `main@7c263d…` sono:
 
-La provenienza e la stabilità delle baseline di
-[#17](https://github.com/Fubeo/Fub/issues/17) sono certificate sul candidato:
-il commit `7463f725` le ha rigenerate sul runner `ubuntu-latest`, ha spiegato
-l'allineamento delle fixture e la neutralizzazione del puntatore e ha ripetuto
-il banco 42/42 senza modificare le soglie. Il foglio di contatto canonico è
-stato riesaminato nelle due luci. Le run `34966343591` e `34966348108` sullo
-stesso SHA hanno poi completato consecutivamente banco visuale e accessibilità
-nello stesso ambiente. Un controllo locale fuori dal runner ha isolato il
-drift a rasterizzazione di testo e canvas, senza promuoverlo a baseline. #16
-resta assorbita; #17 si chiude con l'integrazione autorizzata di queste
-evidenze.
+- **test applicativi:** run CI
+  [35331754822](https://github.com/Fubeo/Fub/actions/runs/35331754822),
+  con invarianti ABI/WIT, fmt/Clippy, test Rust su Linux/macOS/Windows,
+  type-check, test e build del client e guard documentali;
+- **supply chain Rust:** nella stessa run CI, `cargo deny`, generazione SBOM
+  SPDX e pubblicazione dell'artifact sono completati con successo;
+- **supply chain NPM:** run
+  [35331754778](https://github.com/Fubeo/Fub/actions/runs/35331754778),
+  con installazione da lockfile, audit high/critical, SBOM SPDX e controllo
+  licenze completati con successo;
+- **benchmark osservazionali:** il job client della run CI esegue
+  `bench:graph-scale` a 2k nodi e il soak osservativo a 10k;
+- **visuali e accessibilità:** lo stesso job esegue `bench:verify` e
+  `bench:a11y`. La griglia ha inoltre test ARIA e tastiera dedicati; una scena
+  visuale Grid esplicita non è ancora nel catalogo del banco e resta un punto
+  di verifica della Definition of Done di #11.
 
 ## Implementato
 
@@ -88,7 +63,9 @@ evidenze.
 - revisioni, bozze e versioning;
 - anagrafe, organizzazione, impostazioni e journal;
 - apertura a fasi con file non letti dichiarati;
-- eventi accodati e job cancellabili.
+- eventi accodati e job cancellabili;
+- remediation audit per custody, CAS cooperativa, lifecycle e percorsi di
+  scrittura, integrata in `main`.
 
 ### Conoscenza e shell
 
@@ -99,7 +76,10 @@ evidenze.
 - sorgente, live preview e lettura;
 - più riquadri e `DocumentSession` condivisa;
 - UI dichiarativa, comandi e impostazioni;
-- tema generato, banco visuale e accessibilità.
+- tema generato, banco visuale e accessibilità;
+- fase 10 di #11: `DocumentSurfaceRegistry`, superficie Grid v1, negoziazione
+  di famiglia/versione, finestre, patch, invalidazioni, fallback, ownership e
+  teardown.
 
 ### Estensibilità
 
@@ -108,12 +88,13 @@ evidenze.
 - feature ufficiali indipendenti;
 - provider nativi e component model Wasmtime;
 - lifecycle `Plugin` e `CommandProvider` WASM;
-- `FormatProvider`, `ViewProvider` e `GridProvider` nativi/WASM nei percorsi
-  esercitati;
+- `FormatProvider`, `ViewProvider` e `GridProvider` nativi/WASM nei
+  percorsi esercitati;
 - capability, timeout, memoria, UI non fidata ed errori tipizzati;
 - inventario macchina persistente separato dai dati del vault;
-- installazione da file scelto, consenso (`undecided`/`denied`/`granted`),
-  scelta `enabled`, restart e rimozione da disabilitato.
+- installazione da file scelto, consenso
+  (`undecided`/`denied`/`granted`), scelta `enabled`, restart e
+  rimozione da disabilitato.
 
 L'inventario pubblica il blob prima del record e rifiuta collisioni di id,
 versioni implicite, digest alterati e file incompleti. Lo startup seleziona
@@ -121,62 +102,60 @@ solo `enabled && consent == granted`; il consenso non concede capability e
 `enabled` non equivale a un'istanza montata. La rimozione ritira prima il
 record, richiede disabilitazione e non cancella `.fub/plugins/<id>/`.
 
-La fase 10 di #11 è consegnata su questo tree: il protocollo Grid v1 attraversa
-ABI/WIT, provider nativo e componente WASM, con finestre, patch, invalidazioni,
-ownership e teardown. Il TODO conserva le sue checkbox vincolate alla consegna
-in `main`, non descrive un'assenza nel tree audit.
+## Limiti correnti
+
+I rischi accettati da G15 restano limiti tecnici osservabili, non condizioni
+per reintegrare quanto è già in `main`:
+
+- la CAS è esatta tra writer Fub cooperativi che rispettano il lock; writer
+  esterni che ignorano il protocollo possono correre con confronto e
+  pubblicazione;
+- il rename di dominio è staged e non costituisce una transazione globale:
+  un writer esterno può intervenire fra le fasi nonostante riconvalida e
+  generazioni;
+- `IndexProvider` e `EventHandler` inbound non sono esposti ai componenti
+  WASM; `host-events` outbound resta supportato;
+- deadline a epoche e limite di memoria confinano il guest, ma non sono una
+  quota assoluta di CPU/RAM dell'intero processo.
+
+Questi limiti sono conservati nelle pagine permanenti di architettura e nelle
+guide autori; gli identificatori di rischio di G15 restano nel registro audit.
 
 ## Lavoro residuo
-Per #11, la fase 10 è nel candidato PR #50: il pannello monta Markdown, plain
-text e `.fubsheet` attraverso `DocumentSurfaceRegistry`; Grid v1 attraversa
-ABI/WIT, provider nativo e WASM con finestre, patch, invalidazioni, limiti,
-fallback, ownership e teardown. Il lavoro residuo di questa integrazione è
-governance: required checks finali, G15/GO, merge e verifica post-merge.
 
-### Qualità e resilienza
+### Riconciliazione e verifica di completamento
 
-- [#5 — ripristino atomico degli snapshot del database](https://github.com/Fubeo/Fub/issues/5)
-- [#6 — prova di scala e durata della Graph View](https://github.com/Fubeo/Fub/issues/6)
-- [#7 — esercitazione di backup e ripristino](https://github.com/Fubeo/Fub/issues/7)
-- [#9 — endurance e riconciliazione della sincronizzazione](https://github.com/Fubeo/Fub/issues/9)
-- [#17 — evidenze e stabilità delle baseline visuali](https://github.com/Fubeo/Fub/issues/17)
+Le issue #8 e #10 rappresentano capacità M5 già consegnate; resta da verificare
+formalmente i rispettivi criteri e lasciare il commento di chiusura. Lo stesso
+vale per #11 rispetto alle superfici condivise e alla sua regola di uscita.
 
-### Architettura della shell
+Le issue #7, #12, #13 e #17 restano in **verifica di completamento**: lo stato
+del tracker da solo non prova che manchi l'implementazione, ma le rispettive
+matrici devono essere riconciliate con le evidenze presenti in `main`.
 
-- [#11 — superfici di editing condivise](https://github.com/Fubeo/Fub/issues/11)
-  ([piano operativo](todo-superfici-di-editing-condivise.md))
-- [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
-- [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
+### Residui reali
 
-Per #11, le fasi 0–9 e la fase 10 sono consegnate sulla base audit corrente.
-Il pannello monta Markdown, plain text e `.fubsheet` attraverso
-`DocumentSurfaceRegistry`, con collisioni, fallback e teardown posseduto.
-Il contratto Grid v1 è in ABI/WIT, ha clienti nativo e WASM e mantiene
-finestre, patch coordinate, invalidazioni, limiti, fallback e parità nei casi
-coperti. Questa consegna non è stata portata in `main`.
+- #5 conserva lavoro reale sul ripristino atomico degli snapshot del database e
+  va completato contro i suoi criteri di accettazione;
+- #9 richiede una decisione esplicita rispetto al primo release candidate:
+  completarlo prima della release oppure rinviarlo come lavoro post-release,
+  senza chiusura artificiale.
 
 ## Bloccato
 
-Il merge in `main` resta bloccato dai gate audit successivi. Il tree
-`2cc2e44c` è una base audit aggiornata, non `main`: G14 resta aperto senza la
-matrice finale 56/56 e G15/GO non è stato ottenuto. #8 e #10 restano aperte nei
-tracker anche se le capacità M5 esercitate sono presenti su questa base.
-Decisione: **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
+Non esiste più un blocco globale di integrazione audit: G14 è completo,
+G15/GO è registrato, la PR #53 è in `main` e la CI post-merge è verde.
+
+Eventuali blocchi successivi appartengono alle singole issue o ai criteri del
+release candidate; non riaprono il gate di merge audit già concluso.
 
 ## Prossimi passi
 
-1. completare le evidenze residue del piano audit e la matrice G14 senza
-   promuovere in `main` le consegne non ancora autorizzate;
-2. consolidare la chiusura documentale di #8 e #10 sulla base delle prove
-   effettive, senza dichiarare chiuse le issue in questa pagina;
-3. completare ripristino atomico e backup/restore #5/#7;
-4. separare e misurare la Graph View con #12/#6;
-5. completare le evidenze manuali e ripetibili di #17;
-6. completare il contratto dei temi #13;
-7. decidere esplicitamente se #9 blocca la prima release e verificarla oppure
-   motivarne il rinvio senza chiuderla artificialmente;
-8. ottenere G15/GO esplicito prima di autorizzare qualunque merge finale in
-   `main`.
+1. riconciliare tracker e PR storiche;
+2. verificare la chiusura di #8, #10, #11, #17, #7, #12 e #13;
+3. completare il residuo reale di #5;
+4. decidere #9 rispetto alla release;
+5. preparare il primo release candidate.
 
 ## Fonti
 
@@ -184,4 +163,5 @@ Decisione: **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
 - [M5](m5-wasm-runtime.md)
 - [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md)
 - [Changelog](../../CHANGELOG.md)
+- [Baseline post-merge #54](https://github.com/Fubeo/Fub/issues/54)
 - [Issue aperte](https://github.com/Fubeo/Fub/issues)

@@ -1,139 +1,134 @@
 # Roadmap
 
-> **Stato aggiornato per:** candidato `audit-close` della
-> [PR #50](https://github.com/Fubeo/Fub/pull/50), basato su
-> `fix/audit-integration`, 18 settembre 2026.
+> **Stato aggiornato per:** `main` al commit
+> `7c263d2950176846bc45d85381c72f46b822bfd8`, 18 settembre 2026.
 
 La roadmap descrive ordine e direzione. Le GitHub Issues restano il tracker
-delle attività eseguibili. Un prossimo passo approvato può avere un TODO
-operativo in `project/` quando l'issue non è sufficiente a conservare una
-sequenza tecnica estesa.
+operativo; una issue aperta non implica automaticamente che la capacità
+corrispondente manchi da `main`.
 
 ```mermaid
 flowchart LR
-    NOW["Ora<br/>stabilizzazione e audit"] --> NEXT["Dopo<br/>release e temi"]
-    NEXT --> LATER["Più avanti<br/>nuovi formati e servizi opt-in"]
+    NOW["Ora<br/>riconciliazione e resilienza"]
+    RC["Prossimo<br/>release candidate"]
+    LATER["Dopo<br/>temi/sync o lavoro post-release"]
+    NOW --> RC --> LATER
 ```
 
-## Vincolo di integrazione
+## Capacità consegnate
 
-La [governance corrente](status.md#governance-di-integrazione) mantiene in
-vigore il piano audit: la PR #50 è il candidato G14 56/56, ma non si integra in
-`main` prima dei required checks sul commit finale e di un G15/GO esplicito.
-Questa roadmap stabilisce l'ordine del lavoro e non deroga a quei gate.
+### M5 — runtime WASM e percorso prodotto
 
-## Ora
+M5 è implementata in `main` dalla
+[PR #53](https://github.com/Fubeo/Fub/pull/53), merge commit
+`7c263d2950176846bc45d85381c72f46b822bfd8`.
 
-### M5, fase 10 e remediation consegnate nel candidato
+Sono consegnati il component model Wasmtime, lifecycle e capability, limiti,
+installazione, consenso, `enabled`, restart, rimozione, UI non fidata e i
+provider `CommandProvider`, `FormatProvider`, `ViewProvider` e
+`GridProvider` nei percorsi esercitati.
 
-La PR #50 contiene inventario persistente, installazione, consenso sugli esatti
-byte, scelta `enabled`, startup autorizzato, restart e rimozione; collisioni,
-digest alterati e file incompleti restano errori espliciti.
+Le issue [#8](https://github.com/Fubeo/Fub/issues/8) e
+[#10](https://github.com/Fubeo/Fub/issues/10) restano aperte per la
+**verifica formale dei criteri e il commento di chiusura**, non perché queste
+capacità siano assenti da `main`.
 
-I provider `ViewProvider`, `FormatProvider` e `GridProvider` attraversano i
-percorsi nativo/WASM coperti, con validazione UI non fidata, finestre globali,
-fallback, ownership e teardown. La remediation conclusiva chiude le race di
-view/doc-search/grid, i confini lock/capability e la parità tema. #8 e #10
-restano tracker aperti fino al record G15 e alla promozione in `main`.
+### Fase 10 — superfici condivise e Grid v1
 
-### Stabilizzare i dati
+La fase 10 di [#11](https://github.com/Fubeo/Fub/issues/11) è consegnata in
+`main`: Grid v1 attraversa ABI/WIT, mirror TypeScript, SDK/testkit, host
+nativo e proxy WASM; la shell negozia famiglia/versione, usa finestre e patch e
+mantiene fallback, ownership e teardown.
 
-- ripristino atomico;
-- backup e restore provati;
-- nessuna perdita silenziosa su snapshot, schema o storage plugin.
+Il TODO di progetto resta temporaneamente come matrice di verifica finché #11
+non è formalmente chiusa e le invarianti permanenti non sono state trasferite
+nelle pagine di architettura.
 
-Issue: [#5](https://github.com/Fubeo/Fub/issues/5) e
-[#7](https://github.com/Fubeo/Fub/issues/7).
+### Remediation audit
 
-### Misurare la Graph View
+La remediation audit è implementata in `main`. G14 è chiuso 56/56 e G15/GO è
+registrato sulla PR #53; le run push post-merge sul merge SHA sono verdi. I
+rischi accettati rimangono limiti correnti documentati, non un vincolo di
+integrazione ancora aperto.
 
-- modularizzare senza cambiare il contratto dati;
-- dimostrare determinismo, teardown, scala e durata.
+## Ora — riconciliazione e resilienza
 
-Issue: [#6](https://github.com/Fubeo/Fub/issues/6) e
-[#12](https://github.com/Fubeo/Fub/issues/12).
+### Riconciliare tracker e PR storiche
 
-### Completare le evidenze visuali
+La prima attività è riallineare issue, PR impilate e documentazione storica con
+la baseline `main@7c263d…`, senza riscrivere i record audit immutabili.
 
-Il passaggio del banco in CI non chiude la revisione delle baseline. Provenienza,
-foglio di contatto, ripetibilità nello stesso ambiente, soglie e diagnosi del
-drift restano in [#17](https://github.com/Fubeo/Fub/issues/17), tracker unico che
-ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
+Per #8, #10 e #11 la capacità è consegnata; va completata la verifica formale
+dei criteri e registrata la chiusura del tracker.
 
-## Consegne sulla base audit corrente
+### Verifica di completamento
 
-M5 e fase 10 sono integrate in `fix/audit-integration`; la PR #50 aggiunge
-matrice 56/56 e remediation finale. ABI/WIT, mirror TypeScript, provider
-nativo, componente WASM, client shell a finestre/patch, fallback, ownership e
-teardown sono presenti. La consegna diventa definitiva solo dopo required
-checks, G15/GO, merge in `main` e verifica post-merge.
+Finché le rispettive matrici non sono concluse, queste issue restano in
+**verifica di completamento**:
 
-- Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
-- Piano operativo:
-  [TODO — superfici di editing condivise](todo-superfici-di-editing-condivise.md).
+- [#7 — backup e ripristino](https://github.com/Fubeo/Fub/issues/7);
+- [#12 — Graph View 2.0](https://github.com/Fubeo/Fub/issues/12);
+- [#13 — contratto dei temi](https://github.com/Fubeo/Fub/issues/13);
+- [#17 — baseline visuali CI](https://github.com/Fubeo/Fub/issues/17).
 
-## Dopo
+Lo stato aperto del tracker non viene usato come prova di capacità mancante:
+ogni chiusura richiede invece confronto tra criteri, test, documentazione e
+CI effettivamente presenti in `main`.
 
-### Contratto dei temi
+### Decisioni realmente residue
 
-Chiudere compatibilità, discovery, selezione, anteprima e guida per autori senza
-pubblicare forme prive di consumatori.
+#### #5 — ripristino atomico degli snapshot
 
-Issue: [#13](https://github.com/Fubeo/Fub/issues/13).
+[#5](https://github.com/Fubeo/Fub/issues/5) conserva un residuo reale:
+validazione preventiva, atomicità, conflitto di revisione, fallimenti
+intermedi e prova end-to-end devono essere completati contro i criteri
+dell'issue.
 
-### Prima release
+#### #9 — endurance e riconciliazione sync
 
-Prima della release va decisa esplicitamente la classificazione di
-[#9](https://github.com/Fubeo/Fub/issues/9): blocker da completare oppure
-lavoro successivo con motivazione. La collocazione fra le direzioni future
-non è, da sola, un'accettazione del rischio della sincronizzazione esistente.
+[#9](https://github.com/Fubeo/Fub/issues/9) va classificata rispetto alla
+release: o entra nei criteri del primo release candidate, oppure viene
+esplicitamente rinviata al lavoro post-release. Il rinvio non equivale a
+chiusura dell'issue.
 
-- installazione verificata;
-- changelog e versioni coerenti;
-- WIT e schemi controllati;
-- SBOM e audit;
+## Prossimo — primo release candidate
+
+Dopo la riconciliazione e le decisioni residue, preparare il primo release
+candidate sulla linea `main`.
+
+Il candidato deve almeno avere:
+
+- versione, changelog e compatibilità degli schemi coerenti;
+- WIT frozen e compatibilità ABI verificate;
+- test applicativi e guard pertinenti verdi;
+- supply chain Rust e NPM verde con SBOM;
+- benchmark osservazionali registrati;
+- visuali e accessibilità verificate per le superfici incluse nella release;
 - artifact per le piattaforme supportate;
-- documentazione di avvio provata da una macchina pulita;
-- matrice audit G14 e G15/GO sullo stesso candidato, prima del merge finale.
+- documentazione di avvio e installazione coerente con il prodotto consegnato.
+
+G14 e G15/GO sono evidenza storica già soddisfatta della baseline corrente, non
+passi futuri del release candidate.
 
 Versione, tag e distribuzione seguono le
-[regole correnti](../development/versioning-and-releases.md), non una nuova
-policy implicita introdotta dalla roadmap.
+[regole correnti](../development/versioning-and-releases.md).
 
-## Più avanti
+## Dopo — temi, sync o lavoro post-release
 
-Queste direzioni richiedono una proposta, un owner e un caso reale:
+Il lavoro successivo dipende dalle verifiche e dalla decisione su #9. Può
+includere evoluzione dell'ecosistema temi, sync/collaborazione o altre capacità
+non necessarie al primo release candidate.
 
-- formati ulteriori oltre al pilota delle superfici condivise;
-- servizi di rete opt-in;
-- sincronizzazione con garanzie esplicite;
-- collaborazione;
-- publishing;
-- integrazioni AI;
-- ecosistema di distribuzione dei plugin.
+Restano volutamente fuori dalla promessa corrente le famiglie WASM non
+consegnate, tra cui `IndexProvider` e `EventHandler` inbound, finché non
+esistono route, consumatori e prove end-to-end adeguate.
 
-La prova di convergenza, disconnessioni e riavvio della sincronizzazione
-esistente resta in [#9](https://github.com/Fubeo/Fub/issues/9): non è una
-garanzia già consegnata.
+## Regola di avanzamento
 
-Una direzione non autorizza a creare in anticipo tipi ABI, porte IPC o cartelle
-di documentazione.
+Una capacità passa alla sezione consegnata quando è presente in `main` e ha
+evidenza sufficiente nei test e nella documentazione. Una issue può restare
+aperta durante la verifica formale senza retrocedere automaticamente una
+capacità già consegnata.
 
-## Fuori ambito corrente
-
-- database come sostituto obbligatorio dei file;
-- marketplace senza formato di pacchetto e sicurezza completati;
-- esecuzione di JavaScript di plugin nella webview;
-- accesso WASI generale;
-- superfici universali o contratti pubblici senza casi reali e misure;
-- specifiche dettagliate di prodotti non approvati.
-
-## Regola di passaggio
-
-Un elemento entra nella documentazione di prodotto soltanto quando:
-
-1. il comportamento è implementato;
-2. il percorso principale è testato;
-3. errori e limiti sono dichiarati;
-4. il contratto stabile ha una fonte autorevole;
-5. il lavoro residuo è tracciato in issue.
+Per lo stato puntuale e i limiti correnti, vedere
+[Stato del progetto](status.md).

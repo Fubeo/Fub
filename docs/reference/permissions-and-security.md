@@ -89,7 +89,7 @@ non può ottenere:
 - estensioni CodeMirror.
 
 Ogni albero WASM passa dalla validazione non fidata prima della serializzazione
-IPC. Il percorso `ViewProvider` è consegnato nella base audit corrente; l'issue
+IPC. Il percorso `ViewProvider` è consegnato in `main`; l'issue
 [#10](https://github.com/Fubeo/Fub/issues/10) resta il tracker per la chiusura
 formale e per i provider ancora deferred, non un bypass della validazione.
 

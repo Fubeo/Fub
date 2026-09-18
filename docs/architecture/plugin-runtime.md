@@ -363,8 +363,8 @@ Schema, atomicità e rimozione sono descritti nel
 | startup autorizzato e gestione desktop | presenti |
 | UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
 
-Queste capacità sono presenti nella base audit corrente `2cc2e44c`; la loro
-promozione in `main` resta subordinata a G14 e G15/GO.
+Queste capacità sono presenti in `main@7c263d…`, dopo la chiusura G14
+56/56, la decisione G15/GO e il merge della PR #53.
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 
