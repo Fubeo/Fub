@@ -51,7 +51,10 @@ import {
   CONTRAST_KEY,
   SERIES_THEME_ID,
   THEME_KEY,
+  cancelThemePreview,
   currentThemeId,
+  currentThemePreview,
+  previewTheme,
   selectTheme,
   themeCatalog,
 } from "../theme/theme";
@@ -309,6 +312,7 @@ async function open(): Promise<void> {
 function close(): void {
   release?.();
   race.cancel();
+  void cancelThemePreview();
   componentsGeneration++;
   release = null;
   exitSurface(panelEl, () => {
@@ -431,37 +435,90 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
   title.setAttribute("role", "heading");
   title.setAttribute("aria-level", "3");
   title.textContent = t("settings.themes.title");
-  text.append(title);
+  const hint = row("muted", t("settings.themes.preview_hint"));
+  text.append(title, hint);
+
   const control = document.createElement("div");
   control.className = "segmented segmented--wide theme-switch";
   control.setAttribute("role", "radiogroup");
   control.setAttribute("aria-label", t("settings.themes.title"));
+
+  const currentPreview = currentThemePreview();
+  const renderedId = currentPreview?.id ?? currentThemeId();
+  const renderedLight =
+    currentPreview?.light ??
+    (document.documentElement.dataset.theme === "light" ? "light" : "dark");
+
+  const labels = new Map<string, string>();
   for (const theme of themes) {
     for (const light of theme.manifest.lights) {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "segmented-option";
-      button.textContent = t("settings.themes.option", {
+      const label = t("settings.themes.option", {
         name: theme.manifest.name,
         light: t(
           light === "dark" ? "settings.themes.light.dark" : "settings.themes.light.light",
         ),
       });
+      button.textContent = label;
       button.dataset.themeId = theme.manifest.id;
       button.dataset.themeLight = light;
       button.setAttribute("role", "radio");
-      const selected =
-        currentThemeId() === theme.manifest.id &&
-        document.documentElement.dataset.theme === light;
-      button.setAttribute("aria-checked", String(selected));
+      button.setAttribute(
+        "aria-checked",
+        String(renderedId === theme.manifest.id && renderedLight === light),
+      );
+      labels.set(theme.manifest.id + ":" + light, label);
       control.append(button);
     }
   }
+
+  const actions = document.createElement("div");
+  actions.className = "theme-preview-actions";
+  const applyButton = document.createElement("button");
+  applyButton.type = "button";
+  applyButton.textContent = t("settings.themes.apply");
+  const cancelButton = document.createElement("button");
+  cancelButton.type = "button";
+  cancelButton.textContent = t("settings.themes.cancel_preview");
+  const status = row("setting-source", "");
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+
+  const refreshPreviewState = (): void => {
+    const preview = currentThemePreview();
+    applyButton.disabled = preview === null;
+    cancelButton.disabled = preview === null;
+    status.textContent = preview
+      ? t("settings.themes.preview_active", {
+          theme: labels.get(preview.id + ":" + preview.light) ?? preview.id,
+        })
+      : t("settings.themes.preview_none");
+  };
+
   installRadioGroup(control, (button) => {
-    void write(() =>
-      selectTheme(button.dataset.themeId!, button.dataset.themeLight as "light" | "dark"),
-    );
+    const id = button.dataset.themeId!;
+    const light = button.dataset.themeLight as "light" | "dark";
+    void previewTheme(id, light)
+      .then(refreshPreviewState)
+      .catch((error: unknown) => {
+        notify(t("settings.themes.preview_failed", { reason: errorText(error) }), "guasto");
+        void render();
+      });
   });
+
+  applyButton.addEventListener("click", () => {
+    const preview = currentThemePreview();
+    if (!preview) return;
+    void write(() => selectTheme(preview.id, preview.light));
+  });
+  cancelButton.addEventListener("click", () => {
+    void write(() => cancelThemePreview());
+  });
+  actions.append(applyButton, cancelButton);
+  refreshPreviewState();
+
   text.append(
     row(
       "setting-source",
@@ -469,8 +526,9 @@ function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
         ids: themes.map((theme) => theme.manifest.id).join(", "),
       }),
     ),
+    status,
   );
-  panel.append(text, control);
+  panel.append(text, control, actions);
   return panel;
 }
 
