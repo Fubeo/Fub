@@ -18,8 +18,12 @@ presentarsi senza duplicazione.
 Ogni impostazione dichiara id, tipo, default, livello e proprietario. Il valore
 effettivo conserva la sorgente. I cataloghi di testo appartengono al componente
 che produce il messaggio. Il tema usa manifest, token e artefatti generati; la
-shell possiede applicazione e accessibilità. Stato di vista resta locale alla
-macchina e non diventa un'impostazione del vault.
+shell possiede applicazione e accessibilità. La selezione persistente passa
+soltanto dalla chiave autorevole delle impostazioni; la cache locale serve al
+primo fotogramma. L'anteprima è uno stato effimero della shell: monta un tema
+senza scrivere impostazioni o cache, e Annulla o la chiusura delle Impostazioni
+rimontano la selezione precedente. Stato di vista resta locale alla macchina e
+non diventa un'impostazione del vault.
 
 ## Conseguenze
 
@@ -51,5 +55,7 @@ Non definisce compatibilità, token o fallback.
 
 ## Verifica
 
-Test di merge, provenienza, locale mancante, manifest tema e artefatti generati
-presidiano la decisione. Le scelte ancora aperte restano nell'issue #13.
+Test di merge, provenienza, locale mancante, manifest tema, anteprima/annullamento,
+persistenza e artefatti generati presidiano la decisione. La guida autore
+generata documenta struttura, limiti, pubblicazione atomica e fallback di
+`theme-1`.
