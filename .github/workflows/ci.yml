@@ -223,6 +223,18 @@ jobs:
           path: apps/client/bench/.output/graph-scale.json
           if-no-files-found: error
           include-hidden-files: true
+      - name: la coda heap del grafo 10k si stabilizza
+        id: graph_heap_stability
+        run: npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
+        working-directory: apps/client
+      - name: referto del gate heap grafo a 10k
+        if: ${{ failure() && steps.graph_heap_stability.outcome == 'failure' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: heap-grafo-10k-${{ github.sha }}
+          path: apps/client/bench/.output/graph-scale.json
+          if-no-files-found: error
+          include-hidden-files: true
       - name: le scene restano uguali alle baseline del runner
         id: bench_verify
         run: npm run bench:verify
