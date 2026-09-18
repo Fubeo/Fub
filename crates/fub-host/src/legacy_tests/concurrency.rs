@@ -1,12 +1,13 @@
-//! Le tre proprietà che il `RwLock` del §8.3 compra, provate invece che dette.
+//! Le proprietà del percorso di lettura condivisa del §8.3, provate invece che
+//! dette.
 //!
 //! Il §8.3 chiedeva «`RwLock` sul `Workspace` con `render_view`/`query_index`/
 //! `render_*` in prestito condiviso», e la sua prima riga era «misurare prima».
-//! La misura sta in [`examples/contesa.rs`](../examples/contesa.rs) e non è un
-//! test: dice dei numeri, e i numeri dipendono dalla macchina. Qui stanno le
-//! **proprietà** che quei numeri hanno rivelato, ridotte a soglie che una
-//! macchina lenta supera lo stesso — perché il modo di perderle non è un
-//! rallentamento, è qualcuno che riscrive `read()` in `write()`.
+//! Il banco in [`examples/contention.rs`](../../examples/contention.rs) confronta
+//! un gate esterno omologo al percorso pubblico e non pretende di misurare il
+//! `Custody<Workspace>` privato. Qui stanno le **proprietà** di quel percorso,
+//! ridotte a soglie che una macchina lenta supera lo stesso — perché il modo di
+//! perderle non è un rallentamento: è qualcuno che riscrive `read()` in `write()`.
 //!
 //! Il cambio si perde in silenzio: `write()` al posto di `read()` compila,
 //! passa ogni test funzionale, e non si vede in nessuna diff che non sia
@@ -57,6 +58,10 @@ fn readers() -> usize {
 /// sbaglia sempre. Per chi non misura il turno costa il tempo degli altri tre e
 /// non toglie niente, perché nessuno dei tre prova qualcosa che abbia bisogno di
 static BENCH: Mutex<()> = Mutex::new(());
+/// Watchdog for a writer held back by a provider callback. The callback is
+/// released only after this result is observed, so a retained workspace guard
+/// fails the test instead of turning it into an unbounded wait.
+const WRITER_LIMIT: Duration = Duration::from_secs(2);
 
 /// Prende il turno di banco, avvelenamento compreso.
 ///
@@ -1004,6 +1009,9 @@ impl ViewProvider for ViewRenderLockProbe {
     }
 }
 
+/// Regressione diretta del percorso produttivo: il renderer resta sospeso
+/// dopo una vera re-entry `ReadApi`, e un writer indipendente deve acquisire
+/// `Custody<Workspace>` e completare una mutazione entro [`WRITER_LIMIT`].
 #[test]
 fn a_view_render_provider_runs_without_holding_the_workspace_lock() {
     let _turn = bench_turn();
@@ -1036,21 +1044,30 @@ fn a_view_render_provider_runs_without_holding_the_workspace_lock() {
     let writer = {
         let ws = ws.clone();
         std::thread::spawn(move || {
-            let acquired = ws.write().is_ok();
-            let _ = writer_tx.send(acquired);
+            let result = ws.write().map(|workspace| {
+                workspace.set_active_document(Some(DocId::new("Note 0.md")));
+            });
+            writer_tx
+                .send(result)
+                .expect("writer completion receiver remains alive");
         })
     };
-    let writer_progressed = writer_rx
-        .recv_timeout(Duration::from_secs(2))
-        .unwrap_or(false);
+    let writer_completion = writer_rx.recv_timeout(WRITER_LIMIT);
+    // Release and join before asserting, so a failing implementation still
+    // gets a chance to unwind its retained guard and clean up both threads.
     release_tx.send(()).expect("release view provider");
     writer.join().expect("writer probe finishes");
     let outcome = call.join().expect("render thread does not panic");
 
     assert!(
-        writer_progressed,
-        "Host::render_view held Custody<Workspace> across ViewProvider::render_view"
+        writer_completion.is_ok(),
+        "writer did not complete within {WRITER_LIMIT:?} while \
+         ViewProvider::render_view was suspended: the callback retained a \
+         Custody<Workspace> guard"
     );
+    writer_completion
+        .expect("writer completion was observed")
+        .expect("workspace writer succeeds while the provider is suspended");
     outcome.expect("view render completes through its per-capability read host");
 }
 

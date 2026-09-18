@@ -17,6 +17,10 @@ use fub_kernel::{FormatRegistry, Workspace};
 
 const PLUGIN: &str = "fub.audit-query-lock";
 const TIMEOUT: Duration = Duration::from_secs(10);
+/// Watchdog for the writer in the detached-callback regression. The callback
+/// is released only after this result arrives, so a retained workspace guard
+/// deterministically turns into a failed assertion instead of a test hang.
+const WRITER_LIMIT: Duration = Duration::from_secs(2);
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -265,7 +269,7 @@ fn assert_workspace_is_free(workspace: &Custody<Workspace>) {
             .expect("workspace writer result is observed");
     });
     completed_rx
-        .recv_timeout(TIMEOUT)
+        .recv_timeout(WRITER_LIMIT)
         .expect("IndexProvider::query held a read guard on Custody<Workspace>")
         .expect("workspace remains writable");
     writer.join().expect("workspace writer does not panic");
@@ -299,6 +303,62 @@ fn host_query_releases_the_workspace_before_index_provider_query() {
         call.join().expect("query thread does not panic"),
         serde_json::json!({ "source": "old" }),
     );
+}
+
+/// The production query path must release `Custody<Workspace>` before entering
+/// an external reader/provider callback. The callback stays suspended after
+/// its entry signal; an independent workspace writer then has a bounded
+/// opportunity to acquire the lock and complete a real mutation. If the query
+/// path retains an internal read guard, the writer misses `WRITER_LIMIT` and
+/// this assertion fails.
+#[test]
+fn host_query_allows_a_writer_while_index_provider_is_suspended() {
+    let vault = vault();
+    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    host.open(&vault.root).expect("the vault opens");
+    host.wait_indexed(None).expect("opening indexing finishes");
+    let workspace = host.debug_workspace(None).expect("debug custody");
+    let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+    let (release_tx, release_rx) = mpsc::sync_channel(1);
+    install_blocking_probe(&workspace, entered_tx, release_rx);
+
+    let call = std::thread::spawn(move || host.query_index(None, query()));
+    entered_rx
+        .recv_timeout(TIMEOUT)
+        .expect("IndexProvider::query entered before the writer probe");
+
+    let (writer_tx, writer_rx) = mpsc::sync_channel(1);
+    let writer_workspace = workspace.clone();
+    let writer = std::thread::spawn(move || {
+        let result = writer_workspace.write().map(|workspace| {
+            workspace.set_active_document(Some(DocId::new("Note 0.md")));
+        });
+        writer_tx
+            .send(result)
+            .expect("writer completion receiver remains alive");
+    });
+    let writer_completion = writer_rx.recv_timeout(WRITER_LIMIT);
+
+    // Always release and join before asserting. A failing implementation may
+    // unblock the writer only once the callback returns; cleanup must still
+    // let the test report the retained guard instead of leaking a thread.
+    release_tx
+        .send(())
+        .expect("release suspended index provider");
+    let query_result = call.join().expect("query thread does not panic");
+    writer.join().expect("writer thread does not panic");
+
+    assert!(
+        writer_completion.is_ok(),
+        "writer did not complete within {WRITER_LIMIT:?} while \
+         IndexProvider::query was suspended: the callback retained a \
+         Custody<Workspace> guard"
+    );
+    writer_completion
+        .expect("writer completion was observed")
+        .expect("workspace writer succeeds while the provider is suspended");
+
+    assert_result(query_result, serde_json::json!({ "source": "old" }));
 }
 
 #[test]

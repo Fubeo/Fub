@@ -108,7 +108,7 @@ dei plugin. La configurazione macchina è esclusa. Il banco focalizzato si
 esegue con:
 
 ```bash
-cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+cargo +1.89.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
 ```
 
 Il fixture è versionato e il manifesto indipendente controlla ogni path,

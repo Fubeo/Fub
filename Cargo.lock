@@ -1493,6 +1493,7 @@ name = "fub-host"
 version = "0.1.0"
 dependencies = [
  "camino",
+ "cap-std",
  "fub-abi",
  "fub-features",
  "fub-format-markdown",
@@ -1502,6 +1503,7 @@ dependencies = [
  "jiff",
  "notify",
  "notify-debouncer-full",
+ "rustix",
  "serde",
  "serde_json",
  "tempfile",

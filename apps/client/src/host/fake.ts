@@ -646,6 +646,13 @@ export function createFakeHost(options: Options = {}): FakeHost {
       resetSetting: (key) =>
         gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
       listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
+      listThemes: () => gate("listThemes", [], Promise.resolve([])),
+      readTheme: (id, light) =>
+        gate(
+          "readTheme",
+          [id, light],
+          Promise.reject(new Error(`host fake: il tema «${id}» (${light}) non esiste`)),
+        ),
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
       listInstalledPlugins: (vault) =>

@@ -2015,6 +2015,27 @@ impl PreparedViewRender {
         })
     }
 }
+/// Interests di [`ViewProvider`] risolti sotto lock e invocabili senza tenere
+/// una guardia di [`Workspace`]. Il provider resta registrato tramite un
+/// `Arc`, mentre la consistenza della registrazione viene verificata in
+/// `Workspace::finish_view_interests`.
+pub struct PreparedViewInterests {
+    owner: String,
+    view: String,
+    instance: ViewInstance,
+    provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    generation: Arc<()>,
+}
+
+impl PreparedViewInterests {
+    /// Esegue soltanto la callback esterna del provider.
+    pub fn invoke(&self) -> std::result::Result<ViewInterests, PluginError> {
+        let provider = self.provider.read();
+        crate::safety::calling(&self.owner, Gate::ViewRender, &self.view, || {
+            Ok(provider.interests(&self.instance))
+        })
+    }
+}
 
 /// Un'azione di [`ViewProvider`] risolta sotto lock e invocabile senza tenere
 /// `Custody<Workspace>`. Il frame di provider resta logicamente aperto fino al
@@ -2844,8 +2865,57 @@ impl From<CivilTime> for StoredCivilTime {
         }
     }
 }
+/// Token owned per the persistent timer-cursor file.
+///
+/// The workspace validates the plugin namespace and freezes both the storage
+/// handle and the absolute path. Invoking the token can therefore perform
+/// storage I/O after the `Workspace` guard has been released.
+pub struct PreparedTimerCursors {
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    path: Utf8PathBuf,
+}
+
+impl PreparedTimerCursors {
+    /// Read all persisted cursors for this plugin.
+    pub fn read(self) -> std::result::Result<BTreeMap<String, CivilTime>, PluginError> {
+        let bytes = match self.storage.read(&self.path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(BTreeMap::new())
+            }
+            Err(error) => return Err(PluginError::Io(format!("{}: {error}", self.path).into())),
+        };
+        let stored: BTreeMap<String, StoredCivilTime> =
+            serde_json::from_slice(&bytes).map_err(|error| {
+                PluginError::Internal(format!("timer cursors at {}: {error}", self.path).into())
+            })?;
+        Ok(stored
+            .into_iter()
+            .map(|(id, time)| (id, time.into()))
+            .collect())
+    }
+
+    /// Atomically update one persisted cursor.
+    pub fn write(self, timer: &str, cursor: CivilTime) -> std::result::Result<(), PluginError> {
+        let path = self.path;
+        self.storage
+            .update(&path, &mut |existing| {
+                let mut stored: BTreeMap<String, StoredCivilTime> = existing
+                    .map(serde_json::from_slice)
+                    .transpose()
+                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
+                    .unwrap_or_default();
+                stored.insert(timer.to_owned(), cursor.into());
+                serde_json::to_vec_pretty(&stored)
+                    .map(Some)
+                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+            })
+            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+    }
+}
 
 const TIMER_CURSORS_FILE: &str = "timers.json";
+
 /// Marca `.fub/data/plugins/<id>/` come cache. Senza di esso quella cartella
 /// è l'albero autorevole *legacy*: `cache_write` la crea, e data_* non deve
 /// scambiarla per dati.
@@ -8868,6 +8938,23 @@ impl Workspace {
             generation: Arc::clone(&registered.generation),
         })
     }
+    /// Congela la view e i dati necessari a interrogare gli interessi senza
+    /// eseguire codice esterno sotto la guardia del workspace.
+    pub fn prepare_view_interests(
+        &self,
+        instance: &ViewInstance,
+    ) -> std::result::Result<PreparedViewInterests, PluginError> {
+        let at = self.view_owner(&instance.view)?;
+        let registered = &self.providers.views[at];
+        self.check_params(at, instance)?;
+        Ok(PreparedViewInterests {
+            owner: registered.id.clone(),
+            view: instance.view.clone(),
+            instance: instance.clone(),
+            provider: Arc::clone(&registered.provider),
+            generation: Arc::clone(&registered.generation),
+        })
+    }
 
     /// Una callback preparata può terminare soltanto se la stessa entry
     /// possiede ancora la view. L'`Arc` distingue rimozione e nuova
@@ -8913,6 +9000,22 @@ impl Workspace {
         guard_ui(prepared.trust, &tree)?;
         self.localize(&prepared.owner, &mut tree);
         Ok(tree)
+    }
+    /// Conclude la callback degli interessi verificando che la registrazione
+    /// fotografata sia ancora quella pubblicata.
+    pub fn finish_view_interests(
+        &self,
+        prepared: PreparedViewInterests,
+        outcome: std::result::Result<ViewInterests, PluginError>,
+    ) -> std::result::Result<ViewInterests, PluginError> {
+        let interests = outcome.map_err(|error| self.localized(&prepared.owner, error))?;
+        self.ensure_view_is_current(
+            &prepared.owner,
+            &prepared.view,
+            &prepared.generation,
+            &prepared.provider,
+        )?;
+        Ok(interests)
     }
 
     pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
@@ -10500,6 +10603,30 @@ impl Workspace {
         self.emit_event(Event::JobStarted { id, job });
         Ok(id)
     }
+    /// Riserva un job per una chiamata sincrona dell'host senza inserirlo nella
+    /// coda del runner. Usa lo stesso contatore, tabella ed evento di
+    /// [`enqueue_job`]; il composition root lo esegue poi con la stessa
+    /// ammissione dei job drenati dal pool.
+    pub fn issue_direct_job(
+        &mut self,
+        plugin: &str,
+        spec: JobSpec,
+    ) -> std::result::Result<PendingJob, PluginError> {
+        if self.closed {
+            return Err(PluginError::Cancelled(
+                format!("il vault si sta chiudendo: il job `{}` non parte", spec.job).into(),
+            ));
+        }
+        let job = spec.job.clone();
+        let id = self.dispatch.next_job_id();
+        self.indexes.core.jobs.accepted(id, &job, plugin);
+        self.emit_event(Event::JobStarted { id, job });
+        Ok(PendingJob {
+            id,
+            plugin: plugin.to_string(),
+            spec,
+        })
+    }
 
     /// (§15.7).
     ///
@@ -11705,6 +11832,20 @@ impl Workspace {
             .map_err(|and| PluginError::Io(format!("{mark}: {and}").into()))
     }
 
+    /// Freeze the storage handle and timer-cursor path without performing I/O.
+    ///
+    /// The returned token owns everything needed by a caller that must release
+    /// its `Workspace` guard before touching the storage backend.
+    pub fn prepare_timer_cursors(
+        &self,
+        owner: &str,
+    ) -> std::result::Result<PreparedTimerCursors, PluginError> {
+        Ok(PreparedTimerCursors {
+            storage: Arc::clone(self.storage()),
+            path: self.plugin_data_path(owner, TIMER_CURSORS_FILE)?,
+        })
+    }
+
     /// Legge i cursori dei timer del plugin dal dato autorevole del vault.
     ///
     /// Il file vive nello spazio dati del plugin (`.fub/plugins/<id>/`), la
@@ -11713,22 +11854,7 @@ impl Workspace {
         &self,
         owner: &str,
     ) -> std::result::Result<BTreeMap<String, CivilTime>, PluginError> {
-        let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
-        let bytes = match self.storage().read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(BTreeMap::new())
-            }
-            Err(error) => return Err(PluginError::Io(format!("{path}: {error}").into())),
-        };
-        let stored: BTreeMap<String, StoredCivilTime> =
-            serde_json::from_slice(&bytes).map_err(|error| {
-                PluginError::Internal(format!("timer cursors at {path}: {error}").into())
-            })?;
-        Ok(stored
-            .into_iter()
-            .map(|(id, time)| (id, time.into()))
-            .collect())
+        self.prepare_timer_cursors(owner)?.read()
     }
 
     /// Aggiorna atomicamente il cursore di un timer.
@@ -11738,20 +11864,7 @@ impl Workspace {
         timer: &str,
         cursor: CivilTime,
     ) -> std::result::Result<(), PluginError> {
-        let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
-        self.storage()
-            .update(&path, &mut |existing| {
-                let mut stored: BTreeMap<String, StoredCivilTime> = existing
-                    .map(serde_json::from_slice)
-                    .transpose()
-                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
-                    .unwrap_or_default();
-                stored.insert(timer.to_owned(), cursor.into());
-                serde_json::to_vec_pretty(&stored)
-                    .map(Some)
-                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
-            })
-            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+        self.prepare_timer_cursors(owner)?.write(timer, cursor)
     }
 }
 

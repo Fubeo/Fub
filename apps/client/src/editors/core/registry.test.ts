@@ -1,7 +1,15 @@
+// @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
 import { createDocumentSurfaceRegistry } from "./bootstrap";
 import type { EditorSurface, SurfaceFamily, SurfaceFactory } from "./registry";
 import { DocumentSurfaceRegistry, SurfaceRegistrationConflict } from "./registry";
+import { forwardNotice } from "../../state/kernel";
+import { mountStrings } from "../../i18n/strings";
+
+const localeState = vi.hoisted(() => ({ value: "it" }));
+vi.mock("../../host/query", () => ({
+  settings: async () => [{ spec: { key: "locale.language" }, value: localeState.value }],
+}));
 
 function factory(family: SurfaceFamily, destroyed: string[], mountedProfiles: string[]): SurfaceFactory {
   return {
@@ -232,4 +240,74 @@ describe("DocumentSurfaceRegistry", () => {
     ).toThrow("declares no modes");
     expect(destroyed).toEqual(["note.md"]);
   });
+  it("localizes static fallback text and aria labels, then updates live", async () => {
+    document.body.replaceChildren();
+    localStorage.clear();
+    localStorage.setItem("fub.locale.language", "en");
+    const stopStrings = mountStrings(() => {});
+    const viewerParent = document.createElement("div");
+    const errorParent = document.createElement("div");
+    document.body.append(viewerParent, errorParent);
+    const registry = createDocumentSurfaceRegistry({
+      onChange: vi.fn(),
+      onSelectionChange: vi.fn(),
+      onOpenWikilink: vi.fn(),
+      onSearchTag: vi.fn(),
+      completions: {
+        searchNotes: async () => [],
+        listTags: async () => [],
+      },
+    });
+    let viewer: EditorSurface | undefined;
+    let error: EditorSurface | undefined;
+    try {
+      viewer = registry.mount(
+        { formatId: null, sourceKind: "bytes" },
+        { paneId: "pane-bytes", documentId: "image.bin", parent: viewerParent },
+      );
+      error = registry.mount(
+        { formatId: null, sourceKind: "text", override: { family: "error" } },
+        { paneId: "pane-error", documentId: "unknown", parent: errorParent },
+      );
+      const viewerElement = viewerParent.firstElementChild as HTMLElement;
+      const errorElement = errorParent.firstElementChild as HTMLElement;
+      expect(viewerElement.textContent).toBe("Binary preview unavailable");
+      expect(viewerElement.getAttribute("aria-label")).toBe("Binary preview unavailable");
+      expect(errorElement.textContent).toBe("No surface available");
+      expect(errorElement.getAttribute("aria-label")).toBe("No surface available");
+
+      const changeLanguage = async (value: string) => {
+        localeState.value = value;
+        forwardNotice({
+          event: { type: "setting_changed", key: "locale.language", scope: "machine" },
+          origin: { actor: { kind: "kernel" }, batch: null },
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+      };
+
+      await changeLanguage("it");
+      expect(viewerElement.textContent).toBe("Anteprima binaria non disponibile");
+      expect(viewerElement.getAttribute("aria-label")).toBe("Anteprima binaria non disponibile");
+      expect(errorElement.textContent).toBe("Nessuna superficie disponibile");
+      expect(errorElement.getAttribute("aria-label")).toBe("Nessuna superficie disponibile");
+
+      await changeLanguage("en");
+      expect(viewerElement.textContent).toBe("Binary preview unavailable");
+      expect(viewerElement.getAttribute("aria-label")).toBe("Binary preview unavailable");
+
+      viewer.destroy();
+      viewer = undefined;
+      await changeLanguage("it");
+      expect(viewerElement.textContent).toBe("Binary preview unavailable");
+    } finally {
+      viewer?.destroy();
+      error?.destroy();
+      stopStrings();
+      localStorage.clear();
+      document.body.replaceChildren();
+    }
+  });
+
 });

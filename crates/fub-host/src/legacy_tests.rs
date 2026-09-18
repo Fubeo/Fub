@@ -10,6 +10,7 @@ mod event_handler_lock;
 mod flush_is_its_own_phase;
 mod format_source;
 mod headless;
+mod host_public_lock;
 mod index_feed_lock;
 mod index_removal_lock;
 mod job_callback_lock;

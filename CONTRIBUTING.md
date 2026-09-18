@@ -7,7 +7,7 @@ contributi e i controlli da eseguire. Le regole architetturali sono spiegate in
 ## Prerequisiti
 
 - Rust 1.89;
-- Node.js 22;
+- Node.js >=22.12.0;
 - npm e il lockfile committato;
 - Tauri CLI v2 per avviare l'app desktop;
 - dipendenze di sistema richieste da Tauri;

@@ -1068,6 +1068,42 @@ function options(select: HTMLSelectElement, options: UiOption[], value: string[]
   for (const opt of Array.from(select.options)) opt.selected = value.includes(opt.value);
 }
 
+interface RadioReconciliation {
+  /// Ultimo valore arrivato dal provider. È quello da applicare quando il
+  /// controllo non è più in mano all'utente.
+  providerValue: string | null;
+  /// Una scelta locale non ancora confermata dal provider. Un rerender può
+  /// quindi portare ancora il valore precedente senza cancellare la scelta.
+  pendingValue: string | null;
+  listenersInstalled: boolean;
+}
+
+const radioReconciliation = new WeakMap<HTMLElement, RadioReconciliation>();
+
+function applyRadioValue(el: HTMLElement, value: string | null): void {
+  for (const input of el.querySelectorAll<HTMLInputElement>("input[type=radio]")) {
+    input.checked = value !== null && input.value === value;
+  }
+}
+
+function installRadioReconciliation(el: HTMLElement, state: RadioReconciliation): void {
+  if (state.listenersInstalled) return;
+  state.listenersInstalled = true;
+  // `change` is the point at which the browser has applied the user's choice.
+  // Keep that choice until the provider acknowledges it or the group blurs.
+  el.addEventListener("change", () => {
+    state.pendingValue = el.querySelector<HTMLInputElement>("input[type=radio]:checked")?.value ?? null;
+  });
+  // `focusout` bubbles and carries the next focus target. Moving between two
+  // radios in the same group must not reconcile in the middle of the move.
+  el.addEventListener("focusout", (event) => {
+    const related = (event as FocusEvent).relatedTarget;
+    if (related instanceof Node && el.contains(related)) return;
+    state.pendingValue = null;
+    applyRadioValue(el, state.providerValue);
+  });
+}
+
 /// I bottoni di un gruppo di radio, riconciliati.
 ///
 /// **Il nome del gruppo è l'identità di questo gruppo**, non il nome del campo.
@@ -1082,6 +1118,23 @@ function options(select: HTMLSelectElement, options: UiOption[], value: string[]
 /// gruppo, o sono due gruppi che dicono due cose diverse allo stesso utente.
 function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction: Port): void {
   if (!el.id) el.id = identifier("gruppo-radio");
+  let state = radioReconciliation.get(el);
+  if (!state) {
+    state = { providerValue: node.value, pendingValue: null, listenersInstalled: false };
+    radioReconciliation.set(el, state);
+  }
+  state.providerValue = node.value;
+  installRadioReconciliation(el, state);
+
+  const active = document.activeElement;
+  const focused =
+    active instanceof HTMLInputElement && active.type === "radio" && el.contains(active);
+  // A provider value equal to the pending local value is the acknowledgement:
+  // it is safe to apply it and forget the pending choice. A different value
+  // while focused is still a stale response and must leave the DOM untouched.
+  const acknowledged = state.pendingValue !== null && state.pendingValue === node.value;
+  const preserveActive = focused && !acknowledged;
+
   const rows = Array.from(el.querySelectorAll<HTMLElement>(":scope > .ui-radio-option"));
   for (const row of rows.slice(node.options.length)) row.remove();
   node.options.forEach((option, i) => {
@@ -1089,11 +1142,14 @@ function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction
     const input = row.querySelector<HTMLInputElement>("input")!;
     input.name = el.id;
     input.value = option.value;
-    input.checked = option.value === node.value;
     input.disabled = node.action === null;
     row.querySelector<HTMLElement>("span")!.textContent = option.label;
     actionsOfField(input, node.action, onAction);
   });
+  if (!preserveActive) {
+    applyRadioValue(el, node.value);
+    state.pendingValue = null;
+  }
 }
 
 function newItemOption(el: HTMLElement): HTMLElement {

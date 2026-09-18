@@ -163,6 +163,20 @@
   transform: translateY(0);
 }
 
+/* Intestazioni strutturali per lettori di schermo, senza cambiare la scena: il
+   contenuto resta nel flusso semantico ma non occupa pixel né prende il fuoco. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --- lo scheletro: dalla finestra ai riquadri -----------------------------
  *
  * Le regole che seguono sono la geometria: quale regione sta accanto a quale,
@@ -473,11 +487,11 @@ html, body, #app {
   overflow: hidden;
   position: relative;
 }
-.pane.con-vista > .pane-view {
+.pane.con-vista .pane-view {
   display: flex;
 }
-.pane.con-vista > .pane-editor,
-.pane.con-vista > .pane-preview {
+.pane.con-vista .pane-editor,
+.pane.con-vista .pane-preview {
   display: none;
 }
 

@@ -144,6 +144,54 @@
       }
     }
   ],
+  "ThemeInfo": [
+    {
+      "manifest": {
+        "id": "acme.paper",
+        "name": "Paper",
+        "version": "1.0.0",
+        "engine": "theme-1",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.paper/",
+        "motion": [
+          "opacity",
+          "transform"
+        ]
+      }
+    }
+  ],
+  "ThemePayload": [
+    {
+      "manifest": {
+        "id": "acme.paper",
+        "name": "Paper",
+        "version": "1.0.0",
+        "engine": "theme-1",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.paper/",
+        "motion": [
+          "opacity",
+          "transform"
+        ]
+      },
+      "light": "light",
+      "sheet": ":root { --paper: #fff; }",
+      "skin": ".paper { color: var(--paper); }",
+      "assets": {
+        "theme://acme.paper/fonts/paper.woff2": [
+          1,
+          2,
+          3
+        ]
+      }
+    }
+  ],
   "InstalledPluginInfo": [
     {
       "id": "com.acme.tasks",

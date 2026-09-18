@@ -16,11 +16,12 @@
 use fub_abi::error::PluginError;
 use fub_abi::format::SourceKind;
 use fub_abi::options::permission;
+use fub_abi::theme::ThemeLight;
 use fub_abi::traits::PluginPermissions;
 use fub_abi::ui::UiNode;
 use fub_app_lib::{
-    BundleInfo, DocumentSource, EmbedContent, InstalledPluginInfo, OpenVaults, UnreadDoc,
-    VaultEntry, VaultInfo,
+    BundleInfo, DocumentSource, EmbedContent, InstalledPluginInfo, OpenVaults, ThemeInfo,
+    ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
 };
 use fub_host::registry::BundleKind;
 use fub_kernel::{
@@ -160,6 +161,40 @@ fn expected() -> Value {
                     .with(permission::NETWORK, json!(["api.acme.com"])),
             }),
         ],
+        "ThemeInfo": [to_value(ThemeInfo {
+            manifest: fub_abi::theme::ThemeManifest {
+                id: "acme.paper".into(),
+                name: "Paper".into(),
+                version: "1.0.0".into(),
+                engine: fub_abi::theme::ThemeEngine::Theme1,
+                lights: vec![ThemeLight::Light, ThemeLight::Dark],
+                asset_namespace: "theme://acme.paper/".into(),
+                motion: vec![
+                    fub_abi::theme::ThemeMotion::Opacity,
+                    fub_abi::theme::ThemeMotion::Transform,
+                ],
+            },
+        })],
+        "ThemePayload": [to_value(ThemePayload {
+            manifest: fub_abi::theme::ThemeManifest {
+                id: "acme.paper".into(),
+                name: "Paper".into(),
+                version: "1.0.0".into(),
+                engine: fub_abi::theme::ThemeEngine::Theme1,
+                lights: vec![ThemeLight::Light, ThemeLight::Dark],
+                asset_namespace: "theme://acme.paper/".into(),
+                motion: vec![
+                    fub_abi::theme::ThemeMotion::Opacity,
+                    fub_abi::theme::ThemeMotion::Transform,
+                ],
+            },
+            light: ThemeLight::Light,
+            sheet: ":root { --paper: #fff; }".into(),
+            skin: Some(".paper { color: var(--paper); }".into()),
+            assets: [("theme://acme.paper/fonts/paper.woff2".into(), vec![1_u8, 2, 3])]
+                .into_iter()
+                .collect(),
+        })],
         "InstalledPluginInfo": [to_value(InstalledPluginInfo {
             bundle: BundleInfo {
                 id: "com.acme.tasks".into(),

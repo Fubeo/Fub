@@ -189,7 +189,7 @@ La configurazione macchina è fuori dallo scope del vault e resta esclusa dal
 drill. Il comando focalizzato è:
 
 ```bash
-cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+cargo +1.89.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
 ```
 
 Il fixture versionato contiene l'intero scope del vault e il manifesto

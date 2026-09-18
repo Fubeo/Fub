@@ -19,5 +19,20 @@ La documentazione canonica è in
 [`docs/architecture/frontend-and-ipc.md`](../../docs/architecture/frontend-and-ipc.md).
 L'avvio completo è nel [README della radice](../../README.md).
 
+Prerequisito: Node.js `>=22.12.0`.
+
 Comandi locali: `npm ci`, `npm run dev`, `npm run typecheck`, `npm test` e
 `npm run build`.
+
+Comandi autorevoli per temi e benchmark:
+
+```bash
+npm run theme:generate
+npm run theme:verify
+npm run bench:a11y
+npm run bench:verify
+npm run bench:graph-scale
+```
+
+Per il ciclo completo e gli argomenti dei benchmark, vedi
+[`CONTRIBUTING.md`](../../CONTRIBUTING.md).

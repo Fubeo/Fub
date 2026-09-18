@@ -161,6 +161,18 @@ export async function updatePreview(previewEl: HTMLElement, id: string): Promise
 function mountRendered(container: HTMLElement, rendered: RenderedDocument): void {
   unmountSlots(container);
   setSanitizedHtml(container, rendered.html);
+  for (const pre of container.querySelectorAll<HTMLElement>("pre")) {
+    pre.tabIndex = 0;
+    pre.dataset.i18nLabel = "preview.code_block";
+    pre.setAttribute("aria-label", t("preview.code_block"));
+  }
+  for (const checkbox of container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
+    if (!checkbox.hasAttribute("aria-label")) {
+      const labelKey = checkbox.checked ? "editor.task.completed" : "editor.task.pending";
+      checkbox.dataset.i18nLabel = labelKey;
+      checkbox.setAttribute("aria-label", t(labelKey));
+    }
+  }
   wireWikilinks(container);
   mountParts(container, rendered);
 }

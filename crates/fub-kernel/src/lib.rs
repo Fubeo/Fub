@@ -117,5 +117,6 @@ pub use workspace::{
     ExternalRenamePlan, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange,
     ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
     PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedExplicitRename,
-    PreparedExternalAssetRename, Rejected, SyncPlan, Trust, Workspace, INDEX_JOB, MAIN_PANE,
+    PreparedExternalAssetRename, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace,
+    INDEX_JOB, MAIN_PANE,
 };

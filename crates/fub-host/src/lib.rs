@@ -121,4 +121,5 @@ pub use registry::{
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
+pub use theme::{ThemeInfo, ThemePayload};
 pub use vaults::{VaultEntry, VaultRegistry};

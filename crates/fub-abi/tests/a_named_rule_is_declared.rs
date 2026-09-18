@@ -516,6 +516,26 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-host/src/theme.rs::referenced_assets",
+            (
+                Family::AsciiCase,
+                "riconosce `url` nella grammatica CSS, dove il nome della funzione è ASCII e \
+                 può arrivare con qualunque combinazione di maiuscole e minuscole. Non piega \
+                 l'URL dell'asset: mantiene il namespace e il path byte-per-byte, e usa la \
+                 corsia ASCII solo per il token che la RFC CSS rende case-insensitive.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::css_collect_image_set",
+            (
+                Family::AsciiCase,
+                "riconosce `url` nei candidati annidati di `image-set`, dove il nome della \
+                 funzione è ASCII e il CSS ne ammette qualunque combinazione di maiuscole e \
+                 minuscole. È il parser interno della stessa grammatica di `referenced_assets`, \
+                 ma deve restare nominato perché attraversa il confine di una funzione annidata.",
+            ),
+        ),
+        (
             "crates/fub-features/src/commands.rs::parse_value",
             (
                 Family::AsciiCase,

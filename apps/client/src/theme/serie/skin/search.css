@@ -22,6 +22,17 @@
 .search-results li:hover {
   background: var(--bg-hover);
 }
+.search-result {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
 .hit-title {
   display: block;
   font-weight: var(--weight-medium);

@@ -2,7 +2,7 @@
 
 wit_bindgen::generate!({
     path: ["../../crates/fub-abi/wit/fub", "wit"],
-    world: "esempio:grid/grid",
+    world: "example:grid/grid",
     generate_all,
 });
 
@@ -24,7 +24,7 @@ use fub_format_sheet::session::{
 use fub_format_sheet::{CellKey, CellValue, HorizontalAlign};
 
 const PLUGIN_ID: &str = "example.grid";
-const SURFACE_ID: &str = "fub.grid.sheet";
+const SURFACE_ID: &str = "example.grid:sheet";
 const FORMAT_ID: &str = "fubsheet";
 
 struct State {
@@ -228,7 +228,7 @@ impl PluginGuest for Component {
             version: "0.1.0".to_owned(),
             abi_version: "0.1.1".to_owned(),
             permissions: PluginPermissions { granted: vec![] },
-            provides: vec!["grid".to_owned()],
+            provides: vec!["example.grid:grid".to_owned()],
             requires: vec![],
             settings: vec![],
             strings: vec![],

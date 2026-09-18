@@ -31,7 +31,6 @@ import {
   count,
   mountThemeBundle,
   validateThemeBundle,
-  THEME_MOTION,
   type ThemeBundleManifest,
   type ThemeMountResult,
 } from "./loader";
@@ -43,7 +42,7 @@ const SERIES_MANIFEST: ThemeBundleManifest = {
   engine: THEME_ENGINE,
   lights: ["dark", "light"],
   asset_namespace: "theme://fub.serie/",
-  motion: THEME_MOTION,
+  motion: ["opacity", "transform"],
 };
 
 function bundle(sheet: string, skinText?: string) {
@@ -183,5 +182,69 @@ describe("un rifiuto nomina la ragione, lascia il tema precedente e si dice come
     } finally {
       warn.mockRestore();
     }
+  });
+});
+describe("il cancello trasporta davvero gli asset e legge il moto dichiarato", () => {
+  it("materializza gli asset IPC in URL dati, senza lasciare theme:// fantasma", () => {
+    const asset = "theme://fub.serie/icon.png";
+    const result = mountThemeBundle(
+      {
+        manifest: SERIES_MANIFEST,
+        sheet: sheetLight,
+        skin: `${skin}\n/* url("${asset}") */\n.shell-tooltip { content: "url(${asset})"; background-image: url("${asset}"); }`,
+        assets: { [asset]: [1, 2, 3] },
+      },
+      "light",
+    );
+
+    expect(result.mounted).toBe(true);
+    const mounted = document.head.querySelector('style[data-fub="pelle"]')?.textContent ?? "";
+    expect(mounted).toContain("data:image/png;base64,AQID");
+    expect(mounted).toContain(`content: "url(${asset})"`);
+    expect(mounted).toContain(`/* url("${asset}") */`);
+    expect(mounted).not.toContain(`background-image: url("${asset}")`);
+  });
+  it("materializza le candidate image-set e i nomi url con escape, senza toccare commenti e content", () => {
+    const quoted = "theme://fub.serie/quoted.svg";
+    const escaped = "theme://fub.serie/escaped.png";
+    const source = [
+      skin,
+      `.brand {
+        background-image: image-set( "${quoted}" 1x, u\\72 l( "${escaped}" ) 2x);
+        content: "url(${quoted})";
+      }`,
+      `/* image-set("${quoted}" 1x) */`,
+    ].join("\n");
+    const result = mountThemeBundle(
+      {
+        manifest: SERIES_MANIFEST,
+        sheet: sheetLight,
+        skin: source,
+        assets: {
+          [quoted]: [1, 2, 3],
+          [escaped]: [4, 5, 6],
+        },
+      },
+      "light",
+    );
+
+    expect(result.mounted).toBe(true);
+    const mounted = document.head.querySelector('style[data-fub="pelle"]')?.textContent ?? "";
+    expect(mounted).toContain(
+      `background-image: image-set( "data:image/svg+xml;base64,AQID" 1x, u\\72 l( "data:image/png;base64,BAUG" ) 2x);`,
+    );
+    expect(mounted).toContain(`content: "url(${quoted})";`);
+    expect(mounted).toContain(`/* image-set("${quoted}" 1x) */`);
+  });
+
+
+  it("rifiuta un moto malformato invece di inventarlo", () => {
+    const manifest = { ...SERIES_MANIFEST, motion: ["opacity", "filter"] };
+    const reasons = validateThemeBundle(
+      { ...bundle(sheetLight, skin), manifest },
+      "light",
+    );
+
+    expect(reasons.join("\n")).toContain("moto");
   });
 });

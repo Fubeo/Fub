@@ -1,5 +1,7 @@
 // Luce, contrasto e preferenze personali: una risoluzione, un foglio montato.
+import { api } from "../host/ipc";
 import { settings } from "../host/query";
+import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
@@ -7,15 +9,17 @@ import sheetDarkHigh from "./serie/sheet-dark-high.css?raw";
 import sheetDark from "./serie/sheet-dark.css?raw";
 import sheetLightHigh from "./serie/sheet-light-high.css?raw";
 import sheetLight from "./serie/sheet-light.css?raw";
-import skin from "./serie/skin.css?raw";
 import fonts from "./serie/fonts.css?raw";
+import skin from "./serie/skin.css?raw";
 import {
   mount,
   mountPreferences,
   mountThemeBundle,
-  THEME_MOTION,
+  validateThemeBundle,
   type ThemeBundleManifest,
+  type ThemeMountResult,
 } from "./loader";
+import { reportThemeTrouble } from "../ui/notify";
 import { accentPalette, type ContrastLevel } from "./serie/recipe";
 
 export type Theme = "light" | "dark";
@@ -32,22 +36,21 @@ export const MEASURE_KEY = "appearance.measure";
 export const FONT_KEY = "appearance.font";
 export const ACCENT_KEY = "appearance.accent";
 export const ZOOM_KEY = "appearance.zoom";
-
 const THEME_CACHE = "fub.appearance.theme";
+export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
 
 const SERIES_MANIFEST: ThemeBundleManifest = {
-  id: "fub.serie",
+  id: SERIES_THEME_ID,
   name: "Fub di serie",
   version: "1.0.0",
   engine: "theme-1",
   lights: ["dark", "light"],
   asset_namespace: "theme://fub.serie/",
-  motion: THEME_MOTION,
+  motion: ["opacity", "transform"],
 };
-
 export interface AppearancePreferences {
   density: Density;
   body: number;
@@ -78,14 +81,20 @@ const READING_FONTS: Readonly<Record<ReadingFont, string>> = {
   system: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif',
 };
 
-let themeChoice = "";
+let themeChoice: Theme | "" = "";
 let contrastChoice = "";
 let preferences: AppearancePreferences = { ...DEFAULT_PREFERENCES };
+let selectedThemeId = SERIES_MANIFEST.id;
+let installedThemes: ThemeInfo[] = [];
+let catalogLoaded = false;
+let catalogRequest: Promise<ThemeInfo[]> | null = null;
 let mountedVariant = "";
 let mountedPreferenceText = "";
 let mountedLight: Theme | null = null;
+let suppressInitialWarning = false;
+let applyGeneration = 0;
+let selectionGeneration = 0;
 let warn: (theme: Theme) => void = () => {};
-
 export function effectiveTheme(choice: unknown, systemDark: boolean): Theme {
   if (choice === "light" || choice === "dark") return choice;
   return systemDark ? "dark" : "light";
@@ -152,16 +161,92 @@ function sheetFor(light: Theme, contrast: ContrastLevel): string {
   return contrast === "high" ? sheetLightHigh : sheetLight;
 }
 
-function apply(): void {
+function themeBundle(payload: ThemePayload): {
+  manifest: ThemeBundleManifest;
+  sheet: string;
+  skin?: string;
+  assets: Readonly<Record<string, unknown>>;
+} {
+  return {
+    manifest: payload.manifest,
+    sheet: payload.sheet,
+    skin: payload.skin ?? undefined,
+    assets: payload.assets,
+  };
+}
+
+function errorDetail(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function reportLoadFailure(id: string, detail: string): void {
+  reportThemeTrouble({
+    type: "theme",
+    theme: id,
+    reasons: [`fascio non leggibile: ${detail}`],
+  });
+}
+
+function persistSelection(): void {
+  try {
+    localStorage.setItem(
+      THEME_CACHE,
+      JSON.stringify({ id: selectedThemeId, light: themeChoice }),
+    );
+  } catch {
+    // La selezione in memoria resta autorevole fino al prossimo avvio.
+  }
+}
+
+async function apply(): Promise<void> {
+  const generation = ++applyGeneration;
   const light = effectiveTheme(themeChoice, mediaMatches(DARK_QUERY, true));
   const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
-  const variant = `${light}:${contrast}`;
-  if (variant !== mountedVariant) {
-    const result = mountThemeBundle(
+  const requestedId = selectedThemeId;
+  let mounted: ThemeMountResult | null = null;
+  let actualId = SERIES_THEME_ID;
+  const waitingForCatalog = requestedId !== SERIES_THEME_ID && !catalogLoaded;
+
+  if (requestedId !== SERIES_THEME_ID && !waitingForCatalog) {
+    const info = installedThemes.find((theme) => theme.manifest.id === requestedId);
+    if (!info) {
+      reportLoadFailure(requestedId, "tema assente dall'inventario");
+    } else if (!info.manifest.lights.includes(light)) {
+      reportLoadFailure(requestedId, `luce ${light} non offerta`);
+    } else {
+      try {
+        const payload = await api.readTheme(requestedId, light);
+        if (generation !== applyGeneration) return;
+        if (payload.manifest.id !== requestedId || payload.light !== light) {
+          reportLoadFailure(requestedId, "risposta del canale non coerente");
+        } else {
+          mounted = mountThemeBundle(themeBundle(payload), light);
+          if (mounted.mounted) actualId = requestedId;
+        }
+      } catch (error) {
+        if (generation !== applyGeneration) return;
+        reportLoadFailure(requestedId, errorDetail(error));
+      }
+    }
+  }
+
+  if (generation !== applyGeneration) return;
+  if (!mounted?.mounted) {
+    mounted = mountThemeBundle(
       { manifest: SERIES_MANIFEST, sheet: sheetFor(light, contrast), skin, assets: {} },
       light,
     );
-    if (!result.mounted) return;
+    if (!mounted.mounted) return;
+  }
+
+  const variant = `${actualId}:${light}:${contrast}`;
+  if (variant !== mountedVariant) {
     mountedVariant = variant;
     document.documentElement.dataset.theme = light;
     document.documentElement.dataset.contrast = contrast;
@@ -173,10 +258,10 @@ function apply(): void {
     mountPreferences(tokens);
     mountedPreferenceText = serialized;
   }
-
   if (light !== mountedLight) {
     mountedLight = light;
-    warn(light);
+    if (suppressInitialWarning) suppressInitialWarning = false;
+    else warn(light);
   }
 }
 
@@ -185,51 +270,144 @@ function valueOf(entries: Awaited<ReturnType<typeof settings>>, key: string): un
 }
 
 async function reread(): Promise<void> {
+  const generation = applyGeneration;
+  let entries: SettingEntry[];
   try {
-    const entries = await settings();
-    const theme = valueOf(entries, THEME_KEY);
-    const contrast = valueOf(entries, CONTRAST_KEY);
-       themeChoice = typeof theme === "string" ? theme : "";
-    // Lime non è più un fascio: chi lo aveva scelto resta sul buio che aveva.
-    // La migrazione vale prima di persistere, così la cache non riscrive un
-    // valore che `effectiveTheme` non conosce.
-    if (themeChoice === "lime") themeChoice = "dark";
-    contrastChoice = typeof contrast === "string" ? contrast : "";
-    preferences = normalizedPreferences({
-      density: valueOf(entries, DENSITY_KEY) as Density,
-      body: valueOf(entries, BODY_KEY) as number,
-      lineHeight: valueOf(entries, LINE_HEIGHT_KEY) as number,
-      measure: valueOf(entries, MEASURE_KEY) as number,
-      font: valueOf(entries, FONT_KEY) as ReadingFont,
-      accent: valueOf(entries, ACCENT_KEY) as number,
-    });
-    try {
-      localStorage.setItem(THEME_CACHE, themeChoice);
-      localStorage.setItem(
-        PREFERENCES_CACHE,
-        JSON.stringify({ contrast: contrastChoice, preferences }),
-      );
-    } catch {
-      // Il valore vivo è già in memoria; la cache serve solo al primo fotogramma.
-    }
-    apply();
+    [entries] = await Promise.all([settings(), readCatalog()]);
   } catch {
-    // Se il canale dati non risponde resta valida l'ultima cache leggibile.
+    if (generation !== applyGeneration) return;
+    await apply();
+    return;
   }
+  if (generation !== applyGeneration) return;
+  const theme = valueOf(entries, THEME_KEY);
+  const contrast = valueOf(entries, CONTRAST_KEY);
+  const previousChoice = themeChoice;
+  const previousId = selectedThemeId;
+  themeChoice = normalizedThemeChoice(theme);
+  if (theme === "lime") themeChoice = "dark";
+  contrastChoice = typeof contrast === "string" ? contrast : "";
+  preferences = normalizedPreferences({
+    density: valueOf(entries, DENSITY_KEY) as Density,
+    body: valueOf(entries, BODY_KEY) as number,
+    lineHeight: valueOf(entries, LINE_HEIGHT_KEY) as number,
+    measure: valueOf(entries, MEASURE_KEY) as number,
+    font: valueOf(entries, FONT_KEY) as ReadingFont,
+    accent: valueOf(entries, ACCENT_KEY) as number,
+  });
+  if (
+    previousId !== SERIES_THEME_ID &&
+    (previousChoice !== themeChoice ||
+      !installedThemes.some((installed) => installed.manifest.id === previousId))
+  ) {
+    selectionGeneration++;
+    selectedThemeId = SERIES_THEME_ID;
+  }
+  try {
+    persistSelection();
+    localStorage.setItem(
+      PREFERENCES_CACHE,
+      JSON.stringify({ contrast: contrastChoice, preferences }),
+    );
+  } catch {
+    // Il valore vivo è già in memoria; la cache serve solo al primo fotogramma.
+  }
+  await apply();
 }
 
+function normalizedThemeChoice(value: unknown): Theme | "" {
+  return value === "light" || value === "dark" ? value : "";
+}
+async function readCatalog(): Promise<ThemeInfo[]> {
+  if (catalogLoaded) return installedThemes;
+  if (!catalogRequest) {
+    catalogRequest = api
+      .listThemes()
+      .then(async (themes) => {
+        const verified = await Promise.all(
+          themes.map(async (info) => {
+            for (const light of info.manifest.lights) {
+              const payload = await api.readTheme(info.manifest.id, light);
+              if (
+                payload.manifest.id !== info.manifest.id ||
+                payload.light !== light ||
+                validateThemeBundle(themeBundle(payload), light).length > 0
+              ) {
+                return null;
+              }
+            }
+            return info;
+          }),
+        );
+        installedThemes = verified.filter((info): info is ThemeInfo => info !== null);
+        catalogLoaded = true;
+        return installedThemes;
+      })
+      .catch((error: unknown) => {
+        catalogRequest = null;
+        throw error;
+      });
+  }
+  return catalogRequest;
+}
+
+/** I temi installati già validati dal backend, per il pannello dedicato. */
+export async function themeCatalog(): Promise<ThemeInfo[]> {
+  return readCatalog();
+}
+
+/** L'identità effettivamente scelta, non solo la luce che le appartiene. */
+export function currentThemeId(): string {
+  return selectedThemeId;
+}
+
+/** Seleziona un tema e persiste insieme il suo id e la luce esplicita. */
+export async function selectTheme(id: string, light: Theme | ""): Promise<void> {
+  if (id !== SERIES_THEME_ID) {
+    const info = installedThemes.find((theme) => theme.manifest.id === id);
+    if (!info || !info.manifest.lights.includes(light as Theme)) {
+      throw new Error("tema non disponibile");
+    }
+  }
+  const generation = ++selectionGeneration;
+  const previousId = selectedThemeId;
+  const previousChoice = themeChoice;
+  selectedThemeId = id;
+  themeChoice = light;
+  try {
+    await api.setSetting(THEME_KEY, light);
+    if (generation !== selectionGeneration) return;
+    persistSelection();
+    await apply();
+  } catch (error) {
+    if (generation === selectionGeneration) {
+      selectedThemeId = previousId;
+      themeChoice = previousChoice;
+      persistSelection();
+      await apply();
+    }
+    throw error;
+  }
+
+}
 function loadCache(): void {
   themeChoice = "";
+  selectedThemeId = SERIES_THEME_ID;
   contrastChoice = "";
   preferences = { ...DEFAULT_PREFERENCES };
   try {
-    themeChoice = localStorage.getItem(THEME_CACHE) ?? "";
-        // Lime non è più un fascio: chi lo aveva scelto resta sul buio che aveva,
-    // e la cache si riscrive subito, perché al prossimo avvio la migrazione
-    // deve essere già avvenuta (e non di nuovo).
-    if (themeChoice === "lime") {
-      themeChoice = "dark";
-      localStorage.setItem(THEME_CACHE, "dark");
+    const cachedTheme = localStorage.getItem(THEME_CACHE) ?? "";
+    try {
+      const parsed = JSON.parse(cachedTheme) as { id?: unknown; light?: unknown };
+      if (typeof parsed.id === "string" && typeof parsed.light === "string") {
+        selectedThemeId = parsed.id;
+        themeChoice = normalizedThemeChoice(parsed.light);
+      } else {
+        throw new Error("vecchia cache del tema");
+      }
+    } catch {
+      themeChoice = cachedTheme === "lime" ? "dark" : normalizedThemeChoice(cachedTheme);
+      persistSelection();
     }
     const cached = localStorage.getItem(PREFERENCES_CACHE);
     if (cached) {
@@ -242,25 +420,38 @@ function loadCache(): void {
     }
   } catch {
     themeChoice = "";
+    selectedThemeId = SERIES_THEME_ID;
     contrastChoice = "";
     preferences = { ...DEFAULT_PREFERENCES };
   }
 }
 
 export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void): void {
+  if (lifetime.closed) return;
+  const hadMountedTheme =
+    document.head.querySelector<HTMLStyleElement>('style[data-fub="foglio"]') !== null;
+  lifetime.add(() => {
+    applyGeneration++;
+    selectionGeneration++;
+  });
+  selectionGeneration++;
   loadCache();
+  catalogLoaded = false;
+  catalogRequest = null;
+  installedThemes = [];
   mountedVariant = "";
   mountedPreferenceText = "";
-  mountedLight = null;
-  mount(fonts, "caratteri");
-  apply();
+  mountedLight = hadMountedTheme ? mountedLight : null;
+  suppressInitialWarning = !hadMountedTheme;
   warn = onChange;
+  mount(fonts, "caratteri");
+  void apply();
 
   for (const query of [DARK_QUERY, CONTRAST_QUERY]) {
     const media = window.matchMedia?.(query);
-    if (media) lifetime.listen(media, "change", apply);
+    if (media) lifetime.listen(media, "change", () => void apply());
   }
-  onEvent("setting_changed", () => void reread());
-  on("vault", () => void reread());
+  lifetime.add(onEvent("setting_changed", () => void reread()));
+  lifetime.add(on("vault", () => void reread()));
   void reread();
 }

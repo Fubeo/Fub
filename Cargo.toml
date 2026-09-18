@@ -72,6 +72,10 @@ tempfile = "3.27.0"
 # Accesso filesystem ancorato a handle: il vault di produzione non risolve
 # nuovamente path ambientali dopo il mount.
 cap-std = "4.0.3"
+# Open-no-follow flags for theme bundle descriptors on Unix. The host keeps
+# these platform bits behind its target dependency; no path-based read relies
+# on a preflight stat.
+rustix = { version = "1", default-features = false, features = ["fs"] }
 # Il vocabolario del log (§17.3, decisione 0062). **Era già nell'albero** —
 # 0.1.44, tirato da tauri — e prenderlo come dipendenza diretta non aggiunge un
 # crate: aggiunge un nome che descrive una cosa che c'era. Il collettore invece

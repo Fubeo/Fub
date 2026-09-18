@@ -10,7 +10,6 @@ import { refreshOn, registerPanel } from "../ui/panel-host";
 import { openDocument, revealByteOffset } from "./document";
 import { isPanelVisible, showPanel } from "./sidebar";
 import { errorText } from "../host/errors";
-import { activatable } from "../ui/a11y";
 import { t } from "../i18n/strings";
 import { searchedName } from "../rules/searched-name";
 import { rememberSearch } from "../state/recent";
@@ -160,6 +159,9 @@ function showSearchResults(
   for (const row of rowsToShow(hits)) {
     const li = document.createElement("li");
     setTooltip(li, row.doc);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "search-result";
     if (row.occurrence === undefined) {
       const title = document.createElement("span");
       title.className = "hit-title";
@@ -168,12 +170,13 @@ function showSearchResults(
       const snippet = document.createElement("span");
       snippet.className = "hit-snippet";
       snippet.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
-      li.append(title, snippet);
+      button.append(title, snippet);
     } else {
-      li.className = "hit-occurrence";
-      li.textContent = t("search.occurrence", { n: row.occurrence });
+      button.classList.add("hit-occurrence");
+      button.textContent = t("search.occurrence", { n: row.occurrence });
     }
-    openAt(li, row.doc, row.byteOffset);
+    openAt(button, row.doc, row.byteOffset);
+    li.appendChild(button);
     newItems.appendChild(li);
   }
   // **Non l'ho trovata, creala** (§21.7): il gesto che chiude il giro in
@@ -205,14 +208,17 @@ function showSearchResults(
 function createRow(name: string): HTMLElement {
   const li = document.createElement("li");
   li.className = "hit-create";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "search-result";
   const title = document.createElement("span");
   title.className = "hit-title";
   title.textContent = name;
   const desc = document.createElement("span");
   desc.className = "hit-snippet";
   desc.textContent = t("search.create");
-  li.append(title, desc);
-  li.addEventListener("click", () => {
+  button.append(title, desc);
+  button.addEventListener("click", () => {
     rememberSearch(searchInputEl.value);
     void createNote(name)
       .then((doc) => {
@@ -220,7 +226,7 @@ function createRow(name: string): HTMLElement {
       })
       .catch((e: unknown) => notify(errorText(e), "guasto"));
   });
-  activatable(li);
+  li.appendChild(button);
   return li;
 }
 
@@ -242,9 +248,6 @@ function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
       if (byteOffset !== undefined) revealByteOffset(byteOffset);
     });
   });
-  // Un risultato di ricerca si apre col mouse e adesso anche col linguetta: era una
-  // `<li>` con un `click` sopra, cioè — per chi non usa il mouse — testo.
-  activatable(el);
 }
 
 /// Lo snippet con le porzioni evidenziate, come nodi DOM.

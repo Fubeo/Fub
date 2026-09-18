@@ -566,6 +566,13 @@ fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
             .expect("the vault is alive")
             .bus()
             .subscribe();
+        // A malformed document is a per-file warning, not a reason to stop
+        // the watcher: future external changes must still be observed.
+        workspace
+            .read()
+            .expect("the vault is alive")
+            .watch_flag()
+            .store(true, Ordering::SeqCst);
 
         let mut sync = ExternalSync::new(workspace.clone());
         match path {
@@ -600,6 +607,10 @@ fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
             Ok(IndexResult::VaultStatus(status)) => status,
             other => panic!("expected vault status, got {other:?}"),
         };
+        assert!(
+            status.watching,
+            "{path:?} malformed input is a warning; watcher remains active"
+        );
         assert_eq!(status.sync_failures, 1, "{path:?} lost the apply error");
         let original = status.last_sync_error.expect("the apply error is retained");
         assert!(
@@ -613,6 +624,7 @@ fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
                 _ => None,
             })
             .collect();
+
         assert_eq!(
             trouble.len(),
             1,
@@ -623,6 +635,50 @@ fn a_partial_watcher_apply_still_flushes_its_staged_feed() {
             "{path:?} reported a replacement error: {trouble:?}"
         );
     }
+}
+#[test]
+fn fatal_watcher_failure_is_reported_and_clears_status() {
+    let bench = bench();
+    bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .watch_flag()
+        .store(true, Ordering::SeqCst);
+    let events = bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .bus()
+        .subscribe();
+
+    ExternalSync::new(bench.ws.clone()).watch_died(vec!["watcher fatal".to_string()]);
+
+    let status = match bench
+        .ws
+        .read()
+        .expect("the vault is alive")
+        .query_index(IndexQuery::VaultStatus)
+    {
+        Ok(IndexResult::VaultStatus(status)) => status,
+        other => panic!("expected vault status, got {other:?}"),
+    };
+    assert!(
+        !status.watching,
+        "a fatal watcher failure must stop watching"
+    );
+    let troubles: Vec<_> = events
+        .try_iter()
+        .filter_map(|notice| match notice.event {
+            Event::Trouble {
+                severity, error, ..
+            } => Some((severity, error.to_string())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(troubles.len(), 1, "fatal watcher failure is reported once");
+    assert_eq!(troubles[0].0, fub_abi::Severity::Failure);
+    assert!(troubles[0].1.contains("watcher fatal"));
 }
 
 /// Il ramo folder-only di `is_ignored` può chiedere uno `stat`: anche quel

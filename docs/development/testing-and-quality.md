@@ -66,7 +66,7 @@ I guard del contratto verificano:
 Il banco d'integrazione eseguibile è:
 
 ```bash
-cargo +1.89.0 test -p fub-host --test backup_restore_drill -- --nocapture
+cargo +1.89.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
 ```
 
 Il fixture copre l'intero vault: documenti Markdown, allegati binari, file
@@ -92,7 +92,11 @@ presente, mentre l'issue resta aperta fino alla verifica CI.
 
 ## Frontend
 
-Vitest usa un fake host. I test devono verificare la shell senza avviare Tauri.
+Vitest 5 usa un fake host. Con `clearMocks: true`, prima di ogni test vengono
+svuotate chiamate, istanze e risultati delle spy (`vi.clearAllMocks()`), senza
+ripristinare l'implementazione né rimuovere i mock; i test che richiedono un
+comportamento diverso devono configurarlo esplicitamente. I test devono
+verificare la shell senza avviare Tauri.
 
 Aree importanti:
 

@@ -55,13 +55,23 @@ import {
   rememberSearch,
 } from "../state/recent";
 import { createNote } from "../state/vault";
-import { activatable, trapFocus } from "../ui/a11y";
+import { stableIdentifier, trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
 import { openDocument } from "./document";
 
 const OVERLAY_ID = "quick-switcher";
+const LIST_ID = `${OVERLAY_ID}-list`;
+const OPTION_ID_PREFIX = `${OVERLAY_ID}-option`;
+
+function entryKey(entry: Entry): string {
+  return `${entry.k}:${entry.k === "doc" ? entry.doc : entry.k === "query" ? entry.q : entry.name}`;
+}
+
+function optionId(entry: Entry): string {
+  return stableIdentifier(OPTION_ID_PREFIX, entryKey(entry));
+}
 
 /// Cosa può stare in questa lista.
 ///
@@ -79,8 +89,11 @@ type Entry =
 
 /// Come si scioglie la trappola del fuoco, quando il modale è aperto.
 let release: (() => void) | null = null;
+let invalidate: (() => void) | null = null;
 
 export function closeQuickSwitcher(): void {
+  invalidate?.();
+  invalidate = null;
   const overlay = document.getElementById(OVERLAY_ID);
   release?.();
   release = null;
@@ -134,32 +147,51 @@ export function mountQuickSwitcher(): void {
 
 export function openQuickSwitcher(): void {
   const box = openOverlay();
+  // `openOverlay` may reuse a node that is still animating out. Start with one
+  // surface, otherwise the old input/list pair survives beside the new one.
+  box.replaceChildren();
 
   const input = document.createElement("input");
   input.className = "palette-input";
   input.placeholder = t("switcher.placeholder");
+  input.setAttribute("role", "combobox");
   input.setAttribute("aria-label", t("switcher.title"));
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-haspopup", "listbox");
   const list = document.createElement("ul");
+  list.id = LIST_ID;
   list.className = "plain-list palette-list";
   // Come la palette dei comandi: una riga è «quella scelta» e le frecce la
   // spostano, quindi è una listbox — e dirlo è ciò che permette di sapere su
   // cosa si sta per premere Invio senza guardare lo sfondo.
   list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", t("switcher.title"));
+  // La selezione resta sull'input; il popup non è una fermata del tab.
+  list.tabIndex = -1;
+  input.setAttribute("aria-controls", list.id);
   box.append(input, list);
 
   let visibleItems: Entry[] = [];
   let selected = 0;
+  let alive = true;
   // Come nella ricerca dentro la nota: una risposta lenta di una query vecchia
   // non deve sovrascrivere i risultati di una più recente. La corsa è di questo
   // esemplare della palette, non del modulo (decisione 0134).
   const race = new Race();
   let timer: number | undefined;
+  invalidate = () => {
+    alive = false;
+    race.cancel();
+    if (timer !== undefined) window.clearTimeout(timer);
+  };
 
   const render = () => {
-    list.innerHTML = "";
+    list.replaceChildren();
     const newItems = document.createDocumentFragment();
     for (const [i, entry] of visibleItems.entries()) {
       const li = document.createElement("li");
+      li.id = optionId(entry);
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", String(i === selected));
       const title = document.createElement("span");
@@ -179,18 +211,25 @@ export function openQuickSwitcher(): void {
         title.textContent = entry.name;
         where.textContent = t("switcher.create");
       }
-      li.append(title, where);
       li.addEventListener("click", () => active(entry));
-      activatable(li);
       newItems.appendChild(li);
     }
     if (visibleItems.length === 0) {
       const empty = document.createElement("li");
+      empty.id = `${OPTION_ID_PREFIX}-empty`;
       empty.className = "palette-empty";
+      empty.setAttribute("role", "option");
+      empty.setAttribute("aria-disabled", "true");
+      empty.setAttribute("aria-selected", "false");
       empty.textContent = t(input.value.trim() ? "switcher.empty" : "switcher.hint");
       newItems.appendChild(empty);
     }
     list.appendChild(newItems);
+    if (visibleItems.length === 0) {
+      input.removeAttribute("aria-activedescendant");
+    } else {
+      input.setAttribute("aria-activedescendant", optionId(visibleItems[selected]!));
+    }
   };
 
   /// Cosa fa una voce quando la si sceglie, ed è **una cosa diversa per specie**.
@@ -238,15 +277,16 @@ export function openQuickSwitcher(): void {
     rememberSearch(input.value);
     try {
       const doc = await createNote(name);
-      if (doc) open(doc);
+      if (doc && alive) open(doc);
     } catch (e) {
       notify(errorText(e), "guasto");
     }
   };
 
   const search = async () => {
+    if (!alive) return;
     const text = input.value.trim();
-    await race.last(async (expected) => {
+    const result = await race.last(async (expected) => {
       // A mani vuote le note aperte di recente e le ricerche fatte di recente:
       // dove stanno scritte, e a quali condizioni, sta in `state/recenti.ts`.
       // Le note passano dal vault perché una rinominata non si può proporre;
@@ -254,7 +294,7 @@ export function openQuickSwitcher(): void {
       //
       // L'errore diventa un valore prima del cancello: sotto non c'è nessun
       // `catch`, quindi non c'è dove perdere il segnale di scadenza.
-      const result = await expected(
+      return expected(
         (text
           ? notesByName(text).then((d) => d.map((doc): Entry => ({ k: "doc", doc })))
           : existingRecentNotes().then((d) => [
@@ -265,32 +305,33 @@ export function openQuickSwitcher(): void {
           .then((found) => ({ found }))
           .catch((e: unknown) => ({ error: errorText(e) })),
       );
-      if ("error" in result) {
-        visibleItems = [];
-        render();
-        // Il motivo in chiaro, come nella ricerca: «non disponibile» dice che
-        // non si può cercare, non perché.
-        const empty = list.querySelector(".palette-empty");
-        if (empty) {
-          empty.textContent = t("search.unavailable");
-          setTooltip(empty as HTMLElement, result.error);
-        }
-        return;
-      }
-      const found = result.found;
-      visibleItems = found;
-      // Il gesto che chiude il giro: non l'ho trovata, creala. Compare **solo**
-      // a risultati vuoti — con dei risultati sotto gli occhi, «crea» è la voce
-      // che si preme per sbaglio — e solo se dal testo esce un nome di nota
-      // (`nomeDaCercato` risponde `null` a chi ha scritto solo spazi o solo
-      // caratteri che in un nome non ci possono stare).
-      if (text && found.length === 0) {
-        const name = searchedName(text);
-        if (name) visibleItems = [{ k: "crea", name }];
-      }
-      selected = 0;
-      render();
     });
+    if (!alive || !result) return;
+    if ("error" in result) {
+      visibleItems = [];
+      render();
+      // Il motivo in chiaro, come nella ricerca: «non disponibile» dice che
+      // non si può cercare, non perché.
+      const empty = list.querySelector(".palette-empty");
+      if (empty) {
+        empty.textContent = t("search.unavailable");
+        setTooltip(empty as HTMLElement, result.error);
+      }
+      return;
+    }
+    const found = result.found;
+    visibleItems = found;
+    // Il gesto che chiude il giro: non l'ho trovata, creala. Compare **solo**
+    // a risultati vuoti — con dei risultati sotto gli occhi, «crea» è la voce
+    // che si preme per sbaglio — e solo se dal testo esce un nome di nota
+    // (`nomeDaCercato` risponde `null` a chi ha scritto solo spazi o solo
+    // caratteri che in un nome non ci possono stare).
+    if (text && found.length === 0) {
+      const name = searchedName(text);
+      if (name) visibleItems = [{ k: "crea", name }];
+    }
+    selected = 0;
+    render();
   };
 
   input.addEventListener("input", () => {
@@ -308,8 +349,9 @@ export function openQuickSwitcher(): void {
       const step = e.key === "ArrowDown" ? 1 : -1;
       selected = (selected + step + visibleItems.length) % visibleItems.length;
       render();
-      list.children[selected]?.scrollIntoView({ block: "nearest" });
+      list.children[selected]?.scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "Enter") {
+      e.preventDefault();
       const entry = visibleItems[selected];
       if (entry) active(entry);
     }
@@ -317,6 +359,7 @@ export function openQuickSwitcher(): void {
 
   // Le recenti si mostrano subito: il modale si apre già con qualcosa sotto le
   // dita, che è metà del motivo per cui questa superficie si usa tanto.
+  render();
   void search();
   input.focus();
 }

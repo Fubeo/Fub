@@ -3,6 +3,8 @@ import { MAIN_PANE } from "./contract";
 import type {
   BacklinkRef,
   BundleInfo,
+  ThemeInfo,
+  ThemePayload,
   InstalledPluginInfo,
   CommandEffect,
   CommandOutcome,
@@ -794,6 +796,14 @@ const APP_RECORD_KEYS: Record<string, string[]> = {
     kind: true,
     trust: true,
     permissions: true,
+  }),
+  ThemeInfo: keysOf<ThemeInfo>({ manifest: true }),
+  ThemePayload: keysOf<ThemePayload>({
+    manifest: true,
+    light: true,
+    sheet: true,
+    skin: true,
+    assets: true,
   }),
   InstalledPluginInfo: keysOf<InstalledPluginInfo>({
     id: true,

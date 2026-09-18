@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { findTextEditorOrThrow } from "../text/test-support";
 import { parseWorkbook } from "./model";
 import { commitGridPatches, inputPatch } from "./operation";
+import type { GridWindow } from "../../host/contract";
 import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
 
 function workbook(rows = 100, columns = 50): string {
@@ -21,6 +22,7 @@ function workbook(rows = 100, columns = 50): string {
 function mounted(
   evaluator: GridEngineOptions["evaluate"] = async () => ({ cells: [], dependencies: [] }),
   grid?: GridHost,
+  source = workbook(),
 ) {
   const host = document.createElement("div");
   document.body.append(host);
@@ -40,7 +42,7 @@ function mounted(
     clientWidth: { configurable: true, value: 600 },
     clientHeight: { configurable: true, value: 300 },
   });
-  engine.setDoc(workbook());
+  engine.setDoc(source);
   return { engine, host, viewport, changes, evaluate };
 }
 function protocolHost(
@@ -147,6 +149,35 @@ describe("GridEngine", () => {
     expect(engine.renderedCellCount()).toBeLessThan(200);
     engine.destroy();
   });
+  it("annida ogni intestazione e cella alla propria riga semantica", () => {
+    const { engine, viewport } = mounted();
+    const rows = [...viewport.querySelectorAll<HTMLElement>('[role="row"]')];
+    expect(rows.length).toBeGreaterThan(1);
+    expect(rows.every((row) => row.parentElement === viewport)).toBe(true);
+    expect(rows[0]?.getAttribute("aria-rowindex")).toBe("1");
+
+    for (const row of rows) {
+      const rowIndex = row.getAttribute("aria-rowindex");
+      expect(rowIndex).not.toBeNull();
+      for (const child of [...row.children]) {
+        const role = child.getAttribute("role");
+        expect(["columnheader", "rowheader", "gridcell", "presentation"]).toContain(role);
+        if (role === "columnheader") {
+          expect(child.getAttribute("aria-rowindex")).toBe("1");
+          expect(Number(child.getAttribute("aria-colindex"))).toBeGreaterThan(1);
+        } else if (role === "rowheader") {
+          expect(child.getAttribute("aria-rowindex")).toBe(rowIndex);
+          expect(child.getAttribute("aria-colindex")).toBe("1");
+        } else if (role === "gridcell") {
+          expect(child.getAttribute("aria-rowindex")).toBe(rowIndex);
+          expect(Number(child.getAttribute("aria-colindex"))).toBeGreaterThan(1);
+        }
+      }
+    }
+    expect([...viewport.querySelectorAll<HTMLElement>('[role="gridcell"]')]
+      .every((cell) => cell.parentElement?.getAttribute("role") === "row")).toBe(true);
+    engine.destroy();
+  });
 
   it("tiene le battute locali e pubblica una sola operazione al commit", () => {
     const { engine, host, viewport, changes, evaluate } = mounted();
@@ -200,12 +231,16 @@ describe("GridEngine", () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
 
     const windowsBeforeTyping = grid.calls.filter((call) => call === "window").length;
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
     expect(grid.calls.filter((call) => call === "apply")).toHaveLength(0);
     host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
       .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -219,6 +254,123 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
+  it("risolve l'invalidazione sulle coordinate globali senza degradare gli ID sconosciuti", async () => {
+    const sourceValue = JSON.parse(workbook(512, 256)) as {
+      sheets: [{ cells: { row: string; column: string; input: string }[] }];
+    };
+    sourceValue.sheets[0].cells.push({ row: "r300", column: "c200", input: "old" });
+    const source = JSON.stringify(sourceValue);
+    const grid = protocolHost(source);
+    const requests: { row_start: number; column_start: number }[] = [];
+    const open = grid.openGrid;
+    const targetStart = new TextEncoder().encode(source.slice(0, source.indexOf('"old"'))).length;
+    let revision = "rev-1";
+    Object.assign(grid, {
+      openGrid: async (surface: string, text: string, requestedRevision: string) => {
+        const session = await open(surface, text, requestedRevision);
+        return {
+          ...session,
+          revision,
+          sheets: [{ id: "main", name: "Main", row_count: 512, column_count: 256 }],
+        };
+      },
+      gridWindow: async (
+        _surface: string,
+        _instance: string,
+        request: Parameters<GridHost["gridWindow"]>[2],
+      ) => {
+        requests.push({ row_start: request.row_start, column_start: request.column_start });
+        grid.calls.push("window");
+        const rows = Array.from({ length: request.row_count }, (_, offset) => ({
+          id: `r${request.row_start + offset}`,
+          index: request.row_start + offset,
+          height: null,
+          hidden: false,
+        }));
+        const columns = Array.from({ length: request.column_count }, (_, offset) => ({
+          id: `c${request.column_start + offset}`,
+          index: request.column_start + offset,
+          width: null,
+          hidden: false,
+        }));
+        const cells: GridWindow["cells"] = [];
+        if (request.row_start === 0 && request.column_start === 0) {
+          cells.push({
+            key: { sheet: "main", row: "r0", column: "c0" },
+            input: revision === "rev-2" ? "corrupt" : "1",
+            style: { bold: false, italic: false, text_color: null, fill_color: null, horizontal: null, number_format: null },
+            value: { kind: "number" as const, value: 1 },
+          });
+        }
+        if (
+          request.row_start <= 300
+          && 300 < request.row_start + request.row_count
+          && request.column_start <= 200
+          && 200 < request.column_start + request.column_count
+        ) {
+          cells.push({
+            key: { sheet: "main", row: "r300", column: "c200" },
+            input: revision === "rev-2" ? "new" : "old",
+            style: { bold: revision === "rev-2", italic: false, text_color: null, fill_color: null, horizontal: null, number_format: null },
+            value: { kind: "number" as const, value: revision === "rev-2" ? 99 : 1 },
+          });
+        }
+        return {
+          revision,
+          sheet: "main",
+          row_start: request.row_start,
+          column_start: request.column_start,
+          total_rows: 512,
+          total_columns: 256,
+          rows,
+          columns,
+          cells,
+        };
+      },
+      applyGrid: async () => {
+        revision = "rev-2";
+        return {
+          revision,
+          edit: { from: targetStart, to: targetStart + 5, deleted: '"old"', inserted: '"new"' },
+          invalidation: {
+            kind: "cells" as const,
+            cells: [
+              { sheet: "main", row: "r300", column: "c200" },
+              { sheet: "main", row: "missing-row", column: "missing-column" },
+            ],
+          },
+        };
+      },
+    });
+    const { engine, host, viewport } = mounted(undefined, grid, source);
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    viewport.scrollTop = 300 * 28;
+    viewport.scrollLeft = 200 * 120;
+    viewport.dispatchEvent(new Event("scroll"));
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="300"][data-column="200"]')?.textContent).toBe("1");
+
+    const target = host.querySelector<HTMLElement>('.grid-cell[data-row="300"][data-column="200"]')!;
+    target.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+    const requestsBeforeInvalidation = requests.length;
+    const formula = findTextEditorOrThrow(
+      host.querySelector<HTMLElement>(".grid-formula-editor")!,
+    );
+    formula.focus();
+    formula.dispatch({
+      changes: { from: 0, to: formula.state.doc.length, insert: "new" },
+      userEvent: "input",
+    });
+    formula.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+    expect(requests.slice(requestsBeforeInvalidation)).toEqual([{ row_start: 256, column_start: 128 }]);
+    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="300"][data-column="200"]')?.textContent).toBe("99");
+    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="300"][data-column="200"]')?.style.fontWeight).toBe("700");
+    expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.find((cell) => cell.row === "r0" && cell.column === "c0")?.input)
+      .toBe("1");
+    engine.destroy();
+  });
   it("estende la selezione da tastiera e ripristina il fuoco dopo Escape", async () => {
     const { engine, host, viewport } = mounted();
     viewport.focus();
@@ -381,6 +533,9 @@ describe("GridEngine", () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     first.engine.destroy();
     expect(grid.openedInstances).toEqual(["grid-test-1"]);
     expect(grid.closedInstances).toEqual(["grid-test-1"]);
@@ -389,6 +544,9 @@ describe("GridEngine", () => {
     expect(first.host.querySelector(".grid-surface")).toBeNull();
 
     const second = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -410,6 +568,66 @@ describe("GridEngine", () => {
     await Promise.resolve();
     expect(grid.calls.length).toBe(callsAfterDestroy);
   });
+  it("legge solo il viewport anche con assi da centomila righe", async () => {
+    const grid = protocolHost(workbook(1, 1));
+    const open = grid.openGrid;
+    Object.assign(grid, {
+      openGrid: async (surface: string, source: string, revision: string) => {
+        const session = await open(surface, source, revision);
+        return {
+          ...session,
+          sheets: [{ id: "main", name: "Main", row_count: 100_000, column_count: 1_000 }],
+        };
+      },
+      gridWindow: async (_surface: string, _instance: string, request: {
+        revision: string;
+        sheet: string;
+        row_start: number;
+        row_count: number;
+        column_start: number;
+        column_count: number;
+      }) => {
+        grid.calls.push("window");
+        return {
+          revision: request.revision,
+          sheet: request.sheet,
+          row_start: request.row_start,
+          column_start: request.column_start,
+          total_rows: 100_000,
+          total_columns: 1_000,
+          rows: Array.from({ length: request.row_count }, (_, index) => ({
+            id: `r${request.row_start + index}`,
+            index: request.row_start + index,
+            height: null,
+            hidden: false,
+          })),
+          columns: Array.from({ length: request.column_count }, (_, index) => ({
+            id: `c${request.column_start + index}`,
+            index: request.column_start + index,
+            width: null,
+            hidden: false,
+          })),
+          cells: [],
+        };
+      },
+    });
+    const { engine, viewport } = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    const initialWindows = grid.calls.filter((call) => call === "window").length;
+    expect(initialWindows).toBeLessThanOrEqual(4);
+    viewport.scrollTop = 90_000 * 28;
+    viewport.dispatchEvent(new Event("scroll"));
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.calls.filter((call) => call === "window").length).toBeLessThanOrEqual(initialWindows + 4);
+    engine.destroy();
+  });
+
   it("rifiuta famiglia o versione sconosciuta prima di aprire una sessione", async () => {
     const source = workbook();
     const grid = protocolHost(source);
@@ -460,6 +678,10 @@ describe("GridEngine", () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     Object.assign(grid, {
       reloadGrid: async () => {
         throw new Error("provider trap");
@@ -479,12 +701,94 @@ describe("GridEngine", () => {
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
     expect(grid.calls.filter((call) => call === "close")).toHaveLength(1);
     expect(engine.getDoc()).toBe(next);
     expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("fallback");
     expect(host.querySelector<HTMLElement>('.grid-cell[data-row="0"][data-column="0"]')!.textContent)
       .toBe("reloaded");
     engine.destroy();
+  });
+
+  it("ignora un reload stantio senza chiudere la nuova istanza", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    const current = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    let rejectReload: ((reason?: unknown) => void) | undefined;
+    Object.assign(grid, {
+      reloadGrid: async () => new Promise<never>((_resolve, reject) => {
+        rejectReload = reject;
+      }),
+    });
+    const stale = JSON.stringify({
+      version: 1,
+      sheets: [{
+        id: "main",
+        name: "Main",
+        rows: [{ id: "r0" }],
+        columns: [{ id: "c0" }],
+        cells: [{ row: "r0", column: "c0", input: "stale" }],
+      }],
+    });
+    current.engine.syncDoc(stale);
+    await Promise.resolve();
+    const fresh = workbook(2, 2);
+    current.engine.setDoc(fresh);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    rejectReload?.(new Error("stale reload"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.closedInstances).toEqual(["grid-test-1"]);
+    expect(grid.activeInstances).toEqual(new Set(["grid-test-2"]));
+    expect(current.engine.getDoc()).toBe(fresh);
+    expect(current.host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("v1");
+    current.engine.destroy();
+  });
+
+  it("ignora il rifiuto di un apply stantio senza abbattere il provider nuovo", async () => {
+    const source = workbook();
+    const grid = protocolHost(source);
+    const current = mounted(undefined, grid);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    let rejectApply: ((reason?: unknown) => void) | undefined;
+    Object.assign(grid, {
+      applyGrid: async () => new Promise<never>((_resolve, reject) => {
+        rejectApply = reject;
+      }),
+    });
+    current.viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
+    current.host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await Promise.resolve();
+    const fresh = workbook(2, 2);
+    current.engine.setDoc(fresh);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    rejectApply?.(new Error("stale apply"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(grid.closedInstances).toEqual(["grid-test-1"]);
+    expect(grid.activeInstances).toEqual(new Set(["grid-test-2"]));
+    expect(current.engine.getDoc()).toBe(fresh);
+    expect(current.host.querySelector<HTMLElement>(".grid-surface")!.dataset.gridProtocol).toBe("v1");
+    current.engine.destroy();
   });
 
   it("mostra l'input autorevole quando il valutatore Rust non è disponibile", async () => {

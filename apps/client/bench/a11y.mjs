@@ -1,132 +1,28 @@
-// **Il contrasto reso**: `axe-core` su ogni scena, in tutte e due le luci (§31.1).
+// **L'accessibilità resa**: `axe-core` su ogni scena, in tutte e due le luci
+// (§31.1), più i gesti che un browser compie davvero quando si usa la tastiera.
 //
 //     node bench/a11y.mjs
 //
-// # Perché serve, se i token hanno già il loro presidio
-//
-// Perché misurano due cose diverse, e la seconda è quella che si vede.
-//
-// `src/theme/contrast.test.ts` legge i **fogli come testo** e verifica le coppie
-// che il tema promette: `--text` su `--bg`, `--muted` su `--bg-elev`, e così
-// via. È una misura sulle intenzioni, ed è l'unica che possa dire *quale* token
-// è sbagliato. Ma non sa niente di ciò che succede dopo: un'opacità che schiara
-// un testo, un colore ereditato da un antenato che non è la superficie che si
-// credeva, un elemento che ne copre un altro, un `color` scritto a mano in un
-// punto che nessuno ha guardato. Nessuna di queste tre cose si vede leggendo un
-// foglio, e tutte e tre si vedono guardando la pagina.
-//
-// Qui si guarda la pagina: la stessa che il fotografo ritrae, negli stessi
-// gesti, con lo stesso corpus. Le due misure condividono l'aritmetica
-// (`src/theme/contrast.ts` la scrive una volta sola) e non condividono l'occhio:
-// una legge i fogli, l'altra il DOM reso.
-//
-// # Quali regole, e perché dichiarate
-//
-// Solo il contrasto. Non perché il resto non conti, ma perché questa è la voce
-// del contrasto: accendere qui l'intero `axe` vorrebbe dire un elenco di
-// centinaia di rilievi che nessuno ha deciso di riparare, cioè un rosso che si
-// impara a ignorare — e un presidio che si impara a ignorare è peggio di uno che
-// non c'è, perché occupa il posto di quello che servirebbe. L'accessibilità
-// completa è una voce sua, e quando arriverà si aggiungeranno regole a questo
-// elenco invece di riscrivere questo file.
-//
-// # La regola che non trova niente
-//
-// Una regola che non si applica a nessun elemento e una regola che passa su
-// tutti danno lo stesso verde — è la lezione della
-// [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md).
-// Qui si conta quanti elementi `axe` ha davvero esaminato, e una scena che ne
-// esamina **zero** è rossa: vuol dire che non c'è testo, cioè che la pagina non
-// è quella che si credeva.
-//
-// # Gli indecisi
-//
-// `axe` restituisce un terzo esito oltre a «passa» e «non passa»: *incomplete* —
-// non sono riuscito a dirlo. Succede quando lo sfondo di un testo non è un
-// colore ma un'immagine, un gradiente o un canvas, e la misura non si può fare
-// senza guardare i pixel. Non bloccano, perché non affermano niente; ma si
-// stampano tutti, uno per uno, perché **non dire non è dire di sì** e un
-// indeciso che sparisce è un difetto che nessuno ha deciso di tenere.
+// Una scansione strutturale non basta: il nome può esserci ma il fuoco non
+// arrivare mai, un controllo può avere un ruolo valido ma non reagire a Invio,
+// e un `aria-disabled` può continuare ad attivare l'azione. Questo banco usa
+// axe per tutte le regole applicabili e il browser per il percorso osservabile.
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { SCENE, LIGHTS, sceneUrl } from "./scene.mjs";
 import { openStage, openPage, prepareScene, OUTPUT } from "./stage.mjs";
-
-/// **Il debito dichiarato**: le coppie che oggi stanno sotto la soglia.
-///
-/// Oggi è **vuoto**, e la storia di come si è svuotato è il motivo per cui
-/// questa lista resta qui invece di essere cancellata.
-///
-/// È un elenco, non un'esenzione. Un'esenzione si scrive una volta e non si
-/// guarda più; un elenco è un lucchetto che si chiude in tutte e due i versi —
-/// una coppia che scende sotto soglia senza essere scritto qui è rossa, e una
-/// scritto qui che nessuna scena produce più è rossa pure lei, perché è la foto
-/// di un difetto riparato che nessuno ha tolto dal muro. È il secondo verso che
-/// ha fatto il lavoro: le cinque voci non le ha tolte qualcuno passando di qua,
-/// le ha tolte questo banco diventando rosso quando la §31.2 le ha riparate.
-///
-/// La chiave, quando ce n'è una, è la **coppia di colori** e non il selettore: i
-/// selettori sono le classi generate di CodeMirror (`.ͼz`, `.ͼq`), che cambiano
-/// a ogni ricostruzione, mentre la coppia è il difetto vero e non cambia finché
-/// non si tocca il foglio.
-///
-/// # Le cinque che c'erano, e cosa le ha pagate
-///
-/// Erano **tutte e cinque nel chiaro** — non un caso, ed è metà della ragione
-/// per cui questo banco fotografa in due luci: lo scuro è il tema in cui si
-/// lavora, quindi è quello che qualcuno guarda tutti i giorni.
-///
-/// Due erano debito già dichiarato altrove: `--syn-comment` e `--syn-function`
-/// sul fondo del documento, sotto AA perché la tavolozza di sintassi era One
-/// Light presa intera. Le pagava la **25.1**, l'alto contrasto — cioè le pagava
-/// un domani. Le ha pagate invece la §31.2, che ha smesso di prendere una
-/// tavolozza intera: le dieci specie dichiarano tinta e croma, la chiarezza la
-/// trova la ricetta da una mira sola per tutta la famiglia, e la mira sta sopra
-/// AA.
-///
-/// Le altre tre le vedeva **solo** la misura sul reso, ed erano la ragione per
-/// cui questo file esiste accanto a `contrast.test.ts` invece che dentro:
-///
-/// - `--syn-name` sulla **riga attiva** invece che sul fondo (3,21:1). La
-///   tabella dei token misurava ogni specie contro `--doc-bg`, che era l'unico
-///   fondo che sapesse esistere.
-/// - `--doc-heading` su `h3`, `h4`, `h5` (3,51:1). Alla coppia si chiedeva 3:1 e
-///   non 4,5:1 perché «un titolo è testo grande»: vero per un `h1`, falso dal
-///   terzo livello in giù.
-/// - `--doc-link` sopra `--doc-fill` (3,9:1). `--doc-fill` è un **velo**
-///   (`rgb(135 135 135 / 16%)`), e la formula dei token si rifiuta di misurare
-///   ciò che ha un alpha — giustamente: senza sapere cosa c'è sotto, il numero
-///   sarebbe inventato.
-///
-/// Nessuna delle tre è stata riparata guardando questo referto. Le ha riparate
-/// la ricetta, perché la §31.2 ha reso «**sopra cosa sta**» una cosa che si
-/// dichiara: `sopra: CARTA` sono tutti e tre i fondi del documento e non solo la
-/// pagina, la mira di `--doc-heading` è quella del testo e non quella dei segni,
-/// e `sopra: [...CARTA, "doc-bg+doc-fill"]` è il velo **composto** sul fondo
-/// prima di misurarlo. Il velo non è più invisibile al presidio dei token
-/// perché adesso c'è un posto in cui dire su cosa poggia.
-///
-/// Il che è anche il limite di quel presidio detto per bene: non vedeva quelle
-/// tre coppie perché nessuno gliele aveva nominate. Questo banco le ha viste
-/// senza che nessuno gliele nominasse — ed è la sola ragione per cui esiste.
+/// Debito storico dichiarato. Non è un'esenzione dalle altre regole:
+/// ogni violazione fuori dal debito resta bloccante e viene riportata.
 const DEBT = [];
 
-/// Le regole di `axe` che questo presidio accende. Sono i due gradini di WCAG
-/// per il contrasto del testo: 4,5:1 sul testo normale e 3:1 su quello grande,
-/// che è la stessa promessa di `contrast.test.ts` — misurata dall'altro lato.
-const RULES = ["color-contrast"];
-
-const REPORT = join(OUTPUT, "contrasto");
+const REPORT = join(OUTPUT, "accessibilita");
 
 const require = createRequire(import.meta.url);
 
-/// Cosa è successo a una scena. Come per il fotografo, sono nomi e non booleani:
-/// «non ha trovato testo» e «il testo ha contrasto» sono due cose diverse, e
-/// distinguerle è metà del lavoro di questo file.
 const OUTCOMES = {
   clean: "pulita",
-  lowContrast: "contrasto basso",
+  violations: "violazioni",
   opaque: "muta",
   unstable: "instabile",
 };
@@ -152,7 +48,7 @@ async function main() {
   }
 
   await writeFile(
-    join(REPORT, "contrasto.json"),
+    join(REPORT, "accessibilita.json"),
     `${JSON.stringify(
       report.map((r) => ({ ...r, scene: r.scene.id })),
       null,
@@ -174,19 +70,16 @@ async function aScene(page, scene, light, base, axeSource) {
     return row;
   }
 
-  // `axe` si inietta a scena preparata: prima non ci sarebbe niente da leggere,
-  // e dopo lo scatto la pagina è già passata alla prossima.
+  // `axe` si inietta a scena preparata: ogni passata usa il documento corrente.
   await page.addScriptTag({ content: axeSource });
   const outcome = await page.evaluate(
-    async (rules) =>
+    async () =>
       // eslint-disable-next-line no-undef
       await window.axe.run(document, {
-        runOnly: { type: "rule", values: rules },
-        // Gli iframe sono `web_view` del catalogo e portano `about:blank`: non
-        // c'è niente dentro, e chiederlo vorrebbe dire un timeout per scena.
+        // Gli iframe sono web_view del catalogo e portano `about:blank`: il
+        // documento figlio non appartiene alla superficie che si sta provando.
         iframes: false,
       }),
-    RULES,
   );
 
   const count = (group) => group.reduce((n, r) => n + r.nodes.length, 0);
@@ -212,7 +105,7 @@ async function aScene(page, scene, light, base, axeSource) {
     }
   }
 
-  if (row.failures.length > 0) row.outcome = OUTCOMES.lowContrast;
+  if (row.failures.length > 0) row.outcome = OUTCOMES.violations;
   else if (row.examined === 0) row.outcome = OUTCOMES.opaque;
   else row.outcome = OUTCOMES.clean;
 
@@ -220,9 +113,7 @@ async function aScene(page, scene, light, base, axeSource) {
   return row;
 }
 
-/// Un rilievo, ridotto a ciò che serve per ripararlo: dove, quanto, e fra quali
-/// due colori. Il resto di ciò che `axe` restituisce è la spiegazione della
-/// regola, che è sempre la stessa e sta nel suo sito.
+/// Un rilievo axe, ridotto a regola e indicazioni che permettono di ripararlo.
 function describe(rule, node) {
   const data = node.any.find((c) => c.data)?.data ?? {};
   return {
@@ -243,12 +134,13 @@ function print(row) {
     console.error(`✗ ${name}: nessun elemento esaminato — la pagina non ha text?`);
     return;
   }
-  if (row.outcome === OUTCOMES.lowContrast) {
-    console.error(`✗ ${name}: ${row.failures.length} sotto la soglia`);
-    for (const g of row.failures) {
-      const measurement = g.measured ? `${g.measured}:1 invece di ${g.expected}:1` : g.reason;
-      console.error(`    ${g.where} — ${measurement}`);
-      console.error(`      ${g.front ?? "?"} su ${g.behind ?? "?"} — ${g.text}`);
+  if (row.outcome === OUTCOMES.violations) {
+    console.error(`✗ ${name}: ${row.failures.length} violazioni`);
+    for (const issue of row.failures) {
+      console.error(`    [${issue.rule ?? "browser"}] ${issue.where} — ${issue.reason ?? issue.help ?? "senza dettaglio"}`);
+      if (issue.helpUrl) console.error(`      ${issue.helpUrl}`);
+      if (issue.measured) console.error(`      ${issue.measured}:1 invece di ${issue.expected}:1`);
+      if (issue.text) console.error(`      ${issue.text}`);
     }
     return;
   }
@@ -261,10 +153,9 @@ function summary(report) {
   const incompletes = report.flatMap((r) => r.incompletes.map((i) => ({ ...i, row: r })));
 
   if (incompletes.length > 0) {
-    console.log(`\n${incompletes.length} indecisi: axe non è riuscito a misurare lo sfondo.`);
+    console.log(`\n${incompletes.length} indecisi: axe non è riuscito a determinare una regola.`);
     for (const i of incompletes) {
-      console.log(`    ${i.row.scene.id} (${i.row.light}) ${i.where} — ${i.reason ?? "senza motivo"}`);
-      console.log(`      ${i.text}`);
+      console.log(`    ${i.row.scene.id} (${i.row.light}) [${i.rule}] ${i.where} — ${i.reason ?? "senza motivo"}`);
     }
   }
 
@@ -289,24 +180,17 @@ function summary(report) {
   }
 
   const red =
-    count(OUTCOMES.lowContrast) + count(OUTCOMES.opaque) + count(OUTCOMES.unstable) + fixed.length;
+    count(OUTCOMES.violations) + count(OUTCOMES.opaque) + count(OUTCOMES.unstable) + fixed.length;
   const examined = report.reduce((n, r) => n + r.examined, 0);
   const redScenes =
-    count(OUTCOMES.lowContrast) + count(OUTCOMES.opaque) + count(OUTCOMES.unstable);
+    count(OUTCOMES.violations) + count(OUTCOMES.opaque) + count(OUTCOMES.unstable);
   console.log(
     `\n${report.length - redScenes}/${report.length} scene pulite,` +
-      ` ${examined} elementi misurati`,
+      ` ${examined} elementi esaminati`,
   );
-  console.log(`Il referto: ${join(REPORT, "contrasto.json")}`);
+  console.log(`Il referto: ${join(REPORT, "accessibilita.json")}`);
 
   if (red === 0) return 0;
-  if (fixed.length > 0) return 1;
-  if (count(OUTCOMES.lowContrast) > 0) {
-    console.error(
-      "\nUn testo sotto la soglia si ripara nel tema, non qui: la misura è sulla pagina" +
-        " vera, quindi il numero che si legge è quello che vede chi guarda.",
-    );
-  }
   return 1;
 }
 

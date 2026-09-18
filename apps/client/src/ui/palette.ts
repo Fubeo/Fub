@@ -26,7 +26,7 @@ import type {
 } from "../host/contract";
 import { pageName } from "../rules/organizer";
 import { errorText } from "../host/errors";
-import { trapFocus } from "./a11y";
+import { stableIdentifier, trapFocus } from "./a11y";
 import type { Tone } from "./notify";
 import { type Key, t } from "../i18n/strings";
 import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
@@ -261,11 +261,14 @@ export function planLines(plan: CommandPlan): string[] {
 // --- la palette vera e propria ---------------------------------------------
 
 const OVERLAY_ID = "command-palette";
+const LIST_ID = `${OVERLAY_ID}-list`;
+const OPTION_ID_PREFIX = `${OVERLAY_ID}-option`;
 
 /// Come si scioglie la trappola del fuoco della palette aperta.
 let releasePalette: (() => void) | null = null;
-
+let paletteGeneration = 0;
 export function closeCommandPalette() {
+  paletteGeneration += 1;
   const overlay = document.getElementById(OVERLAY_ID);
   releasePalette?.();
   releasePalette = null;
@@ -279,13 +282,16 @@ export function closeCommandPalette() {
 /// ha comandi che nessuno ha ancora chiesto. Con loro si rileggono gli accordi
 /// riconfigurati, perché sono la stessa domanda fatta all'altro canale.
 export async function openCommandPalette(host: PaletteHost) {
+  const generation = ++paletteGeneration;
   try {
     state.commandSpecs = await api.listCommands();
     await loadKeyOverrides();
   } catch (e) {
+    if (generation !== paletteGeneration) return;
     host.notify(t("palette.unavailable", { reason: errorText(e) }));
     return;
   }
+  if (generation !== paletteGeneration) return;
   chooseSpecs(allCommands(), openOverlay(), host);
 }
 
@@ -342,12 +348,22 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
   const input = document.createElement("input");
   input.className = "palette-input";
   input.placeholder = t("palette.placeholder");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-label", t("palette.title"));
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "true");
+  input.setAttribute("aria-haspopup", "listbox");
   const list = document.createElement("ul");
+  list.id = LIST_ID;
   list.className = "plain-list palette-list";
   // Una lista in cui una riga è «quella scelta» e le frecce la spostano è una
   // **listbox**, e finché non lo diceva la scelta esisteva solo come colore di
   // sfondo: chi non lo vede premeva Invio senza sapere su cosa.
   list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", t("palette.title"));
+  // La selezione resta sull'input; il popup non è una fermata del tab.
+  list.tabIndex = -1;
+  input.setAttribute("aria-controls", list.id);
   box.append(input, list);
 
   let visibleItems = specs;
@@ -356,9 +372,10 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
   const render = () => {
     visibleItems = filterCommands(specs, input.value);
     selected = Math.min(selected, Math.max(visibleItems.length - 1, 0));
-    list.innerHTML = "";
+    list.replaceChildren();
     for (const [i, spec] of visibleItems.entries()) {
       const li = document.createElement("li");
+      li.id = stableIdentifier(OPTION_ID_PREFIX, spec.id);
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", String(i === selected));
 
@@ -395,9 +412,19 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
     }
     if (visibleItems.length === 0) {
       const empty = document.createElement("li");
+      empty.id = `${OPTION_ID_PREFIX}-empty`;
       empty.className = "palette-empty";
+      empty.setAttribute("role", "option");
+      empty.setAttribute("aria-disabled", "true");
+      empty.setAttribute("aria-selected", "false");
       empty.textContent = t("palette.empty");
       list.appendChild(empty);
+      input.removeAttribute("aria-activedescendant");
+    } else {
+      input.setAttribute(
+        "aria-activedescendant",
+        stableIdentifier(OPTION_ID_PREFIX, visibleItems[selected]!.id),
+      );
     }
   };
 
@@ -408,11 +435,13 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
+      if (visibleItems.length === 0) return;
       const step = e.key === "ArrowDown" ? 1 : -1;
-      selected = (selected + step + visibleItems.length) % Math.max(visibleItems.length, 1);
+      selected = (selected + step + visibleItems.length) % visibleItems.length;
       render();
-      list.children[selected]?.scrollIntoView({ block: "nearest" });
+      list.children[selected]?.scrollIntoView?.({ block: "nearest" });
     } else if (e.key === "Enter") {
+      e.preventDefault();
       const spec = visibleItems[selected];
       if (spec) start(spec, box, host);
     } else if (e.key === "Escape") {

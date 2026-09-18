@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use camino::{Utf8Path, Utf8PathBuf};
+use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_abi::PluginError;
 use fub_host::{Custody, Host, VaultWatcher, WatcherFactory};
 use fub_kernel::Workspace;
@@ -712,6 +713,16 @@ fn a_panicking_watcher_status_falls_back_to_false_and_cleanup_still_runs() {
     assert!(!reported, "a panicking status must conservatively be false");
     call.join()
         .expect("VaultWatcher::is_watching did not unwind through the host");
+    assert!(
+        matches!(
+            workspace
+                .read()
+                .expect("open workspace remains readable")
+                .query_index(IndexQuery::VaultStatus),
+            Ok(IndexResult::VaultStatus(status)) if !status.watching
+        ),
+        "a panicking status must lower the shared VaultStatus flag"
+    );
 
     assert!(close_with_timeout(host).is_empty());
     assert!(

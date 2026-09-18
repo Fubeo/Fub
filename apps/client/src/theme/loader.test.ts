@@ -257,10 +257,10 @@ describe("mountTheme monta il foglio della luce che vale", () => {
   });
   it("localStorage «lime» migra al foglio scuro di serie (non è un terzo tema)", () => {
     // Lime non è più un fascio: chi lo aveva scelto resta sul buio che aveva.
-    // `mountTheme` riscrive la cache a `dark` prima di applicare, e la pelle
-    // di serie si monta una volta sola. È una migrazione, non un terzo tema:
-    // il foglio montato è il gemello scuro della serie, e il segnale sulla
-    // radice dice `dark`.
+    // `mountTheme` riscrive la cache nel formato che conserva identità e luce
+    // prima di applicare, e la pelle di serie si monta una volta sola. È una
+    // migrazione, non un terzo tema: il foglio montato è il gemello scuro della
+    // serie, e il segnale sulla radice dice `dark`.
     localStorage.setItem("fub.appearance.theme", "lime");
     mountTheme(openLifetime(), () => {});
 
@@ -271,6 +271,9 @@ describe("mountTheme monta il foglio della luce che vale", () => {
     );
     expect(mountedStyle("pelle")?.textContent, "la pelle è quella di serie").toBe(skin);
     expect(document.documentElement.dataset.theme, "lime è scura: data-theme=dark").toBe("dark");
-    expect(localStorage.getItem("fub.appearance.theme"), "la cache è riscritta a dark").toBe("dark");
+    expect(JSON.parse(localStorage.getItem("fub.appearance.theme") ?? "null")).toEqual({
+      id: "fub.serie",
+      light: "dark",
+    });
   });
 });

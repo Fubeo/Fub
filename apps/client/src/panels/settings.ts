@@ -35,6 +35,7 @@ import type {
   PluginError,
   SettingEntry,
   SettingValue,
+  ThemeInfo,
   KnownVault,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -46,9 +47,17 @@ import { allCommands, keybindingKey } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import { CONTRAST_KEY, THEME_KEY } from "../theme/theme";
+import {
+  CONTRAST_KEY,
+  SERIES_THEME_ID,
+  THEME_KEY,
+  currentThemeId,
+  selectTheme,
+  themeCatalog,
+} from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
+import { openLifetime, type Lifetime, type Teardown } from "../ui/lifetime";
 
 /// Le righe risolte per chiave: è ciò con cui una scheda ritrova il valore di
 /// una chiave che ha composto invece di leggerla da un elenco.
@@ -140,30 +149,142 @@ type SettingsTab = "settings" | "components" | "shortcuts" | "vault";
 
 let tab: SettingsTab = "settings";
 
-export function mountSettings(nextHooks: Hooks): void {
+const settingsTabsId = "settings-body";
+
+function tabButtons(): HTMLButtonElement[] {
+  return [...tabsEl.querySelectorAll<HTMLButtonElement>("button[data-tab]")];
+}
+
+
+function moveTab(current: number, key: string, count: number): number | null {
+  if (count < 1) return null;
+  if (key === "ArrowLeft") return (current - 1 + count) % count;
+  if (key === "ArrowRight") return (current + 1) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
+}
+
+/// Un radiogroup è una sola fermata nel Tab: la selezione corrente resta
+/// tabbabile, mentre le frecce spostano sia il fuoco sia il valore. La
+/// sincronizzazione è ottimistica (prima della scrittura asincrona), e il
+/// successivo render rilegge il valore autorevole dal kernel.
+function installRadioGroup(
+  group: HTMLElement,
+  select: (button: HTMLButtonElement) => void,
+): void {
+  const buttons = [...group.querySelectorAll<HTMLButtonElement>('button[role="radio"]')];
+  if (buttons.length === 0) return;
+
+  const checked = buttons.find((button) => button.getAttribute("aria-checked") === "true");
+  const tabbable = checked ?? buttons[0];
+  for (const button of buttons) button.tabIndex = button === tabbable ? 0 : -1;
+
+  const activate = (button: HTMLButtonElement): void => {
+    for (const candidate of buttons) {
+      const selected = candidate === button;
+      candidate.setAttribute("aria-checked", String(selected));
+      candidate.tabIndex = selected ? 0 : -1;
+    }
+    button.focus();
+    select(button);
+  };
+
+  for (const button of buttons) {
+    button.addEventListener("click", () => activate(button));
+    button.addEventListener("keydown", (event) => {
+      const index = buttons.indexOf(button);
+      let next: number | null = null;
+      if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+        next = (index - 1 + buttons.length) % buttons.length;
+      } else if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+        next = (index + 1) % buttons.length;
+      } else if (event.key === "Home") {
+        next = 0;
+      } else if (event.key === "End") {
+        next = buttons.length - 1;
+      }
+      if (next === null) return;
+      event.preventDefault();
+      activate(buttons[next]);
+    });
+  }
+}
+
+function selectTab(next: SettingsTab, focus: boolean): void {
+  tab = next;
+  componentsGeneration++;
+  const owner = settingsLifetime;
+  void render().then(() => {
+    if (!focus || owner?.closed || owner !== settingsLifetime) return;
+    tabButtons().find((button) => button.dataset.tab === next)?.focus();
+  });
+}
+
+export function mountSettings(nextHooks: Hooks, parent?: Lifetime): Teardown {
+  mountedTeardown?.();
+  const lifetime = openLifetime();
+  const teardown = () => lifetime.close();
+  mountedTeardown = teardown;
+  if (parent?.closed) {
+    lifetime.close();
+    return teardown;
+  }
+  parent?.add(teardown);
+  settingsLifetime = lifetime;
+
+  tab = "settings";
   settingsHooks = nextHooks;
   panelEl = $("#settings-panel");
   bodyEl = $("#settings-body");
   tabsEl = $("#settings-tabs");
-  $("#open-settings").addEventListener("click", () => void open());
-  $("#settings-close").addEventListener("click", () => close());
-  for (const button of tabsEl.querySelectorAll<HTMLButtonElement>("button[data-tab]")) {
-    button.addEventListener("click", () => {
-      tab = button.dataset.tab as SettingsTab;
-      componentsGeneration++;
-      void render();
+  tabsEl.setAttribute("role", "tablist");
+  bodyEl.setAttribute("role", "tabpanel");
+  bodyEl.id = settingsTabsId;
+  lifetime.listen($("#open-settings"), "click", () => void open());
+  lifetime.listen($("#settings-close"), "click", () => close());
+  for (const button of tabButtons()) {
+    const value = button.dataset.tab as SettingsTab;
+    button.setAttribute("role", "tab");
+    button.id = `settings-tab-${value}`;
+    button.setAttribute("aria-controls", settingsTabsId);
+    button.tabIndex = value === tab ? 0 : -1;
+    button.setAttribute("aria-selected", String(value === tab));
+    lifetime.listen(button, "click", () => selectTab(value, true));
+    lifetime.listen(button, "keydown", (event) => {
+      const buttons = tabButtons();
+      const index = buttons.indexOf(button);
+      const next = moveTab(index, event.key, buttons.length);
+      if (next === null) return;
+      event.preventDefault();
+      const nextTab = buttons[next]?.dataset.tab as SettingsTab | undefined;
+      if (nextTab) selectTab(nextTab, true);
     });
   }
+  const selectedTab = tabButtons().find((button) => button.dataset.tab === tab);
+  if (selectedTab) bodyEl.setAttribute("aria-labelledby", selectedTab.id);
   // Un'impostazione può cambiare **da fuori di qui**: un comando
   // (`settings.set`), un plugin, un'altra finestra. L'evento non porta il valore
   // nuovo apposta — si rilegge, che è l'unica cosa che non può invecchiare.
-  onEvent("setting_changed", () => {
-    if (!panelEl.hidden) void render();
+  const stopSetting = onEvent("setting_changed", () => {
+    if (!lifetime.closed && !panelEl.hidden) void render();
   });
+  if (typeof stopSetting === "function") lifetime.add(stopSetting);
   // Chiudere il vault mentre il pannello è aperto lascerebbe un form che parla
   // di un vault che non c'è: le impostazioni sono per-vault.
-  onEvent("vault_closed", () => close());
+  const stopVault = onEvent("vault_closed", () => close());
+  if (typeof stopVault === "function") lifetime.add(stopVault);
+  lifetime.add(() => {
+    race.cancel();
+    release?.();
+    release = null;
+  });
+  return teardown;
 }
+
+let mountedTeardown: Teardown | null = null;
+let settingsLifetime: Lifetime | null = null;
+
 
 /// Come si scioglie la trappola del fuoco, quando il pannello è aperto.
 ///
@@ -173,7 +294,7 @@ export function mountSettings(nextHooks: Hooks): void {
 let release: (() => void) | null = null;
 
 async function open(): Promise<void> {
-  if (release) return;
+  if (settingsLifetime?.closed || release) return;
   panelEl.hidden = false;
   enterSurface(panelEl);
   // Il fuoco entra e resta: mentre le impostazioni sono aperte, sono quello che
@@ -208,14 +329,24 @@ function close(): void {
 const race = new Race();
 
 async function render(): Promise<void> {
-  for (const button of tabsEl.querySelectorAll<HTMLButtonElement>("button[data-tab]")) {
+  const owner = settingsLifetime;
+  if (!owner || owner.closed || owner !== settingsLifetime) return;
+  const buttons = tabButtons();
+  for (const button of buttons) {
     const selected = button.dataset.tab === tab;
+    button.setAttribute("role", "tab");
+    button.id = `settings-tab-${button.dataset.tab ?? ""}`;
+    button.setAttribute("aria-controls", settingsTabsId);
+    button.tabIndex = selected ? 0 : -1;
     // La classe la vedeva chi guarda, `aria-selected` chi ascolta: erano la
     // stessa informazione detta a metà delle persone, e scritto due volte.
     // Adesso è scritto una volta sola, e la pelle legge quella.
     button.setAttribute("aria-selected", String(selected));
   }
-  await race.last(async (expected) => {
+  const selected = buttons.find((button) => button.dataset.tab === tab);
+  if (selected) bodyEl.setAttribute("aria-labelledby", selected.id);
+  else bodyEl.removeAttribute("aria-labelledby");
+  const nodes = await race.last(async (expected) => {
     // Il `catch` sta **sulla promessa e non attorno all'attesa**, ed è la
     // differenza che questa migrazione ha reso visibile: un `try` attorno
     // all'`atteso` ingoierebbe il segnale di scadenza insieme all'errore di
@@ -224,13 +355,14 @@ async function render(): Promise<void> {
     //
     // Un pannello che non riesce a leggere lo dice: il §20.2 avrà il canale
     // vero, e finché non c'è questo è il posto più visibile che ha.
-    const nodes = await expected(
+    return expected(
       tabContent().catch((e: unknown) => [
         row("muted", t("settings.read_failed", { reason: errorText(e) })),
       ]),
     );
-    bodyEl.replaceChildren(...nodes);
   });
+  if (!nodes || owner.closed || owner !== settingsLifetime) return;
+  bodyEl.replaceChildren(...nodes);
 }
 
 function tabContent(): Promise<HTMLElement[]> {
@@ -283,7 +415,63 @@ async function renderForm(): Promise<HTMLElement[]> {
     nodes.push(title);
     for (const entry of group.rows) nodes.push(renderRow(entry));
   }
+  const themes = await themeCatalog().catch(() => []);
+  if (themes.length > 0 && entries.some((entry) => entry.spec.key === THEME_KEY)) {
+    nodes.push(renderThemeCatalog(themes));
+  }
   return nodes;
+}
+
+function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
+  const panel = document.createElement("div");
+  panel.className = "setting-row setting-row--theme";
+  const text = document.createElement("div");
+  text.className = "setting-text";
+  const title = document.createElement("div");
+  title.setAttribute("role", "heading");
+  title.setAttribute("aria-level", "3");
+  title.textContent = t("settings.themes.title");
+  text.append(title);
+  const control = document.createElement("div");
+  control.className = "segmented segmented--wide theme-switch";
+  control.setAttribute("role", "radiogroup");
+  control.setAttribute("aria-label", t("settings.themes.title"));
+  for (const theme of themes) {
+    for (const light of theme.manifest.lights) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "segmented-option";
+      button.textContent = t("settings.themes.option", {
+        name: theme.manifest.name,
+        light: t(
+          light === "dark" ? "settings.themes.light.dark" : "settings.themes.light.light",
+        ),
+      });
+      button.dataset.themeId = theme.manifest.id;
+      button.dataset.themeLight = light;
+      button.setAttribute("role", "radio");
+      const selected =
+        currentThemeId() === theme.manifest.id &&
+        document.documentElement.dataset.theme === light;
+      button.setAttribute("aria-checked", String(selected));
+      control.append(button);
+    }
+  }
+  installRadioGroup(control, (button) => {
+    void write(() =>
+      selectTheme(button.dataset.themeId!, button.dataset.themeLight as "light" | "dark"),
+    );
+  });
+  text.append(
+    row(
+      "setting-source",
+      t("settings.themes.source", {
+        ids: themes.map((theme) => theme.manifest.id).join(", "),
+      }),
+    ),
+  );
+  panel.append(text, control);
+  return panel;
 }
 
 /// Una riga di impostazione.
@@ -596,11 +784,17 @@ function appearanceToggle(
     // La scrittura è la stessa della `<select>`: `api.setSetting` con il
     // valore dell'opzione, e `write` che ridisegna. Il reset «azzera»
     // continua a funzionare perché è fuori dal campo, sulla riga.
-    btn.addEventListener("click", () => {
-      void write(() => api.setSetting(entry.spec.key, value));
-    });
+    btn.dataset.choice = value;
     group.append(btn);
   }
+  installRadioGroup(group, (button) => {
+    const selectedValue = button.dataset.choice ?? "";
+    void write(() =>
+      entry.spec.key === THEME_KEY
+        ? selectTheme(SERIES_THEME_ID, selectedValue as "" | "light" | "dark")
+        : api.setSetting(entry.spec.key, selectedValue),
+    );
+  });
   return group;
 }
 
@@ -755,7 +949,9 @@ async function renderComponents(): Promise<HTMLElement[]> {
   const installedRuntimeIds = new Set(
     installed.filter((plugin) => plugin.runtime_known).map((plugin) => plugin.id),
   );
-  const native = bundles.filter((bundle) => !installedRuntimeIds.has(bundle.id));
+  const native = bundles.filter(
+    (bundle) => bundle.kind === "component" && !installedRuntimeIds.has(bundle.id),
+  );
   const nodes: HTMLElement[] = [
     installAction(),
     row("muted", t("settings.components_hint")),
