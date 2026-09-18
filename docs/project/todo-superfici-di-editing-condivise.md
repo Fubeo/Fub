@@ -1,15 +1,15 @@
 # TODO — modularità delle superfici di editing
 
-> **Stato:** in esecuzione — fasi 0–4 concluse su main, fasi 5–9 concluse
-> nello stack candidato, fase 10 aperta.
+> **Stato:** capacità delle fasi 0–10 consegnate in `main`; verifica formale
+> della Definition of Done e chiusura di #11 in corso.
 > **Tracker:** [issue #11](https://github.com/Fubeo/Fub/issues/11).
-> **Aggiornato:** 15 settembre 2026.
+> **Aggiornato:** 18 settembre 2026, `main@7c263d…`.
 > **Origine:** recupero e revisione del piano storico sulle superfici
 > condivise, conservato nella cronologia Git al commit
 > `5d8af02050700c738e73461a7a0a98059d91dfc2`.
-> **Regola di uscita:** quando il lavoro è concluso, le invarianti stabili
-> confluiscono nelle pagine di architettura e in un eventuale ADR; questo TODO
-> viene eliminato.
+> **Regola di uscita:** dopo il commento di chiusura di #11, le invarianti
+> stabili confluiscono nelle pagine di architettura e in un eventuale ADR;
+> questo TODO viene eliminato.
 
 ## Obiettivo
 
@@ -112,7 +112,12 @@ CodeMirror è un servizio della shell, non un plugin dal quale dipendono altri
 plugin. Questa scelta evita dipendenze plugin→plugin, copie incompatibili,
 accesso arbitrario alla webview e chiamate IPC o WASM per ogni battuta.
 
-## Invarianti
+## Invarianti da trasferire alla chiusura di #11
+
+Le caselle di questa sezione misurano la **riconciliazione formale e il
+trasferimento documentale** delle invarianti, non la presenza della fase 10 in
+`main`. Alla chiusura di #11 vanno verificate contro i test correnti,
+trasferite nelle pagine permanenti e poi questo TODO va eliminato.
 
 ### Documento
 
@@ -500,25 +505,32 @@ limiti, fallback e nessuna chiamata per battuta.
 
 ### Fase 10 — ABI, WIT e WASM
 
-Soltanto dopo la misura:
+Verifica su `main@7c263d…`:
 
-- [ ] aggiungere i tipi minimi in `fub-abi`;
-- [ ] aggiornare WIT vivo e verificarne l'additività;
-- [ ] aggiornare mirror TypeScript e fake host;
-- [ ] aggiornare `MemoryHost` e `fub-testkit`;
-- [ ] implementare il proxy in `fub-wasm-host`;
-- [ ] integrare inventario, ownership e lifecycle dei bundle;
-- [ ] creare un esempio WASM con griglia piccola;
-- [ ] provare parità nativo↔WASM;
-- [ ] provare fallback su shell priva della griglia;
-- [ ] documentare limiti, versioni e negoziazione.
+- [x] aggiungere i tipi minimi in `fub-abi` — `grid.rs` e le
+  ri-esportazioni pubbliche definiscono Grid v1 e i relativi limiti;
+- [x] aggiornare WIT vivo e verificarne l'additività — `abi.wit`,
+  `wit_conformance` e `wit_additivity` sono in CI;
+- [x] aggiornare mirror TypeScript e fake host — `host/contract.ts`,
+  `host/fake.ts` e i test del mirror coprono i record Grid;
+- [x] aggiornare `MemoryHost` e `fub-testkit` — entrambi espongono harness e
+  provider Grid;
+- [x] implementare il proxy in `fub-wasm-host` — `WasmGridProvider` serve
+  il protocollo tipizzato;
+- [x] integrare inventario, ownership e lifecycle dei bundle — mount,
+  collisioni, close, unmount e teardown sono esercitati dai test host/WASM;
+- [x] creare un esempio WASM con griglia piccola — `esempi/grid-wasm/`;
+- [x] provare parità nativo↔WASM —
+  `native_and_wasm_grid_have_protocol_parity_and_clean_lifecycle`;
+- [x] provare fallback su shell priva della griglia — famiglia/versione
+  incompatibile viene rifiutata prima dell'invocazione e la shell degrada al
+  fallback registrato;
+- [x] documentare limiti, versioni e negoziazione — ADR 0201 e le pagine
+  `reference/abi-and-wit.md` e `reference/ipc-contract.md`.
 
-Sul branch candidato integrato, il protocollo Grid v1 è già esercitato dai
-provider nativo e WASM e dalle porte IPC tipizzate: famiglia/versione e
+Il protocollo Grid v1 è quindi consegnato in `main`: famiglia/versione e
 fallback precedono l'invocazione; coordinate, limiti, invalidazione, diff
-UTF-8, lifecycle e parità sono verificati. Le caselle della fase 10 restano
-intenzionalmente non spuntate: la regola di consegna consente di chiuderle
-soltanto quando il comportamento è entrato in `main`.
+UTF-8, lifecycle e parità sono verificati nei percorsi esercitati.
 
 Una futura famiglia `structured` per DOCX riusa sessioni, registry, lifecycle,
 comandi e salvataggio, ma non forza CodeMirror a diventare un editor visuale
@@ -543,14 +555,20 @@ rich text.
 - end-to-end: Markdown, plain text e foglio, split, cambio tab, unload, riavvio,
   recupero bozza, conflitto, tema, lingua e sola tastiera.
 
-### Guard da aggiungere
+### Guard verificate
 
 - [x] nessun import `@codemirror/*` fuori da `apps/client/src/editors/text/`;
-- [ ] ogni binding usa famiglia, profilo e fallback registrati;
-- [ ] ogni famiglia pubblica ha implementazione shell, fallback, mirror,
-  conformità nativa e conformità WASM.
+- [x] ogni binding usa famiglia, profilo e fallback registrati —
+  `DocumentSurfaceRegistry` e i relativi test coprono precedenza, collisioni,
+  unregister e fallback;
+- [x] ogni famiglia pubblica consegnata ha implementazione shell, fallback,
+  mirror, conformità nativa e conformità WASM — Grid v1 è coperta da
+  `wit_conformance`, test mirror, test di negoziazione shell e
+  `grid_crosses`.
 
-I guard verificano proprietà, non l'ordine estetico dei file.
+Questi presidi sono già parte dei test/guard eseguiti dalla CI; non serve un
+nuovo guard sorgente per poter registrare lo stato corrente. I guard verificano
+proprietà, non l'ordine estetico dei file.
 
 ## Strategia dei commit
 
@@ -598,11 +616,16 @@ ABI, WIT, SDK, proxy WASM, esempio e rimozione degli adapter.
 - [x] Undo testuale e undo del foglio restano separati.
 - [x] Famiglia e profilo sconosciuti hanno un fallback.
 - [x] Disabilitare un owner rimuove registrazioni e istanze.
-- [ ] Un plugin WASM può richiedere una superficie conosciuta senza iniettare JS.
-- [ ] Rust, WIT, TypeScript, SDK, host nativo e WASM sono conformi.
+- [x] Un plugin WASM può richiedere una superficie conosciuta senza iniettare JS.
+- [x] Rust, WIT, TypeScript, SDK, host nativo e WASM sono conformi.
 - [x] `DocumentModel` resta agnostico rispetto a celle e DOCX.
 - [ ] Banchi visuali e di accessibilità coprono testo e griglia.
-- [ ] Tutta la CI pertinente è verde.
+
+  Accessibilità Grid è coperta dai test ARIA/tastiera e la CI esegue
+  `bench:verify`/`bench:a11y`, ma il catalogo delle scene non contiene ancora
+  una scena Grid esplicita. La casella resta aperta finché quella prova visuale
+  non esiste su `main`.
+- [x] Tutta la CI pertinente è verde su `main@7c263d…` nelle run post-merge.
 
 ## Gestione del TODO
 
