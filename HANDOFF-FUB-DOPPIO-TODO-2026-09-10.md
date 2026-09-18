@@ -1,15 +1,15 @@
 # HANDOFF — certificare i documenti G3 e avviare lo slice 1 di #8
 
-Questo è l'handoff operativo corrente al 13 settembre 2026 per `Fubeo/Fub`.
-Conserva il nome storico del file, non autorizza il merge in `main` e non
-anticipa alcun gate successivo a G3.
+> **Archivio storico.** Questo handoff fotografa il 13 settembre 2026 e non è
+> più una fonte operativa. #11 e la fase 10 sono entrati in `main` tramite
+> #53; per lo stato corrente usare la documentazione canonica indicata sotto.
 
 ## Fonti e regole vincolanti
 
 Prima di modificare il repository, leggere:
 
 1. [`PIANO-AZIONE-FUB-AUDIT-2026-09-01.md`](PIANO-AZIONE-FUB-AUDIT-2026-09-01.md), che governa i 56 finding, C-01..C-10 e G0..G15;
-2. [`docs/project/todo-superfici-di-editing-condivise.md`](docs/project/todo-superfici-di-editing-condivise.md), che governa le superfici condivise;
+2. [`docs/architecture/frontend-and-ipc.md`](docs/architecture/frontend-and-ipc.md) e [ADR 0201](docs/decisions/0201-superfici-strutturate-a-finestre.md), che conservano le invarianti stabili delle superfici condivise;
 3. `AGENTS.md`, `CONTRIBUTING.md` e la documentazione canonica dell'area toccata.
 
 Valgono sempre le regole più restrittive dell'audit: nessun callback provider o
