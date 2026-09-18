@@ -130,6 +130,14 @@ route e provi il feed, la query, il flush e la close. `EventHandler` inbound
 resta deferred finché un componente deve reagire a `Notice`; non va confuso
 con `host-events`, già supportato per il percorso outbound verso il guest.
 
+Per le famiglie di superficie pubbliche vale un presidio aggiuntivo:
+`.github/scripts/check-surface-family-coverage.mjs` deriva l'elenco dai
+`*_FAMILY` pubblici di `fub-abi`. Ogni famiglia deve avere nello stesso tree
+un consumatore shell, un fallback esercitato, il mirror TypeScript, un provider
+nativo e una prova WASM; aggiungere una famiglia al contratto senza uno di
+questi cinque lati rende rossa la CI. Grid v1 è il primo elemento della
+matrice.
+
 ## Provider WASM
 
 `fub-wasm-host`:
