@@ -23,7 +23,7 @@ docs/architecture/overview.md
 
 ## forbidden_paths
 
-`GLOBAL-FORBIDDEN` più `docs/project/todo-superfici-di-editing-condivise.md`, issue #11 e `docs/decisions/**`.
+`GLOBAL-FORBIDDEN` più issue #11 e `docs/decisions/**`. Il TODO operativo citato nella versione storica del task è stato ritirato a chiusura del programma.
 
 ## Invarianti
 
