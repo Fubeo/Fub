@@ -38,10 +38,10 @@ ciò che formerà la prima versione.
 
 ### In corso
 
-- completamento di M5: provider WASM aggiuntivi, UI non fidata e percorso
-  installazione-esecuzione end-to-end;
-- estensione delle superfici condivise a griglia e contratto pubblico;
-- modularizzazione e prova di scala della Graph View;
-- definizione del contratto pubblico dei temi.
+- riconciliazione formale dei tracker dopo la consegna M5 e Grid v1 in `main`;
+- verifica di completamento della modularizzazione e prova di scala della
+  Graph View;
+- verifica di completamento del contratto pubblico dei temi;
+- decisione sul residuo sync/endurance rispetto al primo release candidate.
 
 Lo stato operativo è in [`docs/project/status.md`](docs/project/status.md).
