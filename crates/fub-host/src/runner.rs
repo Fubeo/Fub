@@ -43,6 +43,8 @@ use std::any::Any;
 use std::collections::{HashMap, HashSet};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::Barrier;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
@@ -467,12 +469,48 @@ impl Alarms {
     }
 }
 
+#[cfg(test)]
+/// Presidia la finestra fra il controllo di `stopping` e la presa del biglietto.
+///
+/// Il banco della corsa deve poter mettere in scena quell'ordine senza
+/// aspettare che lo scheduler lo scelga. È un gancio solo per i test: in
+/// produzione non esiste né stato né attesa aggiuntiva.
+pub(crate) struct StopRaceProbe {
+    reached: Barrier,
+    stopping: Barrier,
+}
+
+#[cfg(test)]
+impl StopRaceProbe {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            reached: Barrier::new(2),
+            stopping: Barrier::new(2),
+        })
+    }
+
+    fn pause_before_ticket(&self) {
+        self.reached.wait();
+        self.stopping.wait();
+    }
+
+    pub(crate) fn reached(&self) {
+        self.reached.wait();
+    }
+
+    fn stop_requested(&self) {
+        self.stopping.wait();
+    }
+}
+
 /// Ciò che i thread condividono: il vault, i bundle, il campanello, lo stato
 /// dei job e i quadranti delle sveglie.
 struct Shared {
     workspace: Custody<Workspace>,
     bundles: Custody<BundleRegistry>,
     bell: Arc<JobBell>,
+    #[cfg(test)]
+    stop_race_probe: Option<Arc<StopRaceProbe>>,
     stopping: AtomicBool,
     opening: Custody<Option<InProgress>>,
     bus: EventBus,
@@ -1101,6 +1139,11 @@ impl Shared {
                 std::thread::yield_now();
                 continue;
             }
+            #[cfg(test)]
+            if let Some(probe) = &self.stop_race_probe {
+                probe.pause_before_ticket();
+            }
+
             // Il biglietto si prende **prima** di drenare: un job accodato fra
             // il drenaggio e l'attesa cambia il conto, e l'attesa torna subito
             // invece di dormire su lavoro che c'è.
@@ -1289,8 +1332,42 @@ impl JobRunner {
             bundles,
             bell,
             bus,
+            #[cfg(test)]
+            stop_race_probe: None,
+
             stopping: AtomicBool::new(false),
             opening: Custody::new("l'apertura in corso", opening),
+            flags: Custody::empty("le bandiere dei job"),
+            alarms: Custody::empty("le sveglie del vault"),
+            in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
+        });
+        Self::start_workers_with(shared, threads, |builder, worker| builder.spawn(worker))
+    }
+    /// Avvia il pool con il presidio deterministico della corsa di chiusura.
+    ///
+    /// Il gancio vive solo nei test: il percorso di produzione continua a
+    /// costruire esattamente lo stesso `Shared`, senza stato aggiuntivo.
+    #[cfg(test)]
+    pub(crate) fn start_with_stop_probe(
+        workspace: Custody<Workspace>,
+        bundles: Custody<BundleRegistry>,
+        threads: usize,
+        opening: Option<InProgress>,
+        probe: Arc<StopRaceProbe>,
+    ) -> Result<Self, PluginError> {
+        let (bell, bus) = {
+            let workspace = workspace.read()?;
+            (workspace.job_bell(), workspace.bus().clone())
+        };
+        let shared = Arc::new(Shared {
+            workspace,
+            bundles,
+            bell,
+            stop_race_probe: Some(probe),
+
+            stopping: AtomicBool::new(false),
+            opening: Custody::new("l'apertura in corso", opening),
+            bus,
             flags: Custody::empty("le bandiere dei job"),
             alarms: Custody::empty("le sveglie del vault"),
             in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
@@ -1426,9 +1503,14 @@ impl JobRunner {
     /// risposta vera, ed è il deadline dell'host WASM.
     pub fn stop(&mut self) -> Vec<PluginError> {
         self.shared.stopping.store(true, Ordering::Release);
+
         let mut errors: Vec<PluginError> = self.shared.cancel_all().err().into_iter().collect();
         // Sveglia chi aspetta il campanello: si sveglia, vede `stopping`, esce.
         self.shared.bell.ring();
+        #[cfg(test)]
+        if let Some(probe) = &self.shared.stop_race_probe {
+            probe.stop_requested();
+        }
         for worker in self.workers.drain(..) {
             let _ = worker.join();
         }
@@ -2199,6 +2281,8 @@ mod tests {
             workspace: Custody::new("il vault di prova", ws),
             bundles: Custody::new("i componenti di prova", BundleRegistry::new()),
             bell: Arc::new(JobBell::default()),
+            #[cfg(test)]
+            stop_race_probe: None,
             bus,
             stopping: AtomicBool::new(false),
             opening: Custody::new(

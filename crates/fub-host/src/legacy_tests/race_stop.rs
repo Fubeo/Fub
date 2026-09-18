@@ -6,18 +6,14 @@
 //! fra i due — controllo passato, `store` non ancora visto — il thread prende
 //! un biglietto già oltre la suonata, trova la coda vuota e si mette ad
 //! aspettare una campana che non suonerà mai più: chi chiude lo aspetta per
-//! sempre, e con lui si pianta la chiusura del vault e lo spegnimento dell'app.
+//! sempre.
 //!
-//! La finestra è di qualche istruzione, quindi un test che apre e chiude una
-//! volta non la vede mai — è il genere di difetto che si presenta a un utente e
-//! non a chi lo ha scritto. Quello che segue non aspetta la fortuna: ripete il
-//! giro finché la finestra si apre. Senza il ricontrollo della bandiera dopo il
-//! biglietto si pianta entro il primo migliaio di giri; con, ventimila giri
-//! costano un secondo.
-//!
-//! Non misura un tempo, quindi non prova la macchina su cui gira: il timeout è
-//! un tetto largo per distinguere «piantato» da «lento», e in mezzo non c'è
-//! niente che questa proprietà possa produrre.
+//! Il presidio non aspetta che lo scheduler scelga quella finestra. Il gancio
+//! di test ferma il worker subito dopo il controllo in cima; la prova chiede
+//! allora la chiusura, lascia che il worker prenda il biglietto già oltre la
+//! suonata e verifica che il ricontrollo dopo il drenaggio lo faccia tornare.
+//! Senza quel ricontrollo il watchdog fallisce per un deadlock reale, non per
+//! una soglia di prestazioni.
 
 use std::time::Duration;
 
@@ -25,38 +21,39 @@ use camino::Utf8PathBuf;
 use fub_host::{BundleRegistry, Custody, JobRunner};
 use fub_kernel::Workspace;
 
-/// Quanti giri, e con quanti thread per giro.
-///
-/// Il numero dei thread conta quanto quello dei giri: più sono, più bocche
-/// possono trovarsi nella finestra mentre `stop` la attraversa.
-const ITERATIONS: u32 = 20_000;
-const THREAD: usize = 4;
+use crate::runner::StopRaceProbe;
+
+const WATCHDOG: Duration = Duration::from_secs(10);
 
 #[test]
 fn who_stops_a_pool_always_returns() {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+    let workspace = Custody::new(
+        "test vault",
+        Workspace::new(&root, Default::default()).expect("vault opens successfully"),
+    );
+    let registry = Custody::new("test components", BundleRegistry::new());
+    let probe = StopRaceProbe::new();
+    let runner = JobRunner::start_with_stop_probe(workspace, registry, 1, None, probe.clone())
+        .expect("pool starts");
+
+    // Il worker ha passato il controllo in cima e ora è fermo prima del
+    // biglietto: la chiusura può eseguire store+ring senza dover sperare
+    // nell'ordine scelto dal sistema operativo.
+    probe.reached();
 
     // Il giro sta su un thread suo perché un pool piantato pianta chi lo
-    // aspetta: senza, il test non fallirebbe — resterebbe appeso, che è la
-    // stessa cosa detta in un modo che nessuno legge.
+    // aspetta: il watchdog è soltanto il confine dell'errore, non il via.
     let (done, outcome) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        for _ in 0..ITERATIONS {
-            let workspace = Custody::new(
-                "test vault",
-                Workspace::new(&root, Default::default()).expect("vault opens successfully"),
-            );
-            let registry = Custody::new("test components", BundleRegistry::new());
-            JobRunner::start(workspace, registry, THREAD, None)
-                .expect("pool starts")
-                .stop();
-        }
+        let mut runner = runner;
+        runner.stop();
         let _ = done.send(());
     });
 
     assert!(
-        outcome.recv_timeout(Duration::from_secs(60)).is_ok(),
+        outcome.recv_timeout(WATCHDOG).is_ok(),
         "`JobRunner::stop` did not return: a pool thread is waiting for a \
          bell that will never ring again"
     );
