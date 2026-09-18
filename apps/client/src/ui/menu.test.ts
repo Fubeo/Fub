@@ -43,11 +43,19 @@ describe("il menu contestuale", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     document.body.replaceChildren();
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: undefined,
+    });
   });
 
   afterEach(() => {
     closeContextMenu();
     vi.useRealTimers();
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: undefined,
+    });
   });
 
   it("un menu chiuso prima del tempo non porta via quello dopo", () => {
@@ -71,6 +79,25 @@ describe("il menu contestuale", () => {
 
     closeContextMenu();
     expect(tab().defaultPrevented).toBe(false);
+  });
+
+  it("mantiene l'animazione CSS senza catturare il menu in una View Transition", () => {
+    const start = vi.fn(() => {
+      throw new Error("View Transition non disponibile nel WebKit della shell");
+    });
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: start,
+    });
+
+    showContextMenu(clickEvent(), [{ label: "Apri", run: () => {} }]);
+    const menu = document.getElementById("context-menu")!;
+    expect(menu.dataset.shellMotion).toBe("enter");
+    expect(start).not.toHaveBeenCalled();
+
+    closeContextMenu();
+    vi.runAllTimers();
+    expect(start).not.toHaveBeenCalled();
   });
 });
 describe("tastiera e fuoco del menu", () => {

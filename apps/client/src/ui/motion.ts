@@ -44,6 +44,12 @@ function cancel(element: HTMLElement): void {
   runs.get(element)?.cancel();
 }
 
+type MotionOptions = {
+  /// Le superfici fisse inserite al volo possono restare sulla sola animazione
+  /// CSS: alcuni WebKit GTK abortiscono mentre catturano il vecchio fotogramma.
+  readonly viewTransition?: boolean;
+};
+
 function waitForMotion(
   element: HTMLElement,
   phase: Phase,
@@ -84,7 +90,11 @@ function waitForMotion(
   return run;
 }
 
-function progressive(element: HTMLElement, run: MotionRun, update: () => void): void {
+function progressive(element: HTMLElement, run: MotionRun, update: () => void, useViewTransition: boolean): void {
+  if (!useViewTransition) {
+    update();
+    return;
+  }
   const start = (document as TransitionDocument).startViewTransition;
   if (typeof start !== "function") {
     update();
@@ -111,7 +121,7 @@ function progressive(element: HTMLElement, run: MotionRun, update: () => void): 
  * cancellata senza eseguire la chiusura: un solo attributo cambia valore, quindi
  * riaprire non accumula classi né conserva `pointer-events: none`.
  */
-export function enterSurface(element: HTMLElement): void {
+export function enterSurface(element: HTMLElement, options: MotionOptions = {}): void {
   cancel(element);
   element.style.removeProperty("pointer-events");
   element.dataset.shellMotion = "pre-enter";
@@ -129,9 +139,14 @@ export function enterSurface(element: HTMLElement): void {
     element.dataset.shellMotion = "rest";
     element.style.removeProperty("view-transition-name");
   });
-  progressive(element, run, () => {
-    element.dataset.shellMotion = "enter";
-  });
+  progressive(
+    element,
+    run,
+    () => {
+      element.dataset.shellMotion = "enter";
+    },
+    options.viewTransition !== false,
+  );
 }
 
 /**
@@ -139,7 +154,11 @@ export function enterSurface(element: HTMLElement): void {
  * superficie non intercetta il puntatore; la pelle lo garantisce leggendo lo
  * stesso attributo che governa il moto.
  */
-export function exitSurface(element: HTMLElement, conceal: () => void): void {
+export function exitSurface(
+  element: HTMLElement,
+  conceal: () => void,
+  options: MotionOptions = {},
+): void {
   const current = runs.get(element);
   if (current?.phase === "exit") return;
   cancel(element);
@@ -157,9 +176,14 @@ export function exitSurface(element: HTMLElement, conceal: () => void): void {
     element.style.removeProperty("view-transition-name");
     conceal();
   });
-  progressive(element, run, () => {
-    element.dataset.shellMotion = "exit";
-  });
+  progressive(
+    element,
+    run,
+    () => {
+      element.dataset.shellMotion = "exit";
+    },
+    options.viewTransition !== false,
+  );
 }
 
 /** Porta subito al termine il passaggio pendente, per uno smontaggio definitivo. */
