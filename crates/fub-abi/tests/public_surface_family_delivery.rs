@@ -32,7 +32,10 @@ fn collect_family_constants(dir: &Path, found: &mut BTreeSet<String>) {
                 continue;
             };
             let value = value.trim().trim_end_matches(';').trim();
-            if let Some(family) = value.strip_prefix('"').and_then(|value| value.strip_suffix('"')) {
+            if let Some(family) = value
+                .strip_prefix('"')
+                .and_then(|value| value.strip_suffix('"'))
+            {
                 found.insert(family.to_string());
             }
         }
@@ -96,7 +99,8 @@ fn every_public_surface_family_has_shell_fallback_mirror_native_and_wasm() {
         "public family grid must remain represented in the live WIT"
     );
     assert!(
-        read("apps/client/src/host/mirror.test.ts").contains("GridSurfaceSpec: keysOf<GridSurfaceSpec>"),
+        read("apps/client/src/host/mirror.test.ts")
+            .contains("GridSurfaceSpec: keysOf<GridSurfaceSpec>"),
         "public family grid must remain covered by the TypeScript mirror guard"
     );
 }
