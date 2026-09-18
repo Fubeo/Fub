@@ -161,7 +161,9 @@ export function createDocumentSurfaceRegistry(
   registry.register({
     owner: "fub.shell.text",
     family: "text",
+    profiles: ["plain-text", "markdown"],
     defaultProfile: "plain-text",
+    fallbackProfile: "plain-text",
     formats: { markdown: "markdown" },
     sources: { text: "plain-text" },
     factory: {
@@ -214,7 +216,9 @@ export function createDocumentSurfaceRegistry(
   registry.register({
     owner: "fub.shell.grid",
     family: "grid",
+    profiles: ["sheet"],
     defaultProfile: "sheet",
+    fallbackProfile: "sheet",
     formats: { fubsheet: "sheet" },
     factory: {
       mount(profile, context) {
@@ -251,7 +255,9 @@ export function createDocumentSurfaceRegistry(
   registry.register({
     owner: "fub.shell.viewer",
     family: "viewer",
+    profiles: ["bytes-read-only"],
     defaultProfile: "bytes-read-only",
+    fallbackProfile: "bytes-read-only",
     sources: { bytes: "bytes-read-only" },
     factory: {
       mount(profile, context) {
@@ -262,7 +268,9 @@ export function createDocumentSurfaceRegistry(
   registry.register({
     owner: "fub.shell.error",
     family: "error",
+    profiles: ["unsupported"],
     defaultProfile: "unsupported",
+    fallbackProfile: "unsupported",
     factory: {
       mount(profile, context) {
         return staticSurface("error", profile, context, "surface.unavailable");
