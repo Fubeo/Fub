@@ -66,10 +66,6 @@ impl<T> ProviderTable<T> {
         self.entries.iter()
     }
 
-    pub(crate) fn iter_mut(&mut self) -> std::slice::IterMut<'_, T> {
-        self.entries.iter_mut()
-    }
-
     pub(crate) fn get(&self, at: usize) -> Option<&T> {
         self.entries.get(at)
     }
@@ -82,6 +78,21 @@ impl<T> ProviderTable<T> {
     /// **sostituzione**, dove chi entra prende il posto di chi c'era.
     pub(crate) fn retain(&mut self, keep: impl FnMut(&T) -> bool) {
         self.entries.retain(keep);
+    }
+
+    /// Removes matching entries without dropping them in the registry.
+    pub(crate) fn extract(&mut self, mut take: impl FnMut(&T) -> bool) -> Vec<T> {
+        let mut kept = Vec::with_capacity(self.entries.len());
+        let mut removed = Vec::new();
+        for entry in std::mem::take(&mut self.entries) {
+            if take(&entry) {
+                removed.push(entry);
+            } else {
+                kept.push(entry);
+            }
+        }
+        self.entries = kept;
+        removed
     }
 
     /// Estrae le voci, lasciando la tabella vuota: il primo passo del prestito.
@@ -122,15 +133,16 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 
 use std::sync::Arc;
 
+use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
+use crate::poison::SharedShelter;
+use crate::workspace::Trust;
 use fub_abi::command::CommandSpec;
+use fub_abi::grid::{GridProvider, GridSurfaceSpec};
 use fub_abi::traits::{
     CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
 use fub_abi::PluginError;
-
-use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
-use crate::workspace::Trust;
 
 /// Un provider registrato, con **ciò che ha dichiarato al momento della
 /// registrazione**.
@@ -149,8 +161,13 @@ use crate::workspace::Trust;
 /// chi interroga.
 pub(crate) struct RegisteredView {
     pub(crate) id: String,
-    pub(crate) provider: Box<dyn ViewProvider>,
+    pub(crate) provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
     pub(crate) specs: Vec<ViewSpec>,
+    /// Token di generazione della singola registrazione. Cambia soltanto
+    /// quando questa entry viene rinegoziata o sostituita: una mutazione a una
+    /// view estranea non rende obsolete le callback già in volo. L'identità
+    /// dell'`Arc` evita un contatore globale e non ha un caso di overflow.
+    pub(crate) generation: Arc<()>,
     /// Quanto ci si fida di ciò che produce. Sta qui e non fra le spec perché è
     /// una proprietà di **chi manda**, non di ciò che ha dichiarato: lo stesso
     /// albero è legittimo da una feature ufficiale e inaccettabile da un plugin
@@ -189,6 +206,12 @@ pub(crate) struct RegisteredCommand {
     pub(crate) id: String,
     pub(crate) provider: Arc<dyn CommandProvider>,
     pub(crate) specs: Vec<CommandSpec>,
+}
+
+pub(crate) struct RegisteredGrid {
+    pub(crate) id: String,
+    pub(crate) provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
+    pub(crate) specs: Vec<GridSurfaceSpec>,
 }
 
 /// **Chi è registrato, cosa ha dichiarato, e chi possiede quale nome.**
@@ -255,6 +278,8 @@ pub(crate) struct ProviderRegistry {
     /// view, indici e handler) la macro non troverebbe nessuno dei comandi che
     /// deve comporre.
     pub(crate) commands: ProviderTable<RegisteredCommand>,
+    /// Provider grid strutturati; le superfici sono catturate alla registrazione.
+    pub(crate) grids: ProviderTable<RegisteredGrid>,
     /// La catena dei comandi in corso, dal più esterno al più interno: serve a
     /// rifiutare una ricorsione **nominandola** (`a → b → a`) invece di
     /// scoprirla come stack overflow. È anche ciò che limita la profondità: i
@@ -273,6 +298,7 @@ impl ProviderRegistry {
             exports: ProviderTable::new(),
             views: ProviderTable::new(),
             commands: ProviderTable::new(),
+            grids: ProviderTable::new(),
             command_stack: Vec::new(),
         }
     }
@@ -380,7 +406,10 @@ impl ProviderRegistry {
             .iter()
             .enumerate()
             .filter(|(_, v)| v.id == id)
-            .map(|(at, v)| (at, declared_specs(v.provider.as_ref())))
+            .map(|(at, v)| {
+                let provider = v.provider.read();
+                (at, declared_specs(provider.as_ref()))
+            })
             .collect();
         let commands: Vec<(usize, Vec<CommandSpec>)> = self
             .commands
@@ -406,6 +435,7 @@ impl ProviderRegistry {
 
         for (at, specs) in views {
             self.views[at].specs = specs;
+            self.views[at].generation = Arc::new(());
         }
         for (at, specs) in commands {
             self.commands[at].specs = specs;

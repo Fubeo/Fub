@@ -28,7 +28,7 @@
 //! giorno che servisse anche «dove stanno le cache» e «dove stanno i dati», la
 //! dipendenza tornerebbe a valere il suo prezzo.
 
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 
 /// Il nome della cartella dell'app dentro il profilo dell'utente.
 const APP_DIR: &str = "fub";
@@ -129,10 +129,12 @@ pub fn log_path(config_dir: &camino::Utf8Path) -> Utf8PathBuf {
 /// la prima riga che passa dal collettore appena montato: un log che non si apre
 /// non deve impedire all'app di partire — la stessa regola di
 /// `MachineSettings::open` — ma non deve nemmeno sparire senza una parola.
-pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<String>) {
+pub fn install_logging(
+    config_dir: Option<&Utf8Path>,
+) -> (std::sync::Arc<fub_kernel::log::Levels>, Option<String>) {
     use std::sync::Arc;
     let levels = Arc::new(fub_kernel::log::Levels::default());
-    let (sink, notice) = floor(config_dir());
+    let (sink, notice) = floor(config_dir);
     // In `run` siamo i primi; il `Err` si vede solo se qualcuno ha già
     // installato, e in un test non si passa di qui.
     let _ = fub_kernel::log::install(Arc::clone(&levels), sink);
@@ -151,7 +153,7 @@ pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<Str
 /// al processo*, cioè si esegue una volta sola e nessun banco la può rifare. La
 /// scelta invece è il pezzo che si sbaglia, ed è il pezzo che si prova.
 ///
-/// Il caso che questa funzione esiste per non ripetere: `config_dir()` è un
+/// Il caso che questa funzione esiste per non ripetere: una `config_dir` è un
 /// path, non una promessa che ci si possa scrivere. Un'installazione portable
 /// (il marcatore [`PORTABLE_MARKER`] accanto all'eseguibile) su un supporto in
 /// sola lettura torna `Some(dir)` come qualunque altra, e prima di questa
@@ -160,7 +162,7 @@ pub fn install_logging() -> (std::sync::Arc<fub_kernel::log::Levels>, Option<Str
 /// dei vault e lo stato di vista denunciano di non essersi salvati — finiva nel
 /// vuoto. Il canale con cui ogni altro guasto si racconta era il primo a
 /// tacere, e taceva proprio nel caso in cui c'era di più da dire.
-fn floor(dir: Option<Utf8PathBuf>) -> (std::sync::Arc<dyn fub_kernel::log::Sink>, Option<String>) {
+fn floor(dir: Option<&Utf8Path>) -> (std::sync::Arc<dyn fub_kernel::log::Sink>, Option<String>) {
     use std::sync::Arc;
     let Some(dir) = dir else {
         // Nessuna cartella di configurazione — un ambiente senza `HOME` — e
@@ -181,7 +183,7 @@ fn floor(dir: Option<Utf8PathBuf>) -> (std::sync::Arc<dyn fub_kernel::log::Sink>
             ),
         );
     };
-    match fub_kernel::log::FileSink::open(&log_path(&dir)) {
+    match fub_kernel::log::FileSink::open(&log_path(dir)) {
         Ok(file) => (Arc::new(file), None),
         Err(and) => (
             Arc::new(fub_kernel::log::StderrSink),
@@ -325,7 +327,7 @@ mod tests {
         let occupied = base.join("not-a-folder");
         std::fs::write(&occupied, b"a file, not a folder").expect("write");
 
-        let (_, notice) = floor(Some(occupied.clone()));
+        let (_, notice) = floor(Some(occupied.as_path()));
         let notice = notice.expect("a folder inside a file cannot be created");
         assert!(
             notice.contains(occupied.as_str()),

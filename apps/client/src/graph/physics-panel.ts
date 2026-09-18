@@ -93,10 +93,19 @@ const GRAPHICS_TOGGLES = ["glow", "pulse", "trail", "grid"] as const;
 
 const PRESET_NAMES = ["organica", "costellazione", "alveare", "nebulosa", "rigido", "custom"] as const;
 
-
 export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   const { config } = o;
   const root = document.createElement("div");
+  const listenerDisposers: Array<() => void> = [];
+  function addOwnedListener<K extends keyof HTMLElementEventMap>(
+    target: HTMLElement,
+    type: K,
+    listener: (this: HTMLElement, event: HTMLElementEventMap[K]) => unknown,
+  ): void {
+    target.addEventListener(type, listener);
+    listenerDisposers.push(() => target.removeEventListener(type, listener));
+  }
+
   root.className = "graph-panel";
 
   const gear = document.createElement("button");
@@ -164,7 +173,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     physicsInputs[c.key] = input;
     name.textContent = c.key; // placeholder, sovrascritto da aggiornaLingua
     updateValue(c.key, input.value);
-    input.addEventListener("input", () => {
+    addOwnedListener(input, "input", () => {
       const v = parseFloat(input.value);
       // La fisica è un nuovo oggetto: il grafico la sostituirà (nuovo
       // riferimento) a ogni impostaConf, qui si riassegna per coerenza.
@@ -224,7 +233,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     graphicsSliderInputs[c.key] = input;
     name.textContent = c.key;
     updateValue(c.key, input.value);
-    input.addEventListener("input", () => {
+    addOwnedListener(input, "input", () => {
       const v = parseFloat(input.value);
       Object.assign(config.graphics, { [c.key]: v } as Partial<GraphicsConfig>);
       updateValue(c.key, input.value);
@@ -273,10 +282,9 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     // nello stile futuro, senza contare sull'ordine nel DOM.
     input.dataset.field = key;
     row.append(input);
-    input.addEventListener("change", () => onChange(input.checked));
+    addOwnedListener(input, "change", () => onChange(input.checked));
     return { element: row, input };
   }
-
 
   /// Aggiorna gli input fisici (slider + toggle) ai valori correnti della
   /// conf. Chiamata dopo un cambio preset e dopo «Reimposta», quando la
@@ -349,28 +357,28 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     if (o.restoreFocus) o.restoreFocus();
   }
 
-  gear.addEventListener("click", () => {
+  addOwnedListener(gear, "click", () => {
     if (isOpen) closePopover();
     else openPopover();
   });
 
-  select.addEventListener("change", () => {
+  addOwnedListener(select, "change", () => {
     applyPreset(select.value);
   });
 
   // Esc chiude il popover e rimette il focus sul canvas del grafo: il
   // pannello è un ospite della superficie, Esc lo congeda. Il listener è
   // sul popover (il focus è dentro quando aperto).
-  popover.addEventListener("keydown", (e: KeyboardEvent) => {
+  addOwnedListener(popover, "keydown", (e: KeyboardEvent) => {
     if (e.key === "Escape" && isOpen) {
       e.preventDefault();
       closePopover();
     }
   });
 
-  warmButton.addEventListener("click", () => o.onWarm());
-  unpinButton.addEventListener("click", () => o.onUnpinAll());
-  resetButton.addEventListener("click", () => reset());
+  addOwnedListener(warmButton, "click", () => o.onWarm());
+  addOwnedListener(unpinButton, "click", () => o.onUnpinAll());
+  addOwnedListener(resetButton, "click", () => reset());
 
   function updateLanguage(): void {
     const copy = o.copy();
@@ -427,13 +435,24 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   }
 
   let destroyed = false;
-
   function destroy(): void {
     if (destroyed) return;
     destroyed = true;
-    // I listener vivono sui nodi che rimuoviamo: il GC li porta via con loro.
-    // Non c'è un `removeEventListener` esplicito perché il DOM se ne va tutto.
+    let firstError: unknown;
+    let hasError = false;
+    for (let i = listenerDisposers.length - 1; i >= 0; i -= 1) {
+      try {
+        listenerDisposers[i]();
+      } catch (error) {
+        if (!hasError) {
+          firstError = error;
+          hasError = true;
+        }
+      }
+    }
+    listenerDisposers.length = 0;
     root.remove();
+    if (hasError) throw firstError;
   }
 
   // Primo popolamento: etichette e valori.

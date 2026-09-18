@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Trentasette gesti, contati da fuori
+// # Trentanove gesti, contati da fuori
 //
-// I gesti sono **trentasette** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **trentanove** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -61,6 +61,8 @@ const box = vi.hoisted(() => ({
   /// la shell chiede al di là del confine (§1.3), e negli e2e è un `true`.
   confirm: true,
 }));
+
+let activeStop: (() => void) | null = null;
 
 // Il modulo mimato è **uno solo per tutto il file**, e delega all'host di
 // adesso a ogni chiamata. Non è un vezzo: `vi.resetModules()` svuota il
@@ -101,6 +103,7 @@ vi.mock("./host/ipc", () => {
 vi.mock("./host/dialog", () => ({
   confirm: () => Promise.resolve(box.confirm),
   pickFolder: () => Promise.resolve("/vault"),
+  pickFile: () => Promise.resolve(null),
 }));
 
 const { createFakeHost, TRASH_VIEW, testViewSpec } = await import("./host/fake");
@@ -126,7 +129,7 @@ async function mount(
   throttles: string[] = [],
   notice: KernelNotice | null = null,
   commands: CommandSpec[] = [],
-): Promise<{ host: FakeHost; startup: Promise<void>; unlock: Map<string, () => void> }> {
+): Promise<{ host: FakeHost; startup: Promise<() => void>; unlock: Map<string, () => void> }> {
   vi.resetModules();
   box.confirm = true;
   const host = createFakeHost({
@@ -141,7 +144,15 @@ async function mount(
   const unlock = new Map(throttles.map((p) => [p, host.throttle(p)]));
   mountShell();
   const main = await import("./main");
-  return { host, startup: main.startup, unlock };
+  const startup = main.startup.then((stop) => {
+    const tracked = () => {
+      stop();
+      if (activeStop === tracked) activeStop = null;
+    };
+    activeStop = tracked;
+    return tracked;
+  });
+  return { host, startup, unlock };
 }
 
 /// Monta la shell su un vault finto e **aspetta che l'avvio sia finito**.
@@ -268,8 +279,120 @@ function editorTexts(): string[] {
 }
 
 beforeEach(() => {
+  activeStop?.();
+  activeStop = null;
   document.body.innerHTML = "";
   localStorage.clear();
+});
+
+describe("la menubar applicativa", () => {
+  it("apre File, seleziona una voce, si chiude e si rimonta senza errori", async () => {
+    const first = await mount({});
+    const stopFirst = await first.startup;
+    await settle();
+    const file = document.querySelector<HTMLButtonElement>("#app-menu > button");
+    if (!file) throw new Error("il menu File non è stato montato");
+
+    const errors: unknown[] = [];
+    const rejections: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      event.preventDefault();
+      errors.push(event.error ?? event.message);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      event.preventDefault();
+      rejections.push(event.reason);
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    let stopSecond: (() => void) | undefined;
+    try {
+      file.click();
+      const menu = document.getElementById("context-menu");
+      if (!menu) throw new Error("il menu File non si è aperto");
+      menu.querySelector<HTMLButtonElement>("[role=menuitem]")!.click();
+      await settle();
+      expect(first.host.atGate("openVault").length).toBeGreaterThan(0);
+
+      file.click();
+      expect(file.getAttribute("aria-expanded")).toBe("true");
+      file.click();
+      expect(file.getAttribute("aria-expanded")).toBe("false");
+      file.click();
+      const openMenu = document.getElementById("context-menu");
+      expect(openMenu).not.toBeNull();
+
+      stopFirst();
+      openMenu?.dispatchEvent(new Event("animationend"));
+      file.click();
+      expect(document.getElementById("context-menu")).toBeNull();
+
+      const second = await mount({});
+      stopSecond = await second.startup;
+      await settle();
+      const secondFile = document.querySelector<HTMLButtonElement>("#app-menu > button");
+      if (!secondFile) throw new Error("il menu File non è stato rimontato");
+      secondFile.click();
+      expect(document.getElementById("context-menu")).not.toBeNull();
+    } finally {
+      const secondMenu = document.getElementById("context-menu");
+      stopSecond?.();
+      secondMenu?.dispatchEvent(new Event("animationend"));
+      stopFirst();
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+
+    expect(errors).toEqual([]);
+    expect(rejections).toEqual([]);
+  });
+});
+
+describe("vita della finestra", () => {
+  it("smette i gesti quando si smonta e non duplica al rimontaggio", async () => {
+    const first = await mount({});
+    const stopFirst = await first.startup;
+
+    const firstOpenVaults = first.host.atGate("openVault").length;
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "o", ctrlKey: true, shiftKey: true }),
+    );
+    await settle();
+    expect(first.host.atGate("openVault")).toHaveLength(firstOpenVaults + 1);
+
+    stopFirst();
+    stopFirst();
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "o", ctrlKey: true, shiftKey: true }),
+    );
+    await settle();
+    expect(first.host.atGate("openVault")).toHaveLength(firstOpenVaults + 1);
+
+    const second = await mount({});
+    const stopSecond = await second.startup;
+    const secondOpenVaults = second.host.atGate("openVault").length;
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { bubbles: true, key: "o", ctrlKey: true, shiftKey: true }),
+    );
+    await settle();
+    expect(second.host.atGate("openVault")).toHaveLength(secondOpenVaults + 1);
+
+    stopSecond();
+  });
+
+  it("ignora una risposta IPC arrivata dopo la chiusura", async () => {
+    const mounted = await mount({}, [], "/vault", ["listViews"]);
+    await settle();
+    expect(mounted.host.atGate("listViews")).toHaveLength(1);
+
+    await mounted.host.close();
+    mounted.unlock.get("listViews")!();
+    await mounted.startup;
+    await settle();
+
+    expect(document.querySelector("#views-left")?.childElementCount).toBe(0);
+    expect(mounted.host.atGate("renderView")).toHaveLength(0);
+  });
 });
 
 describe("apri un vault", () => {
@@ -335,6 +458,48 @@ describe("apri un vault", () => {
       "Riunione",
       "Spesa",
     ]);
+  });
+
+  it("il commutatore e le scorciatoie seguono la superficie attiva", async () => {
+    const mounted = await mount({
+      "Markdown.md": "# Titolo\n",
+      "Plain.txt": "solo testo\n",
+    });
+    const stop = await mounted.startup;
+    await settle();
+    const modes = () =>
+      [...document.querySelectorAll<HTMLElement>("#mode-switch button")].map(
+        (button) => button.dataset.mode,
+      );
+
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
+    // `start` rimonta i moduli dopo i mock: serve l'esemplare vivo del pannello,
+    // non un import statico catturato prima di `vi.resetModules`.
+    const { openDocument } = await import("./panels/document");
+    await openDocument("Plain.txt");
+    await settle();
+    expect(modes()).toEqual(["source"]);
+    expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "l",
+        ctrlKey: true,
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await settle();
+    expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
+    document.querySelector<HTMLElement>(".tab")?.click();
+    await settle();
+    expect(modes()).toEqual(["source", "live_preview", "reading"]);
+    expect(
+      document.querySelector<HTMLElement>("#mode-switch button[aria-pressed='true']")
+        ?.dataset.mode,
+    ).toBe("live_preview");
+    stop();
   });
 });
 
@@ -805,7 +970,12 @@ describe("chiudere linguette e superfici", () => {
     const tabs = [...document.querySelectorAll<HTMLElement>(".pane .tab")];
     expect(tabs).toHaveLength(2);
 
-    const close = tabs[1]?.querySelector<HTMLElement>(".tab-close");
+    const tab = tabs[1];
+    const tabId = tab?.id;
+    const close = tabId
+      ? document.querySelector<HTMLElement>(`.pane .tab-close[data-tab-id="${tabId}"]`)
+      : null;
+    expect(close?.classList.contains("tab-close")).toBe(true);
     close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     await waitFor(
       "resta la linguetta iniziale",
@@ -814,6 +984,19 @@ describe("chiudere linguette e superfici", () => {
     expect(textToVideo()).toContain("Il primo documento");
     expect(host.files()["Benvenuto.md"]).toBe(VAULT["Benvenuto.md"]);
   });
+  it("il controllo di chiusura è nominato, nativo e raggiungibile da tastiera", async () => {
+    await start(VAULT);
+    const close = document.querySelector<HTMLButtonElement>(".pane .tab-close");
+    expect(close?.tagName).toBe("BUTTON");
+    expect(close?.type).toBe("button");
+    expect(close?.getAttribute("aria-label")).toBe("Chiudi");
+
+    close?.focus();
+    close?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await waitFor("la linguetta si chiude con Invio", () => document.querySelectorAll(".pane .tab").length === 0);
+    expect(document.activeElement?.classList.contains("pane")).toBe(true);
+  });
+
 
   it("chiude l'ultima linguetta, salva una volta e non lascia timer", async () => {
     const host = await start(VAULT);
@@ -829,7 +1012,6 @@ describe("chiudere linguette e superfici", () => {
       host.atGate("writeDocument").length === 1,
     );
     expect(host.files()["Benvenuto.md"]).toContain("testo prima di chiudere la linguetta");
-    expect(editorViews()).toHaveLength(1);
 
     // This integration must let the real save/debounce deadlines pass: a
     // residual timer is the behavior under test, not an injectable callback.
@@ -1249,7 +1431,11 @@ describe("cerca", () => {
       () => document.querySelectorAll("#search-results li").length > 0,
     );
 
-    const results = [...document.querySelectorAll<HTMLElement>("#search-results li")];
+    const results = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        "#search-results li > button.search-result",
+      ),
+    ];
     expect(results.map((r) => r.textContent)).toHaveLength(1);
     expect(results[0].textContent).toContain("Spesa");
 

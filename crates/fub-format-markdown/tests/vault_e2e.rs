@@ -22,16 +22,13 @@ fn open(root: &Utf8PathBuf) -> Workspace {
     ws
 }
 
-fn open_sample() -> Workspace {
-    open(&sample_root())
-}
-
 /// Una copia usa-e-getta del vault di esempio.
 ///
-/// **Ogni test che tocca il disco passa di qui** — crei un file o ne modifichi
-/// uno che c'è già. Il fixture lo leggono tutti gli altri, in parallelo: una
-/// nota dimenticata dentro lo farebbe mentire, e una modifica *temporanea* lo fa
-/// mentire lo stesso, per la durata della finestra in cui è in piedi.
+/// **Ogni test passa di qui**, anche se deve soltanto leggere. Aprire un
+/// workspace crea e ritira sonde di mount nella radice; due scansioni parallele
+/// sul fixture condiviso possono quindi enumerare una sonda che l'altra ha già
+/// tolto e scambiare quel normale transitorio per `NotFound`. La copia rende
+/// privati sia i contenuti sia i file amministrativi del mount.
 fn open_scratch() -> (tempfile::TempDir, Workspace) {
     let dir = tempfile::tempdir().expect("tempdir");
     let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
@@ -56,7 +53,7 @@ fn copy_dir(from: &Utf8PathBuf, to: &Utf8PathBuf) {
 
 #[test]
 fn scans_all_documents() {
-    let ws = open_sample();
+    let (_scratch, ws) = open_scratch();
     let docs = ws.documents();
     assert_eq!(docs.len(), 4, "documenti: {docs:?}");
     assert!(docs.contains(&DocId::new("index.md")));
@@ -65,7 +62,7 @@ fn scans_all_documents() {
 
 #[test]
 fn resolves_wikilinks_by_name_alias_and_path() {
-    let ws = open_sample();
+    let (_scratch, ws) = open_scratch();
     assert_eq!(ws.resolve_link("Nota B"), Some(DocId::new("Nota B.md")));
     assert_eq!(
         ws.resolve_link("Alfa"),
@@ -80,7 +77,7 @@ fn resolves_wikilinks_by_name_alias_and_path() {
 
 #[test]
 fn computes_backlinks_with_context() {
-    let ws = open_sample();
+    let (_scratch, ws) = open_scratch();
     let bl = ws.backlinks(&DocId::new("Nota B.md"));
     let sources: Vec<_> = bl.iter().map(|r| r.source.as_str()).collect();
     // index (2 link), Progetti/Alpha, Daily (via embed) puntano a Nota B.
@@ -147,7 +144,7 @@ fn every_backlink_carries_the_context(refs: &[BacklinkRef], target: &str) {
 
 #[test]
 fn renders_preview_with_wikilink_data_attrs() {
-    let ws = open_sample();
+    let (_scratch, ws) = open_scratch();
     let html = ws.render_preview(&DocId::new("index.md")).unwrap().html;
     assert!(
         html.contains("data-wikilink-page=\"Nota B\""),

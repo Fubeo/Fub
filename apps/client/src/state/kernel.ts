@@ -30,43 +30,71 @@ type TypedHandler<T extends EventType> = (
 /// chi si iscrive, non un'informazione che serva qui — al momento della
 /// consegna il tipo è già stato usato per scegliere la lista.
 type AnyHandler = (event: KernelEvent, origin: Origin) => void;
+type TypedRegistration = { handler: AnyHandler };
+type AnyRegistration = { handler: (n: KernelNotice) => void };
 
-const forType = new Map<EventType, AnyHandler[]>();
-const forAny: ((n: KernelNotice) => void)[] = [];
+const forType = new Map<EventType, TypedRegistration[]>();
+const forAny: AnyRegistration[] = [];
 
-/// Iscrive un ascoltatore a **un** tipo di evento.
-export function onEvent<T extends EventType>(type: T, handler: TypedHandler<T>): void {
-  const wideHandler = handler as unknown as AnyHandler;
+/// Iscrive un ascoltatore a **un** tipo di evento e restituisce il suo
+/// smontaggio.
+export function onEvent<T extends EventType>(
+  type: T,
+  handler: TypedHandler<T>,
+): () => void {
+  const registration: TypedRegistration = {
+    handler: handler as unknown as AnyHandler,
+  };
   const list = forType.get(type);
-  if (list) list.push(wideHandler);
-  else forType.set(type, [wideHandler]);
+  if (list) list.push(registration);
+  else forType.set(type, [registration]);
+
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    const current = forType.get(type);
+    if (!current) return;
+    const index = current.indexOf(registration);
+    if (index < 0) return;
+    current.splice(index, 1);
+    if (current.length === 0) forType.delete(type);
+  };
 }
 
-/// Iscrive un ascoltatore a **tutti** gli eventi.
+/// Iscrive un ascoltatore a **tutti** gli eventi e restituisce il suo
+/// smontaggio.
 ///
-/// Serve a chi reagisce per *maschera dichiarata* invece che per tipo noto:
-/// l'host dei pannelli (`ui/panel-host.ts`) invokeHandler chi ha dichiarato interesse
+/// Serve a chi reagisce per **maschera dichiarata** invece che per tipo noto:
+/// l'host dei pannelli (`ui/panel-host.ts`) invoca chi ha dichiarato interesse
 /// per quell'evento, e l'elenco dei tipi non lo conosce questa shell — per una
 /// view del protocollo lo porta il `ViewSpec` a runtime. È l'unico caso
-/// legittimo, e infatti l'unico invokeHandlernte: un pannello che si iscrive qui per
-/// comodità sta ricostruendo il vecchio smistatore.
-export function onAnyEvent(handler: (n: KernelNotice) => void): void {
-  forAny.push(handler);
+/// legittimo; un pannello che si iscrive qui per comodità sta ricostruendo il
+/// vecchio smistatore.
+export function onAnyEvent(handler: (n: KernelNotice) => void): () => void {
+  const registration: AnyRegistration = { handler };
+  forAny.push(registration);
+  let disposed = false;
+  return () => {
+    if (disposed) return;
+    disposed = true;
+    const index = forAny.indexOf(registration);
+    if (index >= 0) forAny.splice(index, 1);
+  };
 }
 
 function dispatchNotice(n: KernelNotice): void {
   // Prima i generici, poi i tipizzati. L'ordine conta per un motivo solo, ma
   // vero: le view dichiarative si ridisegnano da `refresh` qualunque sia
-  // l'evento, e farlo per primo evita che un pannello lento le ritardi.
-  for (const handler of forAny) invokeHandler(() => handler(n));
-  for (const handler of forType.get(n.event.type) ?? []) {
+  for (const { handler } of forAny) invokeHandler(() => handler(n));
+  for (const { handler } of forType.get(n.event.type) ?? []) {
     invokeHandler(() => handler(n.event, n.origin));
   }
 }
 
 /// Un ascoltatore che sbaglia non deve zittire gli altri: sarebbe metà finestra
-/// ferma senza che nulla lo dica, il difetto che il §20.3 invokeHandler «l'esito
-/// buttato via». Qui l'esito si nomina e si prosegue.
+/// ferma senza che nulla lo dica, il difetto che il §20.3 chiama «esito buttato
+/// via». Qui l'esito si nomina e si prosegue.
 function invokeHandler(fn: () => void): void {
   try {
     fn();
@@ -75,7 +103,7 @@ function invokeHandler(fn: () => void): void {
   }
 }
 
-/// Attacca il router al canale del kernel. Da invokeHandlerre una volta sola, dal
+/// Attacca il router al canale del kernel. Da invocare una volta sola, dal
 /// punto di montaggio.
 export function startKernelRouter(): Promise<() => void> {
   return onKernelEvent(dispatchNotice);

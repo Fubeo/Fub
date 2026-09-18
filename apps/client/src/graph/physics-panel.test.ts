@@ -63,12 +63,14 @@ describe("createPhysicsPanel", () => {
   let changes: GraphConfig[];
   let warmCalled: boolean;
   let unpinCalled: boolean;
+  let restoreFocusCalled: boolean;
 
   beforeEach(() => {
     config = initialConfig();
     changes = [];
     warmCalled = false;
     unpinCalled = false;
+    restoreFocusCalled = false;
   });
 
   function create() {
@@ -82,6 +84,9 @@ describe("createPhysicsPanel", () => {
         unpinCalled = true;
       },
       copy,
+      restoreFocus: () => {
+        restoreFocusCalled = true;
+      },
     });
   }
 
@@ -229,6 +234,47 @@ describe("createPhysicsPanel", () => {
     expect(document.body.contains(p.element)).toBe(true);
     p.destroy();
     expect(document.body.contains(p.element)).toBe(false);
+  });
+  it("distruggi: rimuove tutti i listener anche dai controlli trattenuti", () => {
+    const p = create();
+    const initial = structuredClone(config);
+    const toggle = p.element.querySelector<HTMLButtonElement>("button.graph-panel-toggle")!;
+    const popover = p.element.querySelector<HTMLElement>(".graph-panel-popover")!;
+    const select = p.element.querySelector<HTMLSelectElement>("select.graph-panel-select")!;
+    const sliders = p.element.querySelectorAll<HTMLInputElement>('input[type="range"]');
+    const physicsSlider = sliders[0]!;
+    const graphicsSlider = sliders[sliders.length - 1]!;
+    const checkbox = p.element.querySelector<HTMLInputElement>('input[data-field="glow"]')!;
+    const actions = p.element.querySelectorAll<HTMLButtonElement>(".graph-panel-azioni button");
+
+    toggle.click();
+    expect(popover.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    p.destroy();
+    p.destroy();
+
+    toggle.click();
+    popover.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(popover.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(restoreFocusCalled).toBe(false);
+    select.value = "rigido";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    physicsSlider.value = "5000";
+    physicsSlider.dispatchEvent(new Event("input", { bubbles: true }));
+    graphicsSlider.value = "0.9";
+    graphicsSlider.dispatchEvent(new Event("input", { bubbles: true }));
+    checkbox.checked = !checkbox.checked;
+    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+    actions[0].click();
+    actions[1].click();
+    actions[2].click();
+
+    expect(config).toEqual(initial);
+    expect(changes).toHaveLength(0);
+    expect(warmCalled).toBe(false);
+    expect(unpinCalled).toBe(false);
   });
 
   it("il select mostra il preset iniziale della config", () => {

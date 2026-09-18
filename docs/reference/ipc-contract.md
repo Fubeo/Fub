@@ -30,6 +30,50 @@ test usano un fake.
 Le operazioni offerte da provider passano da porte generiche. Una feature non
 aggiunge una porta soltanto per evitare di usare il proprio registro.
 
+## Valutazione del foglio pilota
+
+La shell usa `IndexQuery::Custom` con namespace `fub.sheet` soltanto per la
+valutazione read-only della vertical slice, non per il protocollo Grid a
+finestre. Il payload privato è `{kind: "evaluate", version: 1, source: string}`:
+versioni, specie o campi sconosciuti sono `BadArgs`. La risposta è
+`IndexResult::Custom` con la forma `SheetEvaluation` del mirror TypeScript.
+
+`query_index` non applica patch e non possiede lifecycle: resta una porta di
+sola lettura. La famiglia Grid usa invece le porte strettamente tipate
+`list_grid_surfaces`, `open_grid`, `grid_window`, `apply_grid`, `reload_grid` e
+`close_grid`, con i record `Grid*` del mirror. La shell negozia famiglia e
+versione prima di `open_grid`; un binding sconosciuto o incompatibile non viene
+chiamato e attiva il fallback registrato.
+
+Il provider verifica il limite sorgente di 16 MiB e misura la risposta JSON,
+compreso l'envelope, entro 8 MiB prima di materializzare il valore JSON.
+Disabilitare il bundle ritira la route di valutazione: la query restituisce
+`Unserved` e la shell usa il fallback agli input grezzi. Le finestre, patch,
+invalidazioni e il diff UTF-8 seguono i limiti del contratto ABI/WIT e non
+trasportano DOM, CodeMirror, callback JavaScript o una battuta.
+Il payload non è il percorso Grid pubblico a finestre.
+
+Le fonti sono `crates/fub-host/src/sheet/index.rs` e
+`apps/client/src/host/sheet.ts`. La fixture
+`apps/client/src/__fixtures__/sheet-query.json` è generata dal test host reale
+e consumata dai test TypeScript. Nessun interprete formule vive nel fake host.
+
+## Limiti e semantica Grid
+
+Le coordinate sono `SheetId + RowId + ColumnId`; una sessione apre o ricarica
+la sorgente completa (massimo 16 MiB), mentre le letture successive sono
+finestre fino a 256×128 e 32.768 coordinate. Un commit accetta 16.384 patch e
+4 MiB di preimmagini e nuovi input; la risposta, envelope compreso, è al
+massimo 8 MiB. L'invalidazione restituisce coordinate modificate e dipendenti
+fino a 32.768 elementi, poi `all`. Il diff conseguente usa offset in byte UTF-8.
+
+Il registro conserva ownership e disposer per ogni binding. L'unload ritira il
+binding, distrugge le istanze e soltanto dopo rilascia il provider. Nessuna
+battuta attraversa IPC: la shell pubblica una sola operazione al commit.
+Provider nativo e proxy WASM devono osservare la stessa famiglia/versione,
+limiti, fallback ed errori.
+
+
 ## Tipi principali
 
 La shell riceve forme per:

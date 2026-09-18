@@ -369,10 +369,19 @@ describe("rileggere la finestra com'era", () => {
     expect(activeDoc("main", reread!)).toBe("a.md");
   });
 
-  it("una modalità che non esiste vale come nessuna", () => {
+  it("conserva una modalità non vuota dichiarata da una superficie", () => {
     const reread = parseLayout({
       tree: { k: "leaf", pane: "main" },
-      panes: { main: { docs: [], active: -1, mode: "lettura" } },
+      panes: { main: { docs: [], active: -1, mode: "grid.navigate" } },
+      focus: "main",
+    });
+    expect(reread!.panes.main.mode).toBe("grid.navigate");
+  });
+
+  it("una modalità vuota torna al default", () => {
+    const reread = parseLayout({
+      tree: { k: "leaf", pane: "main" },
+      panes: { main: { docs: [], active: -1, mode: "   " } },
       focus: "main",
     });
     expect(reread!.panes.main.mode).toBe("live_preview");

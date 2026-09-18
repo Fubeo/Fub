@@ -52,6 +52,11 @@ pub enum Gate {
     /// Un job che gira sul pool, dove non c'è nemmeno un chiamante a cui il
     /// panico possa arrivare.
     Job,
+    /// Un indice esterno che risponde a una query.
+    ///
+    /// È in coda perché il WIT è additivo: le revisioni congelate mantengono
+    /// intatti i discriminanti precedenti.
+    IndexQuery,
 }
 
 impl Gate {
@@ -60,7 +65,7 @@ impl Gate {
     /// Le varianti sono **nominate** una per una invece di derivate: toglierne
     /// una in coda non compila, che è il caso a cui la forma di
     /// `Capability::ALL` era cieca prima della 0104.
-    pub const ALL: [Gate; 13] = [
+    pub const ALL: [Gate; 14] = [
         Gate::Command,
         Gate::ViewRender,
         Gate::ViewAction,
@@ -74,12 +79,13 @@ impl Gate {
         Gate::SyntaxRule,
         Gate::CustomRender,
         Gate::Job,
+        Gate::IndexQuery,
     ];
 
     /// **Cosa si stava chiedendo**, per il messaggio che leggerà chi ha
     /// chiamato: la frase della porta, col dettaglio del sito dentro.
     ///
-    /// Le tredici frasi stavano in tredici `format!` sparsi, che è il modo in
+    /// Le frasi stavano in `format!` sparsi, che è il modo in
     /// cui l'elenco era diventato incensibile. Qui un `match` esaustivo le tiene
     /// insieme e le rende il posto in cui si vede, in una schermata, cosa
     /// l'utente legge quando un componente esplode.
@@ -103,6 +109,7 @@ impl Gate {
             Gate::SyntaxRule => "innestandosi sul documento".into(),
             Gate::CustomRender => format!("disegnando `{detail}`").into(),
             Gate::Job => format!("eseguendo il job `{detail}`").into(),
+            Gate::IndexQuery => format!("rispondendo alla query `{detail}`").into(),
         }
     }
 

@@ -1,0 +1,23 @@
+# Componente WASM grid reale: usa la stessa SheetSession del provider nativo.
+[package]
+name = "grid-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+incompatible-grid = []
+trap-on-window = []
+malformed-window = []
+
+[dependencies]
+fub-abi = { path = "../../crates/fub-abi", version = "0.1.0" }
+fub-format-sheet = { path = "../../crates/fub-format-sheet", version = "0.1.0" }
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"

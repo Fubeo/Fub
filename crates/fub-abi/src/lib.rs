@@ -51,6 +51,7 @@ pub mod error;
 pub mod event;
 pub mod format;
 pub mod gate;
+pub mod grid;
 pub mod html;
 pub mod ipc;
 pub mod locale;
@@ -98,6 +99,16 @@ pub use format::{
     ParseContext, RenderOptions, RenderTarget, SourceKind,
 };
 pub use gate::Gate;
+pub use grid::{
+    validate_grid_source, GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle,
+    GridCellValue, GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation,
+    GridProvider, GridRow, GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
+    GridWindowRequest, GRID_FAMILY, GRID_PROTOCOL_VERSION, MAX_GRID_INVALIDATED_CELLS,
+    MAX_GRID_PATCHES, MAX_GRID_PATCH_INPUT_BYTES, MAX_GRID_RESPONSE_BYTES, MAX_GRID_SESSION_CELLS,
+    MAX_GRID_SESSION_COLUMNS, MAX_GRID_SESSION_ROWS, MAX_GRID_SESSION_SHEETS,
+    MAX_GRID_SESSION_WINDOWS, MAX_GRID_SOURCE_BYTES, MAX_GRID_WINDOW_CELLS,
+    MAX_GRID_WINDOW_COLUMNS, MAX_GRID_WINDOW_ROWS,
+};
 pub use locale::{HourCycle, Locale, Weekday};
 pub use model::Payload;
 pub use model::{
@@ -122,7 +133,7 @@ pub use settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
 };
 pub use text::{Arg, ArgValue, Localize, Message, StringCatalog, Strings, Text};
-pub use theme::{ThemeEngine, ThemeLight, ThemeManifest, THEME_ENGINE};
+pub use theme::{ThemeEngine, ThemeLight, ThemeManifest, ThemeMotion, THEME_ENGINE};
 pub use traits::{
     BacklinkRef, CivilTime, CommandProvider, DataRead, DataWrite, DocPosition, DocumentMatch,
     DraftInfo, EntryKind, EventHandler, Excerpts, FolderScope, HealthCheck, HealthIssue, HostApi,

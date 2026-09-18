@@ -44,25 +44,146 @@ use fub_abi::query::{
     Matches, QueryClause, QueryEvaluator, QueryExpr, QueryLiteral, QueryPredicate,
 };
 use fub_abi::traits::{
-    DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, PredicateKind, PropertySelect,
-    PropertySort, QueryKind,
+    DocumentMatch, Excerpts, IndexProvider, IndexQuery, IndexResult, Page, Paged, PredicateKind,
+    PropertySelect, PropertySort, QueryKind,
 };
 use fub_abi::PluginError;
 
-use super::{Indexes, Target};
+use super::{query_handle, Indexes, PreparedIndexQuery, RouteTable, Target};
+
+/// La porta del planner verso lo stato locale del kernel.
+///
+/// L'host implementa questo trait per la propria custodia e prende una guardia
+/// breve per ogni operazione core. Gli indici esterni, invece, sono già handle
+/// staccati dentro [`PreparedIndexQuery`]: il planner non può quindi tenere una
+/// guardia del workspace mentre attraversa il loro contratto.
+pub trait QueryCore {
+    /// Esegue una query servita interamente dal core.
+    fn query_core(&self, query: IndexQuery) -> Result<IndexResult, PluginError>;
+
+    /// L'universo corrente dei documenti.
+    fn core_documents(&self) -> Result<Vec<DocId>, PluginError>;
+
+    /// Valuta una foglia che appartiene al core.
+    fn core_predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError>;
+
+    /// Applica la coda canonica di `Documents`: proprietà, ordine e pagina.
+    fn finish_core_documents(
+        &self,
+        matches: Matches,
+        sort: Option<&PropertySort>,
+        select: &PropertySelect,
+        page: Option<Page>,
+    ) -> Result<Paged<DocumentMatch>, PluginError>;
+}
+
+/// Ciò che il planner deve conoscere del canale dati. Il trait è privato:
+/// fuori dal kernel escono soltanto la fotografia preparata e la porta core.
+trait QuerySource {
+    fn routes(&self) -> &RouteTable;
+    fn query_at(
+        &self,
+        target: Target,
+        query: IndexQuery,
+    ) -> Option<Result<IndexResult, PluginError>>;
+    fn core(&self) -> &dyn QueryCore;
+}
+
+impl QueryCore for Indexes {
+    fn query_core(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
+        self.core.query(query)
+    }
+
+    fn core_documents(&self) -> Result<Vec<DocId>, PluginError> {
+        Ok(self.core.documents())
+    }
+
+    fn core_predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError> {
+        self.core.predicate(predicate)
+    }
+
+    fn finish_core_documents(
+        &self,
+        matches: Matches,
+        sort: Option<&PropertySort>,
+        select: &PropertySelect,
+        page: Option<Page>,
+    ) -> Result<Paged<DocumentMatch>, PluginError> {
+        Ok(self.core.finish_documents(matches, sort, select, page))
+    }
+}
+
+impl QuerySource for Indexes {
+    fn routes(&self) -> &RouteTable {
+        &self.routes
+    }
+
+    fn query_at(
+        &self,
+        target: Target,
+        query: IndexQuery,
+    ) -> Option<Result<IndexResult, PluginError>> {
+        Indexes::query_at(self, target, query)
+    }
+
+    fn core(&self) -> &dyn QueryCore {
+        self
+    }
+}
+
+struct DetachedSource<'a> {
+    prepared: &'a PreparedIndexQuery,
+    core: &'a dyn QueryCore,
+}
+
+impl QuerySource for DetachedSource<'_> {
+    fn routes(&self) -> &RouteTable {
+        &self.prepared.routes
+    }
+
+    fn query_at(
+        &self,
+        target: Target,
+        query: IndexQuery,
+    ) -> Option<Result<IndexResult, PluginError>> {
+        match target {
+            Target::Core => Some(self.core.query_core(query)),
+            Target::Provider(at) => self
+                .prepared
+                .providers
+                .get(at)
+                .map(|(id, provider)| query_handle(id, provider, query)),
+        }
+    }
+
+    fn core(&self) -> &dyn QueryCore {
+        self.core
+    }
+}
 
 /// Il percorso di dispatch, che è **uno**.
 pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, PluginError> {
+    run_source(indexes, query)
+}
+
+pub(super) fn run_detached(
+    prepared: &PreparedIndexQuery,
+    core: &dyn QueryCore,
+    query: IndexQuery,
+) -> Result<IndexResult, PluginError> {
+    run_source(&DetachedSource { prepared, core }, query)
+}
+
+fn run_source(source: &dyn QuerySource, query: IndexQuery) -> Result<IndexResult, PluginError> {
     let kind = query.kind();
-    match indexes.routes.owner(&kind) {
+    match source.routes().owner(&kind) {
         // Qualcuno ha dichiarato questa famiglia: gli si consegna la domanda,
         // con l'espressione già risolta per ciò che non saprebbe valutare.
         Some(target) => {
-            let query = resolve_for(indexes, target, query)?;
-            let index = indexes
-                .at(target)
-                .ok_or_else(|| PluginError::Unserved(format!("{kind:?}").into()))?;
-            index.query(query)
+            let query = resolve_for(source, target, query)?;
+            source
+                .query_at(target, query)
+                .ok_or_else(|| PluginError::Unserved(format!("{kind:?}").into()))?
         }
         // Nessuno: la sola famiglia che il kernel sa comporre da sé è
         // `Documents`, perché comporla È il pianificatore.
@@ -73,7 +194,7 @@ pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, P
                 select,
                 page,
                 excerpts,
-            } => documents(indexes, matching, sort, select, page, excerpts),
+            } => documents(source, matching, sort, select, page, excerpts),
             other => Err(PluginError::Unserved(describe(&other).into())),
         },
     }
@@ -81,14 +202,14 @@ pub(crate) fn run(indexes: &Indexes, query: IndexQuery) -> Result<IndexResult, P
 
 /// I documenti che combaciano, ricomposti da chi sa valutare le foglie.
 fn documents(
-    indexes: &Indexes,
+    source: &dyn QuerySource,
     matching: QueryExpr,
     sort: Option<PropertySort>,
     select: PropertySelect,
     page: Option<Page>,
     excerpts: Excerpts,
 ) -> Result<IndexResult, PluginError> {
-    let router = Router::new(indexes);
+    let router = Router::new(source);
 
     // Pushdown intero: una sola clausola, un solo valutatore, e niente che
     // questo modulo debba aggiungere dopo. Vale **solo verso il core**, e la
@@ -110,25 +231,27 @@ fn documents(
     // È un costo di **selezione**, e resta; quello che non resta è che chi
     // seleziona debba anche *raccontare* ogni riga che sta per essere buttata —
     // vedi `Router::ask` e [`rehydrate`] (§21.9).
-    if only_evaluator(indexes, matching.predicates()) == Some(Target::Core) {
-        let index = indexes
-            .at(Target::Core)
-            .expect("il bersaglio viene dalla tabella delle rotte");
-        return index.query(IndexQuery::Documents {
-            matching,
-            sort,
-            select,
-            page,
-            excerpts,
-        });
+    if only_evaluator(source, matching.predicates()) == Some(Target::Core) {
+        return source
+            .query_at(
+                Target::Core,
+                IndexQuery::Documents {
+                    matching,
+                    sort,
+                    select,
+                    page,
+                    excerpts,
+                },
+            )
+            .expect("il bersaglio core esiste sempre");
     }
 
     let matches = router.expr(&matching)?;
-    let mut answer = indexes
-        .core
-        .finish_documents(matches, sort.as_ref(), &select, page);
+    let mut answer = source
+        .core()
+        .finish_core_documents(matches, sort.as_ref(), &select, page)?;
     if excerpts.wanted() {
-        rehydrate(indexes, &router.asked.borrow(), &mut answer.items)?;
+        rehydrate(source, &router.asked.borrow(), &mut answer.items)?;
     }
     Ok(IndexResult::Documents(answer))
 }
@@ -147,7 +270,7 @@ fn documents(
 /// la stessa disciplina con cui il kernel aggiunge le occorrenze
 /// (`Workspace::localize`, §21.3): si arricchisce la pagina, non il vault.
 fn rehydrate(
-    indexes: &Indexes,
+    source: &dyn QuerySource,
     asked: &[(Target, QueryExpr)],
     rows: &mut [DocumentMatch],
 ) -> Result<(), PluginError> {
@@ -156,19 +279,19 @@ fn rehydrate(
     }
     let docs: Vec<DocId> = rows.iter().map(|row| row.doc.clone()).collect();
     for (target, expr) in asked {
-        let Some(index) = indexes.at(*target) else {
-            // Sparito fra le due chiamate: la selezione è già stata fatta e
-            // resta valida — quello che manca è l'estratto, e un estratto che
-            // manca è, da contratto, «nessuno l'ha calcolato».
+        let Some(answer) = source.query_at(
+            *target,
+            IndexQuery::Documents {
+                matching: narrowed(expr, &docs),
+                sort: None,
+                select: PropertySelect::None,
+                page: None,
+                excerpts: Excerpts::Attach,
+            },
+        ) else {
             continue;
         };
-        let answer = index.query(IndexQuery::Documents {
-            matching: narrowed(expr, &docs),
-            sort: None,
-            select: PropertySelect::None,
-            page: None,
-            excerpts: Excerpts::Attach,
-        })?;
+        let answer = answer?;
         // In `Matches`, non in una `BTreeMap` nuda: un provider può rispondere
         // con **due righe per lo stesso documento** — un indice a segmenti ne
         // emette una per segmento — e con un `.collect()` sulla mappa la
@@ -214,7 +337,7 @@ fn narrowed(expr: &QueryExpr, docs: &[DocId]) -> QueryExpr {
 /// Il valutatore che sa **instradare**: ogni foglia al suo proprietario, la
 /// struttura al contratto.
 struct Router<'a> {
-    indexes: &'a Indexes,
+    source: &'a dyn QuerySource,
     /// Cosa è stato chiesto **a chi**, per le sole espressioni che portano una
     /// foglia di testo — cioè le sole che avrebbero un estratto da dare.
     ///
@@ -231,9 +354,9 @@ struct Router<'a> {
 }
 
 impl<'a> Router<'a> {
-    fn new(indexes: &'a Indexes) -> Self {
+    fn new(source: &'a dyn QuerySource) -> Self {
         Router {
-            indexes,
+            source,
             asked: RefCell::new(Vec::new()),
         }
     }
@@ -248,39 +371,44 @@ impl Router<'_> {
     /// estratti per mostrarne venti, ventuno millisecondi su ventitré (§21.9).
     /// Li richiede [`rehydrate`], quando le righe sono quelle vere.
     fn ask(&self, target: Target, matching: QueryExpr) -> Result<Matches, PluginError> {
-        let index = self.indexes.at(target).ok_or_else(|| {
-            PluginError::Unserved("index disappeared from the route table".to_string().into())
-        })?;
         if matching
             .predicates()
             .any(|p| matches!(p, QueryPredicate::Text(_)))
         {
             self.asked.borrow_mut().push((target, matching.clone()));
         }
-        let answer = index.query(IndexQuery::Documents {
-            matching,
-            sort: None,
-            select: PropertySelect::None,
-            page: None,
-            excerpts: Excerpts::Omit,
-        })?;
+        let answer = self
+            .source
+            .query_at(
+                target,
+                IndexQuery::Documents {
+                    matching,
+                    sort: None,
+                    select: PropertySelect::None,
+                    page: None,
+                    excerpts: Excerpts::Omit,
+                },
+            )
+            .ok_or_else(|| {
+                PluginError::Unserved("index disappeared from the route table".to_string().into())
+            })??;
         Ok(answer.documents()?.items.into_iter().collect())
     }
 }
 
 impl QueryEvaluator for Router<'_> {
     fn universe(&self) -> Result<Matches, PluginError> {
-        Ok(Matches::of_docs(self.indexes.core.documents()))
+        Ok(Matches::of_docs(self.source.core().core_documents()?))
     }
 
     fn predicate(&self, predicate: &QueryPredicate) -> Result<Matches, PluginError> {
         let Some(kind) = PredicateKind::of(predicate) else {
             // `Docs` non ha proprietario: è già una risposta.
-            return self.indexes.core.predicate(predicate);
+            return self.source.core().core_predicate(predicate);
         };
         let target = *self
-            .indexes
-            .routes
+            .source
+            .routes()
             .evaluators(&kind)
             .first()
             .ok_or_else(|| {
@@ -295,7 +423,7 @@ impl QueryEvaluator for Router<'_> {
     /// questa clausola, gliela si consegna intera invece di ricomporla qui.
     fn clause(&self, clause: &QueryClause) -> Result<Matches, PluginError> {
         if clause.all.len() > 1 {
-            if let Some(target) = only_evaluator(self.indexes, clause.predicates()) {
+            if let Some(target) = only_evaluator(self.source, clause.predicates()) {
                 return self.ask(
                     target,
                     QueryExpr {
@@ -338,7 +466,7 @@ fn default_clause<E: QueryEvaluator + ?Sized>(
 /// che sanno rispondere la stessa cosa vince chi c'era prima, che è l'unica
 /// regola che non dipende da quale plugin è stato installato per ultimo.
 fn only_evaluator<'a>(
-    indexes: &Indexes,
+    source: &dyn QuerySource,
     predicates: impl Iterator<Item = &'a QueryPredicate>,
 ) -> Option<Target> {
     let mut candidates: Option<Vec<Target>> = None;
@@ -349,7 +477,7 @@ fn only_evaluator<'a>(
             // `Docs` la legge chiunque: non restringe la scelta.
             continue;
         };
-        let evaluators = indexes.routes.evaluators(&kind).to_vec();
+        let evaluators = source.routes().evaluators(&kind).to_vec();
         candidates = Some(match candidates {
             None => evaluators,
             Some(so_far) => so_far
@@ -371,7 +499,7 @@ fn only_evaluator<'a>(
 /// Sostituisce, dentro la query, i sottoalberi che il destinatario non saprebbe
 /// valutare con i documenti che ne escono.
 fn resolve_for(
-    indexes: &Indexes,
+    source: &dyn QuerySource,
     target: Target,
     query: IndexQuery,
 ) -> Result<IndexQuery, PluginError> {
@@ -386,14 +514,14 @@ fn resolve_for(
     if expr.is_everything() {
         return Ok(query.with_expression(QueryExpr::all()));
     }
-    let router = Router::new(indexes);
+    let router = Router::new(source);
     let mut resolved = QueryExpr {
         any: Vec::with_capacity(expr.any.len()),
     };
     for clause in &expr.any {
         let mut all = Vec::with_capacity(clause.all.len());
         for literal in &clause.all {
-            if can_evaluate(indexes, target, &literal.predicate) {
+            if can_evaluate(source, target, &literal.predicate) {
                 all.push(literal.clone());
                 continue;
             }
@@ -410,11 +538,11 @@ fn resolve_for(
     Ok(query.with_expression(resolved))
 }
 
-fn can_evaluate(indexes: &Indexes, target: Target, predicate: &QueryPredicate) -> bool {
+fn can_evaluate(source: &dyn QuerySource, target: Target, predicate: &QueryPredicate) -> bool {
     match PredicateKind::of(predicate) {
         // `Docs` la legge chiunque riceva un'espressione.
         None => true,
-        Some(kind) => indexes.routes.evaluators(&kind).contains(&target),
+        Some(kind) => source.routes().evaluators(&kind).contains(&target),
     }
 }
 
@@ -455,7 +583,7 @@ pub struct PlanStep {
 
 pub(crate) fn explain(indexes: &Indexes, query: &IndexQuery) -> QueryPlan {
     let kind = query.kind();
-    let owner = indexes.routes.owner(&kind).map(|t| indexes.name_of(t));
+    let owner = indexes.routes().owner(&kind).map(|t| indexes.name_of(t));
     let mut steps = Vec::new();
     if let Some(expr) = query.expression() {
         for clause in &expr.any {
@@ -477,7 +605,7 @@ pub(crate) fn explain(indexes: &Indexes, query: &IndexQuery) -> QueryPlan {
                 let evaluator = match PredicateKind::of(predicate) {
                     None => Some(indexes.name_of(Target::Core)),
                     Some(kind) => indexes
-                        .routes
+                        .routes()
                         .evaluators(&kind)
                         .first()
                         .map(|t| indexes.name_of(*t)),

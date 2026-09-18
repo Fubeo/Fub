@@ -1,144 +1,547 @@
-//! Il **registry dei bundle**: chi monta un plugin coi suoi provider, e chi lo
-//! possiede finché è vivo (§9.3,
-//! [decisione 0031](../../../docs/decisions/0183-composizione-host-kernel.md)).
+//! Registry dei bundle: dichiarazione, attivazione, registrazione dei provider
+//! e teardown condividono una sola strada per bundle nativi e WASM.
 //!
-//! # Perché sta qui e non nel kernel
-//!
-//! Perché l'`HostApi` **non ha capacità di registrazione**, e non ne avrà: la
-//! [decisione 0013](../../../docs/decisions/0185-capability-un-solo-guard.md) ha
-//! chiuso l'elenco, e nessun `register_*` ci compare. Ne segue una cosa sola,
-//! ed è la forma di questo modulo: **un plugin non può registrarsi da sé**.
-//! Qualcuno deve leggere il suo manifest, dichiararlo, chiamare il suo
-//! `activate` e mettere i suoi provider nelle mani del kernel — e quel qualcuno
-//! è dalla parte dell'host, perché è l'unico che ha un `&mut Workspace`.
-//!
-//! È anche ciò che rende vera la frase del §9.3, «il pezzo che a M5 il
-//! caricatore WASM riuserà tale e quale»: a M5 il caricatore è host-side per
-//! costruzione, e ciò che cambia è **come si costruisce un [`Plugin`]** (un
-//! componente istanziato invece di un `Box` nativo), non chi lo dichiara né in
-//! che ordine.
-//!
-//! # La strada del montaggio, e cosa è tutto-o-niente
-//!
-//! Un bundle si monta in quattro passi, sempre gli stessi:
-//!
-//! 1. **la versione del contratto** — [`abi_compatible`] sul `abi_version` del
-//!    manifest. Prima di questa decisione quella funzione esisteva e non la
-//!    chiamava nessuno in produzione;
-//! 2. **la dichiarazione** — [`Workspace::register_plugin`], che è dove il §7.3,
-//!    il §7.4 e il §7.5 dicono la loro (permessi, namespace, requisiti);
-//! 3. **[`Plugin::activate`]**, con l'host intestato all'id appena dichiarato;
-//! 4. **i provider**, che il bundle registra da sé perché è lui a sapere quali
-//!    sono.
-//!
-//! I primi tre sono **tutto-o-niente**: se uno fallisce il bundle non è montato
-//! e non resta niente dietro — un `activate` fallito si porta via anche la
-//! dichiarazione. Il quarto no, e la differenza è deliberata: un bundle a cui
-//! una view si contende il nome è un bundle che funziona meno una view, e
-//! smontarlo per intero vorrebbe dire che un id doppio in un plugin di terzi
-//! spegne l'indice di ricerca. Ciò che non entra è un **avviso**, e chi monta
-//! lo scrive nel log: non torna al chiamante, perché un payload che torna è un
-//! payload che si può scartare — ed è ciò che due chiamanti su tre facevano.
+//! Il punto importante è l'atomicità: un bundle o entra per intero oppure non
+//! lascia dichiarazioni/provider dietro. I warning recuperabili devono essere
+//! dichiarati esplicitamente; un errore del vecchio `register -> Vec<String>` è
+//! invece conservativamente un fallimento di montaggio.
 
 use std::sync::Arc;
 
-use fub_abi::traits::{abi_compatible, HostApi, Plugin, PluginManifest};
+use fub_abi::settings::{permission_of_key, SettingSource, SettingValue};
+use fub_abi::traits::{abi_compatible, HostApi, IndexQuery, IndexResult, Plugin, PluginManifest};
 use fub_abi::PluginError;
+use fub_kernel::workspace::{
+    BeforeWriteHook, PermissionInitialization, PreparedIndexRegistration, PreparedRegistration,
+    RegistrationPermit,
+};
 use fub_kernel::{RegistryError, Trust, Workspace};
 
-/// Di che famiglia è un bundle: come lo presenta l'inventario.
-///
-/// La distinzione serve a chi disegna un elenco — componenti e temi non si
-/// accendono dalla stessa riga, e il tema non offre un interruttore nel senso
-/// dei componenti — e nasce qui e non nel manifest perché è ciò che l'host sa
-/// del bundle, non ciò che il bundle dice di sé (la stessa riga di
-/// [`Trust`]).
+#[cfg(feature = "search")]
+use fub_features::SEARCH_ID;
+
+use crate::custody::Custody;
+use crate::JobHost;
+
+/// Di che famiglia è un bundle nell'inventario.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BundleKind {
-    /// Un componente: un plugin con provider da montare.
     Component,
-    /// Un tema: solo la pelle, dichiarata da un [`ThemeManifest`](fub_abi::theme::ThemeManifest).
     Theme,
 }
 
-/// Un **bundle**: un [`Plugin`] e i provider che registra, visti da chi li
-/// monta.
+/// Esito strutturato della registrazione dei provider.
+#[derive(Debug, Default)]
+pub struct RegistrationReport {
+    warnings: Vec<String>,
+    failure: Option<String>,
+}
+
+impl RegistrationReport {
+    pub fn complete() -> Self {
+        Self::default()
+    }
+
+    pub fn warning(message: impl Into<String>) -> Self {
+        Self {
+            warnings: vec![message.into()],
+            failure: None,
+        }
+    }
+
+    pub fn with_warning(mut self, message: impl Into<String>) -> Self {
+        self.warnings.push(message.into());
+        self
+    }
+
+    pub fn failed(message: impl Into<String>) -> Self {
+        Self {
+            warnings: Vec::new(),
+            failure: Some(message.into()),
+        }
+    }
+
+    fn from_legacy(failures: Vec<String>) -> Self {
+        if failures.is_empty() {
+            Self::complete()
+        } else {
+            Self::failed(failures.join("; "))
+        }
+    }
+
+    fn into_parts(self) -> (Vec<String>, Option<String>) {
+        (self.warnings, self.failure)
+    }
+}
+
+type RegistrationStep<'a> = Box<dyn FnOnce(&mut Registrar<'_>) -> RegistrationReport + 'a>;
+
+enum RegistrationWorkspace<'a> {
+    Direct(&'a mut Workspace),
+    Guarded(&'a Custody<Workspace>),
+}
+
+/// The only workspace surface exposed while a bundle publishes providers.
+/// Every declaration callback runs before this type takes a workspace guard;
+/// publication then validates the mount's opaque permit.
+pub struct Registrar<'a> {
+    workspace: RegistrationWorkspace<'a>,
+    permit: RegistrationPermit,
+}
+
+impl Registrar<'_> {
+    fn direct(workspace: &mut Workspace, permit: RegistrationPermit) -> Registrar<'_> {
+        Registrar {
+            workspace: RegistrationWorkspace::Direct(workspace),
+            permit,
+        }
+    }
+
+    fn guarded(workspace: &Custody<Workspace>, permit: RegistrationPermit) -> Registrar<'_> {
+        Registrar {
+            workspace: RegistrationWorkspace::Guarded(workspace),
+            permit,
+        }
+    }
+
+    pub fn owner(&self) -> &str {
+        self.permit.owner()
+    }
+
+    fn with_read<R>(&self, read: impl FnOnce(&Workspace) -> R) -> Result<R, RegistryError> {
+        match &self.workspace {
+            RegistrationWorkspace::Direct(workspace) => Ok(read(workspace)),
+            RegistrationWorkspace::Guarded(workspace) => workspace
+                .read()
+                .map(|guard| read(&guard))
+                .map_err(RegistryError::External),
+        }
+    }
+
+    fn publish(&mut self, mut prepared: PreparedRegistration) -> Result<(), RegistryError> {
+        match &mut self.workspace {
+            RegistrationWorkspace::Direct(workspace) => {
+                workspace.commit_registration(&self.permit, &mut prepared)
+            }
+            RegistrationWorkspace::Guarded(workspace) => workspace
+                .write()
+                .map_err(RegistryError::External)?
+                .commit_registration(&self.permit, &mut prepared),
+        }
+    }
+
+    pub fn register_command_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::traits::CommandProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::commands(provider).map_err(RegistryError::External)?)
+    }
+
+    pub fn register_view_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::traits::ViewProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::views(provider).map_err(RegistryError::External)?)
+    }
+
+    pub fn register_grid_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::grid::GridProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::grid(provider).map_err(RegistryError::External)?)
+    }
+
+    pub fn register_event_handler(
+        &mut self,
+        provider: Box<dyn fub_abi::traits::EventHandler>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::event_handler(provider))
+    }
+
+    pub fn register_service_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::traits::ServiceProvider>,
+    ) -> Result<(), RegistryError> {
+        let provides = match &self.workspace {
+            RegistrationWorkspace::Direct(workspace) => {
+                workspace.registration_services(&self.permit)?
+            }
+            RegistrationWorkspace::Guarded(workspace) => workspace
+                .read()
+                .map_err(RegistryError::External)?
+                .registration_services(&self.permit)?,
+        };
+        self.publish(PreparedRegistration::service(provides, provider))
+    }
+
+    pub fn register_import_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::transfer::ImportProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::import(provider))
+    }
+
+    pub fn register_export_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::transfer::ExportProvider>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::export(provider).map_err(RegistryError::External)?)
+    }
+
+    pub fn register_syntax_rule(
+        &mut self,
+        provider: Box<dyn fub_abi::custom::SyntaxRule>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::syntax(provider).map_err(RegistryError::External)?)
+    }
+
+    pub fn register_custom_renderer(
+        &mut self,
+        provider: Box<dyn fub_abi::custom::CustomRenderer>,
+    ) -> Result<(), RegistryError> {
+        self.publish(PreparedRegistration::renderer(provider).map_err(RegistryError::External)?)
+    }
+
+    pub fn register_index_provider(
+        &mut self,
+        provider: Box<dyn fub_abi::traits::IndexProvider>,
+    ) -> Result<(), RegistryError> {
+        let mut prepared =
+            PreparedIndexRegistration::new(provider).map_err(RegistryError::External)?;
+        match &self.workspace {
+            RegistrationWorkspace::Direct(workspace) => {
+                workspace.admit_index_registration(&self.permit, &prepared)?
+            }
+            RegistrationWorkspace::Guarded(workspace) => workspace
+                .read()
+                .map_err(RegistryError::External)?
+                .admit_index_registration(&self.permit, &prepared)?,
+        }
+        // A recoverable activation error is retained in the token and becomes
+        // `RegistryError::Activate` only after the index has been published.
+        let _ = self.with_host(|host| prepared.activate(host));
+        let committed = match &mut self.workspace {
+            RegistrationWorkspace::Direct(workspace) => {
+                workspace.commit_index_registration(&self.permit, &mut prepared)
+            }
+            RegistrationWorkspace::Guarded(workspace) => match workspace.write() {
+                Ok(mut workspace) => {
+                    workspace.commit_index_registration(&self.permit, &mut prepared)
+                }
+                Err(error) => Err(RegistryError::External(error)),
+            },
+        };
+        if committed.is_err() {
+            let _ = self.with_host(|host| Ok(prepared.dispose_uncommitted(host)));
+        }
+        committed
+    }
+
+    /// Opens the one native filesystem gap required by Tantivy's mmap index.
+    ///
+    /// Keep this surface search-specific: a generic bundle data-directory
+    /// accessor would silently grant every native bundle ambient filesystem
+    /// access outside `VaultStorage`.
+    #[cfg(feature = "search")]
+    pub(crate) fn search_data_dir(&self) -> Result<camino::Utf8PathBuf, PluginError> {
+        self.with_read(|workspace| workspace.plugin_data_dir(SEARCH_ID))
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?
+    }
+
+    pub fn setting(&self, key: &str) -> Result<SettingValue, PluginError> {
+        self.with_read(|workspace| workspace.setting(key))
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?
+    }
+
+    pub fn set_before_write_hook(&mut self, hook: BeforeWriteHook) -> Result<(), RegistryError> {
+        let mut hook = Some(hook);
+        match &mut self.workspace {
+            RegistrationWorkspace::Direct(workspace) => {
+                workspace.commit_before_write_hook(&self.permit, &mut hook)
+            }
+            RegistrationWorkspace::Guarded(workspace) => match workspace.write() {
+                Ok(mut workspace) => workspace.commit_before_write_hook(&self.permit, &mut hook),
+                Err(error) => Err(RegistryError::External(error)),
+            },
+        }
+    }
+
+    pub fn with_host<R>(
+        &mut self,
+        call: impl FnOnce(&mut dyn HostApi) -> Result<R, PluginError>,
+    ) -> Result<R, PluginError> {
+        match &mut self.workspace {
+            RegistrationWorkspace::Direct(workspace) => {
+                let owner = self.permit.owner().to_owned();
+                workspace.with_host(&owner, call)
+            }
+            RegistrationWorkspace::Guarded(workspace) => {
+                let mut host = JobHost::new((*workspace).clone(), self.permit.owner());
+                call(&mut host)
+            }
+        }
+    }
+}
+
+/// Plugin e registrazione provider appartenenti alla **stessa istanza** di un
+/// montaggio.
 ///
-/// È il trait che il §9.3 chiedeva, ed è host-side per la ragione scritta in
-/// testa al modulo. Un'implementazione risponde a quattro domande e nessuna di
-/// più: chi sei, quanto ti si crede, qual è il tuo plugin, e cosa registri.
+/// Il tipo esiste soprattutto per i bundle WASM: plugin e provider devono
+/// condividere l'istanza esplicitamente, non comunicare attraverso un campo
+/// temporaneo del bundle fra due chiamate separate.
+pub struct BundleMount<'a> {
+    plugin: Box<dyn Plugin>,
+    register: RegistrationStep<'a>,
+}
+
+impl<'a> BundleMount<'a> {
+    pub fn new(
+        plugin: Box<dyn Plugin>,
+        register: impl FnOnce(&mut Registrar<'_>) -> RegistrationReport + 'a,
+    ) -> Self {
+        Self {
+            plugin,
+            register: Box::new(register),
+        }
+    }
+
+    fn into_parts(self) -> (Box<dyn Plugin>, RegistrationStep<'a>) {
+        (self.plugin, self.register)
+    }
+}
+
+/// Un plugin e i provider che gli appartengono.
 pub trait Bundle: Send + Sync {
-    /// Chi è: id, versione, versione di ABI, permessi, servizi offerti e
-    /// richiesti. È ciò che il registry **dichiara** al kernel.
     fn manifest(&self) -> PluginManifest;
 
-    /// Di che famiglia è, per l'inventario. Il default è
-    /// [`BundleKind::Component`]: i componenti erano l'unica famiglia prima
-    /// dei temi, e un'implementazione che non dice niente resta quella di
-    /// prima — ciò che si ottiene dimenticandosi di dichiararlo non può essere
-    /// più di ciò che si otteneva dichiarando.
     fn kind(&self) -> BundleKind {
         BundleKind::Component
     }
 
-    /// Quanto l'host si fida di lui.
-    ///
-    /// Non sta nel manifest e non ci starà mai: è ciò che l'host pensa del
-    /// bundle, non ciò che il bundle dice di sé
-    /// ([`Workspace::register_plugin`]). Il default è
-    /// [`Trust::default`] — il grado più restrittivo fra quelli che girano — per
-    /// la stessa ragione per cui lo è là: ciò che si ottiene dimenticandosi di
-    /// dichiararlo non può essere più di ciò che si ottiene dichiarando.
     fn trust(&self) -> Trust {
         Trust::default()
     }
 
-    /// Il plugin del bundle. **Costruirlo non è attivarlo**: qui non c'è il
-    /// workspace, e non è una svista.
-    ///
-    /// Tutto ciò che ha bisogno del vault sta in [`Plugin::activate`] (roba del
-    /// plugin) o in [`register`](Bundle::register) (roba di chi lo monta), che
-    /// sono i due momenti in cui l'id è già dichiarato e quindi le capacità
-    /// hanno un proprietario. A M5 questo metodo è l'istanziazione di un
-    /// componente WASM, che il vault non lo vede nemmeno lei.
+    /// Costruisce il corpo del plugin. Le implementazioni semplici possono
+    /// continuare a usare questa firma storica.
     fn plugin(&self) -> Box<dyn Plugin>;
 
-    /// Registra i provider del bundle: view, comandi, indici, handler, regole
-    /// sintattiche, renderer, servizi.
+    /// Contratto storico di registrazione. Qualunque messaggio restituito è un
+    /// fallimento, non un permesso a lasciare il bundle montato a metà.
+    fn register(&self, registrar: &mut Registrar<'_>) -> Vec<String>;
+
+    /// I bundle con degradi realmente recuperabili sovrascrivono questo metodo.
+    fn registration(&self, registrar: &mut Registrar<'_>) -> RegistrationReport {
+        RegistrationReport::from_legacy(self.register(registrar))
+    }
+
+    /// Prepara una singola transazione di montaggio.
     ///
-    /// Chiamata **dopo** [`Plugin::activate`] e con l'id già dichiarato, quindi
-    /// ogni `register_*` qui dentro trova il proprio proprietario. Ciò che torna
-    /// sono **avvisi** già composti: un pezzo che non entra non smonta il
-    /// bundle, e chi monta ha un canale per dirlo (oggi `stderr`, §20.2).
-    ///
-    /// Il canale lo usa [`BundleRegistry::mount`], che è il punto che ogni
-    /// accensione attraversa — non il chiamante di turno: la frase qui sopra
-    /// era vera del contratto e falsa dei fatti finché scriverla toccava a chi
-    /// chiamava.
-    fn register(&self, ws: &mut Workspace) -> Vec<String>;
+    /// Il default adatta i bundle nativi esistenti. I bundle in cui plugin e
+    /// provider condividono stato (per esempio WASM) sovrascrivono questo metodo
+    /// e portano quello stato nella closure di registrazione.
+    fn prepare(&self) -> BundleMount<'_> {
+        BundleMount::new(self.plugin(), move |registrar| self.registration(registrar))
+    }
+}
+/// Identità opaca di una sorgente runtime.
+///
+/// Due claim sono uguali soltanto quando discendono dallo stesso `new`/clone;
+/// non attraversano ABI, JSON o disco.
+#[derive(Clone, Default)]
+pub struct BundleClaim(Arc<()>);
+
+impl BundleClaim {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    fn same(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
-/// Perché un bundle **non** è montato.
+/// Un bundle immutabile consegnato dal composition root prima dell'apertura.
 ///
-/// Ogni variante vuol dire "non c'è, e non ha lasciato niente dietro": è la
-/// stessa disciplina di [`RegistryError`], un livello più in su.
+/// `requested` è una decisione già calcolata dal chiamante: l'host non la
+/// persiste e non prova a ricostruirla da configurazione o stato installato.
+#[derive(Clone)]
+pub struct StartupBundle {
+    bundle: Arc<dyn Bundle>,
+    requested: bool,
+    claim: BundleClaim,
+}
+
+impl StartupBundle {
+    pub fn new(bundle: Arc<dyn Bundle>, requested: bool, claim: BundleClaim) -> Self {
+        Self {
+            bundle,
+            requested,
+            claim,
+        }
+    }
+
+    pub(crate) fn parts(&self) -> (Arc<dyn Bundle>, bool, BundleClaim) {
+        (Arc::clone(&self.bundle), self.requested, self.claim.clone())
+    }
+}
+
+/// Token che linearizza una decisione installata con preparazione, rollback e
+/// pubblicazione delle aperture che ne hanno letto lo snapshot.
+pub struct StartupValidity {
+    valid: Custody<bool>,
+    leases: Arc<StartupLeaseCounter>,
+}
+
+#[derive(Default)]
+struct StartupLeaseCounter {
+    active: std::sync::Mutex<usize>,
+    drained: std::sync::Condvar,
+}
+
+/// Lease RAII di uno snapshot in preparazione o in apertura.
+pub struct StartupLease {
+    counter: Arc<StartupLeaseCounter>,
+}
+
+impl Drop for StartupLease {
+    fn drop(&mut self) {
+        let mut active = self
+            .counter
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *active = active
+            .checked_sub(1)
+            .expect("una lease viene rilasciata una sola volta");
+        if *active == 0 {
+            self.counter.drained.notify_all();
+        }
+    }
+}
+
+impl StartupValidity {
+    pub fn new() -> Self {
+        Self {
+            valid: Custody::new("la validità dello startup", true),
+            leases: Arc::new(StartupLeaseCounter::default()),
+        }
+    }
+
+    pub fn acquire(&self) -> Result<StartupLease, PluginError> {
+        let valid = self.valid.read()?;
+        if !*valid {
+            return Err(PluginError::Conflict(
+                "La decisione dei componenti non è più corrente.".into(),
+            ));
+        }
+        let mut active = self
+            .leases
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *active = active.checked_add(1).ok_or_else(|| {
+            PluginError::Internal("Troppe aperture startup contemporanee.".into())
+        })?;
+        drop(active);
+        drop(valid);
+        Ok(StartupLease {
+            counter: Arc::clone(&self.leases),
+        })
+    }
+
+    /// Revokes this startup decision without waiting for openings that already
+    /// acquired a lease to finish.
+    ///
+    /// Keeping revocation separate from draining lets shutdown reject new
+    /// openings before closing the currently published host.
+    pub fn revoke(&self) -> Result<(), PluginError> {
+        let mut valid = self.valid.write()?;
+        *valid = false;
+        Ok(())
+    }
+
+    /// Waits until every lease acquired before revocation has been released.
+    ///
+    /// The lease counter is deliberately independent from the validity lock:
+    /// draining therefore does not hold the host, registry, or session locks.
+    pub fn drain(&self) {
+        let mut active = self
+            .leases
+            .active
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        while *active != 0 {
+            active = self
+                .leases
+                .drained
+                .wait(active)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+    }
+
+    /// Revokes the decision and waits for all existing startup leases.
+    ///
+    /// This compatibility operation preserves the original combined behavior;
+    /// shutdown that must close the published host between those phases should
+    /// call [`Self::revoke`] and [`Self::drain`] separately.
+    pub fn invalidate(&self) -> Result<(), PluginError> {
+        self.revoke()?;
+        self.drain();
+        Ok(())
+    }
+
+    pub(crate) fn read(&self) -> Result<std::sync::RwLockReadGuard<'_, bool>, PluginError> {
+        self.valid.read()
+    }
+}
+
+impl Default for StartupValidity {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+pub struct StartupSnapshot {
+    pub bundles: Vec<StartupBundle>,
+    pub formats: crate::PreparedFormatSource,
+    pub diagnostics: Vec<PluginError>,
+    pub validity: Option<Arc<StartupValidity>>,
+    pub lease: Option<StartupLease>,
+}
+
+impl StartupSnapshot {
+    pub fn new(bundles: Vec<StartupBundle>) -> Self {
+        Self {
+            bundles,
+            formats: crate::PreparedFormatSource::empty(),
+            diagnostics: Vec::new(),
+            validity: None,
+            lease: None,
+        }
+    }
+}
+
+pub trait StartupSource: Send + Sync {
+    fn prepare(&self) -> Result<StartupSnapshot, PluginError>;
+}
+
+impl StartupSource for Vec<StartupBundle> {
+    fn prepare(&self) -> Result<StartupSnapshot, PluginError> {
+        Ok(StartupSnapshot::new(self.clone()))
+    }
+}
+
+/// Perché un bundle non è montato.
 #[derive(Debug)]
 pub enum BundleError {
-    /// Il manifest dichiara una versione del contratto che questo host non
-    /// serve ([`abi_compatible`]).
     Abi { id: String, declared: String },
-    /// La dichiarazione è stata rifiutata dal kernel: id doppio, nome fuori dal
-    /// proprio namespace, requisito che nessuno offre.
     Declaration(RegistryError),
-    /// Si è chiesto di accendere un bundle che questo host non sa montare
-    /// (§11.1). È un errore e non un silenzio: «l'ho riacceso» e «ho scritto
-    /// male l'id» devono essere due risposte diverse.
     Unknown(String),
-    /// [`Plugin::activate`] è fallita. La dichiarazione appena fatta è stata
-    /// **ritirata**: un bundle che non si è attivato non resta nell'inventario
-    /// del §7.6, o «dichiarato» smetterebbe di voler dire «montato».
+    Preparation { id: String, error: String },
     Activation { id: String, error: PluginError },
+    Registration { id: String, error: String },
 }
 
 impl std::fmt::Display for BundleError {
@@ -146,16 +549,21 @@ impl std::fmt::Display for BundleError {
         match self {
             BundleError::Abi { id, declared } => write!(
                 f,
-                "`{id}` speaks contract `{declared}`, but this host speaks \
-                 `{}`: will not mount",
+                "`{id}` speaks contract `{declared}`, but this host speaks `{}`: will not mount",
                 fub_abi::traits::ABI_VERSION
             ),
-            BundleError::Declaration(and) => write!(f, "{and}"),
+            BundleError::Declaration(error) => write!(f, "{error}"),
+            BundleError::Unknown(id) => {
+                write!(f, "`{id}` is not a bundle this host knows how to mount")
+            }
+            BundleError::Preparation { id, error } => {
+                write!(f, "`{id}` could not be prepared: {error}")
+            }
             BundleError::Activation { id, error } => {
                 write!(f, "`{id}` did not activate: {error}")
             }
-            BundleError::Unknown(id) => {
-                write!(f, "`{id}` is not a bundle this host knows how to mount")
+            BundleError::Registration { id, error } => {
+                write!(f, "`{id}` did not register atomically: {error}")
             }
         }
     }
@@ -163,46 +571,23 @@ impl std::fmt::Display for BundleError {
 
 impl std::error::Error for BundleError {}
 
-/// Perché un bundle non è montato, **come lo vede chi l'ha chiesto** (§12.2).
-///
-/// Le quattro varianti non sono quattro modi di dire la stessa cosa, e
-/// appiattirle su [`PluginError::Internal`] toglieva a chi accende un
-/// componente l'unica cosa che gli serve sapere: se ha sbagliato l'id, se il
-/// componente è troppo nuovo per questo host, o se è il componente ad avere un
-/// difetto.
-///
-/// L'ultima riga è quella che conta di più: un'attivazione fallita **porta già
-/// un `PluginError`**, scritto da chi non si è attivato. Riavvolgerlo in un
-/// `Internal` avrebbe cancellato una risposta giusta per rimpiazzarla con una
-/// generica — e con essa il catalogo di chi l'aveva scritta.
 impl From<BundleError> for PluginError {
-    fn from(and: BundleError) -> Self {
-        match and {
-            // Non è un difetto di nessuno: questo host non parla quel
-            // contratto. È la stessa forma di «nessuno serve questa domanda».
-            BundleError::Abi { .. } => PluginError::Unserved(and.to_string().into()),
-            // «L'ho riacceso» e «ho scritto male l'id» devono essere due
-            // risposte diverse: è la ragione per cui la variante esiste, e
-            // sopravvive alla traduzione solo restando distinta qui.
-            BundleError::Unknown(_) => PluginError::NotFound(and.to_string().into()),
-            // La dichiarazione respinta dal kernel è un difetto di chi ha
-            // scritto il bundle: id doppio, nome fuori dal namespace, requisito
-            // che nessuno offre.
-            BundleError::Declaration(_) => PluginError::Internal(and.to_string().into()),
-            // La risposta di chi non si è attivato, **preservata**: il suo
-            // `kind` è più informato di qualunque cosa si possa mettere qui.
-            BundleError::Activation { .. } => and.into_activation_error(),
+    fn from(error: BundleError) -> Self {
+        match error {
+            BundleError::Abi { .. } => PluginError::Unserved(error.to_string().into()),
+            BundleError::Unknown(_) => PluginError::NotFound(error.to_string().into()),
+            BundleError::Declaration(_)
+            | BundleError::Preparation { .. }
+            | BundleError::Registration { .. } => PluginError::Internal(error.to_string().into()),
+            BundleError::Activation { .. } => error.into_activation_error(),
         }
     }
 }
 
 impl BundleError {
-    /// L'errore di un'attivazione fallita, con l'id di chi non si è attivato
-    /// premesso al messaggio: chi lo riceve deve sapere **chi** ha detto di no,
-    /// e il `kind` di chi l'ha detto è quello che vale.
     fn into_activation_error(self) -> PluginError {
         let BundleError::Activation { id, mut error } = self else {
-            unreachable!("called only on the Activation branch")
+            unreachable!("called only for activation errors")
         };
         let message = error.message_mut();
         *message = format!("`{id}` non si è attivato: {message}").into();
@@ -210,87 +595,110 @@ impl BundleError {
     }
 }
 
-/// Un bundle montato: l'id con cui è dichiarato, e il suo plugin.
-///
-/// Il plugin è un `Arc` e non un `Box` dalla
-/// [0032](../../../docs/decisions/0183-composizione-host-kernel.md): il runner esegue
-/// `run_job` su un thread suo e per tutta la durata del job, quindi ha bisogno
-/// di **tenere** il corpo senza tenere il lock di questo registry — o chiudere
-/// il vault aspetterebbe la fine di un export. `Arc<dyn Plugin>` è la forma di
-/// quel prestito, e regge perché `run_job` prende `&self`.
 struct MountedBundle {
     id: String,
     plugin: Arc<dyn Plugin>,
 }
 
-/// **Chi possiede i bundle** di un workspace, in ordine di montaggio.
-///
-/// Possedere il plugin è tutto il mestiere di questo tipo, e da lì
-/// vengono le due cose che prima non avevano un posto dove stare:
-/// [`Plugin::deactivate`], che non aveva un chiamante
-/// ([decisione 0028](../../../docs/decisions/0183-composizione-host-kernel.md)),
-/// e [`Plugin::run_job`], che è il corpo di un job e che il runner del §9.3
-/// dovrà pur chiedere a qualcuno.
-///
-/// # I **conosciuti**, e perché ci vogliono (§11.1)
-///
-/// Prima di questa voce la tabella di montaggio era una variabile locale di
-/// `mount()`: i bundle esistevano per il tempo del ciclo che li montava, e
-/// quindi *smontarne uno era definitivo* — `unmount` toglieva, e per rimettere
-/// non c'era niente da cui ripartire. Un interruttore che si può solo spegnere
-/// non è un interruttore.
-///
-/// Adesso il registry tiene anche chi **non** è montato: è quello che rende
-/// vero il §11.1, e insieme è ciò che permette di non montare all'avvio ciò che
-/// l'utente ha spento (`plugins.disabled`) senza che diventi invisibile.
+pub(crate) struct KnownBundle {
+    manifest: PluginManifest,
+    kind: BundleKind,
+    trust: Trust,
+    bundle: Arc<dyn Bundle>,
+    claim: Option<BundleClaim>,
+}
+
 #[derive(Default)]
 pub struct BundleRegistry {
-    /// I bundle che questo host sa montare, in ordine di tabella. Chi è qui e
-    /// non in `mounted` è **spento**, non assente.
-    known: Vec<Arc<dyn Bundle>>,
+    /// Tutto ciò che questo host conosce. Un bundle conosciuto ma non in
+    /// `mounted` è spento, non assente.
+    known: Vec<KnownBundle>,
     mounted: Vec<MountedBundle>,
 }
 
-/// Una riga dell'inventario dei bundle: chi c'è, come si chiama, e se è acceso.
-///
-/// Non è [`PluginInfo`](fub_kernel::PluginInfo) e non lo sostituisce: quello
-/// racconta chi è **dichiarato nel kernel**, e un bundle spento non lo è
-/// affatto. La differenza è il punto — «spento» e «non c'è» sono due stati
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct BundleInfo {
-    /// Chi è: l'id con cui il bundle è dichiarato nel kernel.
     pub id: String,
-    /// Come si chiama, per gli elenchi.
     pub name: String,
-    /// Se è acceso. «Spento» e «non c'è» sono due stati diversi, e questo
-    /// campo è l'unica riga che li distingue.
     pub mounted: bool,
-    /// Di che famiglia è: un componente o un tema.
-    ///
-    /// Sta qui e non si deduce da altro perché è l'**unica** riga che lo dice a
-    /// chi guarda l'elenco: «spento» e «non c'è» sono già distinti da
-    /// [`mounted`](BundleInfo::mounted), e la famiglia è la terza domanda che
-    /// chi disegna si pone davanti a una riga — un tema non si spegne con un
-    /// interruttore di componente, e saperlo prima di cliccare è la differenza
-    /// fra un pannello che chiede e uno che insegna.
     pub kind: BundleKind,
-    /// Quanto l'host si fida di chi lo ha prodotto.
-    ///
-    /// Non è una decorazione accanto ai permessi: è **l'altra metà della
-    /// domanda** che qualcuno si pone leggendoli. «Può leggere le mie note» non
-    /// vuol dire la stessa cosa detto di una feature di questo repo e di un
-    /// componente arrivato da fuori, e chi decide se lasciarglielo fare sta
-    /// decidendo soprattutto di **chi** si fida.
     pub trust: Trust,
-    /// I permessi che il suo manifest dichiara, coi loro parametri (§23.17).
-    ///
-    /// Stanno qui e non solo in [`PluginInfo`](fub_kernel::PluginInfo) per una
-    /// ragione che si vede da chi guarda: l'inventario del kernel racconta chi è
-    /// **dichiarato**, e un componente spento non lo è. Ma la domanda *cosa
-    /// chiederebbe se lo accendessi* si pone precisamente **prima** di
-    /// accenderlo — e un elenco che comparisse solo dopo aver acceso sarebbe un
-    /// elenco che si legge quando la decisione è già stata presa.
     pub permissions: fub_abi::options::OptionMap,
+}
+
+/// Materializza il **default-deny** dei permessi esterni prima che il plugin
+/// riceva il suo primo `HostApi`.
+///
+/// Il manifest dice ciò che il componente *chiede*, non ciò che la persona ha
+/// approvato. Per i bundle non-core una chiave ancora al default viene quindi
+/// scritta `false`; una decisione già presente nel livello macchina — `true` o
+/// `false` — resta invece intatta. Le chiavi dei permessi sono machine-scoped,
+/// quindi un `.fub/settings.json` arrivato con un vault non può portarsi dietro
+/// un proprio consenso.
+fn initialize_external_permissions(
+    ws: &mut Workspace,
+    id: &str,
+    trust: Trust,
+) -> Result<Vec<PermissionInitialization>, String> {
+    if trust == Trust::Core {
+        return Ok(Vec::new());
+    }
+
+    let entries = match ws.query_index(IndexQuery::Settings {
+        plugin: Some(id.to_string()),
+    }) {
+        Ok(IndexResult::Settings(entries)) => entries,
+        Ok(other) => {
+            return Err(format!(
+                "permission settings query for `{id}` answered off-topic: {other:?}"
+            ));
+        }
+        Err(error) => {
+            return Err(format!(
+                "cannot read permission settings for `{id}` before activation: {error}"
+            ));
+        }
+    };
+
+    let mut initialized = Vec::new();
+    for entry in entries {
+        let Some((owner, _permission)) = permission_of_key(&entry.spec.key) else {
+            continue;
+        };
+        if owner != id || entry.source != SettingSource::Default {
+            continue;
+        }
+        let initialized_now = match ws.initialize_permission_denial(&entry.spec.key) {
+            Ok(initialized) => initialized,
+            Err(error) => {
+                let mut reason = format!(
+                    "cannot initialize external permission `{}` as denied: {error}",
+                    entry.spec.key
+                );
+                append_permission_rollback(ws, &initialized, &mut reason);
+                return Err(reason);
+            }
+        };
+        if let Some(receipt) = initialized_now {
+            initialized.push(receipt);
+        }
+    }
+    Ok(initialized)
+}
+
+/// Ritira le sole decisioni `false` create dal tentativo di mount corrente.
+/// Una scelta dell'utente già esistente non entra mai in `initialized`, quindi
+/// il rollback non può cancellarla.
+fn append_permission_rollback(
+    ws: &mut Workspace,
+    initialized: &[PermissionInitialization],
+    reason: &mut String,
+) {
+    for receipt in initialized.iter().rev() {
+        if let Err(error) = ws.rollback_permission_denial(receipt) {
+            reason.push_str(&format!("; permission rollback failed: {error}"));
+        }
+    }
 }
 
 impl BundleRegistry {
@@ -298,17 +706,74 @@ impl BundleRegistry {
         Self::default()
     }
 
-    /// Monta un bundle su un workspace: i quattro passi in testa al modulo.
-    ///
-    /// Torna gli **avvisi** dei provider che non sono entrati (il bundle è
-    /// montato lo stesso), o l'errore di uno dei tre passi che non ammettono un
-    /// mezzo montaggio.
-    pub fn mount(&mut self, bundle: &dyn Bundle, ws: &mut Workspace) -> Result<(), BundleError> {
+    /// Enables a known bundle while keeping both custody guards away from all
+    /// bundle, plugin and provider code. Writer turns serialize the transaction
+    /// across the unlocked phases.
+    pub fn enable_guarded(
+        registry: &Custody<Self>,
+        workspace: &Custody<Workspace>,
+        id: &str,
+    ) -> Result<(), BundleError> {
+        let _workspace_turn = workspace.write_turn();
+        let _registry_turn = registry.write_turn();
+        let bundle = {
+            let registry = registry.read().map_err(|error| BundleError::Registration {
+                id: id.to_owned(),
+                error: error.to_string(),
+            })?;
+            if registry.mounted.iter().any(|bundle| bundle.id == id) {
+                return Ok(());
+            }
+            registry
+                .known
+                .iter()
+                .map(|known| (known.manifest.id.clone(), Arc::clone(&known.bundle)))
+                .collect::<Vec<_>>()
+        }
+        .into_iter()
+        .find(|(known_id, _)| known_id == id)
+        .map(|(_, bundle)| bundle)
+        .ok_or_else(|| BundleError::Unknown(id.to_owned()))?;
+
+        Self::mount_guarded(registry, workspace, bundle.as_ref())
+    }
+
+    pub(crate) fn enable_claimed_guarded(
+        registry: &Custody<Self>,
+        workspace: &Custody<Workspace>,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<(), PluginError> {
+        let _workspace_turn = workspace.write_turn();
+        let _registry_turn = registry.write_turn();
+        let bundle = {
+            let registry = registry.read()?;
+            let Some(known) = registry.known.iter().find(|known| known.manifest.id == id) else {
+                return Err(PluginError::NotFound(
+                    format!("Nessun bundle conosciuto con id `{id}`.").into(),
+                ));
+            };
+            if !known.claim.as_ref().is_some_and(|known| known.same(claim)) {
+                return Err(PluginError::AlreadyExists(
+                    format!("Il bundle `{id}` appartiene a un'altra sorgente.").into(),
+                ));
+            }
+            if registry.mounted.iter().any(|bundle| bundle.id == id) {
+                return Ok(());
+            }
+            Arc::clone(&known.bundle)
+        };
+        Self::mount_guarded(registry, workspace, bundle.as_ref()).map_err(PluginError::from)
+    }
+
+    fn mount_guarded(
+        registry: &Custody<Self>,
+        workspace: &Custody<Workspace>,
+        bundle: &dyn Bundle,
+    ) -> Result<(), BundleError> {
         let manifest = bundle.manifest();
         let id = manifest.id.clone();
-
-        // 1. La versione del contratto, prima di ogni altra cosa: un plugin che
-        //    parla un'altra major non deve nemmeno comparire nell'inventario.
+        let trust = bundle.trust();
         if !abi_compatible(&manifest.abi_version) {
             return Err(BundleError::Abi {
                 id,
@@ -316,217 +781,724 @@ impl BundleRegistry {
             });
         }
 
-        // 2. La dichiarazione. È qui che il kernel applica il §7.3 (permessi e
-        //    fiducia), il §7.4 (i nomi dei servizi) e il §7.5 (i requisiti).
-        ws.register_plugin(manifest, bundle.trust())
+        let permit = {
+            let mut ws = workspace
+                .write()
+                .map_err(|error| BundleError::Registration {
+                    id: id.clone(),
+                    error: error.to_string(),
+                })?;
+            ws.register_plugin(manifest, trust)
+                .map_err(BundleError::Declaration)?;
+            ws.registration_permit(&id)
+                .map_err(BundleError::Declaration)?
+        };
+
+        let initialized_permissions =
+            match initialize_external_permissions_guarded(workspace, &id, trust) {
+                Ok(initialized) => initialized,
+                Err(mut error) => {
+                    rollback_declaration_guarded(workspace, &permit, &mut error);
+                    return Err(BundleError::Registration { id, error });
+                }
+            };
+
+        let prepared = fub_kernel::safety::external(
+            "bundle preparation",
+            |message| PluginError::Internal(message.into()),
+            || Ok(bundle.prepare()),
+        );
+        let (mut plugin, register) = match prepared {
+            Ok(prepared) => prepared.into_parts(),
+            Err(error) => {
+                let mut reason = error.to_string();
+                append_permission_rollback_guarded(
+                    workspace,
+                    &initialized_permissions,
+                    &mut reason,
+                );
+                rollback_declaration_guarded(workspace, &permit, &mut reason);
+                return Err(BundleError::Registration { id, error: reason });
+            }
+        };
+
+        let activation = fub_kernel::safety::external(
+            "plugin activation",
+            |message| PluginError::Internal(message.into()),
+            || {
+                let mut host = JobHost::new(workspace.clone(), &id);
+                plugin.activate(&mut host)
+            },
+        );
+        if let Err(mut error) = activation {
+            let mut rollback = String::new();
+            append_permission_rollback_guarded(workspace, &initialized_permissions, &mut rollback);
+            rollback_declaration_guarded(workspace, &permit, &mut rollback);
+            if !rollback.is_empty() {
+                let message = error.message_mut();
+                *message = format!("{message};{rollback}").into();
+            }
+            drop_external(plugin, "failed plugin drop");
+            return Err(BundleError::Activation { id, error });
+        }
+
+        let mut registrar = Registrar::guarded(workspace, permit);
+        let registration = fub_kernel::safety::external(
+            "bundle registration",
+            |message| PluginError::Internal(message.into()),
+            || Ok(register(&mut registrar)),
+        );
+        let (warnings, failure) = match registration {
+            Ok(report) => report.into_parts(),
+            Err(error) => (Vec::new(), Some(error.to_string())),
+        };
+        if let Some(mut error) = failure {
+            let deactivation = fub_kernel::safety::external(
+                "plugin rollback deactivation",
+                |message| PluginError::Internal(message.into()),
+                || {
+                    let mut host = JobHost::new(workspace.clone(), &id);
+                    plugin.deactivate(&mut host)
+                },
+            );
+            if let Err(rollback) = deactivation {
+                error.push_str(&format!("; rollback deactivate failed: {rollback}"));
+            }
+            append_permission_rollback_guarded(workspace, &initialized_permissions, &mut error);
+            rollback_declaration_guarded(workspace, &registrar.permit, &mut error);
+            drop(registrar);
+            drop_external(plugin, "rolled back plugin drop");
+            return Err(BundleError::Registration { id, error });
+        }
+
+        for warning in warnings {
+            tracing::warn!(target: "fub.host", "{id}: {warning}");
+        }
+        match registry.write() {
+            Ok(mut registry) => {
+                registry.mounted.push(MountedBundle {
+                    id,
+                    plugin: Arc::from(plugin),
+                });
+                Ok(())
+            }
+            Err(publication) => {
+                let mut error = format!("cannot publish mounted bundle: {publication}");
+                let deactivation = fub_kernel::safety::external(
+                    "plugin publication rollback deactivation",
+                    |message| PluginError::Internal(message.into()),
+                    || {
+                        let mut host = JobHost::new(workspace.clone(), &id);
+                        plugin.deactivate(&mut host)
+                    },
+                );
+                if let Err(rollback) = deactivation {
+                    error.push_str(&format!("; rollback deactivate failed: {rollback}"));
+                }
+                append_permission_rollback_guarded(workspace, &initialized_permissions, &mut error);
+                rollback_declaration_guarded(workspace, &registrar.permit, &mut error);
+                drop(registrar);
+                drop_external(plugin, "unpublished plugin drop");
+                Err(BundleError::Registration { id, error })
+            }
+        }
+    }
+
+    /// Stops and removes a bundle without executing plugin/provider code or a
+    /// final destructor under either custody guard.
+    pub fn unmount_guarded(
+        registry: &Custody<Self>,
+        workspace: &Custody<Workspace>,
+        id: &str,
+    ) -> Vec<PluginError> {
+        let _workspace_turn = workspace.write_turn();
+        let _registry_turn = registry.write_turn();
+        let mut mounted = match registry.write() {
+            Ok(mut registry) => {
+                let Some(at) = registry.mounted.iter().position(|bundle| bundle.id == id) else {
+                    return Vec::new();
+                };
+                registry.mounted.remove(at)
+            }
+            Err(error) => return vec![error],
+        };
+
+        let mut errors = Vec::new();
+        match Arc::get_mut(&mut mounted.plugin) {
+            Some(plugin) => {
+                let result = fub_kernel::safety::external(
+                    "plugin deactivation",
+                    |message| PluginError::Internal(message.into()),
+                    || {
+                        let mut host = JobHost::new(workspace.clone(), id);
+                        plugin.deactivate(&mut host)
+                    },
+                );
+                if let Err(error) = result {
+                    errors.push(error);
+                }
+            }
+            None => errors.push(PluginError::Internal(
+                format!("`{id}` still has an in-flight job: its `deactivate` was not called")
+                    .into(),
+            )),
+        }
+
+        let permit = match workspace.read().and_then(|ws| {
+            ws.registration_permit(id)
+                .map_err(|error| PluginError::Internal(error.to_string().into()))
+        }) {
+            Ok(permit) => permit,
+            Err(error) => {
+                errors.push(error);
+                drop_external(mounted, "unmounted bundle drop");
+                return errors;
+            }
+        };
+        errors.extend(retire_guarded(workspace, &permit));
+        drop_external(mounted, "unmounted bundle drop");
+        errors
+    }
+
+    /// Monta un bundle in quattro passi: ABI, dichiarazione, attivazione,
+    /// provider. Gli ultimi tre vengono ritirati se un passo successivo fallisce.
+    pub fn mount(&mut self, bundle: &dyn Bundle, ws: &mut Workspace) -> Result<(), BundleError> {
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        let trust = bundle.trust();
+
+        if !abi_compatible(&manifest.abi_version) {
+            return Err(BundleError::Abi {
+                id,
+                declared: manifest.abi_version,
+            });
+        }
+
+        ws.register_plugin(manifest, trust)
+            .map_err(BundleError::Declaration)?;
+        let permit = ws
+            .registration_permit(&id)
             .map_err(BundleError::Declaration)?;
 
-        // 3. L'attivazione, con le capacità del manifest davanti. Fallire qui
-        //    non lascia un plugin dichiarato: il bundle non c'è.
-        let mut plugin = bundle.plugin();
-        if let Err(error) = ws.with_host(&id, |host| plugin.activate(host)) {
+        // Prima di `activate`: un componente esterno non deve avere neppure una
+        // finestra di una chiamata in cui il permesso richiesto sia già attivo.
+        let initialized_permissions = match initialize_external_permissions(ws, &id, trust) {
+            Ok(keys) => keys,
+            Err(mut error) => {
+                append_declaration_rollback(ws, &id, &mut error);
+                return Err(BundleError::Registration { id, error });
+            }
+        };
+
+        // `prepare` viene dopo la dichiarazione come il vecchio `plugin()`: la
+        // costruzione può essere specifica del backend, ma non ha ancora accesso
+        // alle capacità del vault. È comunque codice esterno: un panico ritira
+        // prima i default-deny creati dal tentativo e poi la dichiarazione.
+        let prepared = fub_kernel::safety::external(
+            "bundle preparation",
+            |message| PluginError::Internal(message.into()),
+            || Ok(bundle.prepare()),
+        );
+        let (mut plugin, register) = match prepared {
+            Ok(prepared) => prepared.into_parts(),
+            Err(error) => {
+                let mut reason = error.to_string();
+                append_permission_rollback(ws, &initialized_permissions, &mut reason);
+                append_declaration_rollback(ws, &id, &mut reason);
+                return Err(BundleError::Preparation { id, error: reason });
+            }
+        };
+        let activation = fub_kernel::safety::external(
+            "plugin activation",
+            |message| PluginError::Internal(message.into()),
+            || ws.with_host(&id, |host| plugin.activate(host)),
+        );
+        if let Err(mut error) = activation {
+            let mut rollback = String::new();
+            append_permission_rollback(ws, &initialized_permissions, &mut rollback);
+            if !rollback.is_empty() {
+                let message = error.message_mut();
+                *message = format!("{message};{rollback}").into();
+            }
             let _ = ws.deactivate_plugin(&id);
             return Err(BundleError::Activation { id, error });
         }
 
-        // 4. I provider. Da qui in poi ciò che va storto è un avviso, e **il
-        //    canale è questo**: il doc di [`Bundle::register`] lo scrive da
-        //    sempre («chi monta ha un canale per dirlo, oggi `stderr`, §20.2»),
-        //    ma finché gli avvisi tornavano al chiamante il canale era una
-        //    promessa che due chiamanti su tre non mantenevano — il bundle di
-        //    core li buttava in un `if let Err`, e `Host::set_plugin_enabled` in
-        //    un `?` che non lega. Scriverli qui è la regola nel posto che tutti
-        //    attraversano, e togliere il payload rende il gesto di scartarli
-        //    inesprimibile invece che solo sconsigliato: chi accende un
-        //    componente non ha più un modo di far sparire i provider che non
-        //    sono entrati.
-        //
-        //    L'id davanti alla frase non è decorazione: gli avvisi che i
-        //    `register_*` compongono dicono *cosa* non è entrato («sintassi non
-        //    innestata: …»), mai *di chi*, e una riga di log senza il
-        //    componente non si può nemmeno rileggere.
-        for warning in bundle.register(ws) {
+        let mut registrar = Registrar::direct(ws, permit);
+        let registration = fub_kernel::safety::external(
+            "bundle registration",
+            |message| PluginError::Internal(message.into()),
+            || Ok(register(&mut registrar)),
+        );
+        let (warnings, failure) = match registration {
+            Ok(report) => report.into_parts(),
+            Err(error) => (Vec::new(), Some(error.to_string())),
+        };
+        drop(registrar);
+        if let Some(mut error) = failure {
+            // Il plugin vede ancora il proprio host e i provider già entrati;
+            // poi si ritirano le sole decisioni create da questo tentativo e,
+            // infine, il kernel ritira provider e dichiarazione.
+            if let Err(rollback) = ws.with_host(&id, |host| plugin.deactivate(host)) {
+                error.push_str(&format!("; rollback deactivate failed: {rollback}"));
+            }
+            append_permission_rollback(ws, &initialized_permissions, &mut error);
+            match ws.deactivate_plugin(&id) {
+                Ok(errors) => {
+                    for rollback in errors {
+                        error.push_str(&format!("; rollback provider close failed: {rollback}"));
+                    }
+                }
+                Err(rollback) => error.push_str(&format!("; rollback failed: {rollback}")),
+            }
+            return Err(BundleError::Registration { id, error });
+        }
+
+        for warning in warnings {
             tracing::warn!(target: "fub.host", "{id}: {warning}");
         }
         self.mounted.push(MountedBundle {
             id,
-            // Dopo l'attivazione, e non prima: `activate` vuole `&mut self`, e
-            // il momento in cui il plugin è ancora solo di chi lo ha costruito è
-            // proprio questo.
             plugin: Arc::from(plugin),
         });
         Ok(())
     }
 
-    /// Gli id dei bundle montati, in ordine di montaggio.
     pub fn ids(&self) -> Vec<&str> {
-        self.mounted.iter().map(|m| m.id.as_str()).collect()
+        self.mounted
+            .iter()
+            .map(|bundle| bundle.id.as_str())
+            .collect()
     }
 
-    /// Aggiunge un bundle ai **conosciuti**, senza montarlo.
-    ///
-    /// È il primo dei due passi della tabella di montaggio: prima si dichiara
-    /// cosa esiste, poi si accende ciò che l'utente non ha spento. Chi passa di
-    /// qui e non da [`enable`](BundleRegistry::enable) resta una riga
-    /// nell'inventario con `mounted: false`.
     pub fn remember(&mut self, bundle: Arc<dyn Bundle>) {
-        let id = bundle.manifest().id;
-        self.known.retain(|b| b.manifest().id != id);
-        self.known.push(bundle);
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        if self
+            .known
+            .iter()
+            .find(|known| known.manifest.id == id)
+            .is_some_and(|known| known.claim.is_some())
+        {
+            return;
+        }
+        let known = KnownBundle {
+            manifest,
+            kind: bundle.kind(),
+            trust: bundle.trust(),
+            bundle,
+            claim: None,
+        };
+        self.known.retain(|known| known.manifest.id != id);
+        self.known.push(known);
+    }
+
+    /// Ricorda il bundle solo se nessuna sorgente precedente ne ha già
+    /// rivendicato l'identità. Restituisce l'id e se questa istanza ha vinto.
+    pub(crate) fn remember_first(&mut self, bundle: Arc<dyn Bundle>) -> (String, bool) {
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        if self.knows(&id) {
+            return (id, false);
+        }
+        self.known.push(KnownBundle {
+            manifest,
+            kind: bundle.kind(),
+            trust: bundle.trust(),
+            bundle,
+            claim: None,
+        });
+        (id, true)
+    }
+
+    pub(crate) fn claimed(bundle: Arc<dyn Bundle>, claim: BundleClaim) -> (String, KnownBundle) {
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        (
+            id,
+            KnownBundle {
+                manifest,
+                kind: bundle.kind(),
+                trust: bundle.trust(),
+                bundle,
+                claim: Some(claim),
+            },
+        )
+    }
+
+    /// Muove `candidate` nel registro soltanto se l'id è davvero vacante.
+    /// Lasciarlo nell'`Option` negli altri rami consente al chiamante di
+    /// distruggerne il corpo dopo avere rilasciato la custodia.
+    pub(crate) fn remember_claimed(
+        &mut self,
+        candidate: &mut Option<KnownBundle>,
+    ) -> Result<bool, PluginError> {
+        let proposed = candidate
+            .as_ref()
+            .expect("il candidato viene consumato soltanto quando è inserito");
+        let id = proposed.manifest.id.as_str();
+        let Some(existing) = self.known.iter().find(|known| known.manifest.id == id) else {
+            self.known.push(
+                candidate
+                    .take()
+                    .expect("il candidato vacante è ancora disponibile"),
+            );
+            return Ok(true);
+        };
+        if existing
+            .claim
+            .as_ref()
+            .zip(proposed.claim.as_ref())
+            .is_some_and(|(existing, proposed)| existing.same(proposed))
+        {
+            return Ok(false);
+        }
+        Err(PluginError::AlreadyExists(
+            format!("Il bundle `{id}` appartiene già a un'altra sorgente.").into(),
+        ))
+    }
+
+    pub(crate) fn is_owned(&self, id: &str, claim: &BundleClaim) -> bool {
+        self.known
+            .iter()
+            .find(|known| known.manifest.id == id)
+            .and_then(|known| known.claim.as_ref())
+            .is_some_and(|known| known.same(claim))
+    }
+
+    pub(crate) fn is_claimed(&self, id: &str) -> bool {
+        self.known
+            .iter()
+            .find(|known| known.manifest.id == id)
+            .is_some_and(|known| known.claim.is_some())
+    }
+
+    pub(crate) fn is_active_owned(&self, id: &str, claim: &BundleClaim) -> bool {
+        self.is_owned(id, claim) && self.mounted.iter().any(|bundle| bundle.id == id)
+    }
+
+    pub(crate) fn forget_claimed(
+        &mut self,
+        id: &str,
+        claim: &BundleClaim,
+    ) -> Result<KnownBundle, PluginError> {
+        let Some(at) = self.known.iter().position(|known| known.manifest.id == id) else {
+            return Err(PluginError::NotFound(
+                format!("Nessun bundle conosciuto con id `{id}`.").into(),
+            ));
+        };
+        let owned = self.known[at]
+            .claim
+            .as_ref()
+            .is_some_and(|known| known.same(claim));
+        if !owned {
+            return Err(PluginError::AlreadyExists(
+                format!("Il bundle `{id}` appartiene a un'altra sorgente.").into(),
+            ));
+        }
+        if self.mounted.iter().any(|bundle| bundle.id == id) {
+            return Err(PluginError::Conflict(
+                format!("Il bundle `{id}` è ancora montato.").into(),
+            ));
+        }
+        Ok(self.known.remove(at))
+    }
+
+    pub(crate) fn drop_known(bundle: Option<KnownBundle>) {
+        if let Some(bundle) = bundle {
+            drop_external(bundle, "managed bundle drop");
+        }
+    }
+
+    pub fn remember_guarded(
+        registry: &Custody<Self>,
+        bundle: Arc<dyn Bundle>,
+    ) -> Result<(), PluginError> {
+        let manifest = bundle.manifest();
+        let id = manifest.id.clone();
+        let mut candidate = Some(KnownBundle {
+            manifest,
+            kind: bundle.kind(),
+            trust: bundle.trust(),
+            bundle,
+            claim: None,
+        });
+        let (result, replaced) = match registry.write() {
+            Ok(mut registry) => {
+                let at = registry
+                    .known
+                    .iter()
+                    .position(|entry| entry.manifest.id == id);
+                if at.is_some_and(|at| registry.known[at].claim.is_some()) {
+                    (
+                        Err(PluginError::AlreadyExists(
+                            format!("Il bundle `{id}` appartiene a una sorgente runtime.").into(),
+                        )),
+                        None,
+                    )
+                } else {
+                    let replaced = at.map(|at| registry.known.remove(at));
+                    registry
+                        .known
+                        .push(candidate.take().expect("il bundle non è stato rifiutato"));
+                    (Ok(()), replaced)
+                }
+            }
+            Err(error) => (Err(error), None),
+        };
+        Self::drop_known(candidate);
+        Self::drop_known(replaced);
+        result
     }
 
     pub fn inventory(&self) -> Vec<BundleInfo> {
         self.known
             .iter()
-            .map(|b| {
-                let manifest = b.manifest();
+            .map(|bundle| {
+                let manifest = &bundle.manifest;
                 BundleInfo {
-                    mounted: self.mounted.iter().any(|m| m.id == manifest.id),
-                    trust: b.trust(),
-                    permissions: manifest.permissions.granted,
-                    id: manifest.id,
-                    name: manifest.name,
-                    kind: b.kind(),
+                    mounted: self.mounted.iter().any(|item| item.id == manifest.id),
+                    trust: bundle.trust,
+                    permissions: manifest.permissions.granted.clone(),
+                    id: manifest.id.clone(),
+                    name: manifest.name.clone(),
+                    kind: bundle.kind,
                 }
             })
             .collect()
     }
 
-    /// **Accende** un bundle conosciuto: gli stessi quattro passi di
-    /// [`mount`](BundleRegistry::mount), su un bundle che era spento.
-    ///
-    /// Un id che non è fra i conosciuti non si accende inventandolo: è
-    /// `Ok(vec![…])` con un avviso? No — è un errore, ed è l'unico modo di
-    /// distinguere «l'ho riacceso» da «ho scritto male l'id». Un bundle già
-    /// acceso invece è un no-op senza avvisi: accendere ciò che è acceso è già
-    /// il risultato voluto.
     pub fn enable(&mut self, ws: &mut Workspace, id: &str) -> Result<(), BundleError> {
-        if self.mounted.iter().any(|m| m.id == id) {
+        if self.mounted.iter().any(|bundle| bundle.id == id) {
             return Ok(());
         }
-        let Some(bundle) = self.known.iter().find(|b| b.manifest().id == id).cloned() else {
+        let Some(bundle) = self
+            .known
+            .iter()
+            .find(|bundle| bundle.manifest.id == id)
+            .map(|known| Arc::clone(&known.bundle))
+        else {
             return Err(BundleError::Unknown(id.to_string()));
         };
         self.mount(bundle.as_ref(), ws)
     }
 
-    /// **Sa montare questo id?** — cioè: è fra i conosciuti, o è già montato.
-    ///
-    /// È la sola metà di [`enable`](BundleRegistry::enable) che risponde senza
-    /// il workspace, e ha un nome suo perché qualcuno la chiede **prima** di
-    /// scrivere: chi accende un componente (`Host::set_plugin_enabled`) mette
-    /// la riga in `plugins.disabled` per prima, e un id inventato non deve
-    /// arrivare a quella scrittura — non è un montaggio andato storto, è una
-    /// domanda mal posta, e le domande mal poste si respingono prima di
-    /// cambiare qualcosa e non dopo.
-    pub fn knows(&self, id: &str) -> bool {
-        self.mounted.iter().any(|m| m.id == id) || self.known.iter().any(|b| b.manifest().id == id)
+    /// Accende un insieme di bundle senza affidare le dipendenze all'ordine
+    /// dell'inventario. Solo `MissingRequirement` viene rimesso in coda; ogni
+    /// altro errore è definitivo. Se un giro intero non monta niente, i
+    /// requisiti rimasti sono realmente irrisolvibili.
+    pub fn enable_in_dependency_order<I, S>(
+        &mut self,
+        ws: &mut Workspace,
+        ids: I,
+    ) -> Vec<(String, BundleError)>
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        let mut pending: Vec<String> = ids.into_iter().map(Into::into).collect();
+        let mut failures = Vec::new();
+
+        while !pending.is_empty() {
+            let mut deferred_ids = Vec::new();
+            let mut deferred_errors = Vec::new();
+            let mut progressed = false;
+
+            for id in pending {
+                let was_mounted = self.mounted.iter().any(|bundle| bundle.id == id);
+                match self.enable(ws, &id) {
+                    Ok(()) => {
+                        if !was_mounted {
+                            progressed = true;
+                        }
+                    }
+                    Err(
+                        error @ BundleError::Declaration(RegistryError::MissingRequirement {
+                            ..
+                        }),
+                    ) => {
+                        deferred_ids.push(id);
+                        deferred_errors.push(error);
+                    }
+                    Err(error) => failures.push((id, error)),
+                }
+            }
+
+            if deferred_ids.is_empty() {
+                break;
+            }
+            if !progressed {
+                failures.extend(deferred_ids.into_iter().zip(deferred_errors));
+                break;
+            }
+            pending = deferred_ids;
+        }
+
+        failures
     }
 
-    /// **Il corpo di un job.** Chi drena `take_pending_jobs` sa a quale plugin
-    /// chiederlo (è il campo che la
-    /// [0028](../../../docs/decisions/0183-composizione-host-kernel.md) ha
-    /// messo in `PendingJob`) e lo trova qui.
-    ///
-    /// Rende un `Arc` clonato e non un prestito, ed è il punto: chi esegue un
-    /// job lo tiene per minuti, e un prestito lo terrebbe legato a questo
-    /// registry per tutto quel tempo.
+    pub fn knows(&self, id: &str) -> bool {
+        self.mounted.iter().any(|bundle| bundle.id == id)
+            || self.known.iter().any(|bundle| bundle.manifest.id == id)
+    }
+
     pub fn body(&self, id: &str) -> Option<Arc<dyn Plugin>> {
         self.mounted
             .iter()
-            .find(|m| m.id == id)
-            .map(|m| Arc::clone(&m.plugin))
+            .find(|bundle| bundle.id == id)
+            .map(|bundle| Arc::clone(&bundle.plugin))
     }
 
-    /// **Chi smette lo sa mentre è ancora intero**: chiama
-    /// [`Plugin::deactivate`] e lascia cadere il plugin, senza toccare il
-    /// kernel.
-    ///
-    /// È il passo che va infilato dentro la chiusura del vault
-    /// ([`Workspace::close_with`]) e dentro [`unmount`](BundleRegistry::unmount),
-    /// e non può stare da nessun'altra parte: dopo che il kernel ha ritirato la
-    /// dichiarazione, l'host intestato a quell'id nega tutto — un `deactivate`
-    /// chiamato lì riceverebbe rifiuti su ogni capacità, cioè il contrario
-    /// esatto di ciò per cui quel metodo ha un `host` nella firma.
-    ///
-    /// Un id che non è un bundle di questo registry non fa niente: il kernel
-    /// accetta anche dichiarazioni che non vengono da qui (una feature montata a
-    /// mano in un test), e quelle un plugin da spegnere non ce l'hanno.
+    /// Estrae il corpo senza chiamarlo e senza mantenere il guard del registry.
+    pub(crate) fn prepare_stop(&mut self, id: &str) -> Option<StoppedBundle> {
+        let at = self.mounted.iter().position(|bundle| bundle.id == id)?;
+        Some(StoppedBundle(self.mounted.remove(at)))
+    }
+
+    /// Ferma solo il corpo del plugin, lasciando ancora vivi host e provider.
     pub fn stop(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
-        let Some(at) = self.mounted.iter().position(|m| m.id == id) else {
+        let Some(at) = self.mounted.iter().position(|bundle| bundle.id == id) else {
             return Vec::new();
         };
         let mut bundle = self.mounted.remove(at);
-        // `deactivate` prende `&mut self`, quindi vuole che il plugin sia di
-        // **uno solo**: un job in volo è l'unico altro che potrebbe tenerne una
-        // copia, e tutte e due le porte da cui si arriva qui lo aspettano prima
-        // di bussare — chi chiude il vault ferma il pool intero
-        // (`JobRunner::stop`), chi spegne un componente ferma i job **suoi**
-        // (`JobRunner::shutdown_bundle`), decisione 0032 per entrambe. Se un
-        // giorno qualcuno invertisse i due passi, o ne aprisse una terza, il
-        // commiato non verrebbe chiamato e questo lo **dice**, invece di
-        // aspettare in silenzio la fine di un export.
-        let out = match Arc::get_mut(&mut bundle.plugin) {
+        let error = match Arc::get_mut(&mut bundle.plugin) {
             Some(plugin) => ws.with_host(id, |host| plugin.deactivate(host)).err(),
             None => Some(PluginError::Internal(
                 format!(
-                    "`{id}` still has an in-flight job: its `deactivate` was not \
-                 called (whoever turns off a bundle stops its jobs first)"
+                    "`{id}` still has an in-flight job: its `deactivate` was not called (whoever turns off a bundle stops its jobs first)"
                 )
                 .into(),
             )),
         };
-        // Qui l'ultima copia cade, ed è il momento in cui un bundle nativo
-        // lascia andare ciò che il `deactivate` non ha saputo lasciare.
         drop(bundle);
-        out.into_iter().collect()
+        error.into_iter().collect()
     }
 
-    /// Spegne **un** bundle per intero: [`Plugin::deactivate`] mentre ha ancora
-    /// tutto, e poi il kernel che gli toglie i provider e la dichiarazione
-    /// ([`Workspace::deactivate_plugin`]).
-    ///
-    /// È l'inverso esatto di [`mount`](BundleRegistry::mount), ed è la strada di
-    /// chi spegne una feature dalle impostazioni (§11.1). Il bundle resta fra i
-    /// **conosciuti**: spegnere non è dimenticare, o non ci sarebbe niente da
-    /// riaccendere.
     pub fn unmount(&mut self, ws: &mut Workspace, id: &str) -> Vec<PluginError> {
         let mut errors = self.stop(ws, id);
         match ws.deactivate_plugin(id) {
-            Ok(errs) => errors.extend(errs),
-            Err(and) => errors.push(PluginError::Internal(and.to_string().into())),
+            Ok(provider_errors) => errors.extend(provider_errors),
+            Err(error) => errors.push(PluginError::Internal(error.to_string().into())),
         }
         errors
     }
 
-    /// **Chiude il vault**: l'ordine della
-    /// [0029](../../../docs/decisions/0183-composizione-host-kernel.md)
-    /// — l'evento mentre tutti sono ancora vivi, il flush di tutti gli indici,
-    /// e poi ognuno che smette a rovescio — con `Plugin::deactivate` di ogni
-    /// bundle infilato al proprio posto.
-    ///
-    /// L'ordine resta del kernel e non si duplica qui: sarebbe una seconda idea
-    /// di come si chiude un vault, e le due non si accorgerebbero mai di essere
-    /// diverse.
     pub fn close(&mut self, ws: &mut Workspace) -> Vec<PluginError> {
         ws.close_with(|ws, id| self.stop(ws, id))
     }
 }
 
-/// Il [`Plugin`] di un bundle che **non possiede niente**: tutto ciò che ha sono
-/// i suoi provider, e quelli li toglie il kernel.
-///
-/// È il caso di quasi tutte le feature ufficiali, e non è un difetto del
-/// disegno: è ciò che il capitolo 7 aveva già ottenuto — un provider si registra
-/// e sparisce dentro il kernel, che sa attivarlo, interrogarlo e chiuderlo
-/// ([`IndexProvider::close`](fub_abi::traits::IndexProvider::close), decisione
-/// 0028). Ciò che resta a un `Plugin` è quel che il kernel *non* può sapere:
-/// risorse proprie del bundle, e il corpo dei suoi job.
+fn append_declaration_rollback(ws: &mut Workspace, id: &str, reason: &mut String) {
+    match ws.deactivate_plugin(id) {
+        Ok(errors) => {
+            for rollback in errors {
+                reason.push_str(&format!("; declaration rollback failed: {rollback}"));
+            }
+        }
+        Err(rollback) => {
+            reason.push_str(&format!("; declaration rollback failed: {rollback}"));
+        }
+    }
+}
+
+fn initialize_external_permissions_guarded(
+    workspace: &Custody<Workspace>,
+    id: &str,
+    trust: Trust,
+) -> Result<Vec<PermissionInitialization>, String> {
+    crate::jobs::with_event_drain(workspace, |ws| {
+        initialize_external_permissions(ws, id, trust)
+    })
+    .map_err(|error| error.to_string())?
+}
+
+fn append_permission_rollback_guarded(
+    workspace: &Custody<Workspace>,
+    initialized: &[PermissionInitialization],
+    reason: &mut String,
+) {
+    match crate::jobs::with_event_drain(workspace, |ws| {
+        append_permission_rollback(ws, initialized, reason)
+    }) {
+        Ok(()) => {}
+        Err(error) => reason.push_str(&format!("; permission rollback failed: {error}")),
+    }
+}
+
+fn rollback_declaration_guarded(
+    workspace: &Custody<Workspace>,
+    permit: &RegistrationPermit,
+    reason: &mut String,
+) {
+    for error in retire_guarded(workspace, permit) {
+        reason.push_str(&format!("; declaration rollback failed: {error}"));
+    }
+}
+
+fn retire_guarded(workspace: &Custody<Workspace>, permit: &RegistrationPermit) -> Vec<PluginError> {
+    let mut prepared = match workspace
+        .write()
+        .map_err(RegistryError::External)
+        .and_then(|mut ws| ws.prepare_plugin_deactivation(permit))
+    {
+        Ok(prepared) => prepared,
+        Err(error) => return vec![PluginError::Internal(error.to_string().into())],
+    };
+    // Grids remain owned by the prepared retirement until their external
+    // shutdown has completed. Keep this before indexes are closed and before
+    // finalization/disposal, matching the complete teardown path.
+    let mut errors = prepared.close_grids();
+    let mut host = JobHost::new(workspace.clone(), permit.owner());
+    errors.extend(prepared.close_indexes(&mut host));
+    let finalized =
+        crate::jobs::with_event_drain(workspace, |ws| ws.finish_plugin_deactivation(&mut prepared));
+    match finalized {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => errors.push(PluginError::Internal(error.to_string().into())),
+        Err(error) => errors.push(error),
+    }
+    errors.extend(prepared.dispose());
+    errors
+}
+
+fn drop_external<T>(value: T, phase: &'static str) {
+    let _ = fub_kernel::safety::external(
+        phase,
+        |message| PluginError::Internal(message.into()),
+        || {
+            drop(value);
+            Ok(())
+        },
+    );
+}
+
+/// Corpo esclusivo del teardown, posseduto dall'orchestratore fuori dai lock.
+pub(crate) struct StoppedBundle(MountedBundle);
+
+impl StoppedBundle {
+    pub(crate) fn invoke(&mut self, host: &mut dyn HostApi) -> Vec<PluginError> {
+        let id = &self.0.id;
+        let outcome = match Arc::get_mut(&mut self.0.plugin) {
+            Some(plugin) => fub_kernel::safety::external(
+                &format!("Plugin::deactivate of `{id}`"),
+                |message| PluginError::Internal(message.into()),
+                || plugin.deactivate(host),
+            ),
+            None => Err(PluginError::Internal(
+                format!("`{id}` still has an in-flight job: its `deactivate` was not called")
+                    .into(),
+            )),
+        };
+        outcome.err().into_iter().collect()
+    }
+}
+
+/// Plugin vuoto usato dai bundle che possiedono solo provider del kernel.
 pub struct OnlyProviders(PluginManifest);
 
 impl OnlyProviders {
     pub fn boxed(manifest: PluginManifest) -> Box<dyn Plugin> {
-        Box::new(OnlyProviders(manifest))
+        Box::new(Self(manifest))
     }
 }
 

@@ -159,6 +159,7 @@
     "icon-none",
     "search-input",
     "search-results",
+    "search-result",
     "hit-title",
     "hit-occurrence",
     "hit-create",
@@ -179,6 +180,16 @@
     "pane",
     "focus",
     "pane-preview",
+    "grid-surface",
+    "grid-formula-bar",
+    "grid-cell-name",
+    "grid-viewport",
+    "grid-cell",
+    "grid-header",
+    "grid-corner",
+    "grid-cell-editor",
+    "selected",
+    "active",
     "markdown-preview",
     "wikilink",
     "unresolved",
@@ -584,6 +595,7 @@
       "hooks": [
         "search-input",
         "search-results",
+        "search-result",
         "hit-title",
         "hit-occurrence",
         "hit-create",
@@ -640,6 +652,29 @@
         "dirty",
         "tab-close",
         "tab-view"
+      ],
+      "states": [
+        "rest",
+        "hover",
+        "pressed",
+        "focused",
+        "disabled",
+        "selected"
+      ]
+    },
+    {
+      "name": "grid-surface",
+      "hooks": [
+        "grid-surface",
+        "grid-formula-bar",
+        "grid-cell-name",
+        "grid-viewport",
+        "grid-cell",
+        "grid-header",
+        "grid-corner",
+        "grid-cell-editor",
+        "selected",
+        "active"
       ],
       "states": [
         "rest",
@@ -1291,10 +1326,10 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 194,
+    "hooks": 205,
     "state_names": 7,
-    "assigned_states": 111,
-    "components": 39,
+    "assigned_states": 117,
+    "components": 40,
     "unassigned_hooks": 0
   }
 }

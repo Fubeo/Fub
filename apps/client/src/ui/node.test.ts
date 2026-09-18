@@ -241,6 +241,28 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     expect(old).toEqual([]);
   });
 
+  it("una chiave ambigua non patcha il primo match: forza il full render", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const duplicate = (value: string): UiNode =>
+      ({
+        node: "stack",
+        dir: "column",
+        gap: 0,
+        children: [
+          { ...field("cambia"), value, key: "doppia" },
+          { ...field("cambia"), value, key: "doppia" },
+        ],
+      }) as UiNode;
+
+    mountTree(host, duplicate("prima"), async () => {});
+    expect(patchTree(host, "doppia", { ...field("cambia"), value: "dopo", key: "doppia" } as UiNode)).toBe(false);
+    expect([...host.querySelectorAll("input")].map((input) => input.value)).toEqual([
+      "prima",
+      "prima",
+    ]);
+  });
+
   it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
     const NS = "prova.porta";
     const handlers: OnAction[] = [];
@@ -440,6 +462,38 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
     expect(choices.map((i) => i.checked)).toEqual([true, false]);
     expect(read(host)).toEqual([{ field: "r", value: { type: "text", value: "x" } }]);
   });
+  it("un radio attivo conserva la scelta davanti a un rerender stantio", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const action = { action: "scegli", payload: null };
+    const onAction = async () => {};
+
+    mountTree(host, buttons({ value: "a", action }), onAction);
+    const first = host.querySelector<HTMLInputElement>('input[type="radio"][value="a"]')!;
+    const second = host.querySelector<HTMLInputElement>('input[type="radio"][value="b"]')!;
+    second.focus();
+    second.click();
+    expect(second.checked).toBe(true);
+
+    // Il provider non ha ancora visto la scelta: il suo `a` non può
+    // sovrascrivere il `b` che l'utente ha appena attivato.
+    mountTree(host, buttons({ value: "a", action }), onAction);
+    expect(second.checked).toBe(true);
+    expect(first.checked).toBe(false);
+
+    // Uscire dal gruppo consente di riconciliare il valore autorevole
+    // precedente; un ack con `b` invece resta visibile anche dopo il blur.
+    second.blur();
+    expect(first.checked).toBe(true);
+    expect(second.checked).toBe(false);
+    mountTree(host, buttons({ value: "a", action }), onAction);
+    const acknowledged = host.querySelector<HTMLInputElement>('input[type="radio"][value="b"]')!;
+    acknowledged.focus();
+    acknowledged.click();
+    mountTree(host, buttons({ value: "b", action }), onAction);
+    acknowledged.blur();
+    expect(acknowledged.checked).toBe(true);
+  });
 });
 
 // A chi appartiene l'identità di un gruppo di radio.
@@ -469,7 +523,7 @@ describe("un gruppo di radio è il nodo che lo dichiara (§2.1)", () => {
         { value: "a", label: "Uno" },
         { value: "b", label: "Due" },
       ],
-      action: null,
+      action: { action: "scegli", payload: null },
     }) as UiNode;
 
   const insideForm = (): UiNode =>
@@ -673,5 +727,54 @@ describe("un'azione che va storta lo dice, e lo dice alla porta (§20.4)", () =>
   it("un'azione che riesce non dice niente", async () => {
     await triggerAction(async () => {});
     expect(notify).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("controlli statici e righe valide", () => {
+  const mount = (node: UiNode): HTMLElement => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, node, async () => {});
+    return host;
+  };
+
+  it("una checkbox porta l'etichetta accessibile del campo", () => {
+    const host = mount({
+      node: "checkbox",
+      field: "completed",
+      label: "Completata",
+      value: true,
+      action: null,
+    } as UiNode);
+    const input = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(input.labels?.[0]?.textContent).toContain("Completata");
+  });
+
+  it.each([
+    [{ node: "text_input", field: "x", label: null, value: "a", placeholder: null, action: null }, "input"],
+    [{ node: "text_area", field: "x", label: null, value: "a", rows: 2, action: null }, "textarea"],
+    [{ node: "number", field: "x", label: null, value: 1, min: null, max: null, step: null, action: null }, "input"],
+    [{ node: "checkbox", field: "x", label: "X", value: true, action: null }, "input"],
+    [{ node: "select", field: "x", label: null, value: [], options: [], multiple: false, action: null }, "select"],
+    [{ node: "radio", field: "x", label: null, value: null, options: [{ label: "A", value: "a" }], action: null }, "input"],
+    [{ node: "slider", field: "x", label: null, value: 1, min: 0, max: 2, step: 1, action: null }, "input"],
+    [{ node: "date_picker", field: "x", label: null, value: null, action: null }, "input"],
+  ] as const)("un campo senza azione è disabilitato: %s", (node, selector) => {
+    const host = mount(node as UiNode);
+    expect((host.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).disabled).toBe(true);
+  });
+
+  it("un campo con azione resta attivo", () => {
+    const host = mount({
+      node: "text_input", field: "x", label: null, value: "", placeholder: null,
+      action: { action: "cambia", payload: null },
+    } as UiNode);
+    expect(host.querySelector<HTMLInputElement>("input")!.disabled).toBe(false);
+  });
+
+  it("una riga senza celle resta una riga HTML valida", () => {
+    const host = mount({ node: "row", cells: [], action: null } as UiNode);
+    expect(host.querySelectorAll("tr > td")).toHaveLength(1);
   });
 });

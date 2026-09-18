@@ -34,11 +34,13 @@ import type {
   SettingScope,
   SettingSource,
   Severity,
+  SourceKind,
   TextField,
   TextMode,
   TextTolerance,
   ThemeEngine,
   ThemeLight,
+  ThemeMotion,
   ViewSurface,
   Weekday,
 } from "./enums.generated";
@@ -46,7 +48,7 @@ import type {
 // Manifest congelato della pelle: non passa dal WIT, ma resta parte del confine.
 export const THEME_ENGINE = "theme-1" as const;
 
-export type { ThemeEngine, ThemeLight } from "./enums.generated";
+export type { ThemeEngine, ThemeLight, ThemeMotion } from "./enums.generated";
 
 export interface ThemeManifest {
   id: string;
@@ -55,6 +57,21 @@ export interface ThemeManifest {
   engine: ThemeEngine;
   lights: ThemeLight[];
   asset_namespace: string;
+  motion: ThemeMotion[];
+}
+
+/** Un tema installato che il backend può consegnare alla shell. */
+export interface ThemeInfo {
+  manifest: ThemeManifest;
+}
+
+/** Una luce di un tema installato, già letta dal backend. */
+export interface ThemePayload {
+  manifest: ThemeManifest;
+  light: ThemeLight;
+  sheet: string;
+  skin: string | null;
+  assets: Record<string, readonly number[]>;
 }
 
 export interface VaultInfo {
@@ -863,6 +880,156 @@ export const MAIN_PANE = "main";
 export interface DocumentSource {
   text: string;
   revision: string;
+  format_id: string | null;
+  source_kind: SourceKind;
+}
+
+export interface SheetCellKey {
+  sheet: string;
+  row: string;
+  column: string;
+}
+
+export type SheetFormulaError =
+  | "parse"
+  | "ref"
+  | "name"
+  | "value"
+  | "div_zero"
+  | "num"
+  | "cycle";
+
+export type SheetCellValue =
+  | { kind: "blank" }
+  | { kind: "number"; value: number }
+  | { kind: "text"; value: string }
+  | { kind: "boolean"; value: boolean }
+  | { kind: "error"; value: SheetFormulaError };
+
+export interface SheetEvaluatedCell extends SheetCellKey {
+  value: SheetCellValue;
+}
+
+export interface SheetCellDependency {
+  cell: SheetCellKey;
+  depends_on: SheetCellKey[];
+}
+
+export interface SheetEvaluation {
+  cells: SheetEvaluatedCell[];
+  dependencies: SheetCellDependency[];
+}
+// Dati strutturati a finestre per la famiglia grid. La shell possiede
+// rendering, input e clipboard; il provider possiede parsing, formule e
+// serializzazione. Nessun DOM, callback o oggetto CodeMirror attraversa questo
+// contratto.
+export const GRID_FAMILY = "grid";
+export const GRID_PROTOCOL_VERSION = 1;
+
+export interface GridSurfaceSpec {
+  id: string;
+  format: string;
+  family: string;
+  protocol_version: number;
+}
+
+export interface GridSession {
+  instance: string;
+  revision: string;
+  sheets: GridSheet[];
+}
+
+export interface GridSheet {
+  id: string;
+  name: string;
+  row_count: number;
+  column_count: number;
+}
+
+export interface GridRow {
+  id: string;
+  index: number;
+  height: number | null;
+  hidden: boolean;
+}
+
+export interface GridColumn {
+  id: string;
+  index: number;
+  width: number | null;
+  hidden: boolean;
+}
+
+export type GridCellKey = SheetCellKey;
+
+export interface GridCellStyle {
+  bold: boolean;
+  italic: boolean;
+  text_color: string | null;
+  fill_color: string | null;
+  horizontal: "start" | "center" | "end" | null;
+  number_format: string | null;
+}
+
+export type GridFormulaError = SheetFormulaError;
+
+export type GridCellValue = SheetCellValue;
+
+export interface GridCell {
+  key: GridCellKey;
+  input: string;
+  style: GridCellStyle;
+  value: GridCellValue;
+}
+
+export interface GridWindowRequest {
+  revision: string;
+  sheet: string;
+  row_start: number;
+  row_count: number;
+  column_start: number;
+  column_count: number;
+}
+
+export interface GridWindow {
+  revision: string;
+  sheet: string;
+  row_start: number;
+  column_start: number;
+  total_rows: number;
+  total_columns: number;
+  rows: GridRow[];
+  columns: GridColumn[];
+  cells: GridCell[];
+}
+
+/** Patch atomica input-only: lo stile resta intatto e il valore si ricalcola. */
+export interface GridCellPatch {
+  cell: GridCellKey;
+  before: string | null;
+  after: string;
+}
+
+export interface GridApplyRequest {
+  revision: string;
+  patches: GridCellPatch[];
+}
+
+export type GridInvalidation =
+  | { kind: "cells"; cells: SheetCellKey[] }
+  | { kind: "all" };
+
+export interface GridSourceEdit {
+  from: number;
+  to: number;
+  deleted: string;
+  inserted: string;
+}
+
+export interface GridCommit {
+  revision: string;
+  edit: GridSourceEdit;
+  invalidation: GridInvalidation;
 }
 
 // **Da cosa parte** una scrittura intera (rispecchia `fub_abi::edit::WriteBase`).
@@ -1503,6 +1670,23 @@ export interface BundleInfo {
   // lo accendessi» è una domanda che ci si pone prima di accenderlo.
   permissions: Record<string, unknown>;
 }
+// Un'installazione scelta su questa macchina. Estende il manifest che l'host
+// usa per le righe native, ma tiene separate le tre decisioni che non sono lo
+// stesso stato: preferenza persistita, consenso all'esecuzione e montaggio
+// effettivo nel vault corrente.
+export interface InstalledPluginInfo extends BundleInfo {
+  // Identità u64 dell'installazione, serializzata come stringa per non perdere
+  // bit nel passaggio JSON. È questa, non `id`, che autorizza le mutazioni.
+  installation: string;
+  version: string;
+  enabled: boolean;
+  // `true` solo quando il registro runtime conosce la voce posseduta da questa
+  // installazione nel vault selezionato. Consente alla UI di togliere il suo
+  // duplicato da `listBundles` senza filtrare un bundle ufficiale omonimo.
+  runtime_known: boolean;
+  consent: "undecided" | "denied" | "granted";
+}
+
 
 // Un vault che questa macchina conosce (rispecchia `fub_host::VaultEntry`,
 // §11.1): la memoria fra un avvio e l'altro, che è un'altra cosa da `OpenVaults`

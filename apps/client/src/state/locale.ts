@@ -108,11 +108,24 @@ export async function publishSystemLocale(): Promise<boolean> {
 //
 // `onChange` scatta solo quando qualcosa è davvero cambiato: chi ridisegna
 // perché la finestra ha ripreso il focus ridisegnerebbe a ogni alt-linguetta.
+let mountEpoch = 0;
+
 export function mountLocale(lifetime: Lifetime, onChange: () => void): void {
-  void publishSystemLocale();
-  lifetime.listen(window, "focus", () => {
-    void publishSystemLocale().then((changed) => {
-      if (changed) onChange();
-    });
+  const epoch = ++mountEpoch;
+  let publishEpoch = 0;
+
+  const publish = async (notifyChange: boolean): Promise<void> => {
+    const current = ++publishEpoch;
+    if (lifetime.closed || epoch !== mountEpoch) return;
+    const changed = await publishSystemLocale();
+    if (lifetime.closed || epoch !== mountEpoch || current !== publishEpoch) return;
+    if (notifyChange && changed) onChange();
+  };
+
+  void publish(false);
+  lifetime.listen(window, "focus", () => void publish(true));
+  lifetime.add(() => {
+    publishEpoch++;
+    if (epoch === mountEpoch) mountEpoch++;
   });
 }

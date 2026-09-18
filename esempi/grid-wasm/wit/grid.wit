@@ -1,0 +1,6 @@
+package example:grid@0.1.0;
+
+world grid {
+    export fub:abi/plugin@0.1.2;
+    export fub:abi/grid@0.1.2;
+}

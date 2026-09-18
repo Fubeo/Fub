@@ -19,6 +19,7 @@ use fub_abi::traits::{DocumentMatch, Excerpts, IndexQuery, IndexResult, Page, Pr
 use fub_features::{SearchIndex, SEARCH_ID};
 use fub_format_markdown::MarkdownProvider;
 use fub_kernel::{FormatRegistry, Workspace};
+use fub_testkit::restore_document;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -214,7 +215,7 @@ fn trashing_a_notes_makes_it_vanish_from_search_and_backlinks_and_coming_back_un
     assert!(ws.resolve_link("Fotosintesi").is_none());
     assert!(ws.backlinks(&DocId::new("Fotosintesi.md")).is_empty());
 
-    ws.restore_from_trash(&trashed, None).unwrap();
+    restore_document(&mut ws, &trashed, None).unwrap();
 
     assert_eq!(found(&ws, "clorofilla"), vec!["Fotosintesi.md"]);
     assert_eq!(

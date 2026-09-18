@@ -69,8 +69,39 @@ sequenceDiagram
     KERNEL-->>CALLER: report tipizzato
 ```
 
-Il chiamante non tiene un lock durante codice esterno. Gli eventi vengono
-pubblicati dopo l'operazione autorevole.
+Nei percorsi staccati dell'host il chiamante non tiene il lock del workspace
+durante codice esterno. Gli eventi vengono pubblicati dopo l'operazione
+autorevole.
+
+## Cancellazione
+
+Il cestino dell'app e la rimozione osservata dal watcher condividono la stessa
+coda in memoria, ma soltanto il primo sposta il file. Dopo la mossa riuscita il
+kernel ritira modello, grafo e contesto attivo, quindi notifica gli indici
+esterni senza tenere il lock del workspace. Perdite e panici degli indici
+diventano avvisi; non annullano la cancellazione, perché il vault resta la fonte
+autorevole e l'indice è ricostruibile.
+
+Il fatto `DocumentRemoved` viene accodato dopo il ritorno degli indici. Il
+watcher conserva l'attore del proprio lotto e drena una volta alla fine. Il
+cestino elimina anche la bozza, registra la mossa nel journal e restituisce il
+nuovo `DocId` della voce cestinata.
+
+### CAS cooperativa
+
+`RootedFsStorage` coordina i writer Fub tramite un file stabile
+`.<nome>.lock` accanto al target, aperto relativamente alla capability.
+La creazione è esclusiva; soltanto `AlreadyExists` conduce all'apertura del
+lock esistente, senza troncarlo. Il file non viene rimosso al rilascio:
+writer concorrenti devono continuare a riferirsi alla stessa identità.
+
+Il lock viene acquisito prima della rilettura e resta detenuto durante il
+confronto e la sostituzione atomica. Un errore di apertura o acquisizione
+impedisce la scrittura e mantiene la specie I/O originale. La diagnostica
+distingue lo stadio del lock dall'operazione protetta.
+
+La CAS è esatta fra writer che rispettano questo protocollo. Con writer
+esterni che ignorano il lock la protezione resta best-effort.
 
 ## Rename
 

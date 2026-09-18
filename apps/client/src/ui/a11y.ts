@@ -26,6 +26,13 @@ export function identifier(prefix: string): string {
   return `${prefix}-${counter}`;
 }
 
+/// Un id DOM deterministico per un elemento la cui identità resta la stessa fra
+/// due ridisegni.
+export function stableIdentifier(prefix: string, value: string): string {
+  const encoded = Array.from(value, (character) => character.codePointAt(0)!.toString(16)).join("-");
+  return `${prefix}-${encoded || "empty"}`;
+}
+
 /// Gli elementi che il browser rende già attivabili da tastiera per conto suo.
 const NATIVE_INTERACTIVE = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "SUMMARY"]);
 

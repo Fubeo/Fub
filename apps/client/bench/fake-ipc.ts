@@ -51,12 +51,71 @@ import type {
   ViewSpec,
 } from "../src/host/contract";
 import { CORPUS, OUTPUT } from "./corpus";
+import {
+  generateGraphFixture as graphFixture,
+  type GraphFixture,
+} from "./graph-fixture";
+
+type GraphBenchMetadata = Readonly<{
+  fixture: Readonly<{
+    nodes: readonly string[];
+    edges: readonly { readonly from: string; readonly to: string }[];
+    seed: number;
+    digest: string;
+  }> | null;
+}>;
 
 // ---------------------------------------------------------------------------
 // Ciò che il banco decide dalla query string.
 // ---------------------------------------------------------------------------
 
 const params = new URLSearchParams(globalThis.window.location.search);
+
+const graphNodesParam = params.get("graphNodes");
+const graphSeedParam = params.get("graphSeed");
+let GRAPH_PAYLOAD: { nodes: string[]; edges: { from: string; to: string }[] } | null = null;
+let GRAPH_FIXTURE: GraphFixture | null = null;
+
+if (graphNodesParam === null) {
+  if (graphSeedParam !== null) {
+    throw new RangeError("graphSeed requires graphNodes");
+  }
+} else {
+  const nodeCount =
+    graphNodesParam === "2000" ? 2_000 : graphNodesParam === "10000" ? 10_000 : null;
+  if (nodeCount === null) {
+    throw new RangeError("graphNodes must be 2000 or 10000");
+  }
+
+  let seed = 6;
+  if (graphSeedParam !== null) {
+    if (!/^(?:0|[1-9]\d*)$/.test(graphSeedParam)) {
+      throw new RangeError("graphSeed must be a canonical decimal uint32");
+    }
+    seed = Number(graphSeedParam);
+    if (seed > 0xffff_ffff) {
+      throw new RangeError("graphSeed must be a canonical decimal uint32");
+    }
+  }
+
+  GRAPH_FIXTURE = graphFixture(nodeCount, seed);
+  Object.freeze(GRAPH_FIXTURE.nodes);
+  for (const edge of GRAPH_FIXTURE.edges) Object.freeze(edge);
+  Object.freeze(GRAPH_FIXTURE.edges);
+  Object.freeze(GRAPH_FIXTURE);
+  GRAPH_PAYLOAD = { nodes: GRAPH_FIXTURE.nodes, edges: GRAPH_FIXTURE.edges };
+}
+
+globalThis.__fubGraphBench = Object.freeze({
+  fixture: GRAPH_FIXTURE
+    ? Object.freeze({
+        nodes: GRAPH_FIXTURE.nodes,
+        edges: GRAPH_FIXTURE.edges,
+        seed: graphSeedParam === null ? 6 : Number(graphSeedParam),
+        digest: GRAPH_FIXTURE.digest,
+      })
+    : null,
+});
 
 // Il ramo Darwin deve nascere prima che `mountTitlebar` legga la piattaforma:
 // la query prepara il browser del banco, mai la shell di produzione.
@@ -583,7 +642,7 @@ const TREES: Record<string, UiNode> = {
   graph: {
     node: "custom",
     ns: "fub:graph",
-    payload: {
+    payload: GRAPH_PAYLOAD ?? {
       nodes: [
         "Benvenuto.md",
         "Guida/Sintassi di Fub.md",
@@ -628,6 +687,7 @@ const host = createFakeHost(options);
 /// Sta su `window` e non in un `export` perché chi la chiama è Playwright, cioè
 /// codice che non condivide il grafo dei moduli con la pagina.
 declare global {
+  var __fubGraphBench: GraphBenchMetadata;
   interface Window {
     bench: {
       emit: typeof host.emit;

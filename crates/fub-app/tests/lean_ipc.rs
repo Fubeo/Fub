@@ -180,6 +180,10 @@ enum Why {
     /// legge. Il canale dati la discovery non ce l'ha, ed è la ragione per cui
     /// `query_index` è uno solo: la domanda è un dato anche lei.
     Bridge,
+    /// Le operazioni Grid attraversano una porta tipata distinta: la shell
+    /// negozia la superficie e mantiene l'istanza, senza un comando generico
+    /// che possa invocare provider arbitrari.
+    Grid,
     /// **La capacità e la sua porta.** L'atto è già nell'elenco chiuso
     /// dell'`HostApi` (0013), e la shell **non è un plugin**: non ha un manifest
     /// a cui concederlo, quindi lo raggiunge da una porta col suo nome invece
@@ -285,7 +289,16 @@ const ALLOWLIST: &[(&str, Why)] = &[
     // Chi questo host sa montare, e chi è acceso: «spento» e «non c'è» sono due
     // stati diversi, e il secondo è l'unico che il kernel sappia dire (0031).
     ("list_bundles", Why::AppSurface),
+    ("list_themes", Why::AppSurface),
+    ("read_theme", Why::AppSurface),
     ("set_plugin_enabled", Why::AppSurface),
+    // Inventario macchina e decisioni persistenti non appartengono al registro
+    // di un vault. Queste porte restano sottili e delegano al manager installato.
+    ("list_installed_plugins", Why::AppSurface),
+    ("install_plugin", Why::AppSurface),
+    ("set_installed_plugin_enabled", Why::AppSurface),
+    ("set_installed_plugin_consent", Why::AppSurface),
+    ("remove_installed_plugin", Why::AppSurface),
     // Fermare un lavoro lungo (§10.3): *elencarli* è una query (`IndexQuery::Jobs`,
     // sono dati), fermarne uno no — e il runner è dell'app, non del kernel (0032).
     ("cancel_job", Why::AppSurface),
@@ -309,6 +322,13 @@ const ALLOWLIST: &[(&str, Why)] = &[
     ("list_commands", Why::Bridge),
     ("invoke_command", Why::Bridge),
     ("query_index", Why::Bridge),
+    // --- Grid v1: discovery, sessioni e finestre tipate ----------------------
+    ("list_grid_surfaces", Why::Grid),
+    ("open_grid", Why::Grid),
+    ("grid_window", Why::Grid),
+    ("apply_grid", Why::Grid),
+    ("reload_grid", Why::Grid),
+    ("close_grid", Why::Grid),
     // --- le capacità dell'elenco chiuso, affacciate sull'IPC ----------------
     (
         "read_document",
@@ -458,6 +478,7 @@ fn defined_commands(src: &str) -> BTreeSet<&str> {
         }
 
         let sig = t.strip_prefix("pub ").unwrap_or(t);
+        let sig = sig.strip_prefix("async ").unwrap_or(sig);
         let rest = sig.strip_prefix("fn ").unwrap_or_else(|| {
             panic!(
                 "line {line_attribute}: after `#[tauri::command]` there is no `fn`, but:\n  {t}\n\
@@ -792,7 +813,9 @@ fn extractor_does_not_count_prose() {
 \n\
 /// Il doc di una funzione, che cita `#[tauri::command]` per spiegarsi.\n\
 #[tauri::command]\n\
-fn real(host: State<Host>) -> bool { true }\n\
+async fn real(host: State<Host>) -> bool { true }\n\
+\n\
+fn not_a_command() {}\n\
 \n\
     // #[tauri::command]\n\
     // fn commented_out() {}\n\
@@ -836,11 +859,12 @@ fn extractor_catches_second_block_written_without_prefix() {
     );
 }
 
-/// E deve fermarsi su ciò che non capisce, invece di far sparire un comando.
+/// E deve fermarsi su token diversi dall'`async` opzionale che sa leggere,
+/// invece di far sparire un comando.
 #[test]
 #[should_panic(expected = "after `#[tauri::command]` there is no `fn`")]
 fn extractor_rejects_what_it_cannot_read() {
-    defined_commands("#[tauri::command]\nstruct SomethingNew;\n");
+    defined_commands("#[tauri::command]\nunsafe fn something_new() {}\n");
 }
 
 /// Il ponte è il ponte: se un giorno ne comparisse un secondo per lo stesso
@@ -864,6 +888,35 @@ fn bridges_stay_six() {
          question is data too. A seventh bridge means a new channel, and a new\n\
          channel is a decision to write into a record, not one more line here.",
         bridges.len()
+    );
+}
+
+#[test]
+fn grid_surface_uses_only_named_typed_ports() {
+    const GRID: &[&str] = &[
+        "list_grid_surfaces",
+        "open_grid",
+        "grid_window",
+        "apply_grid",
+        "reload_grid",
+        "close_grid",
+    ];
+    let app = include_str!("../src/lib.rs");
+    let ipc = include_str!("../../../apps/client/src/host/ipc.ts");
+    for command in GRID {
+        assert!(
+            app.contains(&format!("fn {command}(")),
+            "missing typed Tauri command `{command}`"
+        );
+        assert!(
+            ipc.contains(&format!("\"{command}\"")),
+            "client must invoke the typed Grid command `{command}`"
+        );
+    }
+    assert!(
+        !ipc.lines()
+            .any(|line| line.contains("grid") && line.contains("invoke_command")),
+        "Grid must not tunnel through the generic invoke_command bridge"
     );
 }
 

@@ -97,9 +97,12 @@
 //! [0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
 //! [0032]: ../../../docs/decisions/0183-composizione-host-kernel.md
 
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::thread::ThreadId;
 use std::time::{Duration, Instant};
 
 use fub_abi::PluginError;
@@ -125,11 +128,23 @@ pub struct Custody<T> {
     inside: Arc<Inner<T>>,
 }
 
+#[derive(Default)]
+struct WriterTurnState {
+    owner: Option<ThreadId>,
+    depth: usize,
+}
+
 struct Inner<T> {
     /// **Il lucchetto, e non esce di qui.** È l'intera ragione per cui questo
     /// tipo esiste: un campo privato di un modulo privato non si prende a mano.
     /// tipo esiste: un campo privato di un modulo privato non si prende a mano.
     lock: RwLock<T>,
+    /// Serializza i **turni di mutazione**, ma non le letture. Un turno può
+    /// sopravvivere al rilascio del `RwLock` mentre gira codice esterno: così
+    /// un provider non tiene `Custody<Workspace>` e, nello stesso tempo, un
+    /// secondo writer non entra nel batch/attore lasciato aperto dal primo.
+    writer_turn: Mutex<WriterTurnState>,
+    writer_turn_ready: Condvar,
     /// Come si chiama ciò che sta dentro, quando bisogna dire che è morto.
     /// `&'static str` e non `String` perché è una costante del sito di
     /// costruzione: se un giorno servisse il path del vault, allora la frase la
@@ -187,6 +202,8 @@ impl<T> Custody<T> {
         Custody {
             inside: Arc::new(Inner {
                 lock: RwLock::new(value),
+                writer_turn: Mutex::new(WriterTurnState::default()),
+                writer_turn_ready: Condvar::new(),
                 name,
                 reports: AtomicU32::new(0),
                 threshold,
@@ -204,11 +221,65 @@ impl<T> Custody<T> {
         }
     }
 
+    /// Prenota il **turno di scrittura** senza prendere il dato in esclusiva.
+    ///
+    /// Il turno è rientrante per il thread che lo possiede: una callback può
+    /// quindi rientrare attraverso un host che prende `write()` per una singola
+    /// capacità. Gli altri writer aspettano il turno; i reader non lo guardano
+    /// e continuano a progredire mentre il callback gira fuori dal `RwLock`.
+    pub fn write_turn(&self) -> WriteTurn<'_, T> {
+        let me = std::thread::current().id();
+        let mut state = self
+            .inside
+            .writer_turn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        loop {
+            match state.owner.as_ref() {
+                None => {
+                    state.owner = Some(me);
+                    state.depth = 1;
+                    return WriteTurn::new(&self.inside);
+                }
+                Some(owner) if owner == &me => {
+                    state.depth += 1;
+                    return WriteTurn::new(&self.inside);
+                }
+                Some(_) => {
+                    state = self
+                        .inside
+                        .writer_turn_ready
+                        .wait(state)
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                }
+            }
+        }
+    }
+
+    /// Come [`write_turn`](Self::write_turn), ma senza mettersi in fila.
+    fn try_write_turn(&self) -> Option<WriteTurn<'_, T>> {
+        let me = std::thread::current().id();
+        let mut state = self.inside.writer_turn.try_lock().ok()?;
+        match state.owner.as_ref() {
+            None => {
+                state.owner = Some(me);
+                state.depth = 1;
+                Some(WriteTurn::new(&self.inside))
+            }
+            Some(owner) if owner == &me => {
+                state.depth += 1;
+                Some(WriteTurn::new(&self.inside))
+            }
+            Some(_) => None,
+        }
+    }
+
     /// Il prestito **esclusivo**. Chi lo prende e pania è chi avvelena: è il
     /// caso che questa politica descrive.
     pub fn write(&self) -> Result<Hold<'_, T>, PluginError> {
+        let turn = self.write_turn();
         match self.inside.lock.write() {
-            Ok(g) => Ok(Hold::new(g, &self.inside)),
+            Ok(g) => Ok(Hold::new(g, &self.inside, turn)),
             Err(_) => Err(self.report()),
         }
     }
@@ -228,11 +299,12 @@ impl<T> Custody<T> {
     /// Il prestito esclusivo **senza mettersi in fila**. Vedi
     /// [`try_read`](Custody::try_read) per perché il «no» è uno solo.
     pub fn try_write(&self) -> Option<Hold<'_, T>> {
+        let turn = self.try_write_turn()?;
         self.inside
             .lock
             .try_write()
             .ok()
-            .map(|g| Hold::new(g, &self.inside))
+            .map(|g| Hold::new(g, &self.inside, turn))
     }
 
     /// Sono la **stessa** custodia? Serve a chi prova che riaprire un vault
@@ -333,19 +405,58 @@ impl<T> Inner<T> {
 /// di stile: il campo si scioglie dopo il corpo del [`Drop`], quindi lasciandolo
 /// dov'era la diagnosi di un prestito troppo lungo si sarebbe scritta tenendolo,
 /// cioè allungando esattamente ciò che sta misurando.
+/// Il turno di un writer, separato dal prestito esclusivo del dato.
+///
+/// Non è `Send`: la rientranza è definita dall'identità del thread e il turno
+/// deve essere lasciato dallo stesso thread che l'ha preso.
+pub struct WriteTurn<'a, T> {
+    inside: &'a Inner<T>,
+    _not_send: PhantomData<Rc<()>>,
+}
+
+impl<'a, T> WriteTurn<'a, T> {
+    fn new(inside: &'a Inner<T>) -> Self {
+        Self {
+            inside,
+            _not_send: PhantomData,
+        }
+    }
+}
+
+impl<T> Drop for WriteTurn<'_, T> {
+    fn drop(&mut self) {
+        let me = std::thread::current().id();
+        let mut state = self
+            .inside
+            .writer_turn
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        debug_assert_eq!(state.owner.as_ref(), Some(&me));
+        debug_assert!(state.depth > 0);
+        state.depth -= 1;
+        if state.depth == 0 {
+            state.owner = None;
+            drop(state);
+            self.inside.writer_turn_ready.notify_one();
+        }
+    }
+}
+
 pub struct Hold<'a, T> {
     /// `Option` per poterlo sciogliere **prima** della riga: vedi sopra. Vale
     /// `Some` per tutta la vita della presa e `None` solo dentro il [`Drop`].
     /// `Some` per tutta la vita della presa e `None` solo dentro il [`Drop`].
     guard: Option<RwLockWriteGuard<'a, T>>,
+    turn: Option<WriteTurn<'a, T>>,
     inside: &'a Inner<T>,
     taken: Instant,
 }
 
 impl<'a, T> Hold<'a, T> {
-    fn new(guard: RwLockWriteGuard<'a, T>, inside: &'a Inner<T>) -> Self {
+    fn new(guard: RwLockWriteGuard<'a, T>, inside: &'a Inner<T>, turn: WriteTurn<'a, T>) -> Self {
         Hold {
             guard: Some(guard),
+            turn: Some(turn),
             inside,
             // Dopo l'acquisizione e non prima: ciò che si misura è per quanto
             // **si tiene**, non per quanto si è aspettato di avere. Chi ha
@@ -377,6 +488,7 @@ impl<T> Drop for Hold<'_, T> {
     fn drop(&mut self) {
         let duration = self.taken.elapsed();
         drop(self.guard.take());
+        drop(self.turn.take());
         if duration >= self.inside.threshold {
             self.inside.slowness(duration);
         }

@@ -29,7 +29,7 @@
 // destinazioni degli alias, firme complete delle funzioni. Un WIT invalido =
 // test rosso.
 
-package fub:abi@0.1.1;
+package fub:abi@0.1.2;
 
 /// JSON serializzato come stringa: frontmatter, `attrs` dell'escape hatch,
 /// argomenti dei comandi, storage dei plugin.
@@ -1357,6 +1357,7 @@ interface events {
         syntax-rule,
         custom-render,
         job,
+        index-query,
     }
     /// Quanto pesa ciò che è andato storto. Due gradini e non cinque: una
     /// scala che chi emette non sa dove tagliare finisce con tutto sullo
@@ -3013,6 +3014,157 @@ interface edit {
     }
 }
 
+/// Dati strutturati a finestre per superfici grid. La shell possiede rendering,
+/// input e clipboard; il provider possiede parsing, formule e serializzazione.
+interface grid {
+    use edit.{revision};
+    use errors.{plugin-error};
+
+    /// Binding dichiarato dal provider: il formato sceglie una famiglia e una
+    /// versione di protocollo, mai una versione simile per tentativi.
+    record grid-surface-spec {
+        id: string,
+        format: string,
+        family: string,
+        protocol-version: u32,
+    }
+
+    record grid-session {
+        instance: string,
+        revision: revision,
+        sheets: list<grid-sheet>,
+    }
+
+    record grid-sheet {
+        id: string,
+        name: string,
+        row-count: u32,
+        column-count: u32,
+    }
+
+    record grid-row {
+        id: string,
+        index: u32,
+        height: option<f32>,
+        hidden: bool,
+    }
+
+    record grid-column {
+        id: string,
+        index: u32,
+        width: option<f32>,
+        hidden: bool,
+    }
+
+    record grid-cell-key {
+        sheet: string,
+        row: string,
+        column: string,
+    }
+
+    enum grid-horizontal-align {
+        start,
+        center,
+        end,
+    }
+
+    record grid-cell-style {
+        bold: bool,
+        italic: bool,
+        text-color: option<string>,
+        fill-color: option<string>,
+        horizontal: option<grid-horizontal-align>,
+        number-format: option<string>,
+    }
+
+    enum grid-formula-error {
+        parse,
+        ref,
+        name,
+        value,
+        div-zero,
+        num,
+        cycle,
+    }
+
+    variant grid-cell-value {
+        blank,
+        number(f64),
+        text(string),
+        boolean(bool),
+        error(grid-formula-error),
+    }
+
+    /// `input` e `style` sono persistiti; `value` è derivato dal provider.
+    record grid-cell {
+        key: grid-cell-key,
+        input: string,
+        style: grid-cell-style,
+        value: grid-cell-value,
+    }
+
+    record grid-window-request {
+        revision: revision,
+        sheet: string,
+        row-start: u32,
+        row-count: u32,
+        column-start: u32,
+        column-count: u32,
+    }
+
+    record grid-window {
+        revision: revision,
+        sheet: string,
+        row-start: u32,
+        column-start: u32,
+        total-rows: u32,
+        total-columns: u32,
+        rows: list<grid-row>,
+        columns: list<grid-column>,
+        cells: list<grid-cell>,
+    }
+
+    /// Patch atomica input-only: lo stile resta intatto e il valore viene
+    /// ricalcolato dal provider.
+    record grid-cell-patch {
+        cell: grid-cell-key,
+        before: option<string>,
+        after: string,
+    }
+
+    record grid-apply-request {
+        revision: revision,
+        patches: list<grid-cell-patch>,
+    }
+
+    variant grid-invalidation {
+        cells(list<grid-cell-key>),
+        all,
+    }
+
+    /// Diff UTF-8 guardato restituito come conseguenza del commit.
+    record grid-source-edit {
+        %from: u64,
+        to: u64,
+        deleted: string,
+        inserted: string,
+    }
+
+    record grid-commit {
+        revision: revision,
+        edit: grid-source-edit,
+        invalidation: grid-invalidation,
+    }
+
+    surfaces: func() -> list<grid-surface-spec>;
+    open: func(surface: string, source: string, revision: revision) -> result<grid-session, plugin-error>;
+    window: func(instance: string, request: grid-window-request) -> result<grid-window, plugin-error>;
+    apply: func(instance: string, request: grid-apply-request) -> result<grid-commit, plugin-error>;
+    reload: func(instance: string, expected: revision, source: string, revision: revision) -> result<grid-session, plugin-error>;
+    close: func(instance: string) -> result<_, plugin-error>;
+    shutdown: func() -> result<_, plugin-error>;
+}
+
 /// View dichiarative (`ViewProvider`).
 interface view {
     use ui.{ui-tree, ui-action, view-update};
@@ -4210,6 +4362,7 @@ world plugin-world {
 
     export plugin;
     export format;
+    export grid;
     /// I due innesti del §3.1 e del §3.2: chi aggiunge la sintassi, e chi
     /// disegna il blocco che ne esce. Sono esportati separatamente da `format`
     /// perché un plugin può implementarne uno senza implementare l'altro — ed è

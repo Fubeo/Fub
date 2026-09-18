@@ -58,25 +58,25 @@ impossibile il mount e vengono nominate nell'errore.
 
 ## Stato del runtime WASM
 
-Funzionano:
+Nel tree audit corrente sono consegnati:
 
 - caricamento e istanziazione di un componente;
 - manifest e lifecycle `Plugin`;
-- `CommandProvider`;
-- lettura del modello;
-- eventi host;
+- `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider` nei
+  casi esercitati;
+- lettura del modello ed eventi host;
+- inventario macchina, installazione, consenso, enabled/disabled, restart e
+  remove tramite il percorso desktop;
 - errori e permessi tipizzati;
-- timeout a epoche;
-- limite di memoria;
-- teardown e parità col backend nativo nei casi coperti.
+- timeout a epoche e limite di memoria;
+- validazione della UI non fidata, teardown e parità nativo/WASM nei casi
+  coperti.
 
-Non sono ancora completi:
-
-- discovery e installazione da un percorso supportato;
-- tutti i proxy dei provider;
-- una view non banale;
-- validazione della UI non fidata;
-- guida end-to-end identica al percorso testato.
+`IndexProvider` e `EventHandler` inbound restano deferred. Anche un provider
+consegnato non è montato automaticamente: capability dichiarata, consenso
+`granted`, scelta `enabled` e capability effettiva del `Guard` restano fatti
+distinti. Il percorso è presente nella base audit, ma non è una dichiarazione
+di completamento di `main` o dei gate G14/G15.
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 

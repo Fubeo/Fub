@@ -1,7 +1,7 @@
 //! **Una regola di identità di un nome si dichiara** (decisione 0136).
 //!
 //! La domanda «quando due nomi sono lo stesso nome» in questo repo ha
-//! **quarantadue** risposte in produzione, e non è il difetto. Quattro verbali
+//! **quarantacinque** risposte in produzione, e non è il difetto. Quattro verbali
 //! hanno stabilito che devono essere più d'una: la
 //! [0020](../../../docs/decisions/README.md) («*due
 //! requisiti che **devono** divergere, e una fixture che li legasse nascerebbe
@@ -12,7 +12,7 @@
 //! e un nome che nasce non si giudicano con la stessa regola*») e la
 //! [0115](../../../docs/decisions/0196-test-e-artefatti-generati.md).
 //!
-//! Il difetto è che la **quarantatreesima** nasce in silenzio. La 0115 lo aveva
+//! Il difetto è che la **quarantaseiesima** nasce in silenzio. La 0115 lo aveva
 //! già scritto — «*il generato, la fixture e il corpus prendono chi **cambia**
 //! una regola, non chi ne **aggiunge** una accanto*» — e la
 //! [0110](../../../docs/decisions/0192-impostazioni-locale-e-temi.md) è
@@ -188,6 +188,16 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-format-sheet/src/lib.rs::search",
+            (
+                Family::ContextualCase,
+                "cerca una sottostringa nel testo libero delle celle, non stabilisce l'identità \
+                 di un path: piega query e input perché la grafia dell'utente non deve cambiare \
+                 i risultati. Resta locale al formato perché restituisce coordinate stabili del \
+                 foglio, mentre le altre ricerche lavorano su proprietà o indici di documenti.",
+            ),
+        ),
+        (
             "crates/fub-features/src/tags.rs::matches_case_insensitive",
             (
                 Family::ContextualCase,
@@ -244,11 +254,48 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
-            "crates/fub-kernel/src/registry.rs::insert",
+            "crates/fub-kernel/src/registry.rs::register_source",
             (
                 Family::ContextualCase,
-                "è la scrittura della mappa che `register` interroga: divergere da lei vorrebbe \
-                 dire un provider registrato sotto una chiave che nessuno cercherà.",
+                "dichiara nella stessa mappa un formato privo di parser `DocumentModel`: \
+                 l'assenza del provider non può cambiare l'identità dell'estensione, quindi \
+                 deve piegarla esattamente come `register` prima di controllare i conflitti.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::replace",
+            (
+                Family::ContextualCase,
+                "è la sostituzione intenzionale nella stessa mappa di `register`: riceve lo \
+                 stesso descrittore e deve piegare le estensioni nello stesso modo, o registrare \
+                 e sostituire darebbero identità diverse alla stessa estensione.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::provider_arc_for_ext",
+            (
+                Family::ContextualCase,
+                "è lo stesso lookup di `provider_for_ext`, ma rende un `Arc` perché la callback \
+                 possa essere invocata dopo aver rilasciato il workspace. La forma di ownership \
+                 non può cambiare l'identità dell'estensione che sceglie il provider.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::descriptor_for_ext",
+            (
+                Family::ContextualCase,
+                "legge il descrittore congelato della stessa registrazione: deve risolvere le \
+                 stesse chiavi di `provider_for_ext` e `provider_arc_for_ext`, o metadati e \
+                 callback potrebbero attribuire la stessa estensione a provider diversi.",
+            ),
+        ),
+        (
+            "crates/fub-kernel/src/registry.rs::capabilities_for_ext",
+            (
+                Family::ContextualCase,
+                "legge le capacità congelate accanto al descrittore: deve risolvere la stessa \
+                 estensione di `descriptor_for_ext`, o il provider selezionato e le forme \
+                 sintattiche dichiarate per quel documento potrebbero divergere.",
             ),
         ),
         (
@@ -370,6 +417,34 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
         ),
         // -- CasoAscii: dove è dimostrabilmente la stessa risposta ----------
         (
+            "crates/fub-abi/src/edit.rs::matches_bytes",
+            (
+                Family::AsciiCase,
+                "non è identità di un nome ma compatibilità di migrazione: soltanto la vecchia \
+                 revisione FNV-1a a sedici cifre accetta maiuscole e minuscole equivalenti, perché \
+                 l'alfabeto esadecimale è ASCII. Le revisioni SHA-256 correnti restano canoniche \
+                 e si confrontano esattamente; una piegatura Unicode inventerebbe equivalenze.",
+            ),
+        ),
+        (
+            "crates/fub-format-sheet/src/formula.rs::matches_ignore_ascii_case",
+            (
+                Family::AsciiCase,
+                "confronta identificatori del linguaggio formule con il suo vocabolario chiuso \
+                 (`IF`, `SUM`, `TRUE`): la grammatica accetta token ASCII e una piegatura Unicode \
+                 attribuirebbe equivalenze che il formato non dichiara.",
+            ),
+        ),
+        (
+            "crates/fub-format-sheet/src/formula.rs::reference",
+            (
+                Family::AsciiCase,
+                "converte le lettere di una coordinata A1 dopo averle già limitate con \
+                 `is_ascii_alphabetic`: l'alfabeto delle colonne è A–Z per formato, quindi una \
+                 maiuscola Unicode non può identificare una colonna.",
+            ),
+        ),
+        (
             "crates/fub-abi/src/rules/media.rs::kind_of",
             (
                 Family::AsciiCase,
@@ -438,6 +513,26 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
                 "lo schema di un URL è ASCII per la RFC 3986. Sta accanto a `normalized_host` e \
                  non dentro: sono due capi dell'URL con due grammatiche diverse, e fonderli \
                  vorrebbe dire una regola che non è né dell'uno né dell'altro.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::referenced_assets",
+            (
+                Family::AsciiCase,
+                "riconosce `url` nella grammatica CSS, dove il nome della funzione è ASCII e \
+                 può arrivare con qualunque combinazione di maiuscole e minuscole. Non piega \
+                 l'URL dell'asset: mantiene il namespace e il path byte-per-byte, e usa la \
+                 corsia ASCII solo per il token che la RFC CSS rende case-insensitive.",
+            ),
+        ),
+        (
+            "crates/fub-host/src/theme.rs::css_collect_image_set",
+            (
+                Family::AsciiCase,
+                "riconosce `url` nei candidati annidati di `image-set`, dove il nome della \
+                 funzione è ASCII e il CSS ne ammette qualunque combinazione di maiuscole e \
+                 minuscole. È il parser interno della stessa grammatica di `referenced_assets`, \
+                 ma deve restare nominato perché attraversa il confine di una funzione annidata.",
             ),
         ),
         (
@@ -559,7 +654,7 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
 // Il cammino sui sorgenti
 // ---------------------------------------------------------------------------
 
-const NOT_IS_ENTERS: &[&str] = &["target", "node_modules", ".git", ".fub"];
+const NOT_IS_ENTERS: &[&str] = &["target", "node_modules", ".git", ".fub", "legacy_tests"];
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")

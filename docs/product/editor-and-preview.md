@@ -6,14 +6,16 @@
 
 ## Modalità
 
-Il documento Markdown può essere mostrato come:
+Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 
 - **sorgente**, con la sintassi esplicita;
 - **live preview**, che mantiene l'editing e riduce il rumore della sintassi;
 - **lettura**, che mostra la resa senza cursore di testo.
 
-Il provider Markdown interpreta la sorgente. La shell possiede CodeMirror,
-focus, selezione, scroll, tema e lifecycle.
+La superficie plain text offre soltanto **sorgente**: non simula capacità
+Markdown. Il commutatore della shell legge la dichiarazione della superficie
+attiva; cambiando tab cambia anche l'insieme dei pulsanti e delle scorciatoie
+disponibili.
 
 ## Flusso
 
@@ -110,35 +112,65 @@ la decisione non risolve.
 La preview usa le forme prodotte dal provider e le policy della webview. HTML
 grezzo o contenuto attivo non deve diventare automaticamente codice eseguibile.
 
-La UI dichiarativa di un plugin WASM dovrà passare da
-`UiNode::validate_untrusted()` prima di raggiungere la shell; questo lavoro è
-tracciato nell'issue [#10](https://github.com/Fubeo/Fub/issues/10).
+La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
+prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
+`Trust::Community`. Il percorso è consegnato nella base audit corrente con
+`ViewProvider`; l'issue [#10](https://github.com/Fubeo/Fub/issues/10) resta il
+tracker per la chiusura formale, non un'indicazione che la validazione manchi.
 
 ## Superfici condivise
 
-`TextEngine` è il motore testuale corrente della shell e fornisce la meccanica
-condivisa. L'unico percorso montato dall'utente è l'editor Markdown, che passa
-da `createEditor()` e `MarkdownProfile`.
+`DocumentSurfaceRegistry` sceglie la superficie con precedenza esplicita:
+override dell'utente, formato, specie della sorgente, fallback testuale, viewer
+per byte ed errore. Le collisioni nominano entrambi gli owner; la rimozione di
+un owner distrugge le istanze che possiede.
 
-`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
-stesso `TextEngine`: vengono esercitati soltanto dai test dedicati e dalla
-fixture a tre profili, ma non sono superfici esposte all'utente. La loro
-presenza dimostra il seam interno; non introduce una nuova modalità del
-prodotto.
+`TextEngine` è il motore testuale condiviso. Markdown e plain text sono percorsi
+utente distinti montati dal registro sullo stesso motore; `FormulaProfile`
+alimenta la formula bar e l'unico editor in-cell riusabile della griglia.
 
 La `DocumentSession` coordina buffer, salvataggio, bozza, conflitti e lifecycle;
 il pannello collega le superfici e aggiorna la resa. Nessun profilo invia una
 chiamata IPC o WASM per ogni battuta.
 
-Il percorso corrente non include un `DocumentSurfaceRegistry`, una griglia di
-superfici o la `Phase 5`: restano assenti e l'esperienza utente rimane quella
-del percorso Markdown esistente.
+Popup e keymap locale precedono i comandi della superficie. La shell ordina poi
+i layer superficie, profilo, documento, riquadro e globale. I comandi
+indisponibili sulla superficie attiva non entrano nella palette né nel router;
+i renderer non installano listener globali propri.
+
+## Formato pilota `.fubsheet`
+
+Il formato persistente della griglia è un documento JSON testuale versionato.
+Conserva input, ordine, dimensioni, stile, proprietà e identità stabili di
+sheet, righe e colonne. L'indirizzo A1 dipende invece dall'ordine corrente:
+riordinare una riga sposta l'indirizzo senza cambiare l'identità della cella.
+
+La superficie mostra intestazioni, celle e selezione rettangolare in una
+viewport virtualizzata. Supporta tastiera, editor in-cell, formula bar,
+copia/incolla TSV e undo/redo del workbook. Commit, cancel e blur sono
+espliciti; una modifica peer strutturata conserva la bozza locale, mentre una
+riscrittura completa autorevole la annulla.
+
+Valori calcolati, AST delle formule, dipendenze, cache ed errori non vengono
+salvati nel file: il valutatore Rust li ricostruisce dai dati autorevoli. Se il
+valutatore non è disponibile, anche perché il bundle `fub.sheet` è disabilitato,
+la griglia resta modificabile e mostra gli input grezzi. Nessuna battuta
+attraversa IPC; la valutazione parte dopo il commit e una risposta stantia non
+sostituisce lo stato corrente.
+
+Outline, ricerca e proprietà sono proiezioni del workbook, non un adattamento a
+`DocumentModel`. Il protocollo Grid v1 è promosso in ABI/WIT e mirror
+TypeScript insieme ai consumatori nativo e WASM; famiglia, versione e fallback
+sono negoziati prima dell'invocazione. Limiti, coordinate, diff UTF-8 e
+invalidazione sono normati in [ABI e WIT](../reference/abi-and-wit.md).
 
 ## Dove si trova
 
 - `apps/client/src/editor/`
+- `apps/client/src/editors/core/`
 - `apps/client/src/panels/document.ts`
 - `apps/client/src/state/`
 - `crates/fub-abi/src/edit.rs`
 - `crates/fub-abi/src/session.rs`
 - `crates/fub-kernel/src/drafts.rs`
+- `crates/fub-format-sheet/src/lib.rs`

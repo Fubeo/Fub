@@ -73,37 +73,81 @@ export const OUTPUT = here("./.output");
 /// Apre il palco: server di Vite e browser. Restituisce anche come si chiude,
 /// perché un banco che lascia in giro un server è un banco che alla seconda
 /// corsa non parte.
-export async function openStage({ quiet = true } = {}) {
-  const server = await createServer({
-    configFile: here("../vite.bench.config.ts"),
-    logLevel: quiet ? "warn" : "info",
-  });
-  await server.listen();
-  const base = `http://localhost:${server.config.server.port}`;
-
-  const browser = await chromium.launch({
-    args: [
-      // Tre bandiere che tolgono al rasterizzatore ciò che dipende dalla
-      // macchina: l'hinting dei caratteri, il subpixel antialiasing (che
-      // colora i bordi delle lettere secondo la disposizione dei subpixel di
-      // *quello* schermo) e il profilo colore del monitor.
-      "--font-render-hinting=none",
-      "--disable-lcd-text",
-      "--force-color-profile=srgb",
-      // La memoria condivisa piccola dei container fa cadere Chromium a metà
-      // corsa, e cade in un modo che somiglia a un guasto della pagina.
-      "--disable-dev-shm-usage",
-    ],
-  });
-
-  return {
-    base,
-    browser,
-    async close() {
-      await browser.close();
-      await server.close();
-    },
-  };
+export async function openStage({
+  quiet = true,
+  createServer: createServerImpl = createServer,
+  chromium: chromiumImpl = chromium,
+} = {}) {
+  let server;
+  let browser;
+  try {
+    server = await createServerImpl({
+      configFile: here("../vite.bench.config.ts"),
+      logLevel: quiet ? "warn" : "info",
+    });
+    await server.listen();
+    const base = `http://localhost:${server.config.server.port}`;
+    browser = await chromiumImpl.launch({
+      args: [
+        "--font-render-hinting=none",
+        "--disable-lcd-text",
+        "--force-color-profile=srgb",
+        "--disable-dev-shm-usage",
+      ],
+    });
+    let closePromise;
+    const close = () => {
+      closePromise ??= (async () => {
+        const results = {};
+        let first;
+        for (const [name, owner] of [["browser", browser], ["server", server]]) {
+          try {
+            await owner.close();
+            results[name] = { acquired: true, success: true };
+          } catch (error) {
+            results[name] = {
+              acquired: true,
+              success: false,
+              error: { name: error?.name, message: String(error?.message ?? error) },
+            };
+            first ??= error;
+          }
+        }
+        if (first) {
+          first.results = results;
+          first.cleanup = results;
+          throw first;
+        }
+        return results;
+      })();
+      return closePromise;
+    };
+    return { base, browser, close };
+  } catch (error) {
+    const results = {};
+    for (const [name, owner] of [["browser", browser], ["server", server]]) {
+      if (!owner) {
+        results[name] = { acquired: false, success: true };
+        continue;
+      }
+      try {
+        await owner.close();
+        results[name] = { acquired: name === "server", success: true };
+      } catch (closeError) {
+        results[name] = {
+          acquired: name === "server",
+          success: false,
+          error: {
+            name: closeError?.name,
+            message: String(closeError?.message ?? closeError),
+          },
+        };
+      }
+    }
+    error.results = results;
+    error.cleanup = results;
+    throw error;
+  }
 }
 
 /// Una pagina pronta a fotografare, in una luce.

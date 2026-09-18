@@ -148,7 +148,7 @@ function closeWindow(f: PageWindow): (id: number) => void {
 
 /// Esegue la coda dei rAF finché si svuota o si raggiunge il tetto. L'orologio
 /// avanza di 16.7 ms (≈60 fps) a ogni frame.
-function run(f: PageWindow, max = 5000): void {
+function run(f: PageWindow, max = 5000): number {
   let n = 0;
   while (f.queue.length > 0 && n < max) {
     const cb = f.queue.shift()!;
@@ -156,6 +156,19 @@ function run(f: PageWindow, max = 5000): void {
     cb();
     n++;
   }
+  return n;
+}
+
+/// Come `run`, ma con un passo scelto dal test per esercitare il clamp del dt.
+function runAt(f: PageWindow, dtMs: number, max = 5000): number {
+  let n = 0;
+  while (f.queue.length > 0 && n < max) {
+    const cb = f.queue.shift()!;
+    f.t += dtMs;
+    cb();
+    n++;
+  }
+  return n;
 }
 
 function fakeHost(): HTMLElement {
@@ -232,6 +245,23 @@ describe("createChart", () => {
     run(f, 1);
     const last = lastPainter!.states[lastPainter!.states.length - 1];
     expect(last.alpha).toBeGreaterThanOrEqual(0.85);
+  });
+
+  it("Riscalda mantiene il loop attivo per 120 callback al dt massimo", () => {
+    g.mount(fakeHost());
+    g.setConfig({
+      ...CONF,
+      physics: { ...CONF.physics, cooling: 0.985 },
+    });
+    run(f, 5000);
+    g.warm(1);
+    const before = lastPainter!.states.length;
+
+    const callbacks = runAt(f, 1000 / 30, 120);
+
+    expect(callbacks).toBe(120);
+    expect(lastPainter!.states.length).toBeGreaterThanOrEqual(before + 120);
+    expect(f.queue.length).toBeGreaterThan(0);
   });
 
   it("impostaAperti: un cambio reale ridisegna; un no-change no", () => {

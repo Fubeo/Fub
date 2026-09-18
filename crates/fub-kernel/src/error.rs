@@ -58,6 +58,10 @@ pub enum KernelError {
     /// avrebbe tagliato i byte sbagliati. Non è stato scritto niente.
     #[error("{0} è cambiato da quando la modifica è stata calcolata")]
     Stale(String),
+    /// La mutazione reinvocherebbe un indice già occupato sullo stesso thread.
+    /// Viene rifiutata prima di modificare file, memoria o eventi.
+    #[error("l'indice `{0}` è già in chiamata su questo thread")]
+    IndexReentry(String),
     /// Gli edit di una modifica chirurgica non stanno in piedi sul sorgente
     /// (fuori dal testo, a metà di un carattere, sovrapposti, due nello stesso
     /// punto). Come sopra: niente di parziale, niente scritto.
@@ -198,6 +202,9 @@ impl From<KernelError> for PluginError {
             // Un conflitto è la sola cosa che chi chiama deve **riprovare**
             // (rileggendo e ricalcolando), un edit malformato la sola che deve
             KernelError::Stale(doc) => PluginError::Conflict(doc.into()),
+            KernelError::IndexReentry(owner) => PluginError::Conflict(
+                format!("l'indice `{owner}` è già in chiamata su questo thread").into(),
+            ),
             KernelError::BadEdit { doc, why } => {
                 PluginError::BadArgs(format!("{doc}: {why}").into())
             }

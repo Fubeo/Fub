@@ -14,7 +14,7 @@
 //! testo sul disco **alle spalle del kernel**, che è quel che fa un altro
 //! programma — o Obsidian — mentre Fub guarda altrove.
 
-use fub_abi::edit::{Revision, WriteBase};
+use fub_abi::edit::{Fnv1a, Revision, WriteBase};
 use fub_abi::traits::{IndexQuery, IndexResult};
 use fub_kernel::KernelError;
 use fub_testkit::{doc, Bench, Mounted};
@@ -246,4 +246,23 @@ fn the_two_cases_are_two_responses_and_not_a_and_the_its_absence() {
         .write_document(&id, "tre", WriteBase::DescendsFrom(base))
         .is_err());
     assert!(ws.write_document(&id, "tre", WriteBase::Dictated).is_ok());
+}
+
+#[test]
+fn a_legacy_fnv_base_still_guards_the_same_source_during_migration() {
+    let mut ws = vault();
+    let id = doc("legacy.md");
+    ws.write_document(&id, "com'era", WriteBase::Dictated)
+        .expect("prima scrittura");
+
+    let legacy = Revision::new(format!("{:016x}", Fnv1a::hash(b"com'era")));
+    ws.write_document(&id, "com'è adesso", WriteBase::DescendsFrom(legacy.clone()))
+        .expect("la revisione legacy nomina esattamente il testo sul disco");
+
+    ws.write("legacy.md", "cambiato da fuori");
+    let err = ws
+        .write_document(&id, "non coprire", WriteBase::DescendsFrom(legacy))
+        .expect_err("la compatibilità legacy non deve indebolire la guardia");
+    assert!(matches!(err, KernelError::Stale(_)), "{err:?}");
+    assert_eq!(ws.read("legacy.md"), "cambiato da fuori");
 }

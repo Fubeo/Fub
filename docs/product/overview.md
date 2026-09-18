@@ -61,18 +61,20 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 
 ### Scrittura
 
-- editor CodeMirror;
-- sorgente, live preview e lettura;
+- editor CodeMirror per Markdown e plain text;
+- griglia `.fubsheet` virtualizzata con tastiera, selezione, editor in-cell,
+  formula bar, TSV e undo dedicato;
+- sorgente, live preview e lettura per Markdown;
 - frontmatter;
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal
   provider Markdown;
 - revisioni e conflitti espliciti;
 - sincronizzazione fra più riquadri sullo stesso documento.
 
-Nella shell corrente, l'unico percorso montato dall'utente è Markdown.
-`PlainTextProfile` e `FormulaProfile` sono clienti architetturali reali dello
-stesso `TextEngine`, esercitati dai test e dalla fixture a tre profili, ma non
-sono superfici esposte all'utente.
+La shell monta Markdown, plain text e `.fubsheet` attraverso
+`DocumentSurfaceRegistry`. I profili testuali condividono `TextEngine`; la
+griglia incorpora `FormulaProfile` e delega il calcolo autorevole al motore
+Rust, con fallback sugli input grezzi quando non è disponibile.
 
 ### Navigazione e conoscenza
 
@@ -88,7 +90,10 @@ sono superfici esposte all'utente.
 - registri generici per provider;
 - feature ufficiali selezionabili con feature Cargo;
 - plugin nativi nel composition root;
-- runtime WASM funzionante per lifecycle e comandi;
+- runtime WASM per lifecycle, comandi, formati, view e griglia nei casi
+  esercitati;
+- inventario macchina con installazione, consenso, enabled/disabled, restart e
+  remove;
 - capability applicate nel kernel.
 
 ## Stato delle grandi aree
@@ -99,13 +104,16 @@ sono superfici esposte all'utente.
 | editor, preview e shell | disponibili nel codice |
 | ricerca, backlink e grafo | disponibili nel codice |
 | plugin nativi | disponibili nel codice |
-| runtime WASM | parziale, M5 in corso |
-| installazione di plugin di terzi | non completata |
-| superfici testuali interne | `TextEngine` e profili reali nel codice; solo Markdown è montato dall'utente |
+| runtime WASM e provider M5 | consegnati nella base audit corrente |
+| installazione di plugin di terzi | percorso file singolo disponibile nella base audit |
+| superfici testuali e `.fubsheet` | disponibili nella base audit con protocollo Grid v1 |
 | database, sync, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
 
-Una descrizione dettagliata di un'idea non la rende parte del prodotto. Lo stato
-autorevole è in [`../project/status.md`](../project/status.md).
+La base audit corrente non è `main`: la promozione delle consegne resta
+subordinata a G14 e G15/GO. Una descrizione dettagliata di un'idea non la rende
+parte del prodotto. Lo stato autorevole è in
+[`../project/status.md`](../project/status.md).
+
 
 ## Approfondimenti
 

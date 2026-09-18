@@ -39,21 +39,26 @@
 //! chiudono, che è esattamente il caso a due thread contro cui il watcher viene
 //! lasciato andare per primo.
 
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::Barrier;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use fub_abi::traits::{JobId, JobProgress, TimerSchedule};
-use fub_abi::PluginError;
-use fub_kernel::{Indexing, JobBell, PendingJob, Workspace};
+use fub_abi::event::{Actor, Event, Origin};
+use fub_abi::traits::{JobId, JobProgress, JobSpec, TimerSchedule};
+use fub_abi::{Notice, PluginError};
+use fub_kernel::{EventBus, Indexing, JobBell, PendingJob, Workspace};
 use jiff::Timestamp;
 
 use crate::wall::{verdict, Position, Zone};
 
 use crate::custody::Custody;
-use crate::jobs::JobHost;
+use crate::jobs::{with_event_drain, JobHost};
 use crate::records::UnreadDoc;
 use crate::registry::BundleRegistry;
 
@@ -464,14 +469,51 @@ impl Alarms {
     }
 }
 
+#[cfg(test)]
+/// Presidia la finestra fra il controllo di `stopping` e la presa del biglietto.
+///
+/// Il banco della corsa deve poter mettere in scena quell'ordine senza
+/// aspettare che lo scheduler lo scelga. È un gancio solo per i test: in
+/// produzione non esiste né stato né attesa aggiuntiva.
+pub(crate) struct StopRaceProbe {
+    reached: Barrier,
+    stopping: Barrier,
+}
+
+#[cfg(test)]
+impl StopRaceProbe {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            reached: Barrier::new(2),
+            stopping: Barrier::new(2),
+        })
+    }
+
+    fn pause_before_ticket(&self) {
+        self.reached.wait();
+        self.stopping.wait();
+    }
+
+    pub(crate) fn reached(&self) {
+        self.reached.wait();
+    }
+
+    fn stop_requested(&self) {
+        self.stopping.wait();
+    }
+}
+
 /// Ciò che i thread condividono: il vault, i bundle, il campanello, lo stato
 /// dei job e i quadranti delle sveglie.
 struct Shared {
     workspace: Custody<Workspace>,
     bundles: Custody<BundleRegistry>,
     bell: Arc<JobBell>,
+    #[cfg(test)]
+    stop_race_probe: Option<Arc<StopRaceProbe>>,
     stopping: AtomicBool,
     opening: Custody<Option<InProgress>>,
+    bus: EventBus,
     flags: Custody<Flags>,
     alarms: Custody<Alarms>,
     in_flight: Arc<(Mutex<InFlight>, Condvar)>,
@@ -501,6 +543,107 @@ pub struct InProgress {
     pub(crate) end: Arc<(Mutex<bool>, Condvar)>,
 }
 
+enum OpeningAdvance {
+    More(InProgress),
+    Finished(Result<serde_json::Value, PluginError>),
+}
+
+/// Completes the opening job and wakes waiters even when an opening phase
+/// returns an error or unwinds.
+struct OpeningCompletion<'a> {
+    shared: &'a Shared,
+    id: JobId,
+    end: Arc<(Mutex<bool>, Condvar)>,
+    armed: bool,
+}
+
+impl<'a> OpeningCompletion<'a> {
+    fn new(shared: &'a Shared, in_progress: &InProgress) -> Self {
+        Self {
+            shared,
+            id: in_progress.id,
+            end: Arc::clone(&in_progress.end),
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+
+    fn finish(
+        &mut self,
+        outcome: Result<serde_json::Value, PluginError>,
+    ) -> Result<(), PluginError> {
+        if !self.armed {
+            return Ok(());
+        }
+        self.armed = false;
+        let fallback_bus = self.shared.bus.clone();
+        let fallback_outcome = outcome.clone();
+        let mut queued = false;
+        let completion = catch_unwind(AssertUnwindSafe(|| {
+            let _ = self.shared.forget(self.id);
+            with_event_drain(&self.shared.workspace, |ws| {
+                ws.complete_job(self.id, fub_kernel::INDEX_JOB.to_string(), outcome);
+                queued = true;
+            })
+        }));
+
+        if !queued {
+            let _ = catch_unwind(AssertUnwindSafe(|| {
+                fallback_bus.emit(Notice::new(
+                    Event::JobDone {
+                        id: self.id,
+                        job: fub_kernel::INDEX_JOB.to_string(),
+                        result: fallback_outcome,
+                    },
+                    Origin::by(Actor::Kernel),
+                ));
+            }));
+        }
+        signal_opening_end(&self.end);
+
+        match completion {
+            Ok(result) => result,
+            Err(payload) => Err(panic_error(
+                payload,
+                "la chiusura dell'apertura è andata in panico",
+            )),
+        }
+    }
+}
+
+impl Drop for OpeningCompletion<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.finish(Err(PluginError::Internal(
+                "l'indicizzazione del vault è terminata per un guasto del runner"
+                    .to_string()
+                    .into(),
+            )));
+        }
+    }
+}
+
+fn signal_opening_end(end: &Arc<(Mutex<bool>, Condvar)>) {
+    let (done, bell) = &**end;
+    match done.lock() {
+        Ok(mut done) => *done = true,
+        Err(poisoned) => *poisoned.into_inner() = true,
+    }
+    bell.notify_all();
+}
+
+fn panic_error(payload: Box<dyn Any + Send>, context: &str) -> PluginError {
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("payload di panico non testuale");
+    PluginError::Internal(format!("{context}: {message}").into())
+}
+
 impl Shared {
     /// **Porta avanti l'apertura di una fetta**, e dice se c'era qualcosa da
     /// portare avanti (§15.7).
@@ -516,9 +659,36 @@ impl Shared {
     /// popolando, e farlo aspettare la fine è il verso che gli fa vedere di
     /// più. Non è fame: una fetta è limitata, e fra due fette la coda si drena.
     fn advance_opening(&self) -> Result<bool, PluginError> {
-        let Some(mut in_progress) = self.opening.write()?.take() else {
+        let Some(in_progress) = self.opening.write()?.take() else {
             return Ok(false);
         };
+        let mut completion = OpeningCompletion::new(self, &in_progress);
+        match catch_unwind(AssertUnwindSafe(|| self.advance_opening_step(in_progress))) {
+            Ok(Ok(OpeningAdvance::More(in_progress))) => match self.opening.write() {
+                Ok(mut opening) => {
+                    *opening = Some(in_progress);
+                    completion.disarm();
+                    Ok(true)
+                }
+                Err(error) => Err(error),
+            },
+            Ok(Ok(OpeningAdvance::Finished(outcome))) => completion.finish(outcome).map(|()| true),
+            Ok(Err(error)) => {
+                let _ = completion.finish(Err(error.clone()));
+                Err(error)
+            }
+            Err(payload) => {
+                let error = panic_error(payload, "una fase dell'apertura è andata in panico");
+                let _ = completion.finish(Err(error.clone()));
+                Err(error)
+            }
+        }
+    }
+
+    fn advance_opening_step(
+        &self,
+        mut in_progress: InProgress,
+    ) -> Result<OpeningAdvance, PluginError> {
         // La bandiera è **quella di tutti**: annullare l'indicizzazione è
         // premere lo stesso pulsante che annulla un export, e passa dalla
         // stessa `Flags`. Senza questo, «annulla» avrebbe avuto due
@@ -537,14 +707,31 @@ impl Shared {
             // accanto. Il piano si porta dietro l'impronta che l'anagrafe dava
             // a ogni documento adesso, e chi applica la confronta: fra le due
             // fasi il prestito esclusivo passa di mano, e su un'apertura che
-            // dura secondi in mezzo ci sta un salvataggio dell'utente.
-            let prepared = {
+            // dura secondi in mezzo ci sta comodo un salvataggio dell'utente.
+            let checked = {
                 let ws = self.workspace.read()?;
-                ws.plan_batch(&mut in_progress.work)
-            };
-            {
+                ws.prepare_index_batch_check(&mut in_progress.work)
+            }
+            .invoke();
+            let parsed = {
+                let ws = self.workspace.read()?;
+                ws.prepare_index_batch_parse(checked)
+            }
+            .invoke(&mut in_progress.work);
+            // Il turno serializza le mutazioni dell'apertura con le altre scritture,
+            // ma non è il `RwLock<Workspace>`: durante il codice del provider i
+            // lettori devono poter entrare. È la stessa forma di `write_document`:
+            // prepare/commit sotto lock, callback fuori lock, finalize sotto lock.
+            let _turn = self.workspace.write_turn();
+            let pending = {
                 let mut ws = self.workspace.write()?;
-                ws.index_batch_prepared(prepared);
+                ws.commit_index_batch_prepared(parsed)
+            };
+            let pending = pending.map(|pending| pending.invoke_indexes());
+            with_event_drain(&self.workspace, |ws| {
+                if let Some(pending) = pending {
+                    ws.finalize_index_batch_prepared(pending);
+                }
                 // Il `total` c'è perché la scansione lo sa: l'apertura è il
                 // caso in cui una barra può dire il vero, e
                 // [`JobProgress::total`] è opzionale proprio per distinguerlo
@@ -557,9 +744,8 @@ impl Shared {
                         label,
                     },
                 );
-            }
-            *self.opening.write()? = Some(in_progress);
-            return Ok(true);
+            })?;
+            return Ok(OpeningAdvance::More(in_progress));
         }
 
         // Finita, o smessa: si chiude comunque. Il grafo è CPU sull'insieme
@@ -573,21 +759,18 @@ impl Shared {
             let sources = self.workspace.read()?.graph_sources();
             sources.build()
         };
-        let opening = {
-            let mut ws = self.workspace.write()?;
-            ws.finish_index_with_graph(in_progress.work, graph)
+        let _turn = self.workspace.write_turn();
+        let prepared_finish = {
+            let ws = self.workspace.read()?;
+            ws.prepare_finish_index_with_graph(in_progress.work, graph)
         };
-        // **Il flush degli indici è una fase sua** (difetto 0113), come la
-        // terza fase di `ExternalSync::batch`: un prestito esclusivo separato
-        // da quello della chiusura dell'indicizzazione. Fra i due prestiti il
-        // lucchetto si rilascia, e un lettore concorrente non aspetta la somma
-        // delle fasi — riconciliazione, ricongiungimento, flush, anagrafe —
-        // ma la sola che sta correndo. Il flush tocca solo gli indici e il
-        // disco, non lo stato condiviso del workspace.
-        {
-            let mut ws = self.workspace.write()?;
-            let _ = ws.flush_indexes();
-        }
+        let completed_finish = prepared_finish.invoke();
+        let opening = with_event_drain(&self.workspace, |ws| {
+            ws.finalize_finish_index(completed_finish)
+        })?;
+        // Il flush è una fase esterna separata: il token conserva gli indici,
+        // mentre i lettori e la re-entry possono progredire senza guard Workspace.
+        let _ = crate::teardown::flush_indexes(&self.workspace)?;
         // **La persistenza dell'anagrafe e la raccolta dello spazio per-documento,
         // entrambe sotto prestito condiviso.**
         // Non bloccano l'UI né il lock di scrittura esclusivo durante il calcolo
@@ -616,19 +799,7 @@ impl Shared {
         } else {
             Ok(serde_json::json!({ "discarded": opening.discarded.len() }))
         };
-        self.forget(in_progress.id)?;
-        self.workspace.write()?.complete_job(
-            in_progress.id,
-            fub_kernel::INDEX_JOB.to_string(),
-            outcome,
-        );
-        // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
-        // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
-        // sta mettendo.
-        let (done, bell) = &*in_progress.end;
-        *done.lock().expect("fine avvelenata") = true;
-        bell.notify_all();
-        Ok(true)
+        Ok(OpeningAdvance::Finished(outcome))
     }
 
     /// Prende in carico un lotto appena drenato ([`Flags::claim`]).
@@ -733,10 +904,22 @@ impl Shared {
         // lucchetto che con quella risposta non c'entra niente. Si riconsegna,
         // e poi lo si dice.
         let flags = self.forget(job.id);
-        self.workspace
-            .write()?
-            .complete_job(job.id, job.spec.job, outcome);
+        with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(job.id, job.spec.job, outcome);
+        })?;
         flags
+    }
+    /// Esegue una richiesta sincrona usando la stessa ammissione, cancellazione,
+    /// contenimento dei panic e contabilità del percorso in coda.
+    fn run_direct(&self, job: PendingJob) -> Result<serde_json::Value, PluginError> {
+        let outcome = self.outcome(&job);
+        let flags = self.forget(job.id);
+        let completion = with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(job.id, job.spec.job, outcome.clone());
+        });
+        completion?;
+        flags?;
+        outcome
     }
 
     /// **Ciò che questo job risponde, comunque vada** — anche quando ciò che va
@@ -811,9 +994,9 @@ impl Shared {
         // riconsegna. Chi rifiuta è già dentro un guaio, ed è il momento in cui
         // un esito perso non lo nota nessuno.
         let flags = self.forget(job.id);
-        self.workspace
-            .write()?
-            .complete_job(job.id, job.spec.job, Err(refusal.clone()));
+        with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(job.id, job.spec.job, Err(refusal.clone()));
+        })?;
         flags?;
         Ok(refusal)
     }
@@ -839,9 +1022,19 @@ impl Shared {
         &self,
         cursors: Vec<(String, String, fub_abi::traits::CivilTime)>,
     ) -> Result<(), PluginError> {
-        let workspace = self.workspace.read()?;
-        for (owner, timer, cursor) in cursors {
-            workspace.set_timer_cursor(&owner, &timer, cursor)?;
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            cursors
+                .into_iter()
+                .map(|(owner, timer, cursor)| {
+                    workspace
+                        .prepare_timer_cursors(&owner)
+                        .map(|token| (token, timer, cursor))
+                })
+                .collect::<Result<Vec<_>, PluginError>>()?
+        };
+        for (token, timer, cursor) in prepared {
+            token.write(&timer, cursor)?;
         }
         Ok(())
     }
@@ -851,12 +1044,22 @@ impl Shared {
         &self,
         declared: &[(String, fub_abi::traits::TimerSpec)],
     ) -> Result<HashMap<(String, String), fub_abi::traits::CivilTime>, PluginError> {
-        let workspace = self.workspace.read()?;
-        let owners: HashSet<&str> = declared.iter().map(|(owner, _)| owner.as_str()).collect();
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            let owners: HashSet<&str> = declared.iter().map(|(owner, _)| owner.as_str()).collect();
+            owners
+                .into_iter()
+                .map(|owner| {
+                    workspace
+                        .prepare_timer_cursors(owner)
+                        .map(|token| (owner.to_owned(), token))
+                })
+                .collect::<Result<Vec<_>, PluginError>>()?
+        };
         let mut cursors = HashMap::new();
-        for owner in owners {
-            for (timer, cursor) in workspace.timer_cursors(owner)? {
-                cursors.insert((owner.to_owned(), timer), cursor);
+        for (owner, token) in prepared {
+            for (timer, cursor) in token.read()? {
+                cursors.insert((owner.clone(), timer), cursor);
             }
         }
         Ok(cursors)
@@ -901,7 +1104,7 @@ impl Shared {
             if self.stopping.load(Ordering::Acquire) {
                 return Ok(());
             }
-            self.workspace.write()?.fire_timer(&owner, &timer);
+            with_event_drain(&self.workspace, |ws| ws.fire_timer(&owner, &timer))?;
         }
         Ok(())
     }
@@ -936,6 +1139,11 @@ impl Shared {
                 std::thread::yield_now();
                 continue;
             }
+            #[cfg(test)]
+            if let Some(probe) = &self.stop_race_probe {
+                probe.pause_before_ticket();
+            }
+
             // Il biglietto si prende **prima** di drenare: un job accodato fra
             // il drenaggio e l'attesa cambia il conto, e l'attesa torna subito
             // invece di dormire su lavoro che c'è.
@@ -1039,6 +1247,55 @@ impl Shared {
     }
 }
 
+/// Il via dei worker è una decisione del pool, non del singolo thread.
+///
+/// Finché tutti i thread richiesti non esistono nessuno può entrare nel
+/// workspace: se una `spawn` fallisce, chi è già nato riceve invece
+/// l'annullamento e termina senza toccare il lavoro dell'apertura.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum WorkerStart {
+    Waiting,
+    Running,
+    Cancelled,
+}
+
+struct WorkerStartGate {
+    state: Mutex<WorkerStart>,
+    changed: Condvar,
+}
+
+impl WorkerStartGate {
+    fn new() -> Self {
+        Self {
+            state: Mutex::new(WorkerStart::Waiting),
+            changed: Condvar::new(),
+        }
+    }
+
+    /// Torna `true` soltanto quando il pool è nato per intero.
+    fn wait(&self) -> bool {
+        let mut state = self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        while *state == WorkerStart::Waiting {
+            state = self
+                .changed
+                .wait(state)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        *state == WorkerStart::Running
+    }
+
+    fn release(&self, state: WorkerStart) {
+        *self
+            .state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = state;
+        self.changed.notify_all();
+    }
+}
+
 /// Il pool che esegue i job di un vault.
 pub struct JobRunner {
     shared: Arc<Shared>,
@@ -1066,26 +1323,106 @@ impl JobRunner {
         // che dopo la 0120 *prendere un prestito è una domanda*, e una funzione
         // che se la ponesse per conto suo sarebbe il secondo posto in cui la
         // politica è scritta.
-        let bell = workspace.read()?.job_bell();
+        let (bell, bus) = {
+            let workspace = workspace.read()?;
+            (workspace.job_bell(), workspace.bus().clone())
+        };
         let shared = Arc::new(Shared {
             workspace,
             bundles,
             bell,
+            bus,
+            #[cfg(test)]
+            stop_race_probe: None,
+
             stopping: AtomicBool::new(false),
             opening: Custody::new("l'apertura in corso", opening),
             flags: Custody::empty("le bandiere dei job"),
             alarms: Custody::empty("le sveglie del vault"),
             in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
         });
-        let workers = (0..threads.max(1))
-            .map(|n| {
-                let shared = Arc::clone(&shared);
-                std::thread::Builder::new()
-                    .name(format!("fub-job-{n}"))
-                    .spawn(move || shared.work())
-                    .expect("thread del pool")
-            })
-            .collect();
+        Self::start_workers_with(shared, threads, |builder, worker| builder.spawn(worker))
+    }
+    /// Avvia il pool con il presidio deterministico della corsa di chiusura.
+    ///
+    /// Il gancio vive solo nei test: il percorso di produzione continua a
+    /// costruire esattamente lo stesso `Shared`, senza stato aggiuntivo.
+    #[cfg(test)]
+    pub(crate) fn start_with_stop_probe(
+        workspace: Custody<Workspace>,
+        bundles: Custody<BundleRegistry>,
+        threads: usize,
+        opening: Option<InProgress>,
+        probe: Arc<StopRaceProbe>,
+    ) -> Result<Self, PluginError> {
+        let (bell, bus) = {
+            let workspace = workspace.read()?;
+            (workspace.job_bell(), workspace.bus().clone())
+        };
+        let shared = Arc::new(Shared {
+            workspace,
+            bundles,
+            bell,
+            stop_race_probe: Some(probe),
+
+            stopping: AtomicBool::new(false),
+            opening: Custody::new("l'apertura in corso", opening),
+            bus,
+            flags: Custody::empty("le bandiere dei job"),
+            alarms: Custody::empty("le sveglie del vault"),
+            in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
+        });
+        Self::start_workers_with(shared, threads, |builder, worker| builder.spawn(worker))
+    }
+
+    /// Il solo giunto privato della creazione dei thread.
+    ///
+    /// La funzione iniettata permette al presidio di far fallire una `spawn`
+    /// precisa; in produzione resta esattamente `Builder::spawn`.
+    fn start_workers_with<S>(
+        shared: Arc<Shared>,
+        threads: usize,
+        mut spawn: S,
+    ) -> Result<Self, PluginError>
+    where
+        S: FnMut(
+            std::thread::Builder,
+            Box<dyn FnOnce() + Send + 'static>,
+        ) -> std::io::Result<JoinHandle<()>>,
+    {
+        let gate = Arc::new(WorkerStartGate::new());
+        let mut workers = Vec::with_capacity(threads.max(1));
+        for n in 0..threads.max(1) {
+            let worker_shared = Arc::clone(&shared);
+            let worker_gate = Arc::clone(&gate);
+            let worker = Box::new(move || {
+                if worker_gate.wait() {
+                    worker_shared.work();
+                }
+            });
+            match spawn(
+                std::thread::Builder::new().name(format!("fub-job-{n}")),
+                worker,
+            ) {
+                Ok(worker) => workers.push(worker),
+                Err(error) => {
+                    let root = PluginError::Io(
+                        format!("impossibile avviare il thread del pool: {error}").into(),
+                    );
+                    // Non è `stop`: nessun worker ha ancora ricevuto il via,
+                    // dunque non c'è lavoro da annullare né un'apertura da
+                    // avanzare. Il chiamante conserva la propria transazione
+                    // e ne percorre il rollback dopo che tutti i nati sono
+                    // stati raccolti.
+                    gate.release(WorkerStart::Cancelled);
+                    for worker in workers {
+                        let _ = worker.join();
+                    }
+                    return Err(root);
+                }
+            }
+        }
+        gate.release(WorkerStart::Running);
         Ok(JobRunner { shared, workers })
     }
 
@@ -1109,6 +1446,32 @@ impl JobRunner {
         // Su un vault avvelenato non c'è niente da annullare: il pool si è già
         // fermato da sé, e la riga che spiega perché è già stata scritta.
         let _ = self.shared.cancel(id);
+    }
+    /// Esegue direttamente un job richiesto dall'host, senza creare una
+    /// seconda contabilità: l'id viene riservato dal workspace e il corpo passa
+    /// dalla stessa `Shared::outcome` usata dai worker.
+    pub fn invoke_job(
+        &self,
+        plugin: &str,
+        job: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        if self.shared.bundles.read()?.body(plugin).is_none() {
+            return Err(PluginError::NotFound(
+                format!("plugin not mounted: {plugin}").into(),
+            ));
+        }
+        let pending = {
+            let mut workspace = self.shared.workspace.write()?;
+            workspace.issue_direct_job(
+                plugin,
+                JobSpec {
+                    job: job.into(),
+                    payload,
+                },
+            )?
+        };
+        self.shared.run_direct(pending)
     }
 
     /// **Ferma i job di un componente**, e torna quando nessuno è più dentro il
@@ -1140,9 +1503,14 @@ impl JobRunner {
     /// risposta vera, ed è il deadline dell'host WASM.
     pub fn stop(&mut self) -> Vec<PluginError> {
         self.shared.stopping.store(true, Ordering::Release);
+
         let mut errors: Vec<PluginError> = self.shared.cancel_all().err().into_iter().collect();
         // Sveglia chi aspetta il campanello: si sveglia, vede `stopping`, esce.
         self.shared.bell.ring();
+        #[cfg(test)]
+        if let Some(probe) = &self.shared.stop_race_probe {
+            probe.stop_requested();
+        }
         for worker in self.workers.drain(..) {
             let _ = worker.join();
         }
@@ -1337,6 +1705,77 @@ mod tests {
         );
     }
 
+    #[test]
+    fn poisoned_opening_phase_still_completes_and_wakes_waiters() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let subscription = shared.workspace.read().unwrap().bus().subscribe();
+        let end = {
+            let opening = shared.opening.read().unwrap();
+            Arc::clone(&opening.as_ref().expect("un'apertura in corso").end)
+        };
+        let waiter_end = Arc::clone(&end);
+        let (woke_tx, woke_rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let (done, bell) = &*waiter_end;
+            let mut done = match done.lock() {
+                Ok(done) => done,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            while !*done {
+                done = match bell.wait(done) {
+                    Ok(done) => done,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+            }
+            woke_tx.send(()).expect("il test riceve il risveglio");
+        });
+
+        poison(&shared.flags);
+        assert!(
+            shared.advance_opening().is_err(),
+            "un custode avvelenato resta un errore osservabile"
+        );
+        assert!(
+            woke_rx.recv_timeout(Duration::from_secs(1)).is_ok(),
+            "un errore nella fase non deve lasciare il waiter bloccato"
+        );
+        waiter.join().expect("il waiter è terminato");
+        assert_eq!(
+            completed(&subscription),
+            vec![fub_kernel::INDEX_JOB.to_string()],
+            "anche un errore di fase consegna sempre JobDone"
+        );
+    }
+
+    #[test]
+    fn poisoned_workspace_still_emits_opening_completion() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let subscription = shared.workspace.read().unwrap().bus().subscribe();
+        let end = {
+            let opening = shared.opening.read().unwrap();
+            Arc::clone(&opening.as_ref().expect("un'apertura in corso").end)
+        };
+
+        poison(&shared.workspace);
+        assert!(
+            shared.advance_opening().is_err(),
+            "il workspace avvelenato resta un errore osservabile"
+        );
+        let done = match end.0.lock() {
+            Ok(done) => done,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        assert!(
+            *done,
+            "il workspace avvelenato non può impedire il risveglio"
+        );
+        assert_eq!(
+            completed(&subscription),
+            vec![fub_kernel::INDEX_JOB.to_string()],
+            "il bus indipendente consegna JobDone anche senza workspace"
+        );
+    }
+
     /// **Chi ferma il pool chiude anche l'apertura che nessun thread ha
     /// finito** (§15.7).
     ///
@@ -1367,6 +1806,105 @@ mod tests {
         assert!(
             *end.0.lock().unwrap(),
             "chi aspettava l'indicizzazione non è stato svegliato"
+        );
+    }
+
+    /// Una `spawn` fallita **dopo** che un worker è nato non gli consegna una
+    /// fetta dell'apertura e non prova a fermarlo attraverso il workspace.
+    ///
+    /// Il turno resta intenzionalmente in mano al chiamante, come dentro
+    /// `OpeningTransaction`: il vecchio rollback chiamava `stop`, poi aspettava
+    /// il worker che a sua volta aspettava questo turno. I due canali mettono in
+    /// scena il punto esatto senza sonni: il secondo tentativo fallisce soltanto
+    /// dopo che il primo thread è davvero entrato nella propria closure.
+    #[test]
+    fn partial_spawn_cancels_and_joins_before_touching_the_opening() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let _opening_turn = shared.workspace.write_turn();
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(0);
+        let (exited_tx, exited_rx) = std::sync::mpsc::channel();
+        let mut entered_tx = Some(entered_tx);
+        let mut exited_tx = Some(exited_tx);
+        let mut attempts = 0;
+
+        let started = JobRunner::start_workers_with(Arc::clone(&shared), 2, |builder, worker| {
+            attempts += 1;
+            if attempts == 2 {
+                entered_rx.recv().expect("il primo worker è realmente nato");
+                let opening = shared.opening.read().expect("l'apertura è leggibile");
+                let opening = opening.as_ref().expect("l'apertura resta al chiamante");
+                assert_eq!(
+                    opening.work.done(),
+                    0,
+                    "un worker ha portato avanti l'apertura prima del rollback"
+                );
+                assert!(
+                    shared
+                        .workspace
+                        .read()
+                        .expect("il workspace è leggibile")
+                        .documents()
+                        .is_empty(),
+                    "un worker ha pubblicato documenti prima del rollback"
+                );
+                return Err(std::io::Error::other("spawn di prova"));
+            }
+
+            let entered = entered_tx.take().expect("un solo worker nasce");
+            let exited = exited_tx.take().expect("un solo worker termina");
+            builder.spawn(move || {
+                entered.send(()).expect("il test osserva il worker");
+                worker();
+                exited.send(()).expect("il test osserva l'uscita");
+            })
+        });
+        let error = match started {
+            Err(error) => error,
+            Ok(mut runner) => {
+                drop(_opening_turn);
+                runner.stop();
+                panic!("il secondo spawn doveva fallire");
+            }
+        };
+
+        assert_eq!(attempts, 2, "il guasto arriva dopo un worker reale");
+        assert_eq!(
+            error,
+            PluginError::Io(
+                "impossibile avviare il thread del pool: spawn di prova"
+                    .to_string()
+                    .into()
+            ),
+            "il rollback non deve sostituire il guasto di spawn"
+        );
+        exited_rx
+            .recv()
+            .expect("il worker parziale termina prima del ritorno");
+        assert!(
+            matches!(
+                exited_rx.try_recv(),
+                Err(std::sync::mpsc::TryRecvError::Disconnected)
+            ),
+            "il worker parziale ha lasciato vivo il proprio canale"
+        );
+        let opening = shared.opening.read().expect("l'apertura è leggibile");
+        assert_eq!(
+            opening
+                .as_ref()
+                .expect("l'apertura non è stata consumata")
+                .work
+                .done(),
+            0,
+            "il rollback ha avanzato l'apertura"
+        );
+        assert!(
+            shared
+                .workspace
+                .read()
+                .expect("il workspace è leggibile")
+                .documents()
+                .is_empty(),
+            "il rollback ha modificato il workspace"
         );
     }
 
@@ -1435,6 +1973,115 @@ mod tests {
         ) -> Result<String, fub_abi::error::FormatError> {
             Ok(m.text.clone())
         }
+    }
+
+    struct OpeningIndexFeedLockProbe {
+        entered: std::sync::mpsc::SyncSender<()>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+
+    impl fub_abi::traits::IndexProvider for OpeningIndexFeedLockProbe {
+        fn routes(&self) -> Vec<fub_abi::traits::QueryRoute> {
+            Vec::new()
+        }
+
+        fn activate(&mut self, _: &mut dyn fub_abi::traits::HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn on_documents_indexed(
+            &mut self,
+            _: &[fub_abi::model::DocumentModel],
+        ) -> Vec<fub_abi::traits::IndexLoss> {
+            self.entered.send(()).expect("il test aspetta il feed");
+            self.release
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .recv_timeout(Duration::from_secs(10))
+                .expect("il test lascia uscire il feed");
+            Vec::new()
+        }
+
+        fn on_documents_removed(
+            &mut self,
+            _: &[fub_abi::model::DocId],
+        ) -> Vec<fub_abi::traits::IndexLoss> {
+            Vec::new()
+        }
+
+        fn reconcile(&mut self, _: &[fub_abi::model::DocId]) -> Vec<fub_abi::traits::IndexLoss> {
+            Vec::new()
+        }
+
+        fn flush(&mut self, _: &mut dyn fub_abi::traits::HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn close(&mut self, _: &mut dyn fub_abi::traits::HostApi) -> Result<(), PluginError> {
+            Ok(())
+        }
+
+        fn query(
+            &self,
+            _: fub_abi::traits::IndexQuery,
+        ) -> Result<fub_abi::traits::IndexResult, PluginError> {
+            Err(PluginError::Unserved("feed-only probe".into()))
+        }
+
+        fn up_to_date(&self, _: &[fub_abi::traits::VaultEntry]) -> Vec<fub_abi::model::DocId> {
+            Vec::new()
+        }
+    }
+
+    #[test]
+    fn reader_enters_while_opening_feeds_an_external_index() {
+        let mut formats = fub_kernel::FormatRegistry::new();
+        formats
+            .register(fub_format_markdown::MarkdownProvider::boxed())
+            .expect("un provider di formato solo non confligge");
+        let (_dir, shared, _id, _root) = a_vault_scanned(1, formats);
+        let (entered_tx, entered_rx) = std::sync::mpsc::sync_channel(1);
+        let (release_tx, release_rx) = std::sync::mpsc::sync_channel(1);
+        {
+            let mut ws = shared.workspace.write().expect("il vault è vivo");
+            ws.register_plugin(
+                fub_abi::traits::PluginManifest::new(
+                    "fub.audit-index-feed-opening",
+                    "Audit detached opening index feed",
+                ),
+                fub_kernel::Trust::Community,
+            )
+            .expect("l'owner dell'indice si dichiara");
+            ws.register_index_provider(
+                "fub.audit-index-feed-opening",
+                Box::new(OpeningIndexFeedLockProbe {
+                    entered: entered_tx,
+                    release: Mutex::new(release_rx),
+                }),
+            )
+            .expect("il probe dell'indice si registra");
+        }
+
+        let slice = {
+            let shared = Arc::clone(&shared);
+            std::thread::spawn(move || shared.advance_opening())
+        };
+        entered_rx
+            .recv_timeout(Duration::from_secs(10))
+            .expect("IndexProvider::on_documents_indexed entra durante l'apertura");
+        let reader_progressed = shared.workspace.try_read().is_some();
+        release_tx.send(()).expect("il feed può terminare");
+        let outcome = slice.join().expect("il thread dell'apertura non panica");
+
+        assert!(
+            reader_progressed,
+            "la seconda fase dell'apertura ha tenuto Custody<Workspace> durante \
+             IndexProvider::on_documents_indexed"
+        );
+        assert!(
+            outcome.expect("nessun veleno"),
+            "c'era una fetta di apertura da portare avanti"
+        );
     }
 
     /// **La proprietà** (0119, secondo sito): mentre la fetta dell'apertura
@@ -1628,11 +2275,15 @@ mod tests {
         let work = ws.scan_vault().expect("la scansione riesce");
         assert_eq!(work.total(), count as u64, "le note seminate si leggono");
         let id = ws.begin_index_job();
+        let bus = ws.bus().clone();
 
         let shared = Shared {
             workspace: Custody::new("il vault di prova", ws),
             bundles: Custody::new("i componenti di prova", BundleRegistry::new()),
             bell: Arc::new(JobBell::default()),
+            #[cfg(test)]
+            stop_race_probe: None,
+            bus,
             stopping: AtomicBool::new(false),
             opening: Custody::new(
                 "l'apertura di prova",

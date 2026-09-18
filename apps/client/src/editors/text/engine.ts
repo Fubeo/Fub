@@ -46,6 +46,8 @@ import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToCharIndex, charToByteIndices } from "../../rules/offsets";
+import { onLanguage, t } from "../../i18n/strings";
+import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
 import {
@@ -101,6 +103,7 @@ export class TextEngine {
   private readonly footprints = new HistoryFootprints();
   private readonly options: TextEngineOptions;
   private readonly listener: Extension;
+  private readonly stopLanguage: Teardown;
   private applyOrigin: ApplyOrigin = "user";
   private readOnlyEnabled = false;
   private disposed = false;
@@ -115,6 +118,13 @@ export class TextEngine {
       parent,
       state: EditorState.create({ extensions: this.extensions() }),
     });
+    // CodeMirror rende lo scroller raggiungibile solo con `tabindex="-1"`.
+    // È sufficiente per il fuoco programmato dell'editor, ma axe considera
+    // una regione scrollabile non raggiungibile dalla tastiera: la superficie
+    // deve essere una fermata ordinaria, senza togliere il fuoco al contenuto.
+    this.view.scrollDOM.tabIndex = 0;
+    this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
+    this.updateAccessibleLabels();
   }
 
   public setDoc(text: string): void {
@@ -255,6 +265,7 @@ export class TextEngine {
   public destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopLanguage();
     this.footprints.reset();
     this.view.destroy();
   }
@@ -280,6 +291,17 @@ export class TextEngine {
 
   private profileExtensions(): Extension {
     return this.options.extensions?.() ?? [];
+  }
+  private updateAccessibleLabels(): void {
+    const content = this.view.contentDOM;
+    content.dataset.i18nLabel = "editor.document";
+    content.setAttribute("aria-label", t("editor.document"));
+    for (const checkbox of content.querySelectorAll<HTMLInputElement>(".cm-fub-checkbox")) {
+      checkbox.setAttribute(
+        "aria-label",
+        t(checkbox.checked ? "editor.task.completed" : "editor.task.pending"),
+      );
+    }
   }
 
   private rendered(state: EditorState = this.view.state): string {

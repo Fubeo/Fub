@@ -89,7 +89,10 @@ pub use dispatcher::{Dispatcher, JobBell, PendingJob};
 pub use documents::DocumentStore;
 pub use error::{KernelError, Result};
 pub use graph::{BuiltGraph, GraphSources, LinkGraph};
-pub use host::{Capability, CapabilitySet, Granted, Guard, Policy, ReadOnly};
+pub use host::{
+    authorize_query, filter_query_result, Capability, CapabilitySet, Granted, Guard, Policy,
+    ReadOnly,
+};
 pub use index::plan::{PlanStep, QueryPlan};
 pub use index::{RouteConflict, CORE_ID};
 pub use journal::{journal_path, JournalOp, JournalRead, JournalRecord};
@@ -102,11 +105,18 @@ pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererReg
 pub use session::Session;
 pub use settings::{MachineSettings, SettingsStore, SharedSettings};
 pub use storage::{update_atomic, write_atomic, Durable};
-pub use storage::{DirEntry, EntryKind, FsStorage, MemStorage, Stat, VaultStorage};
+pub use storage::{
+    ConditionalWrite, DirEntry, EntryKind, FileIdentity, FsStorage, MemStorage, RootedFsStorage,
+    Stat, VaultStorage,
+};
 pub use syntax::{SyntaxConflict, SyntaxRegistry, SyntaxSnapshot};
-pub use vault::{data_root, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
+pub use vault::{data_root, PreparedIgnoreCheck, TrashEntry, Vault, FUB_DIR, TRASH_DIR};
 pub use viewstate::ViewStates;
 pub use workspace::{
-    new_doc_id, valid_doc_id, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange, Rejected,
-    Trust, Workspace, INDEX_JOB, MAIN_PANE,
+    new_doc_id, valid_doc_id, CatchUpSnapshot, CompletedExternalAssetRename, CompletedSyncChange,
+    ExternalRenamePlan, GraphUpdate, Indexing, Opening, ParsedBatch, ParsedChange,
+    ParsedExplicitRename, ParsedExternalAssetRename, ParsedExternalRename,
+    PendingExternalAssetRename, PendingSyncChange, PreparedCatchUp, PreparedExplicitRename,
+    PreparedExternalAssetRename, PreparedTimerCursors, Rejected, SyncPlan, Trust, Workspace,
+    INDEX_JOB, MAIN_PANE,
 };

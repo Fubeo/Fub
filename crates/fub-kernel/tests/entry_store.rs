@@ -840,3 +840,27 @@ fn a_data_that_can_again_change_not_ends_in_registry() {
          finché non arriva un evento che lo tocchi, e se non arriva, per sempre"
     );
 }
+
+#[test]
+fn same_size_and_mtime_do_not_hide_changed_bytes() {
+    let f = Fixture::new();
+    f.write("nota.txt", "AAAA");
+    beyond_the_millisecondo();
+    drop(f.open(false));
+    let parsed_before = f.parses();
+
+    let path = f.root.join("nota.txt");
+    let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+    std::fs::write(&path, "BBBB").unwrap();
+    let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    file.set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+
+    let ws = f.open(false);
+    assert_eq!(
+        f.parses() - parsed_before,
+        1,
+        "stessa size e stesso mtime non autorizzano il riuso: il digest dei byte è cambiato"
+    );
+    assert_eq!(ws.read_source(&DocId::new("nota.txt")).unwrap(), "BBBB");
+}

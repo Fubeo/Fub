@@ -107,7 +107,7 @@ use fub_abi::edit::Revision;
 use fub_abi::model::{Anchor, DocId, Frontmatter, Heading, Link};
 use serde::{Deserialize, Serialize};
 
-use crate::storage::{Durable, VaultStorage};
+use crate::storage::{Durable, FileIdentity, VaultStorage};
 use crate::vault::data_root;
 use fub_abi::schema::SchemaVersion;
 
@@ -139,7 +139,12 @@ use fub_abi::schema::SchemaVersion;
 /// si converte: non comincia con `\n`, quindi [`decodifica`] risponde `None` e
 /// il primo [`EntryStore::store`] lo sostituisce con una fotografia — la regola
 /// di sempre, «un derivato di una versione che non si conosce si rifà».
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(4);
+///
+/// v5: ogni voce può portare l'identità filesystem. Il ricongiungimento di una
+/// rinomina fatta ad app chiusa richiede identità **e** digest: una copia seguita
+/// da cancellazione ha gli stessi byte e un file diverso, quindi non eredita mai
+/// bozza, versioni o side-data della sorgente.
+const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(5);
 
 /// Il nome del file dentro [`data_root`].
 const FILE: &str = "entries.json";
@@ -228,6 +233,10 @@ pub(crate) struct StoredEntry {
     pub(crate) size: u64,
     pub(crate) mtime: u64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) change_stamp: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) identity: Option<FileIdentity>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(crate) fingerprint: Option<Revision>,
     /// Una voce come sta sul file.
     /// Assente per ciò che non è un documento: un PNG non ha un modello, e
@@ -243,6 +252,14 @@ impl StoredEntry {
     /// modifica vera (una parola sostituita con un'altra della stessa
     pub(crate) fn describes(&self, size: u64, mtime: u64) -> bool {
         self.size == size && self.mtime == mtime
+    }
+
+    pub(crate) fn same_change_stamp(&self, observed: Option<u64>) -> bool {
+        match (self.change_stamp, observed) {
+            (Some(stored), Some(observed)) => stored == observed,
+            (None, None) => true,
+            _ => false,
+        }
     }
 }
 
@@ -432,11 +449,26 @@ fn enrich(new: &mut BTreeMap<DocId, StoredEntry>, old: &BTreeMap<DocId, StoredEn
         let Some(previous) = old.get(id) else {
             continue;
         };
-        if !previous.describes(entry.size, entry.mtime) {
+        if !previous.describes(entry.size, entry.mtime)
+            || !previous.same_change_stamp(entry.change_stamp)
+        {
             continue;
         }
-        if entry.fingerprint.is_none() {
+
+        // Una fotografia che non ha letto il file può ereditare l'impronta
+        // durevole soltanto se l'identità che conosce non smentisce quella
+        // precedente. Se l'identità è cambiata, stessi size/mtime non bastano:
+        // sarebbe associare il digest del file vecchio a un file nuovo.
+        if entry.fingerprint.is_none()
+            && (entry.identity.is_none() || entry.identity == previous.identity)
+        {
             entry.fingerprint = previous.fingerprint.clone();
+        }
+        if entry.fingerprint != previous.fingerprint {
+            continue;
+        }
+        if entry.identity.is_none() {
+            entry.identity = previous.identity;
         }
         if entry.metadata.is_none() {
             entry.metadata = previous.metadata.clone();
@@ -613,9 +645,70 @@ mod tests {
         StoredEntry {
             size,
             mtime,
+            change_stamp: None,
+            identity: None,
             fingerprint: None,
             metadata: None,
         }
+    }
+
+    #[test]
+    fn a_different_identity_does_not_inherit_the_old_fingerprint() {
+        let id = DocId::new("same.md");
+        let previous_identity = FileIdentity {
+            volume: 1,
+            file: 10,
+        };
+        let current_identity = FileIdentity {
+            volume: 1,
+            file: 11,
+        };
+
+        let mut previous = entry(3, 1_000);
+        previous.identity = Some(previous_identity);
+        previous.fingerprint = Some(Revision::new("0123456789abcdef"));
+
+        let mut current = entry(3, 1_000);
+        current.identity = Some(current_identity);
+
+        let old = BTreeMap::from([(id.clone(), previous)]);
+        let mut new = BTreeMap::from([(id.clone(), current)]);
+        enrich(&mut new, &old);
+
+        let merged = new.get(&id).expect("the entry remains present");
+        assert_eq!(merged.identity, Some(current_identity));
+        assert!(
+            merged.fingerprint.is_none(),
+            "same size/mtime do not authorize attaching the old digest to a different file identity"
+        );
+    }
+
+    #[test]
+    fn a_different_change_stamp_does_not_inherit_the_old_fingerprint() {
+        let id = DocId::new("same.md");
+        let identity = FileIdentity {
+            volume: 1,
+            file: 10,
+        };
+
+        let mut previous = entry(3, 1_000);
+        previous.identity = Some(identity);
+        previous.change_stamp = Some(7);
+        previous.fingerprint = Some(Revision::new("0123456789abcdef"));
+
+        let mut current = entry(3, 1_000);
+        current.identity = Some(identity);
+        current.change_stamp = Some(8);
+
+        let old = BTreeMap::from([(id.clone(), previous)]);
+        let mut new = BTreeMap::from([(id.clone(), current)]);
+        enrich(&mut new, &old);
+
+        let merged = new.get(&id).expect("the entry remains present");
+        assert!(
+            merged.fingerprint.is_none(),
+            "a filesystem change stamp that advanced invalidates the old digest even when size, mtime and identity match"
+        );
     }
 
     /// un `update` che risponde con dei byte, o una `write` — dall'altra. È

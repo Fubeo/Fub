@@ -139,11 +139,11 @@ segnala lo stato di cancellazione pendente; il pannello congela con
 conferma non risolve. Il fan-out continua a raggiungere le superfici congelate:
 una modifica accettata da un altro riquadro resta visibile ma non modificabile.
 
-Ogni `Pane` possiede invece un `Editor`. `renderPane()` crea l'editor chiamando
-`createEditor()` da `apps/client/src/editor/editor.ts`, che costruisce un
-`TextEngine` per quel riquadro e inoltra l'API del profilo Markdown. Questo
-`createEditor()` è un adapter temporaneo di compatibilità, non un secondo
-motore.
+Ogni `Pane` possiede invece una `EditorSurface`.
+`DocumentSurfaceRegistry` risolve la factory da metadati `format_id` e
+`source_kind`, applicando override, formato, specie, fallback testuale, viewer
+per byte ed errore. Il registro possiede le istanze e le distrugge quando il
+riquadro o l'owner vengono smontati.
 
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
@@ -235,21 +235,90 @@ dominio:
 | `PlainTextProfile` | `createPlainTextProfile()` monta estensioni vuote, senza sintassi o comandi di dominio. |
 | `FormulaProfile` | `createFormulaProfile()` monta lessico, completamenti per funzioni/fogli/nomi e commit/cancel espliciti; `singleLine` è configurabile. |
 
-Questi profili sono un'architettura interna della shell. `MarkdownProfile` è
-l'unico profilo montato dal percorso utente; `PlainTextProfile` e
-`FormulaProfile` sono esercitati dai test e dalla fixture a tre profili, ma non
-sono superfici esposte all'utente.
-
-I moduli sono rispettivamente
-`apps/client/src/editors/text/profiles/markdown/profile.ts`,
+Markdown e plain text sono superfici utente distinte montate dal registro sullo
+stesso `TextEngine`; `FormulaProfile` è incorporato dalla formula bar e
+dall'editor in-cell di `GridEngine`. I moduli dei profili vivono rispettivamente
+in `apps/client/src/editors/text/profiles/markdown/profile.ts`,
 `apps/client/src/editors/text/profiles/plain-text.ts` e
 `apps/client/src/editors/text/profiles/formula.ts`. Le callback
 `FormulaProfileCallbacks.commit` e `.cancel` sono punti di integrazione
 TypeScript interni e iniettati dal chiamante; non attraversano IPC, WIT o ABI.
 
-Non fanno parte dell'architettura corrente un `DocumentSurfaceRegistry`, una
-griglia condivisa di superfici o la `Phase 5`: il pannello collega direttamente
-le superfici alla sessione e il percorso attuale resta quello testuale.
+Ogni superficie dichiara almeno una `SurfaceMode`: id estensibile, etichetta,
+presentazione editabile o resa e proiezione sul `PaneMode` ABI già congelato.
+Il layout conserva qualunque id non vuoto; se la superficie attuale non lo
+supporta, il pannello usa il primo modo dichiarato senza sovrascrivere la
+preferenza persistita. Il toggle `Mod-E` sceglie soltanto fra le modalità che la
+superficie dichiara; quando manca una coppia edit/render non mostra un controllo
+falso. La command palette usa la stessa proiezione e non conosce nomi di profilo.
+
+La tastiera è ordinata per contesto: il popup di completamento e le keymap
+CodeMirror precedono il layer della superficie; poi vengono profilo, documento,
+riquadro e globale. La shell monta un solo listener globale e lo rimuove al
+rimontaggio. Le callback di superficie diventano comandi nella stessa pipeline,
+non un secondo sistema di tasti.
+
+### Workbook e vertical slice della griglia
+
+`crates/fub-format-sheet` possiede il formato testuale `.fubsheet` v1 e il
+valutatore autorevole. `Workbook` conserva soltanto dati persistenti: versione,
+proprietà, ordine, dimensioni, input e stile. `SheetId + RowId + ColumnId`
+identifica una cella; A1, AST, valori, dipendenze, cache, errori, outline,
+ricerca e proprietà comuni sono proiezioni calcolate.
+
+Il formato è registrato nel kernel come sorgente conosciuta senza adattarlo a
+`DocumentModel`: discovery, sincronizzazione e indicizzazione conservano
+l'entry, mentre nessun parser di blocchi viene inventato. `GridEngine` analizza
+lo stesso JSON strict nel client, virtualizza righe e colonne e produce
+`GridOperation` con coordinate stabili, preimmagini e patch inverse.
+`DocumentSession` valida e diffonde l'operazione tipizzata prima della scrittura
+guardata; i reload full-text restano il fallback autorevole.
+
+Editor in-cell e formula bar usano due istanze di `TextEngine` con
+`FormulaProfile`, ma nessuna battuta attraversa IPC. Dopo un commit,
+`host/sheet.ts` invia la sorgente completa con `query_index`, nel namespace
+`fub.sheet`. Il provider nativo usa `Workbook::parse()` e
+`Workbook::evaluate()`. La richiesta privata ha specie `evaluate`, versione
+intera e campi chiusi; il risultato conserva valori ed errori formula tipizzati.
+La sorgente è limitata a 16 MiB e la risposta JSON, envelope compreso, a 8 MiB.
+
+Il bundle `fub.sheet` possiede la route nel registro. Disabilitarlo ritira la
+valutazione senza rimuovere il formato sorgente; riabilitarlo registra di nuovo
+il provider. Le generazioni asincrone scartano risposte stantie. Se la query
+non è servita, la superficie dichiara `data-evaluation="unavailable"` e mostra
+gli input grezzi senza duplicare il linguaggio formule in TypeScript.
+
+`crates/fub-format-sheet/src/session.rs` possiede il motore derivato. Apertura e
+reload costruiscono una sola valutazione e gli indici delle coordinate; le
+letture successive restituiscono soltanto la finestra richiesta. Il commit
+interno riceve fino a 16.384 patch e 4 MiB complessivi di preimmagini e nuovi
+input. Valida revisione, coordinate, duplicati e tutte le preimmagini prima di
+mutare; un errore lascia sorgente, revisione, valori e indici precedenti.
+
+Un commit riuscito serializza il workbook autorevole una volta, rivalida la
+sessione e restituisce un diff testuale con offset in byte UTF-8 e preimmagine.
+Il diff non spezza caratteri multibyte né la coppia `\r\n`. La risposta viene
+misurata, escaping JSON compreso, entro 8 MiB usando fette prese in prestito:
+`deleted` e `inserted` vengono allocati soltanto dopo il controllo. La prima
+canonicalizzazione di una sorgente non canonica può quindi fallire in modo
+esplicito senza sostituire la sessione.
+
+L'invalidazione include le coordinate modificate e le dipendenti transitive del
+nuovo workbook, comprese formule che puntavano a celle prima assenti. Fino a
+32.768 coordinate restituisce l'elenco ordinato; oltre la soglia restituisce
+`all`. L'adapter `fub-host::sheet` conserva la derivazione comune
+`Revision::of` ed espone la stessa semantica nativa. Il crate formato non
+dipende dall'host ed è compilabile per WASM.
+
+Questi tipi attraversano ora il contratto Rust↔WIT↔TypeScript e le porte IPC
+tipizzate della famiglia Grid. La shell non riceve DOM, callback JavaScript o
+oggetti CodeMirror: possiede rendering, input, clipboard, selezione e stato
+visuale, mentre il provider possiede parsing, formule e dipendenze.
+`query_index` resta read-only; per `.fubsheet` serve soltanto la valutazione
+privata completa e non è il percorso delle finestre, patch, invalidazioni o
+lifecycle Grid. Limiti, coordinate, fallback, diff UTF-8 e parità nativo/WASM
+sono normati in [ABI e WIT](../reference/abi-and-wit.md) e nel [contratto
+IPC](../reference/ipc-contract.md). Nessuna battuta genera IPC o WASM.
 
 ## Confine CodeMirror
 
@@ -280,13 +349,10 @@ Gli altri guard del frontend impediscono:
 - `apps/client/src/editors/text/profiles/markdown/livepreview.ts`
 - `apps/client/src/editors/text/profiles/plain-text.ts`
 - `apps/client/src/editors/text/profiles/formula.ts`
+- `apps/client/src/editors/text/surface.ts`
+- `apps/client/src/editors/grid/engine.ts`
+- `apps/client/src/editors/grid/surface.ts`
 - `apps/client/src/editor/text-operation.ts`
-- `apps/client/src/editor/editor.ts`
-- `apps/client/src/panels/document.ts`
+- `apps/client/src/state/document-session.ts`
 - `apps/client/src/host/contract.ts`
 - `apps/client/src/host/ipc.ts`
-- `apps/client/src/host/dialog.ts`
-- `apps/client/src/panels/`
-- `apps/client/src/state/`
-- `apps/client/src/ui/`
-- `crates/fub-app/src/lib.rs`

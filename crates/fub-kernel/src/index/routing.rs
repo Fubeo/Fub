@@ -53,7 +53,7 @@ impl std::fmt::Display for RouteConflict {
 
 impl std::error::Error for RouteConflict {}
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct RouteTable {
     /// famiglia → chi la serve. Uno solo.
     queries: BTreeMap<QueryKind, Target>,

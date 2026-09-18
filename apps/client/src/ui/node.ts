@@ -231,8 +231,13 @@ function unmount(el: Element): void {
 }
 
 function findByKey(root: HTMLElement, key: string): HTMLElement | null {
-  if (rendered.get(root)?.node.key === key) return root;
-  return root.querySelector<HTMLElement>(`[data-key="${CSS.escape(key)}"]`);
+  const matches: HTMLElement[] = [];
+  if (rendered.get(root)?.node.key === key) matches.push(root);
+  matches.push(...root.querySelectorAll<HTMLElement>(`[data-key="${CSS.escape(key)}"]`));
+  // Una patch identifica un nodo per chiave, quindi una chiave ambigua non è
+  // un bersaglio: scegliere il primo trasformerebbe un albero malformato in
+  // una mutazione deterministica ma sbagliata. Chi chiama farà il full render.
+  return matches.length === 1 ? matches[0] : null;
 }
 
 /// Aggiorna `el` perché mostri `next`, o lo sostituisce se non è possibile.
@@ -354,6 +359,7 @@ function update(
     case "row":
       if (prev.node !== "row") return false;
       children(el, next.cells, onAction);
+      ensureRowCell(el as HTMLTableRowElement);
       connect(el, next.action, onAction);
       return true;
     case "custom": {
@@ -504,6 +510,13 @@ function key(el: HTMLElement, node: UiNode): void {
   else delete el.dataset.key;
 }
 
+function ensureRowCell(row: HTMLTableRowElement): void {
+  if (row.cells.length > 0) return;
+  const td = document.createElement("td");
+  td.className = "ui-empty-cell";
+  row.appendChild(td);
+}
+
 function draw(node: UiNode, onAction: Port): HTMLElement {
   switch (node.node) {
     case "stack": {
@@ -631,6 +644,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
         td.appendChild(renderUiNode(cell, onAction));
         el.appendChild(td);
       }
+      ensureRowCell(el);
       return el;
     }
     case "tree": {
@@ -936,6 +950,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       attribute(input, "placeholder", node.node === "text_input" ? node.placeholder : null);
       writeValue(input, node.value ?? "");
       value(el, () => ({ type: "text", value: input.value }));
+      staticControl(input, node.action);
       actionsOfField(input, node.action, onAction);
       break;
     }
@@ -945,6 +960,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       area.rows = node.rows;
       writeValue(area, node.value);
       value(el, () => ({ type: "text", value: area.value }));
+      staticControl(area, node.action);
       actionsOfField(area, node.action, onAction);
       break;
     }
@@ -961,6 +977,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       attribute(input, "step", node.step === null ? null : String(node.step));
       writeValue(input, node.value === null ? "" : String(node.value));
       value(el, () => ({ type: "number", value: Number(input.value) }));
+      staticControl(input, node.action);
       actionsOfField(input, node.action, onAction);
       break;
     }
@@ -969,6 +986,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
       if (!input) return false;
       if (document.activeElement !== input) input.checked = node.value;
       value(el, () => ({ type: "bool", value: input.checked }));
+      staticControl(input, node.action);
       actionsOfField(input, node.action, onAction);
       break;
     }
@@ -986,6 +1004,7 @@ function applyField(el: HTMLElement, node: Field, onAction: Port): boolean {
           ? { type: "choices", value: choices }
           : { type: "text", value: choices[0] ?? "" };
       });
+      staticControl(select, node.action);
       actionsOfField(select, node.action, onAction);
       break;
     }
@@ -1049,6 +1068,42 @@ function options(select: HTMLSelectElement, options: UiOption[], value: string[]
   for (const opt of Array.from(select.options)) opt.selected = value.includes(opt.value);
 }
 
+interface RadioReconciliation {
+  /// Ultimo valore arrivato dal provider. È quello da applicare quando il
+  /// controllo non è più in mano all'utente.
+  providerValue: string | null;
+  /// Una scelta locale non ancora confermata dal provider. Un rerender può
+  /// quindi portare ancora il valore precedente senza cancellare la scelta.
+  pendingValue: string | null;
+  listenersInstalled: boolean;
+}
+
+const radioReconciliation = new WeakMap<HTMLElement, RadioReconciliation>();
+
+function applyRadioValue(el: HTMLElement, value: string | null): void {
+  for (const input of el.querySelectorAll<HTMLInputElement>("input[type=radio]")) {
+    input.checked = value !== null && input.value === value;
+  }
+}
+
+function installRadioReconciliation(el: HTMLElement, state: RadioReconciliation): void {
+  if (state.listenersInstalled) return;
+  state.listenersInstalled = true;
+  // `change` is the point at which the browser has applied the user's choice.
+  // Keep that choice until the provider acknowledges it or the group blurs.
+  el.addEventListener("change", () => {
+    state.pendingValue = el.querySelector<HTMLInputElement>("input[type=radio]:checked")?.value ?? null;
+  });
+  // `focusout` bubbles and carries the next focus target. Moving between two
+  // radios in the same group must not reconcile in the middle of the move.
+  el.addEventListener("focusout", (event) => {
+    const related = (event as FocusEvent).relatedTarget;
+    if (related instanceof Node && el.contains(related)) return;
+    state.pendingValue = null;
+    applyRadioValue(el, state.providerValue);
+  });
+}
+
 /// I bottoni di un gruppo di radio, riconciliati.
 ///
 /// **Il nome del gruppo è l'identità di questo gruppo**, non il nome del campo.
@@ -1063,6 +1118,23 @@ function options(select: HTMLSelectElement, options: UiOption[], value: string[]
 /// gruppo, o sono due gruppi che dicono due cose diverse allo stesso utente.
 function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction: Port): void {
   if (!el.id) el.id = identifier("gruppo-radio");
+  let state = radioReconciliation.get(el);
+  if (!state) {
+    state = { providerValue: node.value, pendingValue: null, listenersInstalled: false };
+    radioReconciliation.set(el, state);
+  }
+  state.providerValue = node.value;
+  installRadioReconciliation(el, state);
+
+  const active = document.activeElement;
+  const focused =
+    active instanceof HTMLInputElement && active.type === "radio" && el.contains(active);
+  // A provider value equal to the pending local value is the acknowledgement:
+  // it is safe to apply it and forget the pending choice. A different value
+  // while focused is still a stale response and must leave the DOM untouched.
+  const acknowledged = state.pendingValue !== null && state.pendingValue === node.value;
+  const preserveActive = focused && !acknowledged;
+
   const rows = Array.from(el.querySelectorAll<HTMLElement>(":scope > .ui-radio-option"));
   for (const row of rows.slice(node.options.length)) row.remove();
   node.options.forEach((option, i) => {
@@ -1070,10 +1142,14 @@ function radioButtons(el: HTMLElement, node: Field & { node: "radio" }, onAction
     const input = row.querySelector<HTMLInputElement>("input")!;
     input.name = el.id;
     input.value = option.value;
-    input.checked = option.value === node.value;
+    input.disabled = node.action === null;
     row.querySelector<HTMLElement>("span")!.textContent = option.label;
     actionsOfField(input, node.action, onAction);
   });
+  if (!preserveActive) {
+    applyRadioValue(el, node.value);
+    state.pendingValue = null;
+  }
 }
 
 function newItemOption(el: HTMLElement): HTMLElement {
@@ -1273,6 +1349,16 @@ function connect(el: HTMLElement, action: ActionRef | null, onAction: Port): voi
 /// La chiamano il disegno e la riconciliazione, con le stesse due righe: chi
 /// aggiungerà un terzo ascoltatore a un campo lo scrive qui, e lo ha in
 /// entrambe le vite del campo senza ricordarsene.
+function staticControl(
+  control: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  action: ActionRef | null,
+): void {
+  // Un campo senza azione è dato da leggere, non un editor senza salvataggio.
+  // Lasciarlo modificabile produce uno stato che sembra accettato e sparisce al
+  // primo ridisegno. Il browser espone già la semantica corretta: `disabled`.
+  control.disabled = action === null;
+}
+
 function actionsOfField(
   control: HTMLElement,
   action: ActionRef | null,

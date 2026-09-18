@@ -32,7 +32,7 @@
 
 import { THEME_ENGINE, type ThemeManifest, type ThemeLight } from "../host/contract";
 import { reportThemeTrouble, type ThemeTrouble } from "../ui/notify";
-import { themeAssetUrls, themeCssViolations } from "../ui/sanitize-css";
+import { themeAssetReferences, themeAssetUrls, themeCssViolations } from "../ui/sanitize-css";
 import { contrast } from "./contrast";
 import { REQUIRED_THEME_ROLES, THEME_CONTRAST_PAIRS } from "./contrast-fixture";
 import { HOOKS } from "./serie/anatomia";
@@ -64,13 +64,11 @@ export const PREFERENCE_TOKENS = [
 
 export type PreferenceToken = (typeof PREFERENCE_TOKENS)[number];
 
-export const THEME_MOTION = ["opacity", "transform"] as const;
-
 /** Forma non fidata letta dal bundle: il cancello controlla anche i literal. */
-export type ThemeBundleManifest = Omit<ThemeManifest, "engine" | "lights"> & {
+export type ThemeBundleManifest = Omit<ThemeManifest, "engine" | "lights" | "motion"> & {
   readonly engine: string;
   readonly lights: readonly string[];
-  readonly motion: readonly string[];
+  readonly motion?: readonly string[];
 };
 
 export interface ThemeBundle {
@@ -135,6 +133,64 @@ function replaceTheme(sheet: string, skin: string | undefined): void {
   for (const element of previous) element.remove();
 }
 
+function mimeType(asset: string): string {
+  const extension = asset.slice(asset.lastIndexOf(".") + 1).toLowerCase();
+  return ({
+    css: "text/css",
+    gif: "image/gif",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    png: "image/png",
+    svg: "image/svg+xml",
+    webp: "image/webp",
+    otf: "font/otf",
+    ttf: "font/ttf",
+    woff: "font/woff",
+    woff2: "font/woff2",
+  } as Readonly<Record<string, string>>)[extension] ?? "application/octet-stream";
+}
+
+function bytesOf(value: unknown): number[] | null {
+  if (value instanceof Uint8Array) return [...value];
+  if (!Array.isArray(value)) return null;
+  return value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
+    ? value as number[]
+    : null;
+}
+
+function base64(bytes: readonly number[]): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let encoded = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const first = bytes[i]!;
+    const second = bytes[i + 1];
+    const third = bytes[i + 2];
+    encoded += alphabet[first >> 2];
+    encoded += alphabet[((first & 3) << 4) | ((second ?? 0) >> 4)];
+    encoded += second === undefined
+      ? "=="
+      : alphabet[((second & 15) << 2) | ((third ?? 0) >> 6)] + (third === undefined ? "=" : alphabet[third & 63]);
+  }
+  return encoded;
+}
+
+function materializeAssets(
+  text: string,
+  assets: Readonly<Record<string, unknown>>,
+  namespace: string,
+): string {
+  let output = "";
+  let copiedThrough = 0;
+  for (const { value, start, end } of themeAssetReferences(text)) {
+    const bytes = value.startsWith(namespace) ? bytesOf(assets[value]) : null;
+    if (bytes === null || start < copiedThrough || end < start) continue;
+    output += text.slice(copiedThrough, start);
+    output += `data:${mimeType(value)};base64,${base64(bytes)}`;
+    copiedThrough = end;
+  }
+  return output + text.slice(copiedThrough);
+}
+
 function manifestReasons(manifest: ThemeBundleManifest, light: ThemeLight): string[] {
   const reasons: string[] = [];
   if (manifest.id.trim() === "") reasons.push("manifest: id mancante");
@@ -159,9 +215,14 @@ function manifestReasons(manifest: ThemeBundleManifest, light: ThemeLight): stri
     );
   }
 
-  const motion = new Set(manifest.motion);
-  if (manifest.motion.length !== THEME_MOTION.length ||
-      THEME_MOTION.some((property) => !motion.has(property))) {
+  const hasMotion = Object.prototype.hasOwnProperty.call(manifest, "motion");
+  const motionValues = !hasMotion && manifest.engine === THEME_ENGINE
+    ? ["opacity", "transform"]
+    : Array.isArray(manifest.motion) ? manifest.motion : [];
+  const motion = new Set(motionValues);
+  if (motionValues.length !== 2 ||
+      !motion.has("opacity") ||
+      !motion.has("transform")) {
     reasons.push("manifest: il moto deve dichiarare soltanto opacity e transform");
   }
   return reasons;
@@ -175,7 +236,6 @@ function tokensOf(css: string): Record<string, string> {
     ),
   );
 }
-
 function contrastReasons(sheet: string): string[] {
   const tokens = tokensOf(sheet);
   const reasons: string[] = [];
@@ -231,10 +291,11 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
 
   const assets = bundle.assets && typeof bundle.assets === "object" ? bundle.assets : {};
   if (assets !== bundle.assets) reasons.push("fascio: inventario asset mancante");
-  for (const asset of Object.keys(assets)) {
+  for (const [asset, value] of Object.entries(assets)) {
     if (!asset.startsWith(bundle.manifest.asset_namespace)) {
       reasons.push(`asset: ${asset} fuori da ${bundle.manifest.asset_namespace || "<namespace vuoto>"}`);
     }
+    if (bytesOf(value) === null) reasons.push(`asset: ${asset} non contiene byte validi`);
   }
   const referenced = themeAssetUrls(`${bundle.sheet}\n${bundle.skin ?? ""}`);
   for (const asset of referenced) {
@@ -255,7 +316,6 @@ function rejectTheme(
   report(trouble);
   return { mounted: false, trouble };
 }
-
 /** Valida l'intero fascio e solo allora sostituisce i due strati del tema. */
 export function mountThemeBundle(
   bundle: ThemeBundle,
@@ -265,7 +325,12 @@ export function mountThemeBundle(
   const reasons = validateThemeBundle(bundle, light);
   if (reasons.length > 0) return rejectTheme(bundle.manifest.name, reasons, report);
   try {
-    replaceTheme(bundle.sheet, bundle.skin);
+    replaceTheme(
+      materializeAssets(bundle.sheet, bundle.assets, bundle.manifest.asset_namespace),
+      bundle.skin === undefined
+        ? undefined
+        : materializeAssets(bundle.skin, bundle.assets, bundle.manifest.asset_namespace),
+    );
     return { mounted: true };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

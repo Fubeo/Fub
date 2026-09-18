@@ -28,13 +28,14 @@
 
 mod common;
 
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use camino::Utf8PathBuf;
 use fub_abi::event::Event;
-use fub_abi::traits::{JobId, JobSpec};
+use fub_abi::traits::JobId;
 use fub_abi::PluginError;
-use fub_host::{Host, NoWatcher};
+use fub_host::Host;
 use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::WasmBundle;
 
@@ -89,37 +90,20 @@ fn bench(v: &Vault, wasm: &[Utf8PathBuf]) -> (Host, Subscription) {
         .map(|w| WasmBundle::from_file(w, Trust::Community).expect("il componente si carica"))
         .collect();
 
-    let host = Host::new()
-        .with_watcher(Box::new(NoWatcher))
-        .with_job_threads(1);
+    let host = Host::without_watcher().with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    let events = host
-        .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
-        .expect("aperto");
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        let mut registry = s.bundles().write().unwrap();
-        for b in &bundle {
-            registry.mount(b, &mut ws).expect("il bundle si monta");
-        }
-    })
-    .expect("aperto");
+    let events = host.subscribe(None).expect("aperto");
+    for b in bundle {
+        host.mount_bundle(None, Arc::new(b))
+            .expect("il bundle si monta");
+    }
     (host, events)
 }
 
 fn ask(host: &Host, plugin: &str, job: &str) -> JobId {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        ws.with_host(plugin, |h| {
-            h.spawn_job(JobSpec {
-                job: job.to_string(),
-                payload: serde_json::json!(null),
-            })
-        })
-        .expect("accodato")
-    })
-    .expect("aperto")
+    host.spawn_job(None, plugin, job.to_string(), serde_json::json!(null))
+        .expect("aperto")
 }
 
 /// L'esito **di quel job**, e quanto ci ha messo ad arrivare.
@@ -176,6 +160,9 @@ fn crashed(error: &PluginError) -> String {
 fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
     let v = Vault::new();
     let (host, events) = bench(&v, &[cycle(), ping()]);
+    let key = fub_abi::settings::permission_key(PING, fub_abi::options::permission::READ_VAULT);
+    host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
+        .expect("il permesso di lettura del ping è concesso esplicitamente");
 
     // 1. Lo stesso componente, un job che torna: i limiti non sono una tassa su
     //    chi si comporta bene.
@@ -253,7 +240,12 @@ fn a_component_that_not_returns_becomes_stopped_and_the_host_remains_live() {
         "il componente fermato non riparte da solo: {said}"
     );
 
-    host.close();
+    let _close_errors = host.close();
+    assert!(
+        host.query_index(None, fub_abi::traits::IndexQuery::VaultStatus)
+            .is_err(),
+        "dopo il teardown dell'interruzione non resta pubblicata alcuna sessione o registrazione"
+    );
 }
 
 /// **Un componente che divora memoria trova il tetto**, e lo trova prima della
@@ -317,5 +309,9 @@ fn a_component_that_devours_memory_finds_the_ceiling() {
         "la memoria lineare non torna indietro: il secondo giro non ottiene niente"
     );
 
-    host.close();
+    let _close_errors = host.close();
+    assert!(
+        host.query_index(None, fub_abi::traits::IndexQuery::VaultStatus).is_err(),
+        "dopo il teardown del tetto di memoria non resta pubblicata alcuna sessione o registrazione"
+    );
 }

@@ -106,6 +106,10 @@ function anatomy(): void {
         // della prosa **sul velo** fotograferebbe uno stato che la pelle non
         // produce: il velo si fotografa nudo.
         if (!SUPERFICI.has(hook)) proof.textContent = `${component.name} · ${hook}`;
+        if (hook === "grid-viewport") {
+          proof.tabIndex = 0;
+          proof.setAttribute("aria-label", "Foglio di calcolo");
+        }
         cell.append(proof);
       }
       grid.append(cell);

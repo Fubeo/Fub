@@ -37,7 +37,7 @@ import { errorText } from "../host/errors";
 import { matchingDocuments } from "../host/query";
 import { t } from "../i18n/strings";
 import { rowsToShow } from "../rules/results";
-import { activatable, trapFocus } from "../ui/a11y";
+import { trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
@@ -53,14 +53,52 @@ const OVERLAY_ID = "doc-search";
 /// parola trecento volte non deve costruire trecento righe a ogni tasto.
 const MAX_OCCURRENCES = 50;
 
-/// Come si scioglie la trappola del fuoco, quando il modale è aperto.
-let release: (() => void) | null = null;
+/// Il proprietario di una singola apertura: chiudi prima la superficie, poi
+/// invalida tutto ciò che potrebbe ancora riferirsi alla nota precedente.
+interface SearchOwner {
+  readonly generation: number;
+  readonly doc: string | null;
+  readonly race: Race;
+  alive: boolean;
+  timer: number | undefined;
+  release: (() => void) | null;
+}
+
+let nextGeneration = 0;
+let currentOwner: SearchOwner | null = null;
+
+function isCurrent(owner: SearchOwner): boolean {
+  return (
+    currentOwner === owner &&
+    owner.alive &&
+    owner.generation === nextGeneration &&
+    state.currentDoc === owner.doc
+  );
+}
 
 export function closeInDocumentSearch(): void {
+  const owner = currentOwner;
+  if (owner) {
+    owner.alive = false;
+    owner.race.cancel();
+    if (owner.timer !== undefined) {
+      window.clearTimeout(owner.timer);
+      owner.timer = undefined;
+    }
+    currentOwner = null;
+    owner.release?.();
+    owner.release = null;
+  }
+
   const overlay = document.getElementById(OVERLAY_ID);
-  release?.();
-  release = null;
-  if (overlay) exitSurface(overlay, () => overlay.remove());
+  if (overlay) {
+    exitSurface(overlay, () => {
+      // Un'uscita vecchia non rimuove la superficie riaperta nel frattempo.
+      if (document.getElementById(OVERLAY_ID) === overlay && currentOwner === null) {
+        overlay.remove();
+      }
+    });
+  }
 }
 
 /// Il comando, dichiarato da chi ce l'ha (§18.2).
@@ -74,13 +112,25 @@ export function mountDocSearch(): void {
     id: "shell.doc.search",
     title: "commands.doc.search",
     description: "commands.doc.search.desc",
+    layer: "document",
     run: () => openInDocumentSearch(),
   });
 }
 
 export function openInDocumentSearch(): void {
   const doc = state.currentDoc;
-  const box = openOverlay();
+  closeInDocumentSearch();
+  const owner: SearchOwner = {
+    generation: ++nextGeneration,
+    doc,
+    race: new Race(),
+    alive: true,
+    timer: undefined,
+    release: null,
+  };
+  const { overlay, box } = openOverlay();
+  currentOwner = owner;
+  owner.release = trapFocus(overlay, closeInDocumentSearch);
 
   const input = document.createElement("input");
   input.className = "palette-input";
@@ -93,40 +143,31 @@ export function openInDocumentSearch(): void {
   // clicca. Un ruolo di selezione senza selezione prometterebbe una freccia
   // che non c'è.
   list.className = "plain-list palette-list";
-  box.append(input, summary, list);
+  list.setAttribute("aria-label", t("docsearch.title"));
+  list.tabIndex = 0;
+  // L'overlay può essere ancora quello dell'uscita precedente: sostituire è
+  // atomico e impedisce a una riapertura di accumulare alberi di risultati.
+  box.replaceChildren(input, summary, list);
 
   if (doc === null) {
-    // Niente nota, niente ricerca — e lo si dice qui invece di non aprire
-    // niente: una scorciatoia premuta che non fa succedere nulla si legge come
-    // un guasto della tastiera.
     summary.textContent = t("docsearch.no_doc");
     input.disabled = true;
     return;
   }
 
-  // Lo stesso freno del pannello della ricerca, per la stessa ragione: si cerca
-  // mentre si digita, e una query per tasto sarebbe una raffica di giri IPC di
-  // cui interessa solo l'ultimo.
-  let timer: number | undefined;
-  // Una risposta lenta di una query vecchia non deve sovrascrivere i risultati
-  // di una più recente. La corsa è **di questa casella** e non del modulo:
-  // questo pannello si apre su una nota, e due note aperte sono due caselle che
-  // non devono annullarsi a vicenda (decisione 0134).
-  const race = new Race();
-
   const search = async () => {
+    if (!isCurrent(owner)) return;
     const text = input.value.trim();
+    if (!isCurrent(owner)) return;
     if (!text) {
-      // Svuotare a mano non è un giro: ciò che era in volo va fatto scadere, o
-      // ripopolerebbe una casella che l'utente ha appena svuotato.
-      race.cancel();
+      owner.race.cancel();
+      if (!isCurrent(owner)) return;
       summary.textContent = "";
-      list.innerHTML = "";
+      list.replaceChildren();
       return;
     }
-    await race.last(async (expected) => {
-      // L'errore diventa un valore prima del cancello: il ramo che dice «non si
-      // può cercare» è una scrittura come le altre e passa di qui.
+    await owner.race.last(async (expected) => {
+      if (!isCurrent(owner)) return;
       const result = await expected(
         matchingDocuments(textInDocument([doc], text, true), {
           offset: 0,
@@ -135,61 +176,69 @@ export function openInDocumentSearch(): void {
           .then((p) => ({ hits: p.items }))
           .catch((e: unknown) => ({ error: errorText(e) })),
       );
+      if (!isCurrent(owner)) return;
       if ("error" in result) {
         summary.textContent = t("search.unavailable");
-        list.innerHTML = "";
-        // Il motivo in chiaro: «ricerca non disponibile» dice che non si può
-        // cercare, non perché — e il perché qui è quasi sempre un vault senza
-        // indice full-text.
+        list.replaceChildren();
         setTooltip(summary, result.error);
         return;
       }
-      // Nessuno stato «sto ancora indicizzando» come nel pannello del vault: chi
-      // ha una nota aperta l'ha aperta da un indice che risponde, e la domanda in
-      // più a ogni ricerca vuota costerebbe più di ciò che chiarisce.
       render(result.hits);
     });
   };
 
   const render = (hits: DocumentMatch[]) => {
+    if (!isCurrent(owner)) return;
     const rows = rowsToShow(hits);
+    if (!isCurrent(owner)) return;
     summary.textContent =
       rows.length === 0 ? t("search.empty") : t("search.count", { count: rows.length });
-    list.innerHTML = "";
-    // Fuori dal documento e attaccate in una volta sola, come nel pannello: qui
-    // si ridisegna a ogni tasto premuto.
     const newItems = document.createDocumentFragment();
     for (const row of rows) {
       const li = document.createElement("li");
+      const content = document.createElement("span");
       if (row.occurrence === undefined) {
-        li.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
+        content.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
       } else {
         li.className = "hit-occurrence";
-        li.textContent = t("search.occurrence", { n: row.occurrence });
+        content.textContent = t("search.occurrence", { n: row.occurrence });
       }
       if (row.byteOffset !== undefined) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "search-result";
+        button.appendChild(content);
         const where = row.byteOffset;
-        // Il documento è già aperto: qui non si apre niente, ci si porta il
-        // cursore — e il modale si chiude, perché il gesto è finito.
-        li.addEventListener("click", () => {
+        button.addEventListener("click", () => {
+          if (!isCurrent(owner)) return;
+          const targetDoc = owner.doc;
+          if (state.currentDoc !== targetDoc) return;
           closeInDocumentSearch();
+          if (state.currentDoc !== targetDoc) return;
           revealByteOffset(where);
         });
-        activatable(li);
+        li.appendChild(button);
+      } else {
+        li.appendChild(content);
       }
       newItems.appendChild(li);
     }
-    list.appendChild(newItems);
+    if (!isCurrent(owner)) return;
+    list.replaceChildren(newItems);
   };
 
   input.addEventListener("input", () => {
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => void search(), 180);
+    if (!isCurrent(owner)) return;
+    if (owner.timer !== undefined) window.clearTimeout(owner.timer);
+    owner.timer = window.setTimeout(() => {
+      owner.timer = undefined;
+      if (!isCurrent(owner)) return;
+      void search();
+    }, 180);
   });
 }
 
-function openOverlay(): HTMLElement {
-  closeInDocumentSearch();
+function openOverlay(): { overlay: HTMLElement; box: HTMLElement } {
   let overlay = document.getElementById(OVERLAY_ID);
   if (!overlay) {
     overlay = document.createElement("div");
@@ -210,8 +259,5 @@ function openOverlay(): HTMLElement {
   }
   overlay.setAttribute("aria-label", t("docsearch.title"));
   enterSurface(overlay);
-  // Dopo l'inserimento: `intrappolaFuoco` mette a fuoco il primo elemento, e
-  // un elemento fuori dal documento non lo può prendere.
-  release = trapFocus(overlay, closeInDocumentSearch);
-  return overlay.querySelector<HTMLElement>(".palette-box")!;
+  return { overlay, box: overlay.querySelector<HTMLElement>(".palette-box")! };
 }

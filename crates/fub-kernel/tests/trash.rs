@@ -25,7 +25,7 @@ use fub_abi::traits::{
 };
 use fub_kernel::storage::{DirEntry, FsStorage, Stat, VaultStorage};
 use fub_kernel::{data_root, FormatRegistry, KernelError, MachineSettings, Workspace};
-use fub_testkit::SampleExtractor;
+use fub_testkit::{restore_document, SampleExtractor};
 
 /// Un supporto che fa tutto come il disco tranne **una** mossa, che rifiuta.
 ///
@@ -338,7 +338,7 @@ fn a_notes_trashed_from_a_folder_returns_to_its_folder() {
     // §15.3: il numero sta **dentro** il file, perché è il file a sopravvivere
     let entries = ws.list_trash().unwrap();
     assert_eq!(entries[0].original, DocId::new("projects/Note.txt"));
-    let restored = ws.restore_from_trash(&trashed, None).unwrap();
+    let restored = restore_document(&mut ws, &trashed, None).unwrap();
     assert_eq!(restored, DocId::new("projects/Note.txt"));
     assert_eq!(fx.read("projects/Note.txt"), "in a folder");
 }
@@ -527,7 +527,7 @@ fn an_entry_without_the_date_in_the_sidecar_is_still_dated_from_disk() {
 /// visto. E se là c'è già una nota — è il caso normale, la cartella d'origine di
 /// una nota cancellata è la cartella dove si lavora — il ripristino sotto un
 /// altro nome le porta via lo stato per-documento, storia del versioning
-/// compresa, perché `restore_from_trash` lo migra dall'`original` che il sidecar
+/// compresa, perché il finalize staged la migra dall'`original` che il sidecar
 /// dichiara.
 // 1. Fub cestina la prima: il sidecar ricorda `progetti/`.
 // 2. Un'altra app distrugge quella voce dal cestino. Il sidecar è roba di
@@ -602,9 +602,8 @@ fn restoring_under_a_new_name_announces_the_identity_migration() {
     .unwrap();
 
     let events = ws.bus().subscribe();
-    let restored = ws
-        .restore_from_trash(&trashed, Some(DocId::new("projects/Note 1.txt")))
-        .unwrap();
+    let restored =
+        restore_document(&mut ws, &trashed, Some(DocId::new("projects/Note 1.txt"))).unwrap();
 
     assert_eq!(restored, DocId::new("projects/Note 1.txt"));
     // Il `to` arriva dall'IPC: un path che risale deve essere rifiutato, non
@@ -645,10 +644,8 @@ fn a_restore_target_cannot_escape_the_vault() {
 
     // Poco dopo il watcher riferisce che `Idea.txt` non c'è più (vero) e che in
     // `.trash/` è comparso qualcosa (vero, e non sono fatti suoi).
-    let err = ws
-        .restore_from_trash(&trashed, Some(DocId::new("../outside.txt")))
-        .unwrap_err();
-    assert!(err.to_string().contains("nome non valido"), "{err}");
+    let err = restore_document(&mut ws, &trashed, Some(DocId::new("../outside.txt"))).unwrap_err();
+    assert!(matches!(err, PluginError::BadArgs(_)), "{err}");
     assert!(fx.exists(".trash/Idea.txt"), "the trash entry did not move");
     assert!(!fx.root.parent().unwrap().join("outside.txt").exists());
 }
@@ -704,7 +701,7 @@ fn restoring_from_the_trash_brings_the_notes_back_everywhere() {
     let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
     fx.calls.lock().unwrap().clear();
 
-    let brought_back = ws.restore_from_trash(&trashed, None).unwrap();
+    let brought_back = restore_document(&mut ws, &trashed, None).unwrap();
 
     assert_eq!(brought_back, DocId::new("Idea.txt"));
     assert_eq!(ws.documents(), vec![DocId::new("Idea.txt")]);
@@ -727,7 +724,7 @@ fn a_notes_trashed_by_obsidian_is_restorable_here() {
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].original, DocId::new("Old.txt"));
 
-    let brought_back = ws.restore_from_trash(&entries[0].id, None).unwrap();
+    let brought_back = restore_document(&mut ws, &entries[0].id, None).unwrap();
     assert_eq!(brought_back, DocId::new("Old.txt"));
     assert_eq!(fx.read("Old.txt"), "written elsewhere");
 }
@@ -741,7 +738,7 @@ fn a_notes_deleted_from_a_deep_folder_comes_back_to_it() {
     let trashed = ws
         .delete_document(&DocId::new("notes/2026/Idea.txt"))
         .unwrap();
-    let brought_back = ws.restore_from_trash(&trashed, None).unwrap();
+    let brought_back = restore_document(&mut ws, &trashed, None).unwrap();
 
     // È il chiamante a risolvere il conflitto scegliendo un nome: il kernel non
     // inventa nomi al posto dell'utente.
@@ -764,15 +761,14 @@ fn restoring_onto_an_occupied_path_asks_instead_of_overwriting() {
     )
     .unwrap();
 
-    let err = ws.restore_from_trash(&trashed, None).unwrap_err();
-    assert!(matches!(err, KernelError::AlreadyExists(_)), "found {err}");
+    let err = restore_document(&mut ws, &trashed, None).unwrap_err();
+    assert!(matches!(err, PluginError::AlreadyExists(_)), "found {err}");
     assert_eq!(fx.read("Idea.txt"), "a new note, same name", "intact");
 
     // legge e parsa la voce. Il supporto posa un concorrente al momento esatto
     // della mossa: deve restare intatto, e la voce deve restare nel cestino.
-    let brought_back = ws
-        .restore_from_trash(&trashed, Some(DocId::new("Idea (restored).txt")))
-        .unwrap();
+    let brought_back =
+        restore_document(&mut ws, &trashed, Some(DocId::new("Idea (restored).txt"))).unwrap();
     assert_eq!(fx.read(brought_back.as_str()), "the old one");
 }
 
@@ -794,10 +790,10 @@ fn whoever_occupies_the_destination_after_the_guard_is_not_buried() {
         .occupies_destination
         .store(true, std::sync::atomic::Ordering::SeqCst);
 
-    let result = ws.restore_from_trash(&trashed, None);
+    let result = restore_document(&mut ws, &trashed, None);
 
     assert!(
-        matches!(result, Err(KernelError::AlreadyExists(_))),
+        matches!(result, Err(PluginError::AlreadyExists(_))),
         "the late collision must come back as such: {result:?}"
     );
     assert_eq!(fx.read("Idea.txt"), "concurrent");
@@ -823,7 +819,7 @@ fn a_restore_the_disk_interrupts_leaves_one_copy_not_two() {
     }));
 
     let trashed = ws.delete_document(&DocId::new("Idea.txt")).unwrap();
-    let result = ws.restore_from_trash(&trashed, None);
+    let result = restore_document(&mut ws, &trashed, None);
 
     let back = fx.exists("Idea.txt");
     let in_trash = fx.exists(".trash/Idea.txt");
@@ -849,8 +845,7 @@ fn an_attachment_comes_back_from_the_trash_like_a_notes() {
 
     let entries = ws.list_trash().unwrap();
     assert_eq!(entries.len(), 1, "the trash lists it: {entries:?}");
-    let brought_back = ws
-        .restore_from_trash(&entries[0].id, None)
+    let brought_back = restore_document(&mut ws, &entries[0].id, None)
         .expect("an attachment comes back from the trash like a note");
 
     assert_eq!(brought_back, DocId::new("photo.png"));

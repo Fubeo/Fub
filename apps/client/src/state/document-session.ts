@@ -4,7 +4,8 @@
 // l'origine della scrittura, la coda e i due debounce. Il pannello possiede le
 // superfici e osserva soltanto eventi e snapshot immutabili.
 import { api as defaultApi } from "../host/ipc";
-import type { DraftInfo, Origin, WriteBase } from "../host/contract";
+import type { DocumentSource, DraftInfo, Origin, WriteBase } from "../host/contract";
+import type { SourceKind } from "../host/enums.generated";
 import { Queue } from "../ui/race";
 import {
   consumeUnderChange,
@@ -55,10 +56,20 @@ export type SurfaceChangeResult =
   | { kind: "untracked" };
 
 export interface DocumentSessionApi {
-  readDocument(id: string): Promise<{ text: string; revision: string }>;
+  readDocument(id: string): Promise<DocumentSource>;
   writeDocument(id: string, text: string, base: WriteBase): Promise<string>;
   saveDraft(id: string, text: string, base: string | null): Promise<void>;
   discardDraft(id: string): Promise<void>;
+}
+
+export interface DocumentSurfaceDescriptor {
+  readonly formatId: string | null;
+  readonly sourceKind: SourceKind;
+  readonly revision?: string;
+}
+
+export interface DocumentSurfaceSource extends DocumentSurfaceDescriptor {
+  readonly text: string;
 }
 
 export interface DocumentSessionSnapshot {
@@ -780,6 +791,7 @@ export class DocumentSession implements DraftBuffer {
 export class DocumentSessionCollection implements DraftBufferStore {
   readonly #api: DocumentSessionApi;
   readonly #sessions = new Map<string, DocumentSession>();
+  readonly #surfaceDescriptors = new WeakMap<DocumentSession, DocumentSurfaceDescriptor>();
   readonly #listeners = new Set<SessionListener>();
   readonly #identityVersions = new Map<string, number>();
   readonly #renaming = new Set<string>();
@@ -883,7 +895,59 @@ export class DocumentSessionCollection implements DraftBufferStore {
       return this.read(id);
     }
     if (this.#renaming.has(id) || this.#identityVersion(id) !== version) return source.text;
-    return this.#create(id, source.text, { kind: "descends_from", value: source.revision }).text();
+    const session = this.#create(id, source.text, {
+      kind: "descends_from",
+      value: source.revision,
+    });
+    this.#surfaceDescriptors.set(session, {
+      formatId: source.format_id,
+      sourceKind: source.source_kind,
+      revision: source.revision,
+    });
+    return session.text();
+  }
+
+  async readForSurface(id: string): Promise<DocumentSurfaceSource> {
+    const text = await this.read(id);
+    const session = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
+    const known = session ? this.#surfaceDescriptors.get(session) : undefined;
+    if (known) {
+      const base = session?.snapshot().base;
+      const revision = base?.kind === "descends_from" ? base.value : known.revision;
+      return { text, ...known, revision };
+    }
+
+    let source: DocumentSource;
+    try {
+      source = await this.#api.readDocument(id);
+    } catch (error) {
+      // Una bozza ripristinata può essere l'unica copia rimasta. Se il backend
+      // non sa più descriverne la sorgente, la superficie testuale generica la
+      // rende comunque accessibile senza attribuirle capacità Markdown finte.
+      if (!session) throw error;
+      const fallback: DocumentSurfaceDescriptor = {
+        formatId: null,
+        sourceKind: "text",
+        revision: "",
+      };
+      this.#surfaceDescriptors.set(session, fallback);
+      return { text, ...fallback };
+    }
+
+    const current = this.#sessions.get(id) ?? this.#pendingDeletionOwners.get(id);
+    if (current) {
+      this.#surfaceDescriptors.set(current, {
+        formatId: source.format_id,
+        sourceKind: source.source_kind,
+        revision: source.revision,
+      });
+    }
+    return {
+      text,
+      formatId: source.format_id,
+      sourceKind: source.source_kind,
+      revision: source.revision,
+    };
   }
 
 

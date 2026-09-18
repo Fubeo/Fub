@@ -105,6 +105,14 @@
       "current": "/vault"
     }
   ],
+  "DocumentSource": [
+    {
+      "text": "# Nota",
+      "revision": "sha256:abc",
+      "format_id": "markdown",
+      "source_kind": "text"
+    }
+  ],
   "BundleInfo": [
     {
       "id": "fub.versioning",
@@ -134,6 +142,71 @@
         ],
         "fub:read-vault": true
       }
+    }
+  ],
+  "ThemeInfo": [
+    {
+      "manifest": {
+        "id": "acme.paper",
+        "name": "Paper",
+        "version": "1.0.0",
+        "engine": "theme-1",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.paper/",
+        "motion": [
+          "opacity",
+          "transform"
+        ]
+      }
+    }
+  ],
+  "ThemePayload": [
+    {
+      "manifest": {
+        "id": "acme.paper",
+        "name": "Paper",
+        "version": "1.0.0",
+        "engine": "theme-1",
+        "lights": [
+          "light",
+          "dark"
+        ],
+        "asset_namespace": "theme://acme.paper/",
+        "motion": [
+          "opacity",
+          "transform"
+        ]
+      },
+      "light": "light",
+      "sheet": ":root { --paper: #fff; }",
+      "skin": ".paper { color: var(--paper); }",
+      "assets": {
+        "theme://acme.paper/fonts/paper.woff2": [
+          1,
+          2,
+          3
+        ]
+      }
+    }
+  ],
+  "InstalledPluginInfo": [
+    {
+      "id": "com.acme.tasks",
+      "name": "Tasks",
+      "mounted": true,
+      "kind": "component",
+      "trust": "community",
+      "permissions": {
+        "fub:read-vault": true
+      },
+      "installation": "18446744073709551615",
+      "version": "2.1.0",
+      "enabled": true,
+      "consent": "granted",
+      "runtime_known": true
     }
   ],
   "VaultEntry": [

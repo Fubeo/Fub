@@ -42,8 +42,13 @@
 // che compone sono tipizzate dal contratto e non da sé.
 import type {
   BundleInfo,
+  InstalledPluginInfo,
   CommandSpec,
   DraftInfo,
+  GridCommit,
+  GridSession,
+  GridSurfaceSpec,
+  GridWindow,
   IndexQuery,
   IndexResult,
   KernelEvent,
@@ -84,24 +89,28 @@ interface Trashed {
   text: string;
 }
 
+export interface GridFake {
+  surface: GridSurfaceSpec;
+  session: GridSession;
+  windows: GridWindow[];
+  commits?: GridCommit[];
+}
+
 export interface Options {
   /// I file del vault: path → testo. Le cartelle si deducono dai path, come
   /// sul disco.
   file?: Record<string, string>;
-  /// La radice da aprire all'avvio, o `null` per una finestra vuota.
   root?: string | null;
-  /// L'avviso di sessione (§25.5) che il pull risponde, o `null` (default)
-  /// per una sessione sana.
   sessionNotice?: KernelNotice | null;
-  /// Le view che i provider dichiarano. Vuoto = nessun provider registrato,
-  /// che è uno stato legittimo e non un vault a metà.
   view?: ViewSpec[];
-  /// I comandi del registro **oltre** ai cinque strutturali.
   commands?: CommandSpec[];
-  /// Le impostazioni risolte che il canale dati risponde.
   settings?: SettingEntry[];
-  /// Le forme sintattiche effettive risposte dal montaggio finto.
   syntaxForms?: SyntaxForm[];
+  customQueries?: Record<string, (query: unknown) => unknown>;
+  bundles?: BundleInfo[];
+  installedPlugins?: InstalledPluginInfo[];
+  installablePlugins?: Record<string, InstalledPluginInfo>;
+  grid?: GridFake;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -158,11 +167,25 @@ export interface FakeHost {
 /// L'host finto, pronto a rispondere.
 export function createFakeHost(options: Options = {}): FakeHost {
   const root = options.root === undefined ? "/vault" : options.root;
+  const grid = options.grid;
+  const gridInstances = new Map<string, GridSession>();
+  const gridWindows = new Map(
+    (grid?.windows ?? []).map((window) => [`${grid?.session.instance}\u0000${window.sheet}\u0000${window.row_start}\u0000${window.column_start}`, window]),
+  );
+  let gridCommit = 0;
   const docs = new Map<string, Document>();
   const trash = new Map<string, Trashed>();
   const viewStates = new Map<string, unknown>();
   const calls: Call[] = [];
   const view = options.view ?? [];
+  const bundles = options.bundles ?? [];
+  const installedPlugins = new Map(
+    (options.installedPlugins ?? []).map((plugin) => [
+      plugin.installation,
+      copyInstalled(plugin),
+    ]),
+  );
+  const installablePlugins = options.installablePlugins ?? {};
   let listener: ((n: KernelNotice) => void) | null = null;
   let onClose: (() => Promise<void>) | null = null;
   let revision = 0;
@@ -201,6 +224,39 @@ export function createFakeHost(options: Options = {}): FakeHost {
     // di far cominciare la seconda.
     if (throttle && result instanceof Promise) return throttle.then(() => result) as T;
     return result;
+  }
+
+  /// Una mutazione del fake è pigra: un fault o un throttle agiscono prima
+  /// dell'effetto, come il backend che non persiste una scelta rifiutata.
+  function installedOperation<T>(
+    name: string,
+    args: unknown[],
+    effect: () => T,
+  ): Promise<T> {
+    calls.push({ gate: name, args });
+    const fault = faults.get(name);
+    if (fault !== undefined) return Promise.reject(new Error(fault));
+    const run = () => Promise.resolve().then(effect);
+    const throttle = throttles.get(name);
+    return throttle ? throttle.then(run) : run();
+  }
+
+  function installed(id: string): InstalledPluginInfo {
+    const plugin = installedPlugins.get(id);
+    if (plugin) return plugin;
+    throw {
+      kind: "not_found",
+      message: `l'installazione «${id}» non esiste`,
+    } satisfies PluginError;
+  }
+
+  function copyInstalled(plugin: InstalledPluginInfo): InstalledPluginInfo {
+    return { ...plugin, permissions: { ...plugin.permissions } };
+  }
+
+  function reconcile(plugin: InstalledPluginInfo): void {
+    plugin.mounted = plugin.enabled && plugin.consent === "granted";
+    if (plugin.mounted) plugin.runtime_known = true;
   }
 
   function emit(event: KernelEvent): boolean {
@@ -384,6 +440,14 @@ export function createFakeHost(options: Options = {}): FakeHost {
         };
       case "syntax_forms":
         return { kind: "syntax_forms", value: syntaxForms.map((form) => ({ ...form })) };
+      case "custom": {
+        const handlers = options.customQueries;
+        const handler = handlers && Object.prototype.hasOwnProperty.call(handlers, q.ns) ? handlers[q.ns] : undefined;
+        if (!handler) throw {
+          kind: "unserved", message: `host fake: namespace non montato: ${q.ns}`,
+        } satisfies PluginError;
+        return { kind: "custom", value: handler(q.query) };
+      }
       default:
         throw new Error(`host fake: non so rispondere alla query ${q.kind}`);
     }
@@ -461,12 +525,47 @@ export function createFakeHost(options: Options = {}): FakeHost {
       readDocument: (id) => {
         const doc = docs.get(id);
         if (!doc) return gate("readDocument", [id], Promise.reject(new Error(`«${id}» non c'è`)));
-        return gate(
-          "readDocument",
-          [id],
-          Promise.resolve({ text: doc.text, revision: doc.revision }),
-        );
+        return gate("readDocument", [id], Promise.resolve({
+          text: doc.text,
+          revision: doc.revision,
+          format_id: id.endsWith(".fubsheet")
+            ? "fubsheet"
+            : id.endsWith(".md") || id.endsWith(".markdown")
+              ? "markdown"
+              : null,
+          source_kind: "text",
+        }));
       },
+      listGridSurfaces: () => gate("listGridSurfaces", [], Promise.resolve(grid ? [grid.surface] : [])),
+      openGrid: (surface, source, revision) => gate("openGrid", [surface, source, revision], Promise.resolve().then(() => {
+        if (!grid || surface !== grid.surface.id) throw new Error("host fake: la famiglia grid non è montata");
+        const session = { ...grid.session, revision: revision || grid.session.revision };
+        gridInstances.set(session.instance, session);
+        return session;
+      })),
+      gridWindow: (_surface, instance, request) => gate("gridWindow", [instance, request], Promise.resolve().then(() => {
+        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const window = gridWindows.get(`${instance}\u0000${request.sheet}\u0000${request.row_start}\u0000${request.column_start}`);
+        if (!window) throw new Error("host fake: grid window unavailable");
+        return { ...window, revision: request.revision };
+      })),
+      applyGrid: (_surface, instance, request) => gate("applyGrid", [instance, request], Promise.resolve().then(() => {
+        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const commit = grid?.commits?.[gridCommit++];
+        if (!commit) throw new Error("host fake: grid commit unavailable");
+        const session = gridInstances.get(instance)!;
+        gridInstances.set(instance, { ...session, revision: commit.revision });
+        return commit;
+      })),
+      reloadGrid: (_surface, instance, source, revision) => gate("reloadGrid", [instance, source, revision], Promise.resolve().then(() => {
+        if (!gridInstances.has(instance)) throw new Error("host fake: grid session closed");
+        const session = { ...grid!.session, instance, revision };
+        gridInstances.set(instance, session);
+        return session;
+      })),
+      closeGrid: (_surface, instance) => gate("closeGrid", [instance], Promise.resolve().then(() => {
+        gridInstances.delete(instance);
+      })),
       writeDocument: (id, source, base) => {
         // Il guasto si chiede **prima** di posare i byte: `write` gira mentre
         // si compone l'argomento di `gate`, quindi una porta guasta che ci
@@ -523,7 +622,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
         const throttle = throttles.get("invokeCommand");
         return throttle ? throttle.then(execute) : execute();
       },
-      queryIndex: (q) => gate("queryIndex", [q], Promise.resolve(query(q))),
+      queryIndex: (q) => {
+        // Anche una query non servita deve attraversare il gate e restituire
+        // una Promise rifiutata, come l'IPC, non un'eccezione sincrona.
+        let result: Promise<IndexResult>;
+        try {
+          result = Promise.resolve(query(q));
+        } catch (error) {
+          result = Promise.reject(error);
+        }
+        // Il throttle può trattenere la consegna: osserva subito il rifiuto,
+        // ma restituisce la Promise originale, con lo stesso errore al caller.
+        void result.catch(() => {});
+        return gate("queryIndex", [q], result);
+      },
       cancelJob: (id) => gate("cancelJob", [id], Promise.resolve()),
       setIcon: (path, icon) => gate("setIcon", [path, icon], Promise.resolve()),
       setPinned: (id, pinned) => gate("setPinned", [id, pinned], Promise.resolve()),
@@ -533,9 +645,80 @@ export function createFakeHost(options: Options = {}): FakeHost {
         gate("setSetting", [key, value], Promise.resolve(writeSetting(key, value))),
       resetSetting: (key) =>
         gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
-      listBundles: () => gate("listBundles", [], Promise.resolve([] as BundleInfo[])),
+      listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
+      listThemes: () => gate("listThemes", [], Promise.resolve([])),
+      readTheme: (id, light) =>
+        gate(
+          "readTheme",
+          [id, light],
+          Promise.reject(new Error(`host fake: il tema «${id}» (${light}) non esiste`)),
+        ),
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
+      listInstalledPlugins: (vault) =>
+        gate(
+          "listInstalledPlugins",
+          [vault],
+          Promise.resolve(
+            [...installedPlugins.values()].map((plugin) => ({
+              ...copyInstalled(plugin),
+              mounted: vault === undefined ? false : plugin.mounted,
+              runtime_known: vault === undefined ? false : plugin.runtime_known,
+            })),
+          ),
+        ),
+      installPlugin: (path) =>
+        installedOperation("installPlugin", [path], () => {
+          const source = installablePlugins[path];
+          if (!source) {
+            throw {
+              kind: "bad_args",
+              message: `il file «${path}» non è installabile dal fake`,
+            } satisfies PluginError;
+          }
+          if ([...installedPlugins.values()].some((plugin) => plugin.id === source.id)) {
+            throw {
+              kind: "already_exists",
+              message: `«${source.id}» è già installato`,
+            } satisfies PluginError;
+          }
+          const plugin = copyInstalled({
+            ...source,
+            kind: "component",
+            mounted: false,
+            enabled: false,
+            consent: "undecided",
+            runtime_known: false,
+          });
+          installedPlugins.set(plugin.installation, plugin);
+          return copyInstalled(plugin);
+        }),
+      setInstalledPluginEnabled: (installation, enabled) =>
+        installedOperation("setInstalledPluginEnabled", [installation, enabled], () => {
+          const plugin = installed(installation);
+          plugin.enabled = enabled;
+          reconcile(plugin);
+          return [];
+        }),
+      setInstalledPluginConsent: (installation, consent) =>
+        installedOperation("setInstalledPluginConsent", [installation, consent], () => {
+          const plugin = installed(installation);
+          plugin.consent = consent;
+          reconcile(plugin);
+          return [];
+        }),
+      removeInstalledPlugin: (installation) =>
+        installedOperation("removeInstalledPlugin", [installation], () => {
+          const plugin = installed(installation);
+          if (plugin.enabled) {
+            throw {
+              kind: "bad_args",
+              message: "un componente abilitato non si può rimuovere",
+            } satisfies PluginError;
+          }
+          installedPlugins.delete(installation);
+          return [];
+        }),
       knownVaults: () => gate("knownVaults", [], Promise.resolve([])),
       setVaultFavorite: (path, favorite) =>
         gate("setVaultFavorite", [path, favorite], Promise.resolve()),

@@ -40,7 +40,7 @@
 import { onLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
-
+import type { Lifetime } from "./lifetime";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -139,11 +139,13 @@ export function reportThemeTrouble(trouble: ThemeTrouble): void {
 /// La severità sceglie il tono, ed è una traduzione uno a uno perché i due
 /// gradini sono stati scelti guardando questi due toni: un derivato perduto
 /// informa, ciò che non si ricostruisce è un guasto.
-export function listenForFailures(): void {
-  onEvent("trouble", (e) => {
-    const notice = failureNotice(e);
-    notify(notice.text, notice.tone);
-  });
+export function listenForFailures(lifetime: Lifetime): void {
+  lifetime.add(
+    onEvent("trouble", (e) => {
+      const notice = failureNotice(e);
+      notify(notice.text, notice.tone);
+    }),
+  );
 }
 
 /// Come un guasto del kernel si legge: il testo e il tono.
@@ -197,6 +199,7 @@ const GATE_LABELS: Record<Gate, Key> = {
   syntax_rule: "gate.syntax_rule",
   custom_render: "gate.custom_render",
   job: "gate.job",
+  index_query: "gate.index_query",
 };
 
 /// Ciò che è stato detto, dal più recente. Serve a chi disegna lo storico, e ai
@@ -312,14 +315,17 @@ function redraw(): void {
 
 /// Accende il centro notifiche: il pulsante nella barra di stato e il pannello.
 /// Da chiamare una volta sola, dal punto di montaggio.
-export function mountNotifications(): void {
-  document.getElementById("notify-button")?.addEventListener("click", () => openHistory());
-  document.getElementById("notify-clear")?.addEventListener("click", () => clearHistory());
-  document.getElementById("notify-close")?.addEventListener("click", () => openHistory(false));
+export function mountNotifications(lifetime: Lifetime): void {
+  const button = document.getElementById("notify-button");
+  if (button) lifetime.listen(button, "click", () => openHistory());
+  const clear = document.getElementById("notify-clear");
+  if (clear) lifetime.listen(clear, "click", () => clearHistory());
+  const close = document.getElementById("notify-close");
+  if (close) lifetime.listen(close, "click", () => openHistory(false));
   // Come per il centro attività: il pulsante porta un conteggio, quindi non lo
   // può scrivere `applicaStringhe` — e il testo **degli avvisi** resta com'era,
   // perché un avviso è già stato detto e ridirlo in un'altra lingua vorrebbe
   // dire riscrivere la storia di ciò che è successo.
-  onLanguage(redraw);
+  lifetime.add(onLanguage(redraw));
   redraw();
 }

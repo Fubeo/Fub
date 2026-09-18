@@ -141,7 +141,7 @@ struct TriesEverything {
 /// provato affatto» — un buco nel presidio. Un elenco dei soli rifiuti li
 /// confonderebbe, e il messaggio d'errore direbbe la cosa sbagliata proprio nel
 /// momento in cui qualcuno la legge per rimediare.
-type Attempt = (Capability, &'static str, Option<String>);
+type Attempt = (Capability, &'static str, Option<PluginError>);
 
 impl CommandProvider for TriesEverything {
     fn commands(&self) -> Vec<CommandSpec> {
@@ -159,11 +159,10 @@ impl CommandProvider for TriesEverything {
     ) -> Result<CommandOutcome, PluginError> {
         let doc = DocId::new("note.md");
         let annotate = |cap: Capability, which: &'static str, result: Result<(), PluginError>| {
-            self.attempts.lock().unwrap().push((
-                cap,
-                which,
-                result.err().map(|and| and.to_string()),
-            ));
+            self.attempts
+                .lock()
+                .unwrap()
+                .push((cap, which, result.err()));
         };
         annotate(
             Capability::VaultWrite,
@@ -598,6 +597,17 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
 
     let seen = attempts.lock().unwrap().clone();
     let exercised: BTreeSet<Capability> = seen.iter().map(|(cap, _, _)| *cap).collect();
+    assert!(
+        matches!(
+            seen.iter().find(|(_, which, _)| *which == "restore"),
+            Some((
+                Capability::VaultStructure,
+                _,
+                Some(PluginError::PermissionDenied(_))
+            ))
+        ),
+        "restoring a missing entry under ReadOnly is denied by the family gate: {seen:?}"
+    );
     // E ogni rifiuto dice **perché**: un `permission-denied` muto costringe chi
     // scrive un comando a indovinare se abbia sbagliato permessi o se stia solo
     let passed: BTreeSet<Capability> = seen
@@ -627,10 +637,11 @@ fn every_structural_capability_is_refused_by_the_same_gate() {
     // simulando, e sono due rimedi opposti.
     // Fra il piano e l'approvazione, qualcuno scrive.
     // Il tipo dell'effetto è parte del contratto quanto i suoi campi: questo
-    for (cap, which, message) in seen
+    for (cap, which, error) in seen
         .iter()
         .filter_map(|(c, q, and)| Some((c, q, and.as_ref()?)))
     {
+        let message = error.to_string();
         assert!(
             message.contains("permission denied") && message.contains("simulazione"),
             "{cap:?}/{which}: the refusal says why — {message}"

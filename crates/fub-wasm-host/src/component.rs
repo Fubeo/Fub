@@ -1,39 +1,82 @@
-//! **Il componente, e i due tipi che lo fanno sembrare un plugin qualunque.**
+//! Componente WASM, proxy del plugin e bundle montabile.
 //!
-//! [`Component`] è il `.wasm` compilato e pronto a istanziarsi; [`WasmPlugin`]
-//! è un [`Plugin`] che reinoltra ogni metodo a un'istanza; [`WasmBundle`] è la
-//! porta da cui si monta, la stessa del §9.3 che monta le feature native.
-//!
-//! Che il kernel non abbia un ramo per distinguerli non è una gentilezza: è la
-//! prova di M5. Il `BundleRegistry` chiama `manifest`, `trust`, `plugin` e
-//! `register` senza sapere che dietro c'è una macchina virtuale, e il giorno in
-//! cui gli servisse saperlo il «un trait, due backend» sarebbe finito.
+//! Plugin e provider di uno stesso montaggio condividono esplicitamente una
+//! sola istanza tramite [`BundleMount`]. Il bundle non conserva più «l'ultima
+//! istanza» fra chiamate: non esiste quindi uno stato temporale implicito che un
+//! secondo montaggio o una chiamata fuori sequenza possa sovrascrivere.
 
+use std::cell::RefCell;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
+thread_local! {
+    static ACTIVE_INSTANCES: RefCell<Vec<*const ()>> = const { RefCell::new(Vec::new()) };
+}
+
+struct InstanceGuard {
+    identity: *const (),
+}
+
+impl Drop for InstanceGuard {
+    fn drop(&mut self) {
+        ACTIVE_INSTANCES.with(|active| {
+            let mut active = active.borrow_mut();
+            if let Some(index) = active
+                .iter()
+                .rposition(|identity| *identity == self.identity)
+            {
+                active.remove(index);
+            }
+        });
+    }
+}
+
+fn enter_instance(identity: *const ()) -> Result<InstanceGuard, ()> {
+    ACTIVE_INSTANCES.with(|active| {
+        let mut active = active.borrow_mut();
+        if active.contains(&identity) {
+            return Err(());
+        }
+        active.push(identity);
+        Ok(InstanceGuard { identity })
+    })
+}
+
+fn instance_identity(inner: &Mutex<Instance>) -> *const () {
+    inner as *const Mutex<Instance> as *const ()
+}
 
 use camino::Utf8Path;
 use fub_abi::command::{CommandOutcome, CommandSpec, InvokeMode};
-use fub_abi::traits::{CommandProvider, HostApi, Plugin, PluginManifest};
-use fub_abi::PluginError;
-use fub_host::registry::Bundle;
-use fub_kernel::{Trust, Workspace};
+use fub_abi::format::{
+    DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
+    RenderOptions,
+};
+use fub_abi::grid::{
+    validate_grid_source, GridApplyRequest, GridCommit, GridInvalidation, GridProvider,
+    GridSession, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
+use fub_abi::model::DocumentModel;
+use fub_abi::traits::{
+    CommandProvider, HostApi, Plugin, PluginManifest, ReadApi, ViewInstance, ViewInterests,
+    ViewProvider, ViewSpec,
+};
+use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
+use fub_abi::{FormatError, PluginError, Revision};
+use fub_host::registry::{Bundle, BundleMount, Registrar, RegistrationReport};
+use fub_kernel::Trust;
 use wasmtime::component::types::ComponentItem;
-use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType};
+use wasmtime::component::{Component as WasmtimeComponent, InstancePre, Linker, ResourceType, Val};
 use wasmtime::{Engine, Store};
 
-use crate::borrow::{with_guest, State};
+use crate::borrow::{with_guest, with_read_guest, State};
 use crate::contract::exports::fub::abi::command as w_command;
+use crate::contract::exports::fub::abi::format as w_format;
+use crate::contract::exports::fub::abi::grid as w_grid;
 use crate::contract::exports::fub::abi::plugin as w_plugin;
+use crate::contract::exports::fub::abi::view as w_view;
 use crate::guest::add_to_linker;
 use crate::translate as tr;
-
-/// Le famiglie del contratto che questo crate serve.
-///
-/// L'elenco è scritto a mano ed è il **prezzo dichiarato** del linker per
-/// interfaccia: chi ne aggiunge una a [`add_to_linker`] la aggiunge anche
-/// qui, o un componente che la importa verrebbe rifiutato pur essendo servito.
-/// Le due liste divergono in un modo solo, e quel modo è un test che fallisce
-/// (`una_famiglia_non_servita_si_fa_nominare`).
+/// Famiglie del contratto effettivamente collegate da questo host.
 const FAMILIES_SERVED: &[&str] = &[
     "fub:abi/host-env",
     "fub:abi/host-vault-read",
@@ -41,174 +84,207 @@ const FAMILIES_SERVED: &[&str] = &[
     "fub:abi/host-data-write",
     "fub:abi/host-events",
 ];
-
-/// Il prefisso di una **famiglia di capacità** (§7.1).
-///
-/// `host-` e non `fub:abi/`: il contratto ha anche interfacce di soli tipi —
-/// `json`, `text`, `errors`, `model`, `options`, `settings`, `ui`, `intl` — che
-/// un componente importa per *nominare* i tipi che scambia, non per chiamare
-/// niente. Non hanno una sola funzione, non c'è niente da linkare, e contarle
-/// fra le famiglie non servite rifiuterebbe ogni componente esistente. Lo
-/// abbiamo misurato al primo caricamento vero: il ping ne importava otto.
 const HOST_FAMILY_PREFIX: &str = "fub:abi/host-";
+const FORMAT_INTERFACE: &str = "fub:abi/format";
+const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
+const VIEW_INTERFACE: &str = "fub:abi/view";
+const VIEW_EXPORT: &str = "fub:abi/view@0.1.1";
+const GRID_INTERFACE: &str = "fub:abi/grid";
+const GRID_EXPORT: &str = "fub:abi/grid@0.1.2";
 
-// ---------------------------------------------------------------------------
-// Gli errori del caricamento
-// ---------------------------------------------------------------------------
+fn is_supported_grid_export(name: &str) -> bool {
+    name == GRID_INTERFACE || name == GRID_EXPORT
+}
+fn is_supported_view_export(name: &str) -> bool {
+    name == VIEW_INTERFACE
+        || name == VIEW_EXPORT
+        || name
+            .strip_prefix(VIEW_INTERFACE)
+            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+}
 
-/// Cosa può andare storto **prima** che il componente sia vivo.
-///
-/// Sta separato da [`PluginError`] perché parla di un'altra cosa: `PluginError`
-/// è ciò che un plugin risponde, questo è ciò che succede a chi prova a
-/// montarne uno. Un file che non è un componente non ha ancora un id con cui
-/// firmarsi.
+fn is_supported_format_export(name: &str) -> bool {
+    name == FORMAT_INTERFACE
+        || name == FORMAT_EXPORT
+        || name
+            .strip_prefix(FORMAT_INTERFACE)
+            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+}
+
+fn resolve_format_indices<T, E>(
+    export_present: bool,
+    resolve: impl FnOnce() -> Result<T, E>,
+) -> Result<Option<T>, LoadError>
+where
+    E: std::fmt::Display,
+{
+    match resolve() {
+        Ok(indices) => Ok(Some(indices)),
+        Err(error) if export_present => Err(LoadError::Compilation(format!("{error:#}"))),
+        Err(_) => Ok(None),
+    }
+}
+
+/// Errori che possono verificarsi prima che un componente WASM diventi un
+/// bundle montabile.
 #[derive(Debug, thiserror::Error)]
 pub enum LoadError {
-    /// Il file non si legge.
+    /// Il file del componente non è leggibile.
     #[error("il componente non si legge: {0}")]
     Read(#[from] std::io::Error),
-    /// Il file non è un componente valido, o non si compila.
+    /// I byte non descrivono un componente valido o Wasmtime non riesce a
+    /// compilarlo/linkarlo.
     #[error("il componente non si compila: {0}")]
     Compilation(String),
-    /// Il componente importa una famiglia del contratto che questo host non
-    /// serve. **Nominarla è metà del messaggio**: «manca una capacità» manda a
-    /// cercare, «manca `fub:abi/host-net`» manda a leggere il §20.3.
+    /// Il componente importa una famiglia `host-*` del contratto che questo
+    /// host non implementa.
     #[error("il componente importa famiglie che questo host non serve: {0}")]
     UnservedFamilies(String),
-    /// Il componente non esporta `fub:abi/plugin`, cioè non è un plugin.
+    /// Manca l'export obbligatorio `fub:abi/plugin`.
     #[error("il componente non esporta `fub:abi/plugin`: non è un plugin ({0})")]
     NotAPlugin(String),
-    /// L'istanziazione è fallita, o il `manifest` non risponde.
+    /// L'istanza non nasce oppure il suo manifest non è traducibile nel
+    /// contratto dell'host.
     #[error("il componente non si istanzia: {0}")]
     Instantiation(String),
 }
 
-// ---------------------------------------------------------------------------
-// Il componente
-// ---------------------------------------------------------------------------
-
-/// Un `.wasm` compilato, con il proprio linker, pronto a fare istanze.
-///
-/// Compilare costa; istanziare no. È la ragione per cui questo tipo esiste
-/// separato da [`WasmPlugin`]: un bundle si carica una volta e può fare più
-/// istanze — una per montaggio — senza ricompilare niente.
+/// Un `.wasm` compilato e pronto a produrre istanze indipendenti.
 pub struct Component {
     pre: InstancePre<State>,
     indices: w_plugin::GuestIndices,
-    /// Gli indici dell'export `fub:abi/command`, **se c'è**.
-    ///
-    /// L'`Option` è il «mezzo plugin» del §9.3 scritto in un campo: il mondo
-    /// dichiara undici export e nessun componente li implementa tutti, quindi
-    /// l'assenza di un'interfaccia non è un guasto — è la forma normale. Si
-    /// risolve una volta sola, qui, perché `GuestIndices::new` è una ricerca
-    /// nel tipo del componente e ripeterla a ogni istanza sarebbe pagarla a
-    /// ogni montaggio.
     command_indices: Option<w_command::GuestIndices>,
+    format_indices: Option<w_format::GuestIndices>,
+    grid_indices: Option<w_grid::GuestIndices>,
+    view_indices: Option<w_view::GuestIndices>,
 }
 
 impl Component {
-    /// Carica un componente da file.
+    /// Carica e compila un componente dal filesystem.
     pub fn from_file(path: &Utf8Path) -> Result<Self, LoadError> {
         Self::from_bytes(&std::fs::read(path)?)
     }
 
-    /// Carica un componente dai suoi byte.
+    /// Carica e compila un componente dai suoi byte.
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, LoadError> {
         let engine = crate::limits::engine();
         let component = WasmtimeComponent::new(&engine, bytes)
-            .map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
+            .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
         Self::load(engine, component)
     }
 
     fn load(engine: Engine, component: WasmtimeComponent) -> Result<Self, LoadError> {
         let mut linker: Linker<State> = Linker::new(&engine);
-        add_to_linker(&mut linker).map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
+        add_to_linker(&mut linker).map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
 
-        // Ciò che il componente chiede e questo host non dà. Le due specie
-        // ricevono due trattamenti, e la differenza è il §16.1: una famiglia
-        // **del contratto** non servita è un rifiuto subito, con il nome —
-        // montare un plugin che si romperà a metà lavoro è peggio che non
-        // montarlo. Tutto il resto è l'ambiente che il bersaglio `wasm32-wasip2`
-        // si porta dietro (`wasi:cli`, `wasi:io`, …): non lo linkiamo, perché
-        // un plugin di questo contratto non ha nessuna ragione di chiamarlo, e
-        // chi lo chiamasse lo stesso trova un trap invece di una porta aperta
-        // sul sistema operativo. È la sandbox nella sua forma più corta.
         let missing: Vec<String> = component
             .component_type()
             .imports(&engine)
             .map(|(name, _)| name.to_string())
             .filter(|name| name.starts_with(HOST_FAMILY_PREFIX))
-            .filter(|name| !FAMILIES_SERVED.iter().any(|s| name.starts_with(s)))
+            .filter(|name| {
+                !FAMILIES_SERVED
+                    .iter()
+                    .any(|served| name.starts_with(served))
+            })
             .collect();
         if !missing.is_empty() {
             return Err(LoadError::UnservedFamilies(missing.join(", ")));
         }
         cap_the_rest(&mut linker, &engine, &component)
-            .map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
-
+            .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
+        let format_export_present = component
+            .component_type()
+            .exports(&engine)
+            .any(|(name, _)| is_supported_format_export(name));
+        let view_export_present = component
+            .component_type()
+            .exports(&engine)
+            .any(|(name, _)| is_supported_view_export(name));
+        let grid_export_present = component
+            .component_type()
+            .exports(&engine)
+            .any(|(name, _)| is_supported_grid_export(name));
         let pre = linker
             .instantiate_pre(&component)
-            .map_err(|and| LoadError::Compilation(format!("{and:#}")))?;
+            .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
         let indices = w_plugin::GuestIndices::new(&pre)
-            .map_err(|and| LoadError::NotAPlugin(format!("{and:#}")))?;
-        // `plugin` è obbligatorio — senza non è un plugin, ed è l'errore qui
-        // sopra —, `command` no: `Ok` vuol dire «lo esporta», `Err` vuol dire
-        // «non lo esporta» e non è un guasto da riportare. Sono le due righe in
-        // cui si vede la differenza fra ciò che il contratto pretende e ciò che
-        // offre.
+            .map_err(|error| LoadError::NotAPlugin(format!("{error:#}")))?;
         let command_indices = w_command::GuestIndices::new(&pre).ok();
-
-        Ok(Component {
+        let format_indices =
+            resolve_format_indices(format_export_present, || w_format::GuestIndices::new(&pre))?;
+        let grid_indices =
+            resolve_format_indices(grid_export_present, || w_grid::GuestIndices::new(&pre))?;
+        let view_indices =
+            resolve_format_indices(view_export_present, || w_view::GuestIndices::new(&pre))?;
+        Ok(Self {
             pre,
             indices,
             command_indices,
+            format_indices,
+            grid_indices,
+            view_indices,
         })
     }
 
-    /// Una nuova istanza, viva e non ancora attivata.
     fn instantiate(&self) -> Result<Instance, LoadError> {
         let mut store = Store::new(self.pre.engine(), State::empty());
         crate::limits::arm(&mut store);
-        let instance: wasmtime::component::Instance = self
+        let instance = self
             .pre
             .instantiate(&mut store)
-            .map_err(|and| LoadError::Instantiation(format!("{and:#}")))?;
+            .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?;
         let plugin = self
             .indices
             .load(&mut store, &instance)
-            .map_err(|and| LoadError::Instantiation(format!("{and:#}")))?;
+            .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?;
         let commands = match &self.command_indices {
-            Some(the) => Some(
-                the.load(&mut store, &instance)
-                    .map_err(|and| LoadError::Instantiation(format!("{and:#}")))?,
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
+        let format = match &self.format_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
+        let grid = match &self.grid_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
+            ),
+            None => None,
+        };
+        let view = match &self.view_indices {
+            Some(indices) => Some(
+                indices
+                    .load(&mut store, &instance)
+                    .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?,
             ),
             None => None,
         };
         Ok(Instance {
             store,
-            interfaces: Interfaces { plugin, commands },
+            interfaces: Interfaces {
+                plugin,
+                commands,
+                format,
+                grid,
+                view,
+            },
         })
     }
 }
 
-/// Tappa con un trap ogni import che il linker non ha già servito.
-///
-/// Wasmtime ne ha una versione sua, `Linker::define_unknown_imports_as_traps`,
-/// e non la usiamo: davanti a un'istanza non guarda se c'è già — chiama
-/// `linker.instance(name)` comunque, e su una famiglia che abbiamo appena
-/// linkato risponde «*map entry `fub:abi/host-env@0.1.1` defined twice*».
-/// L'abbiamo scoperto al primo caricamento vero. Quella funzione serve a chi
-/// non linka niente; qui il linker è per interfaccia, e per interfaccia va
-/// anche il tappo.
-///
-/// Ciò che resta da tappare, dopo il filtro delle famiglie, è di due specie e
-/// nessuna delle due è una capacità di questo contratto: le interfacce di soli
-/// tipi (nessuna funzione dentro, quindi un'istanza vuota) e l'ambiente WASI
-/// che il bersaglio `wasm32-wasip2` si porta dietro. Il trap è deliberato: un
-/// plugin di questo contratto non chiama `wasi:cli/environment`, e chi lo
-/// chiamasse lo stesso non deve trovare una porta aperta sul sistema
-/// operativo. È la sandbox nella sua forma più corta — e il messaggio nomina
-/// l'import, perché chi la trova sappia cosa aveva chiesto.
+/// Tappa con trap gli import non serviti dal contratto, senza aprire WASI sul
+/// sistema operativo dell'host.
 fn cap_the_rest(
     linker: &mut Linker<State>,
     engine: &Engine,
@@ -216,38 +292,44 @@ fn cap_the_rest(
 ) -> wasmtime::Result<()> {
     let ty = component.component_type();
     for (name, item) in ty.imports(engine) {
-        if FAMILIES_SERVED.iter().any(|s| name.starts_with(s)) {
+        if name == "wasi:random/random@0.2.3" {
+            let mut instance = linker.instance(name)?;
+            instance.func_new("get-random-bytes", |_, _, results| {
+                results[0] = Val::List(
+                    [0x13_u8, 0x37, 0x5a, 0x7d, 0x91, 0xb4, 0xd6, 0xf8]
+                        .into_iter()
+                        .map(Val::U8)
+                        .collect(),
+                );
+                Ok(())
+            })?;
             continue;
         }
-        let ComponentItem::ComponentInstance(iface) = item else {
-            // Un import che non è un'interfaccia non esiste in un componente
-            // scritto contro questo contratto: il WIT non ha funzioni alla
-            // radice del mondo. Se un giorno ci fosse, l'istanziazione lo dirà
-            // per nome invece che tacere qui.
+        if FAMILIES_SERVED
+            .iter()
+            .any(|served| name.starts_with(served))
+        {
+            continue;
+        }
+        let ComponentItem::ComponentInstance(interface) = item else {
             continue;
         };
-        let mut functions: Vec<String> = Vec::new();
-        let mut resources: Vec<String> = Vec::new();
-        for (entry, and) in iface.exports(engine) {
-            match and {
+        let mut functions = Vec::new();
+        let mut resources = Vec::new();
+        for (entry, item) in interface.exports(engine) {
+            match item {
                 ComponentItem::ComponentFunc(_) => functions.push(entry.to_string()),
                 ComponentItem::Resource(_) => resources.push(entry.to_string()),
                 _ => {}
             }
         }
-        let mut inst = linker.instance(name)?;
-        // Una risorsa importata non è una funzione e non si tappa con un trap:
-        // il tipo dev'esserci comunque, o l'istanziazione si ferma dicendo
-        // «*resource implementation is missing*» — è `wasi:io/poll` con la sua
-        // `pollable`, che il bersaglio si porta dietro. Le diamo un tipo host
-        // vuoto: nessun componente di questo contratto ne fabbrica una, perché
-        // le sole funzioni che la restituirebbero sono già tappate.
+        let mut instance = linker.instance(name)?;
         for resource in resources {
-            inst.resource(&resource, ResourceType::host::<()>(), |_, _| Ok(()))?;
+            instance.resource(&resource, ResourceType::host::<()>(), |_, _| Ok(()))?;
         }
         for function in functions {
             let label = format!("{name}#{function}");
-            inst.func_new(&function, move |_, _, _| {
+            instance.func_new(&function, move |_, _, _| {
                 Err(wasmtime::Error::msg(format!(
                     "this host does not serve `{label}`"
                 )))
@@ -257,129 +339,100 @@ fn cap_the_rest(
     Ok(())
 }
 
-/// Le interfacce che **questa** istanza esporta, già risolte.
-///
-/// Non è un elenco di ciò che il mondo dichiara: è ciò che il componente ha
-/// davvero. Ogni campo che si aggiunge qui è un trait del contratto che
-/// attraversa il confine, e un `Option` in più è un pezzo di «mezzo plugin» in
-/// più.
 struct Interfaces {
     plugin: w_plugin::Guest,
     commands: Option<w_command::Guest>,
+    format: Option<w_format::Guest>,
+    grid: Option<w_grid::Guest>,
+    view: Option<w_view::Guest>,
 }
 
-/// Un'istanza viva: lo store con dentro il prestito, e le sue interfacce.
 struct Instance {
     store: Store<State>,
     interfaces: Interfaces,
 }
 
-/// Apre una chiamata al componente prestandogli l'host di **questa** chiamata.
-///
-/// Sta fuori da [`WasmPlugin`] perché da qui in poi le porte sul componente
-/// sono due — il plugin e il provider dei comandi — e la disciplina del
-/// prestito è la stessa per tutte: prendere il lucchetto dell'istanza, mettere
-/// l'host nello store per la durata della chiamata, toglierlo comunque vada.
-/// Scriverla due volte vorrebbe dire poterla scrivere due volte diversa.
 fn call<R>(
     inner: &Mutex<Instance>,
     host: &mut dyn HostApi,
-    f: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
+    call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
 ) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
     let mut inner = inner
         .lock()
         .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
     let Instance { store, interfaces } = &mut *inner;
-    // `interfaces` a prestito immutabile, `store` mutabile: sono due campi
-    // diversi, e il `let … = &mut *inner` è ciò che lo dice al compilatore in
     let interfaces = &*interfaces;
-    with_guest(store, host, |store| f(interfaces, store))
+    with_guest(store, host, |store| call(interfaces, store))
 }
 
-/// Un guasto di wasmtime raccontato al contratto.
-///
-/// Ogni trap arriva qui, e ogni trap diventa [`PluginError::Internal`]. Che sia
-/// *interno* e non *permission-denied* è una scelta: il rifiuto di una capacità
-/// non passa mai da un trap (vedi il doc di `crate::contract`), quindi tutto
-/// ciò che trappa è davvero un guasto del componente — memoria finita, un
-/// `unwrap` di là dal confine, un'istanza già morta.
-///
-/// Con un'eccezione, che è l'unica trap che **non** è del componente: la
-/// scadenza a epoche (vedi `crate::limits`) è l'host che lo ha fermato, e il
-/// messaggio di wasmtime la chiama `interrupt` — una parola che non dice
-/// all'utente che il plugin ha finito il tempo, e che non si distingue da un
-/// `unwrap` di là dal confine. Qui la si nomina una volta, invece di lasciare
-/// che ogni lettore la riconosca da sé.
-fn failure(and: wasmtime::Error) -> PluginError {
-    if and.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
+fn call_read<R>(
+    inner: &Mutex<Instance>,
+    host: &dyn ReadApi,
+    call: impl FnOnce(&Interfaces, &mut Store<State>) -> Result<R, PluginError>,
+) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let mut inner = inner
+        .lock()
+        .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+    let Instance { store, interfaces } = &mut *inner;
+    let interfaces = &*interfaces;
+    with_read_guest(store, host, |store| call(interfaces, store))
+}
+fn grid_call<R>(
+    inner: &Mutex<Instance>,
+    call: impl FnOnce(&w_grid::Guest, &mut Store<State>) -> Result<R, PluginError>,
+) -> Result<R, PluginError> {
+    let _guard = enter_instance(instance_identity(inner))
+        .map_err(|_| PluginError::Internal("re-entrant component call".into()))?;
+    let mut inner = inner
+        .lock()
+        .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+    let Instance { store, interfaces } = &mut *inner;
+    let grid = interfaces
+        .grid
+        .as_ref()
+        .ok_or_else(|| PluginError::Internal("il componente non esporta `fub:abi/grid`".into()))?;
+    crate::limits::renew(&mut *store);
+    call(grid, store)
+}
+
+fn failure(error: wasmtime::Error) -> PluginError {
+    if error.downcast_ref::<wasmtime::Trap>() == Some(&wasmtime::Trap::Interrupt) {
         return PluginError::Internal(
             "il componente non ha risposto entro il tempo concesso ed è stato fermato".into(),
         );
     }
-    PluginError::Internal(format!("il componente è caduto: {and:#}").into())
+    PluginError::Internal(format!("il componente è caduto: {error:#}").into())
 }
 
-// ---------------------------------------------------------------------------
-// Il proxy del trait `Plugin`
-// ---------------------------------------------------------------------------
-
-/// Un [`Plugin`] che sta dentro un componente WASM.
-///
-/// Il `Mutex` non è concorrenza: è ciò che serve a dare a wasmtime lo `&mut
-/// Store` che vuole partendo dai `&self` che il contract dà (`manifest`,
-/// `run_job`). Un'istanza WASM non è rientrante — due chiamate insieme sulla
-/// stessa istanza sarebbero due `&mut` sullo stesso store — e il `Mutex` è
-/// esattamente la disciplina che il modello dei componenti pretende, scritta
-/// dove si vede.
-///
-/// L'`Arc` è nuovo, ed è ciò che rende **una** l'istanza di un componente che
-/// ha più di un'interfaccia: il plugin e il suo [`WasmCommandProvider`]
-/// tengono lo stesso lucchetto sulla stessa memoria lineare. Non è economia di
-/// istanze — è l'unico modo in cui `activate` vuol dire qualcosa: un
-/// componente che si configura all'attivazione e poi esegue un comando in
-/// un'istanza diversa troverebbe la propria configurazione vuota, e nessuno
-/// glielo avrebbe detto.
-///
-/// # Il giorno in cui il lucchetto morde
-///
-/// Una capacità che facesse **rientrare** l'host nella stessa istanza —
-/// `host-commands.run-command` su un comando di questo stesso componente —
-/// prenderebbe un lucchetto già preso da questo thread, cioè si fermerebbe per
-/// sempre. Oggi non è raggiungibile: `host-commands` non è fra le
-/// [`FAMILIES_SERVED`], e nessuna di quelle che ci sono torna al chiamante. Il
-/// giorno che ci entra, la risposta giusta non è un lucchetto rientrante (due
-/// `&mut Store` annidati non esistono) ma un `plugin-error` che dice cosa è
-/// successo — la stessa scelta per cui `trappable_imports` resta spento.
+/// Proxy `Plugin` sopra una singola istanza WASM.
 pub struct WasmPlugin {
     inner: Arc<Mutex<Instance>>,
 }
 
 impl Plugin for WasmPlugin {
     fn manifest(&self) -> PluginManifest {
-        // Senza host: un manifest è una dichiarazione, e un componente che per
-        // dichiararsi avesse bisogno di leggere il vault starebbe già
-        // rispondendo a una domanda che nessuno gli ha fatto. Se ci prova,
-        // `crate::borrow` gli risponde `internal`.
         let mut inner = match self.inner.lock() {
-            Ok(the) => the,
+            Ok(inner) => inner,
             Err(_) => return PluginManifest::new("", ""),
         };
         let Instance { store, interfaces } = &mut *inner;
-        // Una delle due porte sul componente che non passano da `with_guest`
-        // — l'altra è `declared_commands` — ed è da lì che il budget di tempo
-        // si rinnova: senza questa riga il manifest girerebbe sulla scadenza
-        // armata dalla chiamata precedente, e chiesto qualche secondo dopo il
-        // montaggio trapperebbe per aver fatto niente.
         crate::limits::renew(&mut *store);
         match interfaces.plugin.call_manifest(&mut *store) {
-            Ok(m) => tr::from_manifest(m).unwrap_or_else(|_| PluginManifest::new("", "")),
+            Ok(manifest) => {
+                tr::from_manifest(manifest).unwrap_or_else(|_| PluginManifest::new("", ""))
+            }
             Err(_) => PluginManifest::new("", ""),
         }
     }
 
     fn activate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        call(&self.inner, host, |the, store| {
-            the.plugin
+        call(&self.inner, host, |interfaces, store| {
+            interfaces
+                .plugin
                 .call_activate(store)
                 .map_err(failure)?
                 .map_err(tr::from_error)
@@ -387,8 +440,9 @@ impl Plugin for WasmPlugin {
     }
 
     fn deactivate(&mut self, host: &mut dyn HostApi) -> Result<(), PluginError> {
-        call(&self.inner, host, |the, store| {
-            the.plugin
+        call(&self.inner, host, |interfaces, store| {
+            interfaces
+                .plugin
                 .call_deactivate(store)
                 .map_err(failure)?
                 .map_err(tr::from_error)
@@ -402,8 +456,8 @@ impl Plugin for WasmPlugin {
         host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         let payload = tr::to_json(&payload);
-        call(&self.inner, host, |the, store| {
-            let answer = the
+        call(&self.inner, host, |interfaces, store| {
+            let answer = interfaces
                 .plugin
                 .call_run_job(store, job, &payload)
                 .map_err(failure)?
@@ -413,27 +467,9 @@ impl Plugin for WasmPlugin {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Il proxy del trait `CommandProvider`
-// ---------------------------------------------------------------------------
-
-/// Un [`CommandProvider`] che sta dentro un componente WASM.
-///
-/// È il secondo trait del contratto che attraversa il confine, ed è quello che
-/// rende il §16.1 una frase verificabile invece che un'intenzione: da qui in
-/// poi la palette, la tastiera, una macro e la CLI chiamano un componente
-/// senza avere un ramo che lo distingua da una feature nativa.
+/// Proxy `CommandProvider` sulla **stessa** istanza del `WasmPlugin` montato.
 pub struct WasmCommandProvider {
     inner: Arc<Mutex<Instance>>,
-    /// Ciò che il componente ha dichiarato **al momento della registrazione**.
-    ///
-    /// Non si richiede a ogni apertura della palette, e non è per risparmiare
-    /// una chiamata: è il registro che deve restare vero. Gli id sono già stati
-    /// ammessi da `register_command_provider` — namespace del plugin, nessun
-    /// doppione — e le scorciatoie sono già diventate impostazioni; un
-    /// `commands()` che rispondesse un elenco diverso il secondo giorno
-    /// lascerebbe il kernel a governare comandi che non esistono e il
-    /// componente a offrirne che nessuno ha ammesso. La dichiarazione si legge
     specs: Vec<CommandSpec>,
 }
 
@@ -451,13 +487,8 @@ impl CommandProvider for WasmCommandProvider {
     ) -> Result<CommandOutcome, PluginError> {
         let args = tr::to_json(&args);
         let mode = tr::to_invoke_mode(mode);
-        call(&self.inner, host, |the, store| {
-            // `commands` è `Some` per costruzione: questo tipo lo fabbrica solo
-            // `WasmBundle::register`, e solo dopo averlo trovato. L'`ok_or_else`
-            // è la riga che lo dice senza `unwrap`, perché il giorno che
-            // qualcun altro lo fabbrichi la risposta sia una frase e non un
-            // panico dentro il kernel.
-            let commands = the.commands.as_ref().ok_or_else(|| {
+        call(&self.inner, host, |interfaces, store| {
+            let commands = interfaces.commands.as_ref().ok_or_else(|| {
                 PluginError::Internal("il componente non esporta `fub:abi/command`".into())
             })?;
             let outcome = commands
@@ -469,35 +500,396 @@ impl CommandProvider for WasmCommandProvider {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Il bundle
-// ---------------------------------------------------------------------------
+/// Proxy `GridProvider` sopra la stessa istanza del `WasmPlugin` montato.
+pub struct WasmGridProvider {
+    inner: Arc<Mutex<Instance>>,
+    specs: Vec<GridSurfaceSpec>,
+}
 
-/// Un componente montabile dalla porta di [`Bundle`].
+fn grid_response_error(error: impl std::fmt::Display) -> PluginError {
+    PluginError::Internal(format!("malformed grid provider response: {error}").into())
+}
+
+fn validate_grid_session_response(
+    session: &GridSession,
+    expected: &Revision,
+    operation: &str,
+) -> Result<(), PluginError> {
+    session.validate().map_err(grid_response_error)?;
+    if &session.revision != expected {
+        return Err(grid_response_error(format!(
+            "grid {operation} returned an unexpected revision"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_grid_window_response(
+    window: &GridWindow,
+    request: &GridWindowRequest,
+) -> Result<(), PluginError> {
+    window.validate().map_err(grid_response_error)?;
+    if window.revision != request.revision
+        || window.sheet != request.sheet
+        || window.row_start != request.row_start
+        || window.column_start != request.column_start
+    {
+        return Err(grid_response_error(
+            "grid window does not match its request",
+        ));
+    }
+    if window.rows.len() != request.row_count as usize
+        || window.columns.len() != request.column_count as usize
+    {
+        return Err(grid_response_error(
+            "grid window axes do not match the requested dimensions",
+        ));
+    }
+    let mut rows = HashSet::with_capacity(window.rows.len());
+    for (offset, row) in window.rows.iter().enumerate() {
+        if row.id.is_empty()
+            || !rows.insert(&row.id)
+            || row.index
+                != request
+                    .row_start
+                    .checked_add(offset as u32)
+                    .ok_or_else(|| grid_response_error("grid row index overflows"))?
+        {
+            return Err(grid_response_error("grid window has invalid row metadata"));
+        }
+    }
+    let mut columns = HashSet::with_capacity(window.columns.len());
+    for (offset, column) in window.columns.iter().enumerate() {
+        if column.id.is_empty()
+            || !columns.insert(&column.id)
+            || column.index
+                != request
+                    .column_start
+                    .checked_add(offset as u32)
+                    .ok_or_else(|| grid_response_error("grid column index overflows"))?
+        {
+            return Err(grid_response_error(
+                "grid window has invalid column metadata",
+            ));
+        }
+    }
+    let mut cells = HashSet::with_capacity(window.cells.len());
+    for cell in &window.cells {
+        if cell.key.sheet != window.sheet
+            || !rows.contains(&cell.key.row)
+            || !columns.contains(&cell.key.column)
+            || !cells.insert(cell.key.clone())
+        {
+            return Err(grid_response_error(
+                "grid window has invalid cell coordinates",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_grid_commit_response(
+    commit: &GridCommit,
+    request: &GridApplyRequest,
+) -> Result<(), PluginError> {
+    commit.validate().map_err(grid_response_error)?;
+    if commit.revision == request.revision {
+        return Err(PluginError::Conflict(
+            "grid provider commit did not advance revision".into(),
+        ));
+    }
+    if usize::try_from(commit.edit.from).is_err() || usize::try_from(commit.edit.to).is_err() {
+        return Err(grid_response_error(
+            "grid source diff offset overflows usize",
+        ));
+    }
+    let changed: HashSet<_> = request
+        .patches
+        .iter()
+        .map(|patch| patch.cell.clone())
+        .collect();
+    match &commit.invalidation {
+        GridInvalidation::All => {}
+        GridInvalidation::Cells(cells) => {
+            let invalidated: HashSet<_> = cells.iter().cloned().collect();
+            if !changed.is_subset(&invalidated) {
+                return Err(grid_response_error(
+                    "grid commit does not invalidate every changed cell",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+impl GridProvider for WasmGridProvider {
+    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.specs.clone()
+    }
+
+    fn open(
+        &mut self,
+        surface: &str,
+        source: &str,
+        revision: Revision,
+    ) -> Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        if Revision::of(source) != revision {
+            return Err(PluginError::Conflict(
+                "grid source does not match its declared revision".into(),
+            ));
+        }
+        let revision_wit = tr::to_grid_revision(&revision);
+        let session = grid_call(&self.inner, |grid, store| {
+            grid.call_open(store, surface, source, &revision_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let session = tr::from_grid_session(session).map_err(grid_response_error)?;
+        validate_grid_session_response(&session, &revision, "open")?;
+        Ok(session)
+    }
+
+    fn window(
+        &mut self,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> Result<GridWindow, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_window_request(&request);
+        let window = grid_call(&self.inner, |grid, store| {
+            grid.call_window(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let window = tr::from_grid_window(window).map_err(grid_response_error)?;
+        validate_grid_window_response(&window, &request)?;
+        Ok(window)
+    }
+
+    fn apply(
+        &mut self,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> Result<GridCommit, PluginError> {
+        request.validate()?;
+        let request_wit = tr::to_grid_apply_request(&request);
+        let commit = grid_call(&self.inner, |grid, store| {
+            grid.call_apply(store, instance, &request_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let commit = tr::from_grid_commit(commit).map_err(grid_response_error)?;
+        validate_grid_commit_response(&commit, &request)?;
+        Ok(commit)
+    }
+
+    fn reload(
+        &mut self,
+        instance: &str,
+        expected: Revision,
+        source: &str,
+        revision: Revision,
+    ) -> Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        if Revision::of(source) != revision {
+            return Err(PluginError::Conflict(
+                "grid source does not match its declared revision".into(),
+            ));
+        }
+        let expected_wit = tr::to_grid_revision(&expected);
+        let revision_wit = tr::to_grid_revision(&revision);
+        let session = grid_call(&self.inner, |grid, store| {
+            grid.call_reload(store, instance, &expected_wit, source, &revision_wit)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })?;
+        let session = tr::from_grid_session(session).map_err(grid_response_error)?;
+        validate_grid_session_response(&session, &revision, "reload")?;
+        Ok(session)
+    }
+
+    fn close(&mut self, instance: &str) -> Result<(), PluginError> {
+        grid_call(&self.inner, |grid, store| {
+            grid.call_close(store, instance)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })
+    }
+
+    fn shutdown(&mut self) -> Result<(), PluginError> {
+        grid_call(&self.inner, |grid, store| {
+            grid.call_shutdown(store)
+                .map_err(failure)?
+                .map_err(tr::from_error)
+        })
+    }
+}
+
+/// Proxy `FormatProvider` sopra una singola istanza WASM.
+pub struct WasmFormatProvider {
+    inner: Arc<Mutex<Instance>>,
+    descriptor: FormatDescriptor,
+    capabilities: FormatCapabilities,
+}
+
+impl FormatProvider for WasmFormatProvider {
+    fn descriptor(&self) -> FormatDescriptor {
+        self.descriptor.clone()
+    }
+
+    fn capabilities(&self) -> FormatCapabilities {
+        self.capabilities.clone()
+    }
+
+    fn parse(
+        &self,
+        source: &DocumentSource,
+        ctx: &ParseContext,
+    ) -> Result<DocumentModel, FormatError> {
+        let source_wit = tr::to_document_source(source);
+        let ctx_wit = tr::to_parse_context(ctx);
+        let _guard = enter_instance(instance_identity(self.inner.as_ref()))
+            .map_err(|_| FormatError::Parse("re-entrant component call".into()))?;
+        let mut instance = self
+            .inner
+            .lock()
+            .map_err(|_| FormatError::Parse("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *instance;
+        crate::limits::renew(&mut *store);
+        let format = interfaces.format.as_ref().ok_or_else(|| {
+            FormatError::Parse("il componente non esporta `fub:abi/format`".into())
+        })?;
+        let model = format
+            .call_parse(&mut *store, &source_wit, &ctx_wit)
+            .map_err(|error| FormatError::Parse(format!("il componente è caduto: {error:#}")))?
+            .map_err(tr::from_format_error)?;
+        crate::model::from_document(model, ctx, source)
+    }
+
+    fn render_html(
+        &self,
+        model: &DocumentModel,
+        opts: &RenderOptions,
+    ) -> Result<String, FormatError> {
+        let model_wit = crate::model::to_document(model.clone())
+            .map_err(|error| FormatError::Render(error.to_string()))?;
+        let opts_wit = tr::to_render_options(opts);
+        let _guard = enter_instance(instance_identity(self.inner.as_ref()))
+            .map_err(|_| FormatError::Render("re-entrant component call".into()))?;
+        let mut instance = self
+            .inner
+            .lock()
+            .map_err(|_| FormatError::Render("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *instance;
+        crate::limits::renew(&mut *store);
+        let format = interfaces.format.as_ref().ok_or_else(|| {
+            FormatError::Render("il componente non esporta `fub:abi/format`".into())
+        })?;
+        format
+            .call_render_html(&mut *store, &model_wit, &opts_wit)
+            .map_err(|error| FormatError::Render(format!("il componente è caduto: {error:#}")))?
+            .map_err(tr::from_format_error)
+    }
+
+    fn serialize(&self, model: &DocumentModel) -> Result<String, FormatError> {
+        let model_wit = crate::model::to_document(model.clone())
+            .map_err(|error| FormatError::Serialize(error.to_string()))?;
+        let _guard = enter_instance(instance_identity(self.inner.as_ref()))
+            .map_err(|_| FormatError::Serialize("re-entrant component call".into()))?;
+        let mut instance = self
+            .inner
+            .lock()
+            .map_err(|_| FormatError::Serialize("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *instance;
+        crate::limits::renew(&mut *store);
+        let format = interfaces.format.as_ref().ok_or_else(|| {
+            FormatError::Serialize("il componente non esporta `fub:abi/format`".into())
+        })?;
+        format
+            .call_serialize(&mut *store, &model_wit)
+            .map_err(|error| FormatError::Serialize(format!("il componente è caduto: {error:#}")))?
+            .map_err(tr::from_format_error)
+    }
+}
+/// Proxy `ViewProvider` sopra la stessa istanza WASM.
+pub struct WasmViewProvider {
+    inner: Arc<Mutex<Instance>>,
+    specs: Vec<ViewSpec>,
+}
+
+impl ViewProvider for WasmViewProvider {
+    fn views(&self) -> Vec<ViewSpec> {
+        self.specs.clone()
+    }
+
+    fn interests(&self, instance: &ViewInstance) -> ViewInterests {
+        let wit_instance = tr::to_view_instance(instance)
+            .unwrap_or_else(|error| panic!("view instance non traducibile: {error}"));
+        let result = {
+            let mut locked = self
+                .inner
+                .lock()
+                .unwrap_or_else(|_| panic!("component instance is poisoned"));
+            let Instance { store, interfaces } = &mut *locked;
+            let view = interfaces
+                .view
+                .as_ref()
+                .unwrap_or_else(|| panic!("il componente non esporta `fub:abi/view`"));
+            crate::limits::renew(&mut *store);
+            view.call_interests(&mut *store, &wit_instance)
+        };
+        result
+            .map_err(failure)
+            .and_then(tr::from_view_interests)
+            .unwrap_or_else(|error| panic!("interessi view falliti: {error}"))
+    }
+
+    fn render_view(
+        &self,
+        instance: &ViewInstance,
+        host: &dyn ReadApi,
+    ) -> Result<UiNode, PluginError> {
+        let wit_instance = tr::to_view_instance(instance)?;
+        call_read(&self.inner, host, |interfaces, store| {
+            let view = interfaces.view.as_ref().ok_or_else(|| {
+                PluginError::Internal("il componente non esporta `fub:abi/view`".into())
+            })?;
+            let tree = view
+                .call_render_view(store, &wit_instance)
+                .map_err(failure)?
+                .map_err(tr::from_error)?;
+            crate::ui::from_tree(tree)
+        })
+    }
+
+    fn on_action(
+        &mut self,
+        instance: &ViewInstance,
+        action: UiAction,
+        host: &mut dyn HostApi,
+    ) -> Result<ViewUpdate, PluginError> {
+        let wit_instance = tr::to_view_instance(instance)?;
+        let wit_action = crate::ui::to_action(&action)?;
+        call(&self.inner, host, |interfaces, store| {
+            let view = interfaces.view.as_ref().ok_or_else(|| {
+                PluginError::Internal("il componente non esporta `fub:abi/view`".into())
+            })?;
+            let update = view
+                .call_on_action(store, &wit_instance, &wit_action)
+                .map_err(failure)?
+                .map_err(tr::from_error)?;
+            crate::ui::from_update(update)
+        })
+    }
+}
+/// Componente montabile dalla stessa porta dei bundle nativi.
 pub struct WasmBundle {
     component: Component,
     manifest: PluginManifest,
     trust: Trust,
-    /// L'istanza fabbricata dall'ultima [`Bundle::plugin`], in attesa che
-    /// [`Bundle::register`] venga a prenderla.
-    ///
-    /// I quattro passi del montaggio (§9.3) chiamano `plugin()` al terzo e
-    /// `register()` al quarto, sullo **stesso** bundle e in fila: questo campo è
-    /// il filo che li lega. Serve perché entrambe le firme sono `&self` — non
-    /// c'è un valore che passi dall'una all'altra — e perché l'istanza dev'essere
-    /// una sola: il plugin e i suoi provider sono lo stesso componente, non due
-    /// copie che si somigliano.
-    ///
-    /// È `Option` e si **svuota** quando la si prende: un `register` senza il
-    /// `plugin` che lo precede non trova niente e lo dice, invece di registrare
-    /// i comandi di un'istanza di un montaggio di prima.
-    last: Mutex<Option<Arc<Mutex<Instance>>>>,
 }
 
-/// Chi è, non com'è fatto: l'istanza e il linker non hanno niente da dire a
-/// chi legge un log o un `expect_err`. Il `Debug` c'è perché senza di lui un
-/// `Result<WasmBundle, _>` non si sa nemmeno spacchettare in un test.
-/// `Result<WasmBundle, _>` non si sa nemmeno spacchettare in un test.
 impl std::fmt::Debug for WasmBundle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WasmBundle")
@@ -510,64 +902,249 @@ impl std::fmt::Debug for WasmBundle {
 }
 
 impl WasmBundle {
-    /// Carica il componente e **gli chiede subito chi è**.
-    ///
-    /// Il manifest si legge qui, in un'istanza che poi si butta, perché
-    /// `Bundle::manifest` non può fallire e chi monta lo legge prima di tutto
-    /// il resto: il primo passo del montaggio è `abi_compatible`, e per fare
-    /// quel confronto la versione del contratto deve essere già in mano. Un
-    /// componente che non sa dire il proprio manifest non è un bundle, e lo si
-    /// scopre qui invece che a metà montaggio.
+    /// Carica il componente e legge subito il manifest, prima del montaggio.
     pub fn from_file(path: &Utf8Path, trust: Trust) -> Result<Self, LoadError> {
-        let component = Component::from_file(path)?;
+        Self::from_bytes(&std::fs::read(path)?, trust)
+    }
+
+    /// Compila e legge il manifest degli esatti byte ricevuti, senza riaprire
+    /// un percorso che potrebbe essere cambiato dopo la verifica.
+    pub fn from_bytes(bytes: &[u8], trust: Trust) -> Result<Self, LoadError> {
+        let component = Component::from_bytes(bytes)?;
         let manifest = {
-            let mut inst = component.instantiate()?;
-            let m = inst
+            let mut instance = component.instantiate()?;
+            let manifest = instance
                 .interfaces
                 .plugin
-                .call_manifest(&mut inst.store)
-                .map_err(|and| LoadError::Instantiation(format!("{and:#}")))?;
-            tr::from_manifest(m)
-                .map_err(|and| LoadError::Instantiation(format!("manifest: {and}")))?
+                .call_manifest(&mut instance.store)
+                .map_err(|error| LoadError::Instantiation(format!("{error:#}")))?;
+            tr::from_manifest(manifest)
+                .map_err(|error| LoadError::Instantiation(format!("manifest: {error}")))?
         };
-        Ok(WasmBundle {
+        Ok(Self {
             component,
             manifest,
             trust,
-            last: Mutex::new(None),
         })
     }
 
-    /// Cosa il componente dichiara di saper fare.
-    ///
-    /// Senza host, per la ragione di `manifest`: un elenco di comandi è una
-    /// dichiarazione, e un componente che per dirla dovesse leggere il vault
-    /// starebbe rispondendo a una domanda che nessuno gli ha fatto. Se ci prova,
-    /// `crate::borrow` gli risponde `internal` — e l'elenco che ne esce è
-    /// vuoto o parziale, il che è esattamente ciò che deve succedere.
-    ///
-    /// `Ok(vec![])` vuol dire due cose che qui vanno bene tutte e due: non
-    /// esporta `command`, oppure lo esporta e non offre niente. `Err` è la
-    /// terza, che è un guasto: lo esporta e cade quando glielo si chiede.
-    fn declared_commands(&self, inner: &Mutex<Instance>) -> Result<Vec<CommandSpec>, String> {
-        let mut inst = inner
+    fn declared_commands(inner: &Mutex<Instance>) -> Result<Vec<CommandSpec>, String> {
+        let mut instance = inner
             .lock()
             .map_err(|_| "component instance is poisoned".to_string())?;
-        let Instance { store, interfaces } = &mut *inst;
+        let Instance { store, interfaces } = &mut *instance;
         let Some(commands) = interfaces.commands.as_ref() else {
             return Ok(Vec::new());
         };
-        // L'altra porta che non passa da `with_guest` (vedi `manifest`), e per
-        // la stessa ragione rinnova da sé: qui il budget residuo sarebbe quello
-        // che `activate` ha lasciato indietro un istante fa, e un `activate`
-        // lento farebbe scadere l'elenco dei comandi per colpa sua. La
-        // dichiarazione dei comandi è una chiamata, e ogni chiamata ha il suo
-        // tempo intero.
         crate::limits::renew(&mut *store);
-        let specs = commands
-            .call_commands(&mut *store)
-            .map_err(|and| format!("comandi non dichiarati: il componente è caduto: {and:#}"))?;
+        let specs = commands.call_commands(&mut *store).map_err(|error| {
+            format!("comandi non dichiarati: il componente è caduto: {error:#}")
+        })?;
         Ok(specs.into_iter().map(tr::from_command_spec).collect())
+    }
+
+    fn declared_views(inner: &Mutex<Instance>) -> Result<Vec<ViewSpec>, String> {
+        let mut instance = inner
+            .lock()
+            .map_err(|_| "component instance is poisoned".to_string())?;
+        let Instance { store, interfaces } = &mut *instance;
+        let Some(view) = interfaces.view.as_ref() else {
+            return Ok(Vec::new());
+        };
+        crate::limits::renew(&mut *store);
+        let specs = view
+            .call_views(&mut *store)
+            .map_err(|error| format!("view non dichiarate: il componente è caduto: {error:#}"))?;
+        specs
+            .into_iter()
+            .map(tr::from_view_spec)
+            .collect::<Result<_, _>>()
+            .map_err(|error| format!("view non traducibili: {error}"))
+    }
+    fn declared_grids(inner: &Mutex<Instance>) -> Result<Vec<GridSurfaceSpec>, String> {
+        let mut instance = inner
+            .lock()
+            .map_err(|_| "component instance is poisoned".to_string())?;
+        let Instance { store, interfaces } = &mut *instance;
+        let Some(grid) = interfaces.grid.as_ref() else {
+            return Ok(Vec::new());
+        };
+        crate::limits::renew(&mut *store);
+        let surfaces = grid
+            .call_surfaces(&mut *store)
+            .map_err(|error| format!("grid non dichiarate: il componente è caduto: {error:#}"))?;
+        let mut supported = Vec::new();
+        for surface in surfaces {
+            if let Some(surface) = tr::from_optional_grid_surface(surface)
+                .map_err(|error| format!("grid non traducibili: {error}"))?
+            {
+                supported.push(surface);
+            }
+        }
+        Ok(supported)
+    }
+
+    fn instantiate_plugin(&self) -> Box<dyn Plugin> {
+        match self.component.instantiate() {
+            Ok(instance) => Box::new(WasmPlugin {
+                inner: Arc::new(Mutex::new(instance)),
+            }),
+            Err(error) => Box::new(FailedPlugin {
+                manifest: self.manifest.clone(),
+                error: error.to_string(),
+            }),
+        }
+    }
+    fn format_provider_from_inner(
+        inner: Arc<Mutex<Instance>>,
+    ) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+        let mut locked = inner
+            .lock()
+            .map_err(|_| PluginError::Internal("component instance is poisoned".into()))?;
+        let Instance { store, interfaces } = &mut *locked;
+        let format = match interfaces.format.as_ref() {
+            Some(format) => format,
+            None => return Ok(None),
+        };
+        crate::limits::renew(&mut *store);
+        let descriptor = format
+            .call_descriptor(&mut *store)
+            .map_err(failure)
+            .map(tr::from_format_descriptor)?;
+        crate::limits::renew(&mut *store);
+        let capabilities = format
+            .call_capabilities(&mut *store)
+            .map_err(failure)
+            .and_then(tr::from_format_capabilities)?;
+        drop(locked);
+        Ok(Some(Box::new(WasmFormatProvider {
+            inner,
+            descriptor,
+            capabilities,
+        })))
+    }
+
+    /// Prepara il provider di formato opzionale e ne congela i metadati.
+    pub fn format_provider(&self) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+        let instance = self
+            .component
+            .instantiate()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+        Self::format_provider_from_inner(Arc::new(Mutex::new(instance)))
+    }
+
+    fn grid_provider_from_inner(
+        inner: Arc<Mutex<Instance>>,
+    ) -> Result<Option<Box<dyn GridProvider>>, PluginError> {
+        let specs =
+            Self::declared_grids(&inner).map_err(|error| PluginError::Internal(error.into()))?;
+        if specs.is_empty() {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(WasmGridProvider { inner, specs })))
+    }
+
+    /// Prepara il provider grid opzionale e ne congela il binding negoziato.
+    pub fn grid_provider(&self) -> Result<Option<Box<dyn GridProvider>>, PluginError> {
+        let instance = self
+            .component
+            .instantiate()
+            .map_err(|error| PluginError::Internal(error.to_string().into()))?;
+        Self::grid_provider_from_inner(Arc::new(Mutex::new(instance)))
+    }
+
+    pub(crate) fn prepare_opening(self) -> WasmOpeningBundle {
+        let instance = self
+            .component
+            .instantiate()
+            .map(|instance| Arc::new(Mutex::new(instance)))
+            .map_err(|error| error.to_string());
+        WasmOpeningBundle {
+            instance,
+            manifest: self.manifest,
+            trust: self.trust,
+        }
+    }
+}
+
+fn bundle_mount(
+    instance: Result<Arc<Mutex<Instance>>, String>,
+    manifest: PluginManifest,
+) -> BundleMount<'static> {
+    let inner = match instance {
+        Ok(inner) => inner,
+        Err(error) => {
+            return BundleMount::new(Box::new(FailedPlugin { manifest, error }), |_| {
+                RegistrationReport::complete()
+            });
+        }
+    };
+    let plugin = Box::new(WasmPlugin {
+        inner: Arc::clone(&inner),
+    });
+    let command_specs = WasmBundle::declared_commands(&inner);
+    let view_specs = WasmBundle::declared_views(&inner);
+    let grid_specs = WasmBundle::declared_grids(&inner);
+    BundleMount::new(plugin, move |registrar| {
+        let command_specs = match &command_specs {
+            Ok(specs) => specs.clone(),
+            Err(error) => return RegistrationReport::failed(error.clone()),
+        };
+        let view_specs = match &view_specs {
+            Ok(specs) => specs.clone(),
+            Err(error) => return RegistrationReport::failed(error.clone()),
+        };
+        let grid_specs = match &grid_specs {
+            Ok(specs) => specs.clone(),
+            Err(error) => return RegistrationReport::failed(error.clone()),
+        };
+        if !grid_specs.is_empty() {
+            let provider = WasmGridProvider {
+                inner: Arc::clone(&inner),
+                specs: grid_specs,
+            };
+            if let Err(error) = registrar.register_grid_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("grid non registrato: {error}"));
+            }
+        }
+        if !command_specs.is_empty() {
+            let provider = WasmCommandProvider {
+                inner: Arc::clone(&inner),
+                specs: command_specs,
+            };
+            if let Err(error) = registrar.register_command_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("comandi non registrati: {error}"));
+            }
+        }
+        if !view_specs.is_empty() {
+            let provider = WasmViewProvider {
+                inner: Arc::clone(&inner),
+                specs: view_specs,
+            };
+            if let Err(error) = registrar.register_view_provider(Box::new(provider)) {
+                return RegistrationReport::failed(format!("view non registrate: {error}"));
+            }
+        }
+        RegistrationReport::complete()
+    })
+}
+
+/// Stato preparato per una singola apertura: plugin e provider condividono
+/// esattamente l'istanza conservata qui.
+pub(crate) struct WasmOpeningBundle {
+    instance: Result<Arc<Mutex<Instance>>, String>,
+    manifest: PluginManifest,
+    trust: Trust,
+}
+
+impl WasmOpeningBundle {
+    pub(crate) fn format_provider(&self) -> Result<Option<Box<dyn FormatProvider>>, PluginError> {
+        let inner = self
+            .instance
+            .as_ref()
+            .map(Arc::clone)
+            .map_err(|error| PluginError::Internal(error.clone().into()))?;
+        WasmBundle::format_provider_from_inner(inner)
     }
 }
 
@@ -580,76 +1157,62 @@ impl Bundle for WasmBundle {
         self.trust
     }
 
+    /// Costruzione isolata, senza effetti collaterali sul bundle. Il registry
+    /// usa `prepare`; questo metodo resta valido per i clienti del trait che
+    /// vogliono solo un corpo `Plugin`.
     fn plugin(&self) -> Box<dyn Plugin> {
-        match self.component.instantiate() {
-            Ok(inst) => {
-                let inner = Arc::new(Mutex::new(inst));
-                // La copia che `register` verrà a prendere fra un passo. Un
-                // `plugin()` senza il `register()` che lo segue la lascia qui e
-                // la fa buttare dal prossimo: è un `Arc` in più che vive quanto
-                // il bundle, non una perdita.
-                if let Ok(mut last) = self.last.lock() {
-                    *last = Some(Arc::clone(&inner));
-                }
-                Box::new(WasmPlugin { inner })
-            }
-            // `plugin()` non può fallire, e inventare un plugin muto sarebbe
-            // montarne uno che non c'è. Questo invece è un plugin che dice di
-            // no al primo passo che lo interroga davvero — `activate`, il terzo
-            // del montaggio — e il montaggio è tutto-o-niente fino a lì: si
-            // disfa da sé, e chi monta legge perché.
-            Err(and) => Box::new(FailedPlugin {
+        self.instantiate_plugin()
+    }
+
+    /// La registrazione WASM richiede l'istanza preparata insieme al plugin.
+    /// Una chiamata diretta non può quindi fabbricare correttamente i provider.
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
+        vec!["WASM providers require a prepared bundle mount".to_string()]
+    }
+
+    /// Crea **una** istanza e consegna due proprietari espliciti dello stesso
+    /// `Arc`: il plugin e la closure che registra i provider.
+    fn prepare(&self) -> BundleMount<'_> {
+        let instance = self
+            .component
+            .instantiate()
+            .map(|instance| Arc::new(Mutex::new(instance)))
+            .map_err(|error| error.to_string());
+        bundle_mount(instance, self.manifest.clone())
+    }
+}
+
+impl Bundle for WasmOpeningBundle {
+    fn manifest(&self) -> PluginManifest {
+        self.manifest.clone()
+    }
+
+    fn trust(&self) -> Trust {
+        self.trust
+    }
+
+    fn plugin(&self) -> Box<dyn Plugin> {
+        match &self.instance {
+            Ok(inner) => Box::new(WasmPlugin {
+                inner: Arc::clone(inner),
+            }),
+            Err(error) => Box::new(FailedPlugin {
                 manifest: self.manifest.clone(),
-                error: and.to_string(),
+                error: error.clone(),
             }),
         }
     }
 
-    /// Il quarto passo: i provider del componente.
-    ///
-    /// Ciò che torna sono **avvisi**, non errori: un provider che non entra non
-    /// smonta il bundle (il doc di [`Bundle::register`]), e chi monta li scrive
-    /// nel log con l'id davanti. Vale anche per il caso più brutto — il
-    /// componente esporta `command` e cade appena glielo si chiede: il plugin
-    /// resta montato con le sue altre interfacce, e la riga di log dice quale
-    /// pezzo manca.
-    fn register(&self, ws: &mut Workspace) -> Vec<String> {
-        let mut warnings = Vec::new();
-        let inner = match self.last.lock().map(|mut u| u.take()) {
-            Ok(Some(the)) => the,
-            Ok(None) => {
-                warnings.push("no instance to register: `plugin()` was not called".into());
-                return warnings;
-            }
-            Err(_) => {
-                warnings.push("component instance is poisoned".into());
-                return warnings;
-            }
-        };
+    fn register(&self, _registrar: &mut Registrar<'_>) -> Vec<String> {
+        vec!["WASM providers require a prepared bundle mount".to_string()]
+    }
 
-        // I comandi. Le due domande sono separate perché sono due risposte
-        // diverse: «non esporta `command`» è la forma normale di un mezzo
-        // plugin e non si dice a nessuno, «li esporta e non sa elencarli» è un
-        // guasto e va detto.
-        let specs = match self.declared_commands(&inner) {
-            Ok(s) => s,
-            Err(warning) => {
-                warnings.push(warning);
-                return warnings;
-            }
-        };
-        if !specs.is_empty() {
-            let provider = WasmCommandProvider { inner, specs };
-            if let Err(and) = ws.register_command_provider(&self.manifest.id, Box::new(provider)) {
-                warnings.push(format!("comandi non registrati: {and}"));
-            }
-        }
-        warnings
+    fn prepare(&self) -> BundleMount<'_> {
+        bundle_mount(self.instance.clone(), self.manifest.clone())
     }
 }
-
-/// Il plugin che non è mai nato: risponde il proprio guasto a chi lo attiva.
-/// Il plugin che non è mai nato: risponde il proprio guasto a chi lo attiva.
+/// Plugin che rappresenta un'istanza che non è mai nata: fallisce in activate
+/// così il montaggio resta atomico e restituisce la causa originale.
 struct FailedPlugin {
     manifest: PluginManifest,
     error: String,
@@ -675,5 +1238,50 @@ impl Plugin for FailedPlugin {
         _host: &mut dyn HostApi,
     ) -> Result<serde_json::Value, PluginError> {
         Err(PluginError::Internal(self.error.clone().into()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        enter_instance, is_supported_format_export, resolve_format_indices, FORMAT_EXPORT,
+    };
+    use std::sync::Mutex;
+
+    #[test]
+    fn instance_guard_rejects_reentry_and_cleans_up_nested_instances() {
+        let first = Mutex::new(());
+        let second = Mutex::new(());
+        let first_id = &first as *const Mutex<()> as *const ();
+        let second_id = &second as *const Mutex<()> as *const ();
+
+        let first_guard = enter_instance(first_id).expect("first entry should succeed");
+        assert!(enter_instance(first_id).is_err());
+        let second_guard = enter_instance(second_id).expect("nested distinct entry should succeed");
+        drop(second_guard);
+        assert!(enter_instance(first_id).is_err());
+        drop(first_guard);
+        assert!(enter_instance(first_id).is_ok());
+    }
+
+    #[test]
+    fn format_export_matches_identity_across_versions() {
+        assert!(is_supported_format_export(FORMAT_EXPORT));
+        assert!(is_supported_format_export("fub:abi/format"));
+        assert!(is_supported_format_export("fub:abi/format@0.1.2"));
+        assert!(is_supported_format_export("fub:abi/format@9.9.9"));
+        assert!(!is_supported_format_export("fub:abi/format@"));
+        assert!(!is_supported_format_export("fub:abi/formatting@0.1.1"));
+        assert!(!is_supported_format_export("fub:abi/format-extra@0.1.1"));
+        assert!(!is_supported_format_export("foreign:fub/abi/format@0.1.1"));
+    }
+
+    #[test]
+    fn malformed_format_indices_fail_only_when_identity_is_present() {
+        assert!(resolve_format_indices(true, || -> Result<(), &str> { Err("malformed") }).is_err());
+        assert_eq!(
+            resolve_format_indices(false, || -> Result<(), &str> { Err("not exported") }).unwrap(),
+            None
+        );
     }
 }

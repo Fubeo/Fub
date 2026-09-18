@@ -15,6 +15,8 @@ export interface MenuItem {
   label: string;
   /// Voce distruttiva: la si distingue perché sia difficile sbagliarla.
   danger?: boolean;
+  /// Voce da cui far partire il fuoco quando il menu si apre.
+  selected?: boolean;
   run: () => void;
 }
 
@@ -41,24 +43,77 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   menu.tabIndex = -1;
   menu.style.left = `${at.clientX}px`;
   menu.style.top = `${at.clientY}px`;
+  const buttons: HTMLButtonElement[] = [];
   for (const item of items) {
     const b = document.createElement("button");
     b.setAttribute("role", "menuitem");
+    b.tabIndex = -1;
     b.textContent = item.label;
     if (item.danger) b.className = "danger";
-    b.addEventListener("click", () => {
-      closeContextMenu();
-      item.run();
+    b.addEventListener("click", () => activate(b, item));
+    b.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
+        // Il browser attiva già un button con questi tasti. Fermiamo quel
+        // click implicito perché l'attivazione è gestita qui, una volta sola.
+        e.preventDefault();
+        activate(b, item);
+      }
     });
+    buttons.push(b);
     menu.appendChild(b);
   }
-  document.body.appendChild(menu);
-  lifetime.add(() => exitSurface(menu, () => menu.remove()));
-  enterSurface(menu);
-  // Il fuoco entra nel menu e non ne esce col tab, ed Escape lo chiude. Senza,
-  // un menu contestuale era raggiungibile **solo** col tasto destro del mouse:
-  // per chi naviga da tastiera, rinominare o eliminare una nota non esisteva.
-  lifetime.add(trapFocus(menu, closeContextMenu));
+  const initial = Math.max(
+    0,
+    items.findIndex((item) => item.selected),
+  );
+  let active = items.length > 0 && items[initial]?.selected ? initial : 0;
+  const focusItem = (index: number): void => {
+    if (buttons.length === 0) {
+      menu.focus();
+      return;
+    }
+    active = (index + buttons.length) % buttons.length;
+    buttons.forEach((button, i) => {
+      button.tabIndex = i === active ? 0 : -1;
+    });
+    buttons[active]?.focus();
+  };
+  const move = (delta: number): void => {
+    focusItem(active + delta);
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      move(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      move(-1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      focusItem(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      focusItem(buttons.length - 1);
+    }
+  };
+  menu.addEventListener("keydown", onKey);
+  lifetime.add(() => menu.removeEventListener("keydown", onKey));
+  function activate(button: HTMLButtonElement, item: MenuItem): void {
+    // Space può produrre il click nativo al rilascio anche se il keydown è
+    // stato annullato. Dopo la prima attivazione la vita non è più quella del
+    // menu, quindi quel click tardivo non può eseguire la voce una seconda volta.
+    if (menuLifetime !== lifetime) return;
+    if (document.activeElement !== button) button.focus();
+    closeContextMenu();
+    item.run();
+  }
+  const workspace = document.getElementById("workspace");
+  (workspace ?? document.body).appendChild(menu);
+  // WebKitGTK può terminare il processo web mentre fotografa in una View
+  // Transition un menu fisso appena inserito. Conserviamo l'animazione CSS
+  // canonica, senza portare questa superficie effimera nel percorso nativo.
+  lifetime.add(() => exitSurface(menu, () => menu.remove(), { viewTransition: false }));
+  enterSurface(menu, { viewTransition: false });
   // Il primo click fuori chiude, e il ritardo evita che sia questo stesso click
   // ad attivarlo. Il `once` **non** bastava: se il menu si chiudeva prima —
   // Escape, o una voce scelta da tastiera — l'ascoltatore non era ancora
@@ -66,6 +121,10 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   // Restava lì fino al prossimo click qualunque, che chiudeva un menu inesistente
   // e, se nel frattempo se n'era aperto un altro, chiudeva quello. Su una vita
   // già chiusa `ascolta` non fa niente, e il caso non è da ricordarsi: non c'è.
+  lifetime.add(trapFocus(menu, closeContextMenu));
+  // `trapFocus` conserva e ripristina il fuoco precedente; il fuoco operativo
+  // del menu, però, è una sola voce, secondo la regola del roving tabindex.
+  focusItem(active);
   setTimeout(() => lifetime.listen(document, "click", closeContextMenu, { once: true }), 0);
 }
 
@@ -150,8 +209,9 @@ export function pickIcon(at: MouseEvent, onPick: (icon: string | null) => void):
   pop.appendChild(remove);
 
   document.body.appendChild(pop);
-  lifetime.add(() => exitSurface(pop, () => pop.remove()));
-  enterSurface(pop);
+  // Il selettore di icona è la stessa specie di superficie fissa effimera.
+  lifetime.add(() => exitSurface(pop, () => pop.remove(), { viewTransition: false }));
+  enterSurface(pop, { viewTransition: false });
   // La trappola prima del `focus()` esplicito: `trapFocus` metterebbe il
   // fuoco sul primo elemento — la prima emoji — mentre qui la cosa giusta è il
   // campo, che è ciò che permette di scriverne una qualsiasi senza attraversare

@@ -7,7 +7,7 @@ contributi e i controlli da eseguire. Le regole architetturali sono spiegate in
 ## Prerequisiti
 
 - Rust 1.89;
-- Node.js 22;
+- Node.js 22 (almeno 22.12.0);
 - npm e il lockfile committato;
 - Tauri CLI v2 per avviare l'app desktop;
 - dipendenze di sistema richieste da Tauri;
@@ -23,7 +23,7 @@ Dalla radice:
 ```bash
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace --no-fail-fast
 cargo deny check
 ```
 
@@ -36,6 +36,8 @@ npm test
 npm run build
 npm run bench:a11y
 npm run bench:verify
+npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
 ```
 
 Per la documentazione:
@@ -57,7 +59,7 @@ I comandi seguenti costituiscono il nucleo che deve rimanere presente in CI.
 ```text
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
+cargo test --workspace --no-fail-fast
 npm run typecheck
 npm test
 npm run build

@@ -39,6 +39,7 @@
 import { settings } from "../host/query";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
+import type { SettingEntry } from "../host/contract";
 import type { Teardown } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 
@@ -64,6 +65,8 @@ const IT = {
     "Questo vault propone {count} scorciatoie che non sono ancora attive ({commands}). Guardale nelle impostazioni, sezione Scorciatoie.",
 
   // --- le regioni, che si leggono solo navigando -------------------------
+  "region.menu": "Menu applicazione",
+  "region.window_controls": "Controlli finestra",
   "region.notes": "Note e ricerca",
   "region.document": "Documento",
   "region.bottom": "Pannelli in basso",
@@ -109,11 +112,16 @@ const IT = {
   // --- le tre modalità del pannello --------------------------------------
   "mode.group": "Modalità del pannello",
   "mode.source": "Sorgente",
-  "mode.source.hint": "Solo sorgente, nessuna resa inline",
+  "mode.sheet": "Foglio",
   "mode.live": "Live",
-  "mode.live.hint": "Sorgente con resa inline",
   "mode.reading": "Lettura",
-  "mode.reading.hint": "Sola lettura, senza editor",
+  "editor.document": "Editor del documento",
+  "editor.task.completed": "Attività completata",
+  "editor.task.pending": "Attività da completare",
+  "grid.surface": "Foglio di calcolo",
+  "preview.code_block": "Blocco di codice",
+  "viewer.unavailable": "Anteprima binaria non disponibile",
+  "surface.unavailable": "Nessuna superficie disponibile",
 
   // --- la ricerca --------------------------------------------------------
   "search.placeholder": "Cerca nel vault…",
@@ -233,6 +241,7 @@ const IT = {
   "gate.syntax_rule": "innestandosi sul documento",
   "gate.custom_render": "disegnando con un renderer personalizzato",
   "gate.job": "eseguendo un job",
+  "gate.index_query": "rispondendo a una query di indice",
 
   // --- il cestino --------------------------------------------------------
   "trash.confirm_delete": "Spostare «{doc}» nel cestino?",
@@ -301,6 +310,11 @@ const IT = {
   "settings.shortcuts_hint":
     "Una riga per comando: la combinazione che lo esegue. `Mod` è Ctrl (Cmd sul Mac); si scrive come `Mod-Shift-f`. I modificatori sono tre — `Mod`, `Shift`, `Alt` — e nessun altro: un `Ctrl-k` scritto a mano non viene onorato. Una combinazione senza modificatori non viene onorata, perché ruberebbe una lettera a chi sta scrivendo. Uno spazio separa due tasti premuti uno dopo l'altro: `Mod-k d` è una scorciatoia sola.",
   "settings.shortcuts.none": "Nessun comando dichiarato.",
+  "settings.themes.title": "Temi installati",
+  "settings.themes.option": "{name} · {light}",
+  "settings.themes.light.dark": "scuro",
+  "settings.themes.light.light": "chiaro",
+  "settings.themes.source": "Temi installati: {ids}",
   // --- i tasti che il vault propone (§23.13) -----------------------------
   //
   // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -318,6 +332,39 @@ const IT = {
   "settings.read_failed": "Non riesco a leggere: {reason}",
   "settings.components_hint":
     "Un componente spento si smonta subito e non viene più montato all'apertura del vault: non registra niente, e le sue impostazioni non compaiono.",
+  "settings.components.bundled": "Inclusi in Fub",
+  "settings.components.installed": "Installati su questa macchina",
+  "settings.components.installed.none": "Nessun componente installato.",
+  "settings.components.install": "Installa un componente",
+  "settings.components.install.hint":
+    "Scegli un file .wasm. L'installazione non lo abilita, non concede permessi e non lo esegue.",
+  "settings.components.install.pick": "Scegli file…",
+  "settings.components.install_failed": "Componente non installato: {reason}",
+  "settings.components.identity": "{id} · versione {version} · {trust}",
+  "settings.components.runtime.mounted": "Stato runtime: in esecuzione in questo vault",
+  "settings.components.runtime.off": "Stato runtime: non in esecuzione",
+  "settings.components.enabled": "Abilitato",
+  "settings.components.enabled.hint":
+    "Scelta persistita su questa macchina. Il componente può avviarsi soltanto se anche il consenso è concesso.",
+  "settings.components.enabled_failed": "Scelta di abilitazione non cambiata: {reason}",
+  "settings.components.consent": "Consenso all'esecuzione",
+  "settings.components.consent.hint":
+    "È distinto dall'abilitazione: negato o da decidere impediscono sempre l'esecuzione.",
+  "settings.components.consent.undecided": "Da decidere",
+  "settings.components.consent.denied": "Negato",
+  "settings.components.consent.granted": "Concesso",
+  "settings.components.consent_failed": "Consenso non cambiato: {reason}",
+  "settings.components.permissions.hint":
+    "Capacità dichiarate dal file. Concedere il consenso le approva insieme; un consenso negato non esegue il componente.",
+  "settings.components.remove": "Rimuovi",
+  "settings.components.remove.hint":
+    "Rimuove l'installazione ma conserva i suoi dati nel vault.",
+  "settings.components.remove.disabled": "Disabilita il componente prima di rimuoverlo.",
+  "settings.components.remove.title": "Rimuovi componente",
+  "settings.components.remove.confirm":
+    "Rimuovere «{name}»? I dati che il componente ha salvato nei vault verranno conservati.",
+  "settings.components.remove_failed": "Componente non rimosso: {reason}",
+  "settings.components.reload_failed": "Stato dei componenti non aggiornato: {reason}",
 
   // --- i permessi, come li legge chi deve accettarli (§23.17) ------------
   //
@@ -588,6 +635,8 @@ const EN: Record<Key, string> = {
   "app.vault_keys_pending":
     "This vault proposes {count} shortcuts that are not active yet ({commands}). Look at them in the settings, Shortcuts section.",
 
+  "region.menu": "Application menu",
+  "region.window_controls": "Window controls",
   "region.notes": "Notes and search",
   "region.document": "Document",
   "region.bottom": "Bottom panels",
@@ -633,11 +682,16 @@ const EN: Record<Key, string> = {
 
   "mode.group": "Pane mode",
   "mode.source": "Source",
-  "mode.source.hint": "Source only, no inline rendering",
+  "mode.sheet": "Sheet",
   "mode.live": "Live",
-  "mode.live.hint": "Source with inline rendering",
   "mode.reading": "Reading",
-  "mode.reading.hint": "Read only, no editor",
+  "editor.document": "Document editor",
+  "editor.task.completed": "Completed task",
+  "editor.task.pending": "Incomplete task",
+  "grid.surface": "Spreadsheet",
+  "preview.code_block": "Code block",
+  "viewer.unavailable": "Binary preview unavailable",
+  "surface.unavailable": "No surface available",
 
   "search.placeholder": "Search the vault…",
   "search.hint": "Search the vault",
@@ -755,6 +809,7 @@ const EN: Record<Key, string> = {
   "gate.syntax_rule": "grafting onto the document",
   "gate.custom_render": "drawing with a custom renderer",
   "gate.job": "running a job",
+  "gate.index_query": "answering an index query",
 
   "trash.confirm_delete": "Move «{doc}» to the trash?",
   "trash.delete_title": "Delete note",
@@ -783,6 +838,11 @@ const EN: Record<Key, string> = {
   "settings.shortcuts_hint":
     "One row per command: the combination that runs it. `Mod` is Ctrl (Cmd on the Mac); you write it as `Mod-Shift-f`. There are three modifiers — `Mod`, `Shift`, `Alt` — and no others: a hand-written `Ctrl-k` is not honoured. A combination without modifiers is not honoured, because it would steal a letter from whoever is typing. A space separates two keys pressed one after the other: `Mod-k d` is a single shortcut.",
   "settings.shortcuts.none": "No command declared.",
+  "settings.themes.title": "Installed themes",
+  "settings.themes.option": "{name} · {light}",
+  "settings.themes.light.dark": "dark",
+  "settings.themes.light.light": "light",
+  "settings.themes.source": "Installed themes: {ids}",
   "settings.vault_keys.title": "This vault proposes {count} shortcuts",
   "settings.vault_keys.hint":
     "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",
@@ -797,6 +857,39 @@ const EN: Record<Key, string> = {
   "settings.read_failed": "I cannot read: {reason}",
   "settings.components_hint":
     "A component that is off unmounts at once and is not mounted again when the vault opens: it registers nothing, and its settings do not show up.",
+  "settings.components.bundled": "Included with Fub",
+  "settings.components.installed": "Installed on this machine",
+  "settings.components.installed.none": "No installed component.",
+  "settings.components.install": "Install a component",
+  "settings.components.install.hint":
+    "Choose a .wasm file. Installing it does not enable it, grant consent, or run it.",
+  "settings.components.install.pick": "Choose file…",
+  "settings.components.install_failed": "Component not installed: {reason}",
+  "settings.components.identity": "{id} · version {version} · {trust}",
+  "settings.components.runtime.mounted": "Runtime status: running in this vault",
+  "settings.components.runtime.off": "Runtime status: not running",
+  "settings.components.enabled": "Enabled",
+  "settings.components.enabled.hint":
+    "Persistent choice on this machine. The component can start only when consent is granted too.",
+  "settings.components.enabled_failed": "Enabled choice not changed: {reason}",
+  "settings.components.consent": "Consent to run",
+  "settings.components.consent.hint":
+    "This is separate from enabling it: denied or undecided always prevent execution.",
+  "settings.components.consent.undecided": "Undecided",
+  "settings.components.consent.denied": "Denied",
+  "settings.components.consent.granted": "Granted",
+  "settings.components.consent_failed": "Consent not changed: {reason}",
+  "settings.components.permissions.hint":
+    "Capabilities declared by the file. Granting consent approves them together; denied consent does not run the component.",
+  "settings.components.remove": "Remove",
+  "settings.components.remove.hint":
+    "Removes the installation but preserves its data in the vault.",
+  "settings.components.remove.disabled": "Disable the component before removing it.",
+  "settings.components.remove.title": "Remove component",
+  "settings.components.remove.confirm":
+    "Remove “{name}”? Data saved by the component in your vaults will be preserved.",
+  "settings.components.remove_failed": "Component not removed: {reason}",
+  "settings.components.reload_failed": "Component state not refreshed: {reason}",
   "settings.permissions": "Permissions",
   "settings.permissions.hint":
     "What this component has declared it wants to do. Taking one away has effect at once and survives switching the component off and on again; the component may stop working, and that is its side of the deal: to ask only for what it needs.",
@@ -999,8 +1092,17 @@ const CACHE = "fub.locale.language";
 /// La scelta corrente, così com'è scritto nell'impostazione.
 let choice = "";
 
+/// Il proprietario di una rilettura asincrona. La generazione rende vecchia
+/// ogni richiesta precedente; `active` impedisce a una risposta che arriva dopo
+/// lo smontaggio di cambiare una finestra già rimontata.
+type RereadOwner = {
+  active: boolean;
+  generation: number;
+};
+
 /// Chi va avvisato quando la lingua cambia: chi ha già disegnato del testo.
-const listeners: Array<() => void> = [];
+type LanguageRegistration = { listener: () => void };
+const listeners: LanguageRegistration[] = [];
 
 /// La lingua che vale, date la scelta e quella del sistema.
 ///
@@ -1024,6 +1126,14 @@ export function catalogFor(language: string): Record<string, string> {
 function languageCurrent(): string {
   const systemLanguage = typeof navigator === "undefined" ? FALLBACK : navigator.language || FALLBACK;
   return effectiveLanguage(choice, systemLanguage);
+}
+
+/// Allinea il documento al testo che `t()` sta per restituire. Non si usa un
+/// valore fermo in `index.html`: dopo un cambio di lingua anche i lettori che
+/// non guardano una regione devono ricevere la lingua della pagina.
+function applyDocumentLanguage(): void {
+  if (typeof document === "undefined" || !document.documentElement) return;
+  document.documentElement.lang = languageCurrent();
 }
 
 /// Sostituisce `{nome}` con l'argomento che si chiama così.
@@ -1104,6 +1214,7 @@ const ATTRIBUTES = [
 /// comunque quello italiano — non è un segnaposto vuoto — perché è ciò che si
 /// vede se questa funzione non gira: un ripiego che è già la lingua di ripiego.
 export function applyStrings(root: ParentNode = document): void {
+  applyDocumentLanguage();
   for (const [attribute, where] of ATTRIBUTES) {
     for (const el of root.querySelectorAll<HTMLElement>(`[${attribute}]`)) {
       const key = el.getAttribute(attribute) as Key;
@@ -1125,40 +1236,54 @@ export function applyStrings(root: ParentNode = document): void {
 /// — un elenco che si scopre incompleto solo cambiando lingua e guardando bene.
 ///
 /// Torna **come smettere**, come `onKernelEvent` in `host/ipc.ts` e come
-/// `trapFocus`. I quattro chiamanti di oggi lo ignorano, ed è corretto:
-/// sono superfici montate una volta che vivono quanto la finestra, e per loro
-/// non c'è niente da disfare. Il difetto non morde adesso — morde il primo
-/// chiamante che sia un pannello, che si iscriverebbe di nuovo a ogni
-/// montaggio senza che la vecchia iscrizione se ne vada, e ridisegnerebbe N
-/// volte una superficie che non esiste più. Chi ha una `Lifetime` scrive
-/// `lifetime.aggiungi(onLanguage(redraw))` e non ci pensa.
+/// `trapFocus`. Chi si iscrive deve affidare il disposer a una `Lifetime`:
+/// `lifetime.add(onLanguage(redraw))`. `mountStrings` raccoglie nello stesso
+/// modo le proprie iscrizioni a lingua, kernel e store, così il suo chiamante
+/// può smontarle tutte insieme.
 export function onLanguage(listener: () => void): Teardown {
-  listeners.push(listener);
+  const registration: LanguageRegistration = { listener };
+  listeners.push(registration);
+  let disposed = false;
   return () => {
-    const i = listeners.indexOf(listener);
+    if (disposed) return;
+    disposed = true;
+    const i = listeners.indexOf(registration);
     if (i >= 0) listeners.splice(i, 1);
   };
 }
 
 /// Rilegge la scelta dall'impostazione, se c'è un vault che possa rispondere.
-async function reread(): Promise<void> {
+async function reread(owner: RereadOwner): Promise<void> {
+  const generation = ++owner.generation;
+  let entries: SettingEntry[];
   try {
-    const entry = (await settings()).find((e) => e.spec.key === LANGUAGE_KEY);
-    if (!entry) return;
-    const next = typeof entry.value === "string" ? entry.value : "";
-    if (next === choice) return;
-    choice = next;
-    localStorage.setItem(CACHE, choice);
-    applyStrings();
-    // Una copia: un ascoltatore che si disiscrive mentre viene chiamato
-    // altrimenti accorcerebbe l'array sotto l'iteratore, e il successivo
-    // salterebbe il turno.
-    for (const listener of [...listeners]) listener();
+    entries = await settings();
   } catch {
     // Nessun vault aperto, o il canale dati che non risponde: si resta su ciò
     // che la cache diceva. Una lingua è la cosa meno urgente da cui far fallire
     // un avvio.
+    return;
   }
+  // Una risposta non può più applicarsi se nel frattempo è partita una
+  // rilettura più nuova o il chiamante è stato smontato.
+  if (!owner.active || owner.generation !== generation) return;
+  const entry = entries.find((e) => e.spec.key === LANGUAGE_KEY);
+  if (!entry) return;
+  const next = typeof entry.value === "string" ? entry.value : "";
+  if (next === choice) return;
+  choice = next;
+  // La cache è una memoria di cortesia: se il browser la vieta, la scelta
+  // arrivata dall'impostazione resta comunque autorevole per questa finestra.
+  try {
+    localStorage.setItem(CACHE, choice);
+  } catch {
+    // Best effort: non impedire né l'applicazione né l'avviso del cambio.
+  }
+  applyStrings();
+  // Una copia: un ascoltatore che si disiscrive mentre viene chiamato
+  // altrimenti accorcerebbe l'array sotto l'iteratore, e il successivo
+  // salterebbe il turno.
+  for (const { listener } of [...listeners]) listener();
 }
 
 /// Accende le stringhe: applica subito ciò che si sa, poi insegue l'unica
@@ -1167,14 +1292,27 @@ async function reread(): Promise<void> {
 /// Il sistema non è una seconda sorgente da inseguire come per il tema: la
 /// lingua della webview non cambia mentre l'app è aperta, e se cambiasse
 /// cambierebbe riavviandola.
-export function mountStrings(onChange: () => void): void {
+export function mountStrings(onChange: () => void): Teardown {
+  const owner: RereadOwner = { active: true, generation: 0 };
   try {
     choice = localStorage.getItem(CACHE) ?? "";
   } catch {
     choice = "";
   }
   applyStrings();
-  listeners.push(onChange);
-  onEvent("setting_changed", () => void reread());
-  on("vault", () => void reread());
+  const stopLanguage = onLanguage(onChange);
+  const stopSetting = onEvent("setting_changed", () => {
+    if (owner.active) void reread(owner);
+  });
+  const stopVault = on("vault", () => {
+    if (owner.active) void reread(owner);
+  });
+  return () => {
+    if (!owner.active) return;
+    owner.active = false;
+    owner.generation++;
+    stopVault();
+    stopSetting();
+    stopLanguage();
+  };
 }

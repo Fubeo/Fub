@@ -795,19 +795,38 @@ impl<H, P: Policy> Guard<H, P> {
         path: &str,
         what: impl FnOnce() -> String,
     ) -> Result<(), PluginError> {
-        let action = what();
-        self.check(cap, || action.clone())?;
-        if let Some(why) = self.policy.denies_path(cap, path) {
-            return Err(PluginError::PermissionDenied(
-                format!("{action}: {why}").into(),
-            ));
-        }
-        Ok(())
+        authorize_path(&self.policy, cap, path, what)
     }
 
     fn allows_path(&self, cap: Capability, path: &str) -> bool {
         self.allows(cap) && self.policy.denies_path(cap, path).is_none()
     }
+}
+
+/// Applica i due cancelli (famiglia e path) a un'operazione che deve essere
+/// preparata fuori dal `Guard` preso in prestito dal workspace.
+///
+/// Il composition root usa questa porta prima di staccare parse, hook e indici
+/// di una scrittura `JobHost`: la policy resta quella unica di [`Guard`], non
+/// una seconda interpretazione nel proxy.
+pub fn authorize_path<P: Policy>(
+    policy: &P,
+    cap: Capability,
+    path: &str,
+    what: impl FnOnce() -> String,
+) -> Result<(), PluginError> {
+    let action = what();
+    if let Some(why) = policy.denies(cap) {
+        return Err(PluginError::PermissionDenied(
+            format!("{action}: {why}").into(),
+        ));
+    }
+    if let Some(why) = policy.denies_path(cap, path) {
+        return Err(PluginError::PermissionDenied(
+            format!("{action}: {why}").into(),
+        ));
+    }
+    Ok(())
 }
 
 impl<H: VaultRead, P: Policy> VaultRead for Guard<H, P> {
@@ -927,6 +946,9 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
         self.check_path(Capability::VaultStructure, to.as_str(), || {
             format!("renaming to `{to}`")
         })?;
+        self.check_path(Capability::VaultWrite, "", || {
+            format!("rewriting backlinks after renaming `{from}`")
+        })?;
         self.inner.rename_document(from, to)
     }
 
@@ -938,18 +960,25 @@ impl<H: VaultStructure, P: Policy> VaultStructure for Guard<H, P> {
     }
 
     fn restore_document(&mut self, entry: &DocId, to: Option<DocId>) -> Result<DocId, PluginError> {
-        self.check_path(Capability::VaultStructure, entry.as_str(), || {
+        self.check(Capability::VaultStructure, || {
             format!("restoring `{entry}`")
         })?;
-        if let Some(to) = &to {
-            self.check_path(Capability::VaultStructure, to.as_str(), || {
-                format!("restoring to `{to}`")
-            })?;
-        }
-        self.inner.restore_document(entry, to)
+        let target = match to {
+            Some(target) => target,
+            None => self
+                .list_trash()?
+                .into_iter()
+                .find(|candidate| &candidate.id == entry)
+                .map(|candidate| candidate.original)
+                .ok_or_else(|| PluginError::NotFound(entry.to_string().into()))?,
+        };
+        self.check_path(Capability::VaultStructure, target.as_str(), || {
+            format!("restoring to `{target}`")
+        })?;
+        self.inner.restore_document(entry, Some(target))
     }
     fn empty_trash(&mut self) -> Result<u64, PluginError> {
-        self.check(Capability::VaultStructure, || "emptying trash".into())?;
+        self.check_path(Capability::VaultStructure, "", || "emptying trash".into())?;
         self.inner.empty_trash()
     }
 }
@@ -1130,25 +1159,51 @@ impl<H: HostEvents, P: Policy> HostEvents for Guard<H, P> {
 
 impl<H: HostQuery, P: Policy> HostQuery for Guard<H, P> {
     fn query_index(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
-        let (cap, what) = Guard::<H, P>::query_capability(&query.kind());
-        self.check(cap, || what.into())?;
+        let cap = authorize_query(&self.policy, &query.kind())?;
         let result = self.inner.query_index(query)?;
-        if cap == Capability::Drafts {
-            if let IndexResult::Drafts(mut page) = result {
-                let before = page.items.len();
-                page.items.retain(|draft| {
-                    self.policy
-                        .denies_path(Capability::Drafts, draft.doc.as_str())
-                        .is_none()
-                });
-                if page.items.len() != before {
-                    page.total = page.items.len() as u32;
-                }
-                return Ok(IndexResult::Drafts(page));
-            }
-        }
-        Ok(result)
+        Ok(filter_query_result(&self.policy, cap, result))
     }
+}
+
+/// Applica lo stesso cancello di [`Guard`] a un piano che deve essere eseguito
+/// fuori dalla guardia del workspace. È pubblico perché il composition root
+/// stacca la callback, non perché esista una seconda politica.
+pub fn authorize_query<P: Policy>(
+    policy: &P,
+    kind: &fub_abi::traits::QueryKind,
+) -> Result<Capability, PluginError> {
+    let (cap, what) = Guard::<(), P>::query_capability(kind);
+    match policy.denies(cap) {
+        None => Ok(cap),
+        Some(why) => Err(PluginError::PermissionDenied(
+            format!("{what}: {why}").into(),
+        )),
+    }
+}
+
+/// Rifinisce una risposta con le regole dipendenti dalla politica. Oggi la
+/// sola è il recinto delle bozze; tenerla qui impedisce che il percorso
+/// staccato e il `Guard` imparino due semantiche diverse.
+pub fn filter_query_result<P: Policy>(
+    policy: &P,
+    cap: Capability,
+    result: IndexResult,
+) -> IndexResult {
+    if cap == Capability::Drafts {
+        if let IndexResult::Drafts(mut page) = result {
+            let before = page.items.len();
+            page.items.retain(|draft| {
+                policy
+                    .denies_path(Capability::Drafts, draft.doc.as_str())
+                    .is_none()
+            });
+            if page.items.len() != before {
+                page.total = page.items.len() as u32;
+            }
+            return IndexResult::Drafts(page);
+        }
+    }
+    result
 }
 
 impl<H, P: Policy> Guard<H, P> {
@@ -1236,12 +1291,15 @@ impl<H: HostCommands, P: Policy> HostCommands for Guard<H, P> {
         // cui `match` esaustivo obbliga una famiglia nuova a dichiararsi. Così
         // il giorno che il vault avesse una terza specie di scrittura, questo
         // cancello la eredita senza che nessuno se ne debba ricordare.
-        // Un cancello solo: *dove* qui non si pone, perché un handle non nomina un
-        // posto che si possa scegliere — nomina la sorgente che l'host ha aperto.
+        // L'undo non nomina un documento: uno scope di path non può quindi
+        // provarne la copertura e deve fallire chiuso prima di avviare il replay.
         self.check(Capability::Commands, || "undoing".into())?;
         for cap in Capability::ALL.into_iter().filter(|c| c.writes_the_vault()) {
             self.check(cap, || "undoing".into())?;
         }
+        authorize_path(&self.policy, Capability::VaultWrite, "", || {
+            "undoing".into()
+        })?;
         self.inner.undo_last()
     }
 }
@@ -1606,6 +1664,177 @@ mod tests {
                 "the rename".into(),
             ))))
         }
+    }
+    struct CountsUndoes(std::sync::Arc<std::sync::atomic::AtomicUsize>);
+
+    impl HostCommands for CountsUndoes {
+        fn run_command(
+            &mut self,
+            _command: &str,
+            _args: serde_json::Value,
+        ) -> Result<CommandOutcome, PluginError> {
+            unreachable!("no bench in this module invokes a command")
+        }
+
+        fn undo_last(&mut self) -> Result<Option<Undone>, PluginError> {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(Undone::whole(fub_abi::text::Text::Literal(
+                "the replacement".into(),
+            ))))
+        }
+    }
+
+    struct CountsGlobalStructure {
+        renames: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        sweeps: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl VaultRead for CountsGlobalStructure {
+        fn read_document(&self, _id: &DocId) -> Result<String, PluginError> {
+            unreachable!("the structural authorization benches do not read")
+        }
+
+        fn read_document_bytes(&self, _id: &DocId) -> Result<Vec<u8>, PluginError> {
+            unreachable!("the structural authorization benches do not read bytes")
+        }
+
+        fn document_revision(&self, _id: &DocId) -> Result<Revision, PluginError> {
+            unreachable!("the structural authorization benches do not read revisions")
+        }
+
+        fn list_documents(&self, _page: Option<Page>) -> Result<Paged<DocId>, PluginError> {
+            unreachable!("the structural authorization benches do not list documents")
+        }
+
+        fn free_name(&self, id: &DocId) -> DocId {
+            id.clone()
+        }
+
+        fn read_model(&self, _id: &DocId) -> Result<DocumentModel, PluginError> {
+            unreachable!("the structural authorization benches do not parse")
+        }
+
+        fn format_of(&self, _id: &DocId) -> Option<DocumentFormat> {
+            None
+        }
+
+        fn list_trash(&self) -> Result<Vec<TrashEntry>, PluginError> {
+            unreachable!("the structural authorization benches do not list trash")
+        }
+    }
+
+    impl VaultStructure for CountsGlobalStructure {
+        fn create_document(&mut self, _id: &DocId, _source: &str) -> Result<(), PluginError> {
+            unreachable!("the structural authorization benches do not create")
+        }
+
+        fn rename_document(&mut self, _from: &DocId, _to: &DocId) -> Result<(), PluginError> {
+            self.renames
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(())
+        }
+
+        fn trash_document(&mut self, _id: &DocId) -> Result<DocId, PluginError> {
+            unreachable!("the structural authorization benches do not trash")
+        }
+
+        fn restore_document(
+            &mut self,
+            _entry: &DocId,
+            _to: Option<DocId>,
+        ) -> Result<DocId, PluginError> {
+            unreachable!("the structural authorization benches do not restore")
+        }
+
+        fn empty_trash(&mut self) -> Result<u64, PluginError> {
+            self.sweeps
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(0)
+        }
+    }
+
+    fn scoped_structure_guard(
+        renames: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+        sweeps: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Guard<CountsGlobalStructure, Granted> {
+        let mut permissions = PluginPermissions::of(&[permission::WRITE_VAULT]);
+        permissions
+            .granted
+            .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+        Guard::new(
+            CountsGlobalStructure { renames, sweeps },
+            Granted::new("scoped", &permissions, Trust::Community),
+        )
+    }
+
+    #[test]
+    fn a_path_scoped_rename_never_reaches_the_inner_mutation() {
+        let renames = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sweeps = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = scoped_structure_guard(
+            std::sync::Arc::clone(&renames),
+            std::sync::Arc::clone(&sweeps),
+        );
+
+        let error = guard
+            .rename_document(
+                &DocId::new("public/Before.md"),
+                &DocId::new("public/After.md"),
+            )
+            .expect_err("backlink rewrites require an unrestricted writer");
+
+        assert!(matches!(error, PluginError::PermissionDenied(_)));
+        assert_eq!(
+            renames.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "both endpoints are in scope, but the global backlink mutation stays fenced"
+        );
+        assert_eq!(sweeps.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_path_scoped_empty_trash_never_reaches_the_inner_sweep() {
+        let renames = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let sweeps = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut guard = scoped_structure_guard(
+            std::sync::Arc::clone(&renames),
+            std::sync::Arc::clone(&sweeps),
+        );
+
+        let error = guard
+            .empty_trash()
+            .expect_err("emptying trash requires unrestricted structure access");
+
+        assert!(matches!(error, PluginError::PermissionDenied(_)));
+        assert_eq!(
+            sweeps.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the root path gate runs before the wrapped host can sweep"
+        );
+        assert_eq!(renames.load(std::sync::atomic::Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn a_path_scoped_writer_cannot_start_a_global_undo() {
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut permissions =
+            PluginPermissions::of(&[permission::RUN_COMMAND, permission::WRITE_VAULT]);
+        permissions
+            .granted
+            .set(permission::WRITE_VAULT, serde_json::json!(["public/"]));
+        let policy = Granted::new("scoped", &permissions, Trust::Community);
+        let mut guard = Guard::new(CountsUndoes(std::sync::Arc::clone(&calls)), policy);
+
+        let err = guard
+            .undo_last()
+            .expect_err("a public-only writer cannot undo a vault-wide entry");
+
+        assert!(matches!(err, PluginError::PermissionDenied(_)));
+        assert_eq!(
+            calls.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the path gate runs before the wrapped host can pop or replay"
+        );
     }
 
     /// La voce in cima alla pila può essere l'inverso di una rinomina, di una

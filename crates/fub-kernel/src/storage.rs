@@ -65,6 +65,9 @@ use crate::poison::Shelter;
 
 use camino::{Utf8Path, Utf8PathBuf};
 
+mod rooted;
+pub use rooted::RootedFsStorage;
+
 /// Che cosa è una voce di directory: le due specie che la camminata sa
 /// trattare, e **tutto il resto**.
 ///
@@ -106,6 +109,17 @@ pub struct Stat {
     /// rilegge invece di essere dato per immutato
     /// ([0046](../../../docs/decisions/0188-identita-path-e-rename.md)).
     pub mtime: u64,
+}
+
+/// Identità del file fornita dal filesystem: device/inode su Unix, volume/file
+/// index su Windows. Non è un'identità di contenuto e non viene mai usata da
+/// sola: il rejoin richiede anche il digest dei byte.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct FileIdentity {
+    pub volume: u64,
+    pub file: u64,
 }
 
 impl Stat {
@@ -187,6 +201,15 @@ pub struct DirEntry {
 /// uguale, e i quattro doppioni di prova nei test la nominano.
 pub type Merge<'a> = &'a mut dyn FnMut(Option<&[u8]>) -> io::Result<Option<Vec<u8>>>;
 
+/// Esito di una scrittura condizionale sul contenuto che il chiamante aveva
+/// letto. `Changed` non è un errore I/O: significa che un altro writer ha
+/// avanzato il file e la scrittura non è stata eseguita.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConditionalWrite {
+    Written(Stat),
+    Changed,
+}
+
 pub trait VaultStorage: Send + Sync {
     /// I byte a questo path.
     fn read(&self, path: &Utf8Path) -> io::Result<Vec<u8>>;
@@ -219,6 +242,35 @@ pub trait VaultStorage: Send + Sync {
     /// byte; la **data** la sa solo il supporto, e solo mentre il file che ha
     /// scritto è ancora quello suo.
     fn write(&self, path: &Utf8Path, bytes: &[u8]) -> io::Result<Stat>;
+
+    /// Scrive soltanto se i byte presenti sono ancora `expected`.
+    ///
+    /// Il default eredita la serializzazione di [`update`](VaultStorage::update)
+    /// e basta ai supporti di test. Il backend di produzione la sovrascrive: il
+    /// confronto e la pubblicazione restano sotto **lo stesso lock capability**.
+    /// La garanzia è esatta fra writer cooperativi che usano questo protocollo;
+    /// un processo esterno che ignora il lock resta, per definizione,
+    /// best-effort e non va descritto come CAS universale.
+    fn write_if_unchanged(
+        &self,
+        path: &Utf8Path,
+        expected: Option<&[u8]>,
+        bytes: &[u8],
+    ) -> io::Result<ConditionalWrite> {
+        let mut matches = false;
+        self.update(path, &mut |current| {
+            if current != expected {
+                return Ok(None);
+            }
+            matches = true;
+            Ok(Some(bytes.to_vec()))
+        })?;
+        if matches {
+            self.stat(path).map(ConditionalWrite::Written)
+        } else {
+            Ok(ConditionalWrite::Changed)
+        }
+    }
 
     /// Scrive un **dato derivato**: la stessa [`write`](VaultStorage::write),
     /// senza la promessa che i byte sopravvivano a un crash.
@@ -365,8 +417,31 @@ pub trait VaultStorage: Send + Sync {
     /// Non risale un errore: «non lo so» e «no» sono la stessa cosa per chi
     /// chiama, perché la guardia che ne segue è comunque quella prudente — si
     /// crede che siano due file, e la rinomina si ferma invece di sovrascrivere.
+    /// Identità del file, quando il supporto può dirla senza seguire il nome
+    /// ambientale oltre il capability montato. `None` vuol dire «non lo so» e
+    /// impedisce inferenze di rename, non le rende più permissive.
+    fn file_identity(&self, _path: &Utf8Path) -> io::Result<Option<FileIdentity>> {
+        Ok(None)
+    }
+
+    /// Timbro opaco di **cambiamento** del file, se il supporto ne ha uno.
+    ///
+    /// Non è un'identità e non si usa per ricongiungere rinomine: serve solo a
+    /// distinguere due osservazioni dello stesso path quando size e mtime sono
+    /// uguali. `None` vuol dire che il backend non sa dare questa garanzia; in
+    /// quel caso chi chiama degrada alla regola storica size+mtime.
+    fn change_stamp(&self, _path: &Utf8Path) -> io::Result<Option<u64>> {
+        Ok(None)
+    }
+
     fn same_file(&self, a: &Utf8Path, b: &Utf8Path) -> bool {
-        a == b
+        if a == b {
+            return true;
+        }
+        matches!(
+            (self.file_identity(a), self.file_identity(b)),
+            (Ok(Some(a)), Ok(Some(b))) if a == b
+        )
     }
 
     /// Su questa radice può stare un vault?
@@ -383,6 +458,13 @@ pub trait VaultStorage: Send + Sync {
     /// un vault che non può stare. Un supporto su un disco vero
     /// ([`FsStorage`]) la sovrascrive con la verità del disco: lì una radice
     /// mancante è un errore di chi ha scelto, e va detto subito.
+    /// Fissa/valida la radice all'ingresso del vault. Un backend a capability
+    /// usa questa porta per verificare **l'handle già aperto**, non per risolvere
+    /// di nuovo il nome ambientale.
+    fn mount_fence(&self, root: &Utf8Path) -> io::Result<()> {
+        self.root_validates(root)
+    }
+
     fn root_validates(&self, root: &Utf8Path) -> io::Result<()> {
         match self.stat(root) {
             Err(and) if and.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -794,6 +876,58 @@ pub fn identity_of_the_file(path: &Utf8Path) -> Option<Identity> {
         let _ = path;
         None
     }
+}
+
+#[cfg(unix)]
+pub(super) fn unix_change_stamp(seconds: i64, nanos: i64) -> u64 {
+    let ticks = (seconds as i128)
+        .saturating_mul(1_000_000_000)
+        .saturating_add(nanos as i128);
+    ticks.clamp(0, u64::MAX as i128) as u64
+}
+
+#[cfg(windows)]
+pub(super) fn windows_change_stamp(handle: std::os::windows::io::RawHandle) -> io::Result<u64> {
+    use windows_sys::Win32::Storage::FileSystem::{
+        FileBasicInfo, GetFileInformationByHandleEx, FILE_BASIC_INFO,
+    };
+
+    let mut info: FILE_BASIC_INFO = unsafe { std::mem::zeroed() };
+    // SAFETY: l'handle resta vivo nel chiamante per tutta la syscall e `info`
+    // è un buffer della dimensione esatta che Windows riempie soltanto.
+    let outcome = unsafe {
+        GetFileInformationByHandleEx(
+            handle as _,
+            FileBasicInfo,
+            (&mut info as *mut FILE_BASIC_INFO).cast(),
+            std::mem::size_of::<FILE_BASIC_INFO>() as u32,
+        )
+    };
+    if outcome == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(info.ChangeTime.max(0) as u64)
+}
+
+fn change_stamp_of_file(path: &Utf8Path) -> io::Result<Option<u64>> {
+    #[cfg(unix)]
+    let stamp = {
+        use std::os::unix::fs::MetadataExt;
+        let metadata = std::fs::metadata(path)?;
+        Some(unix_change_stamp(metadata.ctime(), metadata.ctime_nsec()))
+    };
+    #[cfg(windows)]
+    let stamp = {
+        use std::os::windows::io::AsRawHandle;
+        let file = std::fs::File::open(path)?;
+        Some(windows_change_stamp(file.as_raw_handle())?)
+    };
+    #[cfg(not(any(unix, windows)))]
+    let stamp = {
+        let _ = path;
+        None
+    };
+    Ok(stamp)
 }
 
 /// L'identità di un file: il volume e il numero che lo distingue là dentro.
@@ -1373,6 +1507,10 @@ impl VaultStorage for FsStorage {
 
     fn exists(&self, path: &Utf8Path) -> bool {
         path.exists()
+    }
+
+    fn change_stamp(&self, path: &Utf8Path) -> io::Result<Option<u64>> {
+        change_stamp_of_file(path)
     }
 
     /// **Qui il default non basta**, ed è l'unico supporto per cui non basta:

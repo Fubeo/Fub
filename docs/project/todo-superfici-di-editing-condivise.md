@@ -1,8 +1,9 @@
 # TODO — modularità delle superfici di editing
 
-> **Stato:** in esecuzione — fasi 0–4 concluse su main, fasi 5–10 aperte.
+> **Stato:** in esecuzione — fasi 0–4 concluse su main, fasi 5–9 concluse
+> nello stack candidato, fase 10 aperta.
 > **Tracker:** [issue #11](https://github.com/Fubeo/Fub/issues/11).
-> **Aggiornato:** 29 agosto 2026.
+> **Aggiornato:** 15 settembre 2026.
 > **Origine:** recupero e revisione del piano storico sulle superfici
 > condivise, conservato nella cronologia Git al commit
 > `5d8af02050700c738e73461a7a0a98059d91dfc2`.
@@ -359,10 +360,10 @@ Le collisioni nominano entrambi gli owner e non usano silenziosamente
 
 Criteri di uscita:
 
-- [ ] il pannello non chiama direttamente `createEditor()`;
-- [ ] Markdown e plain text vengono scelti dal registro;
-- [ ] una famiglia assente mostra il fallback;
-- [ ] unregister rimuove binding e istanze possedute.
+- [x] il pannello non chiama direttamente `createEditor()`;
+- [x] Markdown e plain text vengono scelti dal registro;
+- [x] una famiglia assente mostra il fallback;
+- [x] unregister rimuove binding e istanze possedute.
 
 ### Fase 6 — modalità e tastiera per superficie
 
@@ -382,6 +383,14 @@ Ordine di arbitrato:
 Il commutatore della shell legge la superficie attiva. Non vengono aggiunti
 listener globali isolati nei renderer.
 
+Criteri di uscita:
+
+- [x] il commutatore deriva modalità, etichette e presentazione dalla superficie;
+- [x] plain text non eredita le modalità Markdown;
+- [x] popup e keymap locale precedono i layer di superficie e shell;
+- [x] i comandi seguono l'ordine superficie, profilo, documento, riquadro, globale;
+- [x] il rimontaggio rimuove l'unico listener globale della tastiera.
+
 ### Fase 7 — formato pilota `.fubsheet`
 
 Creare `crates/fub-format-sheet/` con formato testuale e schema versionato.
@@ -398,21 +407,31 @@ Principi:
 Non iniziare da XLSX: OOXML, ZIP, stili e relazioni oscurerebbero la prova
 architetturale.
 
+Criteri di uscita:
+
+- [x] schema JSON v1 incluso nel crate e parser strict per campi o versioni sconosciuti;
+- [x] `SheetId`, `RowId` e `ColumnId` persistono l'identità separata dall'indirizzo A1;
+- [x] ordine, dimensioni, input, stile e proprietà sopravvivono al round trip;
+- [x] coordinate duplicate o mancanti, id invalidi e limiti fuori contratto vengono rifiutati;
+- [x] riordinare righe e colonne conserva `CellKey` e modifica soltanto la proiezione A1;
+- [x] outline, ricerca e proprietà sono proiezioni Rust del workbook;
+- [x] nessun tipo del workbook entra in `DocumentModel`, ABI o WIT.
+
 ### Fase 8 — vertical slice di `GridEngine`
 
 Consegnare:
 
-- [ ] una sheet visibile con righe, colonne e intestazioni;
-- [ ] viewport virtualizzata e overscan limitato;
-- [ ] cella attiva e selezione rettangolare;
-- [ ] navigazione completa da tastiera;
-- [ ] un solo editor in-cell riusabile;
-- [ ] formula bar basata su `TextEngine`;
-- [ ] commit, cancel e politica di blur;
-- [ ] copia e incolla TSV come una sola operazione;
-- [ ] undo del workbook separato dall'undo testuale;
-- [ ] lettura e scrittura `.fubsheet`;
-- [ ] accessibilità con `role="grid"` e focus ripristinato.
+- [x] una sheet visibile con righe, colonne e intestazioni;
+- [x] viewport virtualizzata e overscan limitato;
+- [x] cella attiva e selezione rettangolare;
+- [x] navigazione completa da tastiera;
+- [x] un solo editor in-cell riusabile;
+- [x] formula bar basata su `TextEngine`;
+- [x] commit, cancel e politica di blur;
+- [x] copia e incolla TSV come una sola operazione;
+- [x] undo del workbook separato dall'undo testuale;
+- [x] lettura e scrittura `.fubsheet`;
+- [x] accessibilità con `role="grid"` e focus ripristinato.
 
 Nessun carattere digitato attraversa IPC o WASM. Il commit produce una
 `GridOperation`, poi passa dalla `DocumentSession` e dalla scrittura guardata.
@@ -421,26 +440,63 @@ La prima versione delle formule comprende numeri, stringhe, operatori,
 parentesi, riferimenti, intervalli, `SUM`, `AVERAGE`, `MIN`, `MAX`, `IF`, errori
 tipizzati e rilevamento dei cicli. L'evaluatore autorevole resta in Rust.
 
-### Fase 9 — misurare il protocollo
+La slice usa coordinate `SheetId + RowId + ColumnId`, preimmagini atomiche e
+patch inverse. Un'operazione peer strutturata non entra nella history locale e
+conserva la bozza; un reload full-text autorevole annulla la bozza prima di
+ricostruire il workbook. Assi nascosti non ricevono selezione o focus. Le
+valutazioni asincrone hanno una generazione e una risposta superata non può
+riscrivere la vista corrente.
 
-Prima di pubblicare tipi, rispondere con il vertical slice a queste domande:
+Lo smoke browser reale ha esercitato commit, cancel, blur, formula bar,
+copia/incolla TSV, undo/redo, scroll virtualizzato, serializzazione, riapertura
+e fallback senza valutatore. Su un workbook 120×60 il DOM ha mantenuto soltanto
+la finestra visibile con overscan; la riapertura ha conservato gli input senza
+produrre modifiche spurie.
 
-1. dato minimo per scegliere una superficie;
-2. owner del binding formato→superficie;
-3. scope della scelta;
-4. negoziazione della versione;
-5. fallback;
-6. finestre di celle e operazioni incrementali;
-7. ritorno delle celle dipendenti;
-8. persistenza dello stato visuale;
-9. unload del bundle;
-10. capability richieste;
-11. localizzazione di errori e stati mancanti;
-12. comportamento di una shell che non conosce una versione.
+### Fase 9 — protocollo misurato
 
-Un tipo entra nel contratto soltanto se ha almeno due clienti, non espone il
-framework frontend, attraversa WIT, possiede limiti e fallback, funziona
-nativamente e via WASM e non richiede chiamate per battuta.
+La misura e la decisione completa sono nella
+[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md). Il comando
+provvisorio scala con il workbook: sul caso dense 120×60 invia 696 785 byte e
+restituisce 625 368 byte/7 200 celle per una viewport che ne disegna da 390 a
+528; cambiare `A1` richiede invece di aggiornare soltanto `A1` e `B1`. Una patch
+coordinata occupa 106 byte contro 12 963 byte di sorgente sparse reinviata.
+
+Le dodici domande hanno risposta:
+
+1. la superficie si sceglie con `format-id + source-kind`, preceduti
+   dall'eventuale override;
+2. il bundle possiede il binding e il registro della shell ne possiede
+   arbitrato e disposer;
+3. registrazione globale al mount, scelta e stato visuale per riquadro e
+   documento, buffer unico nella sessione;
+4. ogni famiglia negozia una propria versione intera, indipendente da ABI e
+   formato;
+5. il fallback è testo UTF-8, viewer per byte o errore esplicito; senza
+   valutatore grid restano visibili gli input grezzi;
+6. apertura e reload portano la sorgente completa, le letture successive usano
+   finestre e i commit patch coordinate atomiche;
+7. il provider invalida celle cambiate e dipendenti transitive; oltre il limite
+   invalida `all`, poi ogni istanza rilegge soltanto la propria finestra;
+8. selezione, scroll, zoom e modalità sono stato versionato della superficie,
+   non del file;
+9. l'unload ritira il binding, distrugge le istanze e infine rilascia il
+   provider;
+10. la famiglia grid non è una capability di sicurezza; valgono soltanto i
+    permessi host realmente usati dal provider;
+11. formule e località usano codici e coordinate, gli errori operativi
+    `PluginError`, gli stati della shell frasi localizzate dalla shell;
+12. una shell che non conosce famiglia o versione non chiama quel provider,
+    conserva le altre registrazioni del bundle, mostra un notice e usa il
+    fallback.
+
+Il primo contratto limita sorgente/reload a 16 MiB, finestra a 256×128 e 32 768
+coordinate, commit a 16 384 patch/4 MiB, risposta a 8 MiB e invalidazione
+esplicita a 32 768 celle. Oltre tale soglia l'invalidazione diventa `all`.
+
+Un tipo entra nel contratto soltanto insieme ai due clienti della fase 10 —
+provider nativo ed esempio WASM —, senza framework frontend, con parità,
+limiti, fallback e nessuna chiamata per battuta.
 
 ### Fase 10 — ABI, WIT e WASM
 
@@ -456,6 +512,13 @@ Soltanto dopo la misura:
 - [ ] provare parità nativo↔WASM;
 - [ ] provare fallback su shell priva della griglia;
 - [ ] documentare limiti, versioni e negoziazione.
+
+Sul branch candidato integrato, il protocollo Grid v1 è già esercitato dai
+provider nativo e WASM e dalle porte IPC tipizzate: famiglia/versione e
+fallback precedono l'invocazione; coordinate, limiti, invalidazione, diff
+UTF-8, lifecycle e parità sono verificati. Le caselle della fase 10 restano
+intenzionalmente non spuntate: la regola di consegna consente di chiuderle
+soltanto quando il comportamento è entrato in `main`.
 
 Una futura famiglia `structured` per DOCX riusa sessioni, registry, lifecycle,
 comandi e salvataggio, ma non forza CodeMirror a diventare un editor visuale
@@ -510,7 +573,7 @@ ABI, WIT, SDK, proxy WASM, esempio e rimozione degli adapter.
 | Rischio | Segnale | Risposta |
 |---|---|---|
 | astrazione nominale | il core riceve ancora tipi Markdown | secondo profilo obbligatorio |
-| ABI prematura | ogni modifica alla griglia cambia il WIT | protocollo interno fino al vertical slice |
+| ABI prematura | la griglia cambia senza misura, limiti o consumatori | ADR 0201, protocollo Grid v1 promosso solo con clienti nativo/WASM e additività WIT |
 | dipendenza plugin→plugin | il foglio importa Markdown | entrambi consumano servizi della shell |
 | chiamata per battuta | lag o code IPC | bozza locale e commit esplicito |
 | due verità | frontend e Rust calcolano formule diverse | evaluatore autorevole unico |
@@ -526,18 +589,18 @@ ABI, WIT, SDK, proxy WASM, esempio e rimozione degli adapter.
 
 - [x] Markdown usa `TextEngine` attraverso `MarkdownProfile`.
 - [x] Il core testuale non conosce Markdown.
-- [ ] Plain text, formula bar e cell editor usano lo stesso motore.
+- [x] Plain text, formula bar e cell editor usano lo stesso motore.
 - [x] Una correzione al core raggiunge tutti i profili.
-- [ ] Il pannello documenti monta le superfici attraverso il registro.
+- [x] Il pannello documenti monta le superfici attraverso il registro.
 - [x] Il buffer appartiene alla sessione; cursore, scroll e undo alla superficie.
-- [ ] La griglia usa un solo CodeMirror in-cell riusabile.
-- [ ] Nessuna battuta genera IPC o WASM.
-- [ ] Undo testuale e undo del foglio restano separati.
-- [ ] Famiglia e profilo sconosciuti hanno un fallback.
-- [ ] Disabilitare un owner rimuove registrazioni e istanze.
+- [x] La griglia usa un solo CodeMirror in-cell riusabile.
+- [x] Nessuna battuta genera IPC o WASM.
+- [x] Undo testuale e undo del foglio restano separati.
+- [x] Famiglia e profilo sconosciuti hanno un fallback.
+- [x] Disabilitare un owner rimuove registrazioni e istanze.
 - [ ] Un plugin WASM può richiedere una superficie conosciuta senza iniettare JS.
 - [ ] Rust, WIT, TypeScript, SDK, host nativo e WASM sono conformi.
-- [ ] `DocumentModel` resta agnostico rispetto a celle e DOCX.
+- [x] `DocumentModel` resta agnostico rispetto a celle e DOCX.
 - [ ] Banchi visuali e di accessibilità coprono testo e griglia.
 - [ ] Tutta la CI pertinente è verde.
 

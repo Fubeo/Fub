@@ -39,11 +39,12 @@
 //! costa una riga di regole invece di due — «prima guardo qui, poi lì» era la
 //! parte del §11.1 che nessuno avrebbe indovinato guardando il file.
 //!
-//! [`SettingScope`] resta perché resta il caso che l'ha fatto nascere, uno
-//! solo: la **diagnostica** (`log.*`) deve valere anche quando un vault non si
-//! apre, cioè quando una chiave che vive nel vault non è nemmeno leggibile. Le
-//! chiavi [`SettingScope::Machine`] scritte in un `.fub/settings.json` si
-//! **ignorano**, e chi le legge lo dice.
+//! [`SettingScope`] resta per le decisioni che **non devono viaggiare con un
+//! vault**: la diagnostica (`log.*`) deve valere anche quando un vault non si
+//! apre, e l'approvazione di un permesso deve appartenere alla macchina che ha
+//! detto di sì, non a un vault che potrebbe arrivare da fuori. Le chiavi
+//! [`SettingScope::Machine`] scritte in un `.fub/settings.json` si **ignorano**,
+//! e chi le legge lo dice.
 //!
 //! # Cosa NON entra, e va detto
 //!
@@ -67,10 +68,10 @@ use crate::ui::UiOption;
 /// Dove un'impostazione ha il diritto di stare.
 ///
 /// Il posto normale è **uno**, il vault; [`Machine`](SettingScope::Machine) è
-/// l'eccezione dichiarata di chi non può dipendere da un vault aperto. Due e
-/// non tre: il terzo — «profilo/portable» — non è un posto in cui cercare un
-/// valore, è **dove sta il livello macchina**, e lo decide chi monta
-/// (`fub_host::config_dir`).
+/// l'eccezione dichiarata di chi non può dipendere da un vault aperto o da un
+/// vault fidato. Due e non tre: il terzo — «profilo/portable» — non è un posto
+/// in cui cercare un valore, è **dove sta il livello macchina**, e lo decide chi
+/// monta (`fub_host::config_dir`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SettingScope {
@@ -79,8 +80,8 @@ pub enum SettingScope {
     /// default dello schema — che per tema e lingua è «come il sistema».
     #[default]
     Vault,
-    /// Della macchina: il livello del log, e per ora nient'altro. Non viaggia,
-    /// e un vault che provasse a dichiararla non viene ascoltato.
+    /// Della macchina: diagnostica e decisioni di sicurezza locali. Non
+    /// viaggia, e un vault che provasse a scriverla non viene ascoltato.
     Machine,
 }
 
@@ -293,8 +294,18 @@ pub struct SettingSpec {
 impl SettingSpec {
     /// Un interruttore, acceso o spento di default. È la forma più comune: una
     /// feature che si può spegnere.
+    ///
+    /// Le chiavi sintetiche dei **permessi** fanno una cosa in più: sono sempre
+    /// di macchina. L'approvazione è una decisione di chi sta usando questa
+    /// installazione e non deve poter arrivare dentro un vault importato.
     pub fn toggle(key: impl Into<String>, label: impl Into<Text>, default: bool) -> Self {
-        SettingSpec::new(key, label, SettingKind::Toggle { default })
+        let key = key.into();
+        let spec = SettingSpec::new(key.clone(), label, SettingKind::Toggle { default });
+        if permission_of_key(&key).is_some() {
+            spec.for_machine()
+        } else {
+            spec
+        }
     }
 
     pub fn new(key: impl Into<String>, label: impl Into<Text>, kind: SettingKind) -> Self {
@@ -395,14 +406,16 @@ pub fn command_of_keybinding_key(key: &str) -> Option<String> {
     }
 }
 
-/// La chiave d'impostazione con cui si **nega a un componente un permesso che
-/// il suo manifest dichiara** (§23.17).
+/// La chiave d'impostazione con cui si decide se concedere a un componente un
+/// permesso che il suo manifest **chiede** (§23.17).
 ///
 /// Una chiave per coppia *(componente, permesso)*, di specie
-/// [`SettingKind::Toggle`] e con **`true` come default**: ciò che il manifest
-/// dichiara è concesso finché qualcuno non dice di no, che è la sola forma
-/// compatibile con ciò che c'era prima — un permesso mai visto da nessuno non
-/// deve cominciare a mancare perché ha acquistato un interruttore.
+/// [`SettingKind::Toggle`]. Il kernel mantiene `true` come default per
+/// compatibilità con chi usa direttamente `Workspace`; l'host, che conosce il
+/// grado di fiducia, materializza invece `false` per ogni bundle non-core finché
+/// l'utente non concede esplicitamente il permesso. La chiave è di macchina:
+/// una scelta di sicurezza non viaggia con il vault e un vault ricevuto da
+/// fuori non può portarsi dietro un proprio «sì».
 ///
 /// # Perché è la stessa mossa di [`keybinding_key`], e dove si scosta
 ///
@@ -455,7 +468,11 @@ pub fn permission_of_key(key: &str) -> Option<(&str, String)> {
     if plugin.is_empty() || name.is_empty() {
         return None;
     }
-    Some((plugin, crate::options::key(crate::options::CORE_NS, name)))
+    let permission = crate::options::key(crate::options::CORE_NS, name);
+    if !crate::options::permission::ALL.contains(&permission.as_str()) {
+        return None;
+    }
+    Some((plugin, permission))
 }
 
 /// Da dove viene il valore che si sta leggendo.
@@ -554,6 +571,23 @@ mod tests {
         );
     }
 
+    /// Le decisioni sui permessi non viaggiano col vault: la fabbrica di
+    /// `SettingSpec` riconosce solo le chiavi sintetiche reali e le mette nel
+    /// livello macchina.
+    #[test]
+    fn permission_toggles_are_machine_scoped() {
+        let permission = SettingSpec::toggle(
+            permission_key("com.acme", crate::options::permission::READ_VAULT),
+            "read",
+            true,
+        );
+        assert_eq!(permission.scope, SettingScope::Machine);
+        assert_eq!(
+            SettingSpec::toggle("feature.enabled", "feature", true).scope,
+            SettingScope::Vault
+        );
+    }
+
     /// Ciò che **non** è una chiave di permesso non deve somigliarci: chi
     /// scrive un'impostazione qualunque non deve veder ricalcolare un recinto.
     #[test]
@@ -562,6 +596,7 @@ mod tests {
             "plugins.disabled",
             "versioning.enabled",
             "com.acme:permissions.",
+            "com.acme:permissions.unknown",
             ":permissions.network",
             "permissions.network",
             "com.acme:keys.tasks.add",

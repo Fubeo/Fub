@@ -35,7 +35,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_host::{Host, NoWatcher};
+use fub_host::Host;
 use tracing::span::{Attributes, Id, Record};
 use tracing::{Event, Level, Metadata, Subscriber};
 
@@ -233,7 +233,7 @@ fn main() {
         }
     );
 
-    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    let host = Host::without_watcher();
 
     // 1. Freddo: la prima apertura, tutto da leggere.
     scenario(&host, &root, "freddo", &sub);

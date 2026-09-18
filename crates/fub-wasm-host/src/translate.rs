@@ -36,15 +36,17 @@ use fub_abi::PluginError;
 // aggirare: dice che i tipi di un'interfaccia che l'host *chiama* e di una che
 // l'host *implementa* viaggiano in versi opposti, e confonderli sarebbe
 // esattamente lo scambio che questo modulo esiste per non fare.
-use crate::contract::exports::fub::abi::{command as w_command, plugin as w_plugin};
+use crate::contract::exports::fub::abi::{
+    command as w_command, format as x_format, grid as w_grid, plugin as w_plugin, view as w_view,
+};
 // I tipi che l'interfaccia esportata `use`a da altre — `model.{span}`,
 // `edit.{edit-request}`, `text.{text}` — restano invece gli stessi delle
 // importate: la duplicazione qui sopra riguarda i tipi che un'interfaccia
 // **definisce**, non quelli che prende in prestito.
 use crate::contract::fub::abi::{
-    edit as w_edit, errors as w_errors, format as w_format, host_vault_read as w_vault,
-    index as w_index, intl as w_intl, model as w_model, options as w_options, session as w_session,
-    settings as w_settings, text as w_text, ui as w_ui,
+    edit as w_edit, errors as w_errors, events as w_events, format as w_format,
+    host_vault_read as w_vault, index as w_index, intl as w_intl, model as w_model,
+    options as w_options, session as w_session, settings as w_settings, text as w_text, ui as w_ui,
 };
 
 // ---------------------------------------------------------------------------
@@ -376,6 +378,71 @@ pub(crate) fn to_format(f: &fub_abi::format::DocumentFormat) -> w_format::Docume
     }
 }
 
+pub(crate) fn to_document_source(
+    source: &fub_abi::format::DocumentSource,
+) -> x_format::DocumentSource {
+    match source {
+        fub_abi::format::DocumentSource::Text(text) => x_format::DocumentSource::Text(text.clone()),
+        fub_abi::format::DocumentSource::Bytes(bytes) => {
+            x_format::DocumentSource::Bytes(bytes.clone())
+        }
+    }
+}
+
+pub(crate) fn to_parse_context(ctx: &fub_abi::format::ParseContext) -> x_format::ParseContext {
+    x_format::ParseContext {
+        doc_id: ctx.doc_id.clone(),
+        options: to_map(&ctx.options),
+    }
+}
+
+pub(crate) fn to_render_options(opts: &fub_abi::format::RenderOptions) -> x_format::RenderOptions {
+    x_format::RenderOptions {
+        target: match opts.target {
+            fub_abi::format::RenderTarget::Screen => x_format::RenderTarget::Screen,
+            fub_abi::format::RenderTarget::Print => x_format::RenderTarget::Print,
+            fub_abi::format::RenderTarget::Pdf => x_format::RenderTarget::Pdf,
+            fub_abi::format::RenderTarget::StaticSite => x_format::RenderTarget::StaticSite,
+        },
+        options: to_map(&opts.options),
+    }
+}
+
+pub(crate) fn from_format_error(error: x_format::FormatError) -> fub_abi::FormatError {
+    match error {
+        x_format::FormatError::Parse(message) => fub_abi::FormatError::Parse(message),
+        x_format::FormatError::Render(message) => fub_abi::FormatError::Render(message),
+        x_format::FormatError::Serialize(message) => fub_abi::FormatError::Serialize(message),
+        x_format::FormatError::Unsupported(error) => fub_abi::FormatError::Unsupported {
+            format: error.format,
+            got: match error.got {
+                x_format::SourceKind::Text => fub_abi::format::SourceKind::Text,
+                x_format::SourceKind::Bytes => fub_abi::format::SourceKind::Bytes,
+            },
+        },
+    }
+}
+pub(crate) fn from_format_descriptor(
+    descriptor: x_format::FormatDescriptor,
+) -> fub_abi::format::FormatDescriptor {
+    fub_abi::format::FormatDescriptor {
+        id: descriptor.id,
+        name: descriptor.name,
+        extensions: descriptor.extensions,
+        source: match descriptor.source {
+            x_format::SourceKind::Text => fub_abi::format::SourceKind::Text,
+            x_format::SourceKind::Bytes => fub_abi::format::SourceKind::Bytes,
+        },
+    }
+}
+pub(crate) fn from_format_capabilities(
+    capabilities: x_format::FormatCapabilities,
+) -> Result<fub_abi::format::FormatCapabilities, PluginError> {
+    Ok(fub_abi::format::FormatCapabilities {
+        syntax: from_map(capabilities.syntax)?,
+    })
+}
+
 pub(crate) fn to_trash(and: fub_abi::traits::TrashEntry) -> w_vault::TrashEntry {
     w_vault::TrashEntry {
         id: and.id.0,
@@ -682,5 +749,356 @@ pub(crate) fn from_command_outcome(
         effect: from_command_effect(or.effect)?,
         undo: or.undo.map(from_undo).transpose()?,
         partial: or.partial.map(from_partial),
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Le view dichiarative
+// ---------------------------------------------------------------------------
+
+fn from_view_surface(s: w_view::ViewSurface) -> fub_abi::traits::ViewSurface {
+    use fub_abi::traits::ViewSurface as R;
+    match s {
+        w_view::ViewSurface::LeftSidebar => R::LeftSidebar,
+        w_view::ViewSurface::RightSidebar => R::RightSidebar,
+        w_view::ViewSurface::Bottom => R::Bottom,
+        w_view::ViewSurface::Main => R::Main,
+        w_view::ViewSurface::Modal => R::Modal,
+        w_view::ViewSurface::StatusBar => R::StatusBar,
+        w_view::ViewSurface::Ribbon => R::Ribbon,
+        w_view::ViewSurface::Menu => R::Menu,
+        w_view::ViewSurface::ContextMenu => R::ContextMenu,
+        w_view::ViewSurface::SettingsTab => R::SettingsTab,
+    }
+}
+
+fn from_event_kind(k: w_events::EventKind) -> fub_abi::event::EventKind {
+    use fub_abi::event::EventKind as R;
+    match k {
+        w_events::EventKind::VaultOpened => R::VaultOpened,
+        w_events::EventKind::DocumentChanged => R::DocumentChanged,
+        w_events::EventKind::DocumentRemoved => R::DocumentRemoved,
+        w_events::EventKind::DocumentRenamed => R::DocumentRenamed,
+        w_events::EventKind::IndexUpdated => R::IndexUpdated,
+        w_events::EventKind::JobDone => R::JobDone,
+        w_events::EventKind::Overflow => R::Overflow,
+        w_events::EventKind::Custom => R::Custom,
+        w_events::EventKind::BatchEnded => R::BatchEnded,
+        w_events::EventKind::ViewInvalidated => R::ViewInvalidated,
+        w_events::EventKind::VaultClosed => R::VaultClosed,
+        w_events::EventKind::JobStarted => R::JobStarted,
+        w_events::EventKind::JobProgress => R::JobProgress,
+        w_events::EventKind::SettingChanged => R::SettingChanged,
+        w_events::EventKind::EntryChanged => R::EntryChanged,
+        w_events::EventKind::EntryRemoved => R::EntryRemoved,
+        w_events::EventKind::EntryRenamed => R::EntryRenamed,
+        w_events::EventKind::Trouble => R::Trouble,
+        w_events::EventKind::TimerFired => R::TimerFired,
+    }
+}
+
+fn from_subject(s: w_events::Subject) -> fub_abi::event::Subject {
+    match s {
+        w_events::Subject::Document(d) => fub_abi::event::Subject::document(d.id),
+        w_events::Subject::Folder(f) => fub_abi::event::Subject::folder(f.path),
+    }
+}
+
+fn from_doc_change(c: w_events::DocChange) -> fub_abi::event::DocChange {
+    match c {
+        w_events::DocChange::Body => fub_abi::event::DocChange::Body,
+        w_events::DocChange::Frontmatter => fub_abi::event::DocChange::Frontmatter,
+        w_events::DocChange::Tags => fub_abi::event::DocChange::Tags,
+        w_events::DocChange::Links => fub_abi::event::DocChange::Links,
+        w_events::DocChange::Outline => fub_abi::event::DocChange::Outline,
+        w_events::DocChange::Anchors => fub_abi::event::DocChange::Anchors,
+    }
+}
+
+fn from_event_mask(m: w_events::EventMask) -> fub_abi::event::EventMask {
+    fub_abi::event::EventMask {
+        kinds: m.kinds.into_iter().map(from_event_kind).collect(),
+        topics: m.topics,
+        subjects: m.subjects.into_iter().map(from_subject).collect(),
+        changes: m.changes.into_iter().map(from_doc_change).collect(),
+    }
+}
+
+fn from_context_mask(m: Vec<w_session::ContextKind>) -> fub_abi::session::ContextMask {
+    fub_abi::session::ContextMask(
+        m.into_iter()
+            .map(|k| match k {
+                w_session::ContextKind::Document => fub_abi::session::ContextKind::Document,
+                w_session::ContextKind::Selection => fub_abi::session::ContextKind::Selection,
+                w_session::ContextKind::Mode => fub_abi::session::ContextKind::Mode,
+            })
+            .collect(),
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Grid provider
+// ---------------------------------------------------------------------------
+
+pub(crate) fn from_grid_surface(
+    surface: w_grid::GridSurfaceSpec,
+) -> Result<fub_abi::grid::GridSurfaceSpec, PluginError> {
+    let surface = fub_abi::grid::GridSurfaceSpec {
+        id: surface.id,
+        format: surface.format,
+        family: surface.family,
+        protocol_version: surface.protocol_version,
+    };
+    surface.validate()?;
+    if surface.family != fub_abi::grid::GRID_FAMILY
+        || surface.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+    {
+        return Err(PluginError::BadArgs(
+            "unsupported grid family or protocol version".into(),
+        ));
+    }
+    Ok(surface)
+}
+/// Translate a declared binding while treating a family/protocol we do not
+/// understand as an optional capability.  Identity validation remains strict
+/// for the supported Grid v1 surface.
+pub(crate) fn from_optional_grid_surface(
+    surface: w_grid::GridSurfaceSpec,
+) -> Result<Option<fub_abi::grid::GridSurfaceSpec>, PluginError> {
+    if surface.family != fub_abi::grid::GRID_FAMILY
+        || surface.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+    {
+        return Ok(None);
+    }
+    from_grid_surface(surface).map(Some)
+}
+
+fn from_grid_revision(revision: String) -> fub_abi::Revision {
+    fub_abi::Revision(revision)
+}
+
+pub(crate) fn to_grid_revision(revision: &fub_abi::Revision) -> String {
+    revision.0.clone()
+}
+
+fn from_grid_sheet(sheet: w_grid::GridSheet) -> fub_abi::grid::GridSheet {
+    fub_abi::grid::GridSheet {
+        id: sheet.id,
+        name: sheet.name,
+        row_count: sheet.row_count,
+        column_count: sheet.column_count,
+    }
+}
+
+pub(crate) fn from_grid_session(
+    session: w_grid::GridSession,
+) -> Result<fub_abi::grid::GridSession, PluginError> {
+    let session = fub_abi::grid::GridSession {
+        instance: session.instance,
+        revision: from_grid_revision(session.revision),
+        sheets: session.sheets.into_iter().map(from_grid_sheet).collect(),
+    };
+    session.validate()?;
+    Ok(session)
+}
+
+fn from_grid_key(key: w_grid::GridCellKey) -> fub_abi::grid::GridCellKey {
+    fub_abi::grid::GridCellKey {
+        sheet: key.sheet,
+        row: key.row,
+        column: key.column,
+    }
+}
+
+fn to_grid_key(key: &fub_abi::grid::GridCellKey) -> w_grid::GridCellKey {
+    w_grid::GridCellKey {
+        sheet: key.sheet.clone(),
+        row: key.row.clone(),
+        column: key.column.clone(),
+    }
+}
+
+fn from_grid_horizontal(
+    horizontal: w_grid::GridHorizontalAlign,
+) -> fub_abi::grid::GridHorizontalAlign {
+    match horizontal {
+        w_grid::GridHorizontalAlign::Start => fub_abi::grid::GridHorizontalAlign::Start,
+        w_grid::GridHorizontalAlign::Center => fub_abi::grid::GridHorizontalAlign::Center,
+        w_grid::GridHorizontalAlign::End => fub_abi::grid::GridHorizontalAlign::End,
+    }
+}
+
+fn from_grid_style(style: w_grid::GridCellStyle) -> fub_abi::grid::GridCellStyle {
+    fub_abi::grid::GridCellStyle {
+        bold: style.bold,
+        italic: style.italic,
+        text_color: style.text_color,
+        fill_color: style.fill_color,
+        horizontal: style.horizontal.map(from_grid_horizontal),
+        number_format: style.number_format,
+    }
+}
+
+fn from_grid_formula_error(error: w_grid::GridFormulaError) -> fub_abi::grid::GridFormulaError {
+    match error {
+        w_grid::GridFormulaError::Parse => fub_abi::grid::GridFormulaError::Parse,
+        w_grid::GridFormulaError::Ref => fub_abi::grid::GridFormulaError::Ref,
+        w_grid::GridFormulaError::Name => fub_abi::grid::GridFormulaError::Name,
+        w_grid::GridFormulaError::Value => fub_abi::grid::GridFormulaError::Value,
+        w_grid::GridFormulaError::DivZero => fub_abi::grid::GridFormulaError::DivZero,
+        w_grid::GridFormulaError::Num => fub_abi::grid::GridFormulaError::Num,
+        w_grid::GridFormulaError::Cycle => fub_abi::grid::GridFormulaError::Cycle,
+    }
+}
+
+fn from_grid_value(value: w_grid::GridCellValue) -> fub_abi::grid::GridCellValue {
+    match value {
+        w_grid::GridCellValue::Blank => fub_abi::grid::GridCellValue::Blank,
+        w_grid::GridCellValue::Number(value) => fub_abi::grid::GridCellValue::Number(value),
+        w_grid::GridCellValue::Text(value) => fub_abi::grid::GridCellValue::Text(value),
+        w_grid::GridCellValue::Boolean(value) => fub_abi::grid::GridCellValue::Boolean(value),
+        w_grid::GridCellValue::Error(error) => {
+            fub_abi::grid::GridCellValue::Error(from_grid_formula_error(error))
+        }
+    }
+}
+
+fn from_grid_row(row: w_grid::GridRow) -> fub_abi::grid::GridRow {
+    fub_abi::grid::GridRow {
+        id: row.id,
+        index: row.index,
+        height: row.height,
+        hidden: row.hidden,
+    }
+}
+
+fn from_grid_column(column: w_grid::GridColumn) -> fub_abi::grid::GridColumn {
+    fub_abi::grid::GridColumn {
+        id: column.id,
+        index: column.index,
+        width: column.width,
+        hidden: column.hidden,
+    }
+}
+
+fn from_grid_cell(cell: w_grid::GridCell) -> fub_abi::grid::GridCell {
+    fub_abi::grid::GridCell {
+        key: from_grid_key(cell.key),
+        input: cell.input,
+        style: from_grid_style(cell.style),
+        value: from_grid_value(cell.value),
+    }
+}
+
+pub(crate) fn from_grid_window(
+    window: w_grid::GridWindow,
+) -> Result<fub_abi::grid::GridWindow, PluginError> {
+    let window = fub_abi::grid::GridWindow {
+        revision: from_grid_revision(window.revision),
+        sheet: window.sheet,
+        row_start: window.row_start,
+        column_start: window.column_start,
+        total_rows: window.total_rows,
+        total_columns: window.total_columns,
+        rows: window.rows.into_iter().map(from_grid_row).collect(),
+        columns: window.columns.into_iter().map(from_grid_column).collect(),
+        cells: window.cells.into_iter().map(from_grid_cell).collect(),
+    };
+    window.validate()?;
+    Ok(window)
+}
+
+pub(crate) fn to_grid_window_request(
+    request: &fub_abi::grid::GridWindowRequest,
+) -> w_grid::GridWindowRequest {
+    w_grid::GridWindowRequest {
+        revision: to_grid_revision(&request.revision),
+        sheet: request.sheet.clone(),
+        row_start: request.row_start,
+        row_count: request.row_count,
+        column_start: request.column_start,
+        column_count: request.column_count,
+    }
+}
+
+fn to_grid_patch(patch: &fub_abi::grid::GridCellPatch) -> w_grid::GridCellPatch {
+    w_grid::GridCellPatch {
+        cell: to_grid_key(&patch.cell),
+        before: patch.before.clone(),
+        after: patch.after.clone(),
+    }
+}
+
+pub(crate) fn to_grid_apply_request(
+    request: &fub_abi::grid::GridApplyRequest,
+) -> w_grid::GridApplyRequest {
+    w_grid::GridApplyRequest {
+        revision: to_grid_revision(&request.revision),
+        patches: request.patches.iter().map(to_grid_patch).collect(),
+    }
+}
+
+fn from_grid_invalidation(
+    invalidation: w_grid::GridInvalidation,
+) -> fub_abi::grid::GridInvalidation {
+    match invalidation {
+        w_grid::GridInvalidation::Cells(cells) => {
+            fub_abi::grid::GridInvalidation::Cells(cells.into_iter().map(from_grid_key).collect())
+        }
+        w_grid::GridInvalidation::All => fub_abi::grid::GridInvalidation::All,
+    }
+}
+
+pub(crate) fn from_grid_commit(
+    commit: w_grid::GridCommit,
+) -> Result<fub_abi::grid::GridCommit, PluginError> {
+    let commit = fub_abi::grid::GridCommit {
+        revision: from_grid_revision(commit.revision),
+        edit: fub_abi::grid::GridSourceEdit {
+            from: commit.edit.from,
+            to: commit.edit.to,
+            deleted: commit.edit.deleted,
+            inserted: commit.edit.inserted,
+        },
+        invalidation: from_grid_invalidation(commit.invalidation),
+    };
+    commit.validate()?;
+    Ok(commit)
+}
+
+pub(crate) fn from_view_spec(
+    s: w_view::ViewSpec,
+) -> Result<fub_abi::traits::ViewSpec, PluginError> {
+    Ok(fub_abi::traits::ViewSpec {
+        id: s.id,
+        title: from_text(s.title),
+        surface: from_view_surface(s.surface),
+        refresh: from_event_mask(s.refresh),
+        follows: from_context_mask(s.follows),
+        params: s.params.into_iter().map(from_param_spec).collect(),
+        icon: s.icon,
+        order: s.order,
+        open_by_default: s.open_by_default,
+        preferred_size: s.preferred_size,
+        closable: s.closable,
+    })
+}
+
+pub(crate) fn from_view_interests(
+    i: w_view::ViewInterests,
+) -> Result<fub_abi::traits::ViewInterests, PluginError> {
+    Ok(fub_abi::traits::ViewInterests {
+        refresh: from_event_mask(i.refresh),
+        follows: from_context_mask(i.follows),
+    })
+}
+
+pub(crate) fn to_view_instance(
+    i: &fub_abi::traits::ViewInstance,
+) -> Result<w_view::ViewInstance, PluginError> {
+    Ok(w_view::ViewInstance {
+        view: i.view.clone(),
+        instance: i.instance.clone(),
+        params: to_json(&i.params),
     })
 }

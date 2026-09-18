@@ -469,6 +469,17 @@ progress::-moz-progress-bar {
 .search-results li:hover {
   background: var(--bg-hover);
 }
+.search-result {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
 .hit-title {
   display: block;
   font-weight: var(--weight-medium);
@@ -606,6 +617,8 @@ progress::-moz-progress-bar {
 /* Le tab di un riquadro. La striscia sparisce quando non c'è niente aperto:
    una fila di pulsanti vuota è rumore che occupa spazio. */
 .pane-tabs {
+  display: flex;
+  align-items: center;
   border-bottom: 1px solid var(--border);
   background: var(--bg-soft, var(--bg));
 }
@@ -615,6 +628,7 @@ progress::-moz-progress-bar {
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   max-width: 16rem;
+  font-size: var(--text-base);
   border: none;
   border-right: 1px solid var(--border);
   border-radius: 0;
@@ -632,11 +646,12 @@ progress::-moz-progress-bar {
   color: var(--text);
 }
 .tab[aria-selected="true"] {
-  background: transparent;
   color: var(--text);
   box-shadow: inset 0 -2px 0 var(--accent);
 }
 .tab-name {
+  display: inline-flex;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -684,6 +699,57 @@ progress::-moz-progress-bar {
   padding: var(--space-5) var(--space-7);
   background: var(--doc-bg);
   color: var(--doc-fg);
+}
+
+.grid-surface {
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+}
+.grid-formula-bar {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft, var(--bg));
+}
+.grid-cell-name {
+  border-right: 1px solid var(--border);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-viewport {
+  background: var(--doc-bg);
+  outline: none;
+}
+.grid-viewport:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--focus);
+}
+.grid-cell,
+.grid-header,
+.grid-corner {
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.grid-header,
+.grid-corner {
+  background: var(--bg-soft, var(--bg));
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.grid-cell {
+  background: var(--doc-bg);
+  color: var(--doc-fg);
+  font-family: var(--font-mono);
+}
+.grid-cell.selected {
+  background: var(--overlay-hover);
+}
+.grid-cell.active {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.grid-cell-editor {
+  border: 2px solid var(--accent);
+  background: var(--doc-bg);
 }
 
 /* ── skin/preview.css ───────────────────────────────────────────────────── */

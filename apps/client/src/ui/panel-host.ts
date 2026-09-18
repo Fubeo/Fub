@@ -40,6 +40,7 @@ import { onAnyEvent, onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import { errorText } from "../host/errors";
 import { t } from "../i18n/strings";
+import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
 import { notify } from "./notify";
 
 export type EventType = KernelEvent["type"];
@@ -174,11 +175,32 @@ export async function refreshAllPanels(): Promise<void> {
 /// montaggio, **prima** dei pannelli: l'ordine non conta per la consegna (il
 /// registro si consulta all'arrivo dell'evento), ma tenerlo in testa dice che
 /// l'host c'è già quando i pannelli si presentano.
-export function mountPanelHost(): void {
+///
+/// La vita delle iscrizioni è un figlio della finestra: il figlio permette di
+/// rimontare l'host sullo stesso modulo senza accumulare callback, mentre la
+/// finestra resta l'unico padrone che decide quando smettere.
+export function mountPanelHost(parent?: Lifetime): Teardown {
+  mountedTeardown?.();
+  const lifetime = openLifetime();
+  const teardown = () => lifetime.close();
+  mountedTeardown = teardown;
+  if (parent?.closed) {
+    lifetime.close();
+    return teardown;
+  }
+  parent?.add(teardown);
+
+  // I mock dei banchi possono non restituire un disposer: in produzione le tre
+  // porte lo fanno sempre, ma ignorare un valore assente rende il montaggio
+  // inerte invece di lasciare un elemento non chiamabile nella lista di pulizia.
+  const own = (dispose: unknown): void => {
+    if (typeof dispose === "function") lifetime.add(dispose as Teardown);
+  };
+
   // L'unico ascoltatore "di tutto" della shell, ed è legittimo per la ragione
   // scritto in `state/kernel.ts`: decide per **dato** — la maschera che ogni
   // pannello ha dichiarato — e non per conoscenza privata di chi c'è.
-  onAnyEvent((n) => {
+  own(onAnyEvent((n) => {
     // `overflow` non passa di qui: ha una strada sua, sotto, perché non
     // ridisegna «chi è interessato» ma **tutti**.
     if (n.event.type === "overflow") return;
@@ -189,13 +211,13 @@ export function mountPanelHost(): void {
       // quando il provider aveva chiesto di no, e non lo direbbe nessun test.
       if (maskWants(panel.refresh, n.event)) void refreshPanel(panel.id, n);
     }
-  });
+  }));
   // Eventi persi (coda troncata): ciò che deriva dagli eventi si riconcilia da
   // zero, non si aggiorna.
-  onEvent("overflow", () => void refreshAllPanels());
+  own(onEvent("overflow", () => void refreshAllPanels()));
   // Il contesto di sessione è stato pubblicato e il kernel ha detto **quali**
   // view seguono ciò che è cambiato (`ViewSpec.follows`).
-  on("stale-views", (ids) => {
+  own(on("stale-views", (ids) => {
     // Il kernel nomina **view**; qui i pannelli possono essere N per view (una
     // view dell'area principale ne ha uno per riquadro). L'id diretto resta
     // perché per le sette superfici di prima pannello e view si chiamano
@@ -206,11 +228,14 @@ export function mountPanelHost(): void {
         if (panel.view === id && panel.id !== id) void refreshPanel(panel.id);
       }
     }
-  });
+  }));
   // Il documento aperto è cambiato: invecchia chi lo segue.
-  on("active-doc", () => {
+  own(on("active-doc", () => {
     for (const panel of registry.values()) {
       if (panel.followsDoc) void refreshPanel(panel.id);
     }
-  });
+  }));
+  return teardown;
 }
+
+let mountedTeardown: Teardown | null = null;

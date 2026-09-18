@@ -34,7 +34,7 @@ import {
   registerShellCommand,
 } from "./ui/commands";
 import { mountKeyboard } from "./ui/keyboard";
-import { openLifetime } from "./ui/lifetime";
+import { openLifetime, type Teardown } from "./ui/lifetime";
 import { mountSidebarCommands, showPanel } from "./panels/sidebar";
 import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
@@ -97,6 +97,13 @@ const paletteHost = {
 /// un posto solo, invece di essere tre `removeEventListener` da inventare in
 /// tre file.
 const pageWindowLifetime = openLifetime();
+let pageEpoch = 0;
+
+/// Chiude una finestra già montata, senza ripetere nessuno smontaggio.
+const teardownPageWindow: Teardown = () => {
+  pageEpoch++;
+  pageWindowLifetime.close();
+};
 
 /// Porta accanto ai bottoni della titlebar l'accordo efficace del comando.
 function refreshTitlebarShortcuts(): void {
@@ -115,7 +122,9 @@ function refreshTitlebarShortcuts(): void {
   }
 }
 
-async function init(): Promise<void> {
+async function init(): Promise<Teardown> {
+  const epoch = pageEpoch;
+  const alive = (): boolean => !pageWindowLifetime.closed && pageEpoch === epoch;
   // Il tema **per primo**, e prima di qualunque cosa disegni (§12.4): applica
   // subito l'ultima scelta nota, così il primo fotogramma è già nella luce
   // giusta invece di correggersi mezzo secondo dopo. La preferenza di moto si
@@ -138,7 +147,7 @@ async function init(): Promise<void> {
   // fuori dai pannelli — i due pulsanti della barra di stato, il titolo dello
   // spazio — si iscrive da sé con `onLanguage`, invece di allungare un elenco qui
   // che si scopre incompleto solo cambiando lingua.
-  mountStrings(() => void refreshAllPanels());
+  pageWindowLifetime.add(mountStrings(() => void refreshAllPanels()));
 
   // La titlebar custom (§Fase 2): i controlli finestra e il doppio click.
   // Va dopo `mountStrings` perché i suoi aria-label seguono la lingua, e
@@ -153,7 +162,7 @@ async function init(): Promise<void> {
   // vicenda sarebbe un ciclo, e in un bundle ESM un ciclo è un `undefined`
   // all'avvio che non dice da dove viene. È la stessa forma con cui i tre
   // moduli dell'editor ricevono il mondo.
-  mountDocument({ searchTag: (tag) => searchFor(`tags:${tag}`) });
+  mountDocument(pageWindowLifetime, { searchTag: (tag) => searchFor(`tags:${tag}`) });
   configurePreview({ openPage: openWikilink });
 
   // Subito dopo il pannello del documento, perché è il suo testo che protegge, e
@@ -163,38 +172,51 @@ async function init(): Promise<void> {
   // l'iscrizione, non la chiusura — ma non è nemmeno buttata: un `catch` che
   // dice cosa non c'è, perché una finestra che chiudendo perde l'ultima battuta
   // non lo racconta a nessuno.
-  void onClose(flushBeforeClose).catch(() => {
+  const closeListener = onClose(async () => {
+    try {
+      await flushBeforeClose();
+    } finally {
+      teardownPageWindow();
+    }
+  }).catch(() => {
     notify(t("document.close_unhooked"), "guasto");
+    return () => {};
+  });
+  pageWindowLifetime.add(() => {
+    void closeListener.then(
+      (unlisten) => unlisten(),
+      () => notify(t("document.close_unhooked"), "guasto"),
+    );
   });
 
   // L'host dei pannelli per primo: da qui in poi ogni pannello — nativo o
   // dichiarato dal backend — si presenta al registro invece di iscriversi da
   // sé agli eventi, ed è l'host a decidere quando ridisegnarlo (§1.2).
-  mountPanelHost();
+  mountPanelHost(pageWindowLifetime);
   // L'invito a ridisegnare che arriva da un provider (§2.5): sta accanto
   // all'host dei pannelli perché è l'altra metà della stessa domanda — quando
   // una view è invecchiata. Una la dichiara la view (`refresh`/`follows`),
   // l'altra la dice il provider quando ha finito qualcosa che il vault non
   // vede.
-  mountViewInvalidation();
-  mountExplorer();
-  mountSearch();
+  mountViewInvalidation(pageWindowLifetime);
+  mountExplorer(pageWindowLifetime);
   // La ricerca **dentro** la nota aperta (§21.4): stesso motore della casella
   // del vault, raggio ristretto al documento col fuoco. È un comando e non un
   // pannello, quindi qui basta dichiararlo.
   mountDocSearch();
+  mountSearch();
   mountQuickSwitcher();
   // La rail (§Fase 2): le icone shell a sinistra — Note, Cerca, Grafo —
   // sempre visibili. Le view dichiarate `left_sidebar` si aggiungono dopo,
   // a ogni apertura di vault, con `syncRail()`. Va prima di `mountGraph`
   // perché crea `#show-graph`, che `mountGraph` ascolta.
-  mountRail();
+  pageWindowLifetime.add(mountRail());
   mountGraph();
   // Le due superfici della barra di stato (§10.3): cosa sta girando, e cosa è
   // stato detto. Il centro attività si iscrive agli eventi del kernel, quindi
   // va montato prima che il router parta.
-  mountNotifications();
-  mountActivity();
+  mountNotifications(pageWindowLifetime);
+  mountActivity(pageWindowLifetime);
   // La tastiera rilegge gli accordi quando una scorciatoia cambia (§18.2): anche
   // lei si iscrive a `setting_changed`, quindi anche lei prima del router.
   mountKeyOverrides();
@@ -212,12 +234,13 @@ async function init(): Promise<void> {
       // Le stesse due domande dell'apertura, e per la stessa ragione insieme:
       // non si leggono a vicenda, e chi accende un componente le aspetta
       // entrambe.
-      await Promise.all([mountDeclaredViews(), loadCommandSpecs()]);
+      await Promise.all([mountDeclaredViews(pageWindowLifetime), loadCommandSpecs()]);
+      if (!alive()) return;
       syncRail();
     },
-  });
+  }, pageWindowLifetime);
 
-  $("#open-vault").addEventListener("click", () => void pickVault());
+  pageWindowLifetime.listen($("#open-vault"), "click", () => void pickVault());
 
   // I due comandi che sono **di qui e di nessun pannello**: aprire un vault e
   // aprire la palette. Come ogni altro pannello, questo file dichiara i propri
@@ -231,12 +254,14 @@ async function init(): Promise<void> {
     id: "shell.vault.open",
     title: "commands.vault.open",
     description: "commands.vault.open.desc",
+    layer: "global",
     run: () => void pickVault(),
   });
   registerShellCommand({
     id: "shell.palette",
     title: "commands.palette",
     description: "commands.palette.desc",
+    layer: "global",
     run: () => void openCommandPalette(paletteHost),
   });
   mountSidebarCommands();
@@ -245,23 +270,22 @@ async function init(): Promise<void> {
   // di shell già registrati. Il menu non registra niente: legge il
   // registro, e `main.ts` gli inietta `run(id)` che risolve l'entry e la
   // esegue come farebbe la tastiera.
-  mountAppMenu({
+  pageWindowLifetime.add(mountAppMenu({
     run: (id) => {
       const entry = allCommands().find((e) => e.id === id);
       if (entry) startCommand(entry, paletteHost);
     },
-  });
+  }));
   refreshTitlebarShortcuts();
 
   // Il trigger di ricerca nella titlebar: fa focus su `#search-input`, che è
   // la ricerca onesta — già lì, già cablata — e non una palette travestita.
   // Il suggerimento mostra l'accordo di `shell.panel.search`, per chi cerca un comando.
-  $("#command-search").addEventListener("click", () => {
+  pageWindowLifetime.listen($("#command-search"), "click", () => {
     showPanel("search");
     $("#search-input").focus();
   });
-  // Il bottone palette nella titlebar: apre la palette dei comandi.
-  $("#open-palette").addEventListener("click", () =>
+  pageWindowLifetime.listen($("#open-palette"), "click", () =>
     void openCommandPalette(paletteHost),
   );
 
@@ -274,12 +298,14 @@ async function init(): Promise<void> {
   // e una via d'uscita (§18.2).
   mountKeyboard(pageWindowLifetime, (entry) => startCommand(entry, paletteHost));
 
-  // Chi ascolta i guasti si iscrive **prima** che il router parta (§20.2): un
-  // vault che va storto mentre si apre è esattamente il caso in cui l'utente
-  // deve saperlo, e un ascoltatore iscritto dopo si perde proprio quello.
-  listenForFailures();
+  listenForFailures(pageWindowLifetime);
 
-  await startKernelRouter();
+  const stopRouter = await startKernelRouter();
+  if (!alive()) {
+    stopRouter();
+    return teardownPageWindow;
+  }
+  pageWindowLifetime.add(stopRouter);
 
   // L'avviso di sessione (§25.5): la diagnosi «la cartella di configurazione
   // non si può scrivere» nasce all'avvio del backend, quando nessun ascoltatore
@@ -288,6 +314,7 @@ async function init(): Promise<void> {
   // garantisce che `listenForFailures` — iscritta prima del router — sia già
   // lì a riceverlo.
   const notice = await api.sessionNotice();
+  if (!alive()) return teardownPageWindow;
   if (notice) forwardNotice(notice);
 
   // Il locale del sistema (§12.3), **prima** di aprire il vault: da qui in poi
@@ -295,7 +322,9 @@ async function init(): Promise<void> {
   // giro con la lingua indeterminata e correggersi dopo. Chi lo cambia da fuori
   // — impostazioni del sistema, ora legale — se ne accorge al ritorno del
   // focus, e allora si ridisegna ciò che è appeso al contesto.
-  mountLocale(pageWindowLifetime, () => void mountDeclaredViews());
+  mountLocale(pageWindowLifetime, () => {
+    if (alive()) void mountDeclaredViews(pageWindowLifetime);
+  });
 
   // Gli accordi riconfigurati, **prima** di sapere se un vault c'è (§16.3).
   // Quelli dei comandi di shell vivono nella macchina e non nel vault, quindi
@@ -304,24 +333,34 @@ async function init(): Promise<void> {
   // troverebbe la sua combinazione muta esattamente nella schermata in cui
   // serve. Con un vault aperto la riga dopo la rifà, e costa una domanda.
   await loadKeyOverrides();
+  if (!alive()) return teardownPageWindow;
   refreshTitlebarShortcuts();
 
   const initial = await api.initialVault();
+  if (!alive()) return teardownPageWindow;
   // Chi apre un vault ripristina anche la sua disposizione (§1.2): è là dentro
   // che si sa quale fosse. Senza vault iniziale si disegna comunque il layout di
   // default, perché la finestra vuota deve essere in uno stato coerente — un
   // riquadro, vuoto, col fuoco — e non in nessuno stato.
-  if (initial) await openVaultPath(initial);
+  if (initial) await openVaultPath(initial, alive);
   else await synchronize();
+  if (!alive()) return teardownPageWindow;
+  return teardownPageWindow;
 }
 
 async function pickVault(): Promise<void> {
+  if (pageWindowLifetime.closed) return;
   const dir = await pickFolder();
-  if (dir) await openVaultPath(dir);
+  if (dir && !pageWindowLifetime.closed) await openVaultPath(dir);
 }
 
-async function openVaultPath(dir: string): Promise<void> {
+async function openVaultPath(
+  dir: string,
+  alive: () => boolean = () => !pageWindowLifetime.closed,
+): Promise<void> {
+  if (!alive()) return;
   const info = await api.openVault(dir);
+  if (!alive()) return;
   vaultPathEl.textContent = info.root;
   // «Questo vault si è aperto a metà» (§15.7): la riga che il contratto teneva
   // in serbo per una superficie che non c'era. Ogni voce esce anche come evento
@@ -355,7 +394,9 @@ async function openVaultPath(dir: string): Promise<void> {
   // tutte e quattro hanno il proprio `catch` dentro — quindi qui non c'è la
   // domanda «cosa resta a metà se una va storta».
   await Promise.all([loadOrganization(), loadLayout(), loadExpanded(), loadActiveSpace()]);
+  if (!alive()) return;
   await synchronize();
+  if (!alive()) return;
   // **Ciò che era rimasto non salvato** (§15.2), e sta qui accanto a
   // `vault.partial` perché è la stessa specie di riga: due cose che l'apertura
   // deve dire e che nessun'altra superficie direbbe. La differenza è il verso —
@@ -363,6 +404,7 @@ async function openVaultPath(dir: string): Promise<void> {
   // aveva scritto — ed è dopo il layout di proposito: il testo recuperato è un
   // buffer, e i buffer vanno messi quando i riquadri ci sono già.
   const recovered = await recoverDrafts();
+  if (!alive()) return;
   if (recovered > 0) {
     notify(t("draft.found", { count: recovered }), "info");
   }
@@ -387,7 +429,8 @@ async function openVaultPath(dir: string): Promise<void> {
   // prima non venivano nemmeno chiesti adesso arrivano lo stesso. È il verso
   // buono — un vault che si apre male tiene comunque i comandi e gli accordi —
   // e `Promise.all` rifiuta come rifiutava `mountDeclaredViews` da solo.
-  await Promise.all([mountDeclaredViews(), loadCommandSpecs(), loadKeyOverrides()]);
+  await Promise.all([mountDeclaredViews(pageWindowLifetime), loadCommandSpecs(), loadKeyOverrides()]);
+  if (!alive()) return;
   // S5-1: `mountDeclaredViews` svuota i contenitori delle view dichiarate
   // (views.ts) prima di rimontarle, e il grafo — view dichiarata anche lui —
   // resta senza superficie. `synchronize()` rifà il giro di `show` per ogni
@@ -395,16 +438,22 @@ async function openVaultPath(dir: string): Promise<void> {
   // document.ts è idempotente): è il passaggio che rimette a posto la tab del
   // grafo dopo l'azzeramento di `mountDeclaredViews`.
   await synchronize();
+  if (!alive()) return;
   // Le view dichiarate `left_sidebar` sono state montate in `#views-left`:
-  // la rail le scopre e aggiunge i bottoni dopo le icone shell.
+  // la rail le scopre e aggiunge i bottoni dopo che `mountDeclaredViews` ha
+  // riempito l'host.
   syncRail();
+  if (!alive()) return;
   await warnIfCommandsContendKey();
+  if (!alive()) return;
   // **Dopo** i conflitti, e non è indifferente: una scorciatoia sospesa non è in
   // vigore, quindi non partecipa a nessun conflitto — e dire prima «questo vault
   // ne propone tre» farebbe leggere l'avviso dei conflitti come se le riguardasse.
   await warnIfVaultProvidesKeys();
+  if (!alive()) return;
 
   await warnIfUnwatched();
+  if (!alive()) return;
 
   // La prima nota, chiesta con una finestra da uno (§14.4): l'apertura del
   // vault non porta più l'elenco intero, e per aprirne una non serve.
@@ -415,7 +464,11 @@ async function openVaultPath(dir: string): Promise<void> {
   // qualunque le tab che l'utente aveva lasciato aperte.
   if (!activeDoc()) {
     const before = await beforeNote();
-    if (before) await openDocument(before);
+    if (!alive()) return;
+    if (before) {
+      await openDocument(before);
+      if (!alive()) return;
+    }
   }
 }
 
@@ -501,8 +554,12 @@ async function warnIfUnwatched(): Promise<void> {
 // non può aspettare la fine del montaggio deve dormire un tempo a caso e
 // sperare, cioè diventa un presidio che ogni tanto passa; e questa è l'unica
 // promessa che la shell fa sul proprio boot. Chi la esporta la dichiara.
-export const startup: Promise<void> = init().catch((e) => {
+export const startup: Promise<Teardown> = init().catch((e) => {
   const reason = errorText(e);
+  const alreadyClosed = pageWindowLifetime.closed;
+  teardownPageWindow();
+  if (alreadyClosed) return teardownPageWindow;
   notify(t("app.start_failed", { reason }), "guasto");
   vaultPathEl.textContent = t("app.start_failed", { reason });
+  return teardownPageWindow;
 });

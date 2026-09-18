@@ -48,8 +48,25 @@
 //! (cancellazioni ad app chiusa): lo chiude [`IndexProvider::reconcile`] in
 //! [`Workspace::reindex`].
 
+mod registration;
+pub use registration::{
+    PreparedGridCall, PreparedIndexRegistration, PreparedPluginDeactivation, PreparedRegistration,
+    RegistrationPermit,
+};
+mod lifecycle;
+pub use lifecycle::{
+    PluginTeardownFailure, PreparedIndexFlush, PreparedPluginTeardown, RetiredPlugin,
+};
+mod removal;
+pub use removal::{
+    CommittedDocumentDeletion, CompletedDocumentDeletion, CompletedDocumentRemoval,
+    FinalizedDocumentDeletion, PreparedDocumentDeletion, PreparedDocumentRemoval,
+};
+mod restore;
+pub use restore::{CompletedDocumentRestore, PendingDocumentRestore, PreparedDocumentRestore};
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -58,9 +75,11 @@ use fub_abi::command::{
 };
 use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
 use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
-use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions};
+use fub_abi::event::DocChanges;
+use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions, SourceKind};
 use fub_abi::locale::Locale;
 use fub_abi::model::{canonical_anchor, heading_matches, DocId, DocumentModel, LinkTarget, Span};
+use fub_abi::query::{Matches, QueryEvaluator, QueryPredicate};
 use fub_abi::session::ViewContext;
 use fub_abi::settings::{
     SettingEntry, SettingKind, SettingScope, SettingSource, SettingSpec, SettingValue,
@@ -69,8 +88,9 @@ use fub_abi::text::{Localize, Strings, Text};
 use fub_abi::traits::{
     BacklinkRef, CivilTime, CommandProvider, DocPosition, DocumentMatch, EntryKind, EventHandler,
     HostApi, IndexLoss, IndexProvider, IndexQuery, IndexResult, IndexingState, JobId, JobProgress,
-    JobSpec, LinkDirection, Page, Paged, PluginManifest, QueryRoute, ReadApi, ServiceProvider,
-    TimerSpec, VaultEntry, ViewInstance, ViewInterests, ViewProvider, ViewSpec,
+    JobSpec, LinkDirection, Page, Paged, PluginManifest, PropertySelect, PropertySort, QueryRoute,
+    ReadApi, ServiceProvider, TimerSpec, VaultEntry, ViewInstance, ViewInterests, ViewProvider,
+    ViewSpec,
 };
 use fub_abi::transfer::{
     ArtifactSink, ExportProvider, ExportReport, ExportRequest, ExportTarget, ImportProvider,
@@ -88,30 +108,43 @@ use fub_abi::rules::path_policy::{self, Naming};
 
 use crate::bus::EventBus;
 use crate::dispatcher::{Dispatcher, JobBell, PendingJob};
-use crate::documents::{extension_of, DocumentStore};
+use crate::documents::{extension_of, DocumentStore, PreparedParse};
 use crate::drafts::Drafts;
 use crate::entries::{EntryStore, StoredEntry, StoredMeta};
-use crate::error::{KernelError, Result};
+use crate::error::{KernelError, Missing, Result};
 use crate::graph::{BuiltGraph, GraphSources};
 use crate::host::{Granted, Guard, KernelHost, ReadHost, ReadOnly};
-use crate::index::plan::QueryPlan;
-use crate::index::Indexes;
+use crate::index::plan::{QueryCore, QueryPlan};
+use crate::index::{
+    feed_handles as feed_index_handles, reconcile_handles as reconcile_index_handles,
+    release_handles as release_index_handles, up_to_date_handles as up_to_date_index_handles,
+    CompletedIndexQuery, Indexes, PreparedIndexQuery, SharedIndexProvider,
+};
 use crate::journal::{Journal, JournalOp, JournalRead};
 use crate::locale::SystemLocale;
 use crate::occurrences;
 use crate::organization::OrganizationStore;
 use crate::plugins::{self, PluginInfo, RegistrationKind, RegistryError};
-use crate::poison::Shelter;
-use crate::providers::{ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredView};
+use crate::poison::{SharedShelter, Shelter};
+use crate::providers::{
+    ProviderRegistry, ProviderTable, RegisteredCommand, RegisteredGrid, RegisteredView,
+};
 use crate::registry::FormatRegistry;
-use crate::renderer::{self, RenderedDocument};
+use crate::renderer::RenderedDocument;
 use crate::safety::Gate;
 use crate::session::{ContextChange, Session};
 use crate::settings::{MachineSettings, SettingsStore, SharedSettings};
 use crate::transfer::{MemorySink, OpenSources, SourceBacking, PROLOGUE};
 use crate::undo::UndoStack;
-use crate::vault::TrashEntry;
+use crate::vault::{PreparedIgnoreCheck, PreparedTrashSweep, TrashEntry};
 use crate::viewstate::ViewStates;
+
+/// Identità process-local di un'istanza `Workspace`.
+///
+/// Non è una versione persistita e non attraversa alcun confine: distingue due
+/// workspace costruiti sulla stessa radice, così un token preparato da quello
+/// ritirato non può finalizzare il suo sostituto.
+static NEXT_WORKSPACE_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Il pannello di una shell che ne ha uno solo.
 ///
@@ -263,36 +296,1354 @@ impl Indexing {
     }
 }
 
-/// workspace.
+/// Piano owned di una sincronizzazione esterna.
 ///
-/// È il valore che permette a una sincronizzazione da fuori di stare nella
-/// forma della [decisione 0024](../../../docs/decisions/README.md):
-/// leggere e parsare sotto prestito condiviso
-/// ([`Workspace::plan_sync`]), mutare sotto quello esclusivo
-/// ([`Workspace::sync_path_prepared`]).
-///
-/// I campi sono chiusi apposta: fuori dal kernel non c'è niente da guardarci
-/// dentro, e ciò che si può fare con questo valore è **darlo a chi lo applica**.
-/// È anche ciò che lo rende un presidio invece di una comodità — chi tiene un
-/// `ParsedChange` in mano ha per forza già rilasciato il prestito condiviso,
-/// perché il tipo non ne porta con sé nessun pezzo.
-/// `None` quando il file letto porta **l'impronta che l'anagrafe ha già**:
-pub struct ParsedChange {
-    id: DocId,
-    /// è la scrittura del kernel che rientra dal rilevatore, e non c'è niente
-    /// da parsare né da ingerire (difetto 0196, vedi
-    /// [`Workspace::already_ingested`]).
-    /// L'impronta del sorgente che è stato letto: è quella che finirà in
-    model: Option<DocumentModel>,
-    /// anagrafe.
-    /// L'impronta che l'anagrafe aveva **al momento del piano**. Vedi
-    fingerprint: Revision,
-    /// [`Workspace::sync_path_prepared`].
-    /// **Una fetta dell'apertura già letta e già parsata**, che aspetta di entrare
-    seen: Option<Revision>,
+/// La preparazione fotografa soltanto stato del kernel e handle condivisi. La
+/// lettura `stat-read-stat` e il parse avvengono con [`SyncPlan::invoke`],
+/// senza conservare alcun prestito del workspace.
+pub struct SyncPlan {
+    snapshot: SyncSnapshot,
+    action: SyncPlanAction,
 }
 
-/// nel workspace.
+/// Lettura e parse owned di una rinomina esplicita di documento.
+///
+/// La preparazione fotografa il core e risolve provider e sintassi senza
+/// invocarli. [`PreparedExplicitRename::invoke`] esegue lo stat-read-stat e il
+/// parse senza prendere in prestito il workspace.
+#[must_use = "la rinomina preparata deve essere invocata e committata"]
+pub struct PreparedExplicitRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    parser: PreparedParse,
+    source_kind: SourceKind,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
+    side_data: PreparedRenameSideData,
+}
+/// Piano owned di una rinomina esplicita di una voce senza provider di formato.
+///
+/// La preparazione fotografa soltanto core, path, riferimenti e handle. I byte
+/// dell'asset, le sorgenti dei link e i side-data vengono letti o mossi da
+/// [`PreparedExplicitAssetRename::invoke`] senza prendere in prestito il
+/// workspace.
+#[must_use = "la rinomina asset preparata deve essere invocata e committata"]
+pub struct PreparedExplicitAssetRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
+    side_data: PreparedAssetRenameSideData,
+}
+
+/// Asset già spostato e fotografato esattamente, ancora da riconvalidare nel core.
+#[must_use = "la rinomina asset spostata deve essere committata o annullata"]
+pub struct MovedExplicitAssetRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    fingerprint: Revision,
+    stat: crate::storage::Stat,
+    identity: Option<crate::storage::FileIdentity>,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedAssetRenameSideData,
+}
+
+/// Core della rinomina asset installato, con callback ancora da invocare.
+#[must_use = "registro e riscritture della rinomina asset devono essere invocati"]
+pub struct PendingExplicitAssetRename {
+    workspace_id: u64,
+    installed: VaultEntry,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedAssetRenameSideData,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+    from: DocId,
+    to: DocId,
+    owns_batch: bool,
+}
+
+/// Callback della rinomina asset concluse, pronto per eventi ed epilogo.
+pub struct CompletedExplicitAssetRename {
+    workspace_id: u64,
+    installed: VaultEntry,
+    side_data: CompletedAssetRenameSideData,
+    from: DocId,
+    to: DocId,
+    owns_batch: bool,
+    rewrite_failures: Vec<String>,
+    journal_fault: Option<String>,
+}
+
+/// Sorgente stabile e modello già parsato, ancora da riconvalidare nel core.
+#[must_use = "la rinomina parsata deve essere committata"]
+pub struct ParsedExplicitRename {
+    snapshot: ExplicitRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    model: DocumentModel,
+    fingerprint: Revision,
+    stat: crate::storage::Stat,
+    identity: Option<crate::storage::FileIdentity>,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedRenameSideData,
+}
+/// Core della rinomina esplicita già installato, con gli handle degli indici
+/// ancora da invocare fuori dal workspace.
+#[must_use = "gli indici della rinomina devono essere invocati e finalizzati"]
+pub struct PendingExplicitRename {
+    identity: PendingIdentityMigration,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedRenameSideData,
+    journal: Arc<Journal>,
+    origin: fub_abi::event::Origin,
+    from: DocId,
+    to: DocId,
+    owns_batch: bool,
+}
+
+/// Callback degli indici concluse, pronto per l'epilogo sotto guard.
+pub struct CompletedExplicitRename {
+    identity: CompletedIdentityMigration,
+    rewrites: Vec<(DocId, EditRequest)>,
+    side_data: CompletedRenameSideData,
+    owns_batch: bool,
+    rewrite_failures: Vec<String>,
+    journal_fault: Option<String>,
+}
+
+struct PendingIdentityMigration {
+    workspace_id: u64,
+    from: DocId,
+    to: DocId,
+    installed: VaultEntry,
+    removal: PreparedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+}
+
+struct CompletedIdentityMigration {
+    workspace_id: u64,
+    from: DocId,
+    to: DocId,
+    installed: VaultEntry,
+    removal: CompletedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+}
+
+struct ExplicitRenameSnapshot {
+    workspace_id: u64,
+    from_path: Utf8PathBuf,
+    to_path: Utf8PathBuf,
+    from: DocId,
+    to: DocId,
+    from_entry: VaultEntry,
+    to_entry: Option<VaultEntry>,
+    syntax_generation: u64,
+    routing_generation: u64,
+}
+
+struct PreparedExplicitLinkRewrite {
+    source_path: Utf8PathBuf,
+    destination: DocId,
+    edits: Vec<PreparedExplicitLinkEdit>,
+}
+
+struct PreparedExplicitLinkEdit {
+    span: Span,
+    written: String,
+    replacement: String,
+    from_end: bool,
+}
+
+/// Routing owned di una rinomina consegnata dal watcher.
+pub enum ExternalRenamePlan {
+    Asset(Box<PreparedExternalAssetRename>),
+    Document(Box<PreparedExternalDocumentRename>),
+    Sync(Vec<(Utf8PathBuf, Option<SyncPlan>)>),
+}
+
+/// Lettura e parse detached della destinazione di una rinomina documento.
+pub struct PreparedExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    parser: PreparedParse,
+    source_kind: SourceKind,
+    side_data: PreparedRenameSideData,
+}
+
+/// Destinazione già letta e parsata fuori dal workspace.
+pub struct ParsedExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    state: ParsedExternalDocumentState,
+    side_data: PreparedRenameSideData,
+}
+
+enum ParsedExternalDocumentState {
+    Ready {
+        model: Box<DocumentModel>,
+        fingerprint: Revision,
+        stat: crate::storage::Stat,
+    },
+    Failed(KernelError),
+    Stale,
+}
+
+/// Handle owned per spostare i dati autorevoli di una rinomina fuori dal
+/// workspace.
+struct PreparedRenameSideData {
+    from: DocId,
+    to: DocId,
+    organization: Arc<OrganizationStore>,
+    drafts: Arc<Drafts>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Errori recuperabili prodotti dalla migrazione detached dei side-data.
+struct CompletedRenameSideData {
+    from: DocId,
+    to: DocId,
+    errors: Vec<String>,
+    rollback: Option<PreparedRenameSideData>,
+}
+/// Handle owned per migrare soltanto i side-data che appartengono anche agli
+/// asset. Le bozze sono buffer di documenti testuali e non seguono questa rotta.
+struct PreparedAssetRenameSideData {
+    from: DocId,
+    to: DocId,
+    organization: Arc<OrganizationStore>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Esito e ricevuta one-shot per il rollback dei side-data di un asset.
+struct CompletedAssetRenameSideData {
+    from: DocId,
+    to: DocId,
+    errors: Vec<String>,
+    rollback: Option<PreparedAssetRenameSideData>,
+}
+
+/// Core della rinomina già installato, callback e side-data ancora detached.
+pub struct PendingExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    removal: PreparedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+    side_data: PreparedRenameSideData,
+}
+
+/// Callback e side-data completati, pronto per l'unico epilogo.
+pub struct CompletedExternalDocumentRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    removal: CompletedDocumentRemoval,
+    feed: PreparedDocumentFeed,
+    side_data: CompletedRenameSideData,
+}
+
+/// Prima fase owned della migrazione d'identità di un asset.
+pub struct PreparedExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    organization: Arc<OrganizationStore>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+    fallback: Vec<(Utf8PathBuf, Option<SyncPlan>)>,
+}
+
+/// Esito detached della prima fase di una rinomina asset.
+pub enum ParsedExternalRename {
+    Asset(Box<ParsedExternalAssetRename>),
+    Sync(Vec<(Utf8PathBuf, Option<ParsedChange>)>),
+}
+
+pub struct ParsedExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    stat: crate::storage::Stat,
+    fingerprint: Revision,
+    organization: Arc<OrganizationStore>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Core già migrato, side-data ancora da spostare fuori dal workspace.
+pub struct PendingExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    organization: Arc<OrganizationStore>,
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    doc_data_roots: Vec<Utf8PathBuf>,
+}
+
+/// Side-data già migrato, pronto per l'unica finalizzazione e notifica.
+pub struct CompletedExternalAssetRename {
+    snapshot: ExternalRenameSnapshot,
+    installed: VaultEntry,
+    doc_data_errors: Vec<String>,
+}
+
+struct ExternalRenameSnapshot {
+    workspace_id: u64,
+    from_path: Utf8PathBuf,
+    to_path: Utf8PathBuf,
+    from_id: DocId,
+    to_id: DocId,
+    from_entry: VaultEntry,
+    to_entry: Option<VaultEntry>,
+    syntax_generation: u64,
+    routing_generation: u64,
+}
+
+/// Fotografia owned necessaria a confrontare il disco dopo l'avvio del watcher.
+///
+/// Il workspace la prepara senza I/O; [`PreparedCatchUp::invoke`] cammina il
+/// vault e verifica le impronte dopo che la guardia di [`Workspace`] è caduta.
+pub struct PreparedCatchUp {
+    vault: crate::Vault,
+    entries: BTreeMap<DocId, VaultEntry>,
+}
+
+/// Candidati prodotti dalla scansione detached della riconciliazione d'apertura.
+///
+/// I campi restano chiusi: soltanto [`Workspace::plan_catch_up`] può trasformare
+/// questa fotografia in piani legati allo stato corrente del workspace.
+pub struct CatchUpSnapshot {
+    candidates: BTreeMap<DocId, Utf8PathBuf>,
+}
+
+/// Esito già invocato della fase detached di una sincronizzazione esterna.
+///
+/// Questo tipo non espone `invoke`: non può quindi essere confuso con il piano
+/// che ancora possiede I/O o parse da eseguire.
+pub struct ParsedChange {
+    snapshot: SyncSnapshot,
+    state: ParsedChangeState,
+}
+
+/// Mutazione preparata sotto il workspace, ma non ancora notificata agli
+/// indici esterni.
+pub struct PendingSyncChange {
+    snapshot: SyncSnapshot,
+    state: PendingSyncState,
+}
+
+/// Risultato di una mutazione dopo l'unica callback esterna necessaria.
+pub struct CompletedSyncChange {
+    snapshot: SyncSnapshot,
+    state: CompletedSyncState,
+}
+
+struct SyncSnapshot {
+    workspace_id: u64,
+    path: Utf8PathBuf,
+    id: DocId,
+    seen: Option<Revision>,
+    entry: Option<VaultEntry>,
+    syntax_generation: u64,
+    routing_generation: u64,
+}
+
+enum SyncPlanAction {
+    Parse {
+        storage: Arc<dyn crate::storage::VaultStorage>,
+        parser: Box<PreparedParse>,
+        source_kind: SourceKind,
+        already_ingested: bool,
+    },
+    Stat {
+        storage: Arc<dyn crate::storage::VaultStorage>,
+    },
+}
+
+enum ParsedChangeState {
+    Ready {
+        model: Box<DocumentModel>,
+        fingerprint: Revision,
+        stat: crate::storage::Stat,
+    },
+    Entry(Option<crate::storage::Stat>),
+    Unchanged(crate::storage::Stat),
+    Missing,
+    Unstable,
+    Failed(KernelError),
+}
+
+enum PendingSyncState {
+    Feed {
+        feed: Box<PreparedDocumentFeed>,
+        previous_provider_call: bool,
+    },
+    Removal(PreparedDocumentRemoval),
+    Entry(Option<crate::storage::Stat>),
+    Unchanged(crate::storage::Stat),
+}
+
+enum CompletedSyncState {
+    Feed {
+        feed: Box<PreparedDocumentFeed>,
+        previous_provider_call: bool,
+    },
+    Removal(CompletedDocumentRemoval),
+    Entry(Option<crate::storage::Stat>),
+    Unchanged(crate::storage::Stat),
+}
+
+impl SyncPlan {
+    /// Esegue I/O e parse senza alcun prestito del workspace.
+    pub fn invoke(self) -> ParsedChange {
+        let SyncPlan { snapshot, action } = self;
+        let state = match action {
+            SyncPlanAction::Parse {
+                storage,
+                parser,
+                source_kind,
+                already_ingested,
+            } => invoke_sync_read(
+                &snapshot,
+                storage.as_ref(),
+                *parser,
+                source_kind,
+                already_ingested,
+            ),
+            SyncPlanAction::Stat { storage } => match storage.stat(&snapshot.path) {
+                Ok(stat) if stat.is_file() => ParsedChangeState::Entry(Some(stat)),
+                Ok(_) => ParsedChangeState::Entry(None),
+                Err(error) if sync_path_is_absent(&error) => ParsedChangeState::Entry(None),
+                Err(source) => ParsedChangeState::Failed(KernelError::Io {
+                    path: snapshot.path.clone(),
+                    source,
+                }),
+            },
+        };
+        ParsedChange { snapshot, state }
+    }
+}
+
+impl PreparedExplicitRename {
+    /// Legge e parsa una versione stabile della sorgente, costruisce le
+    /// richieste CAS dei backlink, poi migra i side-data e infine sposta il
+    /// file. Tutto avviene senza un prestito del workspace.
+    pub fn invoke(self) -> Result<ParsedExplicitRename> {
+        let PreparedExplicitRename {
+            snapshot,
+            storage,
+            parser,
+            source_kind,
+            rewrites,
+            side_data,
+        } = self;
+
+        let path = snapshot.from_path.clone();
+        let before = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if !before.is_file() {
+            return Err(KernelError::NotFound(snapshot.from.to_string()));
+        }
+        let identity_before = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let bytes = storage.read(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let after = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let identity_after = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        if !after.is_file() || before != after || identity_before != identity_after {
+            return Err(KernelError::Stale(snapshot.from.to_string()));
+        }
+        let identity = identity_after;
+        let fingerprint = Revision::of_bytes(&bytes);
+        let source = match source_kind {
+            SourceKind::Text => {
+                let text =
+                    fub_abi::rules::text_policy::decode(&bytes).map_err(|at| KernelError::Io {
+                        path: path.clone(),
+                        source: std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            format!("il file non è UTF-8: il primo byte non valido è a {at}"),
+                        ),
+                    })?;
+                DocumentSource::Text(text.to_string())
+            }
+            SourceKind::Bytes => DocumentSource::Bytes(bytes),
+        };
+        let model = parser.invoke(source)?;
+
+        let rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites);
+
+        let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
+        if !same_file && storage.exists(&snapshot.to_path) {
+            return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
+        }
+        let side_data = side_data.invoke();
+        if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
+            let rollback_errors = side_data.rollback();
+            if source.kind() == std::io::ErrorKind::AlreadyExists {
+                let to = if rollback_errors.is_empty() {
+                    snapshot.to.to_string()
+                } else {
+                    format!(
+                        "{}; anche il rollback dei side-data è fallito: {}",
+                        snapshot.to,
+                        rollback_errors.join("; ")
+                    )
+                };
+                return Err(KernelError::AlreadyExists(to));
+            }
+            let source = if rollback_errors.is_empty() {
+                source
+            } else {
+                std::io::Error::new(
+                    source.kind(),
+                    format!(
+                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                )
+            };
+            return Err(KernelError::Io {
+                path: snapshot.from_path,
+                source,
+            });
+        }
+        Ok(ParsedExplicitRename {
+            snapshot,
+            storage,
+            model,
+            fingerprint,
+            stat: after,
+            identity,
+            rewrites,
+            side_data,
+        })
+    }
+}
+impl ParsedExplicitRename {
+    /// Annulla una mossa che il workspace ha rifiutato al commit. Il token è
+    /// one-shot e riporta il file indietro soltanto se la destinazione contiene
+    /// ancora esattamente i byte mossi da questa invocazione.
+    pub fn rollback(self) -> Result<()> {
+        let ParsedExplicitRename {
+            snapshot,
+            storage,
+            fingerprint,
+            identity,
+            side_data,
+            ..
+        } = self;
+        let before = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let identity_before =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        let bytes = storage
+            .read(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let after = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let identity_after =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        if !before.is_file()
+            || before != after
+            || identity_before != identity
+            || identity_after != identity
+            || Revision::of_bytes(&bytes) != fingerprint
+        {
+            return Err(KernelError::Stale(snapshot.to.to_string()));
+        }
+        storage
+            .rename_no_replace(&snapshot.to_path, &snapshot.from_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let rollback_errors = side_data.rollback();
+        if rollback_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(KernelError::Io {
+                path: snapshot.from_path,
+                source: std::io::Error::other(format!(
+                    "il file è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                    rollback_errors.join("; ")
+                )),
+            })
+        }
+    }
+}
+impl PendingExplicitRename {
+    /// Esegue le callback remove+feed e registra il fatto usando handle owned,
+    /// lasciando le riscritture al chiamante.
+    pub fn invoke(self) -> CompletedExplicitRename {
+        let PendingExplicitRename {
+            identity,
+            rewrites,
+            side_data,
+            journal,
+            origin,
+            from,
+            to,
+            owns_batch,
+        } = self;
+        let identity = identity.invoke();
+        let journal_fault = journal
+            .append(origin, JournalOp::Renamed { from, to })
+            .err();
+        CompletedExplicitRename {
+            identity,
+            rewrites,
+            side_data,
+            owns_batch,
+            rewrite_failures: Vec::new(),
+            journal_fault,
+        }
+    }
+}
+
+impl CompletedExplicitRename {
+    /// Applica tutte le riscritture fuori dal workspace e conserva gli errori
+    /// qualificati con la sorgente per il finalizzatore.
+    pub fn invoke_rewrites<E>(
+        mut self,
+        mut apply: impl FnMut(&DocId, &EditRequest) -> std::result::Result<(), E>,
+    ) -> Self
+    where
+        E: std::fmt::Display,
+    {
+        for (source, request) in &self.rewrites {
+            if let Err(error) = apply(source, request) {
+                self.rewrite_failures.push(format!("{source}: {error}"));
+            }
+        }
+        self
+    }
+}
+fn invoke_prepared_link_rewrites(
+    storage: &dyn crate::storage::VaultStorage,
+    rewrites: Vec<PreparedExplicitLinkRewrite>,
+) -> Vec<(DocId, EditRequest)> {
+    rewrites
+        .into_iter()
+        .filter_map(|prepared| {
+            let bytes = storage.read(&prepared.source_path).ok()?;
+            let source = fub_abi::rules::text_policy::decode(&bytes).ok()?;
+            let mut edits = Vec::new();
+            for prepared_edit in prepared.edits {
+                let Some(slice) = source.get(prepared_edit.span.start..prepared_edit.span.end)
+                else {
+                    continue;
+                };
+                let found = if prepared_edit.from_end {
+                    slice.rfind(&prepared_edit.written)
+                } else {
+                    slice.find(&prepared_edit.written)
+                };
+                let Some(relative) = found else {
+                    continue;
+                };
+                let start = prepared_edit.span.start + relative;
+                edits.push(TextEdit::replace(
+                    Span::new(start, start + prepared_edit.written.len()),
+                    prepared_edit.replacement,
+                ));
+            }
+            (!edits.is_empty()).then(|| {
+                (
+                    prepared.destination,
+                    EditRequest::new(Revision::of(source), edits),
+                )
+            })
+        })
+        .collect()
+}
+
+impl PreparedExplicitAssetRename {
+    /// Verifica l'identità dell'asset, prepara le CAS dei riferimenti, migra i
+    /// side-data e sposta il file senza trattenere il workspace.
+    pub fn invoke(self) -> Result<MovedExplicitAssetRename> {
+        let PreparedExplicitAssetRename {
+            snapshot,
+            storage,
+            rewrites,
+            side_data,
+        } = self;
+        let path = snapshot.from_path.clone();
+        let before = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        if !before.is_file() {
+            return Err(KernelError::NotFound(snapshot.from.to_string()));
+        }
+        let identity_before = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        let bytes = storage.read(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let after = storage.stat(&path).map_err(|source| KernelError::Io {
+            path: path.clone(),
+            source,
+        })?;
+        let identity_after = storage
+            .file_identity(&path)
+            .map_err(|source| KernelError::Io {
+                path: path.clone(),
+                source,
+            })?;
+        if !after.is_file() || before != after || identity_before != identity_after {
+            return Err(KernelError::Stale(snapshot.from.to_string()));
+        }
+        let identity = identity_after;
+        let fingerprint = Revision::of_bytes(&bytes);
+        let rewrites = invoke_prepared_link_rewrites(storage.as_ref(), rewrites);
+        let same_file = storage.same_file(&snapshot.from_path, &snapshot.to_path);
+        if !same_file && storage.exists(&snapshot.to_path) {
+            return Err(KernelError::AlreadyExists(snapshot.to.to_string()));
+        }
+        let side_data = side_data.invoke();
+        if let Err(source) = storage.rename_no_replace(&snapshot.from_path, &snapshot.to_path) {
+            let rollback_errors = side_data.rollback();
+            if source.kind() == std::io::ErrorKind::AlreadyExists {
+                let to = if rollback_errors.is_empty() {
+                    snapshot.to.to_string()
+                } else {
+                    format!(
+                        "{}; anche il rollback dei side-data è fallito: {}",
+                        snapshot.to,
+                        rollback_errors.join("; ")
+                    )
+                };
+                return Err(KernelError::AlreadyExists(to));
+            }
+            let source = if rollback_errors.is_empty() {
+                source
+            } else {
+                std::io::Error::new(
+                    source.kind(),
+                    format!(
+                        "{source}; anche il rollback dei side-data è fallito: {}",
+                        rollback_errors.join("; ")
+                    ),
+                )
+            };
+            return Err(KernelError::Io {
+                path: snapshot.from_path,
+                source,
+            });
+        }
+        Ok(MovedExplicitAssetRename {
+            snapshot,
+            storage,
+            fingerprint,
+            stat: after,
+            identity,
+            rewrites,
+            side_data,
+        })
+    }
+}
+
+impl MovedExplicitAssetRename {
+    /// Ripristina esattamente il file mosso se il commit del core lo rifiuta.
+    pub fn rollback(self) -> Result<()> {
+        let MovedExplicitAssetRename {
+            snapshot,
+            storage,
+            fingerprint,
+            stat,
+            identity,
+            side_data,
+            ..
+        } = self;
+        let before = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let identity_before =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        let bytes = storage
+            .read(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let after = storage
+            .stat(&snapshot.to_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let identity_after =
+            storage
+                .file_identity(&snapshot.to_path)
+                .map_err(|source| KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                })?;
+        if !before.is_file()
+            || before != stat
+            || before != after
+            || identity_before != identity
+            || identity_after != identity
+            || Revision::of_bytes(&bytes) != fingerprint
+        {
+            return Err(KernelError::Stale(snapshot.to.to_string()));
+        }
+        storage
+            .rename_no_replace(&snapshot.to_path, &snapshot.from_path)
+            .map_err(|source| KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            })?;
+        let rollback_errors = side_data.rollback();
+        if rollback_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(KernelError::Io {
+                path: snapshot.from_path,
+                source: std::io::Error::other(format!(
+                    "l'asset è stato ripristinato, ma il rollback dei side-data è fallito: {}",
+                    rollback_errors.join("; ")
+                )),
+            })
+        }
+    }
+}
+
+impl PendingExplicitAssetRename {
+    /// Registra il fatto e applica le riscritture tramite callback del chiamante.
+    pub fn invoke_rewrites<E>(
+        self,
+        mut apply: impl FnMut(&DocId, &EditRequest) -> std::result::Result<(), E>,
+    ) -> CompletedExplicitAssetRename
+    where
+        E: std::fmt::Display,
+    {
+        let PendingExplicitAssetRename {
+            workspace_id,
+            installed,
+            rewrites,
+            side_data,
+            journal,
+            origin,
+            from,
+            to,
+            owns_batch,
+        } = self;
+        let journal_fault = journal
+            .append(
+                origin,
+                JournalOp::Renamed {
+                    from: from.clone(),
+                    to: to.clone(),
+                },
+            )
+            .err();
+        let mut rewrite_failures = Vec::new();
+        for (source, request) in &rewrites {
+            if let Err(error) = apply(source, request) {
+                rewrite_failures.push(format!("{source}: {error}"));
+            }
+        }
+        CompletedExplicitAssetRename {
+            workspace_id,
+            installed,
+            side_data,
+            from,
+            to,
+            owns_batch,
+            rewrite_failures,
+            journal_fault,
+        }
+    }
+}
+
+impl PendingIdentityMigration {
+    fn invoke(self) -> CompletedIdentityMigration {
+        CompletedIdentityMigration {
+            workspace_id: self.workspace_id,
+            from: self.from,
+            to: self.to,
+            installed: self.installed,
+            removal: self.removal.invoke(),
+            feed: self.feed.invoke_indexes(),
+        }
+    }
+}
+
+impl PreparedExternalDocumentRename {
+    /// Esegue stat-read-stat e parse nella forma dichiarata dal formato.
+    pub fn invoke(self) -> ParsedExternalDocumentRename {
+        let PreparedExternalDocumentRename {
+            snapshot,
+            storage,
+            parser,
+            source_kind,
+            side_data,
+        } = self;
+        let state = match storage.stat(&snapshot.to_path) {
+            Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
+                Ok(bytes) => match storage.stat(&snapshot.to_path) {
+                    Ok(after) if after.is_file() && before == after => {
+                        let fingerprint = Revision::of_bytes(&bytes);
+                        let source =
+                            match source_kind {
+                                SourceKind::Text => {
+                                    match fub_abi::rules::text_policy::decode(&bytes) {
+                                    Ok(text) => Ok(DocumentSource::Text(text.to_string())),
+                                    Err(at) => Err(KernelError::Io {
+                                        path: snapshot.to_path.clone(),
+                                        source: std::io::Error::new(
+                                            std::io::ErrorKind::InvalidData,
+                                            format!(
+                                                "il file non è UTF-8: il primo byte non valido è a {at}"
+                                            ),
+                                        ),
+                                    }),
+                                }
+                                }
+                                SourceKind::Bytes => Ok(DocumentSource::Bytes(bytes)),
+                            };
+                        match source.and_then(|source| parser.invoke(source)) {
+                            Ok(model) => ParsedExternalDocumentState::Ready {
+                                model: Box::new(model),
+                                fingerprint,
+                                stat: after,
+                            },
+                            Err(error) => ParsedExternalDocumentState::Failed(error),
+                        }
+                    }
+                    Ok(_) => ParsedExternalDocumentState::Stale,
+                    Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
+                    Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                        path: snapshot.to_path.clone(),
+                        source,
+                    }),
+                },
+                Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
+                Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                    path: snapshot.to_path.clone(),
+                    source,
+                }),
+            },
+            Ok(_) => ParsedExternalDocumentState::Stale,
+            Err(error) if sync_path_is_absent(&error) => ParsedExternalDocumentState::Stale,
+            Err(source) => ParsedExternalDocumentState::Failed(KernelError::Io {
+                path: snapshot.to_path.clone(),
+                source,
+            }),
+        };
+        ParsedExternalDocumentRename {
+            snapshot,
+            state,
+            side_data,
+        }
+    }
+}
+
+impl PreparedRenameSideData {
+    fn invoke(self) -> CompletedRenameSideData {
+        let rollback = PreparedRenameSideData {
+            from: self.to.clone(),
+            to: self.from.clone(),
+            organization: Arc::clone(&self.organization),
+            drafts: Arc::clone(&self.drafts),
+            storage: Arc::clone(&self.storage),
+            doc_data_roots: self.doc_data_roots.clone(),
+        };
+        let PreparedRenameSideData {
+            from,
+            to,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = self;
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            organization.warn(format!(
+                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {error}"
+            ));
+        }
+        let mut errors =
+            crate::docdata::migrate_data(storage.as_ref(), &doc_data_roots, &from, &to);
+        if let Err(error) = drafts.migrate(&from, &to) {
+            errors.push(format!("bozza non migrata: {error}"));
+        }
+        CompletedRenameSideData {
+            from,
+            to,
+            errors,
+            rollback: Some(rollback),
+        }
+    }
+}
+
+impl CompletedRenameSideData {
+    fn rollback(mut self) -> Vec<String> {
+        let Some(rollback) = self.rollback.take() else {
+            return vec!["ricevuta di rollback già consumata".into()];
+        };
+        let PreparedRenameSideData {
+            from,
+            to,
+            organization,
+            drafts,
+            storage,
+            doc_data_roots,
+        } = rollback;
+        let mut errors = Vec::new();
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            errors.push(format!("organizzazione non ripristinata: {error}"));
+        }
+        errors.extend(crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &from,
+            &to,
+        ));
+        if let Err(error) = drafts.migrate(&from, &to) {
+            errors.push(format!("bozza non ripristinata: {error}"));
+        }
+        errors
+    }
+}
+impl PreparedAssetRenameSideData {
+    fn invoke(self) -> CompletedAssetRenameSideData {
+        let rollback = PreparedAssetRenameSideData {
+            from: self.to.clone(),
+            to: self.from.clone(),
+            organization: Arc::clone(&self.organization),
+            storage: Arc::clone(&self.storage),
+            doc_data_roots: self.doc_data_roots.clone(),
+        };
+        let PreparedAssetRenameSideData {
+            from,
+            to,
+            organization,
+            storage,
+            doc_data_roots,
+        } = self;
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            organization.warn(format!(
+                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {error}"
+            ));
+        }
+        let errors = crate::docdata::migrate_data(storage.as_ref(), &doc_data_roots, &from, &to);
+        CompletedAssetRenameSideData {
+            from,
+            to,
+            errors,
+            rollback: Some(rollback),
+        }
+    }
+}
+
+impl CompletedAssetRenameSideData {
+    fn rollback(mut self) -> Vec<String> {
+        let Some(rollback) = self.rollback.take() else {
+            return vec!["ricevuta di rollback asset già consumata".into()];
+        };
+        let PreparedAssetRenameSideData {
+            from,
+            to,
+            organization,
+            storage,
+            doc_data_roots,
+        } = rollback;
+        let mut errors = Vec::new();
+        if let Err(error) = organization.migrate(from.as_str(), to.as_str()) {
+            errors.push(format!("organizzazione non ripristinata: {error}"));
+        }
+        errors.extend(crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &from,
+            &to,
+        ));
+        errors
+    }
+}
+
+impl PendingExternalDocumentRename {
+    /// Notifica remove+feed e migra i dati autorevoli senza detenere il workspace.
+    pub fn invoke(self) -> CompletedExternalDocumentRename {
+        let PendingExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            side_data,
+        } = self;
+        CompletedExternalDocumentRename {
+            snapshot,
+            installed,
+            removal: removal.invoke(),
+            feed: feed.invoke_indexes(),
+            side_data: side_data.invoke(),
+        }
+    }
+}
+
+impl PreparedExternalAssetRename {
+    /// Verifica la destinazione con stat-read-stat e, se non è un file stabile,
+    /// invoca i due piani per-path già fotografati. Tutto il filesystem resta
+    /// fuori da Custody.
+    pub fn invoke(self) -> ParsedExternalRename {
+        let PreparedExternalAssetRename {
+            snapshot,
+            storage,
+            organization,
+            doc_data_roots,
+            fallback,
+        } = self;
+        let verified = match storage.stat(&snapshot.to_path) {
+            Ok(before) if before.is_file() => match storage.read(&snapshot.to_path) {
+                Ok(bytes) => match storage.stat(&snapshot.to_path) {
+                    Ok(after) if after.is_file() && before == after => {
+                        Some((after, Revision::of_bytes(&bytes)))
+                    }
+                    _ => None,
+                },
+                Err(_) => None,
+            },
+            _ => None,
+        };
+        match verified {
+            Some((stat, fingerprint)) => {
+                ParsedExternalRename::Asset(Box::new(ParsedExternalAssetRename {
+                    snapshot,
+                    stat,
+                    fingerprint,
+                    organization,
+                    storage,
+                    doc_data_roots,
+                }))
+            }
+            None => ParsedExternalRename::Sync(
+                fallback
+                    .into_iter()
+                    .map(|(path, plan)| (path, plan.map(SyncPlan::invoke)))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+impl PendingExternalAssetRename {
+    /// Migra i dati autorevoli dell'asset senza detenere il workspace.
+    pub fn invoke(self) -> CompletedExternalAssetRename {
+        let PendingExternalAssetRename {
+            snapshot,
+            installed,
+            organization,
+            storage,
+            doc_data_roots,
+        } = self;
+        if let Err(error) = organization.migrate(snapshot.from_id.as_str(), snapshot.to_id.as_str())
+        {
+            organization.warn(format!(
+                "l'organizzazione di {} non ha potuto seguire la rinomina in {}: {error}",
+                snapshot.from_id, snapshot.to_id
+            ));
+        }
+        let doc_data_errors = crate::docdata::migrate_data(
+            storage.as_ref(),
+            &doc_data_roots,
+            &snapshot.from_id,
+            &snapshot.to_id,
+        );
+        CompletedExternalAssetRename {
+            snapshot,
+            installed,
+            doc_data_errors,
+        }
+    }
+}
+
+impl PreparedCatchUp {
+    /// Cammina e legge il vault senza conservare alcun prestito del workspace.
+    ///
+    /// Soltanto un `size + mtime` uguale rende il file eleggibile al salto, e
+    /// l'impronta sui byte decide poi se è davvero rimasto uguale. Un metadato
+    /// diverso o una lettura fallita resta candidato.
+    pub fn invoke(self) -> Result<CatchUpSnapshot> {
+        let PreparedCatchUp { vault, entries } = self;
+        let scanned = vault.scan()?;
+        let mut candidates = BTreeMap::new();
+        let mut on_disk = BTreeSet::new();
+        for file in scanned.files {
+            let unchanged = entries
+                .get(&file.id)
+                .filter(|entry| entry.size == file.size && entry.mtime == file.mtime)
+                .and_then(|entry| entry.fingerprint.as_ref())
+                .is_some_and(|fingerprint| {
+                    vault
+                        .read_bytes(&file.id)
+                        .is_ok_and(|bytes| fingerprint.matches_bytes(&bytes))
+                });
+            on_disk.insert(file.id.clone());
+            if !unchanged {
+                candidates.insert(file.id.clone(), vault.root().join(file.id.as_str()));
+            }
+        }
+        for id in entries.keys() {
+            if on_disk.contains(id) {
+                continue;
+            }
+            let path = vault.root().join(id.as_str());
+            if !vault.is_ignored(&path) {
+                candidates.insert(id.clone(), path);
+            }
+        }
+        Ok(CatchUpSnapshot { candidates })
+    }
+}
+
+impl PendingSyncChange {
+    /// Esegue la sola callback esterna successiva alla mutazione del core.
+    pub fn invoke(self) -> CompletedSyncChange {
+        let PendingSyncChange { snapshot, state } = self;
+        let state = match state {
+            PendingSyncState::Feed {
+                feed,
+                previous_provider_call,
+            } => CompletedSyncState::Feed {
+                feed: Box::new((*feed).invoke_indexes()),
+                previous_provider_call,
+            },
+            PendingSyncState::Removal(removal) => CompletedSyncState::Removal(removal.invoke()),
+            PendingSyncState::Entry(stat) => CompletedSyncState::Entry(stat),
+            PendingSyncState::Unchanged(stat) => CompletedSyncState::Unchanged(stat),
+        };
+        CompletedSyncChange { snapshot, state }
+    }
+}
+
+fn invoke_sync_read(
+    snapshot: &SyncSnapshot,
+    storage: &dyn crate::storage::VaultStorage,
+    parser: PreparedParse,
+    source_kind: SourceKind,
+    already_ingested: bool,
+) -> ParsedChangeState {
+    let before = match storage.stat(&snapshot.path) {
+        Ok(stat) if stat.is_file() => stat,
+        Ok(_) => return ParsedChangeState::Unstable,
+        Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
+        Err(source) => {
+            return ParsedChangeState::Failed(KernelError::Io {
+                path: snapshot.path.clone(),
+                source,
+            })
+        }
+    };
+    let bytes = match storage.read(&snapshot.path) {
+        Ok(bytes) => bytes,
+        Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
+        Err(source) => {
+            return ParsedChangeState::Failed(KernelError::Io {
+                path: snapshot.path.clone(),
+                source,
+            })
+        }
+    };
+    let after = match storage.stat(&snapshot.path) {
+        Ok(stat) if stat.is_file() => stat,
+        Ok(_) => return ParsedChangeState::Unstable,
+        Err(error) if sync_path_is_absent(&error) => return ParsedChangeState::Missing,
+        Err(source) => {
+            return ParsedChangeState::Failed(KernelError::Io {
+                path: snapshot.path.clone(),
+                source,
+            })
+        }
+    };
+    if before != after {
+        return ParsedChangeState::Unstable;
+    }
+    let fingerprint = Revision::of_bytes(&bytes);
+    if already_ingested && snapshot.seen.as_ref() == Some(&fingerprint) {
+        return ParsedChangeState::Unchanged(after);
+    }
+    let source = match source_kind {
+        SourceKind::Text => match fub_abi::rules::text_policy::decode(&bytes) {
+            Ok(text) => DocumentSource::Text(text.to_string()),
+            Err(at) => {
+                return ParsedChangeState::Failed(KernelError::Io {
+                    path: snapshot.path.clone(),
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!(
+                            "il file non è UTF-8: il primo byte non valido è a {at} \
+                             (0x{:02X}), su {} byte in tutto",
+                            bytes.get(at).copied().unwrap_or(0),
+                            bytes.len()
+                        ),
+                    ),
+                })
+            }
+        },
+        SourceKind::Bytes => DocumentSource::Bytes(bytes),
+    };
+    match parser.invoke(source) {
+        Ok(model) => ParsedChangeState::Ready {
+            model: Box::new(model),
+            fingerprint,
+            stat: after,
+        },
+        Err(error) => ParsedChangeState::Failed(error),
+    }
+}
+
+fn sync_path_is_absent(error: &std::io::Error) -> bool {
+    matches!(
+        error.kind(),
+        std::io::ErrorKind::NotFound | std::io::ErrorKind::InvalidInput
+    ) || matches!(error.raw_os_error(), Some(2 | 3 | 123))
+}
+
+/// Una fetta dell'apertura già letta e parsata, che aspetta di entrare nel workspace.
 ///
 /// È il [`ParsedChange`] di un lotto invece che di un file, e il nome dice la
 /// parentela apposta: la forma è la stessa della
@@ -326,10 +1677,25 @@ pub struct ParsedBatch {
 /// di [`ParsedBatch`], ma senza `seen` (che si calcola una volta per tutta la
 /// fetta). Si fondono in [`Workspace::plan_batch`].
 /// Come il `Workspace` tiene aggiornato il grafo dopo una modifica.
+struct PendingIndexEntry {
+    entry: VaultEntry,
+    source: Option<DocumentSource>,
+}
+
 #[derive(Default)]
-struct PlanChunk {
-    read: Vec<VaultEntry>,
-    reused: Vec<(DocId, StoredMeta)>,
+struct IndexCheckChunk {
+    entries: Vec<PendingIndexEntry>,
+    discarded: Vec<(DocId, KernelError)>,
+}
+
+struct PendingDocumentParse {
+    id: DocId,
+    parser: PreparedParse,
+    source: DocumentSource,
+}
+
+#[derive(Default)]
+struct IndexParseChunk {
     models: Vec<DocumentModel>,
     discarded: Vec<(DocId, KernelError)>,
 }
@@ -449,7 +1815,834 @@ pub const INDEX_JOB: &str = "vault.index";
 pub type BeforeWriteHook =
     Arc<dyn Fn(&mut dyn HostApi, &DocId) -> std::result::Result<(), PluginError> + Send + Sync>;
 
+/// Receipt for the exact machine-setting write that materialized default deny.
+/// It can only undo that write while it is still the latest write to the key.
+pub struct PermissionInitialization(crate::settings::MachineSettingRevision);
+
+/// Una chiamata a `CommandProvider` preparata sotto lock e invocabile fuori.
+///
+/// Contiene anche il frame da ripristinare al rientro: attore, batch, pila e
+/// flag di provider restano una singola transazione logica anche se il `RwLock`
+/// non attraversa codice esterno.
+pub struct PreparedCommand {
+    owner: String,
+    command: String,
+    args: Option<serde_json::Value>,
+    mode: InvokeMode,
+    provider: Arc<dyn CommandProvider>,
+    read_only_reason: Option<&'static str>,
+    previous_actor: Option<Actor>,
+    owns_batch: bool,
+    previous_provider_call: bool,
+}
+
+impl PreparedCommand {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    /// Modalità che il proxy deve usare per le capacità annidate.
+    pub fn host_mode(&self) -> InvokeMode {
+        if self.read_only_reason.is_some() {
+            InvokeMode::DryRun
+        } else {
+            self.mode
+        }
+    }
+
+    /// Il recinto addizionale da mettere davanti al proxy, se serve.
+    pub fn read_only_reason(&self) -> Option<&'static str> {
+        self.read_only_reason
+    }
+
+    /// Esegue **soltanto** il codice del provider. Nessun `Workspace` è
+    /// necessario qui: chi chiama deve aver già rilasciato la sua guardia.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let args = self.args.take().ok_or_else(|| {
+            PluginError::Internal("una chiamata preparata è stata invocata due volte".into())
+        })?;
+        crate::safety::calling(&self.owner, Gate::Command, &self.command, || {
+            self.provider.invoke(&self.command, args, self.mode, host)
+        })
+    }
+}
+/// Frame del solo rebuild di manutenzione che l'host porta avanti senza una
+/// guardia del workspace. Attore, batch, pila e rinvio degli eventi restano
+/// aperti fino alla riconciliazione finale.
+pub struct PreparedMaintenanceRebuild {
+    owner: String,
+    command: String,
+    mode: InvokeMode,
+    previous_actor: Option<Actor>,
+    owns_batch: bool,
+    previous_dispatch_deferral: bool,
+}
+
+impl PreparedMaintenanceRebuild {
+    pub fn mode(&self) -> InvokeMode {
+        self.mode
+    }
+}
+
+/// Stato owned di un annullamento fra un passo e il successivo.
+///
+/// Il token tiene aperti replay e batch senza prestare il [`Workspace`], così
+/// un host può eseguire provider, parser e indici dopo avere rilasciato il
+/// proprio guard. Va sempre riconsegnato a
+/// [`Workspace::finish_undo_replay_deferred`].
+pub struct UndoReplay {
+    entry: crate::undo::Entry,
+    next: usize,
+    done: usize,
+    failure: Option<Failure>,
+    before_replay: bool,
+    owns_batch: bool,
+}
+
+/// Epilogo di undo da completare soltanto dopo il drain degli eventi.
+pub struct DeferredUndo {
+    entry: crate::undo::Entry,
+    done: usize,
+    failure: Option<Failure>,
+    before_replay: bool,
+}
+
+impl UndoReplay {
+    /// Il prossimo passo, owned perché deve poter attraversare il confine del
+    /// guard del workspace.
+    pub fn next_step(&self) -> Option<UndoStep> {
+        if self.failure.is_some() {
+            return None;
+        }
+        self.entry.undo.steps.get(self.next).cloned()
+    }
+
+    /// Riconsegna l'esito del passo appena estratto.
+    pub fn finish_step(&mut self, outcome: std::result::Result<(), Failure>) {
+        debug_assert!(
+            self.failure.is_none() && self.next < self.entry.undo.steps.len(),
+            "un esito di undo deve seguire un passo preparato"
+        );
+        match outcome {
+            Ok(()) => {
+                self.done += 1;
+                self.next += 1;
+            }
+            Err(failure) => self.failure = Some(failure),
+        }
+    }
+
+    /// Registra nel token che il passo in corso è uscito per unwind.
+    ///
+    /// Il payload resta al driver, che lo riprenderà dopo l'epilogo. Qui serve
+    /// soltanto distinguere l'interruzione da un replay completo: se nessun
+    /// passo era riuscito, la normale chiusura rimette la voce in pila.
+    pub fn finish_unwind(&mut self) {
+        if self.failure.is_none() {
+            self.failure = Some(Failure::other(PluginError::Internal(
+                "undo interrotto da un panic".into(),
+            )));
+        }
+    }
+}
+
+/// Una chiamata a [`ServiceProvider`] preparata sotto lock e invocabile
+/// senza tenere `Custody<Workspace>`.
+pub struct PreparedService {
+    owner: String,
+    service: String,
+    method: String,
+    args: Option<serde_json::Value>,
+    provider: Arc<dyn ServiceProvider>,
+    previous_provider_call: bool,
+}
+
+impl PreparedService {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    /// Esegue soltanto il codice esterno. Stack e flag sono già stati impostati
+    /// da `prepare_service_call` e verranno chiusi da `finish_service_call`.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<serde_json::Value, PluginError> {
+        let args = self.args.take().ok_or_else(|| {
+            PluginError::Internal(
+                "una chiamata di servizio preparata è stata invocata due volte".into(),
+            )
+        })?;
+        crate::safety::calling(
+            &self.owner,
+            Gate::Service,
+            &format!("{}.{}", self.service, self.method),
+            || self.provider.call(&self.service, &self.method, args, host),
+        )
+    }
+}
+
+/// Un render di [`ViewProvider`] risolto sotto lock e invocabile senza tenere
+/// `Custody<Workspace>`. Il provider resta registrato tramite un `Arc`; il lock
+/// qui è del solo provider, non del workspace, e consente render concorrenti.
+pub struct PreparedViewRender {
+    owner: String,
+    view: String,
+    instance: ViewInstance,
+    trust: Trust,
+    provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    generation: Arc<()>,
+}
+
+impl PreparedViewRender {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn instance_id(&self) -> &str {
+        &self.instance.instance
+    }
+
+    /// Esegue soltanto il codice esterno del provider. Le letture richieste dal
+    /// provider passano dal proxy host e prendono il workspace per capacità.
+    pub fn invoke(&self, host: &dyn ReadApi) -> std::result::Result<UiNode, PluginError> {
+        let provider = self.provider.read();
+        crate::safety::calling(&self.owner, Gate::ViewRender, &self.view, || {
+            provider.render_view(&self.instance, host)
+        })
+    }
+}
+/// Interests di [`ViewProvider`] risolti sotto lock e invocabili senza tenere
+/// una guardia di [`Workspace`]. Il provider resta registrato tramite un
+/// `Arc`, mentre la consistenza della registrazione viene verificata in
+/// `Workspace::finish_view_interests`.
+pub struct PreparedViewInterests {
+    owner: String,
+    view: String,
+    instance: ViewInstance,
+    provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    generation: Arc<()>,
+}
+
+impl PreparedViewInterests {
+    /// Esegue soltanto la callback esterna del provider.
+    pub fn invoke(&self) -> std::result::Result<ViewInterests, PluginError> {
+        let provider = self.provider.read();
+        crate::safety::calling(&self.owner, Gate::ViewRender, &self.view, || {
+            Ok(provider.interests(&self.instance))
+        })
+    }
+}
+
+/// Un'azione di [`ViewProvider`] risolta sotto lock e invocabile senza tenere
+/// `Custody<Workspace>`. Il frame di provider resta logicamente aperto fino al
+/// finalize, mentre l'esclusione sulla mutabilità riguarda il solo provider.
+pub struct PreparedViewAction {
+    owner: String,
+    view: String,
+    instance: ViewInstance,
+    action: Option<UiAction>,
+    trust: Trust,
+    provider: Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    generation: Arc<()>,
+    previous_provider_call: bool,
+}
+
+impl PreparedViewAction {
+    pub fn owner(&self) -> &str {
+        &self.owner
+    }
+
+    pub fn instance_id(&self) -> &str {
+        &self.instance.instance
+    }
+
+    /// Esegue soltanto il codice esterno. Il provider ha il proprio lock; il
+    /// workspace viene ripreso dal proxy soltanto per la singola capacità che
+    /// la callback usa.
+    pub fn invoke(
+        &mut self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        let action = self
+            .action
+            .take()
+            .expect("a prepared view action is invoked exactly once");
+        let mut provider = self.provider.write();
+        crate::safety::calling(&self.owner, Gate::ViewAction, &self.view, || {
+            provider.on_action(&self.instance, action, host)
+        })
+    }
+}
+
+/// Scrittura risolta fino al confine del codice esterno. Non porta guardie del
+/// workspace: può essere parsata mentre `Custody<Workspace>` è rilasciato.
+pub struct PreparedDocumentWrite {
+    id: DocId,
+    existed: bool,
+    from: Option<Revision>,
+    expected_source: Option<String>,
+    parser: PreparedParse,
+    before_write: Option<(String, BeforeWriteHook)>,
+}
+
+/// Una proiezione locale risolta fino al confine dei provider. Sorgente,
+/// parser, regole e renderer sono valori posseduti: nessuno porta con sé una
+/// guardia del workspace.
+pub struct PreparedLocalProjection {
+    id: DocId,
+    resolved_page: Option<String>,
+    source_revision: Revision,
+    source: DocumentSource,
+    parser: PreparedParse,
+    renderers: crate::renderer::RendererRegistry,
+    kind: LocalProjectionKind,
+    routing_generation: u64,
+    projection_generation: u64,
+}
+
+/// Lettura del modello risolta fino al confine del parser. La sorgente, il
+/// provider e le regole sono posseduti: `invoke` non prende in prestito il
+/// workspace e può quindi attraversare il codice esterno senza la sua guardia.
+pub struct PreparedDocumentModel {
+    id: DocId,
+    source_revision: Revision,
+    source: DocumentSource,
+    parser: PreparedParse,
+    syntax_generation: u64,
+}
+
+/// Modello prodotto fuori dal workspace, ancora da confrontare con la
+/// sorgente e la pipeline correnti.
+pub struct CompletedDocumentModel {
+    id: DocId,
+    source_revision: Revision,
+    model: DocumentModel,
+    syntax_generation: u64,
+}
+
+enum LocalProjectionKind {
+    Preview,
+    Embed {
+        heading: Option<String>,
+        block: Option<String>,
+    },
+}
+
+/// Il risultato esterno di una proiezione, ancora da validare contro lo stato
+/// corrente del workspace.
+pub struct CompletedLocalProjection {
+    id: DocId,
+    resolved_page: Option<String>,
+    source_revision: Revision,
+    result: IndexResult,
+    routing_generation: u64,
+    projection_generation: u64,
+}
+
+impl PreparedLocalProjection {
+    /// Attraversa `FormatProvider::parse`, le `SyntaxRule`,
+    /// `FormatProvider::render_html` e i `CustomRenderer`. Il chiamante deve
+    /// aver già rilasciato ogni guardia di `Custody<Workspace>`.
+    pub fn invoke(self) -> std::result::Result<CompletedLocalProjection, PluginError> {
+        let PreparedLocalProjection {
+            id,
+            resolved_page,
+            source_revision,
+            source,
+            parser,
+            renderers,
+            kind,
+            routing_generation,
+            projection_generation,
+        } = self;
+        let model = parser.invoke(source).map_err(PluginError::from)?;
+        let (model, result_kind) = match kind {
+            LocalProjectionKind::Preview => (model, None),
+            LocalProjectionKind::Embed { block, heading } => {
+                let clipped = match (block.as_deref(), heading.as_deref()) {
+                    (Some(block), _) => block_of(&model, block)
+                        .ok_or_else(|| PluginError::NotFound(format!("{id}#^{block}").into()))?,
+                    (None, Some(heading)) => section_of(&model, heading)
+                        .ok_or_else(|| PluginError::NotFound(format!("{id}#{heading}").into()))?,
+                    (None, None) => model,
+                };
+                (clipped, Some(id.0.clone()))
+            }
+        };
+        let rendered = parser
+            .render(&model, &renderers, &RenderOptions::preview())
+            .map_err(PluginError::from)?;
+        let result = match result_kind {
+            None => IndexResult::RenderPreview(rendered.into()),
+            Some(doc_id) => IndexResult::RenderEmbed(EmbedContent {
+                doc_id,
+                content: rendered.into(),
+            }),
+        };
+        Ok(CompletedLocalProjection {
+            id,
+            resolved_page,
+            source_revision,
+            result,
+            routing_generation,
+            projection_generation,
+        })
+    }
+}
+
+impl PreparedDocumentModel {
+    /// Esegue `FormatProvider::parse` e le `SyntaxRule` sulla fotografia
+    /// preparata. Il chiamante deve avere già rilasciato qualunque guardia di
+    /// `Custody<Workspace>`.
+    pub fn invoke(self) -> std::result::Result<CompletedDocumentModel, PluginError> {
+        let PreparedDocumentModel {
+            id,
+            source_revision,
+            source,
+            parser,
+            syntax_generation,
+        } = self;
+        let model = parser.invoke(source).map_err(PluginError::from)?;
+        Ok(CompletedDocumentModel {
+            id,
+            source_revision,
+            model,
+            syntax_generation,
+        })
+    }
+}
+
+/// La scansione preparata senza chiamare codice esterno. Contiene una
+/// fotografia degli handle degli indici, non una guardia del `Workspace`.
+pub struct PreparedVaultScan {
+    folders: Vec<String>,
+    entries: Vec<VaultEntry>,
+    documents: Vec<VaultEntry>,
+    known_entries: Vec<Option<StoredEntry>>,
+    assets: Vec<VaultEntry>,
+    providers: Vec<(String, SharedIndexProvider)>,
+}
+
+/// La risposta degli indici alla scansione, pronta per la finalizzazione.
+pub struct CompletedVaultScan {
+    folders: Vec<String>,
+    entries: Vec<VaultEntry>,
+    documents: Vec<VaultEntry>,
+    known_entries: Vec<Option<StoredEntry>>,
+    assets: Vec<VaultEntry>,
+    up_to_date: BTreeSet<DocId>,
+}
+
+impl PreparedVaultScan {
+    /// Esegue soltanto `IndexProvider::up_to_date`, sugli handle staccati.
+    pub fn invoke(self) -> CompletedVaultScan {
+        let PreparedVaultScan {
+            folders,
+            entries,
+            documents,
+            known_entries,
+            assets,
+            providers,
+        } = self;
+        let mut up_to_date = up_to_date_index_handles(&providers, &documents);
+        if release_index_handles(providers).is_err() {
+            up_to_date.clear();
+        }
+        CompletedVaultScan {
+            folders,
+            entries,
+            documents,
+            known_entries,
+            assets,
+            up_to_date,
+        }
+    }
+}
+
+/// Prima metà di una fetta d'apertura: impronte e fotografia dei provider,
+/// senza callback esterne.
+pub struct PreparedIndexBatchCheck {
+    seen: BTreeMap<DocId, Option<Revision>>,
+    entries: Vec<PendingIndexEntry>,
+    discarded: Vec<(DocId, KernelError)>,
+    providers: Vec<(String, SharedIndexProvider)>,
+}
+
+/// Risposta di `up_to_date` che non porta alcuna guardia del workspace.
+pub struct CheckedIndexBatch {
+    seen: BTreeMap<DocId, Option<Revision>>,
+    entries: Vec<PendingIndexEntry>,
+    discarded: Vec<(DocId, KernelError)>,
+    already: BTreeSet<DocId>,
+}
+
+impl PreparedIndexBatchCheck {
+    /// Attraversa il solo confine degli indici. Il chiamante deve aver già
+    /// rilasciato qualunque guardia di `Custody<Workspace>`.
+    pub fn invoke(self) -> CheckedIndexBatch {
+        let PreparedIndexBatchCheck {
+            seen,
+            entries,
+            discarded,
+            providers,
+        } = self;
+        let documents: Vec<VaultEntry> = entries
+            .iter()
+            .filter(|pending| pending.entry.kind == EntryKind::Document)
+            .map(|pending| pending.entry.clone())
+            .collect();
+        let mut already = up_to_date_index_handles(&providers, &documents);
+        if release_index_handles(providers).is_err() {
+            already.clear();
+        }
+        CheckedIndexBatch {
+            seen,
+            entries,
+            discarded,
+            already,
+        }
+    }
+}
+
+/// Seconda metà preparata della fetta: parser e sorgenti risolti, ma nessun
+/// `FormatProvider` o `SyntaxRule` ancora eseguito.
+pub struct PreparedIndexBatchParse {
+    read: Vec<VaultEntry>,
+    reused: Vec<(DocId, StoredMeta)>,
+    parses: Vec<PendingDocumentParse>,
+    discarded: Vec<(DocId, KernelError)>,
+    seen: BTreeMap<DocId, Option<Revision>>,
+}
+
+impl PreparedIndexBatchParse {
+    /// Esegue soltanto parse e regole sintattiche. Gli scarti aggiornano
+    /// `Indexing`, che vive fuori dal workspace.
+    pub fn invoke(self, work: &mut Indexing) -> ParsedBatch {
+        let PreparedIndexBatchParse {
+            read,
+            reused,
+            parses,
+            mut discarded,
+            seen,
+        } = self;
+
+        let n = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1)
+            .clamp(1, 8);
+        let chunks: Vec<IndexParseChunk> = if n > 1 && parses.len() > n {
+            let mut buckets: Vec<Vec<PendingDocumentParse>> = (0..n).map(|_| Vec::new()).collect();
+            for (at, pending) in parses.into_iter().enumerate() {
+                buckets[at % n].push(pending);
+            }
+            std::thread::scope(|scope| {
+                let handles: Vec<_> = buckets
+                    .into_iter()
+                    .filter(|bucket| !bucket.is_empty())
+                    .map(|bucket| scope.spawn(move || Workspace::invoke_parse_chunk(bucket)))
+                    .collect();
+                handles
+                    .into_iter()
+                    .map(|handle| handle.join().expect("il parser non esce dal recinto"))
+                    .collect()
+            })
+        } else {
+            vec![Workspace::invoke_parse_chunk(parses)]
+        };
+
+        let mut models = Vec::new();
+        for chunk in chunks {
+            models.extend(chunk.models);
+            discarded.extend(chunk.discarded);
+        }
+        for (id, why) in discarded {
+            work.opening.discards(id, why);
+        }
+        ParsedBatch {
+            read,
+            reused,
+            models,
+            seen,
+        }
+    }
+}
+
+/// Chiusura dell'indicizzazione preparata: grafo, insieme completo e handle dei
+/// provider attraversano il confine senza portarsi dietro il `Workspace`.
+pub struct PreparedIndexFinish {
+    work: Indexing,
+    graph: BuiltGraph,
+    ids: Vec<DocId>,
+    providers: Vec<(String, SharedIndexProvider)>,
+}
+
+pub struct CompletedIndexFinish {
+    work: Indexing,
+    graph: BuiltGraph,
+    external_losses: Vec<IndexLoss>,
+}
+
+impl PreparedIndexFinish {
+    pub fn invoke(self) -> CompletedIndexFinish {
+        let PreparedIndexFinish {
+            work,
+            graph,
+            ids,
+            providers,
+        } = self;
+        let mut external_losses = if work.finished() {
+            reconcile_index_handles(&providers, &ids)
+        } else {
+            Vec::new()
+        };
+        if let Err(error) = release_index_handles(providers) {
+            if let Some(id) = ids.into_iter().next() {
+                external_losses.push(IndexLoss::new(id, error));
+            }
+        }
+        CompletedIndexFinish {
+            work,
+            graph,
+            external_losses,
+        }
+    }
+}
+
+pub struct PreparedIndexBatchFeed {
+    models: Vec<DocumentModel>,
+    providers: Vec<(String, SharedIndexProvider)>,
+    losses: Vec<IndexLoss>,
+}
+
+impl PreparedIndexBatchFeed {
+    pub fn invoke_indexes(mut self) -> Self {
+        let providers = std::mem::take(&mut self.providers);
+        self.losses
+            .extend(feed_index_handles(&providers, &self.models));
+        if let Err(error) = release_index_handles(providers) {
+            self.losses.extend(
+                self.models
+                    .iter()
+                    .map(|model| IndexLoss::new(model.id.clone(), error.clone())),
+            );
+        }
+        self
+    }
+}
+
+pub struct PreparedDocumentFeed {
+    id: DocId,
+    model: DocumentModel,
+    changes: DocChanges,
+    revision: Revision,
+    journal: JournalOp,
+    providers: Vec<(String, SharedIndexProvider)>,
+    losses: Vec<IndexLoss>,
+}
+
+/// Un epilogo che ha già chiuso il frame dell'operazione ma deve ancora
+/// consegnare gli eventi fuori da `Custody<Workspace>`.
+///
+/// Il valore resta opaco all'host: il kernel conserva qui anche lo stato che
+/// va ripristinato *dopo* il drain (l'attore di un comando) e il journal che,
+/// per una scrittura, deve restare nell'ordine storico
+/// `indici -> eventi -> journal`.
+pub struct DeferredEvents<T> {
+    outcome: T,
+    previous_actor: Option<Actor>,
+    journal: Option<JournalOp>,
+}
+
+/// Diritto monouso a completare una chiusura già annunciata.
+///
+/// [`Workspace::prepare_close`] alza la generazione terminale del workspace
+/// (`closed`) e accoda `VaultClosed`; da quel momento nessun'altra prepare può
+/// riuscire. Il token non è clonabile e i suoi campi sono privati: l'host lo
+/// conserva mentre drena l'evento fuori da `Custody<Workspace>`, quindi lo
+/// riconsegna una volta sola a [`Workspace::finish_close_with`]. Un nonce
+/// process-local impedisce che venga accettato da un'altra istanza aperta sulla
+/// stessa radice.
+#[derive(Debug)]
+pub struct PreparedClose {
+    root: String,
+    workspace_id: u64,
+}
+
+impl<T> DeferredEvents<T> {
+    fn outcome(outcome: T) -> Self {
+        Self {
+            outcome,
+            previous_actor: None,
+            journal: None,
+        }
+    }
+}
+
+/// Token opaco usato dal proxy dei job per rimandare il dispatch finché il
+/// suo write guard non è stato rilasciato.
+pub struct EventDispatchDeferral {
+    previous_dispatch_deferral: bool,
+}
+
+/// Cursore di un drenaggio eventi eseguito dall'host fuori dal lock.
+///
+/// Il budget appartiene all'intero drenaggio, non a una singola callback: una
+/// cascata rientrante conserva quindi lo stesso limite del percorso diretto di
+/// [`Workspace`].
+pub struct EventDrain {
+    budget: usize,
+    active: bool,
+    lent: bool,
+    done: bool,
+}
+
+impl EventDrain {
+    pub fn new() -> Self {
+        Self {
+            budget: Dispatcher::budget(),
+            active: false,
+            lent: false,
+            done: false,
+        }
+    }
+}
+
+impl Default for EventDrain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Una consegna preparata sotto il write guard e invocabile senza alcun
+/// prestito di `Custody<Workspace>`.
+pub struct PreparedEventDelivery {
+    notice: Notice,
+    handlers: Vec<(String, Box<dyn EventHandler>)>,
+    previous_provider_call: bool,
+}
+
+/// La parte che deve rientrare nel workspace anche quando uno o più handler
+/// hanno risposto con errore o sono andati in panico.
+pub struct CompletedEventDelivery {
+    notice: Notice,
+    handlers: Vec<(String, Box<dyn EventHandler>)>,
+    previous_provider_call: bool,
+    troubles: Vec<(String, PluginError)>,
+}
+
+impl PreparedEventDelivery {
+    /// Esegue `subscribed` e `handle` fuori dal workspace. La closure presta
+    /// l'host stretto del singolo plugin e viene chiamata soltanto dopo che il
+    /// chiamante ha rilasciato il write guard.
+    pub fn invoke(
+        mut self,
+        mut with_host: impl FnMut(
+            &str,
+            &mut dyn FnMut(&mut dyn HostApi),
+        ) -> std::result::Result<(), PluginError>,
+    ) -> CompletedEventDelivery {
+        let mut troubles = Vec::new();
+        for (id, handler) in &mut self.handlers {
+            let subscribed = crate::safety::calling(id, Gate::Event, "", || {
+                Ok::<_, PluginError>(handler.subscribed())
+            });
+            let mask = match subscribed {
+                Ok(mask) => mask,
+                Err(error) => {
+                    troubles.push((id.clone(), error));
+                    continue;
+                }
+            };
+            if !mask.wants(&self.notice.event) {
+                continue;
+            }
+
+            let mut outcome = None;
+            let mut invoke = |host: &mut dyn HostApi| {
+                outcome = Some(crate::safety::calling(id, Gate::Event, "", || {
+                    handler.handle(&self.notice, host)
+                }));
+            };
+            if let Err(error) = with_host(id, &mut invoke) {
+                troubles.push((id.clone(), error));
+                continue;
+            }
+            match outcome {
+                Some(Ok(())) => {}
+                Some(Err(error)) => troubles.push((id.clone(), error)),
+                None => troubles.push((
+                    id.clone(),
+                    PluginError::Internal(
+                        "l'host non ha invocato la consegna evento preparata".into(),
+                    ),
+                )),
+            }
+        }
+
+        CompletedEventDelivery {
+            notice: self.notice,
+            handlers: self.handlers,
+            previous_provider_call: self.previous_provider_call,
+            troubles,
+        }
+    }
+}
+
+impl PreparedDocumentFeed {
+    pub fn invoke_indexes(mut self) -> Self {
+        let providers = std::mem::take(&mut self.providers);
+        self.losses.extend(feed_index_handles(
+            &providers,
+            std::slice::from_ref(&self.model),
+        ));
+        if let Err(error) = release_index_handles(providers) {
+            self.losses
+                .push(IndexLoss::new(self.model.id.clone(), error));
+        }
+        self
+    }
+}
+
+impl PreparedDocumentWrite {
+    /// Esegue `FormatProvider::parse` e tutte le `SyntaxRule`, e nient'altro.
+    pub fn parse(&self, source: &str) -> Result<DocumentModel> {
+        self.parser.invoke(DocumentSource::Text(source.to_string()))
+    }
+
+    /// Il sorgente verificato da `WriteBase::DescendsFrom`.
+    ///
+    /// Serve al percorso host dell'edit: gli span vengono applicati e il
+    /// provider di formato viene chiamato dopo aver rilasciato il workspace.
+    pub fn expected_source(&self) -> Option<&str> {
+        self.expected_source.as_deref()
+    }
+
+    pub fn before_write_owner(&self) -> Option<&str> {
+        self.before_write.as_ref().map(|(owner, _)| owner.as_str())
+    }
+
+    /// Esegue soltanto il gancio esterno fra parse e disco. Il chiamante host
+    /// gli fornisce un proxy che riacquisisce capacità strette una per volta.
+    pub fn invoke_before_write(
+        &self,
+        host: &mut dyn HostApi,
+    ) -> std::result::Result<(), PluginError> {
+        match &self.before_write {
+            Some((owner, hook)) => {
+                crate::safety::calling_callback(owner, "BeforeWriteHook", || hook(host, &self.id))
+            }
+            None => Ok(()),
+        }
+    }
+}
+
 pub struct Workspace {
+    /// Nonce process-local che lega i token opachi a questa istanza precisa.
+    workspace_id: u64,
     /// vault, il registro dei formati, le sintassi innestate (§3.1) e i
     /// renderer dei blocchi custom (§3.2). Stanno insieme perché **ogni** parse
     /// li attraversa tutti e quattro.
@@ -464,6 +2657,15 @@ pub struct Workspace {
     /// ricorda di ciò che ha già visto.
     /// *Chi è registrato, cosa ha dichiarato, chi possiede quale nome* (§8.1):
     indexes: Indexes,
+    /// Cambia quando regole sintattiche o renderer rendono obsoleta una
+    /// fotografia della pipeline di proiezione. È distinta dai token delle
+    /// view: quei token versionano il proprietario di una callback, questa
+    /// versione il contenuto della pipeline documentale.
+    projection_generation: u64,
+    /// Versiona la sola parte della pipeline che costruisce un modello. Un
+    /// renderer nuovo invalida una resa in volo, ma è compatibile con un parse
+    /// che non lo consulta.
+    syntax_generation: u64,
     /// le sei tabelle di provider, il registro dei plugin (decisione 0021) e le
     /// due catene di chiamate in corso. Ciò che si risponde **senza svegliare
     /// nessuno** sta lì dentro; chiamare un provider vuole un `HostApi`, che è
@@ -592,7 +2794,7 @@ pub struct Workspace {
     /// classe: l'anagrafe è l'unico stato di questa lista che si può buttare
     /// senza perdere niente, il registro è quello che non si rifà da niente.
     /// **Ciò che l'utente ha scritto e non ha salvato** (§15.2): le bozze.
-    journal: Journal,
+    journal: Arc<Journal>,
     ///
     /// Sta accanto al registro e ne condivide la classe — autorevole, non si
     /// rifà da niente — ed è il suo opposto per verso: il registro conserva ciò
@@ -625,18 +2827,7 @@ pub struct Workspace {
     /// prestito esclusivo del workspace, e un suo errore ferma la scrittura:
     /// sovrascrivere senza che la fotografia sia riuscita sarebbe la finestra
     /// che questo meccanismo esiste per chiudere.
-    /// L'ultimo documento che il rilevatore ha visto sparire, con l'impronta
     before_write: Option<(String, BeforeWriteHook)>,
-    /// che aveva. Serve a ricongiungere una rinomina esterna spezzata dal
-    /// debounce (difetto 0198): partenza e arrivo in due finestre diverse
-    /// arrivano come remove+add, e senza questo accoppiamento la bozza e lo
-    /// stato per-documento restano sotto il nome morto.
-    ///
-    /// Uno solo, e per impronta: è la regola della 0099 vista dal rilevatore
-    /// aperto. Due sparizioni di fila tengono l'ultima; un arrivo con
-    /// impronta diversa non consuma il posto; nel dubbio non si accoppia.
-    /// Crea un workspace su una radice con un registry di provider già
-    last_removed: Option<(DocId, Revision)>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -674,12 +2865,197 @@ impl From<CivilTime> for StoredCivilTime {
         }
     }
 }
+/// Token owned per the persistent timer-cursor file.
+///
+/// The workspace validates the plugin namespace and freezes both the storage
+/// handle and the absolute path. Invoking the token can therefore perform
+/// storage I/O after the `Workspace` guard has been released.
+pub struct PreparedTimerCursors {
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    path: Utf8PathBuf,
+}
+
+impl PreparedTimerCursors {
+    /// Read all persisted cursors for this plugin.
+    pub fn read(self) -> std::result::Result<BTreeMap<String, CivilTime>, PluginError> {
+        let bytes = match self.storage.read(&self.path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(BTreeMap::new())
+            }
+            Err(error) => return Err(PluginError::Io(format!("{}: {error}", self.path).into())),
+        };
+        let stored: BTreeMap<String, StoredCivilTime> =
+            serde_json::from_slice(&bytes).map_err(|error| {
+                PluginError::Internal(format!("timer cursors at {}: {error}", self.path).into())
+            })?;
+        Ok(stored
+            .into_iter()
+            .map(|(id, time)| (id, time.into()))
+            .collect())
+    }
+
+    /// Atomically update one persisted cursor.
+    pub fn write(self, timer: &str, cursor: CivilTime) -> std::result::Result<(), PluginError> {
+        let path = self.path;
+        self.storage
+            .update(&path, &mut |existing| {
+                let mut stored: BTreeMap<String, StoredCivilTime> = existing
+                    .map(serde_json::from_slice)
+                    .transpose()
+                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
+                    .unwrap_or_default();
+                stored.insert(timer.to_owned(), cursor.into());
+                serde_json::to_vec_pretty(&stored)
+                    .map(Some)
+                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+            })
+            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+    }
+}
 
 const TIMER_CURSORS_FILE: &str = "timers.json";
+
 /// Marca `.fub/data/plugins/<id>/` come cache. Senza di esso quella cartella
 /// è l'albero autorevole *legacy*: `cache_write` la crea, e data_* non deve
 /// scambiarla per dati.
 const PLUGIN_CACHE_MARK: &str = ".fub-cache-root";
+
+enum SettingMutation {
+    Set(SettingValue),
+    Reset,
+}
+
+/// Mutazione di configurazione validata che può persistere fuori dalla
+/// custodia del workspace.
+pub struct PreparedSettingMutation {
+    settings: SharedSettings,
+    key: String,
+    scope: SettingScope,
+    mutation: SettingMutation,
+}
+
+/// Esito persistito che autorizza il solo epilogo in memoria.
+pub struct AppliedSettingMutation {
+    key: String,
+    scope: SettingScope,
+}
+
+impl PreparedSettingMutation {
+    pub fn invoke(self) -> std::result::Result<AppliedSettingMutation, PluginError> {
+        let mut settings = self.settings.write().expect("store di configurazione");
+        let scope = match self.mutation {
+            SettingMutation::Set(value) => settings.set(&self.key, value)?,
+            SettingMutation::Reset => settings.reset(&self.key)?,
+        };
+        debug_assert_eq!(scope, self.scope);
+        Ok(AppliedSettingMutation {
+            key: self.key,
+            scope,
+        })
+    }
+}
+
+/// Token owned per l'I/O dello spazio dati di un plugin.
+///
+/// Il workspace valida e congela radici e path; ogni domanda al supporto,
+/// inclusa la scelta fra namespace canonico e legacy e il marcatore cache,
+/// avviene soltanto quando il token viene invocato.
+pub struct PreparedPluginDataIo {
+    storage: Arc<dyn crate::storage::VaultStorage>,
+    canonical_root: Utf8PathBuf,
+    cache_root: Utf8PathBuf,
+    cache_mark: Utf8PathBuf,
+    canonical_path: Utf8PathBuf,
+    cache_path: Utf8PathBuf,
+}
+
+impl PreparedPluginDataIo {
+    fn authoritative_uses_canonical(&self) -> bool {
+        self.storage.exists(&self.canonical_root)
+            || !self.storage.exists(&self.cache_root)
+            || self.storage.exists(&self.cache_mark)
+    }
+
+    fn authoritative_path(&self) -> &Utf8Path {
+        if self.authoritative_uses_canonical() {
+            &self.canonical_path
+        } else {
+            &self.cache_path
+        }
+    }
+
+    pub fn read_authoritative(self) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        let path = self.authoritative_path();
+        match self.storage.read(path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(PluginError::Internal(format!("{path}: {error}").into())),
+        }
+    }
+
+    pub fn list_authoritative(self) -> Vec<String> {
+        let (root, dir) = if self.authoritative_uses_canonical() {
+            (&self.canonical_root, &self.canonical_path)
+        } else {
+            (&self.cache_root, &self.cache_path)
+        };
+        let mut paths = Vec::new();
+        collect_data_files(self.storage.as_ref(), root, dir, &mut paths);
+        paths.sort_unstable();
+        paths
+    }
+
+    pub fn read_cache(self) -> std::result::Result<Option<Vec<u8>>, PluginError> {
+        match self.storage.read(&self.cache_path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(PluginError::Internal(
+                format!("{}: {error}", self.cache_path).into(),
+            )),
+        }
+    }
+
+    pub fn write_authoritative(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        let path = self.authoritative_path();
+        self.storage
+            .write(path, bytes)
+            .map(|_| ())
+            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+    }
+
+    pub fn remove_authoritative(self) -> std::result::Result<(), PluginError> {
+        let path = self.authoritative_path();
+        match self.storage.remove(path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(PluginError::Io(format!("{path}: {error}").into())),
+        }
+    }
+
+    pub fn write_cache(self, bytes: &[u8]) -> std::result::Result<(), PluginError> {
+        if !self.authoritative_uses_canonical() {
+            self.storage
+                .rename(&self.cache_root, &self.canonical_root)
+                .map_err(|error| {
+                    PluginError::Io(
+                        format!(
+                            "migrazione `{}` → `{}`: {error}",
+                            self.cache_root, self.canonical_root
+                        )
+                        .into(),
+                    )
+                })?;
+        }
+        self.storage
+            .write_derived(&self.cache_mark, b"cache\n")
+            .map_err(|error| PluginError::Io(format!("{}: {error}", self.cache_mark).into()))?;
+        self.storage
+            .write(&self.cache_path, bytes)
+            .map(|_| ())
+            .map_err(|error| PluginError::Io(format!("{}: {error}", self.cache_path).into()))
+    }
+}
 
 impl Workspace {
     /// popolato, e **senza livello macchina**: le impostazioni di macchina
@@ -709,7 +3085,14 @@ impl Workspace {
         // cartella sarebbero due idee di cosa c'è dentro — il giorno in cui uno
         // dei due cifra, un dato su due resta in chiaro (§15.1, 0065).
         // Come [`with_machine_settings`](Workspace::with_machine_settings), col
-        Workspace::on(root, registry, Arc::new(crate::storage::FsStorage), machine)
+        let root = crate::vault::root_absolute(root.as_ref());
+        let storage = crate::storage::RootedFsStorage::open(&root).map_err(|source| {
+            KernelError::InvalidRoot {
+                path: root.clone(),
+                source,
+            }
+        })?;
+        Workspace::on(root, registry, Arc::new(storage), machine)
     }
 
     /// **supporto passato** invece del disco (§15.1).
@@ -728,9 +3111,18 @@ impl Workspace {
         storage: Arc<dyn crate::storage::VaultStorage>,
         machine: Arc<MachineSettings>,
     ) -> Result<Self> {
+        // **La radice si fissa e si verifica prima di aprire qualunque store**.
+        // Un supporto capability controlla qui l'handle già aperto: nessun
+        // sidecar viene letto o creato prima che il recinto sia valido.
+        let root_buf = crate::vault::root_absolute(root.as_ref());
+        storage
+            .mount_fence(&root_buf)
+            .map_err(|source| KernelError::InvalidRoot {
+                path: root_buf.clone(),
+                source,
+            })?;
         // "quali estensioni sono documenti" è una domanda sola (vedi
         // `CoreIndex::registry`).
-        // **La radice si fissa qui, una volta sola.** Tutto ciò che segue ci
         let registry = Arc::new(registry);
         // appende il proprio nome — le impostazioni, l'organizzazione, le
         // bozze, i documenti, l'anagrafe, il registro: sei store, e cinque il
@@ -741,7 +3133,7 @@ impl Workspace {
         // stile: chi aggiungerà il settimo store non ha in mano nessun'altra
         // `root` da passargli.
         // L'organizzazione è **del vault**, quindi si apre col root e non si
-        let root = &crate::vault::root_absolute(root.as_ref());
+        let root = &root_buf;
         let settings: SharedSettings = Arc::new(RwLock::new(SettingsStore::open(
             root,
             Arc::clone(&storage),
@@ -759,6 +3151,7 @@ impl Workspace {
         // L'anagrafe è **del vault**, come l'organizzazione: si apre col
         let drafts = Arc::new(Drafts::open(root, Arc::clone(&storage)));
         Ok(Workspace {
+            workspace_id: NEXT_WORKSPACE_ID.fetch_add(1, Ordering::Relaxed),
             docs: DocumentStore::new(
                 root,
                 Arc::clone(&registry),
@@ -771,6 +3164,8 @@ impl Workspace {
                 Arc::clone(&organization),
                 Arc::clone(&drafts),
             ),
+            projection_generation: 0,
+            syntax_generation: 0,
             providers: ProviderRegistry::new(),
             dispatch: Dispatcher::new(EventBus::new()),
             session: Session::default(),
@@ -788,12 +3183,11 @@ impl Workspace {
             // col root: ciò che è successo a queste note viaggia con queste
             // note.
             // Aggancia lo stato di vista della macchina (§11.2).
-            journal: Journal::open(root, storage),
+            journal: Arc::new(Journal::open(root, storage)),
             drafts,
             doc_data_warnings: Vec::new(),
             suspended_from_rejoin: BTreeSet::new(),
             before_write: None,
-            last_removed: None,
         })
     }
 
@@ -1063,20 +3457,10 @@ impl Workspace {
         provider: Box<dyn ServiceProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let provides = self
-            .providers
-            .plugins
-            .get(&plugin)
-            .map(|and| and.manifest.provides.clone())
-            .ok_or_else(|| RegistryError::UnknownPlugin(plugin.clone()))?;
-        if provides.is_empty() {
-            return Err(RegistryError::NothingProvided(plugin));
-        }
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Service, &provides);
-        self.providers.services.push((plugin, Arc::from(provider)));
-        Ok(())
+        let permit = self.registration_permit(&plugin)?;
+        let provides = self.registration_services(&permit)?;
+        let mut prepared = PreparedRegistration::service(provides, provider);
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -1096,6 +3480,24 @@ impl Workspace {
         method: &str,
         args: serde_json::Value,
     ) -> std::result::Result<serde_json::Value, PluginError> {
+        let mut prepared = self.prepare_service_call(service, method, args)?;
+        let owner = prepared.owner().to_string();
+        let outcome = {
+            let mut host = self.host_for(&owner, InvokeMode::Apply);
+            prepared.invoke(&mut host)
+        };
+        self.finish_service_call(prepared, outcome)
+    }
+
+    /// Risolve e apre il frame di una chiamata a servizio senza eseguire codice
+    /// esterno. Chi riceve il valore deve sempre riconsegnarlo a
+    /// [`finish_service_call`](Self::finish_service_call).
+    pub fn prepare_service_call(
+        &mut self,
+        service: &str,
+        method: &str,
+        args: serde_json::Value,
+    ) -> std::result::Result<PreparedService, PluginError> {
         let owner = self
             .providers
             .plugins
@@ -1115,9 +3517,6 @@ impl Workspace {
                 )
             })?;
 
-        // su sé stesso non è una profondità da limitare con un numero: è un
-        // errore di chi lo ha scritto, e l'unica risposta utile lo nomina.
-        // La rete contro i panici sta **attorno alla chiamata del
         if self.providers.service_stack.iter().any(|s| s == service) {
             let mut round = self.providers.service_stack.clone();
             round.push(service.to_string());
@@ -1132,23 +3531,41 @@ impl Workspace {
 
         let provider = Arc::clone(&self.providers.services[at].1);
         self.providers.service_stack.push(service.to_string());
-        let out = self.with_provider_call(|ws| {
-            let mut host = ws.host_for(&owner, InvokeMode::Apply);
-            // provider** e a niente di più (§9.3): tutto ciò che viene dopo —
-            // la pila dei servizi da svuotare, il dispatch da drenare — è già
-            // scritto per girare sul ramo dell'errore, e catturare più in alto
-            // lo salterebbe.
-            // Dichiara una **feature ufficiale** di questo repo: [`Trust::Core`] e i
-            crate::safety::calling(
-                &owner,
-                Gate::Service,
-                &format!("{service}.{method}"),
-                || provider.call(service, method, args, &mut host),
-            )
-        });
-        self.providers.service_stack.pop();
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        Ok(PreparedService {
+            owner,
+            service: service.to_string(),
+            method: method.to_string(),
+            args: Some(args),
+            provider,
+            previous_provider_call,
+        })
+    }
+
+    /// Chiude flag e stack senza consegnare eventi. L'host usa questa forma per
+    /// rilasciare `Custody<Workspace>` prima degli [`EventHandler`].
+    pub fn finish_service_call_deferred(
+        &mut self,
+        prepared: PreparedService,
+        outcome: std::result::Result<serde_json::Value, PluginError>,
+    ) -> DeferredEvents<std::result::Result<serde_json::Value, PluginError>> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let popped = self.providers.service_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.service.as_str()));
+        DeferredEvents::outcome(outcome)
+    }
+
+    /// Chiude il frame aperto da [`prepare_service_call`](Self::prepare_service_call)
+    /// nello stesso ordine del vecchio percorso sincrono: flag, stack, dispatch.
+    pub fn finish_service_call(
+        &mut self,
+        prepared: PreparedService,
+        outcome: std::result::Result<serde_json::Value, PluginError>,
+    ) -> std::result::Result<serde_json::Value, PluginError> {
+        let deferred = self.finish_service_call_deferred(prepared, outcome);
         self.dispatch_pending();
-        out
+        self.finish_deferred_events(deferred)
     }
 
     /// permessi di
@@ -1205,7 +3622,7 @@ impl Workspace {
     /// prestito** (§7.2), la loro tabella è vuota, e una rimozione calcolata su
     /// una tabella vuota toglie zero e vede tornare tutti. Chi lo riceve
     /// richiede a chiamata tornata.
-    // Il flush **prima** della chiusura, come dice il contratto: chi
+    // Percorso sincrono legacy: chi arriva a close ha già ricevuto il flush.
     pub fn deactivate_plugin(
         &mut self,
         plugin: &str,
@@ -1217,67 +3634,93 @@ impl Workspace {
             return Err(RegistryError::Busy(plugin.to_string()));
         }
 
-        let mut errors = Vec::new();
-        let indexes = self.indexes.remove(plugin);
-        let removed_indexes = !indexes.is_empty();
-        for (id, mut index) in indexes {
-            let out = self.with_provider_call(|ws| {
-                let mut host = ws.host_for(&id, InvokeMode::Apply);
-                // arriva a `close` ha già avuto il proprio punto di persistenza,
-                // e ciò che scrive lì dentro è roba della chiusura.
-                // Qui il `Box` cade, ed è il momento in cui un provider nativo
-                let flushed = index.flush(&mut host);
-                let closed = index.close(&mut host);
-                [flushed, closed]
-            });
-            errors.extend(out.into_iter().filter_map(|outcome| outcome.err()));
-            // lascia andare ciò che il `close` non ha saputo lasciare.
-            // Regole sintattiche e renderer non sono in una tabella di provider: i
-            drop(index);
+        let mut prepared = self.prepare_plugin_teardown(plugin)?;
+        self.take_plugin_teardown_indexes(&mut prepared)
+            .map_err(RegistryError::Activate)?;
+        let mut errors = prepared.invoke_grids();
+        {
+            let mut host = self.host_for(plugin, InvokeMode::Apply);
+            errors.extend(prepared.invoke_indexes(&mut host));
+        }
+        let outcome = self
+            .finish_plugin_teardown(prepared, errors)
+            .map(RetiredPlugin::dispose)
+            .map_err(|failure| RegistryError::Activate(failure.error));
+        self.dispatch_pending();
+        outcome
+    }
+
+    /// Ritira soltanto registrazioni e dichiarazione, dopo le callback.
+    fn retire_plugin(
+        &mut self,
+        plugin: &str,
+        removed_indexes: bool,
+    ) -> lifecycle::RetiredResources {
+        let mut retired = lifecycle::RetiredResources::default();
+        retired.take("event handler", &mut self.providers.handlers, |(id, _)| {
+            id == plugin
+        });
+        retired.take("view", &mut self.providers.views, |v| v.id == plugin);
+        retired.take("command", &mut self.providers.commands, |c| c.id == plugin);
+        retired.take("service", &mut self.providers.services, |(id, _)| {
+            id == plugin
+        });
+        retired.take("import", &mut self.providers.imports, |(id, _)| {
+            id == plugin
+        });
+        retired.take("export", &mut self.providers.exports, |(id, _)| {
+            id == plugin
+        });
+        if self
+            .before_write
+            .as_ref()
+            .is_some_and(|(owner, _)| owner == plugin)
+        {
+            retired.push("before-write hook", self.before_write.take());
         }
 
-        self.providers.handlers.retain(|(id, _)| id != plugin);
-        self.providers.views.retain(|v| v.id != plugin);
-        self.providers.commands.retain(|c| c.id != plugin);
-        self.providers.services.retain(|(id, _)| id != plugin);
-        self.providers.imports.retain(|(id, _)| id != plugin);
-        self.providers.exports.retain(|(id, _)| id != plugin);
-
-        // loro registri conoscono l'id della *regola*, non quello di chi l'ha
-        // registrata. Chi lo sa è l'inventario, ed è da lì che si prendono i
-        // nomi da togliere.
-        // Lo schema delle sue impostazioni se ne va con lui: da qui in poi le
+        // Regole sintattiche e renderer hanno registri propri che conoscono
+        // l'id della regola, non quello dell'owner. L'inventario conserva
+        // l'associazione e fornisce i nomi da ritirare.
+        let mut syntax_changed = false;
         for id in self
             .providers
             .plugins
             .ids_of(plugin, RegistrationKind::Syntax)
         {
-            self.docs.syntax.remove(&id);
+            if let Some(rule) = self.docs.syntax.take(&id) {
+                syntax_changed = true;
+                retired.push("syntax rule", rule);
+            }
         }
+        let mut renderer_changed = false;
         for id in self
             .providers
             .plugins
             .ids_of(plugin, RegistrationKind::Renderer)
         {
-            self.docs.renderers.remove(&id);
+            if let Some(renderer) = self.docs.renderers.take(&id) {
+                renderer_changed = true;
+                retired.push("custom renderer", renderer);
+            }
+        }
+        if syntax_changed {
+            self.syntax_generation = self.syntax_generation.wrapping_add(1);
+        }
+        if syntax_changed || renderer_changed {
+            self.projection_generation = self.projection_generation.wrapping_add(1);
         }
 
         self.providers.plugins.retire(plugin);
-        // sue chiavi non si leggono e non si scrivono, che è ciò che vuol dire
-        // «quella feature non c'è». I **valori** restano scritti dov'erano —
-        // spegnere una feature non è riconfigurarla, e riaccenderla ritrova come
-        // l'avevi lasciata.
-        // I job che aveva in coda non partiranno: il loro corpo è
+        // Lo schema delle impostazioni se ne va con l'owner: le sue chiavi non
+        // sono più accessibili, ma i valori restano per la prossima attivazione.
         self.settings
             .write()
             .expect("store di configurazione")
             .withdraw(plugin);
 
-        // `Plugin::run_job`, e quel plugin non c'è più. Ognuno riceve il proprio
-        // esito, perché un job che sparisce senza dire niente è un chiamante che
-        // aspetta per sempre — ed è la terza faccia del §9.2, quella che la
-        // decisione 0027 aveva lasciato aperta.
-        // Il canale dati non risponde più come prima: chi disegna da una query
+        // I job ancora accodati non partiranno: il loro Plugin::run_job non
+        // esiste più. Ognuno riceve comunque un esito terminale (§9.2).
         for job in self.dispatch.take_jobs_of(plugin) {
             self.complete_job(
                 job.id,
@@ -1292,19 +3735,18 @@ impl Workspace {
             );
         }
 
-        // sta mostrando il passato. Non lo ha chiesto un documento né un plugin
-        // — è il kernel che dichiara di aver cambiato forma (decisione 0012).
-        // **Chiude il vault**: l'ultimo giro sincrono, un punto di consistenza per
+        // Le query degli indici sono cambiate: il kernel annuncia il ritiro
+        // ai consumer, dopo la restituzione dalle callback (decisione 0012).
         if removed_indexes {
             self.as_actor(Actor::Kernel, |ws| {
                 ws.emit_event(Event::IndexUpdated);
                 ws.dispatch_pending();
             });
         }
-        Ok(errors)
+        retired
     }
 
-    /// tutti, e poi ognuno che smette (§9.5).
+    /// Chiude il vault: punto di consistenza globale, poi teardown (§9.5).
     ///
     /// È il gemello di [`reindex`](Workspace::reindex), che è l'apertura, e
     /// prima non esisteva: `flush_indexes` aveva **un solo chiamante in
@@ -1352,6 +3794,31 @@ impl Workspace {
         self.close_with(|_, _| Vec::new())
     }
 
+    /// Annuncia una chiusura senza chiamare alcun provider.
+    ///
+    /// `closed` è la versione che invalida un secondo tentativo: una volta
+    /// prodotto il token, lo stesso workspace non può essere preparato di
+    /// nuovo. Le scritture compiute da un handler di `VaultClosed` sono invece
+    /// compatibili e intenzionali: chi monta dietro `Custody` conserva il
+    /// writer turn, drena gli handler senza guardie e le include nel flush che
+    /// segue. La sostituzione concorrente di un provider non può attraversare
+    /// quel turno; il token, monouso, impedisce la doppia finalizzazione.
+    pub fn prepare_close(&mut self) -> Option<PreparedClose> {
+        if self.closed {
+            return None;
+        }
+        self.closed = true;
+
+        let root = self.docs.vault.root().to_string();
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.emit_event(Event::VaultClosed { root: root.clone() });
+        });
+        Some(PreparedClose {
+            root,
+            workspace_id: self.workspace_id,
+        })
+    }
+
     /// `stopping` gira su ciascuno subito prima che il kernel lo disattivi, ed è
     /// il posto in cui chi possiede i bundle chiama
     /// [`Plugin::deactivate`](fub_abi::traits::Plugin::deactivate) (§9.3).
@@ -1374,18 +3841,49 @@ impl Workspace {
     // Un `Busy` qui vorrebbe dire che si sta chiudendo il vault da
     pub fn close_with(
         &mut self,
-        mut stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
+        stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
     ) -> Vec<PluginError> {
-        if self.closed {
+        let Some(prepared) = self.prepare_close() else {
             return Vec::new();
+        };
+        self.dispatch_pending();
+        match self.finish_close_with(prepared, stopping) {
+            Ok(errors) => errors,
+            Err((_prepared, error)) => vec![error],
         }
-        self.closed = true;
+    }
 
-        let root = self.docs.vault.root().to_string();
-        self.as_actor(Actor::Kernel, |ws| {
-            ws.emit_event(Event::VaultClosed { root });
-            ws.dispatch_pending();
-        });
+    /// Completa una chiusura preparata dopo che `VaultClosed` è stato drenato.
+    ///
+    /// Il metodo non riemette il terminale e consuma il token. L'identità
+    /// process-local valida il token anche se due istanze hanno la **stessa**
+    /// radice; un mismatch restituisce token ed errore senza toccare il
+    /// workspace, così il chiamante può riconsegnarlo al proprietario giusto.
+    /// Nel percorso host il writer turn tenuto fra prepare e finalize esclude
+    /// inoltre qualsiasi writer concorrente.
+    ///
+    /// Questo confine riguarda soltanto gli `EventHandler` del terminale:
+    /// `flush_indexes`, `IndexProvider::close`, `stopping` e la disattivazione
+    /// restano il seguito sincrono preesistente e richiedono ciascuno la
+    /// propria migrazione prima che l'intera lifecycle possa dirsi staccata.
+    pub fn finish_close_with(
+        &mut self,
+        prepared: PreparedClose,
+        mut stopping: impl FnMut(&mut Workspace, &str) -> Vec<PluginError>,
+    ) -> std::result::Result<Vec<PluginError>, (PreparedClose, PluginError)> {
+        if prepared.workspace_id != self.workspace_id || !self.closed {
+            let error = PluginError::Conflict(
+                format!(
+                    "close prepared by workspace {} on `{}` cannot finalize workspace {} on `{}`",
+                    prepared.workspace_id,
+                    prepared.root,
+                    self.workspace_id,
+                    self.docs.vault.root()
+                )
+                .into(),
+            );
+            return Err((prepared, error));
+        }
 
         let mut errors = self.flush_indexes();
 
@@ -1446,7 +3944,43 @@ impl Workspace {
         // Il vault è già stato chiuso?
         self.store_entries();
 
-        errors
+        Ok(errors)
+    }
+
+    /// Ordine terminale di una chiusura valida, senza chiamate ai provider.
+    pub fn closing_plugins(
+        &self,
+        prepared: &PreparedClose,
+    ) -> std::result::Result<Vec<String>, PluginError> {
+        if prepared.workspace_id != self.workspace_id || !self.closed {
+            return Err(PluginError::Conflict("stale workspace close".into()));
+        }
+        Ok(self
+            .providers
+            .plugins
+            .iter()
+            .rev()
+            .map(|entry| entry.manifest.id.clone())
+            .collect())
+    }
+
+    /// Ultimo passo della chiusura staccata: nessun plugin può scrivere dopo
+    /// l'anagrafe. Un token errato torna al proprietario senza mutazioni.
+    pub fn finish_detached_close(
+        &mut self,
+        prepared: PreparedClose,
+    ) -> std::result::Result<(), (PreparedClose, PluginError)> {
+        if let Err(error) = self.closing_plugins(&prepared) {
+            return Err((prepared, error));
+        }
+        if self.providers.plugins.iter().next().is_some() {
+            return Err((
+                prepared,
+                PluginError::Conflict("cannot finish close while plugins remain declared".into()),
+            ));
+        }
+        self.store_entries();
+        Ok(())
     }
 
     /// La bandiera del **rilevamento delle modifiche esterne** (§9.7), da dare a
@@ -1539,14 +4073,9 @@ impl Workspace {
         handler: Box<dyn EventHandler>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::EventHandler, &[])?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::EventHandler, &[]);
-        self.providers.handlers.push((plugin, handler));
-        Ok(())
+        let mut prepared = PreparedRegistration::event_handler(handler);
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     /// chiamata.
@@ -1560,14 +4089,38 @@ impl Workspace {
     /// che nessuno ha dichiarato riceve un host che nega tutto, dicendo perché.
     // Anche questa è una "chiamata di provider" ai fini della consegna:
     pub fn with_host<R>(&mut self, plugin: &str, f: impl FnOnce(&mut dyn HostApi) -> R) -> R {
+        self.with_host_mode(plugin, InvokeMode::Apply, f)
+    }
+
+    /// Come [`with_host`](Self::with_host), conservando la modalità della
+    /// chiamata esterna. Serve ai proxy che rientrano per una singola capacità.
+    pub fn with_host_mode<R>(
+        &mut self,
+        plugin: &str,
+        mode: InvokeMode,
+        f: impl FnOnce(&mut dyn HostApi) -> R,
+    ) -> R {
         // ciò che `f` emette arriva agli handler quando `f` è tornata.
-        // Presta un [`ReadApi`] intestato a un plugin, per la durata di una
         let result = self.with_provider_call(|ws| {
-            let mut host = ws.host_for(plugin, InvokeMode::Apply);
+            let mut host = ws.host_for(plugin, mode);
             f(&mut host)
         });
         self.dispatch_pending();
         result
+    }
+
+    /// Variante del proxy di scrittura intestata a un esemplare di view. Le
+    /// capacità restano per-chiamata; cambia soltanto il timbro dello stato di
+    /// view.
+    pub fn with_host_mode_instance<R>(
+        &mut self,
+        plugin: &str,
+        mode: InvokeMode,
+        instance: &str,
+        f: impl FnOnce(&mut dyn HostApi) -> R,
+    ) -> R {
+        let mut host = self.host_for_view(plugin, mode, Some(instance));
+        f(&mut host)
     }
 
     /// chiamata — il gemello in sola lettura di
@@ -1587,6 +4140,19 @@ impl Workspace {
         // e non si scrive, quindi non c'è nessuna coda che possa crescere.
         // L'host di **lettura** intestato a un plugin, con la stessa politica di
         let host = self.read_host_for(plugin);
+        f(&host)
+    }
+
+    /// Variante del proxy di lettura intestata a un esemplare di view. È la
+    /// stessa politica di `with_read_host`, con in più la chiave dello stato di
+    /// view che solo l'host può timbrare correttamente.
+    pub fn with_read_host_instance<R>(
+        &self,
+        plugin: &str,
+        instance: &str,
+        f: impl FnOnce(&dyn ReadApi) -> R,
+    ) -> R {
+        let host = self.read_host_for_view(plugin, Some(instance));
         f(&host)
     }
 
@@ -1693,22 +4259,19 @@ impl Workspace {
         index: Box<dyn IndexProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        // regola del §7.4 vale per loro come per gli id di view: chi rivendica
-        // `acme:tasks` deve essere `acme`. Le rotte del contratto invece non
-        // sono nomi di nessuno — chi le rivendica non le nomina, le serve — e il
-        // loro conflitto lo vede la tabella delle rotte.
-        // Registra un indice **sostituendo** chi rivendicava le stesse famiglie di
-        let namespaces = plugins::custom_namespaces(&index.routes());
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Index, &namespaces)?;
-        self.indexes
-            .declare(&plugin, index.as_ref())
-            .map_err(RegistryError::Route)?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Index, &namespaces);
-        self.activate_index(plugin, index)
+        let mut prepared =
+            PreparedIndexRegistration::new(index).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.admit_index_registration(&permit, &prepared)?;
+        self.with_provider_call(|ws| {
+            let mut host = ws.host_for(&plugin, InvokeMode::Apply);
+            // The token retains the outcome for publication, including the
+            // established recoverable RegistryError::Activate case.
+            let _ = prepared.activate(&mut host);
+        });
+        let result = self.commit_index_registration(&permit, &mut prepared);
+        self.dispatch_pending();
+        result
     }
 
     /// domande.
@@ -1759,7 +4322,9 @@ impl Workspace {
             let mut host = ws.host_for(&id, InvokeMode::Apply);
             index.activate(&mut host)
         });
-        self.indexes.providers.push((id, index));
+        self.indexes
+            .providers
+            .push((id, Arc::new(SharedShelter::new(index))));
         self.dispatch_pending();
         activated.map_err(RegistryError::Activate)
     }
@@ -1868,25 +4433,25 @@ impl Workspace {
     /// quindi la fase che può fallire e la fase che dura sono due fasi diverse.
     /// Chi apre aspetta la prima e non la seconda.
     // La specie si **ricalcola** e non si rilegge dalla tabella: dipende da
-    pub fn scan_vault(&mut self) -> Result<Indexing> {
+    pub fn prepare_scan_vault(&self) -> Result<PreparedVaultScan> {
         let _phase = tracing::info_span!(target: "fub.apertura", "scan_vault").entered();
         let scanned = self.docs.vault.scan()?;
         self.sweep_temporary(&scanned.temporary_remaining_back);
 
-        // chi è registrato adesso, e un `.canvas` diventa un documento il giorno
-        // che qualcuno rivendica quell'estensione, senza essere cambiato.
-        // Una domanda sola all'anagrafe: la risposta intera serve
-        let mut entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
+        // La scansione raccoglie una fotografia completa ma non muta ancora il
+        // core: durante `IndexProvider::up_to_date` i reader vedono l'ultimo stato
+        // coerente, non metà della nuova anagrafe.
+        let entries: Vec<(VaultEntry, Option<StoredEntry>)> = scanned
             .files
             .into_iter()
             .map(|file| {
-                // alla riapertura incrementale qui sotto, e rifarla là è un
-                // lock e una copia regalati per niente.
-                // La coppia viaggia in parallelo: il `VaultEntry` per gli indici
+                let change_stamp = self.docs.vault.change_stamp(&file.id);
                 let known = self
                     .entry_store
                     .known(&file.id)
-                    .filter(|known| known.describes(file.size, file.mtime));
+                    .filter(|known| known.describes(file.size, file.mtime))
+                    .filter(|known| known.same_change_stamp(change_stamp))
+                    .filter(|known| known.fingerprint.is_some());
                 let entry = VaultEntry {
                     fingerprint: known.as_ref().and_then(|known| known.fingerprint.clone()),
                     kind: media::kind_of_ext(&file.id, |ext| self.docs.registry.has_doc_ext(ext)),
@@ -1898,61 +4463,50 @@ impl Workspace {
             })
             .collect();
 
-        // (che lo chiedono per valore), l'anagrafe per la riapertura.
-        // **Gli indici si svuotano qui**, cioè all'inizio della prima fase e
-        let mut documents: Vec<VaultEntry> = Vec::new();
-        let mut known_entries: Vec<Option<StoredEntry>> = Vec::new();
-        let mut assets: Vec<VaultEntry> = Vec::new();
-        for (entry, _) in entries
-            .iter()
-            .filter(|(and, _)| and.kind == EntryKind::Asset)
-        {
-            assets.push(entry.clone());
-        }
-        for (entry, known) in entries
-            .iter()
-            .filter(|(and, _)| and.kind == EntryKind::Document)
-        {
-            documents.push(entry.clone());
-            known_entries.push(known.clone());
+        let mut documents = Vec::new();
+        let mut known_entries = Vec::new();
+        let mut assets = Vec::new();
+        for (entry, known) in &entries {
+            match entry.kind {
+                EntryKind::Document => {
+                    documents.push(entry.clone());
+                    known_entries.push(known.clone());
+                }
+                EntryKind::Asset => assets.push(entry.clone()),
+                _ => {}
+            }
         }
 
-        // non a giro di lettura finito. Finché il parse era fatale, svuotare
-        // tardi teneva il tutto-o-niente; quando la
-        // [0068](../../../docs/decisions/0187-autorita-e-schemi-su-disco.md)
-        // gliel'ha tolto, teneva ancora una cosa vera — gli indici non restano
-        // vuoti per il tempo in cui si cammina il disco. Quella cosa **si
-        // perde qui**, ed è il prezzo dichiarato dell'apertura a fasi: fra
-        // `scan_vault` e `finish_index` la ricerca risponde poco e poi di più.
-        // Il prezzo si paga in questo verso perché l'alternativa lo fa pagare
-        // tutto a chi apre — che aspetta a schermo fermo — invece che a chi
-        // cerca nei primi secondi, che vede l'app viva e i risultati arrivare.
-        // Chi guarda non deve indovinarlo: lo dice `Indicizzazione` a chi la
-        // porta avanti, e `VaultStatus::indexing` a chiunque altro.
-        // Le cartelle prima delle voci, e dalla **camminata** e non dai path
+        Ok(PreparedVaultScan {
+            folders: scanned.folders,
+            entries: entries.into_iter().map(|(entry, _)| entry).collect(),
+            documents,
+            known_entries,
+            assets,
+            providers: self.indexes.feed_handles(),
+        })
+    }
+
+    /// Installa atomicamente la fotografia della scansione dopo che le risposte
+    /// esterne sono tornate. Nessuna callback provider gira in questa fase.
+    pub fn finalize_scan_vault(&mut self, completed: CompletedVaultScan) -> Indexing {
+        let CompletedVaultScan {
+            folders,
+            entries,
+            documents,
+            known_entries,
+            assets,
+            up_to_date,
+        } = completed;
+
         self.indexes.core.clear();
-        // dei file (§14.3): una cartella vuota non compare in nessun path, e
-        // dedurle dai file vorrebbe dire che l'unica cartella che esiste è
-        // quella che ha già qualcosa dentro.
-        // L'anagrafe è **intera già adesso**, ed è ciò che rende il vault
-        for folder in scanned.folders {
+        for folder in folders {
             self.indexes.core.set_folder(folder);
         }
-        // utilizzabile alla fine di questa fase: l'albero dei file, le
-        // cartelle e la specie di ogni voce non aspettano di aver letto niente.
-        // Le impronte che mancano le riempirà la seconda fase, rimettendo in
-        // anagrafe le voci che legge.
-        // **Riapertura incrementale**: per ogni documento descritto dall'anagrafe
-        for (entry, _) in entries.drain(..) {
+        for entry in entries {
             self.indexes.core.set_entry(entry);
         }
 
-        // (size+mtime → impronta) che porta i metadati e per cui tutti gli indici
-        // plugin rispondono `up_to_date`, si ripristinano direttamente i metadati
-        // in memoria senza rileggerlo dal disco. A fette finiscono solo i documenti
-        // nuovi, modificati, o per cui un indice plugin deve essere allineato.
-        // L'apertura non l'ha chiesta un documento né un plugin: è il kernel che
-        let up_to_date = self.indexes.up_to_date(&documents);
         let mut to_index = Vec::new();
         for (entry, known) in documents.into_iter().zip(known_entries) {
             let metadata = if entry.fingerprint.is_some() && up_to_date.contains(&entry.id) {
@@ -1968,30 +4522,23 @@ impl Workspace {
                 to_index.push(entry);
             }
         }
-        // Gli allegati non hanno metadati da ripristinare: la seconda fase ne
-        // legge i byte e aggiorna la stessa impronta dei documenti.
         to_index.extend(assets);
 
-        // dichiara di esistere (decisione 0012).
-        //
-        // `VaultOpened` esce **qui**, dove il vault diventa usabile, e non alla
-        // fine dell'indicizzazione: è l'evento che dice *questo vault è
-        // aperto*, e con le fasi quel momento è questo. Chi lo riceve sa che
-        // l'anagrafe c'è; per sapere se la ricerca è pronta c'è `IndexUpdated`,
-        // che resta dov'era — in fondo.
-        // Da qui l'indice risponde **meno di quanto il vault sappia**, e chi lo
         self.as_actor(Actor::Kernel, |ws| {
             ws.emit_event(Event::VaultOpened {
                 root: ws.docs.vault.root().to_string(),
             });
             ws.dispatch_pending();
         });
-
-        // interroga deve poterlo distinguere da un vault vuoto (§15.7).
-        // **Una fetta della seconda fase** (§15.7): legge, parsa e alimenta fino a
         self.indexes.core.watch.indexing = IndexingState::Running;
+        Indexing::new(to_index)
+    }
 
-        Ok(Indexing::new(to_index))
+    /// Percorso sincrono per chi possiede direttamente un `Workspace`. L'host,
+    /// che usa `Custody`, chiama esplicitamente prepare/invoke/finalize.
+    pub fn scan_vault(&mut self) -> Result<Indexing> {
+        let completed = self.prepare_scan_vault()?.invoke();
+        Ok(self.finalize_scan_vault(completed))
     }
 
     /// [`FEED_BATCH`] documenti, e torna.
@@ -2034,170 +4581,166 @@ impl Workspace {
     /// nella 0119 lo diceva `ExternalSync::batch`.
     // Lo span copre tutto il lavoro parallelo della fetta, `thread::scope`
     pub fn plan_batch(&self, work: &mut Indexing) -> ParsedBatch {
+        let checked = self.prepare_index_batch_check(work).invoke();
+        self.prepare_index_batch_parse(checked).invoke(work)
+    }
+
+    /// Legge soltanto ciò che serve a determinare le impronte della prossima
+    /// fetta e cattura gli handle degli indici. Nessuna callback esterna gira
+    /// sotto il prestito condiviso del workspace.
+    pub fn prepare_index_batch_check(&self, work: &mut Indexing) -> PreparedIndexBatchCheck {
         let slice = work.next_slice();
-        if slice.is_empty() {
-            return ParsedBatch::default();
-        }
-
-        // compreso: è ciò che il banco dell'apertura legge per vedere se le
-        // fette scalano davvero (§25.3).
-        // L'impronta che l'anagrafe dà a ogni voce **adesso**: è ciò che il
-        let _phase = tracing::info_span!(target: "fub.apertura", "plan_batch").entered();
-
-        // piano si porta dietro per accorgersi di essere invecchiato (0119).
-        // Si calcola una volta per tutta la fetta, prima del lavoro parallelo.
-        // La fetta si lavora in parallelo quando ci sono abbastanza documenti
         let seen: BTreeMap<DocId, Option<Revision>> = slice
             .iter()
-            .map(|and| (and.id.clone(), self.entry_fingerprint(&and.id)))
+            .map(|entry| (entry.id.clone(), self.entry_fingerprint(&entry.id)))
             .collect();
+        if slice.is_empty() {
+            return PreparedIndexBatchCheck {
+                seen,
+                entries: Vec::new(),
+                discarded: Vec::new(),
+                providers: self.indexes.feed_handles(),
+            };
+        }
 
-        // da ripagare i thread: su un vault da 30k file la prima apertura
-        // legge e parsa ogni documento, e farlo in un thread solo la rende
-        // seriale. `thread::scope` presta `&self` ai figli — `docs`,
-        // `entry_store` e `indexes` sono `Sync` — e li aspetta prima di
-        // restituire. Gli handle si raccolgono **tutti** prima di joinare:
-        // `map(spawn).map(join)` è pigro, e joinerebbe un thread alla volta.
-        // Il lavoro di un pezzo di fetta: lettura, impronta, domanda agli indici,
+        let _phase = tracing::info_span!(target: "fub.apertura", "plan_batch").entered();
         let n = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(1)
             .clamp(1, 8);
         let docs = &self.docs;
-        let store = &self.entry_store;
-        let indexes = &self.indexes;
-
-        let chunks: Vec<PlanChunk> = if n > 1 && slice.len() > n {
+        let chunks: Vec<IndexCheckChunk> = if n > 1 && slice.len() > n {
             let size = slice.len().div_ceil(n);
-            std::thread::scope(|s| {
+            std::thread::scope(|scope| {
                 let handles: Vec<_> = slice
                     .chunks(size)
-                    .map(|c| {
-                        let c = c.to_vec();
-                        s.spawn(move || Self::plan_one_chunk(docs, store, indexes, c))
+                    .map(|chunk| {
+                        let chunk = chunk.to_vec();
+                        scope.spawn(move || Self::prepare_index_check_chunk(docs, chunk))
                     })
                     .collect();
-                handles.into_iter().map(|h| h.join().unwrap()).collect()
+                handles
+                    .into_iter()
+                    .map(|handle| handle.join().expect("la lettura non esce dal recinto"))
+                    .collect()
             })
         } else {
-            vec![Self::plan_one_chunk(docs, store, indexes, slice)]
+            vec![Self::prepare_index_check_chunk(docs, slice)]
         };
 
-        let mut prepared = ParsedBatch {
-            seen,
-            ..Default::default()
-        };
-        for c in chunks {
-            prepared.read.extend(c.read);
-            prepared.models.extend(c.models);
-            prepared.reused.extend(c.reused);
-            for (id, why) in c.discarded {
-                work.opening.discards(id, why);
-            }
+        let mut entries = Vec::new();
+        let mut discarded = Vec::new();
+        for chunk in chunks {
+            entries.extend(chunk.entries);
+            discarded.extend(chunk.discarded);
         }
-        prepared
+        PreparedIndexBatchCheck {
+            seen,
+            entries,
+            discarded,
+            providers: self.indexes.feed_handles(),
+        }
     }
 
-    /// parse. Ogni pezzo è indipendente e può girare in un `thread::scope`.
-    // Ciò che non si sa lo si legge, e leggendolo se ne prende l'impronta:
-    fn plan_one_chunk(
+    fn prepare_index_check_chunk(
         docs: &DocumentStore,
-        store: &EntryStore,
-        indexes: &Indexes,
         entries: Vec<VaultEntry>,
-    ) -> PlanChunk {
-        let mut out = PlanChunk::default();
-        let mut discarded_idx = BTreeSet::new();
-
-        // dopo un `git checkout` che ha ritimbrato mille file senza cambiarne
-        // uno, la data non combacia ma il contenuto sì — e chi tiene l'impronta
-        // (l'anagrafe, e chi risponde alla domanda di `up_to_date`) li riconosce
-        // tutti e mille.
-        //
-        // **Si legge nella forma che il provider ha dichiarato** (§21.8): un
-        // documento rivendicato a byte non passa da una decodifica UTF-8 che
-        // fallirebbe, e la sua impronta si prende sui byte — che per una
-        // sorgente di testo è lo stesso numero di prima.
-        // Ciò che non si è potuto leggere o parsare: si raccoglie
-        let mut sources: BTreeMap<DocId, DocumentSource> = BTreeMap::new();
+    ) -> IndexCheckChunk {
+        let mut out = IndexCheckChunk::default();
         for mut entry in entries {
-            if entry.kind == EntryKind::Asset {
-                if entry.fingerprint.is_none() {
+            let mut source = None;
+            match entry.kind {
+                EntryKind::Asset if entry.fingerprint.is_none() => {
                     match docs.vault.read_bytes(&entry.id) {
-                        Ok(bytes) => {
-                            entry.fingerprint = Some(Revision::of_bytes(&bytes));
-                        }
-                        Err(why) => {
-                            discarded_idx.insert(entry.id.clone());
-                            out.discarded.push((entry.id.clone(), why));
-                        }
-                    }
-                }
-                out.read.push(entry);
-                continue;
-            }
-            if entry.fingerprint.is_none() {
-                match docs.source_from_disk(&entry.id) {
-                    Ok(source) => {
-                        entry.fingerprint = Some(Revision::of_bytes(source.bytes()));
-                        sources.insert(entry.id.clone(), source);
-                    }
-                    Err(why) => {
-                        discarded_idx.insert(entry.id.clone());
-                        out.discarded.push((entry.id.clone(), why));
-                    }
-                }
-            }
-            out.read.push(entry);
-        }
-
-        // indice che risponde `up_to_date` guardando ciò che ha non cambia
-        // risposta perché gliela si chiede in dieci volte; chiederla una volta
-        // sola vorrebbe dire tenere in mano l'elenco intero prima di alimentare
-        // il primo documento, che è esattamente ciò che questa voce toglie.
-        //
-        // Per fetta di chunk: ogni thread chiede per le proprie voci, e il
-        // risultato è lo stesso — la domanda è per documento.
-        // L'applicazione di una fetta, con il lavoro di lettura **già fatto** da
-        let documents: Vec<VaultEntry> = out
-            .read
-            .iter()
-            .filter(|entry| entry.kind == EntryKind::Document)
-            .cloned()
-            .collect();
-        let already = indexes.up_to_date(&documents);
-
-        for entry in &out.read {
-            if discarded_idx.contains(&entry.id) {
-                continue;
-            }
-            if entry.kind == EntryKind::Asset {
-                continue;
-            }
-            let remembered = store
-                .known(&entry.id)
-                .filter(|known| known.fingerprint == entry.fingerprint)
-                .and_then(|known| known.metadata.clone());
-            match remembered {
-                Some(metadata) if already.contains(&entry.id) => {
-                    out.reused.push((entry.id.clone(), metadata))
-                }
-                _ => {
-                    let source = match sources.remove(&entry.id) {
-                        Some(source) => source,
-                        None => match docs.source_from_disk(&entry.id) {
-                            Ok(source) => source,
-                            Err(why) => {
-                                out.discarded.push((entry.id.clone(), why));
-                                continue;
-                            }
-                        },
-                    };
-                    match docs.parse_source(&entry.id, source) {
-                        Ok(model) => out.models.push(model),
+                        Ok(bytes) => entry.fingerprint = Some(Revision::of_bytes(&bytes)),
                         Err(why) => out.discarded.push((entry.id.clone(), why)),
                     }
                 }
+                EntryKind::Document if entry.fingerprint.is_none() => {
+                    match docs.source_from_disk(&entry.id) {
+                        Ok(read) => {
+                            entry.fingerprint = Some(Revision::of_bytes(read.bytes()));
+                            source = Some(read);
+                        }
+                        Err(why) => out.discarded.push((entry.id.clone(), why)),
+                    }
+                }
+                _ => {}
+            }
+            out.entries.push(PendingIndexEntry { entry, source });
+        }
+        out
+    }
+
+    /// Risolve cache e parser dopo che `up_to_date` è tornato. Leggere il
+    /// sorgente resta sotto un prestito condiviso breve; il parser preparato lo
+    /// attraverserà soltanto dopo il rilascio della guardia.
+    pub fn prepare_index_batch_parse(&self, checked: CheckedIndexBatch) -> PreparedIndexBatchParse {
+        let CheckedIndexBatch {
+            seen,
+            entries,
+            mut discarded,
+            already,
+        } = checked;
+        let discarded_ids: BTreeSet<DocId> = discarded.iter().map(|(id, _)| id.clone()).collect();
+        let mut read = Vec::with_capacity(entries.len());
+        let mut reused = Vec::new();
+        let mut parses = Vec::new();
+
+        for pending in entries {
+            let PendingIndexEntry { entry, source } = pending;
+            read.push(entry.clone());
+            if discarded_ids.contains(&entry.id) || entry.kind != EntryKind::Document {
+                continue;
+            }
+            let remembered = self
+                .entry_store
+                .known(&entry.id)
+                .filter(|known| known.fingerprint == entry.fingerprint)
+                .and_then(|known| known.metadata.clone());
+            if let Some(metadata) = remembered.filter(|_| already.contains(&entry.id)) {
+                reused.push((entry.id.clone(), metadata));
+                continue;
+            }
+            let source = match source {
+                Some(source) => source,
+                None => match self.docs.source_from_disk(&entry.id) {
+                    Ok(source) => source,
+                    Err(why) => {
+                        discarded.push((entry.id.clone(), why));
+                        continue;
+                    }
+                },
+            };
+            let ext = extension_of(&entry.id).unwrap_or_default();
+            if self.docs.registry.provider_for_ext(&ext).is_none() {
+                continue;
+            }
+            match self.docs.prepare_parse(&entry.id) {
+                Ok(parser) => parses.push(PendingDocumentParse {
+                    id: entry.id,
+                    parser,
+                    source,
+                }),
+                Err(why) => discarded.push((entry.id, why)),
+            }
+        }
+
+        PreparedIndexBatchParse {
+            read,
+            reused,
+            parses,
+            discarded,
+            seen,
+        }
+    }
+
+    fn invoke_parse_chunk(parses: Vec<PendingDocumentParse>) -> IndexParseChunk {
+        let mut out = IndexParseChunk::default();
+        for pending in parses {
+            match pending.parser.invoke(pending.source) {
+                Ok(model) => out.models.push(model),
+                Err(why) => out.discarded.push((pending.id, why)),
             }
         }
         out
@@ -2227,7 +4770,10 @@ impl Workspace {
     /// ed è la differenza con la 0119, dove il piano buttato era l'unica notizia
     /// che quel file fosse cambiato.
     // L'impronta appena calcolata torna in anagrafe: la voce c'era già
-    pub fn index_batch_prepared(&mut self, prepared: ParsedBatch) {
+    pub fn commit_index_batch_prepared(
+        &mut self,
+        prepared: ParsedBatch,
+    ) -> Option<PreparedIndexBatchFeed> {
         let ParsedBatch {
             read,
             reused,
@@ -2241,9 +4787,6 @@ impl Workspace {
             .collect();
 
         for entry in read {
-            // dalla prima fase, quello che qui si aggiunge è ciò che si è
-            // imparato leggendola.
-            // **Il kernel taglia** (§20.1): la fetta di lavoro è già grande quanto
             if entry.fingerprint.is_some() && !aged.contains(&entry.id) {
                 self.indexes.core.set_entry_from_scan(entry);
             }
@@ -2258,23 +4801,28 @@ impl Workspace {
             .into_iter()
             .filter(|model| !aged.contains(&model.id))
             .collect();
-
-        // il lotto di alimentazione, quindi qui non si taglia una seconda
-        // volta. I modelli interi vivono solo dentro questa chiamata, il tempo
-        // di alimentare indici e conteggi: in cache restano i metadati.
-        //
-        // **Una fetta senza modelli non attraversa il confine** (§17.1,
-        // decisione 0113): è il caso normale di una riapertura a caldo, dove
-        // ogni documento è stato ripreso dalla cache, e un lotto vuoto non
-        // porta nessuna notizia a nessuno — a M5 sarebbe una serializzazione
-        // per dire niente. Lo ha trovato il banco contando le chiamate: nessun
-        // altro presidio le conta.
-        // Fotografia di ciò che il grafo legge. Costa O(documenti) di **copia**
         if models.is_empty() {
-            return;
+            return None;
         }
-        let lost = self.indexes.on_documents_indexed(&models);
-        self.report_losses(lost);
+
+        let losses = self.indexes.core.on_documents_indexed(&models);
+        let providers = self.indexes.feed_handles();
+        Some(PreparedIndexBatchFeed {
+            models,
+            providers,
+            losses,
+        })
+    }
+
+    pub fn finalize_index_batch_prepared(&mut self, pending: PreparedIndexBatchFeed) {
+        self.report_losses(pending.losses);
+    }
+
+    pub fn index_batch_prepared(&mut self, prepared: ParsedBatch) {
+        if let Some(pending) = self.commit_index_batch_prepared(prepared) {
+            let pending = pending.invoke_indexes();
+            self.finalize_index_batch_prepared(pending);
+        }
     }
 
     /// (id, alias, link), e tiene il prestito condiviso solo per quella copia:
@@ -2317,7 +4865,13 @@ impl Workspace {
     pub fn finish_index(&mut self, work: Indexing) -> Opening {
         let _phase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
         self.indexes.core.rebuild_graph();
-        let opening = self.close_indexing(work);
+        let ids = self.reconcile_ids(&work);
+        let external_losses = if work.finished() {
+            reconcile_index_handles(&self.indexes.feed_handles(), &ids)
+        } else {
+            Vec::new()
+        };
+        let opening = self.close_indexing(work, external_losses);
         // indice è stato derivato, il vault è la verità (M4: notifica).
         // Come [`finish_index`], col grafo già costruito fuori dal prestito
         {
@@ -2336,17 +4890,60 @@ impl Workspace {
     /// funzione — fra i due prestiti il lucchetto si rilascia e i lettori in
     /// coda passano, come nella terza fase di `ExternalSync::batch`.
     // **Gli scarti entrano nell'insieme completo**, e non è un
-    pub fn finish_index_with_graph(&mut self, work: Indexing, graph: BuiltGraph) -> Opening {
-        let _phase = tracing::info_span!(target: "fub.apertura", "finish_index").entered();
+    /// Prepara la chiusura senza eseguire provider. Il turno di scrittura può
+    /// restare aperto mentre la guardia del workspace viene rilasciata.
+    pub fn prepare_finish_index_with_graph(
+        &self,
+        work: Indexing,
+        graph: BuiltGraph,
+    ) -> PreparedIndexFinish {
+        let ids = self.reconcile_ids(&work);
+        PreparedIndexFinish {
+            work,
+            graph,
+            ids,
+            providers: self.indexes.feed_handles(),
+        }
+    }
+
+    /// Installa grafo e stato soltanto dopo che `reconcile` dei provider è
+    /// tornato. Questa fase non attraversa codice esterno.
+    pub fn finalize_finish_index(&mut self, completed: CompletedIndexFinish) -> Opening {
+        let CompletedIndexFinish {
+            work,
+            graph,
+            external_losses,
+        } = completed;
         if graph.epoch == self.indexes.core.graph_epoch {
             self.indexes.core.graph = graph.graph;
         } else {
             self.indexes.core.rebuild_graph();
         }
-        self.close_indexing(work)
+        self.close_indexing(work, external_losses)
     }
 
-    fn close_indexing(&mut self, work: Indexing) -> Opening {
+    pub fn finish_index_with_graph(&mut self, work: Indexing, graph: BuiltGraph) -> Opening {
+        let completed = self.prepare_finish_index_with_graph(work, graph).invoke();
+        self.finalize_finish_index(completed)
+    }
+
+    fn reconcile_ids(&self, work: &Indexing) -> Vec<DocId> {
+        if !work.finished() {
+            return Vec::new();
+        }
+        let mut ids: Vec<DocId> = self.documents();
+        ids.extend(
+            work.opening
+                .discarded
+                .iter()
+                .map(|discard| discard.id.clone()),
+        );
+        ids.sort();
+        ids.dedup();
+        ids
+    }
+
+    fn close_indexing(&mut self, work: Indexing, external_losses: Vec<IndexLoss>) -> Opening {
         let mut opening = work.opening;
         if work.cursor >= work.from_do.len() {
             // dettaglio. `reconcile` dice agli indici *quali documenti
@@ -2357,13 +4954,14 @@ impl Workspace {
             // permesso storto la nota uscirebbe dalla ricerca in silenzio.
             // **Un'indicizzazione interrotta non riconcilia**, ed è la stessa
             let mut ids: Vec<DocId> = self.documents();
-            ids.extend(opening.discarded.iter().map(|s| s.id.clone()));
+            ids.extend(opening.discarded.iter().map(|discard| discard.id.clone()));
             ids.sort();
             ids.dedup();
-            let lost = {
+            let mut lost = {
                 let _phase = tracing::info_span!(target: "fub.apertura", "reconcile").entered();
-                self.indexes.reconcile(&ids)
+                self.indexes.core.reconcile(&ids)
             };
+            lost.extend(external_losses);
             self.report_losses(lost);
         } else {
             // riga con cui la 0068 tiene fatale la scansione: un insieme
@@ -2528,6 +5126,8 @@ impl Workspace {
                     StoredEntry {
                         size: entry.size,
                         mtime: entry.mtime,
+                        change_stamp: self.docs.vault.change_stamp(&entry.id),
+                        identity: self.docs.vault.file_identity(&entry.id),
                         fingerprint: entry.fingerprint.clone(),
                         metadata: self.indexes.core.stored_metadata(&entry.id),
                     },
@@ -2624,78 +5224,29 @@ impl Workspace {
     /// prima, perché una riga di registro non vale una lettura a ogni
     /// salvataggio (§15.2).
     // Cosa si sapeva **prima**: l'impronta che l'anagrafe teneva, e se il
-    pub fn write_document(
-        &mut self,
+    pub fn prepare_document_write(
+        &self,
         id: &DocId,
-        source: &str,
         base: WriteBase,
-    ) -> Result<Revision> {
-        // documento esistesse affatto.
-        //
-        // **«C'era» lo dice il disco** (difetto 0180). L'anagrafe è una cache
-        // di ciò che si è indicizzato, quindi «non lo conosco» e «non c'è» ci
-        // si assomigliano solo finché nessuno scrive nel vault da fuori: un
-        // file creato da un'altra applicazione e non ancora visto dal
-        // rilevatore c'è sul disco e in anagrafe no, e sopra quel file il
-        // salvataggio scriveva `Created`. Non è una parola imprecisa in una
-        // lista: il registro è **autorevole** (0067) e di quella variante c'è
-        // scritto sopra che «l'inverso è cestinarlo», quindi chi ripercorre la
-        // riga porta nel cestino un file che non abbiamo creato noi, con dentro
-        // ciò che ci aveva messo qualcun altro.
-        //
-        // La domanda è la più povera che risponda — *c'è un file lì?* — e la
-        // paga un `stat`, non una lettura: la riga tre capoversi più su dice
-        // che «una riga di registro non vale una lettura a ogni salvataggio»,
-        // ed è vera e resta vera, perché una lettura porta i byte e li fa
-        // parsare per averne l'impronta mentre qui non serve niente di tutto
-        // ciò. Con [`WriteBase::DescendsFrom`] non si paga nemmeno quello: il
-        // disco è già stato letto qui sotto, e se non fosse esistito la base non
-        // combaciava e non si arrivava a scrivere.
-        //
-        // E non si paga **quasi mai**, perché l'anagrafe sbaglia in una
-        // direzione sola: conosce meno di quanto c'è, mai di più. Quando ha la
-        // voce il file c'era, e la domanda è già risposta senza toccare il
-        // disco; il `stat` resta al solo caso in cui l'anagrafe tace, che è
-        // esattamente la finestra del difetto. Il salvataggio di una nota che
-        // si sta scrivendo non ci passa mai, ed è ciò che tiene ferma la 0179 —
-        // «un salvataggio non torna a chiedere al disco cosa ha appena
-        // scritto», che ha un banco che conta gli `stat` e li vuole zero.
-        // Un file che **non c'è** non è un errore da propagare: è una
-        let (id, esisteva, from) = match base {
+    ) -> Result<PreparedDocumentWrite> {
+        self.indexes.ensure_mutation_available()?;
+        let (id, existed, from, expected_source) = match base {
             WriteBase::DescendsFrom(expected) => {
-                // base che non combacia — chi scrive credeva di riscrivere
-                // qualcosa che nel frattempo è stato cestinato, e ha diritto
-                // alla stessa risposta. Ogni **altro** guasto invece risale con
-                // il suo tipo, ed è la differenza che vale la riga: con `.ok()`
-                // chi non riusciva più a leggere la propria nota — permessi, un
-                // disco che sta fallendo, byte che non sono più testo — si
-                // sentiva dire «il documento è cambiato sotto di te», cioè un
-                // fatto del vault che non era avvenuto, e un conflitto vero non
-                // si distingueva da un supporto rotto.
-                // Il corpo di una scrittura, **senza la riga di registro**: parse, disco,
-                let now =
-                    crate::error::optional(self.docs.vault.read(id))?.map(|s| Revision::of(&s));
-                if now.as_ref() != Some(&expected) {
+                let current = crate::error::optional(self.docs.vault.read(id))?;
+                let now = current.as_ref().map(|s| Revision::of(s));
+                if !current
+                    .as_deref()
+                    .is_some_and(|source| expected.matches(source))
+                {
                     return Err(KernelError::Stale(id.to_string()));
                 }
-                (id.clone(), true, now)
+                (id.clone(), true, now, current)
             }
             WriteBase::Dictated => {
                 let in_store = self.indexes.core.entries.get(id);
-                // An indexed, already-portable id is the ordinary save path:
-                // the index is authoritative for that unchanged spelling, so
-                // keep the no-stat fast path. Imported names that would be
-                // changed or rejected by `new_doc_id` must ask the disk: a
-                // stale index cannot prove that such a file still exists.
                 let candidate = new_doc_id(id.as_str());
                 let unchanged_portable =
                     in_store.is_some() && candidate.as_ref().is_ok_and(|candidate| candidate == id);
-                // Su Windows un nome con spazio finale (`nota.md `) risolve
-                // allo stesso file di `nota.md`: se si guarda prima il nome
-                // grezzo, si conserva però l'estensione `md ` e il provider
-                // non viene trovato. Il target normalizzato ha precedenza se è
-                // l'unico esistente o se i due nomi indicano lo stesso file;
-                // due file distinti conservano invece l'import non portabile.
                 let normalized_exists = !unchanged_portable
                     && candidate.as_ref().is_ok_and(|candidate| {
                         candidate != id && self.docs.vault.stat(candidate).is_some()
@@ -2707,13 +5258,8 @@ impl Workspace {
                         .as_ref()
                         .is_ok_and(|candidate| self.docs.vault.same_file(id, candidate));
                 let use_normalized = normalized_exists && (!raw_exists || normalized_aliases_raw);
-                let esisteva = unchanged_portable || normalized_exists || raw_exists;
-                // A dictated write is also the path used by importers and
-                // restores. Apply the stricter naming rule only when this
-                // call is actually creating a new document: an imported file
-                // may already have a name that is not portable to every OS,
-                // and writing it back must preserve that existing name.
-                if esisteva {
+                let existed = unchanged_portable || normalized_exists || raw_exists;
+                if existed {
                     let id = if use_normalized {
                         candidate
                             .as_ref()
@@ -2724,34 +5270,189 @@ impl Workspace {
                     };
                     let in_store = self.indexes.core.entries.get(&id);
                     let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
-                    (id, true, fingerprint)
+                    (id, true, fingerprint, None)
                 } else {
                     let id = candidate?;
-                    // `new_doc_id` may normalize the name (NFC and trimmed
-                    // segments) onto a file that is already on disk.  The
-                    // stale index is not evidence that this normalized target
-                    // exists: only the storage stat can classify this write.
                     let in_store = self.indexes.core.entries.get(&id);
                     let fingerprint = in_store.and_then(|and| and.fingerprint.clone());
-                    let esisteva = self.docs.vault.stat(&id).is_some();
-                    (id, esisteva, esisteva.then_some(fingerprint).flatten())
+                    let existed = self.docs.vault.stat(&id).is_some();
+                    (id, existed, existed.then_some(fingerprint).flatten(), None)
                 }
             }
         };
-        let to = self.write_source(&id, source)?;
-        self.record(if esisteva {
+        let parser = self.docs.prepare_parse(&id)?;
+        Ok(PreparedDocumentWrite {
+            id,
+            existed,
+            from,
+            expected_source,
+            parser,
+            before_write: self.before_write.clone(),
+        })
+    }
+
+    /// Prepara una creazione senza attraversare parser o hook esterni.
+    ///
+    /// Il nome nasce in questa operazione, quindi applica anche la portabilità
+    /// stretta e rifiuta una destinazione già occupata prima di restituire il
+    /// token staccato.
+    pub fn prepare_document_creation(&self, id: &DocId) -> Result<PreparedDocumentWrite> {
+        let id = new_doc_id(id.as_str())?;
+        if self.is_taken(&id) {
+            return Err(KernelError::AlreadyExists(id.to_string()));
+        }
+        self.prepare_document_write(&id, WriteBase::Dictated)
+    }
+
+    /// Finalizza una scrittura già parsata. La CAS resta qui, sotto il writer
+    /// turn, quindi il tempo passato nel provider non allarga la finestra fra
+    /// expected e write per gli altri writer Fub.
+    /// Finalizza una scrittura già parsata e con il gancio già tornato. La CAS
+    /// resta qui, sotto il writer turn: nessun writer Fub può infilarsi fra la
+    /// base preparata e la sostituzione, mentre il provider gira senza RwLock.
+    pub fn commit_document_write(
+        &mut self,
+        prepared: PreparedDocumentWrite,
+        source: &str,
+        model: DocumentModel,
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<PreparedDocumentFeed> {
+        self.indexes.ensure_mutation_available()?;
+        let PreparedDocumentWrite {
+            id,
+            existed,
+            from,
+            expected_source,
+            ..
+        } = prepared;
+        if let Err(and) = before_write {
+            return Err(Self::before_write_error(&id, and));
+        }
+        let placed = if let Some(expected) = expected_source.as_deref() {
+            self.docs
+                .vault
+                .write_if_unchanged(&id, expected, source)?
+                .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else {
+            self.docs.vault.write(&id, source)?
+        };
+        let revision = Revision::of(source);
+        let changes = self.indexes.core.changes_for(&model, &revision);
+        self.set_entry(&id, placed.0, placed.1, Some(revision.clone()));
+        let losses = self
+            .indexes
+            .core
+            .on_documents_indexed(std::slice::from_ref(&model));
+        let providers = self.indexes.feed_handles();
+        let journal = if existed {
             JournalOp::Written {
                 doc: id.clone(),
                 from,
-                to: to.clone(),
+                to: revision.clone(),
             }
         } else {
             JournalOp::Created {
                 doc: id.clone(),
-                to: to.clone(),
+                to: revision.clone(),
             }
-        });
-        Ok(to)
+        };
+        Ok(PreparedDocumentFeed {
+            id,
+            model,
+            changes,
+            revision,
+            journal,
+            providers,
+            losses,
+        })
+    }
+
+    /// Come `commit_document_write`, conservando però la semantica di journal
+    /// dell'edit chirurgico invece di registrarlo come una scrittura generica.
+    pub fn commit_document_edit(
+        &mut self,
+        prepared: PreparedDocumentWrite,
+        source: &str,
+        model: DocumentModel,
+        before_write: std::result::Result<(), PluginError>,
+        base: Revision,
+        report: &EditReport,
+    ) -> Result<PreparedDocumentFeed> {
+        let mut pending = self.commit_document_write(prepared, source, model, before_write)?;
+        pending.journal = JournalOp::Edited {
+            doc: pending.id.clone(),
+            from: base,
+            to: pending.revision.clone(),
+            footprint: crate::journal::EditFootprint::of(&report.applied),
+        };
+        Ok(pending)
+    }
+
+    /// Chiude la fase indici senza consegnare eventi. Il journal resta nel
+    /// token e verrà registrato solo dopo il drain staccato.
+    pub fn finish_document_write_deferred(
+        &mut self,
+        pending: PreparedDocumentFeed,
+    ) -> DeferredEvents<Revision> {
+        let revision = pending.revision.clone();
+        let journal = pending.journal.clone();
+        self.finish_index_feed(pending);
+        DeferredEvents {
+            outcome: revision,
+            previous_actor: None,
+            journal: Some(journal),
+        }
+    }
+
+    /// Finalizza gli indici di un edit staccato e consegna il report originale
+    /// soltanto dopo il drain degli eventi.
+    pub fn finish_document_edit_deferred(
+        &mut self,
+        pending: PreparedDocumentFeed,
+        report: EditReport,
+    ) -> DeferredEvents<EditReport> {
+        let journal = pending.journal.clone();
+        self.finish_index_feed(pending);
+        DeferredEvents {
+            outcome: report,
+            previous_actor: None,
+            journal: Some(journal),
+        }
+    }
+
+    pub fn finalize_document_write(&mut self, pending: PreparedDocumentFeed) -> Result<Revision> {
+        let deferred = self.finish_document_write_deferred(pending);
+        self.dispatch_pending();
+        Ok(self.finish_deferred_events(deferred))
+    }
+
+    pub fn finish_document_write(
+        &mut self,
+        prepared: PreparedDocumentWrite,
+        source: &str,
+        model: DocumentModel,
+        before_write: std::result::Result<(), PluginError>,
+    ) -> Result<Revision> {
+        let pending = self.commit_document_write(prepared, source, model, before_write)?;
+        let pending = pending.invoke_indexes();
+        self.finalize_document_write(pending)
+    }
+
+    pub fn write_document(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        base: WriteBase,
+    ) -> Result<Revision> {
+        let prepared = self.prepare_document_write(id, base)?;
+        let model = prepared.parse(source)?;
+        let before_write = if let Some(owner) = prepared.before_write_owner().map(str::to_owned) {
+            let mut host = self.host_for(&owner, InvokeMode::Apply);
+            prepared.invoke_before_write(&mut host)
+        } else {
+            Ok(())
+        };
+        self.finish_document_write(prepared, source, model, before_write)
     }
 
     /// coda di ogni scrittura, eventi. Rende la revisione prodotta.
@@ -2762,41 +5463,58 @@ impl Workspace {
     /// quella di `write_document`, cioè una mutazione contata due volte in una
     /// lista che esiste per essere ripercorsa.
     // Il parse è puro: farlo PRIMA di scrivere tiene la mutazione atomica.
-    fn write_source(&mut self, id: &DocId, source: &str) -> Result<Revision> {
-        // Nell'ordine inverso un parse fallito lascerebbe il disco avanti
-        // rispetto a modelli/grafo/indici — e il chiamante riceverebbe `Err`
-        // pur avendo scritto.
-        // Il gancio **prima della scrittura** (0154): fra il parse e il disco
+    fn write_source(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        expected_source: Option<&str>,
+    ) -> Result<Revision> {
+        self.indexes.ensure_mutation_available()?;
         let model = self.docs.parse(id, source)?;
-        // l'originale è ancora leggibile, e chi ha registrato una chiusura
-        // (la fotografia del versioning) la vuole guardare in questo istante.
-        // Un suo errore ferma la scrittura: sovrascrivere senza che la
-        // fotografia sia riuscita sarebbe la finestra che il meccanismo
-        // esiste per chiudere. L'host è intestato al plugin che ha registrato
-        // il gancio, in modalità `Apply` — e non è `with_host`, che in fondo
-        // drenerebbe la coda delle scritture mentre siamo dentro una scrittura.
-        // Dimensione e data arrivano dalla scrittura stessa: sono ciò che i byte
-        if let Some((plugin, hook)) = &self.before_write {
-            let plugin = plugin.clone();
-            let hook = hook.clone();
+        if let Some((plugin, hook)) = self.before_write.clone() {
             let mut host = self.host_for(&plugin, InvokeMode::Apply);
-            if let Err(and) = hook(&mut host, id) {
-                return Err(match and {
-                    PluginError::Io(why) => KernelError::Io {
-                        path: id.to_string().into(),
-                        source: std::io::Error::other(why.to_string()),
-                    },
-                    other => KernelError::BadEdit {
-                        doc: id.to_string(),
-                        why: other.to_string(),
-                    },
-                });
+            if let Err(and) =
+                crate::safety::calling_callback(&plugin, "BeforeWriteHook", || hook(&mut host, id))
+            {
+                return Err(Self::before_write_error(id, and));
             }
         }
-        // appena posati dicono di sé, e ripeterle al disco con una `stat` era il
-        // difetto 0179.
-        // Scrive una riga nel registro delle mutazioni (§15.2).
-        let placed = self.docs.vault.write(id, source)?;
+        self.write_source_parsed(id, source, expected_source, model)
+    }
+
+    /// Seconda metà di `write_source`: da qui in poi il modello è già stato
+    /// prodotto. Restano hook, storage/CAS, ingestione ed eventi.
+    /// Seconda metà di `write_source`: parse e gancio sono già tornati. Da qui
+    /// in poi restano soltanto storage/CAS, ingestione ed eventi.
+    fn before_write_error(id: &DocId, and: PluginError) -> KernelError {
+        match and {
+            PluginError::Io(why) => KernelError::Io {
+                path: id.to_string().into(),
+                source: std::io::Error::other(why.to_string()),
+            },
+            other => KernelError::BadEdit {
+                doc: id.to_string(),
+                why: other.to_string(),
+            },
+        }
+    }
+
+    fn write_source_parsed(
+        &mut self,
+        id: &DocId,
+        source: &str,
+        expected_source: Option<&str>,
+        model: DocumentModel,
+    ) -> Result<Revision> {
+        self.indexes.ensure_mutation_available()?;
+        let placed = if let Some(expected) = expected_source {
+            self.docs
+                .vault
+                .write_if_unchanged(id, expected, source)?
+                .ok_or_else(|| KernelError::Stale(id.to_string()))?
+        } else {
+            self.docs.vault.write(id, source)?
+        };
         let revision = Revision::of(source);
         self.ingest_model(id, model, revision.clone(), Some(placed));
         self.dispatch_pending();
@@ -2956,7 +5674,7 @@ impl Workspace {
             return Ok(report);
         }
         let from = request.base.clone();
-        let to = self.write_source(id, &next)?;
+        let to = self.write_source(id, &next, Some(&source))?;
         // toccato e quanto ha sostituito, mai con cosa (0103). Non è
         // `report.inverse()` a cui si toglie il testo — quella funzione qui non
         // si chiama affatto, così i byte dell'utente non passano nemmeno per una
@@ -3012,43 +5730,14 @@ impl Workspace {
     /// all'esito, e non deve tornare a chiederle (difetto 0179, vedi
     /// [`set_entry`](Workspace::set_entry)). `None` per chi porta dentro un
     /// cambiamento che non ha fatto lui.
-    // Una rinomina esterna spezzata dal debounce arriva come «sparito» e
-    fn ingest_model(
+    fn prepare_ingest_model(
         &mut self,
         id: &DocId,
         model: DocumentModel,
         fingerprint: Revision,
         placed: Option<(u64, u64)>,
-    ) {
-        // poi «nato» (difetto 0198). Se il nato ha l'impronta di chi è appena
-        // sparito, è la stessa nota: lo stato attaccato la segue. Uno a uno e
-        // per impronta, come la 0099; se `id` è già in anagrafe non è una
-        // rinomina (0135).
-        // **E poi si dice**, con lo stesso evento della rinomina
-        if !self.indexes.core.metas.contains_key(id) {
-            if let Some((from, fp)) = self.last_removed.take() {
-                if from != *id && fp == fingerprint {
-                    self.migrate_side_data(&from, id);
-                    // vista: chi tiene stato per-documento fuori dallo spazio
-                    // dichiarato — il versioning, che ha uno store suo perché
-                    // deve sopravvivere alla cancellazione (0044) — non ha
-                    // altro modo di saperlo, e senza l'evento la sua storia si
-                    // spezza in due chiavi. È il gemello del rejoin a vault
-                    // chiuso (il precedente qui sotto, ~7093-7106), che però
-                    // passa da `as_actor(Actor::Kernel, …)` perché lì non c'è
-                    // un rilevatore: qui l'attore è chi ha visto — il batch del
-                    // rilevatore — e l'evento esce dal suo frame, come ogni
-                    // altro di questo ingest.
-                    // L'anagrafe segue ogni scrittura (§14.1): dimensione, data e impronta
-                    self.emit_event(Event::DocumentRenamed {
-                        from,
-                        to: id.clone(),
-                    });
-                } else if from != *id {
-                    self.last_removed = Some((from, fp));
-                }
-            }
-        }
+        journal: JournalOp,
+    ) -> PreparedDocumentFeed {
         // di un documento appena scritto sono cambiate, e una voce ferma a
         // prima direbbe che il file è quello di ieri — a chi la interroga
         // adesso, e alla prossima apertura, che sull'anagrafe decide cosa
@@ -3062,37 +5751,87 @@ impl Workspace {
         let changes = self.indexes.core.changes_for(&model, &fingerprint);
         match placed {
             Some((size, mtime)) => {
-                self.set_entry(id, size, mtime, Some(fingerprint));
+                self.set_entry(id, size, mtime, Some(fingerprint.clone()));
             }
             None => {
-                self.touch_entry(id, Some(fingerprint));
+                self.touch_entry(id, Some(fingerprint.clone()));
             }
         }
-        // stessa verità, nessun canale che può perdere pezzi per strada. E la
-        // vedono ADESSO, sul modello intero: è l'unico momento in cui corpo e
-        // testo esistono — la cache tiene i soli metadati.
-        // Un lotto di uno: la scrittura singola È il caso normale, e la firma
-        // a lotti non la trasforma in un'eccezione da spiegare.
-        // Il rebuild legge la cache: va aggiornata prima.
         let lost = self
             .indexes
+            .core
             .on_documents_indexed(std::slice::from_ref(&model));
-        self.report_losses(lost);
+        let providers = self.indexes.feed_handles();
+        PreparedDocumentFeed {
+            id: id.clone(),
+            model,
+            changes,
+            revision: fingerprint,
+            journal,
+            providers,
+            losses: lost,
+        }
+    }
+
+    fn ingest_model(
+        &mut self,
+        id: &DocId,
+        model: DocumentModel,
+        fingerprint: Revision,
+        placed: Option<(u64, u64)>,
+    ) {
+        let pending = self.prepare_ingest_model(
+            id,
+            model,
+            fingerprint,
+            placed,
+            JournalOp::Written {
+                doc: id.clone(),
+                from: None,
+                to: Revision::of(""),
+            },
+        );
+        let pending = pending.invoke_indexes();
+        self.finish_index_feed(pending);
+    }
+
+    fn finish_index_feed(&mut self, pending: PreparedDocumentFeed) {
+        self.report_losses(pending.losses);
         if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-            // Il sorgente sotto la selezione è cambiato: gli offset pubblicati
             self.indexes.core.rebuild_graph();
         }
-        // dalla shell erano di un altro testo. La shell ne ripubblicherà uno
-        // vero al prossimo movimento del cursore (o subito dopo un
-        // salvataggio); fino ad allora il contesto dice "non so dove", che è
-        // la verità.
-        // Sincronizza un path assoluto dopo un evento del filesystem: riparsa se
-        self.session.invalidate(id, ContextChange::Rewritten);
+        self.session
+            .invalidate(&pending.id, ContextChange::Rewritten);
         self.emit_event(Event::DocumentChanged {
-            id: id.clone(),
-            changes: Some(changes),
+            id: pending.id,
+            changes: Some(pending.changes),
         });
         self.emit_event(Event::IndexUpdated);
+    }
+
+    /// Accoda il fatto già committato prima che gli indici esterni possano
+    /// rientrare e produrre una modifica successiva dello stesso documento.
+    fn announce_index_feed(&mut self, pending: &PreparedDocumentFeed) {
+        self.emit_event(Event::DocumentChanged {
+            id: pending.id.clone(),
+            changes: Some(pending.changes.clone()),
+        });
+        self.emit_event(Event::IndexUpdated);
+    }
+
+    /// Chiude il solo feed watcher. Perdite e frame appartengono alla callback
+    /// e vanno sempre recuperati; grafo e sessione, invece, possono seguire il
+    /// risultato preparato soltanto finché quella revisione è ancora corrente.
+    fn finish_sync_index_feed(&mut self, pending: PreparedDocumentFeed, current: bool) {
+        self.report_losses(pending.losses);
+        if !current {
+            return;
+        }
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        self.session
+            .invalidate(&pending.id, ContextChange::Rewritten);
     }
 
     /// esiste ed è un documento, aggiorna l'anagrafe se è un file di
@@ -3117,64 +5856,493 @@ impl Workspace {
     /// si parsa lasciava la cache, il grafo e l'indice fermi a *prima*, per
     /// sempre, senza che niente lo dicesse. Adesso lo dice
     /// [`IndexQuery::VaultStatus`].
-    /// **La metà di [`sync_path`] che non ha bisogno del prestito esclusivo**:
+    /// La porta sincrona orchestra lo stesso protocollo staged del watcher:
+    /// pianifica senza I/O, invoca il piano detached e applica il risultato
+    /// attraverso l'unico percorso che gestisce feed, rimozioni e rinomine.
     pub fn sync_path(&mut self, abs: &Utf8Path) -> Result<bool> {
-        let outcome = self.sync_path_here(abs);
-        self.notes_sync(abs, &outcome);
-        outcome
+        let prepared = self.plan_sync(abs).map(SyncPlan::invoke);
+        self.sync_path_prepared(abs, prepared)
     }
 
-    /// legge il file dal disco e lo parsa, sotto `&self`.
+    /// Cattura la politica e lo storage necessari al filtro di un path.
     ///
-    /// È la regola della
-    /// [decisione 0024](../../../docs/decisions/README.md)
-    /// applicata alla porta da cui il vault cambia da fuori: leggere e parsare
-    /// N file è l'I/O più lungo di un lotto del watcher, e chi legge — la
-    /// ricerca, il disegno dei pannelli — non ha niente a che farci. Il
-    /// chiamante prepara sotto prestito **condiviso** e applica con
-    /// [`sync_path_prepared`](Workspace::sync_path_prepared).
+    /// Questa metà non fa I/O; il watcher invoca il token dopo aver rilasciato
+    /// `Custody`, quindi rientra con il solo esito.
+    pub fn prepare_is_ignored(&self, abs: &Utf8Path) -> PreparedIgnoreCheck {
+        self.docs.vault.prepare_is_ignored(abs)
+    }
+
+    /// Prepara una lettura del watcher conservando la porta sincrona storica.
     ///
-    /// `None` vuol dire «qui non c'è niente da preparare», e non è un
-    /// fallimento: un path ignorato, un file di un'altra specie, un file
-    /// sparito, una lettura che non è riuscita, o un file che sta ancora
-    /// cambiando sotto (difetto 0197: due `stat` discordi). In tutti i casi
-    /// [`sync_path_prepared`] rifà la strada intera sotto il prestito
-    /// esclusivo, che è dove quei rami stavano già — e dove un errore viene
-    /// registrato come sempre (§9.7). Un file instabile si rifiuta anche
-    /// là: ingerirlo a metà è il difetto, non una lettura da ritentare subito.
-    // L'eco della propria scrittura non si riparsa (§14.1, difetto 0196).
-    pub fn plan_sync(&self, abs: &Utf8Path) -> Option<ParsedChange> {
-        if self.docs.vault.is_ignored(abs) {
+    /// I chiamanti sotto `Custody` usano invece [`prepare_is_ignored`] e
+    /// [`plan_sync_admitted`], separando il possibile `stat` dalla
+    /// pianificazione pura.
+    pub fn plan_sync(&self, abs: &Utf8Path) -> Option<SyncPlan> {
+        if self.prepare_is_ignored(abs).invoke() {
             return None;
         }
+        self.plan_sync_admitted(abs)
+    }
+
+    /// Prepara un path che il filtro owned ha già ammesso.
+    ///
+    /// Non interroga lo storage e non ricalcola la politica di esclusione.
+    pub fn plan_sync_admitted(&self, abs: &Utf8Path) -> Option<SyncPlan> {
         let id = self.docs.vault.doc_id_for_path(abs).ok()?;
-        let ext = extension_of(&id).unwrap_or_default();
-        self.docs.registry.provider_for_ext(&ext)?;
-        if !abs.exists() {
+        self.plan_sync_known(abs.to_owned(), id)
+    }
+
+    /// Classifica una rinomina esterna conservando la porta sincrona storica.
+    pub fn plan_external_rename(&self, from: &Utf8Path, to: &Utf8Path) -> ExternalRenamePlan {
+        let from_admitted = !self.prepare_is_ignored(from).invoke();
+        let to_admitted = !self.prepare_is_ignored(to).invoke();
+        self.plan_external_rename_admitted(from, from_admitted, to, to_admitted)
+    }
+
+    /// Classifica una rinomina dai due esiti già valutati fuori da `Custody`.
+    ///
+    /// Documenti e asset riconosciuti portano handle owned; ogni caso ambiguo
+    /// degrada agli stessi piani `Touched` della consegna ordinaria. Questa
+    /// funzione non interroga lo storage né ricalcola il filtro.
+    pub fn plan_external_rename_admitted(
+        &self,
+        from: &Utf8Path,
+        from_admitted: bool,
+        to: &Utf8Path,
+        to_admitted: bool,
+    ) -> ExternalRenamePlan {
+        let sync_plan = |path: &Utf8Path, admitted: bool| {
+            admitted.then(|| self.plan_sync_admitted(path)).flatten()
+        };
+        let fallback = |only_to: bool| {
+            let paths = if only_to {
+                vec![(to.to_owned(), to_admitted)]
+            } else {
+                vec![
+                    (from.to_owned(), from_admitted),
+                    (to.to_owned(), to_admitted),
+                ]
+            };
+            ExternalRenamePlan::Sync(
+                paths
+                    .into_iter()
+                    .map(|(path, admitted)| {
+                        let plan = sync_plan(&path, admitted);
+                        (path, plan)
+                    })
+                    .collect(),
+            )
+        };
+        let identity = |path: &Utf8Path, admitted: bool| {
+            admitted
+                .then(|| self.docs.vault.doc_id_for_path(path).ok())
+                .flatten()
+        };
+        let (Some(from_id), Some(to_id)) =
+            (identity(from, from_admitted), identity(to, to_admitted))
+        else {
+            return fallback(false);
+        };
+        if from_id == to_id {
+            return fallback(true);
+        }
+
+        let from_entry = self.indexes.core.entries.get(&from_id).cloned();
+        let to_entry = self.indexes.core.entries.get(&to_id).cloned();
+        let destination_free = to_entry.is_none() && !self.indexes.core.metas.contains_key(&to_id);
+        let from_document = self.indexes.core.metas.contains_key(&from_id);
+        let to_has_provider = self
+            .docs
+            .registry
+            .provider_for_ext(&extension_of(&to_id).unwrap_or_default())
+            .is_some();
+        let to_kind = media::kind_of_ext(&to_id, |ext| self.docs.registry.has_doc_ext(ext));
+        if from_document && destination_free && to_has_provider {
+            let Some(from_entry) = from_entry.clone() else {
+                return fallback(false);
+            };
+            let Some(descriptor) = self
+                .docs
+                .registry
+                .descriptor_for_ext(&extension_of(&to_id).unwrap_or_default())
+            else {
+                return fallback(false);
+            };
+            let Ok(parser) = self.docs.prepare_parse(&to_id) else {
+                return fallback(false);
+            };
+            let side_data = self.prepare_rename_side_data(&from_id, &to_id);
+            return ExternalRenamePlan::Document(Box::new(PreparedExternalDocumentRename {
+                snapshot: ExternalRenameSnapshot {
+                    workspace_id: self.workspace_id,
+                    from_path: from.to_owned(),
+                    to_path: to.to_owned(),
+                    from_id,
+                    to_id,
+                    from_entry,
+                    to_entry,
+                    syntax_generation: self.syntax_generation,
+                    routing_generation: self.indexes.routing_generation(),
+                },
+                storage: Arc::clone(self.docs.vault.storage()),
+                parser,
+                source_kind: descriptor.source,
+                side_data,
+            }));
+        }
+
+        let from_has_provider = self
+            .docs
+            .registry
+            .provider_for_ext(&extension_of(&from_id).unwrap_or_default())
+            .is_some();
+        let Some(from_entry) = from_entry else {
+            return fallback(false);
+        };
+        if !destination_free
+            || from_entry.kind != EntryKind::Asset
+            || from_has_provider
+            || to_has_provider
+            || to_kind != EntryKind::Asset
+        {
+            return fallback(false);
+        }
+
+        let fallback_plans = [
+            (from.to_owned(), from_admitted),
+            (to.to_owned(), to_admitted),
+        ]
+        .into_iter()
+        .map(|(path, admitted)| {
+            let plan = sync_plan(&path, admitted);
+            (path, plan)
+        })
+        .collect();
+        ExternalRenamePlan::Asset(Box::new(PreparedExternalAssetRename {
+            snapshot: ExternalRenameSnapshot {
+                workspace_id: self.workspace_id,
+                from_path: from.to_owned(),
+                to_path: to.to_owned(),
+                from_id,
+                to_id,
+                from_entry,
+                to_entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            storage: Arc::clone(self.docs.vault.storage()),
+            organization: Arc::clone(&self.organization),
+            doc_data_roots: self.docs.plugin_data_roots(),
+            fallback: fallback_plans,
+        }))
+    }
+
+    /// Riconvalida la fotografia e installa remove+feed nel solo core.
+    pub fn prepare_external_document_rename(
+        &mut self,
+        parsed: ParsedExternalDocumentRename,
+    ) -> Result<Option<PendingExternalDocumentRename>> {
+        let ParsedExternalDocumentRename {
+            snapshot,
+            state,
+            side_data,
+        } = parsed;
+        let (model, fingerprint, stat) = match state {
+            ParsedExternalDocumentState::Ready {
+                model,
+                fingerprint,
+                stat,
+            } => (model, fingerprint, stat),
+            ParsedExternalDocumentState::Failed(error) => {
+                let outcome: Result<()> = Err(error);
+                self.notes_sync(&snapshot.to_path, &outcome);
+                return Ok(None);
+            }
+            ParsedExternalDocumentState::Stale => return Ok(None),
+        };
+        let current_from = self.indexes.core.entries.get(&snapshot.from_id);
+        let current_to = self.indexes.core.entries.get(&snapshot.to_id);
+        if snapshot.workspace_id != self.workspace_id
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.from_path)
+                .ok()
+                .as_ref()
+                != Some(&snapshot.from_id)
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.to_path)
+                .ok()
+                .as_ref()
+                != Some(&snapshot.to_id)
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || !self.indexes.core.metas.contains_key(&snapshot.from_id)
+            || self.indexes.core.metas.contains_key(&snapshot.to_id)
+            || snapshot.from_entry.fingerprint != self.entry_fingerprint(&snapshot.from_id)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+            || model.id != snapshot.to_id
+        {
+            return Ok(None);
+        }
+        let removal = self
+            .prepare_document_rename_removal(&snapshot.from_id)?
+            .expect("il documento riconvalidato esiste");
+        let changes = self.indexes.core.changes_for(&model, &fingerprint);
+        let installed = VaultEntry {
+            id: snapshot.to_id.clone(),
+            kind: EntryKind::Document,
+            size: stat.size,
+            mtime: stat.mtime,
+            fingerprint: Some(fingerprint.clone()),
+        };
+        self.indexes.core.ensure_folders_of(&snapshot.to_id);
+        self.indexes.core.set_entry(installed.clone());
+        let losses = self
+            .indexes
+            .core
+            .on_documents_indexed(std::slice::from_ref(&model));
+        let feed = PreparedDocumentFeed {
+            id: snapshot.to_id.clone(),
+            model: *model,
+            changes,
+            revision: fingerprint,
+            journal: JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            },
+            providers: self.indexes.feed_handles(),
+            losses,
+        };
+        self.session.invalidate(
+            &snapshot.from_id,
+            ContextChange::Renamed(snapshot.to_id.clone()),
+        );
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.record(JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::DocumentRenamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::IndexUpdated);
+        });
+        Ok(Some(PendingExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            side_data,
+        }))
+    }
+
+    /// Recupera sempre frame, perdite e warning; grafo e note di sync seguono
+    /// il token soltanto se il core installato è ancora corrente.
+    pub fn finish_external_document_rename(
+        &mut self,
+        completed: CompletedExternalDocumentRename,
+    ) -> std::result::Result<bool, Box<(PluginError, CompletedExternalDocumentRename)>> {
+        if completed.snapshot.workspace_id != self.workspace_id {
+            return Err(Box::new((
+                PluginError::Conflict(
+                    "la rinomina documento appartiene a un altro workspace".into(),
+                ),
+                completed,
+            )));
+        }
+        let CompletedExternalDocumentRename {
+            snapshot,
+            installed,
+            removal,
+            feed,
+            side_data,
+        } = completed;
+        let removal_losses = match self.finish_document_rename_removal(removal) {
+            Ok(losses) => losses,
+            Err(removal) => {
+                return Err(Box::new((
+                    PluginError::Conflict(
+                        "la rimozione della rinomina appartiene a un altro workspace".into(),
+                    ),
+                    CompletedExternalDocumentRename {
+                        snapshot,
+                        installed,
+                        removal,
+                        feed,
+                        side_data,
+                    },
+                )));
+            }
+        };
+        self.report_losses(removal_losses);
+        self.report_losses(feed.losses);
+        self.report_rename_side_data(side_data);
+        let current = !self.indexes.core.entries.contains_key(&snapshot.from_id)
+            && self.indexes.core.entries.get(&snapshot.to_id) == Some(&installed)
+            && self.entry_fingerprint(&snapshot.to_id) == installed.fingerprint
+            && self.indexes.core.metas.contains_key(&snapshot.to_id)
+            && snapshot.syntax_generation == self.syntax_generation
+            && snapshot.routing_generation == self.indexes.routing_generation();
+        if !current {
+            return Ok(false);
+        }
+        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        let outcome: Result<bool> = Ok(true);
+        self.notes_sync(&snapshot.to_path, &outcome);
+        Ok(true)
+    }
+
+    /// Applica soltanto al core un asset già osservato sul path d'arrivo.
+    /// Nessun filesystem, sidecar o provider viene attraversato qui.
+    pub fn prepare_external_asset_rename(
+        &mut self,
+        parsed: ParsedExternalAssetRename,
+    ) -> Option<PendingExternalAssetRename> {
+        let ParsedExternalAssetRename {
+            snapshot,
+            stat,
+            fingerprint,
+            organization,
+            storage,
+            doc_data_roots,
+        } = parsed;
+        let current_from = self.indexes.core.entries.get(&snapshot.from_id);
+        let current_to = self.indexes.core.entries.get(&snapshot.to_id);
+        if snapshot.workspace_id != self.workspace_id
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.from_path)
+                .ok()
+                .as_ref()
+                != Some(&snapshot.from_id)
+            || self
+                .docs
+                .vault
+                .doc_id_for_path(&snapshot.to_path)
+                .ok()
+                .as_ref()
+                != Some(&snapshot.to_id)
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || snapshot.from_entry.fingerprint != self.entry_fingerprint(&snapshot.from_id)
+            || self.indexes.core.metas.contains_key(&snapshot.to_id)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+        {
             return None;
         }
-        let source = self.source_if_stable(&id).ok().flatten()?;
-        let fingerprint = Revision::of(&source);
-        // **I byte, se il file sta fermo.** Due `stat` attorno alla lettura: se
-        let model = if self.already_ingested(&id, &fingerprint) {
-            None
-        } else {
-            Some(self.docs.parse_owned(&id, source).ok()?)
+        let installed = VaultEntry {
+            id: snapshot.to_id.clone(),
+            kind: snapshot.from_entry.kind,
+            size: stat.size,
+            mtime: stat.mtime,
+            fingerprint: Some(fingerprint),
         };
-        Some(ParsedChange {
-            seen: self.entry_fingerprint(&id),
-            fingerprint,
-            id,
-            model,
+        self.as_actor(Actor::Watcher, |ws| {
+            ws.indexes.core.remove_entry(&snapshot.from_id);
+            ws.indexes.core.ensure_folders_of(&snapshot.to_id);
+            ws.indexes.core.set_entry(installed.clone());
+            ws.record(JournalOp::Renamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+            });
+            ws.emit_event(Event::EntryRenamed {
+                from: snapshot.from_id.clone(),
+                to: snapshot.to_id.clone(),
+                kind: installed.kind,
+            });
+            ws.emit_event(Event::IndexUpdated);
+        });
+        Some(PendingExternalAssetRename {
+            snapshot,
+            installed,
+            organization,
+            storage,
+            doc_data_roots,
         })
     }
 
-    /// dimensione o data cambiano in mezzo, qualcun altro sta ancora scrivendo
-    /// e questi byte sono una metà (difetto 0197). `None` non è un fallimento
-    /// — il debounce del rilevatore riproverà — ed è per questo che non si
-    /// aspetta: un `sleep` in un banco non è un segnale, e qui non ce n'è
-    /// bisogno, perché la prova è sui due numeri, non sul tempo.
-    /// **Questi byte sono già quelli che il kernel ha in memoria?**
+    /// Recupera sempre i warning detached; l'epilogo derivato resta subordinato
+    /// all'identità installata dal token.
+    pub fn finish_external_asset_rename(
+        &mut self,
+        completed: CompletedExternalAssetRename,
+    ) -> std::result::Result<bool, Box<(PluginError, CompletedExternalAssetRename)>> {
+        if completed.snapshot.workspace_id != self.workspace_id {
+            return Err(Box::new((
+                PluginError::Conflict("la rinomina asset appartiene a un altro workspace".into()),
+                completed,
+            )));
+        }
+        let CompletedExternalAssetRename {
+            snapshot,
+            installed,
+            doc_data_errors,
+        } = completed;
+        for error in doc_data_errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
+                snapshot.from_id, snapshot.to_id
+            ));
+        }
+        let current = !self.indexes.core.entries.contains_key(&snapshot.from_id)
+            && self.indexes.core.entries.get(&snapshot.to_id) == Some(&installed)
+            && self.entry_fingerprint(&snapshot.to_id) == installed.fingerprint
+            && snapshot.syntax_generation == self.syntax_generation
+            && snapshot.routing_generation == self.indexes.routing_generation();
+        Ok(current)
+    }
+
+    /// Compone un piano da un'identità già recintata e filtrata.
+    ///
+    /// Non interroga il vault: la riconciliazione d'apertura usa questa metà
+    /// dopo che la propria scansione detached ha deciso i candidati.
+    fn plan_sync_known(&self, path: Utf8PathBuf, id: DocId) -> Option<SyncPlan> {
+        let ext = extension_of(&id).unwrap_or_default();
+        let entry = self.indexes.core.entries.get(&id).cloned();
+        let seen = entry.as_ref().and_then(|entry| entry.fingerprint.clone());
+        let action = if let (Some(descriptor), Ok(parser)) = (
+            self.docs.registry.descriptor_for_ext(&ext),
+            self.docs.prepare_parse(&id),
+        ) {
+            SyncPlanAction::Parse {
+                storage: Arc::clone(self.docs.vault.storage()),
+                parser: Box::new(parser),
+                source_kind: descriptor.source,
+                already_ingested: self.indexes.core.metas.contains_key(&id),
+            }
+        } else {
+            SyncPlanAction::Stat {
+                storage: Arc::clone(self.docs.vault.storage()),
+            }
+        };
+        Some(SyncPlan {
+            snapshot: SyncSnapshot {
+                workspace_id: self.workspace_id,
+                path,
+                id,
+                seen,
+                entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            action,
+        })
+    }
+
+    /// Legge testo soltanto quando i due `stat` ai lati della lettura
+    /// combaciano. Il percorso sincrono legacy usa ancora questa porta.
+    ///
+    /// Se dimensione o data cambiano, qualcun altro sta ancora scrivendo e
+    /// questi byte sono una metà (difetto 0197).
     fn source_if_stable(&self, id: &DocId) -> Result<Option<String>> {
         let Some(before) = self.docs.vault.stat(id) else {
             return Ok(None);
@@ -3186,8 +6354,9 @@ impl Workspace {
         Ok((before == after).then_some(source))
     }
 
+    /// **Questi byte sono già quelli che il kernel ha in memoria?**
     ///
-    /// L'impronta in anagrafe è quella dell'ultimo sorgente ingerito, e se il
+    /// L'impronta in anagrafe è quella dell'ultimo sorgente ingerito: se il
     /// file sul disco ne porta una uguale non c'è niente da fare: il modello in
     /// cache è già quello che un parse rifarebbe identico.
     ///
@@ -3210,14 +6379,13 @@ impl Workspace {
     /// La cache dei metadati va **guardata insieme all'impronta**: un documento
     /// che sta in anagrafe ma non in cache — uno che alla scansione non si è
     /// potuto parsare — non è «già dentro», e va riprovato.
-    /// L'impronta che l'anagrafe attribuisce **adesso** a un documento: è ciò
     fn already_ingested(&self, id: &DocId, fingerprint: &Revision) -> bool {
         self.indexes.core.metas.contains_key(id)
             && self.entry_fingerprint(id).as_ref() == Some(fingerprint)
     }
 
-    /// che un piano si porta dietro per accorgersi di essere invecchiato.
-    /// [`sync_path`] con il lavoro di lettura **già fatto** da
+    /// L'impronta che un piano porta con sé per rilevare una mutazione
+    /// intervenuta prima della finalizzazione.
     fn entry_fingerprint(&self, id: &DocId) -> Option<Revision> {
         self.indexes
             .core
@@ -3226,47 +6394,221 @@ impl Workspace {
             .and_then(|and| and.fingerprint.clone())
     }
 
-    /// [`plan_sync`](Workspace::plan_sync).
+    /// Valida e applica al solo core un risultato già invocato.
     ///
-    /// **Il piano dichiara cosa credeva di sapere, e chi applica lo verifica.**
-    /// Fra la fase condivisa e questa il prestito esclusivo è passato di mano, e
-    /// in mezzo può esserci stato un salvataggio dell'utente: applicare un
-    /// modello parsato *prima* di quella scrittura la cancellerebbe dalla
-    /// memoria del kernel, in silenzio. Il piano porta quindi l'impronta che
-    /// l'anagrafe aveva quando è stato fatto; se adesso è un'altra, il piano si
-    /// butta e si rifà la strada intera — che è ciò che il codice faceva sempre,
-    /// e qui succede solo nel caso raro.
-    // Il file può anche essere sparito nel frattempo: è un `stat`, non una
+    /// Nessun filesystem o provider viene attraversato qui. Un token stale,
+    /// una lettura instabile o un routing cambiato vengono scartati senza
+    /// fallback e senza eventi.
+    pub fn prepare_sync_path_prepared(
+        &mut self,
+        abs: &Utf8Path,
+        prepared: Option<ParsedChange>,
+    ) -> Result<Option<PendingSyncChange>> {
+        let Some(parsed) = prepared else {
+            return Ok(None);
+        };
+        let outcome = (|| {
+            if parsed.snapshot.workspace_id != self.workspace_id
+                || parsed.snapshot.path != abs
+                || self.docs.vault.doc_id_for_path(abs).ok().as_ref() != Some(&parsed.snapshot.id)
+                || self.indexes.core.entries.get(&parsed.snapshot.id)
+                    != parsed.snapshot.entry.as_ref()
+                || parsed.snapshot.syntax_generation != self.syntax_generation
+                || parsed.snapshot.routing_generation != self.indexes.routing_generation()
+            {
+                return Ok(None);
+            }
+            let ParsedChange { snapshot, state } = parsed;
+            match state {
+                ParsedChangeState::Ready {
+                    model,
+                    fingerprint,
+                    stat,
+                } => {
+                    self.indexes.ensure_mutation_available()?;
+                    let previous_provider_call = self.dispatch.enter_provider_call();
+                    let feed = self.as_actor(Actor::Watcher, |ws| {
+                        let feed = ws.prepare_ingest_model(
+                            &snapshot.id,
+                            *model,
+                            fingerprint,
+                            Some((stat.size, stat.mtime)),
+                            JournalOp::Written {
+                                doc: snapshot.id.clone(),
+                                from: snapshot.seen.clone(),
+                                to: Revision::of(""),
+                            },
+                        );
+                        ws.announce_index_feed(&feed);
+                        feed
+                    });
+                    Ok(Some(PendingSyncChange {
+                        snapshot,
+                        state: PendingSyncState::Feed {
+                            feed: Box::new(feed),
+                            previous_provider_call,
+                        },
+                    }))
+                }
+                ParsedChangeState::Missing => {
+                    let removal =
+                        self.prepare_sync_document_removal(&snapshot.id)?
+                            .map(|removal| PendingSyncChange {
+                                snapshot,
+                                state: PendingSyncState::Removal(removal),
+                            });
+                    Ok(removal)
+                }
+                ParsedChangeState::Entry(stat) => Ok(Some(PendingSyncChange {
+                    snapshot,
+                    state: PendingSyncState::Entry(stat),
+                })),
+                ParsedChangeState::Failed(error) => Err(error),
+                ParsedChangeState::Unchanged(stat) => Ok(Some(PendingSyncChange {
+                    snapshot,
+                    state: PendingSyncState::Unchanged(stat),
+                })),
+                ParsedChangeState::Unstable => Ok(None),
+            }
+        })();
+        self.notes_sync(abs, &outcome);
+        outcome
+    }
+
+    /// Chiude feed, rimozione o aggiornamento d'anagrafe dopo la fase detached.
+    ///
+    /// Un errore conserva il token completo: in particolare una rimozione
+    /// consegnata al workspace sbagliato deve poter tornare al proprietario,
+    /// che è l'unico autorizzato a ripristinarne il frame provider.
+    pub fn finish_sync_path_prepared(
+        &mut self,
+        completed: CompletedSyncChange,
+    ) -> std::result::Result<bool, Box<(PluginError, CompletedSyncChange)>> {
+        if completed.snapshot.workspace_id != self.workspace_id {
+            return Err(Box::new((
+                PluginError::Conflict("la sincronizzazione appartiene a un altro workspace".into()),
+                completed,
+            )));
+        }
+        let CompletedSyncChange { snapshot, state } = completed;
+        match state {
+            CompletedSyncState::Feed {
+                feed,
+                previous_provider_call,
+            } => {
+                self.dispatch.restore_provider_call(previous_provider_call);
+                let current = self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
+                    == Some(&snapshot.id)
+                    && snapshot.routing_generation == self.indexes.routing_generation()
+                    && snapshot.syntax_generation == self.syntax_generation
+                    && self.entry_fingerprint(&snapshot.id).as_ref() == Some(&feed.revision);
+                self.as_actor(Actor::Watcher, |ws| {
+                    ws.finish_sync_index_feed(*feed, current)
+                });
+                Ok(current)
+            }
+            CompletedSyncState::Removal(removal) => {
+                match self.finish_sync_document_removal(removal) {
+                    Ok(()) => Ok(true),
+                    Err((error, removal)) => Err(Box::new((
+                        error,
+                        CompletedSyncChange {
+                            snapshot,
+                            state: CompletedSyncState::Removal(removal),
+                        },
+                    ))),
+                }
+            }
+            CompletedSyncState::Entry(stat) => {
+                if self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
+                    != Some(&snapshot.id)
+                    || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
+                    || snapshot.syntax_generation != self.syntax_generation
+                    || snapshot.routing_generation != self.indexes.routing_generation()
+                {
+                    return Ok(false);
+                }
+                Ok(self.as_actor(Actor::Watcher, |ws| {
+                    let before = ws.indexes.core.entries.get(&snapshot.id).cloned();
+                    let Some(stat) = stat else {
+                        let Some(kind) = ws.indexes.core.remove_entry(&snapshot.id) else {
+                            return false;
+                        };
+                        ws.emit_event(Event::EntryRemoved {
+                            id: snapshot.id,
+                            kind,
+                        });
+                        return true;
+                    };
+                    let fingerprint = before.as_ref().and_then(|entry| {
+                        (entry.size == stat.size && entry.mtime == stat.mtime)
+                            .then(|| entry.fingerprint.clone())
+                            .flatten()
+                    });
+                    let kind = ws.set_entry(&snapshot.id, stat.size, stat.mtime, fingerprint);
+                    if ws.indexes.core.entries.get(&snapshot.id) == before.as_ref() {
+                        return false;
+                    }
+                    ws.emit_event(Event::EntryChanged {
+                        id: snapshot.id,
+                        kind,
+                    });
+                    true
+                }))
+            }
+            CompletedSyncState::Unchanged(stat) => {
+                if self
+                    .docs
+                    .vault
+                    .doc_id_for_path(&snapshot.path)
+                    .ok()
+                    .as_ref()
+                    != Some(&snapshot.id)
+                    || self.indexes.core.entries.get(&snapshot.id) != snapshot.entry.as_ref()
+                    || snapshot.syntax_generation != self.syntax_generation
+                    || snapshot.routing_generation != self.indexes.routing_generation()
+                {
+                    return Ok(false);
+                }
+                let Some(fingerprint) = snapshot.seen else {
+                    return Ok(false);
+                };
+                self.set_entry(&snapshot.id, stat.size, stat.mtime, Some(fingerprint));
+                Ok(false)
+            }
+        }
+    }
+
+    /// Compatibilità dei chiamanti kernel sincroni. Il watcher di processo usa
+    /// le due porte separate sopra e non attraversa provider sotto `Custody`.
     pub fn sync_path_prepared(
         &mut self,
         abs: &Utf8Path,
         prepared: Option<ParsedChange>,
     ) -> Result<bool> {
-        let Some(plan) = prepared else {
-            return self.sync_path(abs);
-        };
-        // lettura, e il ramo che toglie un documento sta di là.
-        // Niente da parsare vuol dire niente da applicare: il piano ha
-        if self.entry_fingerprint(&plan.id) != plan.seen || !abs.exists() {
-            return self.sync_path(abs);
-        }
-        let ParsedChange {
-            id,
-            model,
-            fingerprint,
-            ..
-        } = plan;
-        // riconosciuto l'eco di una scrittura del kernel (difetto 0196).
-        // **I piani che chiudono la finestra di apertura** (§15.7): ciò che è
-        let Some(model) = model else {
+        let Some(prepared) = self.prepare_sync_path_prepared(abs, prepared)? else {
             return Ok(false);
         };
-        let outcome = self.as_actor(Actor::Watcher, |ws| {
-            ws.ingest_model(&id, model, fingerprint, None);
-            ws.dispatch_pending();
-            Ok(true)
-        });
-        self.notes_sync(abs, &outcome);
+        let completed = prepared.invoke();
+        let outcome = match self.finish_sync_path_prepared(completed) {
+            Ok(changed) => Ok(changed),
+            Err(failure) => {
+                let (error, _completed) = *failure;
+                self.report_host_trouble(Severity::Warning, error);
+                Ok(false)
+            }
+        };
+        self.dispatch_pending();
         outcome
     }
 
@@ -3284,11 +6626,11 @@ impl Workspace {
     ///
     /// L'insieme è **il disco adesso più l'anagrafe della scansione**: un file
     /// nuovo c'è solo nel disco, uno sparito solo nell'anagrafe, uno riscritto
-    /// sta in entrambi con numeri diversi. Chi è rimasto com'era — stessi
-    /// `size` e `mtime` della camminata di scansione — non si legge: è il salto
-    /// che la cache dei metadati compra (§14.1), e senza di esso ogni apertura
-    /// rileggerebbe il vault intero per dire che non è cambiato niente. Un
-    /// lotto del rilevatore che arrivasse dopo su un path già allineato non
+    /// sta in entrambi. `size` e `mtime` sono il filtro economico; quando
+    /// combaciano, l'impronta dei byte chiude la finestra delle riscritture
+    /// della stessa lunghezza nello stesso millisecondo. Solo chi supera
+    /// entrambi i confronti viene saltato.
+    /// Un lotto del rilevatore che arrivasse dopo su un path già allineato non
     /// trova niente da fare: l'impronta in anagrafe è la stessa, e
     /// `sync_path_prepared` risponde senza parsare (difetto 0196).
     ///
@@ -3296,39 +6638,27 @@ impl Workspace {
     /// applica lo fa sotto quello esclusivo: è la regola della
     /// [0119](../../../docs/decisions/README.md)
     /// sull'unico sito che le mancava.
-    // La camminata è quella della scansione — stessa politica di
-    pub fn plan_catch_up(&self) -> Vec<(Utf8PathBuf, Option<ParsedChange>)> {
-        // esclusione, stesse specie: elenca i file, non li apre.
-        // Ciò che l'anagrafe aveva e il disco non ha più: un file sparito
-        let Ok(scanned) = self.docs.vault.scan() else {
-            return Vec::new();
-        };
-        let mut paths: BTreeSet<Utf8PathBuf> = BTreeSet::new();
-        let mut on_the_disk: BTreeSet<DocId> = BTreeSet::new();
-        for file in scanned.files {
-            let unchanged = self
-                .indexes
-                .core
-                .entries
-                .get(&file.id)
-                .is_some_and(|and| and.size == file.size && and.mtime == file.mtime);
-            on_the_disk.insert(file.id.clone());
-            if !unchanged {
-                paths.insert(self.root().join(file.id.as_str()));
-            }
+    /// Cattura sotto prestito soltanto handle e anagrafe owned.
+    ///
+    /// La scansione non parte finché il chiamante non invoca il token dopo
+    /// aver rilasciato il workspace.
+    pub fn prepare_catch_up(&self) -> PreparedCatchUp {
+        PreparedCatchUp {
+            vault: self.docs.vault.clone(),
+            entries: self.indexes.core.entries.clone(),
         }
-        // nella finestra si toglie, e `plan_sync` risponde `None` per lui —
-        // chi applica rifà la strada intera, che è dove lo sparito si toglie.
-        // Registra l'esito di una sincronizzazione per-path nel fatto interrogabile
-        for id in self.indexes.core.entries.keys() {
-            if !on_the_disk.contains(id) {
-                paths.insert(self.root().join(id.as_str()));
-            }
-        }
-        paths
-            .into_iter()
+    }
+
+    /// Crea i piani dai candidati di una scansione già completata.
+    ///
+    /// Questa fase è pura rispetto al vault: non cammina, non apre, non fa
+    /// `stat` e non ricalcola la politica di esclusione.
+    pub fn plan_catch_up(&self, snapshot: CatchUpSnapshot) -> Vec<(Utf8PathBuf, Option<SyncPlan>)> {
+        snapshot
+            .candidates
+            .into_values()
             .map(|path| {
-                let plan = self.plan_sync(&path);
+                let plan = self.plan_sync_admitted(&path);
                 (path, plan)
             })
             .collect()
@@ -3371,7 +6701,7 @@ impl Workspace {
     ///
     /// [`report_losses`]: Workspace::report_losses
     /// La stessa sincronizzazione per un file che **non è un documento**: si
-    fn notes_sync(&mut self, abs: &Utf8Path, outcome: &Result<bool>) {
+    fn notes_sync<T>(&mut self, abs: &Utf8Path, outcome: &Result<T>) {
         let Err(and) = outcome else {
             return;
         };
@@ -3383,6 +6713,14 @@ impl Workspace {
             ws.report_trouble(Severity::Warning, subject, reason, None);
             ws.dispatch_pending();
         });
+    }
+
+    /// Registra un fallimento della scansione detached di catch-up sulle stesse
+    /// superfici delle sincronizzazioni per-path.
+    pub fn note_catch_up_failure(&mut self, error: KernelError) {
+        let root = self.docs.vault.root().to_owned();
+        let outcome: Result<()> = Err(error);
+        self.notes_sync(&root, &outcome);
     }
 
     fn sync_path_here(&mut self, abs: &Utf8Path) -> Result<bool> {
@@ -3402,11 +6740,6 @@ impl Workspace {
         } else {
             self.as_actor(Actor::Watcher, |ws| {
                 let existed = ws.indexes.core.metas.contains_key(&id);
-                if existed {
-                    if let Some(fp) = ws.entry_fingerprint(&id) {
-                        ws.last_removed = Some((id.clone(), fp));
-                    }
-                }
                 ws.remove_document(&id);
                 Ok(existed)
             })
@@ -3429,7 +6762,14 @@ impl Workspace {
                     // un'impronta che qualcuno aveva calcolato vale ancora.
                     // Cambiato: l'impronta di prima descriveva un altro
                     (Some(and), Some((size, mtime))) if and.size == size && and.mtime == mtime => {
-                        and.fingerprint.clone()
+                        and.fingerprint.as_ref().and_then(|fingerprint| {
+                            ws.docs
+                                .vault
+                                .read_bytes(id)
+                                .ok()
+                                .filter(|bytes| fingerprint.matches_bytes(bytes))
+                                .map(|_| fingerprint.clone())
+                        })
                     }
                     // contenuto, e tenerla sarebbe scrivere una bugia in
                     // anagrafe. Chi la vorrà la calcolerà leggendo i byte.
@@ -3465,19 +6805,18 @@ impl Workspace {
 
     // La nota con il focus non esiste più: `active_context` non deve
     pub fn remove_document(&mut self, id: &DocId) {
-        if self.indexes.core.contains(id) {
-            // continuare a nominarla alle view (né tenerne una selezione).
-            // Crea una nota vuota e restituisce il suo [`DocId`].
-            self.session.invalidate(id, ContextChange::Gone);
-            self.indexes.core.remove_entry(id);
-            let lost = self.indexes.on_documents_removed(std::slice::from_ref(id));
-            self.report_losses(lost);
-            if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-                self.indexes.core.rebuild_graph();
+        match self.prepare_document_removal(id) {
+            Ok(Some(prepared)) => {
+                let completed = prepared.invoke();
+                if let Err((error, _)) = self.finish_document_removal(completed) {
+                    self.report_trouble(Severity::Warning, Some(id.clone()), error, None);
+                }
+                self.dispatch_pending();
             }
-            self.emit_event(Event::DocumentRemoved { id: id.clone() });
-            self.emit_event(Event::IndexUpdated);
-            self.dispatch_pending();
+            Ok(None) => {}
+            Err(error) => {
+                self.report_trouble(Severity::Warning, Some(id.clone()), error.into(), None)
+            }
         }
     }
 
@@ -3588,11 +6927,31 @@ impl Workspace {
     /// [`remove_document`]: Workspace::remove_document
     // **E la bozza non salvata se ne va con la nota** (§15.2). Sta qui per
     pub fn delete_document(&mut self, id: &DocId) -> Result<DocId> {
-        if !self.indexes.core.metas.contains_key(id) {
-            return Err(KernelError::NotFound(id.to_string()));
-        }
-        let (trashed, sidecar_fault) = self.docs.vault.trash(id)?;
-        self.remove_document(id);
+        let completed = self.prepare_document_deletion(id)?.invoke()?;
+        let committed = match self.commit_document_deletion(completed) {
+            Ok(committed) => committed,
+            Err(failure) => {
+                let (error, completed) = *failure;
+                completed.rollback()?;
+                return Err(error);
+            }
+        };
+        let finalized = committed.invoke();
+        let trashed = match self.finish_document_deletion(finalized) {
+            Ok(trashed) => trashed,
+            Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
+        };
+        Ok(trashed)
+    }
+
+    fn finish_deleted_document(
+        &mut self,
+        id: &DocId,
+        trashed: DocId,
+        sidecar_fault: Option<KernelError>,
+        draft_fault: Option<String>,
+        journal_fault: Option<String>,
+    ) -> DocId {
         // la ragione per cui `migrate_side_data` la fa seguire una rinomina —
         // una bozza è indicizzata per `DocId`, e un `DocId` che non nomina più
         // niente è una bozza che nessuna vista raggiunge — ma con la risposta
@@ -3608,16 +6967,22 @@ impl Workspace {
         // percorso del **watcher**, che reagisce a un file sparito dal disco per
         // mano d'altri — ed è precisamente il momento in cui la bozza è l'unica
         // copia di ciò che si era scritto, quindi lì non si tocca.
-        // Il sidecar del cestino non si è scritto: la cancellazione è riuscita
-        if let Err(and) = self.drafts.discard(id) {
+        // I callback di storage per bozza e registro sono già avvenuti dal
+        // finalizzatore owned. Qui si trasformano soltanto i loro esiti in
+        // avvisi e fatti del workspace.
+        if let Some(and) = draft_fault {
             self.organization.warn(format!(
                 "la bozza non salvata di {id} è rimasta dietro alla nota cestinata: {and}"
             ));
         }
-        self.record(JournalOp::Trashed {
-            doc: id.clone(),
-            trash: trashed.clone(),
-        });
+        if let Some(and) = journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {and}").into()),
+                None,
+            );
+        }
         // ma chi ripristina questa voce tornerà nel posto sbagliato. È la
         // perdita di un dato autorevole (0052 la conta come `Failure`), e
         // `delete_document` è il primo chiamante con il workspace in mano —
@@ -3638,140 +7003,31 @@ impl Workspace {
                 None,
             );
         }
-        Ok(trashed)
+        trashed
     }
 
-    /// Ripristina una voce del cestino e restituisce il [`DocId`] con cui è
+    /// Elenca il contenuto del cestino, inclusi allegati e voci straniere.
+    ///
+    /// Il ripristino non ha un gemello sincrono su `Workspace`: parser e indici
+    /// devono attraversare il protocollo staged di `workspace::restore`, così
+    /// l'host può invocarli dopo aver rilasciato `Custody<Workspace>`.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
         self.docs.vault.list_trash()
     }
 
-    /// tornata nel vault: il nome originale nella radice, oppure `to` se il
-    /// chiamante ne ha scelto un altro (è il caso in cui il path è di nuovo
-    /// occupato e l'app ha chiesto all'utente).
-    ///
-    /// Il ripristino è l'**inverso esatto** della cancellazione: una mossa sola
-    /// sul disco ([`Vault::restore_trashed`]), e poi la stessa coda che segue
-    /// ogni scrittura — parse, grafo, indici, eventi. Non è un `write` seguito
-    /// da un `remove`: quella forma ha un istante in cui la nota sta in due
-    /// posti, e un guasto lì dentro ce la lascia.
-    ///
-    /// Ciò che torna può **non essere un documento**: nel cestino ci finiscono
-    /// anche gli allegati — è condiviso con Obsidian (D1) e
-    /// [`list_trash`](Vault::list_trash) li elenca apposta — e per restituire un
-    /// `.png` non serve né un provider né che i byte siano UTF-8. Pretenderli
-    /// sarebbe il difetto, com'è per
-    /// [`rename_entry_in_batch`](Workspace::rename_entry_in_batch): la coda di
-    /// un allegato è quella di un documento per sottrazione, non un secondo
-    /// percorso.
-    ///
-    /// [`Vault::restore_trashed`]: crate::Vault::restore_trashed
-    // `entry.original` nasce da un basename o dal sidecar scritto dal
-    pub fn restore_from_trash(&mut self, trash_id: &DocId, to: Option<DocId>) -> Result<DocId> {
-        let entry = self
-            .docs
-            .vault
-            .list_trash()?
-            .into_iter()
-            .find(|and| &and.id == trash_id)
-            .ok_or_else(|| KernelError::NotFound(trash_id.to_string()))?;
-        // vault, ed è sano per costruzione; il `to` del chiamante invece
-        // arriva dall'IPC e va validato.
-        //
-        // Le due strade fanno **due domande diverse**, ed è la distinzione del
-        // §15.5 letta sul cestino. Senza `to` non nasce nessun nome: ne torna
-        // uno che c'era, e va giudicato col solo recinto — una nota che si
-        // chiamava `CON.md` prima di finire nel cestino deve poter tornare, e
-        // sarebbe un modo curioso di perdere un file, rifiutarsi di restituirlo
-        // per un nome che il vault conteneva già. Con `to` invece il nome
-        // **nasce adesso**: `to` è opzionale proprio perché è il caso in cui il
-        // path d'origine era occupato e l'utente ne ha digitato un altro, cioè
-        // Fub sta scegliendo dove mettere un file. Finché anche questa strada
-        // chiedeva il solo recinto, un ripristino poteva atterrare su
-        // `.nascosta/Nota.md` — legale su ogni filesystem, saltato dalla
-        // scansione — e la nota tornava invisibile a chi l'aveva ripristinata,
-        // con la sua voce fantasma in anagrafe. Era il difetto 0186.
-        // Il modello si costruisce **prima** di muovere il file, per la ragione
-        let original = entry.original.clone();
-        let target = match to {
-            Some(to) => new_doc_id(to.as_str())?,
-            None => entry.original,
-        };
-        if self.indexes.core.metas.contains_key(&target) || self.docs.vault.exists(&target) {
-            return Err(KernelError::AlreadyExists(target.to_string()));
-        }
-        // di `write_source`: il parse è puro, e farlo dopo lascerebbe il disco
-        // avanti rispetto a modelli, grafo e indici davanti a un chiamante che
-        // riceve `Err`.
-        //
-        // Nessun provider per questa estensione non è un errore: è un allegato,
-        // e la sua coda è questa per sottrazione — niente lettura, niente parse,
-        // niente modello da mettere in cache.
-        // **Una** mossa sul disco, e il cestino lascia andare la voce con tutto
-        let ext = extension_of(&target).unwrap_or_default();
-        let model = match self.docs.registry.provider_for_ext(&ext) {
-            Some(_) => {
-                let source = self.docs.vault.read(trash_id)?;
-                let revision = Revision::of(&source);
-                Some((self.docs.parse_owned(&target, source)?, revision))
-            }
-            None => None,
-        };
-
-        // ciò che teneva per lei.
-        // L'impronta di un allegato non c'è, come per ogni voce che
-        self.docs.vault.restore_trashed(trash_id, &target)?;
-        match model {
-            Some((model, revision)) => self.ingest_model(&target, model, revision, None),
-            None => {
-                // nessuno parsa: l'anagrafe la ricava dal disco.
-                // Se il ripristino approda su un path diverso dall'origine (il path
-                let kind = self
-                    .touch_entry(&target, None)
-                    .unwrap_or(EntryKind::Unknown);
-                self.emit_event(Event::EntryChanged {
-                    id: target.clone(),
-                    kind,
-                });
-                self.emit_event(Event::IndexUpdated);
-            }
-        }
-        self.dispatch_pending();
-        self.record(JournalOp::Restored {
-            trash: trash_id.clone(),
-            doc: target.clone(),
-        });
-        // era di nuovo occupato e l'utente ha scelto un altro nome), lo stato
-        // per-documento — storia del versioning, meta del frontend — vive
-        // ancora sotto la chiave d'origine: è un rename a tutti gli effetti,
-        // anche se il documento non era indicizzato, e chi tiene stato migra
-        // la chiave sull'evento.
-        // Lo stato per-documento segue la chiave anche qui, e va fatto nel
-        if target != original {
-            // kernel per la ragione di sempre: l'evento dice la stessa cosa, ma
-            // la coda ha un budget e può troncare (decisione 0034), e chi tiene
-            // stato autorevole non può dipendere da una consegna best-effort.
-            // Svuota il cestino. Restituisce quante voci ha cancellato: da qui in poi
-            self.migrate_doc_data(&original, &target);
-            self.emit_event(Event::DocumentRenamed {
-                from: original,
-                to: target.clone(),
-            });
-            self.dispatch_pending();
-        }
-        Ok(target)
+    /// Prepara lo sweep del cestino senza accedere allo storage.
+    pub fn prepare_empty_trash(&self) -> PreparedTrashSweep {
+        self.docs.vault.prepare_empty_trash()
     }
 
-    /// non sono più recuperabili, e chi chiama deve poterlo dire.
-    /// Rinomina/sposta un documento **preservando l'identità**: file sul disco,
+    /// Svuota il cestino e restituisce quante voci non sono più recuperabili.
     pub fn empty_trash(&mut self) -> Result<usize> {
         self.docs.vault.empty_trash()
     }
 
-    /// modello, grafo, e riscrittura chirurgica dei wikilink entranti che
-    /// puntavano al vecchio nome o path (stile Obsidian). I link per **alias**
-    /// non vengono toccati: l'alias vive nel frontmatter del documento e
-    /// sopravvive al rename.
+    /// Rinomina o sposta un documento preservandone identità, modello, grafo e
+    /// wikilink entranti. I link per alias non vengono toccati: l'alias vive nel
+    /// frontmatter del documento e sopravvive al rename.
     ///
     /// Emette [`Event::DocumentRenamed`] (non `Removed`+`Changed`): chi tiene
     /// stato per-documento migra la chiave.
@@ -3783,118 +7039,416 @@ impl Workspace {
     /// Adesso è un `batch-ended` solo, con dentro l'elenco.
     // `to` arriva dall'IPC: senza validazione `../fuori.md` sposterebbe il
     pub fn rename_document(&mut self, from: &DocId, to: &DocId) -> Result<()> {
+        self.indexes.ensure_mutation_available()?;
         self.batch(|ws| ws.rename_document_in_batch(from, to))
     }
 
     fn rename_document_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
-        // file fuori dal vault. E la destinazione di un rename è un nome che
-        // **nasce**, quindi vale la tolleranza stretta del §15.5: rinominare
-        // *verso* `CON.md` è creare un file che su Windows non si apre, mentre
-        // rinominare *via da* `CON.md` è precisamente il modo di sistemarlo — ed
-        // è per questo che qui si valida `to` e non `from`.
-        // Non è un documento, ma il vault potrebbe conoscerlo lo stesso
+        // La destinazione nasce: vale la validazione stretta del §15.5. La
+        // sorgente invece può essere proprio un nome storico che si sta
+        // correggendo.
         let to = &new_doc_id(to.as_str())?;
         if from == to {
             return Ok(());
         }
         if !self.indexes.core.metas.contains_key(from) {
-            // (§14.1): spostare un allegato è la stessa operazione, con una
-            // coda diversa — non c'è niente da riparsare, e i riferimenti che
-            // lo seguono sono quelli che lo mostrano.
-            // Rename "case-only" (`nota.md` → `Nota.md`): su un filesystem
             if self.indexes.core.entries.contains_key(from) {
                 return self.rename_entry_in_batch(from, to);
             }
             return Err(KernelError::NotFound(from.to_string()));
         }
-        // case-insensitive (macOS/Windows) `vault.exists(to)` vede lo STESSO
-        // file, non una collisione — e il check sul disco va saltato **perché è
-        // lo stesso file**, non perché i due nomi si somiglino. La differenza
-        // non è di stile: là dove il filesystem il caso lo distingue, `Nota.md`
-        // è un omonimo vero, e saltare il check lo seppelliva senza dire niente
-        // (0182). Chi risponde è il supporto, l'unico che lo sappia.
-        // Il piano di riscrittura va calcolato PRIMA di toccare il grafo:
-        let same_file = self.docs.vault.same_file(from, to);
-        if self.indexes.core.metas.contains_key(to) || (!same_file && self.docs.vault.exists(to)) {
+
+        let prepared = self
+            .prepare_explicit_rename(from, to)?
+            .expect("il documento è già stato classificato");
+        let parsed = prepared.invoke()?;
+        let pending = match self.commit_explicit_rename(parsed) {
+            Ok(pending) => pending,
+            Err(failure) => {
+                let (error, parsed) = *failure;
+                parsed.rollback()?;
+                return Err(error);
+            }
+        };
+        let completed = pending
+            .invoke()
+            .invoke_rewrites(|source, request| self.apply_edit(source, request.clone()).map(drop));
+        match self.finish_explicit_rename(completed) {
+            Ok(outcome) => outcome,
+            Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
+        }
+    }
+
+    /// Classifica e fotografa core, routing e pipeline di parse senza I/O né
+    /// callback. `None` conserva i due percorsi che non hanno lavoro detached:
+    /// no-op e rinomina di una voce non-documento.
+    pub fn prepare_explicit_rename(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Option<PreparedExplicitRename>> {
+        let to = new_doc_id(to.as_str())?;
+        if from == &to {
+            return Ok(None);
+        }
+        if !self.indexes.core.metas.contains_key(from) {
+            if self.indexes.core.entries.contains_key(from) {
+                return Ok(None);
+            }
+            return Err(KernelError::NotFound(from.to_string()));
+        }
+        let to_entry = self.indexes.core.entries.get(&to).cloned();
+        if to_entry.is_some() || self.indexes.core.metas.contains_key(&to) {
             return Err(KernelError::AlreadyExists(to.to_string()));
         }
-        let ext = extension_of(to).unwrap_or_default();
-        if self.docs.registry.provider_for_ext(&ext).is_none() {
-            return Err(KernelError::NoProvider(ext));
-        }
+        let ext = extension_of(&to).unwrap_or_default();
+        let descriptor = self
+            .docs
+            .registry
+            .descriptor_for_ext(&ext)
+            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        let parser = self.docs.prepare_parse(&to)?;
+        let from_entry = self
+            .indexes
+            .core
+            .entries
+            .get(from)
+            .cloned()
+            .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
+        Ok(Some(PreparedExplicitRename {
+            snapshot: ExplicitRenameSnapshot {
+                workspace_id: self.workspace_id,
+                from_path: self.docs.vault.path_for(from)?,
+                to_path: self.docs.vault.path_for(&to)?,
+                from: from.clone(),
+                to: to.clone(),
+                from_entry,
+                to_entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            storage: Arc::clone(self.docs.vault.storage()),
+            parser,
+            source_kind: descriptor.source,
+            rewrites: self.prepare_explicit_link_rewrites(from, &to),
+            side_data: self.prepare_rename_side_data(from, &to),
+        }))
+    }
 
-        // serve la risoluzione con il vecchio nome ancora in vigore.
-        // **Ciò che può fallire va prima di ciò che non si disfa.** Leggere e
-        let plan = self.link_rewrite_plan(from, to);
-
-        // parsare stanno qui e non dopo la `rename` per la ragione per cui ci
-        // stanno in `write_source` e in `restore_document`: un errore di parse —
-        // un provider che rifiuta quel testo, un file sparito nella finestra —
-        // risaliva con `?` **a rename avvenuta**, e allora il disco aveva il
-        // nome nuovo, la memoria il vecchio (nessun `migrate_identity`), il
-        // registro non aveva la riga `Renamed`, e chi aveva chiamato riceveva un
-        // `Err` per un'operazione che sul disco era successa. Un secondo
-        // tentativo rispondeva `NotFound(from)`, e la nota spariva dalla vista
-        // fino alla riapertura del vault.
-        //
-        // Si legge `from` e si parsa **col nome nuovo**: i byte sono gli stessi
-        // — una rinomina non li tocca — e il nome serve al parse per risolvere i
-        // link relativi, che devono essere quelli di dove il documento sta per
-        // andare.
-        // I dati per-documento si spostano **prima** del file (difetto 0168),
-        let source = self.docs.vault.read(from)?;
-        let revision = Revision::of(&source);
-        let model = self.docs.parse_owned(to, source)?;
-        // mentre `from` è ancora vivo: un crash fra le due lasciava il file al
-        // nome nuovo e i dati sotto la chiave vecchia, dove la prima `collect`
-        // li spazza. La seconda `migrate_side_data` dentro `migrate_identity`
-        // è un no-op — la bozza a `from` non c'è più (`drafts.migrate` torna
-        // `Ok(())`). `sync_renamed_path_here` resta migrate-dopo: là il file
-        // è già a `to`. Il registro `Renamed` resta dopo la mutazione del
-        // file (0067).
-        // La riga del rename va **prima** di quelle delle sorgenti riscritte:
-        self.migrate_side_data(from, to);
-        self.docs.vault.rename_no_replace(from, to)?;
-        self.migrate_identity(from, to, model, revision);
-        // sono tutte dentro lo stesso lotto, e chi le ripercorre all'indietro le
-        // trova nell'ordine in cui `UndoStep` le vuole (0045: i passi sono in
-        // ordine di esecuzione, e chi esegue non riordina).
-        // Il piano si applica TUTTO, anche se una sorgente fallisce: abortire
-        self.record(JournalOp::Renamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
-
-        // a metà lascerebbe link misti vecchio/nuovo senza possibilità di
-        // retry. Gli errori si accumulano per-sorgente e arrivano in coda.
-        // `apply_edit` riparsa, aggiorna il grafo ed emette gli eventi come
-        let mut failed: Vec<String> = Vec::new();
-        for (src, request) in plan {
-            // ogni scrittura — con in più la base: se qualcuno ha riscritto una
-            // di queste sorgenti da quando il piano è stato calcolato, quella
-            // riscrittura non viene cancellata in silenzio, il suo link resta
-            // vecchio e il fallimento è nominato qui sotto.
-            // Dentro il lotto questo `index-updated` non esce: diventa il
-            if let Err(and) = self.apply_edit(&src, request) {
-                failed.push(format!("{src}: {and}"));
+    /// Riconvalida il solo core della rinomina. Il file e i side-data sono già
+    /// stati mossi dal token detached; in caso di rifiuto il chiamante recupera
+    /// lo stesso token per il rollback fuori dal guard.
+    pub fn commit_explicit_rename(
+        &mut self,
+        parsed: ParsedExplicitRename,
+    ) -> std::result::Result<PendingExplicitRename, Box<(KernelError, ParsedExplicitRename)>> {
+        let owns_batch = self.dispatch.open_batch();
+        match self.commit_explicit_rename_in_batch(parsed) {
+            Ok(mut pending) => {
+                pending.owns_batch = owns_batch;
+                Ok(pending)
+            }
+            Err(failure) => {
+                if owns_batch {
+                    self.dispatch.close_batch();
+                }
+                Err(failure)
             }
         }
-        // `batch-ended` che la chiusura emette. Resta scritto qui perché il
-        // rename **ha** aggiornato l'indice, e chi legge questo metodo non deve
-        // dedurlo dal fatto che è avvolto in un lotto.
-        // Il lotto non annulla: le sorgenti riscritte restano riscritte anche
-        self.emit_event(Event::IndexUpdated);
-        self.dispatch_pending();
-        // se una è fallita, ed è la scelta giusta *per il rename* — abortire a
-        // metà lascerebbe link misti senza possibilità di retry. Chi vuole il
-        // contrario (import, migrazioni) vuole il registro delle mutazioni, che
-        // adesso c'è (0067) e di questo lotto tiene i confini — non un campo in
-        // più qui.
-        // Sposta un file che **non è un documento**, e porta i riferimenti con sé
-        if !failed.is_empty() {
-            return Err(KernelError::LinkRewrite(failed.join("; ")));
+    }
+
+    /// Riconvalida integralmente workspace, generazioni, fotografia del core e
+    /// contenuto del token prima della prima mutazione autorevole. Non consulta
+    /// lo storage.
+    fn commit_explicit_rename_in_batch(
+        &mut self,
+        parsed: ParsedExplicitRename,
+    ) -> std::result::Result<PendingExplicitRename, Box<(KernelError, ParsedExplicitRename)>> {
+        let snapshot = &parsed.snapshot;
+        let current_from = self.indexes.core.entries.get(&snapshot.from);
+        let current_to = self.indexes.core.entries.get(&snapshot.to);
+        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&parsed.fingerprint)
+            && snapshot.from_entry.size == parsed.stat.size
+            && snapshot.from_entry.mtime == parsed.stat.mtime;
+        if snapshot.workspace_id != self.workspace_id
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || !self.indexes.core.metas.contains_key(&snapshot.from)
+            || self.indexes.core.metas.contains_key(&snapshot.to)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+            || parsed.model.id != snapshot.to
+            || !source_matches
+        {
+            return Err(Box::new((
+                KernelError::Stale(snapshot.from.to_string()),
+                parsed,
+            )));
         }
-        Ok(())
+        if let Err(error) = self.indexes.ensure_mutation_available() {
+            return Err(Box::new((error, parsed)));
+        }
+
+        let ParsedExplicitRename {
+            snapshot,
+            storage: _,
+            model,
+            fingerprint,
+            stat: _,
+            identity: _,
+            rewrites,
+            side_data,
+        } = parsed;
+        let identity = self
+            .migrate_identity_core(&snapshot.from, &snapshot.to, model, fingerprint)
+            .expect("la fotografia del core è stata appena riconvalidata");
+        Ok(PendingExplicitRename {
+            identity,
+            rewrites,
+            side_data,
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
+            from: snapshot.from,
+            to: snapshot.to,
+            owns_batch: false,
+        })
+    }
+
+    /// Recupera frame e perdite, riporta l'eventuale guasto del registro e
+    /// completa il lotto storico. Le riscritture e l'append sono già stati
+    /// invocati dal token senza trattenere un prestito del workspace.
+    pub fn finish_explicit_rename(
+        &mut self,
+        completed: CompletedExplicitRename,
+    ) -> std::result::Result<Result<()>, Box<(PluginError, CompletedExplicitRename)>> {
+        if completed.identity.workspace_id != self.workspace_id {
+            return Err(Box::new((
+                PluginError::Conflict(
+                    "la rinomina esplicita appartiene a un altro workspace".into(),
+                ),
+                completed,
+            )));
+        }
+        let CompletedExplicitRename {
+            identity,
+            rewrites: _,
+            side_data,
+            owns_batch,
+            rewrite_failures,
+            journal_fault,
+        } = completed;
+        if self.finish_identity_migration(identity).is_err() {
+            unreachable!("l'identità è già stata legata a questo workspace");
+        }
+        self.report_rename_side_data(side_data);
+        if let Some(and) = journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {and}").into()),
+                None,
+            );
+        }
+        let failed = rewrite_failures;
+        self.emit_event(Event::IndexUpdated);
+        if owns_batch {
+            self.dispatch.close_batch();
+        }
+        if failed.is_empty() {
+            Ok(Ok(()))
+        } else {
+            Ok(Err(KernelError::LinkRewrite(failed.join("; "))))
+        }
+    }
+    /// Fotografa una voce senza modello, i suoi riferimenti e gli handle dei
+    /// side-data senza leggere il filesystem né invocare provider.
+    pub fn prepare_explicit_asset_rename(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Result<Option<PreparedExplicitAssetRename>> {
+        let to = new_doc_id(to.as_str())?;
+        if from == &to {
+            return Ok(None);
+        }
+        if self.indexes.core.metas.contains_key(from) {
+            return Ok(None);
+        }
+        let from_entry = self
+            .indexes
+            .core
+            .entries
+            .get(from)
+            .cloned()
+            .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
+        let to_entry = self.indexes.core.entries.get(&to).cloned();
+        if to_entry.is_some() || self.indexes.core.metas.contains_key(&to) {
+            return Err(KernelError::AlreadyExists(to.to_string()));
+        }
+        Ok(Some(PreparedExplicitAssetRename {
+            snapshot: ExplicitRenameSnapshot {
+                workspace_id: self.workspace_id,
+                from_path: self.docs.vault.path_for(from)?,
+                to_path: self.docs.vault.path_for(&to)?,
+                from: from.clone(),
+                to: to.clone(),
+                from_entry,
+                to_entry,
+                syntax_generation: self.syntax_generation,
+                routing_generation: self.indexes.routing_generation(),
+            },
+            storage: Arc::clone(self.docs.vault.storage()),
+            rewrites: self.prepare_explicit_entry_link_rewrites(from, &to),
+            side_data: PreparedAssetRenameSideData {
+                from: from.clone(),
+                to,
+                organization: Arc::clone(&self.organization),
+                storage: Arc::clone(self.docs.vault.storage()),
+                doc_data_roots: self.docs.plugin_data_roots(),
+            },
+        }))
+    }
+
+    /// Riconvalida e installa nel core un asset già spostato. In caso di stale
+    /// restituisce intatto il token, che il chiamante deve annullare fuori dal
+    /// guard.
+    pub fn commit_explicit_asset_rename(
+        &mut self,
+        moved: MovedExplicitAssetRename,
+    ) -> std::result::Result<PendingExplicitAssetRename, Box<(KernelError, MovedExplicitAssetRename)>>
+    {
+        let owns_batch = self.dispatch.open_batch();
+        match self.commit_explicit_asset_rename_in_batch(moved) {
+            Ok(mut pending) => {
+                pending.owns_batch = owns_batch;
+                Ok(pending)
+            }
+            Err(failure) => {
+                if owns_batch {
+                    self.dispatch.close_batch();
+                }
+                Err(failure)
+            }
+        }
+    }
+
+    fn commit_explicit_asset_rename_in_batch(
+        &mut self,
+        moved: MovedExplicitAssetRename,
+    ) -> std::result::Result<PendingExplicitAssetRename, Box<(KernelError, MovedExplicitAssetRename)>>
+    {
+        let snapshot = &moved.snapshot;
+        let current_from = self.indexes.core.entries.get(&snapshot.from);
+        let current_to = self.indexes.core.entries.get(&snapshot.to);
+        let source_matches = snapshot.from_entry.fingerprint.as_ref() == Some(&moved.fingerprint)
+            && snapshot.from_entry.size == moved.stat.size
+            && snapshot.from_entry.mtime == moved.stat.mtime;
+        let paths_match = self.docs.vault.path_for(&snapshot.from).ok().as_ref()
+            == Some(&snapshot.from_path)
+            && self.docs.vault.path_for(&snapshot.to).ok().as_ref() == Some(&snapshot.to_path);
+        if snapshot.workspace_id != self.workspace_id
+            || current_from != Some(&snapshot.from_entry)
+            || current_to != snapshot.to_entry.as_ref()
+            || self.indexes.core.metas.contains_key(&snapshot.from)
+            || self.indexes.core.metas.contains_key(&snapshot.to)
+            || snapshot.syntax_generation != self.syntax_generation
+            || snapshot.routing_generation != self.indexes.routing_generation()
+            || !source_matches
+            || !paths_match
+        {
+            return Err(Box::new((
+                KernelError::Stale(snapshot.from.to_string()),
+                moved,
+            )));
+        }
+        if let Err(error) = self.indexes.ensure_mutation_available() {
+            return Err(Box::new((error, moved)));
+        }
+
+        let MovedExplicitAssetRename {
+            snapshot,
+            storage: _,
+            fingerprint,
+            stat,
+            identity: _,
+            rewrites,
+            side_data,
+        } = moved;
+        let installed = VaultEntry {
+            id: snapshot.to.clone(),
+            kind: snapshot.from_entry.kind,
+            size: stat.size,
+            mtime: stat.mtime,
+            fingerprint: Some(fingerprint),
+        };
+        self.indexes.core.remove_entry(&snapshot.from);
+        self.indexes.core.ensure_folders_of(&snapshot.to);
+        self.indexes.core.set_entry(installed.clone());
+        Ok(PendingExplicitAssetRename {
+            workspace_id: snapshot.workspace_id,
+            installed,
+            rewrites,
+            side_data,
+            journal: Arc::clone(&self.journal),
+            origin: self.dispatch.origin(),
+            from: snapshot.from,
+            to: snapshot.to,
+            owns_batch: false,
+        })
+    }
+
+    /// Converte callback e side-data completati nell'unico fatto di rename e
+    /// chiude il lotto sotto il guard del workspace.
+    pub fn finish_explicit_asset_rename(
+        &mut self,
+        completed: CompletedExplicitAssetRename,
+    ) -> std::result::Result<Result<()>, Box<(PluginError, CompletedExplicitAssetRename)>> {
+        if completed.workspace_id != self.workspace_id {
+            return Err(Box::new((
+                PluginError::Conflict(
+                    "la rinomina asset esplicita appartiene a un altro workspace".into(),
+                ),
+                completed,
+            )));
+        }
+        let CompletedExplicitAssetRename {
+            workspace_id: _,
+            installed,
+            side_data,
+            from,
+            to,
+            owns_batch,
+            rewrite_failures,
+            journal_fault,
+        } = completed;
+        for error in side_data.errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato per-documento di {} non ha potuto seguire la rinomina in {} — {error}",
+                side_data.from, side_data.to
+            ));
+        }
+        if let Some(and) = journal_fault {
+            self.report_trouble(
+                Severity::Failure,
+                None,
+                PluginError::Internal(format!("registro: {and}").into()),
+                None,
+            );
+        }
+        self.emit_event(Event::EntryRenamed {
+            from,
+            to,
+            kind: installed.kind,
+        });
+        self.emit_event(Event::IndexUpdated);
+        if owns_batch {
+            self.dispatch.close_batch();
+        }
+        if rewrite_failures.is_empty() {
+            Ok(Ok(()))
+        } else {
+            Ok(Err(KernelError::LinkRewrite(rewrite_failures.join("; "))))
+        }
     }
 
     /// (§14.1).
@@ -3913,84 +7467,41 @@ impl Workspace {
     /// mettendo ordine — romperebbe ogni nota che lo incorpora.
     // Il piano PRIMA di spostare: si risolve con il vecchio path ancora in
     fn rename_entry_in_batch(&mut self, from: &DocId, to: &DocId) -> Result<()> {
-        let same_file = self.docs.vault.same_file(from, to);
-        if self.indexes.core.entries.contains_key(to)
-            || self.indexes.core.metas.contains_key(to)
-            || (!same_file && self.docs.vault.exists(to))
-        {
-            return Err(KernelError::AlreadyExists(to.to_string()));
-        }
-
-        // vigore, come per i documenti.
-        // L'impronta segue il file: un rename sposta i byte senza toccarli.
-        let plan = self.entry_rewrite_plan(from, to);
-        self.docs.vault.rename_no_replace(from, to)?;
-
-        let fingerprint = self
-            .indexes
-            .core
-            .entries
-            .get(from)
-            .and_then(|and| and.fingerprint.clone());
-        self.indexes.core.remove_entry(from);
-        // E lo seguono anche le due cose che seguono ogni identità che cambia:
-        let kind = self
-            .touch_entry(to, fingerprint)
-            .unwrap_or(EntryKind::Unknown);
-        // ciò che l'utente gli ha attaccato addosso (§11.3) e lo spazio
-        // per-documento di chiunque altro (§13.2). Un allegato può essere
-        // appuntato e può avere una miniatura, e nessuna delle due è meno sua
-        // per il fatto che nessuno lo parsa.
-        // Un allegato spostato è una mutazione del vault come le altre: il
-        if let Err(and) = self.organization.migrate(from.as_str(), to.as_str()) {
-            self.organization.warn(format!(
-                "l'organizzazione di {from} non ha potuto seguire la rinomina in {to}: {and}"
-            ));
-        }
-        self.migrate_doc_data(from, to);
-        // registro non conosce la differenza fra un documento e un file di cui
-        // nessuno sa il formato, e non deve — l'inverso è lo stesso.
-        // Per ogni documento che **mostra** o nomina `from`, la modifica che
-        self.record(JournalOp::Renamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
-
-        let mut failed: Vec<String> = Vec::new();
-        for (src, request) in plan {
-            if let Err(and) = self.apply_edit(&src, request) {
-                failed.push(format!("{src}: {and}"));
+        let prepared = self
+            .prepare_explicit_asset_rename(from, to)?
+            .expect("la voce senza modello è già stata classificata");
+        let moved = prepared.invoke()?;
+        let pending = match self.commit_explicit_asset_rename(moved) {
+            Ok(pending) => pending,
+            Err(failure) => {
+                let (error, moved) = *failure;
+                moved.rollback()?;
+                return Err(error);
             }
+        };
+        let completed = pending
+            .invoke_rewrites(|source, request| self.apply_edit(source, request.clone()).map(drop));
+        match self.finish_explicit_asset_rename(completed) {
+            Ok(outcome) => outcome,
+            Err(_) => unreachable!("il commit ha già validato l'identità del workspace"),
         }
-        self.emit_event(Event::EntryRenamed {
-            from: from.clone(),
-            to: to.clone(),
-            kind,
-        });
-        self.emit_event(Event::IndexUpdated);
-        self.dispatch_pending();
-        if !failed.is_empty() {
-            return Err(KernelError::LinkRewrite(failed.join("; ")));
-        }
-        Ok(())
     }
 
-    /// riscrive il suo riferimento verso `to` (§14.1).
+    /// Prepara, senza leggere le sorgenti, le sostituzioni dei riferimenti che
+    /// risolvono verso l'asset rinominato.
     ///
-    /// Le sorgenti non si chiedono al grafo, e non è una scorciatoia: un
-    /// allegato non è un nodo del grafo — non ha backlink, perché non ha link
-    /// uscenti e non partecipa alla risoluzione per nome delle note. Si cammina
-    /// quindi la cache dei metadati, che i link ce li ha tutti. È un giro
-    /// sull'intero vault, e si paga quando qualcuno sposta un allegato: cioè
-    /// quanto costa già un rename di nota con molti backlink.
-    // Un wikilink nomina per nome: il nome nuovo, che è il nome
-    fn entry_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
+    /// Le sorgenti non si chiedono al grafo: un allegato non è un nodo del
+    /// grafo, perché non ha link uscenti. Si cammina quindi la cache dei
+    /// metadati e si consegnano path, span e testo atteso al token owned, che
+    /// leggerà le sorgenti e costruirà le CAS fuori dal workspace.
+    fn prepare_explicit_entry_link_rewrites(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Vec<PreparedExplicitLinkRewrite> {
         let mut plan = Vec::new();
         for (src, metadata) in &self.indexes.core.metas {
-            let Ok(source_text) = self.docs.vault.read(src) else {
-                continue;
-            };
-            let mut edits: Vec<TextEdit> = Vec::new();
+            let mut edits = Vec::new();
             for link in &metadata.links {
                 if self.indexes.core.resolve_entry(src, &link.target).as_ref() != Some(from) {
                     continue;
@@ -4021,7 +7532,7 @@ impl Workspace {
                         } else {
                             name.to_string()
                         };
-                        (page.as_str(), new, false)
+                        (page.clone(), new, false)
                     }
                     LinkTarget::Path(written) => {
                         let (path, fragment) = rules_path::split_fragment(written);
@@ -4037,44 +7548,114 @@ impl Workspace {
                         if rewritten == *written {
                             continue;
                         }
-                        (written.as_str(), rewritten, true)
+                        (written.clone(), rewritten, true)
                     }
                     LinkTarget::Url(_) => continue,
                 };
-                let Some(slice) = source_text.get(link.span.start..link.span.end) else {
-                    continue;
-                };
-                let found = if from_end {
-                    slice.rfind(written)
-                } else {
-                    slice.find(written)
-                };
-                let Some(rel) = found else {
-                    continue;
-                };
-                let start = link.span.start + rel;
-                edits.push(TextEdit::replace(
-                    Span::new(start, start + written.len()),
+                edits.push(PreparedExplicitLinkEdit {
+                    span: link.span,
+                    written,
                     replacement,
-                ));
+                    from_end,
+                });
             }
-            if !edits.is_empty() {
-                plan.push((
-                    src.clone(),
-                    EditRequest::new(Revision::of(&source_text), edits),
-                ));
+            if edits.is_empty() {
+                continue;
             }
+            let Ok(source_path) = self.docs.vault.path_for(src) else {
+                continue;
+            };
+            plan.push(PreparedExplicitLinkRewrite {
+                source_path,
+                destination: src.clone(),
+                edits,
+            });
         }
         plan
     }
 
-    /// modelli, documento attivo, grafo, indici, evento [`Event::DocumentRenamed`].
-    ///
-    /// È il tratto comune di [`rename_document`](Workspace::rename_document)
-    /// (che prima sposta il file) e di
-    /// [`sync_renamed_path`](Workspace::sync_renamed_path) (dove il file lo ha
-    /// già spostato qualcun altro).
-    // L'anagrafe migra come tutto il resto: la chiave è il path, e il path
+    /// Installa il cambio d'identità nel core e fotografa gli handle esterni
+    /// senza invocare alcun `IndexProvider`.
+    fn migrate_identity_core(
+        &mut self,
+        from: &DocId,
+        to: &DocId,
+        model: DocumentModel,
+        fingerprint: Revision,
+    ) -> Result<PendingIdentityMigration> {
+        let removal = self
+            .prepare_document_rename_removal(from)?
+            .ok_or_else(|| KernelError::NotFound(from.to_string()))?;
+        let changes = self.indexes.core.changes_for(&model, &fingerprint);
+        self.touch_entry(to, Some(fingerprint.clone()));
+        let installed = self
+            .indexes
+            .core
+            .entries
+            .get(to)
+            .cloned()
+            .expect("touch_entry installa l'identità");
+        let losses = self
+            .indexes
+            .core
+            .on_documents_indexed(std::slice::from_ref(&model));
+        let feed = PreparedDocumentFeed {
+            id: to.clone(),
+            model,
+            changes,
+            revision: fingerprint,
+            journal: JournalOp::Renamed {
+                from: from.clone(),
+                to: to.clone(),
+            },
+            providers: self.indexes.feed_handles(),
+            losses,
+        };
+        self.session
+            .invalidate(from, ContextChange::Renamed(to.clone()));
+        Ok(PendingIdentityMigration {
+            workspace_id: self.workspace_id,
+            from: from.clone(),
+            to: to.clone(),
+            installed,
+            removal,
+            feed,
+        })
+    }
+
+    fn finish_identity_migration(
+        &mut self,
+        completed: CompletedIdentityMigration,
+    ) -> std::result::Result<bool, Box<CompletedIdentityMigration>> {
+        if completed.workspace_id != self.workspace_id {
+            return Err(Box::new(completed));
+        }
+        let CompletedIdentityMigration {
+            from,
+            to,
+            installed,
+            removal,
+            feed,
+            ..
+        } = completed;
+        let removal_losses = match self.finish_document_rename_removal(removal) {
+            Ok(losses) => losses,
+            Err(_) => unreachable!("la rimozione condivide l'identità del workspace"),
+        };
+        self.report_losses(removal_losses);
+        self.report_losses(feed.losses);
+        let current = !self.indexes.core.entries.contains_key(&from)
+            && self.indexes.core.entries.get(&to) == Some(&installed)
+            && self.entry_fingerprint(&to) == installed.fingerprint
+            && self.indexes.core.metas.contains_key(&to);
+        if current && self.indexes.core.graph_update == GraphUpdate::FullRebuild {
+            self.indexes.core.rebuild_graph();
+        }
+        self.emit_event(Event::DocumentRenamed { from, to });
+        Ok(current)
+    }
+
+    /// Percorso sincrono usato dal watcher storico.
     fn migrate_identity(
         &mut self,
         from: &DocId,
@@ -4082,36 +7663,14 @@ impl Workspace {
         model: DocumentModel,
         fingerprint: Revision,
     ) {
-        // è cambiato.
-        // La nota aperta segue il rename anche qui: senza, `active_context`
-        self.indexes.core.remove_entry(from);
-        self.touch_entry(to, Some(fingerprint));
-        // risponderebbe col path vecchio e outline/backlink si svuoterebbero
-        // fino al prossimo cambio nota. Va fatto nel kernel, non nella shell:
-        // vale anche per i rename non innescati da lei.
-        // Per ogni indice — quello del kernel compreso — il rename è
-        self.session
-            .invalidate(from, ContextChange::Renamed(to.clone()));
+        let pending = self
+            .migrate_identity_core(from, to, model, fingerprint)
+            .expect("la rinomina ha già validato l'identità");
         self.migrate_side_data(from, to);
-        // remove+add: l'identità è la chiave, e la chiave è cambiata. (Chi
-        // tiene stato *per-documento* invece migra la chiave sull'evento
-        // `DocumentRenamed`.)
-        // Porta dietro a una rinomina **tutto ciò che sta attaccato al documento e
-        let lost = self
-            .indexes
-            .on_documents_removed(std::slice::from_ref(from));
-        self.report_losses(lost);
-        let lost = self
-            .indexes
-            .on_documents_indexed(std::slice::from_ref(&model));
-        self.report_losses(lost);
-        if self.indexes.core.graph_update == GraphUpdate::FullRebuild {
-            self.indexes.core.rebuild_graph();
+        let completed = pending.invoke();
+        if self.finish_identity_migration(completed).is_err() {
+            unreachable!("la migrazione appartiene a questo workspace");
         }
-        self.emit_event(Event::DocumentRenamed {
-            from: from.clone(),
-            to: to.clone(),
-        });
     }
 
     /// non è il documento**: l'organizzazione del kernel, lo spazio
@@ -4189,6 +7748,7 @@ impl Workspace {
         }
         // sparizione, e portarci lo stato vorrebbe dire metterlo sotto una
         // chiave che la prima raccolta spazza: sotto quella vecchia almeno
+
         // resta finché il file può tornare.
         // **L'organizzazione segue l'identità** (§11.3): icona, pin e posto
         if !self.docs.vault.exists(&to_id) {
@@ -4201,6 +7761,26 @@ impl Workspace {
             ));
         }
         self.migrate_doc_data(&from_id, &to_id);
+    }
+
+    fn prepare_rename_side_data(&self, from: &DocId, to: &DocId) -> PreparedRenameSideData {
+        PreparedRenameSideData {
+            from: from.clone(),
+            to: to.clone(),
+            organization: Arc::clone(&self.organization),
+            drafts: Arc::clone(&self.drafts),
+            storage: Arc::clone(self.docs.vault.storage()),
+            doc_data_roots: self.docs.plugin_data_roots(),
+        }
+    }
+
+    fn report_rename_side_data(&mut self, completed: CompletedRenameSideData) {
+        for error in completed.errors {
+            self.doc_data_warnings.push(format!(
+                "lo stato di {} non ha potuto seguire la rinomina in {} — {error}",
+                completed.from, completed.to
+            ));
+        }
     }
 
     fn migrate_side_data(&mut self, from: &DocId, to: &DocId) {
@@ -4358,7 +7938,7 @@ impl Workspace {
         // una nota che sul disco non esiste, e che ad aprirla dà un errore,
         // fino alla riapertura.
         //
-        // È la regola che `restore_from_trash` enuncia dal verso in cui la si
+        // È la regola che il ripristino staged enuncia dal verso in cui la si
         // può ancora rispettare — «il parse è puro, e farlo dopo lascerebbe il
         // disco avanti rispetto a modelli, grafo e indici davanti a un
         // chiamante che riceve `Err`» —: là si legge **prima** di muovere,
@@ -4401,11 +7981,10 @@ impl Workspace {
     /// link, mai il resto del documento (heading `#...`, blocco `^...`, alias
     /// `|label` e formattazione restano intatti).
     ///
-    /// Il piano è fatto di [`EditRequest`], non di sorgenti intere: è lo stesso
-    /// calcolo di prima — gli span dei link li dava già il modello — detto nella
-    /// forma che il contratto ora ha (decisione 0008). La `base` di ognuna è la revisione
-    /// del sorgente **letto qui**, ed è ciò che impedisce che una riscrittura
-    /// arrivata nel frattempo venga cancellata dal piano.
+    /// La prepare conserva span, testo atteso e sostituzione senza leggere
+    /// sorgenti. L'`invoke` owned legge ciascuna sorgente e costruisce
+    /// l'[`EditRequest`] con la revisione CAS osservata in quel momento, così
+    /// una scrittura successiva non viene cancellata dal piano.
     ///
     /// Vale per **entrambe le specie di link**, e la seconda ha un caso in più
     /// della prima. Un wikilink si rompe solo se si sposta il suo bersaglio; un
@@ -4415,43 +7994,13 @@ impl Workspace {
     /// sorgenti del piano — i suoi link uscenti vanno ri-basati sulla cartella
     /// nuova — e non solo quando linka se stesso.
     // Nuovo riferimento: il nome pagina se nessun altro documento lo
-    fn link_rewrite_plan(&self, from: &DocId, to: &DocId) -> Vec<(DocId, EditRequest)> {
+    fn prepare_explicit_link_rewrites(
+        &self,
+        from: &DocId,
+        to: &DocId,
+    ) -> Vec<PreparedExplicitLinkRewrite> {
         let from_name = resolution_key(from.page_name());
         let from_path = resolution_key(&strip_ext(from.as_str()));
-
-        // contende, altrimenti il path senza estensione, altrimenti il path
-        // intero.
-        //
-        // **La terza forma esiste perché la seconda non è «sempre univoca»**,
-        // come questo commento ha dichiarato fino alla
-        // [0107](../../../docs/decisions/0192-impostazioni-locale-e-temi.md): la
-        // chiave di `path_index` è `resolution_key(strip_ext(…))`, quindi
-        // `sub/Nota.md` e `sub/nota.txt` la condividono. E qui non si sta
-        // scegliendo cosa mostrare a schermo: si sta **scrivendo su disco nei
-        // documenti di terzi**, cioè producendo il riferimento che un altro
-        // programma leggerà fra un anno.
-        //
-        // **La prova non si può fare qui**, ed è stato misurato provandoci: la
-        // strada onesta sarebbe chiedere al grafo se il riferimento scelto torna
-        // davvero a `to`, ma questo piano si calcola *prima* che il rename sia
-        // applicato — il grafo conosce ancora `from` e non ha mai sentito
-        // nominare `to`. Ogni candidato risulterebbe sbagliato, e la
-        // riscrittura scriverebbe sempre la forma più lunga. Quindi resta una
-        // regola; ciò che cambia è che adesso la seconda condizione la si
-        // **verifica** invece di affermarla.
-        // **`metas` e non `entries`, ed è la scelta giusta** (difetto 0059, che
-        // affermava il contrario). La gemella qui accanto — `entry_rewrite_plan`,
-        // che sposta un allegato — cerca gli omonimi nell'anagrafe, e la
-        // differenza fra le due non è una svista: **ogni piano cerca l'omonimia
-        // nel registro che il proprio risolutore legge**. Un wikilink verso un
-        // allegato lo risolve la chiave dei nomi dell'anagrafe, che porta il
-        // nome del file **con l'estensione** (`![[foto.png]]`, mai `[[foto]]`),
-        // quindi un allegato non contende mai un *nome pagina*; e dove le due
-        // stringhe coincidono davvero — un file senza estensione — chi risolve
-        // prova il grafo per primo e ripiega sull'anagrafe solo se lì non ha
-        // trovato niente. Allargare la ricerca a `entries` scriverebbe il path
-        // intero dentro i documenti di terzi per un'ambiguità che non esiste.
-        // La stessa domanda sul path senza estensione, che è la chiave di
         let to_name = to.page_name();
         let ambiguous = self
             .indexes
@@ -4459,10 +8008,6 @@ impl Workspace {
             .metas
             .keys()
             .any(|id| id != from && resolution_key(id.page_name()) == resolution_key(to_name));
-        // `path_index`: `sub/Nota.md` e `sub/nota.txt` la condividono, quindi
-        // due file possono contenderselo esattamente come si contendono un
-        // nome. Dove anche questa è contesa si scrive il path **intero**.
-        // Le note che linkano `from`, **una volta ciascuna**: chi lo cita tre
         let to_path_key = resolution_key(&strip_ext(to.as_str()));
         let path_ambiguous = self
             .indexes
@@ -4478,54 +8023,32 @@ impl Workspace {
             to.as_str().to_string()
         };
 
-        // volte va riscritto una volta sola, e il filtro per-link qui sotto
-        // cammina già tutti i suoi link. Prima questo era un `.map().collect()`
-        // in un `BTreeSet` costruito qui: adesso l'insieme lo dice la firma.
-        // Il self-link è escluso dai backlink per scelta, ma al rename va
         let mut sources: BTreeSet<DocId> =
             self.indexes.core.graph.linked(from, LinkDirection::Inbound);
-        // riscritto come gli altri: `[[Nota]]` dentro la nota stessa resterebbe
-        // dangling — e verrebbe dirottato da chi ricreasse il vecchio nome. Ai
-        // link markdown serve comunque (vedi la nota sopra: sposta la
-        // sorgente), quindi `from` entra sempre e sarà il filtro per-link a
-        // dire se c'è davvero qualcosa da riscrivere.
-        // `from_end` è la direzione in cui cercare il riferimento
         sources.insert(from.clone());
 
-        let mut plan = Vec::new();
-        for src in sources {
-            let Some(metadata) = self.indexes.core.metas.get(&src) else {
+        let mut prepared = Vec::new();
+        for source in sources {
+            let Some(metadata) = self.indexes.core.metas.get(&source) else {
                 continue;
             };
-            let Ok(source_text) = self.docs.vault.read(&src) else {
-                continue;
-            };
-            let mut edits: Vec<TextEdit> = Vec::new();
+            let mut edits = Vec::new();
             for link in &metadata.links {
-                // dentro lo span, e non è una preferenza: in `[[Nota|Nota]]` la
-                // pagina è la **prima** delle due occorrenze, in
-                // `[Nota.md](Nota.md)` la destinazione è la **seconda**. Chi
-                // sbaglia direzione riscrive l'etichetta e lascia il link rotto.
-                // Riscrivi solo se il link puntava davvero a `from`
                 let (written, replacement, from_end) = match &link.target {
                     LinkTarget::Wiki { page, .. } => {
-                        // (non a un omonimo) e ci arrivava per nome o per path
-                        // — mai per alias.
-                        // La sorgente rinominata vive ormai al path nuovo: la sua
                         let key = resolution_key(page);
                         let by_name = key == from_name;
                         let by_path =
                             key == from_path || resolution_key(&strip_ext(&key)) == from_path;
-                        if !(by_name || by_path) {
+                        if !(by_name || by_path)
+                            || self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from)
+                        {
                             continue;
                         }
-                        if self.indexes.core.graph.resolve_wiki(page).as_ref() != Some(from) {
-                            continue;
-                        }
-                        (page.as_str(), new_ref.clone(), false)
+                        (page.clone(), new_ref.clone(), false)
                     }
                     LinkTarget::Path(written) => {
-                        let Some(new_target) = self.rebased_path_link(from, to, &src, written)
+                        let Some(new_target) = self.rebased_path_link(from, to, &source, written)
                         else {
                             continue;
                         };
@@ -4534,39 +8057,31 @@ impl Workspace {
                         if rewritten == *written {
                             continue;
                         }
-                        (written.as_str(), rewritten, true)
+                        (written.clone(), rewritten, true)
                     }
                     LinkTarget::Url(_) => continue,
                 };
-                let Some(slice) = source_text.get(link.span.start..link.span.end) else {
-                    continue;
-                };
-                let found = if from_end {
-                    slice.rfind(written)
-                } else {
-                    slice.find(written)
-                };
-                let Some(rel) = found else {
-                    continue;
-                };
-                let start = link.span.start + rel;
-                edits.push(TextEdit::replace(
-                    Span::new(start, start + written.len()),
+                edits.push(PreparedExplicitLinkEdit {
+                    span: link.span,
+                    written,
                     replacement,
-                ));
+                    from_end,
+                });
             }
             if edits.is_empty() {
                 continue;
             }
-            // riscrittura va applicata lì — e la base resta valida, perché un
-            // rename sposta il file senza toccarne il contenuto. È una proprietà
-            // della revisione-impronta: un contatore per-documento, qui, avrebbe
-            // detto che il documento è cambiato.
-            // La destinazione che il link markdown `written`, scritto dentro `src`,
-            let dest = if &src == from { to.clone() } else { src };
-            plan.push((dest, EditRequest::new(Revision::of(&source_text), edits)));
+            let Ok(source_path) = self.docs.vault.path_for(&source) else {
+                continue;
+            };
+            let destination = if &source == from { to.clone() } else { source };
+            prepared.push(PreparedExplicitLinkRewrite {
+                source_path,
+                destination,
+                edits,
+            });
         }
-        plan
+        prepared
     }
 
     /// deve avere dopo il rename `from` → `to`; `None` se non va toccato.
@@ -4619,33 +8134,9 @@ impl Workspace {
         rule: Box<dyn SyntaxRule>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let spec = rule.spec();
-        let id = spec.id;
-        // propria — «serve un `ns:nome`», senza sapere di chi — e chiedeva un
-        // namespace anche al core mentre non chiedeva a nessuno che fosse il
-        // *suo*. Adesso passa di qui come le altre.
-        // E vale anche per i `custom_kind` che la regola si impegna a emettere:
-        self.providers.plugins.admit(
-            &plugin,
-            RegistrationKind::Syntax,
-            std::slice::from_ref(&id),
-        )?;
-        // sono nomi che entrano nel modello, e senza questa riga un terzo
-        // dichiara `callout` e si fa disegnare dal core. Non passano da `admit`
-        // perché produrre lo stesso kind in due non è una contesa — è come si
-        // scrivono due dialetti della stessa famiglia.
-        // Registra chi disegna un `custom_kind` (§3.2).
-        self.providers
-            .plugins
-            .check_names(&plugin, &spec.produces)?;
-        self.docs
-            .syntax
-            .register(rule)
-            .map_err(RegistryError::Syntax)?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Syntax, std::slice::from_ref(&id));
-        Ok(())
+        let mut prepared = PreparedRegistration::syntax(rule).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -4661,23 +8152,10 @@ impl Workspace {
         renderer: Box<dyn CustomRenderer>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let id = renderer.spec().id;
-        self.providers.plugins.admit(
-            &plugin,
-            RegistrationKind::Renderer,
-            std::slice::from_ref(&id),
-        )?;
-        let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
-        self.docs
-            .renderers
-            .register(trust, renderer)
-            .map_err(RegistryError::Renderer)?;
-        self.providers.plugins.record(
-            &plugin,
-            RegistrationKind::Renderer,
-            std::slice::from_ref(&id),
-        );
-        Ok(())
+        let mut prepared =
+            PreparedRegistration::renderer(renderer).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -4688,6 +8166,64 @@ impl Workspace {
     /// Il modello parsato di un documento (§4.2): la metà kernel di
     pub fn undrawn_kinds(&self) -> Vec<String> {
         self.docs.undrawn_kinds()
+    }
+
+    /// Congela sorgente, parser e regole per una lettura del modello che verrà
+    /// eseguita dal composition root senza la guardia del workspace.
+    pub fn prepare_detached_document_model(
+        &self,
+        id: &DocId,
+    ) -> std::result::Result<PreparedDocumentModel, PluginError> {
+        let id = fenced_doc_id(id)?;
+        let indexed = self.indexes.core.metas.contains_key(&id);
+        let parseable_file =
+            self.docs.vault.stat(&id).is_some() && self.docs.provider_for(&id).is_ok();
+        if !indexed && !parseable_file {
+            return Err(PluginError::NotFound(id.to_string().into()));
+        }
+        let source = self.docs.source_from_disk(&id).map_err(PluginError::from)?;
+        let source_revision = Revision::of_bytes(source.bytes());
+        let parser = self.docs.prepare_parse(&id).map_err(PluginError::from)?;
+        Ok(PreparedDocumentModel {
+            id,
+            source_revision,
+            source,
+            parser,
+            syntax_generation: self.syntax_generation,
+        })
+    }
+
+    /// Pubblica il modello soltanto se sorgente e regole sono ancora quelle
+    /// fotografate da `prepare_detached_document_model`. Mutazioni di altri
+    /// documenti e cambi ai soli renderer sono compatibili.
+    pub fn finish_detached_document_model(
+        &self,
+        completed: CompletedDocumentModel,
+    ) -> std::result::Result<DocumentModel, PluginError> {
+        if completed.syntax_generation != self.syntax_generation {
+            return Err(PluginError::Conflict(
+                "la pipeline sintattica è cambiata durante la lettura del modello".into(),
+            ));
+        }
+        let current = match self.docs.source_from_disk(&completed.id) {
+            Ok(current) => current,
+            Err(error) if error.is_missing() => {
+                return Err(PluginError::Conflict(
+                    format!(
+                        "{} è stato rimosso durante la lettura del modello",
+                        completed.id
+                    )
+                    .into(),
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if Revision::of_bytes(current.bytes()) != completed.source_revision {
+            return Err(PluginError::Conflict(
+                format!("{} è cambiato durante la lettura del modello", completed.id).into(),
+            ));
+        }
+        Ok(completed.model)
     }
 
     /// [`VaultRead::read_model`](fub_abi::traits::VaultRead::read_model).
@@ -4704,6 +8240,11 @@ impl Workspace {
     /// scartato perché il parse è fallito: in quel caso lo ripariamo comunque,
     /// così il chiamante riceve il `FormatError` reale (e non un falso
     /// `NotFound`). Asset, directory e file senza provider restano assenti.
+    ///
+    /// Questa è la comodità del kernel quando possiede già un `&Workspace`:
+    /// chi lo monta in una `Custody` usa `prepare_detached_document_model` e
+    /// `finish_detached_document_model`, perché soltanto il composition root
+    /// può rilasciare la propria guardia prima del parse.
     /// Di che formato è un documento, e che sintassi capirebbe (§4.3): la metà
     pub fn read_model(&self, id: &DocId) -> Result<DocumentModel> {
         let indexed = self.indexes.core.metas.contains_key(id);
@@ -4755,14 +8296,10 @@ impl Workspace {
         if !self.indexes.core.metas.contains_key(id) {
             return Err(KernelError::NotFound(id.to_string()));
         }
-        let model = self.docs.parse_from_disk(id)?;
-        let provider = self.docs.provider_for(id)?;
-        Ok(renderer::compose(
-            &model,
-            provider,
-            &self.docs.renderers,
-            &RenderOptions::preview(),
-        )?)
+        let source = self.docs.source_from_disk(id)?;
+        let parser = self.docs.prepare_parse(id)?;
+        let model = parser.invoke(source)?;
+        parser.render(&model, &self.docs.renderers, &RenderOptions::preview())
     }
 
     /// risolve la pagina e rende l'intero documento, o la sola sezione del
@@ -4797,8 +8334,9 @@ impl Workspace {
             return Err(KernelError::NotFound(id.to_string()));
         }
         // Anche un embed passa dai renderer: un diagramma dentro una nota
-        let model = self.docs.parse_from_disk(&id)?;
-        let provider = self.docs.provider_for(&id)?;
+        let source = self.docs.source_from_disk(&id)?;
+        let parser = self.docs.prepare_parse(&id)?;
+        let model = parser.invoke(source)?;
         let opts = RenderOptions::preview();
         let model =
             match (block, heading) {
@@ -4812,10 +8350,7 @@ impl Workspace {
         // dentro QUESTA composizione, e il frontend li monta dentro il
         // segnaposto dell'embed che ha appena idratato.
         // Backlink verso un documento.
-        Ok((
-            id,
-            renderer::compose(&model, provider, &self.docs.renderers, &opts)?,
-        ))
+        Ok((id, parser.render(&model, &self.docs.renderers, &opts)?))
     }
 
     /// Link uscenti risolti da un documento.
@@ -4904,6 +8439,145 @@ impl Workspace {
     // --- indici -----------------------------------------------------------
     pub fn active_document(&self) -> Option<DocId> {
         self.session.document()
+    }
+
+    /// Congela il piano delle query servite dal canale dati generico. Le quattro
+    /// famiglie composte dal `Workspace` restano sul percorso locale soltanto
+    /// quando la rotta appartiene al core; se un indice esterno la sostituisce,
+    /// anche quella callback attraversa il percorso staccato.
+    pub fn prepare_detached_index_query(&self, query: &IndexQuery) -> Option<PreparedIndexQuery> {
+        match query {
+            IndexQuery::RenderPreview { .. }
+            | IndexQuery::RenderEmbed { .. }
+            | IndexQuery::Settings { .. }
+            | IndexQuery::SyntaxForms { .. }
+                if !self.indexes.query_owner_is_external(query) =>
+            {
+                None
+            }
+            _ => Some(self.indexes.prepare_query()),
+        }
+    }
+
+    /// Prepara le due proiezioni servite localmente senza eseguire provider.
+    /// Una rotta sostituita da un indice esterno resta sul planner staccato e
+    /// non entra qui.
+    pub fn prepare_local_index_projection(
+        &self,
+        query: &IndexQuery,
+    ) -> Result<Option<PreparedLocalProjection>> {
+        if self.indexes.query_owner_is_external(query) {
+            return Ok(None);
+        }
+        let (id, resolved_page, kind) = match query {
+            IndexQuery::RenderPreview { doc } => (doc.clone(), None, LocalProjectionKind::Preview),
+            IndexQuery::RenderEmbed {
+                page,
+                heading,
+                block,
+            } => {
+                let id = self
+                    .resolve_link(page)
+                    .ok_or_else(|| KernelError::NotFound(page.clone()))?;
+                (
+                    id,
+                    Some(page.clone()),
+                    LocalProjectionKind::Embed {
+                        heading: heading.clone(),
+                        block: block.clone(),
+                    },
+                )
+            }
+            _ => return Ok(None),
+        };
+        if !self.indexes.core.metas.contains_key(&id) {
+            return Err(KernelError::NotFound(id.to_string()));
+        }
+        let source = self.docs.source_from_disk(&id)?;
+        let source_revision = Revision::of_bytes(source.bytes());
+        let parser = self.docs.prepare_parse(&id)?;
+        Ok(Some(PreparedLocalProjection {
+            id,
+            resolved_page,
+            source_revision,
+            source,
+            parser,
+            renderers: self.docs.renderers.clone(),
+            kind,
+            routing_generation: self.indexes.routing_generation(),
+            projection_generation: self.projection_generation,
+        }))
+    }
+
+    /// Accetta una proiezione soltanto se appartiene ancora alla stessa rotta,
+    /// alla stessa pipeline e allo stesso sorgente. Mutazioni su altri
+    /// documenti sono compatibili e non la invalidano; qualunque registrazione
+    /// o ritiro di regole sintattiche o renderer è invece conservativamente
+    /// incompatibile con lo snapshot della pipeline.
+    pub fn finish_local_index_projection(
+        &self,
+        completed: CompletedLocalProjection,
+    ) -> std::result::Result<IndexResult, PluginError> {
+        self.indexes
+            .ensure_query_is_current(completed.routing_generation)?;
+        if completed.projection_generation != self.projection_generation {
+            return Err(PluginError::Conflict(
+                "la pipeline di proiezione è cambiata durante la query".into(),
+            ));
+        }
+        if !self.indexes.core.metas.contains_key(&completed.id) {
+            return Err(PluginError::Conflict(
+                format!("{} è stato ritirato durante la query", completed.id).into(),
+            ));
+        }
+        if completed
+            .resolved_page
+            .as_deref()
+            .is_some_and(|page| self.resolve_link(page).as_ref() != Some(&completed.id))
+        {
+            return Err(PluginError::Conflict(
+                format!(
+                    "il riferimento a {} è cambiato durante la query",
+                    completed.id
+                )
+                .into(),
+            ));
+        }
+        let current = match self.docs.source_from_disk(&completed.id) {
+            Ok(current) => current,
+            Err(error) if error.is_missing() => {
+                return Err(PluginError::Conflict(
+                    format!("{} è stato rimosso durante la query", completed.id).into(),
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        };
+        if Revision::of_bytes(current.bytes()) != completed.source_revision {
+            return Err(PluginError::Conflict(
+                format!("{} è cambiato durante la query", completed.id).into(),
+            ));
+        }
+        Ok(completed.result)
+    }
+
+    /// Completa la sola parte locale della risposta dopo l'esecuzione del
+    /// piano staccato. Prima rifiuta una fotografia il cui routing è cambiato;
+    /// poi traduce le occorrenze sul sorgente corrente senza riattraversare
+    /// alcun provider.
+    pub fn finish_detached_index_query(
+        &self,
+        completed: CompletedIndexQuery,
+        query: &IndexQuery,
+    ) -> std::result::Result<IndexResult, PluginError> {
+        self.indexes
+            .ensure_query_is_current(completed.routing_generation)?;
+        let needles = occurrences::wanted(query);
+        Ok(match completed.result {
+            IndexResult::Documents(page) if !needles.is_empty() => {
+                IndexResult::Documents(self.locate(page, &needles))
+            }
+            other => other,
+        })
     }
 
     /// Interroga il canale dati.
@@ -5078,7 +8752,15 @@ impl Workspace {
             |ws| &mut ws.indexes.providers,
             |ws, indexes| {
                 let mut errors = Vec::new();
-                for (id, index) in indexes.iter_mut() {
+                for (id, index) in indexes.iter() {
+                    let _call = match crate::index::IndexCall::enter(id, index) {
+                        Ok(call) => call,
+                        Err(error) => {
+                            errors.push(error);
+                            continue;
+                        }
+                    };
+                    let mut index = index.write();
                     let mut host = ws.host_for(id, InvokeMode::Apply);
                     if let Err(and) = index.flush(&mut host) {
                         errors.push(and);
@@ -5112,7 +8794,11 @@ impl Workspace {
         plugin: impl Into<String>,
         provider: Box<dyn ViewProvider>,
     ) -> std::result::Result<(), RegistryError> {
-        self.mount_views(plugin.into(), provider, false)
+        let plugin = plugin.into();
+        let mut prepared =
+            PreparedRegistration::views(provider).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     /// di view.
@@ -5141,7 +8827,9 @@ impl Workspace {
         // effetti, e un rifiuto in mezzo lascerebbe il primo fatto e il secondo
         // no — cioè una view del core cancellata da chi non poteva nemmeno
         // nominarla, con in mano un errore che dice «non è registrato».
-        // Il grado di fiducia è quello del plugin: era un parametro di questa
+        // Il token nasce insieme all'entry: non c'è un contatore condiviso che
+        // renda obsolete view estranee quando questa viene sostituita.
+        let generation = Arc::new(());
         if replacing {
             self.providers
                 .plugins
@@ -5159,6 +8847,8 @@ impl Workspace {
         // terzi avrebbe ricevuto ogni documento del vault senza che nessuno gli
         // avesse dato un grado (§7.3).
         // Rilegge ciò che un provider dichiara: view e comandi.
+        // Il grado di fiducia è quello del plugin: era un parametro di questa
+        // sola registrazione, prima che la politica diventasse dato del plugin.
         let trust = self.providers.plugins.trust_of(&plugin).unwrap_or_default();
         self.providers
             .plugins
@@ -5166,7 +8856,8 @@ impl Workspace {
         self.providers.views.push(RegisteredView {
             id: plugin,
             specs,
-            provider,
+            provider: Arc::new(SharedShelter::new(provider)),
+            generation,
             trust,
         });
         Ok(())
@@ -5231,28 +8922,109 @@ impl Workspace {
     /// e view registrate compresi. La mutilazione del mondo osservabile resta
     /// confinata ai callback in scrittura (vedi il doc di `HostApi`).
     // Anche il percorso di lettura passa dal punto di applicazione: un
-    pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
+    pub fn prepare_view_render(
+        &self,
+        instance: &ViewInstance,
+    ) -> std::result::Result<PreparedViewRender, PluginError> {
         let at = self.view_owner(&instance.view)?;
         let registered = &self.providers.views[at];
         self.check_params(at, instance)?;
-        // provider senza `read_vault` non legge il vault **mentre disegna** più
-        // di quanto lo legga da un'azione. Che il guard qui avvolga un
-        // `ReadHost` invece di un `KernelHost` non cambia niente per la
-        // politica — è la stessa, e non sa cosa ci sia sotto.
-        // **Dopo** la validazione del confine di fiducia, non prima: risolvere
-        let host = self.read_host_for_view(&registered.id, Some(instance.instance.as_str()));
-        let mut tree =
-            crate::safety::calling(&registered.id, Gate::ViewRender, &instance.view, || {
-                registered.provider.render_view(instance, &host)
-            })
-            .map_err(|and| self.localized(&registered.id, and))?;
-        guard_ui(registered.trust, &tree)?;
-        // una chiave non può trasformare un nodo innocuo in uno riservato — i
-        // `Text` non diventano markup — ma l'ordine giusto è comunque quello che
-        // non fa passare niente dal catalogo prima del controllo.
-        // La dichiarazione di interesse di **un esemplare** (§22.3).
-        self.localize(&registered.id, &mut tree);
+        Ok(PreparedViewRender {
+            owner: registered.id.clone(),
+            view: instance.view.clone(),
+            instance: instance.clone(),
+            trust: registered.trust,
+            provider: Arc::clone(&registered.provider),
+            generation: Arc::clone(&registered.generation),
+        })
+    }
+    /// Congela la view e i dati necessari a interrogare gli interessi senza
+    /// eseguire codice esterno sotto la guardia del workspace.
+    pub fn prepare_view_interests(
+        &self,
+        instance: &ViewInstance,
+    ) -> std::result::Result<PreparedViewInterests, PluginError> {
+        let at = self.view_owner(&instance.view)?;
+        let registered = &self.providers.views[at];
+        self.check_params(at, instance)?;
+        Ok(PreparedViewInterests {
+            owner: registered.id.clone(),
+            view: instance.view.clone(),
+            instance: instance.clone(),
+            provider: Arc::clone(&registered.provider),
+            generation: Arc::clone(&registered.generation),
+        })
+    }
+
+    /// Una callback preparata può terminare soltanto se la stessa entry
+    /// possiede ancora la view. L'`Arc` distingue rimozione e nuova
+    /// registrazione; il token di generazione distingue invece un refresh
+    /// delle spec sullo stesso provider.
+    fn ensure_view_is_current(
+        &self,
+        owner: &str,
+        view: &str,
+        generation: &Arc<()>,
+        provider: &Arc<SharedShelter<Box<dyn ViewProvider>>>,
+    ) -> std::result::Result<(), PluginError> {
+        let current = self.providers.views.iter().any(|registered| {
+            registered.id == owner
+                && Arc::ptr_eq(&registered.generation, generation)
+                && Arc::ptr_eq(&registered.provider, provider)
+                && registered.specs.iter().any(|spec| spec.id == view)
+        });
+        if current {
+            Ok(())
+        } else {
+            Err(PluginError::Conflict(
+                format!("la registrazione della view `{view}` è cambiata durante la callback")
+                    .into(),
+            ))
+        }
+    }
+
+    /// Applica il confine di fiducia e la localizzazione dopo che il provider è
+    /// tornato. Nessun codice del provider viene eseguito in questa fase.
+    pub fn finish_view_render(
+        &self,
+        prepared: PreparedViewRender,
+        outcome: std::result::Result<UiNode, PluginError>,
+    ) -> std::result::Result<UiNode, PluginError> {
+        let mut tree = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
+        self.ensure_view_is_current(
+            &prepared.owner,
+            &prepared.view,
+            &prepared.generation,
+            &prepared.provider,
+        )?;
+        guard_ui(prepared.trust, &tree)?;
+        self.localize(&prepared.owner, &mut tree);
         Ok(tree)
+    }
+    /// Conclude la callback degli interessi verificando che la registrazione
+    /// fotografata sia ancora quella pubblicata.
+    pub fn finish_view_interests(
+        &self,
+        prepared: PreparedViewInterests,
+        outcome: std::result::Result<ViewInterests, PluginError>,
+    ) -> std::result::Result<ViewInterests, PluginError> {
+        let interests = outcome.map_err(|error| self.localized(&prepared.owner, error))?;
+        self.ensure_view_is_current(
+            &prepared.owner,
+            &prepared.view,
+            &prepared.generation,
+            &prepared.provider,
+        )?;
+        Ok(interests)
+    }
+
+    pub fn render_view(&self, instance: &ViewInstance) -> std::result::Result<UiNode, PluginError> {
+        let prepared = self.prepare_view_render(instance)?;
+        let owner = prepared.owner().to_string();
+        let instance_id = prepared.instance_id().to_string();
+        let host = self.read_host_for_view(&owner, Some(instance_id.as_str()));
+        let outcome = prepared.invoke(&host);
+        self.finish_view_render(prepared, outcome)
     }
 
     ///
@@ -5267,8 +9039,12 @@ impl Workspace {
         instance: &ViewInstance,
     ) -> std::result::Result<ViewInterests, PluginError> {
         let at = self.view_owner(&instance.view)?;
+        self.check_params(at, instance)?;
         let registered = &self.providers.views[at];
-        Ok(registered.provider.interests(instance))
+        let provider = registered.provider.read();
+        crate::safety::calling_callback(&registered.id, "ViewProvider::interests", || {
+            Ok(provider.interests(instance))
+        })
     }
 
     /// aggiornamento. Ogni albero che l'aggiornamento porta con sé —
@@ -5277,63 +9053,101 @@ impl Workspace {
     /// fidato non può iniettare contenuto attivo *in risposta a un click*
     /// invece che al rendering, né per la via stretta invece che per quella
     /// larga.
-    // Prima del `take`: dopo, il registro è vuoto.
+    /// Prepara un'azione di view senza eseguire codice del provider. Il flag di
+    /// provider-call viene aperto qui e chiuso in `finish_view_action`, così gli
+    /// eventi prodotti dalla callback non possono rientrare nel suo frame.
+    pub fn prepare_view_action(
+        &mut self,
+        instance: &ViewInstance,
+        action: UiAction,
+    ) -> std::result::Result<PreparedViewAction, PluginError> {
+        let at = self.view_owner(&instance.view)?;
+        self.check_params(at, instance)?;
+        let (owner, trust, provider, generation) = {
+            let registered = &self.providers.views[at];
+            (
+                registered.id.clone(),
+                registered.trust,
+                Arc::clone(&registered.provider),
+                Arc::clone(&registered.generation),
+            )
+        };
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        Ok(PreparedViewAction {
+            owner,
+            view: instance.view.clone(),
+            instance: instance.clone(),
+            action: Some(action),
+            trust,
+            provider,
+            generation,
+            previous_provider_call,
+        })
+    }
+
+    /// Chiude il frame dell'azione senza consegnare eventi. Il valore opaco
+    /// permette all'host di eseguire il drain dopo aver rilasciato il guard.
+    pub fn finish_view_action_deferred(
+        &mut self,
+        prepared: PreparedViewAction,
+        outcome: std::result::Result<ViewUpdate, PluginError>,
+    ) -> DeferredEvents<std::result::Result<ViewUpdate, PluginError>> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let result = (|| {
+            let mut update = outcome.map_err(|and| self.localized(&prepared.owner, and))?;
+            self.ensure_view_is_current(
+                &prepared.owner,
+                &prepared.view,
+                &prepared.generation,
+                &prepared.provider,
+            )?;
+            let tree = match &update {
+                ViewUpdate::Replace { root } => Some(root),
+                ViewUpdate::Patch { node, .. } => Some(node),
+                ViewUpdate::None
+                | ViewUpdate::Navigate { .. }
+                | ViewUpdate::Reveal { .. }
+                | ViewUpdate::RunSearch { .. }
+                | ViewUpdate::Custom { .. } => None,
+            };
+            if let Some(tree) = tree {
+                guard_ui(prepared.trust, tree)?;
+            }
+            self.localize(&prepared.owner, &mut update);
+            Ok(update)
+        })();
+        DeferredEvents::outcome(result)
+    }
+
+    /// Chiude il frame aperto da `prepare_view_action` e riproduce l'epilogo
+    /// del vecchio percorso: ripristino flag, errore localizzato, trust gate,
+    /// localizzazione e soltanto alla fine consegna degli eventi accodati.
+    pub fn finish_view_action(
+        &mut self,
+        prepared: PreparedViewAction,
+        outcome: std::result::Result<ViewUpdate, PluginError>,
+    ) -> std::result::Result<ViewUpdate, PluginError> {
+        let deferred = self.finish_view_action_deferred(prepared, outcome);
+        self.dispatch_pending();
+        self.finish_deferred_events(deferred)
+    }
+
+    /// Compatibilità per i chiamanti diretti del kernel. L'host di processo usa
+    /// le tre fasi separatamente, perché solo lui possiede `Custody<Workspace>`.
     pub fn view_action(
         &mut self,
         instance: &ViewInstance,
         action: UiAction,
     ) -> std::result::Result<ViewUpdate, PluginError> {
-        let at = self.view_owner(&instance.view)?;
-        self.check_params(at, instance)?;
-        // Il prestito rimanda il dispatch: se il provider scrive via `HostApi`
-        let trust = self.providers.views[at].trust;
-        // dentro `on_action`, gli handler NON girano nel suo frame — girano
-        // nel `dispatch_pending` qui sotto, a chiamata tornata. Senza, un
-        // plugin che è sia view sia handler (il caso versioning) sarebbe
-        // rientrato nella propria istanza: in nativo funziona, a M5 trappa.
-        // Dentro il prestito, non attorno: il `lend` deve **rimettere a
-        let updated = self.lend(
-            |ws| &mut ws.providers.views,
-            |ws, views| {
-                let registered = &mut views[at];
-                let mut host =
-                    ws.host_for_view(&registered.id, InvokeMode::Apply, Some(&instance.instance));
-                // posto** la tabella delle view anche quando il provider pania,
-                // e lo fa perché il panico non arriva fin qui.
-                // Il proprietario è quello della view: un aggiornamento porta le
-                crate::safety::calling(&registered.id, Gate::ViewAction, &instance.view, || {
-                    registered.provider.on_action(instance, action, &mut host)
-                })
-            },
-        );
-        // stringhe di chi l'ha scritto, come l'albero che sostituisce — e come
-        // l'errore con cui, invece dell'aggiornamento, può rispondere.
-        // **Ogni** albero che l'aggiornamento porta con sé, non solo quello di
-        let owner = self.providers.views[at].id.clone();
-        let mut update = updated.map_err(|and| self.localized(&owner, and))?;
-        // `Replace`: una `Patch` è un nodo che entra nella webview come gli
-        // altri, ed è più piccola solo nella dimensione. Il `match` è esaustivo
-        // di proposito — è la stessa lezione di `UiNode::children`, che elencava
-        // a mano i contenitori che c'erano: una variante nuova che portasse un
-        // nodo deve rompere la compilazione qui, non passare in silenzio.
-        // Gli eventi accodati durante `on_action` arrivano ADESSO, dopo che la
-        let tree = match &update {
-            ViewUpdate::Replace { root } => Some(root),
-            ViewUpdate::Patch { node, .. } => Some(node),
-            ViewUpdate::None
-            | ViewUpdate::Navigate { .. }
-            | ViewUpdate::Reveal { .. }
-            | ViewUpdate::RunSearch { .. }
-            | ViewUpdate::Custom { .. } => None,
+        let mut prepared = self.prepare_view_action(instance, action)?;
+        let owner = prepared.owner().to_string();
+        let instance_id = prepared.instance_id().to_string();
+        let outcome = {
+            let mut host = self.host_for_view(&owner, InvokeMode::Apply, Some(&instance_id));
+            prepared.invoke(&mut host)
         };
-        if let Some(tree) = tree {
-            guard_ui(trust, tree)?;
-        }
-        self.localize(&owner, &mut update);
-        // chiamata del provider è tornata: è il contratto di consegna.
-        // I parametri di questa istanza reggono la spec della sua view?
-        self.dispatch_pending();
-        Ok(update)
+        self.finish_view_action(prepared, outcome)
     }
 
     ///
@@ -5372,44 +9186,10 @@ impl Workspace {
         provider: Box<dyn CommandProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let specs = provider.commands();
-        let ids: Vec<String> = specs.iter().map(|s| s.id.clone()).collect();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Command, &ids)?;
-        // fabbricata qui e non chiesta a chi registra. Chiederla avrebbe voluto
-        // dire che un comando con la scorciatoia riconfigurabile è un comando il
-        // cui autore si è ricordato di dichiararne una — cioè la proprietà che
-        // interessa affidata alla diligenza, mentre l'utente che vuole
-        // rimappare *quel* comando non ha modo di sapere perché non può.
-        //
-        // Va **dopo** `admit` e prima di `record`: `admit` è ciò che verifica
-        // che quegli id siano nominabili da questo plugin, e sintetizzare una
-        // chiave dal nome di un comando che il registro sta per rifiutare
-        // vorrebbe dire dichiarare l'impostazione di un comando che non
-        // esisterà.
-        // La firma resta `Box` — è quella degli altri `register_*`, e chi
-        let keys = self.keybinding_specs(&specs);
-        if let Err(why) = self
-            .settings
-            .write()
-            .expect("store di configurazione")
-            .declare(&plugin, &keys)
-        {
-            return Err(RegistryError::Setting(why));
-        }
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Command, &ids);
-        // registra non deve sapere perché qui dentro serve un `Arc` (decisione 0013:
-        // `run_command` rientra nel registro mentre il registro è in uso).
-        // Le impostazioni `keys.<id>` di un elenco di comandi (§18.2).
-        self.providers.commands.push(RegisteredCommand {
-            id: plugin,
-            specs,
-            provider: Arc::from(provider),
-        });
-        Ok(())
+        let mut prepared =
+            PreparedRegistration::commands(provider).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -5618,6 +9398,242 @@ impl Workspace {
         })
     }
 
+    /// Prepara il ramo **esterno** di un comando provider. `None` significa che
+    /// il comando è manutenzione del kernel e va eseguito dal percorso interno.
+    ///
+    /// Dopo `Some`, il chiamante deve invocare [`PreparedCommand::invoke`] senza
+    /// una guardia del workspace e riconsegnare sempre l'esito a
+    /// [`finish_provider_command`](Self::finish_provider_command).
+    pub fn prepare_provider_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Actor,
+    ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
+        self.prepare_provider_command_here(command, args, mode, Some(by))
+    }
+
+    /// Versione per [`HostCommands::run_command`](fub_abi::traits::HostCommands::run_command):
+    /// apre un batch se non ce n'è già uno, ma **non cambia attore**. Il
+    /// chiamante resta chi è entrato nel kernel; annidare non è un nuovo ingresso.
+    pub fn prepare_nested_provider_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
+        self.prepare_provider_command_here(command, args, mode, None)
+    }
+
+    fn prepare_provider_command_here(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Option<Actor>,
+    ) -> std::result::Result<Option<PreparedCommand>, PluginError> {
+        let at = self.command_owner(command)?;
+        let spec = self.providers.commands[at]
+            .specs
+            .iter()
+            .find(|s| s.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando")
+            .clone();
+        spec.validate_args(&args)?;
+
+        if self.providers.command_stack.iter().any(|c| c == command) {
+            let mut round = self.providers.command_stack.clone();
+            round.push(command.to_string());
+            return Err(PluginError::BadArgs(
+                format!(
+                    "un comando non può invocare sé stesso: {}",
+                    round.join(" → ")
+                )
+                .into(),
+            ));
+        }
+
+        if self.providers.commands[at].id == crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+
+        let owner = self.providers.commands[at].id.clone();
+        let provider = Arc::clone(&self.providers.commands[at].provider);
+        let read_only_reason = if spec.scope.writes && mode == InvokeMode::Apply {
+            None
+        } else if mode.is_dry_run() {
+            Some("una simulazione non scrive")
+        } else {
+            Some("il comando si è dichiarato di sola lettura")
+        };
+
+        let previous_actor = by.map(|by| self.dispatch.swap_actor(by));
+        let owns_batch = self.dispatch.open_batch();
+        self.providers.command_stack.push(command.to_string());
+        let previous_provider_call = self.dispatch.enter_provider_call();
+
+        Ok(Some(PreparedCommand {
+            owner,
+            command: command.to_string(),
+            args: Some(args),
+            mode,
+            provider,
+            read_only_reason,
+            previous_actor,
+            owns_batch,
+            previous_provider_call,
+        }))
+    }
+    /// Apre il frame staccato esclusivamente per `vault.rebuild-index`.
+    ///
+    /// Gli altri comandi di manutenzione restano sul percorso sincrono: questa
+    /// porta non è un esecutore generico del potere interno del kernel.
+    pub fn prepare_maintenance_rebuild(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+        by: Option<Actor>,
+    ) -> std::result::Result<Option<PreparedMaintenanceRebuild>, PluginError> {
+        if command != crate::maintenance::VAULT_REBUILD_INDEX {
+            return Ok(None);
+        }
+
+        let at = self.command_owner(command)?;
+        if self.providers.commands[at].id != crate::maintenance::MAINTENANCE_ID {
+            return Ok(None);
+        }
+        let spec = self.providers.commands[at]
+            .specs
+            .iter()
+            .find(|spec| spec.id == command)
+            .expect("il proprietario è stato trovato dichiarando questo comando");
+        spec.validate_args(&args)?;
+
+        if self.providers.command_stack.iter().any(|id| id == command) {
+            let mut round = self.providers.command_stack.clone();
+            round.push(command.to_string());
+            return Err(PluginError::BadArgs(
+                format!(
+                    "un comando non può invocare sé stesso: {}",
+                    round.join(" → ")
+                )
+                .into(),
+            ));
+        }
+
+        let owner = self.providers.commands[at].id.clone();
+        let previous_actor = by.map(|actor| self.dispatch.swap_actor(actor));
+        let owns_batch = self.dispatch.open_batch();
+        self.providers.command_stack.push(command.to_string());
+        let previous_dispatch_deferral = self.dispatch.defer_dispatch();
+
+        Ok(Some(PreparedMaintenanceRebuild {
+            owner,
+            command: command.to_string(),
+            mode,
+            previous_actor,
+            owns_batch,
+            previous_dispatch_deferral,
+        }))
+    }
+
+    /// Chiude il frame del rebuild dopo che l'host ha completato tutte le fasi
+    /// esterne. `None` è il dry-run, che conserva il piano del percorso comune.
+    pub fn finish_maintenance_rebuild(
+        &mut self,
+        prepared: PreparedMaintenanceRebuild,
+        opening: Option<std::result::Result<Opening, PluginError>>,
+    ) -> DeferredEvents<std::result::Result<CommandOutcome, PluginError>> {
+        let outcome = match opening {
+            Some(Ok(opening)) => Ok(self.rebuild_index_outcome(opening)),
+            Some(Err(error)) => Err(error),
+            None => self.run_maintenance(&prepared.command, prepared.mode),
+        };
+
+        let popped = self.providers.command_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.command.as_str()));
+        let result = match outcome {
+            Err(error) => Err(self.localized(&prepared.owner, error)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                if prepared.mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
+                    if let Some(undo) = outcome.undo.clone() {
+                        self.undo.push(undo, outcome.partial.clone());
+                    }
+                }
+                Ok(outcome)
+            }
+        };
+
+        if prepared.owns_batch {
+            self.dispatch.close_batch();
+        }
+        self.dispatch
+            .restore_dispatch(prepared.previous_dispatch_deferral);
+        DeferredEvents {
+            outcome: result,
+            previous_actor: prepared.previous_actor,
+            journal: None,
+        }
+    }
+
+    /// Chiude il frame del comando senza consegnare eventi. L'attore precedente
+    /// resta nel token: storicamente veniva ripristinato soltanto *dopo* il
+    /// dispatch e il percorso staccato conserva lo stesso ordine.
+    pub fn finish_provider_command_deferred(
+        &mut self,
+        prepared: PreparedCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> DeferredEvents<std::result::Result<CommandOutcome, PluginError>> {
+        self.dispatch
+            .restore_provider_call(prepared.previous_provider_call);
+        let popped = self.providers.command_stack.pop();
+        debug_assert_eq!(popped.as_deref(), Some(prepared.command.as_str()));
+
+        let result = match outcome {
+            Err(and) => Err(self.localized(&prepared.owner, and)),
+            Ok(mut outcome) => {
+                if let CommandEffect::Plan(plan) = &mut outcome.effect {
+                    plan.complete();
+                }
+                self.localize(&prepared.owner, &mut outcome);
+                if prepared.mode == InvokeMode::Apply && self.providers.command_stack.is_empty() {
+                    if let Some(undo) = outcome.undo.clone() {
+                        self.undo.push(undo, outcome.partial.clone());
+                    }
+                }
+                Ok(outcome)
+            }
+        };
+
+        if prepared.owns_batch {
+            self.dispatch.close_batch();
+        }
+        DeferredEvents {
+            outcome: result,
+            previous_actor: prepared.previous_actor,
+            journal: None,
+        }
+    }
+
+    /// Rientra dopo una [`PreparedCommand`] e riproduce l'epilogo del percorso
+    /// sincrono: ripristino del flag, pila, localizzazione, undo, batch, dispatch
+    /// e infine attore. Il provider non gira in questa funzione.
+    pub fn finish_provider_command(
+        &mut self,
+        prepared: PreparedCommand,
+        outcome: std::result::Result<CommandOutcome, PluginError>,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let deferred = self.finish_provider_command_deferred(prepared, outcome);
+        self.dispatch_pending();
+        self.finish_deferred_events(deferred)
+    }
+
     /// [`HostCommands::run_command`](fub_abi::traits::HostCommands::run_command).
     ///
     /// Differisce da [`invoke_command`](Workspace::invoke_command) per le due
@@ -5637,6 +9653,26 @@ impl Workspace {
     /// passa l'host, che è l'unico a sapere in che modo sta girando chi
     /// invoca. Vedi `KernelHost::mode` e la politica `ReadOnly`.
     // Il giro (decisione 0013). Un comando che rientra su sé stesso non è una
+    /// Porta stretta dell'host per il solo ramo di manutenzione del kernel.
+    ///
+    /// Un `PreparedCommand` restituisce `None` soltanto per questo proprietario:
+    /// tenere questa porta distinta impedisce a `fub-host` di acquisire una
+    /// scorciatoia pubblica con cui eseguire provider arbitrari sotto lock.
+    pub fn invoke_nested_maintenance_command(
+        &mut self,
+        command: &str,
+        args: serde_json::Value,
+        mode: InvokeMode,
+    ) -> std::result::Result<CommandOutcome, PluginError> {
+        let at = self.command_owner(command)?;
+        if self.providers.commands[at].id != crate::maintenance::MAINTENANCE_ID {
+            return Err(PluginError::PermissionDenied(
+                format!("`{command}` non è un comando di manutenzione del kernel").into(),
+            ));
+        }
+        self.invoke_command_nested(command, args, mode)
+    }
+
     pub(crate) fn invoke_command_nested(
         &mut self,
         command: &str,
@@ -5818,71 +9854,119 @@ impl Workspace {
     /// niente è ancora «fallito», che è la promessa che
     /// [`HostCommands::undo_last`](fub_abi::traits::HostCommands::undo_last)
     /// faceva già.
-    // Tutto dentro un lotto solo: annullare una rinomina che aveva riscritto
-    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Undone>, PluginError> {
-        let Some(entry) = self.undo.pop() else {
-            return Ok(None);
-        };
-        let count = entry.undo.steps.len();
-        // quaranta sorgenti è un gesto, quindi un `batch-ended` e un ridisegno.
-        // La bandiera dell'annullamento è un prestito e si chiude cadendo (vedi
-        // [`Riproduzione`]): su questo tratto passa tutto ciò che pania — un
-        // supporto che esplode invece di rispondere, una `expect` del kernel — e
-        // una riga di ripristino scritta dopo la chiamata la salterebbe.
-        // Niente è cambiato: resta un errore, ma la voce torna in pila. Il
-        let mut replay = Replay::open(self);
-        let batch_result = replay.batch(|ws| {
-            let mut done = 0usize;
-            for step in &entry.undo.steps {
-                let outcome = match step {
-                    UndoStep::Edit(planned) => ws
-                        .apply_edit(&planned.doc, planned.edit.clone())
-                        .map(|_| ())
-                        .map_err(|and| Failure::of(planned.doc.clone(), and.into())),
-                    UndoStep::Command { command, args } => ws
-                        .invoke_command_here(command, args.clone(), InvokeMode::Apply)
-                        .map(|_| ())
-                        .map_err(Failure::other),
-                };
-                match outcome {
-                    Ok(()) => done += 1,
-                    Err(failure) => return (done, Some(failure)),
-                }
-            }
-            (done, None)
-        });
-        drop(replay);
+    pub fn prepare_undo_replay(&mut self) -> Option<UndoReplay> {
+        let entry = self.undo.pop()?;
+        Some(UndoReplay {
+            entry,
+            next: 0,
+            done: 0,
+            failure: None,
+            before_replay: self.undo.begin_replay(),
+            owns_batch: self.dispatch.open_batch(),
+        })
+    }
 
-        let (done, failure) = batch_result;
-        let Some(failure) = failure else {
-            return Ok(Some(Undone {
+    /// Chiude il batch senza chiamare handler. Replay resta attivo nel token:
+    /// come nella via sincrona, verrà ripristinato soltanto dopo che gli eventi
+    /// del batch sono stati consegnati.
+    pub fn finish_undo_replay_deferred(&mut self, replay: UndoReplay) -> DeferredUndo {
+        let UndoReplay {
+            entry,
+            done,
+            failure,
+            before_replay,
+            owns_batch,
+            ..
+        } = replay;
+        if owns_batch {
+            self.dispatch.close_batch();
+        }
+        DeferredUndo {
+            entry,
+            done,
+            failure,
+            before_replay,
+        }
+    }
+
+    /// Ripristina replay e produce lo stesso esito per il driver diretto e per
+    /// quello staccato. Va chiamato dopo il drain degli eventi.
+    pub fn finish_undo_replay(
+        &mut self,
+        deferred: DeferredUndo,
+    ) -> std::result::Result<Option<Undone>, PluginError> {
+        let DeferredUndo {
+            entry,
+            done,
+            failure,
+            before_replay,
+        } = deferred;
+        let count = entry.undo.steps.len();
+        self.undo.end_replay(before_replay);
+
+        match failure {
+            None => Ok(Some(Undone {
                 label: entry.undo.label,
                 operation: entry.partial,
                 replay: None,
-            }));
-        };
-        // conflitto può essere transitorio e chi riprova deve ritrovare lo stesso
-        // annullamento invece di una pila vuota. `replay` è già caduto, quindi
-        // `UndoStack::push` non scarta la voce come riproduzione ricorsiva.
-        // Chi possiede un comando, per posizione. `UnknownCommand` se nessuno.
-        if done == 0 {
-            let error = failure.error;
-            self.undo.push(entry.undo, entry.partial);
-            return Err(error);
+            })),
+            Some(failure) if done == 0 => {
+                let error = failure.error;
+                self.undo.push(entry.undo, entry.partial);
+                Err(error)
+            }
+            Some(failure) => Ok(Some(Undone {
+                label: entry.undo.label,
+                operation: entry.partial,
+                replay: Partial::of(count, done, vec![failure]),
+            })),
         }
-        Ok(Some(Undone {
-            label: entry.undo.label,
-            operation: entry.partial,
-            replay: Partial::of(count, done, vec![failure]),
-        }))
+    }
+
+    /// Via sincrona del kernel: guida lo stesso token usato dagli host che
+    /// devono rilasciare il workspace fra un passo e l'altro.
+    pub(crate) fn undo_last(&mut self) -> std::result::Result<Option<Undone>, PluginError> {
+        let Some(mut replay) = self.prepare_undo_replay() else {
+            return Ok(None);
+        };
+        let replayed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            while let Some(step) = replay.next_step() {
+                let outcome = match step {
+                    UndoStep::Edit(planned) => self
+                        .apply_edit(&planned.doc, planned.edit)
+                        .map(|_| ())
+                        .map_err(|and| Failure::of(planned.doc, and.into())),
+                    UndoStep::Command { command, args } => self
+                        .invoke_command_here(&command, args, InvokeMode::Apply)
+                        .map(|_| ())
+                        .map_err(Failure::other),
+                };
+                replay.finish_step(outcome);
+            }
+        }));
+        if replayed.is_err() {
+            replay.finish_unwind();
+        }
+
+        let deferred = self.finish_undo_replay_deferred(replay);
+        let dispatched = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.dispatch_pending();
+        }));
+        let outcome = self.finish_undo_replay(deferred);
+
+        if let Err(payload) = replayed {
+            std::panic::resume_unwind(payload);
+        }
+        if let Err(payload) = dispatched {
+            std::panic::resume_unwind(payload);
+        }
+        outcome
     }
 
     // --- import ed export ---------------------------------------------------
     fn command_owner(&self, command: &str) -> std::result::Result<usize, PluginError> {
         self.providers.command_owner(command)
     }
-
-    //
     // Il kernel non sa cosa sia un formato di scambio: sa scegliere chi lo sa e
     // prestargli le capacità. Vedi `fub_abi::transfer`.
     /// Registra un [`ImportProvider`] sotto un id. L'ordine di registrazione è
@@ -5899,14 +9983,9 @@ impl Workspace {
         p: Box<dyn ImportProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Import, &[])?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Import, &[]);
-        self.providers.imports.push((plugin, p));
-        Ok(())
+        let mut prepared = PreparedRegistration::import(p);
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     ///
@@ -5919,15 +9998,9 @@ impl Workspace {
         p: Box<dyn ExportProvider>,
     ) -> std::result::Result<(), RegistryError> {
         let plugin = plugin.into();
-        let ids: Vec<String> = p.targets().into_iter().map(|t| t.id).collect();
-        self.providers
-            .plugins
-            .admit(&plugin, RegistrationKind::Export, &ids)?;
-        self.providers
-            .plugins
-            .record(&plugin, RegistrationKind::Export, &ids);
-        self.providers.exports.push((plugin, p));
-        Ok(())
+        let mut prepared = PreparedRegistration::export(p).map_err(RegistryError::External)?;
+        let permit = self.registration_permit(&plugin)?;
+        self.commit_registration(&permit, &mut prepared)
     }
 
     /// tutta insieme (decisione 0102).
@@ -6120,6 +10193,20 @@ impl Workspace {
         });
     }
 
+    /// Accoda un guasto prodotto dal composition root dell'host.
+    ///
+    /// Il watcher non è un plugin e non deve attraversare un [`HostApi`]
+    /// intestato a un id fittizio: la guardia delle capacità filtrerebbe
+    /// correttamente quell'emissione. L'host chiama questa porta dentro il
+    /// proprio `with_event_drain`; qui si attribuisce il fatto al kernel e si
+    /// accoda soltanto il notice, così gli handler verranno invocati dopo che
+    /// il composition root avrà rilasciato la guardia del workspace.
+    pub fn report_host_trouble(&mut self, severity: Severity, error: PluginError) {
+        self.as_actor(Actor::Kernel, |ws| {
+            ws.report_trouble(severity, None, error, None)
+        });
+    }
+
     /// giunzione fra le due voci, ed è l'unica ragione per cui vanno decise
     /// nella stessa seduta — un esito che nomina i documenti perduti e nessun
     /// posto dove portarlo è un canale senza destinazione.
@@ -6194,6 +10281,112 @@ impl Workspace {
         self.dispatch_pending();
     }
 
+    /// Rimanda il dispatch avviato da una capacità del proxy host. Il token va
+    /// sempre restituito a [`restore_event_dispatch`](Self::restore_event_dispatch)
+    /// prima di rilasciare il guard.
+    pub fn defer_event_dispatch(&mut self) -> EventDispatchDeferral {
+        EventDispatchDeferral {
+            previous_dispatch_deferral: self.dispatch.defer_dispatch(),
+        }
+    }
+
+    /// Ripristina il frame aperto da [`defer_event_dispatch`](Self::defer_event_dispatch).
+    pub fn restore_event_dispatch(&mut self, deferred: EventDispatchDeferral) {
+        self.dispatch
+            .restore_dispatch(deferred.previous_dispatch_deferral);
+    }
+
+    /// Completa un epilogo dopo che l'host ha drenato gli eventi. Non chiama
+    /// codice esterno.
+    pub fn finish_deferred_events<T>(&mut self, deferred: DeferredEvents<T>) -> T {
+        if let Some(journal) = deferred.journal {
+            self.record(journal);
+        }
+        if let Some(previous_actor) = deferred.previous_actor {
+            self.dispatch.restore_actor(previous_actor);
+        }
+        deferred.outcome
+    }
+
+    /// Prepara una sola consegna del drenaggio `drain` senza eseguire callback.
+    ///
+    /// Dopo `Some`, chi chiama deve rilasciare il guard, invocare
+    /// [`PreparedEventDelivery::invoke`] e riconsegnare sempre il risultato a
+    /// [`finish_event_delivery`](Self::finish_event_delivery). `None` chiude
+    /// il drenaggio (o dice che, per le regole consuete, va rimandato).
+    pub fn prepare_event_delivery(
+        &mut self,
+        drain: &mut EventDrain,
+    ) -> Option<PreparedEventDelivery> {
+        if drain.done {
+            return None;
+        }
+        debug_assert!(
+            !drain.lent,
+            "una consegna va finalizzata prima di prepararne un'altra"
+        );
+        if !drain.active {
+            if !self
+                .dispatch
+                .begin_drain(!self.providers.handlers.is_empty())
+            {
+                drain.done = true;
+                return None;
+            }
+            drain.active = true;
+        }
+
+        let Some(notice) = self.dispatch.next_to_deliver(&mut drain.budget) else {
+            self.dispatch.end_drain();
+            drain.active = false;
+            drain.done = true;
+            return None;
+        };
+        let handlers = self.providers.handlers.take();
+        let previous_provider_call = self.dispatch.enter_provider_call();
+        drain.lent = true;
+        Some(PreparedEventDelivery {
+            notice,
+            handlers,
+            previous_provider_call,
+        })
+    }
+
+    /// Ripristina tabella e flag della consegna, quindi trasforma gli errori
+    /// raccolti nei `Trouble` previsti dal contratto. Gira anche sul ramo
+    /// errore/panico, perché entrambi sono già valori nel completamento.
+    pub fn finish_event_delivery(
+        &mut self,
+        drain: &mut EventDrain,
+        completed: CompletedEventDelivery,
+    ) {
+        let CompletedEventDelivery {
+            notice,
+            handlers,
+            previous_provider_call,
+            troubles,
+        } = completed;
+        self.dispatch.restore_provider_call(previous_provider_call);
+        self.providers.handlers.restore(handlers);
+        drain.lent = false;
+        self.report_handler_troubles(&notice, troubles);
+    }
+
+    /// Attribuisce le capacità rientranti al plugin che sta ricevendo
+    /// l'evento. Il token va sempre riconsegnato a
+    /// [`finish_event_handler`](Self::finish_event_handler).
+    pub fn prepare_event_handler(&mut self, plugin: &str) -> Actor {
+        self.dispatch.swap_actor(Actor::Plugin {
+            id: plugin.to_string(),
+        })
+    }
+
+    /// Ripristina l'attore installato da [`prepare_event_handler`](Self::prepare_event_handler).
+    pub fn finish_event_handler(&mut self, previous: Actor) {
+        self.dispatch.restore_actor(previous);
+    }
+
+    /// Drena la coda eventi verso gli handler. Mai rientrante: chiamato
     /// durante un dispatch (es. da un `write_document` fatto da un handler)
     /// ritorna subito e lascia drenare il ciclo esterno.
     ///
@@ -6297,7 +10490,17 @@ impl Workspace {
                     // il secondo lettore è la shell — che decide da sé quando
                     // ridisegnare una view dichiarata.
                     // L'errore di un handler non deve far fallire
-                    if !handler.subscribed().wants(&notice.event) {
+                    let subscribed = crate::safety::calling(id, Gate::Event, "", || {
+                        Ok::<_, PluginError>(handler.subscribed())
+                    });
+                    let mask = match subscribed {
+                        Ok(mask) => mask,
+                        Err(error) => {
+                            troubles.push((id.clone(), error));
+                            continue;
+                        }
+                    };
+                    if !mask.wants(&notice.event) {
                         continue;
                     }
                     let attore = Actor::Plugin { id: id.clone() };
@@ -6312,19 +10515,20 @@ impl Workspace {
                         // `EventHandler` e nient'altro — smetteva di fare
                         // snapshot in un modo indistinguibile dal funzionare.
                         // **Il guasto della consegna di un guasto non si emette** (decisione
-                        let mut fault = None;
-                        if let Some(panic) = crate::safety::reporting(id, Gate::Event, "", || {
-                            fault = handler.handle(notice, &mut host).err();
-                        }) {
-                            fault = Some(panic);
-                        }
-                        fault
+                        crate::safety::calling(id, Gate::Event, "", || {
+                            handler.handle(notice, &mut host)
+                        })
+                        .err()
                     });
                     troubles.extend(fault.map(|and| (id.clone(), and)));
                 }
                 troubles
             },
         );
+        self.report_handler_troubles(notice, troubles);
+    }
+
+    fn report_handler_troubles(&mut self, notice: &Notice, troubles: Vec<(String, PluginError)>) {
         // 0052). È l'unico ciclo che questa variante rende possibile — un
         // handler che fallisce ricevendo un `Trouble` ne produrrebbe un
         // secondo, che ripasserebbe da lui — e si chiude dove nasce, cioè qui,
@@ -6398,6 +10602,30 @@ impl Workspace {
         self.indexes.core.jobs.accepted(id, &job, plugin);
         self.emit_event(Event::JobStarted { id, job });
         Ok(id)
+    }
+    /// Riserva un job per una chiamata sincrona dell'host senza inserirlo nella
+    /// coda del runner. Usa lo stesso contatore, tabella ed evento di
+    /// [`enqueue_job`]; il composition root lo esegue poi con la stessa
+    /// ammissione dei job drenati dal pool.
+    pub fn issue_direct_job(
+        &mut self,
+        plugin: &str,
+        spec: JobSpec,
+    ) -> std::result::Result<PendingJob, PluginError> {
+        if self.closed {
+            return Err(PluginError::Cancelled(
+                format!("il vault si sta chiudendo: il job `{}` non parte", spec.job).into(),
+            ));
+        }
+        let job = spec.job.clone();
+        let id = self.dispatch.next_job_id();
+        self.indexes.core.jobs.accepted(id, &job, plugin);
+        self.emit_event(Event::JobStarted { id, job });
+        Ok(PendingJob {
+            id,
+            plugin: plugin.to_string(),
+            spec,
+        })
     }
 
     /// (§15.7).
@@ -6637,6 +10865,57 @@ impl Workspace {
             .effective(key)
     }
 
+    /// Valida schema e scrivibilità prima di staccare la persistenza dal
+    /// workspace. Il token conserva soltanto dati owned e lo store condiviso.
+    pub fn prepare_program_setting_mutation(
+        &self,
+        key: &str,
+        value: Option<SettingValue>,
+    ) -> std::result::Result<PreparedSettingMutation, PluginError> {
+        let scope = {
+            let settings = self.settings.read().expect("store di configurazione");
+            let spec = settings.spec(key).ok_or_else(|| {
+                PluginError::BadArgs(format!("nobody declared setting `{key}`").into())
+            })?;
+            if !spec.program_writable {
+                return Err(PluginError::PermissionDenied(
+                    format!(
+                        "setting `{key}` was not declared writable by a \
+                         program: the person looking at it is the one who changes it"
+                    )
+                    .into(),
+                ));
+            }
+            if let Some(value) = value.as_ref() {
+                if let Some(why) = spec.kind.rejects(value) {
+                    return Err(PluginError::BadArgs(format!("`{key}`: {why}").into()));
+                }
+            }
+            spec.scope
+        };
+        Ok(PreparedSettingMutation {
+            settings: Arc::clone(&self.settings),
+            key: key.to_owned(),
+            scope,
+            mutation: match value {
+                Some(value) => SettingMutation::Set(value),
+                None => SettingMutation::Reset,
+            },
+        })
+    }
+
+    /// Annuncia una mutazione già persistita, rimandando ogni callback a dopo
+    /// il rilascio della custodia.
+    pub fn finish_setting_mutation_deferred(
+        &mut self,
+        applied: AppliedSettingMutation,
+    ) -> DeferredEvents<()> {
+        let deferred = self.defer_event_dispatch();
+        self.announce_setting(&applied.key, applied.scope);
+        self.restore_event_dispatch(deferred);
+        DeferredEvents::outcome(())
+    }
+
     /// fatto che riguarda chi la legge, e senza l'evento un interruttore
     /// spostato in una finestra resterebbe invisibile a tutto il resto finché
     /// qualcuno non ricarica.
@@ -6669,6 +10948,45 @@ impl Workspace {
             .reset(key)?;
         self.announce_setting(key, scope);
         Ok(())
+    }
+
+    /// Writes a machine-scoped permission denial only while no machine choice
+    /// exists, returning the exact write receipt needed by rollback.
+    pub fn initialize_permission_denial(
+        &mut self,
+        key: &str,
+    ) -> std::result::Result<Option<PermissionInitialization>, PluginError> {
+        if fub_abi::settings::permission_of_key(key).is_none() {
+            return Err(PluginError::BadArgs(
+                format!("`{key}` is not a permission setting").into(),
+            ));
+        }
+        let receipt = self
+            .settings
+            .read()
+            .expect("store di configurazione")
+            .initialize_machine_default_tracked(key, SettingValue::Toggle(false))?;
+        if receipt.is_some() {
+            self.announce_setting(key, SettingScope::Machine);
+        }
+        Ok(receipt.map(PermissionInitialization))
+    }
+
+    /// Undoes only the exact default-deny write represented by `receipt`.
+    /// A later write, including an ABA write back to `false`, is preserved.
+    pub fn rollback_permission_denial(
+        &mut self,
+        receipt: &PermissionInitialization,
+    ) -> std::result::Result<bool, PluginError> {
+        let reset = self
+            .settings
+            .read()
+            .expect("store di configurazione")
+            .rollback_machine_if_current(&receipt.0)?;
+        if reset {
+            self.announce_setting(receipt.0.key(), SettingScope::Machine);
+        }
+        Ok(reset)
     }
 
     fn announce_setting(&mut self, key: &str, scope: SettingScope) {
@@ -6845,6 +11163,11 @@ impl Workspace {
     pub fn organization(&self) -> fub_abi::organization::Organization {
         self.organization.snapshot()
     }
+    /// Lo store owned dell'organizzazione, per i confini host che devono
+    /// rilasciare il prestito del workspace prima della persistenza.
+    pub fn organization_store(&self) -> Arc<OrganizationStore> {
+        Arc::clone(&self.organization)
+    }
 
     /// Appunta o spunta una nota.
     pub fn set_icon(&self, path: &str, icon: Option<String>) -> std::result::Result<(), String> {
@@ -6950,21 +11273,7 @@ impl Workspace {
                 let opening = self.reindex().map_err(|and| {
                     PluginError::Internal(format!("l'indice non si è rifatto: {and}").into())
                 })?;
-                let discarded = opening.discarded.len();
-                Ok(CommandOutcome::notify(Text::message(
-                    crate::maintenance::T_REBUILT,
-                    vec![
-                        fub_abi::text::Arg::int(
-                            crate::maintenance::A_DOCS,
-                            self.indexes.core.metas.len() as i64,
-                        ),
-                        fub_abi::text::Arg::int(
-                            crate::maintenance::A_ENTRIES,
-                            self.indexes.core.entries.len() as i64,
-                        ),
-                        fub_abi::text::Arg::int(crate::maintenance::A_SKIPPED, discarded as i64),
-                    ],
-                )))
+                Ok(self.rebuild_index_outcome(opening))
             }
             VAULT_REPAIR => {
                 // rebuild non guarda — i dati attaccati a note che non ci sono
@@ -7077,6 +11386,26 @@ impl Workspace {
             }
             other => Err(PluginError::UnknownCommand(other.to_string().into())),
         }
+    }
+
+    fn rebuild_index_outcome(&self, opening: Opening) -> CommandOutcome {
+        CommandOutcome::notify(Text::message(
+            crate::maintenance::T_REBUILT,
+            vec![
+                fub_abi::text::Arg::int(
+                    crate::maintenance::A_DOCS,
+                    self.indexes.core.metas.len() as i64,
+                ),
+                fub_abi::text::Arg::int(
+                    crate::maintenance::A_ENTRIES,
+                    self.indexes.core.entries.len() as i64,
+                ),
+                fub_abi::text::Arg::int(
+                    crate::maintenance::A_SKIPPED,
+                    opening.discarded.len() as i64,
+                ),
+            ],
+        ))
     }
 
     /// e dice quante ne ha tolte.
@@ -7229,15 +11558,20 @@ impl Workspace {
     fn rejoin_renamed_while_closed(&mut self) -> BTreeSet<DocId> {
         let trashed = self.trashed_originals();
         // Oggi c'è, ieri non c'era. Si guardano solo le impronte per cui
-        let mut disappeared: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
+        let mut disappeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
+            BTreeMap::new();
         let snapshot = self.entry_store.snapshot();
         for (id, entry) in &snapshot {
             if entry.size == 0 || self.indexes.core.entries.contains_key(id) || trashed.contains(id)
             {
                 continue;
             }
-            if let Some(fingerprint) = entry.fingerprint.clone() {
-                disappeared.entry(fingerprint).or_default().push(id.clone());
+            if let (Some(identity), Some(fingerprint)) = (entry.identity, entry.fingerprint.clone())
+            {
+                disappeared
+                    .entry((identity, fingerprint))
+                    .or_default()
+                    .push(id.clone());
             }
         }
         if disappeared.is_empty() {
@@ -7248,24 +11582,28 @@ impl Workspace {
         // tutto «comparso» e niente «sparito», e non deve costare una mappa
         // grande quanto il vault per scoprirlo.
         // Nessun candidato: non è una rinomina, è una cancellazione. La
-        let mut appeared: BTreeMap<Revision, Vec<DocId>> = BTreeMap::new();
+        let mut appeared: BTreeMap<(crate::storage::FileIdentity, Revision), Vec<DocId>> =
+            BTreeMap::new();
         for entry in self.indexes.core.entries.values() {
             if entry.size == 0 || self.entry_store.known(&entry.id).is_some() {
                 continue;
             }
-            match &entry.fingerprint {
-                Some(fingerprint) if disappeared.contains_key(fingerprint) => appeared
-                    .entry(fingerprint.clone())
-                    .or_default()
-                    .push(entry.id.clone()),
-                _ => continue,
+            let (Some(identity), Some(fingerprint)) = (
+                self.docs.vault.file_identity(&entry.id),
+                entry.fingerprint.clone(),
+            ) else {
+                continue;
+            };
+            let key = (identity, fingerprint);
+            if disappeared.contains_key(&key) {
+                appeared.entry(key).or_default().push(entry.id.clone());
             }
         }
 
         let mut suspended = BTreeSet::new();
         let mut pairs: Vec<(DocId, DocId)> = Vec::new();
-        for (fingerprint, mut from) in disappeared {
-            let Some(a) = appeared.get(&fingerprint) else {
+        for (identity_and_digest, mut from) in disappeared {
+            let Some(a) = appeared.get(&identity_and_digest) else {
                 // raccolta se ne occupa come si è sempre occupata.
                 // Il pavimento e la porta insieme (0062): una riga nel log per chi
                 continue;
@@ -7449,6 +11787,30 @@ impl Workspace {
         }
     }
 
+    /// Congela supporto, namespace e path validati per una singola operazione
+    /// `data_*`; il token non esegue I/O finché non viene invocato.
+    pub fn prepare_plugin_data_io(
+        &self,
+        plugin: &str,
+        rel: &str,
+    ) -> std::result::Result<PreparedPluginDataIo, PluginError> {
+        let canonical_root = self.plugin_data_root(plugin);
+        let cache_root = self.plugin_cache_root(plugin);
+        let canonical_path = self.plugin_data_path(plugin, rel)?;
+        let relative = canonical_path
+            .strip_prefix(&canonical_root)
+            .map_err(|_| PluginError::Internal("cache path outside plugin root".into()))?;
+        let cache_path = cache_root.join(relative);
+        Ok(PreparedPluginDataIo {
+            storage: Arc::clone(self.storage()),
+            cache_mark: cache_root.join(PLUGIN_CACHE_MARK),
+            canonical_root,
+            cache_root,
+            canonical_path,
+            cache_path,
+        })
+    }
+
     /// Prima di `cache_write`: se il vecchio albero è ancora autorevole, lo
     /// sposta in `.fub/plugins/<id>/`. Poi posa il marcatore, così un plugin
     /// nuovo che scrive solo cache non rende quei blob visibili a `data_read`.
@@ -7470,6 +11832,20 @@ impl Workspace {
             .map_err(|and| PluginError::Io(format!("{mark}: {and}").into()))
     }
 
+    /// Freeze the storage handle and timer-cursor path without performing I/O.
+    ///
+    /// The returned token owns everything needed by a caller that must release
+    /// its `Workspace` guard before touching the storage backend.
+    pub fn prepare_timer_cursors(
+        &self,
+        owner: &str,
+    ) -> std::result::Result<PreparedTimerCursors, PluginError> {
+        Ok(PreparedTimerCursors {
+            storage: Arc::clone(self.storage()),
+            path: self.plugin_data_path(owner, TIMER_CURSORS_FILE)?,
+        })
+    }
+
     /// Legge i cursori dei timer del plugin dal dato autorevole del vault.
     ///
     /// Il file vive nello spazio dati del plugin (`.fub/plugins/<id>/`), la
@@ -7478,22 +11854,7 @@ impl Workspace {
         &self,
         owner: &str,
     ) -> std::result::Result<BTreeMap<String, CivilTime>, PluginError> {
-        let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
-        let bytes = match self.storage().read(&path) {
-            Ok(bytes) => bytes,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Ok(BTreeMap::new())
-            }
-            Err(error) => return Err(PluginError::Io(format!("{path}: {error}").into())),
-        };
-        let stored: BTreeMap<String, StoredCivilTime> =
-            serde_json::from_slice(&bytes).map_err(|error| {
-                PluginError::Internal(format!("timer cursors at {path}: {error}").into())
-            })?;
-        Ok(stored
-            .into_iter()
-            .map(|(id, time)| (id, time.into()))
-            .collect())
+        self.prepare_timer_cursors(owner)?.read()
     }
 
     /// Aggiorna atomicamente il cursore di un timer.
@@ -7503,20 +11864,7 @@ impl Workspace {
         timer: &str,
         cursor: CivilTime,
     ) -> std::result::Result<(), PluginError> {
-        let path = self.plugin_data_path(owner, TIMER_CURSORS_FILE)?;
-        self.storage()
-            .update(&path, &mut |existing| {
-                let mut stored: BTreeMap<String, StoredCivilTime> = existing
-                    .map(serde_json::from_slice)
-                    .transpose()
-                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
-                    .unwrap_or_default();
-                stored.insert(timer.to_owned(), cursor.into());
-                serde_json::to_vec_pretty(&stored)
-                    .map(Some)
-                    .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))
-            })
-            .map_err(|error| PluginError::Io(format!("{path}: {error}").into()))
+        self.prepare_timer_cursors(owner)?.write(timer, cursor)
     }
 }
 
@@ -7711,6 +12059,36 @@ fn block_of(model: &DocumentModel, block: &str) -> Option<DocumentModel> {
 /// Esiste perché la chiusura di un lotto non è una riga che chi apre debba
 /// ricordarsi di scrivere. `Workspace::batch` la scriveva *dopo* la chiamata
 /// alla chiusura del chiamante, e su quella riga passa tutto ciò che pania:
+impl QueryCore for Workspace {
+    fn query_core(&self, query: IndexQuery) -> std::result::Result<IndexResult, PluginError> {
+        self.indexes.core.query(query)
+    }
+
+    fn core_documents(&self) -> std::result::Result<Vec<DocId>, PluginError> {
+        Ok(self.indexes.core.documents())
+    }
+
+    fn core_predicate(
+        &self,
+        predicate: &QueryPredicate,
+    ) -> std::result::Result<Matches, PluginError> {
+        self.indexes.core.predicate(predicate)
+    }
+
+    fn finish_core_documents(
+        &self,
+        matches: Matches,
+        sort: Option<&PropertySort>,
+        select: &PropertySelect,
+        page: Option<Page>,
+    ) -> std::result::Result<Paged<DocumentMatch>, PluginError> {
+        Ok(self
+            .indexes
+            .core
+            .finish_documents(matches, sort, select, page))
+    }
+}
+
 /// il parse di un formato storto, un provider senza la rete della
 /// [`safety`](crate::safety), una `expect` del kernel. Un panico saltava
 /// `end_batch`, il campo del lotto restava pieno, e da lì in poi
@@ -7762,59 +12140,6 @@ impl Drop for Batch<'_> {
             return;
         }
         self.ws.end_batch();
-    }
-}
-
-///
-/// È il [`Lotto`] applicato all'altra bandiera che [`Workspace::undo_last`]
-/// alzava a mano: `replaying` dice *annullare non è annullabile*, e finché è
-/// alzata ogni [`UndoStack::push`] viene scartata. Il ripristino era una riga
-/// **dopo** la chiamata, e su quella riga passa tutto ciò che pania — un
-/// supporto che esplode invece di rispondere, una `expect` del kernel: la
-/// bandiera restava alzata, e da lì in poi nessuna operazione entrava più in
-/// pila. Ctrl-Z smetteva di funzionare per sempre, in silenzio, e chi lo premeva
-/// leggeva «non c'è niente da annullare» avendo appena scritto.
-///
-/// La ragione per cui non era già un `Drop` era vera e la risposta è
-/// nell'oggetto prestato: un guardiano sulla **pila** avrebbe tenuto occupato
-/// `self.undo` per tutta la durata delle scritture, che passano dal workspace
-/// intero. Questo presta il **workspace**, come `Lotto`, e non toglie niente a
-/// nessuno.
-/// Com'era la bandiera prima: un annullamento annidato non spegne quello di
-struct Replay<'w> {
-    ws: &'w mut Workspace,
-    /// fuori uscendo.
-    // Niente ramo per `std::thread::panicking()`, ed è la differenza con
-    before: bool,
-}
-
-impl<'w> Replay<'w> {
-    fn open(ws: &'w mut Workspace) -> Self {
-        let before = ws.undo.begin_replay();
-        Replay { ws, before }
-    }
-}
-
-impl Drop for Replay<'_> {
-    fn drop(&mut self) {
-        // `Lotto`: qui non si chiama nessuno, si rimette a posto un `bool` di
-        // questo oggetto. Non c'è un secondo panico da temere.
-        // questo oggetto. Non c'è un secondo panico da temere.
-        self.ws.undo.end_replay(self.before);
-    }
-}
-
-impl std::ops::Deref for Replay<'_> {
-    type Target = Workspace;
-
-    fn deref(&self) -> &Workspace {
-        self.ws
-    }
-}
-
-impl std::ops::DerefMut for Replay<'_> {
-    fn deref_mut(&mut self) -> &mut Workspace {
-        self.ws
     }
 }
 

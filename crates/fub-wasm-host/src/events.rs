@@ -12,12 +12,14 @@
 //!
 //! # La rientranza, e perché oggi non si chiude su sé stessa
 //!
-//! Le tre funzioni girano **dentro** [`crate::borrow::with_guest`], cioè con
-//! il `Mutex` dell'istanza già in mano a chi ci ha chiamati
-//! ([`WasmPlugin::chiamata`](crate::WasmPlugin)). Un `Mutex` di `std` non è
-//! rientrante: qualunque strada che da qui tornasse *nella stessa istanza* non
-//! sarebbe una ricorsione, sarebbe un blocco definitivo. Le tre strade sono
-//! state percorse una per una, e questo è ciò che si è trovato.
+//! Le tre funzioni hanno effetto solo con il prestito mutabile ottenuto da
+//! [`crate::borrow::with_guest`], cioè quando il `Mutex` dell'istanza è già in
+//! mano a chi ci ha chiamati ([`WasmPlugin::chiamata`](crate::WasmPlugin)).
+//! Durante `render`/`with_read_guest`, invece, `writer` le rifiuta oppure lascia
+//! il no-op previsto dalla firma WIT. Un `Mutex` di `std` non è rientrante:
+//! qualunque strada che da qui tornasse *nella stessa istanza* non sarebbe una
+//! ricorsione, sarebbe un blocco definitivo. Le tre strade sono state percorse
+//! una per una, e questo è ciò che si è trovato.
 //!
 //! * `spawn_job` **accoda e non esegue**: `Workspace::enqueue_job` mette la
 //!   richiesta nella coda del dispatcher, suona il campanello e torna con
@@ -37,16 +39,13 @@
 //! * `report_progress` è l'unica delle tre che drena: `note_job_progress`
 //!   chiama `dispatch_pending()`, cioè consegna agli `EventHandler` registrati
 //!   **prima** di tornare. Oggi non c'è modo che uno di quelli sia servito da
-//!   questa istanza: `WasmBundle::register` registra i comandi del componente e
-//!   nient'altro, e un `CommandProvider` non è un `EventHandler` — nessun
-//!   handler di questa istanza sta nel registro, quindi il giro si chiude fuori
-//!   da noi. È la casella da riguardare il giorno in cui un
-//!   `EventHandler` attraverserà: quel giorno un job che si racconta
-//!   sveglierebbe l'handler del proprio plugin passando dal `Mutex` che il job
-//!   sta tenendo. Il posto in cui difendersi non è questo modulo — è il
-//!   `Mutex`, che dovrà saper dire «sono già dentro» con un `plugin-error`
-//!   invece di fermarsi, come `trappable_imports` spento dice ogni altro
-//!   rifiuto.
+//!   questa istanza: `bundle_mount` registra comandi/view sulla stessa
+//!   `Instance`; il formato è preparato separatamente dallo startup sulla
+//!   stessa `Instance`; nessun `EventHandler` inbound è registrato. Il giro
+//!   quindi si chiude fuori da noi; e, se una chiamata provasse comunque a
+//!   rientrare nella stessa `Instance`, `enter_instance` la rifiuterebbe già.
+//!   Non c'è un futuro caso di reentry da aspettare qui: la guardia impedisce
+//!   il rientro sulla stessa istanza prima che il `Mutex` possa bloccarsi.
 //!
 //! # Chi può cosa non si decide qui
 //!
@@ -56,7 +55,6 @@
 //! job su un vault che sta chiudendo — lo nega chi ha il registro davanti.
 //! Rileggerlo di qua sarebbe il secondo punto di enforcement che quel verbale
 //! esiste per non avere.
-//! enforcement point that decision record exists not to have.
 
 use fub_abi::event::{BatchId, DocChange, DocChanges, Event, Severity};
 use fub_abi::gate::Gate;
@@ -94,7 +92,7 @@ impl host_events::Host for State {
     /// dallo stesso host, che dice cosa non è uscito e perché.
     /// dallo stesso host, che dice cosa non è uscito e perché.
     fn emit(&mut self, event: w_events::Event) {
-        let Ok(guest) = self.guest() else {
+        let Ok(guest) = self.writer() else {
             return;
         };
         match from_event(event) {
@@ -127,7 +125,7 @@ impl host_events::Host for State {
     /// scrivere quella stringa è stato il componente.
     fn spawn_job(&mut self, spec: w_jobs::JobSpec) -> Result<w_jobs::JobId, w_errors::PluginError> {
         let payload = tr::from_json(&spec.payload).map_err(|and| tr::to_error(&and))?;
-        let guest = match self.guest() {
+        let guest = match self.writer() {
             Ok(h) => h,
             Err(and) => return Err(tr::to_error(&and)),
         };
@@ -150,7 +148,7 @@ impl host_events::Host for State {
     /// racconta durante un `activate` non riceve un errore — non succede
     /// niente, ed è ciò che il trait dichiara.
     fn report_progress(&mut self, progress: w_jobs::JobProgress) {
-        let Ok(guest) = self.guest() else {
+        let Ok(guest) = self.writer() else {
             return;
         };
         guest.report_progress(from_progress(progress));
@@ -328,5 +326,6 @@ fn from_gate(g: w_events::Gate) -> Gate {
         w_events::Gate::SyntaxRule => Gate::SyntaxRule,
         w_events::Gate::CustomRender => Gate::CustomRender,
         w_events::Gate::Job => Gate::Job,
+        w_events::Gate::IndexQuery => Gate::IndexQuery,
     }
 }

@@ -3750,9 +3750,10 @@ pub trait IndexProvider: Send + Sync {
     ///
     /// # Due `query` possono essere in volo insieme
     ///
-    /// Questo trait è `Send + Sync` e questo metodo prende `&self`: il kernel
-    /// serve le interrogazioni sotto **prestito condiviso** del workspace, e N
-    /// chiamate concorrenti sulla stessa istanza sono lecite per costruzione.
+    /// Questo trait è `Send + Sync` e questo metodo prende `&self`: l'host
+    /// prepara routing e handle sotto un prestito breve, poi serve le
+    /// interrogazioni **fuori da ogni prestito del workspace**. N chiamate
+    /// concorrenti sulla stessa istanza sono lecite per costruzione.
     ///
     /// Lecite, non necessariamente **parallele**. Un provider che metta un lock
     /// dentro il proprio `&self` è conforme, e si rimette in fila da solo senza
@@ -3934,7 +3935,7 @@ impl PluginPermissions {
 
 /// La versione del contratto che QUESTO abi definisce. È la stessa del
 /// `package fub:abi@…` nel WIT (il test di conformità le confronta).
-pub const ABI_VERSION: &str = "0.1.1";
+pub const ABI_VERSION: &str = "0.1.2";
 
 // Niente `Eq`: i permessi portano un parametro JSON, e `serde_json::Value` non
 // è `Eq` (contiene numeri in virgola mobile). È lo stesso motivo per cui
@@ -4487,12 +4488,27 @@ impl PluginManifest {
 /// Una versione che non parsa si rifiuta: meglio un no chiaro che un runtime
 /// a sorpresa.
 pub fn abi_compatible(declared: &str) -> bool {
+    fn canonical_number(segment: &str) -> Option<u64> {
+        if segment.is_empty()
+            || (segment.len() > 1 && segment.starts_with('0'))
+            || !segment.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return None;
+        }
+        segment.parse().ok()
+    }
+
     fn major_minor(v: &str) -> Option<(u64, u64)> {
-        let mut parts = v.trim().split('.');
-        let major = parts.next()?.parse().ok()?;
-        let minor = parts.next()?.parse().ok()?;
+        let mut parts = v.split('.');
+        let major = canonical_number(parts.next()?)?;
+        let minor = canonical_number(parts.next()?)?;
+        canonical_number(parts.next()?)?;
+        if parts.next().is_some() {
+            return None;
+        }
         Some((major, minor))
     }
+
     match (major_minor(declared), major_minor(ABI_VERSION)) {
         (Some((dmaj, dmin)), Some((hmaj, hmin))) => dmaj == hmaj && dmin <= hmin,
         _ => false,
@@ -4685,24 +4701,51 @@ mod tests {
     }
 
     #[test]
-    fn the_abi_version_rule_rejects_other_majors_and_newer_minors() {
+    fn the_abi_version_rule_accepts_only_canonical_complete_versions() {
         assert!(abi_compatible(ABI_VERSION), "l'host accetta sé stesso");
         assert!(
-            abi_compatible("0.0.9"),
-            "una minor inferiore è servibile: post-freeze si cresce per aggiunta"
+            abi_compatible("0.0.0"),
+            "la minor inferiore è servibile: post-freeze si cresce per aggiunta"
         );
+        assert!(
+            abi_compatible("0.1.18446744073709551615"),
+            "la patch massima è valida anche se non partecipa alla compatibilità"
+        );
+        assert!(
+            !abi_compatible("18446744073709551615.0.0"),
+            "una major valida ma diversa resta incompatibile"
+        );
+
+        for version in [
+            " 0.1.2",
+            "0.1.2 ",
+            "0. 1.2",
+            "0.1. 2",
+            "00.1.2",
+            "0.01.2",
+            "0.1.02",
+            "0.1",
+            "0",
+            "0.1.2.3",
+            "0..2",
+            "0.1.",
+            "0.+1.2",
+            "0.1.-2",
+            "18446744073709551616.1.2",
+            "0.18446744073709551616.2",
+            "0.1.18446744073709551616",
+        ] {
+            assert!(
+                !abi_compatible(version),
+                "forma non canonica accettata: {version:?}"
+            );
+        }
         assert!(
             !abi_compatible("0.2.0"),
             "una minor superiore usa cose che l'host non ha"
         );
         assert!(!abi_compatible("1.0.0"), "una major diversa è un rifiuto");
-        assert!(
-            abi_compatible("0.1.999"),
-            "la patch non conta: non cambia il contratto"
-        );
-        assert!(!abi_compatible(""), "una versione che non parsa si rifiuta");
         assert!(!abi_compatible("abc"));
-        assert!(!abi_compatible("0"));
     }
 
     #[test]

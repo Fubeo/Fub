@@ -24,9 +24,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import html from "../../index.html?raw";
 import generatedEnums from "../host/enums.generated?raw";
-import type { ViewSpec } from "../host/contract";
+import type { UiNode, ViewSpec, ViewUpdate } from "../host/contract";
+import { openLifetime } from "./lifetime";
 
-const renderView = vi.fn(async () => ({ node: "empty_state", label: "vuoto", key: null }));
+function emptyTree(title: string): UiNode {
+  return { node: "empty_state", title, detail: null, action: null };
+}
+
+const renderView = vi.fn(async (): Promise<UiNode> => emptyTree("vuoto"));
 const viewAction = vi.fn(async () => ({ kind: "none" }));
 const listViews = vi.fn(async (): Promise<ViewSpec[]> => []);
 
@@ -165,6 +170,46 @@ describe("le superfici che questa shell ospita da sé", () => {
     ).toBe("tags");
   });
 });
+describe("l'inspector a tab", () => {
+  it("lega tab e pannelli e muove il fuoco con frecce/Home/Fine", async () => {
+    listViews.mockResolvedValueOnce([
+      spec("outline", "right_sidebar"),
+      spec("backlinks", "right_sidebar"),
+    ]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+
+    const right = document.getElementById("views-right")!;
+    const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+    const panels = [...right.querySelectorAll<HTMLElement>(".declared-view-panel")];
+    expect(tabs).toHaveLength(2);
+    expect(new Set(tabs.map((tab) => tab.id)).size).toBe(tabs.length);
+
+    tabs.forEach((tab, i) => {
+      const panel = panels[i]!;
+      expect(tab.id).not.toBe("");
+      expect(tab.getAttribute("role")).toBe("tab");
+      expect(tab.getAttribute("aria-controls")).toBe(panel.id);
+      expect(panel.getAttribute("role")).toBe("tabpanel");
+      expect(panel.getAttribute("aria-labelledby")).toBe(tab.id);
+    });
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1]);
+    expect(panels.map((panel) => panel.hidden)).toEqual([false, true]);
+
+    tabs[0]!.focus();
+    tabs[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(tabs[1]);
+    expect(tabs.map((tab) => tab.tabIndex)).toEqual([-1, 0]);
+    expect(panels.map((panel) => panel.hidden)).toEqual([true, false]);
+
+    tabs[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(tabs[0]);
+    tabs[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(tabs[1]);
+    tabs[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    expect(document.activeElement).toBe(tabs[0]);
+  });
+});
 
 /// Ogni superficie che il contratto nomina è **classificata** da questa shell:
 /// ospitata in un contenitore, aperta in un riquadro, o non ospitata con una
@@ -287,7 +332,131 @@ describe("un rimontaggio che non riesce", () => {
     resolveOld([spec("backlinks", "left_sidebar"), spec("stats", "right_sidebar")]);
     await old;
 
+
     expect(document.querySelector("#views-left")!.innerHTML).toBe(afterTheNewItem);
     expect(document.querySelector("#views-right")!.childElementCount).toBe(0);
+  });
+});
+describe("lifecycle delle view dichiarate", () => {
+  it("un render vecchio non riscrive il contenitore dopo un rimontaggio", async () => {
+    const views = await loadViews();
+    let resolveOld!: (tree: UiNode) => void;
+    renderView.mockImplementationOnce(
+      () =>
+        new Promise<UiNode>((resolve) => {
+          resolveOld = resolve;
+        }),
+    );
+    listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
+    const oldMount = views.mountDeclaredViews();
+
+    // Lascia che la prima discovery arrivi fino alla chiamata lenta al provider,
+    // ma non aspettare `oldMount`: il suo render è deliberatamente in volo.
+    for (let i = 0; i < 12 && renderView.mock.calls.length === 0; i += 1) {
+      await Promise.resolve();
+    }
+    expect(renderView).toHaveBeenCalledTimes(1);
+
+    listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
+    renderView.mockResolvedValueOnce(emptyTree("nuovo"));
+    await views.mountDeclaredViews();
+    const host = document.querySelector("#views-left .declared-view")!;
+    expect(host.textContent).toContain("nuovo");
+
+    resolveOld(emptyTree("vecchio"));
+    await oldMount;
+    expect(host.textContent).toContain("nuovo");
+    expect(host.textContent).not.toContain("vecchio");
+  });
+
+  it("chiudere il parent invalida un render differito e svuota il pannello", async () => {
+    listViews.mockResolvedValueOnce([spec("tags", "left_sidebar")]);
+    let resolveRender!: (tree: UiNode) => void;
+    renderView.mockImplementationOnce(
+      () =>
+        new Promise<UiNode>((resolve) => {
+          resolveRender = resolve;
+        }),
+    );
+    const views = await loadViews();
+    const parent = openLifetime();
+    const mounting = views.mountDeclaredViews(parent);
+    const host = document.getElementById("views-left")!;
+
+    for (let i = 0; i < 12 && renderView.mock.calls.length === 0; i += 1) {
+      await Promise.resolve();
+    }
+    expect(renderView).toHaveBeenCalledTimes(1);
+
+    parent.close();
+    expect(host.childElementCount).toBe(0);
+    expect(views.primaryViews()).toEqual([]);
+    const { registeredPanels } = await import("./panel-host");
+    expect(registeredPanels()).toEqual([]);
+
+    resolveRender(emptyTree("arrivato dopo la chiusura"));
+    await mounting;
+    expect(host.childElementCount).toBe(0);
+    expect(host.textContent).not.toContain("arrivato dopo la chiusura");
+    expect(registeredPanels()).toEqual([]);
+  });
+
+  it("un'azione tardiva non riscrive un riquadro chiuso e rimontato", async () => {
+    listViews.mockResolvedValueOnce([spec("graph", "main")]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+
+    const oldTree: UiNode = {
+      node: "list_item",
+      title: "prima",
+      subtitle: null,
+      action: { action: "tardi", payload: null },
+      selected: false,
+    };
+    const newTree = emptyTree("nuovo");
+    const lateTree = emptyTree("tardivo");
+    let resolveAction!: (update: ViewUpdate) => void;
+    const actionResponse = new Promise<ViewUpdate>((resolve) => {
+      resolveAction = resolve;
+    });
+    const pane = document.createElement("div");
+    document.body.appendChild(pane);
+    renderView.mockImplementationOnce(async () => oldTree);
+    viewAction.mockImplementationOnce(() => actionResponse);
+    await views.mountViewInPane("graph", "same", pane);
+
+    pane.querySelector<HTMLElement>(".ui-list-item")!.click();
+    await Promise.resolve();
+    expect(viewAction).toHaveBeenCalledTimes(1);
+    views.unmountViewFromPane("graph", "same");
+
+    renderView.mockImplementationOnce(async () => newTree);
+    await views.mountViewInPane("graph", "same", pane);
+    expect(pane.textContent).toContain("nuovo");
+
+    resolveAction({ kind: "replace", root: lateTree });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(pane.textContent).toContain("nuovo");
+    expect(pane.textContent).not.toContain("tardivo");
+  });
+
+  it("la trappola modale appartiene al parent e si stacca a chiusura pagina", async () => {
+    listViews.mockResolvedValueOnce([spec("confirm", "modal")]);
+    const views = await loadViews();
+    const parent = openLifetime();
+    await views.mountDeclaredViews(parent);
+
+    const modal = document.getElementById("views-modal")!;
+    expect(modal.hidden).toBe(false);
+    expect(modal.querySelector(".declared-view")).not.toBeNull();
+    parent.close();
+
+    expect(modal.hidden).toBe(true);
+    expect(modal.childElementCount).toBe(0);
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+    expect(modal.hidden).toBe(true);
   });
 });

@@ -40,7 +40,7 @@ import { api } from "../host/ipc";
 import { Race } from "./race";
 import type { ActionRef, FieldValue, UiNode, ViewSpec, ViewSurface } from "../host/contract";
 import { $ } from "./dom";
-import { activatable, trapFocus } from "./a11y";
+import { activatable, stableIdentifier, trapFocus } from "./a11y";
 import { applyIntent } from "./intents";
 import { mountTree, patchTree, unmountTree } from "./node";
 import { onEvent } from "../state/kernel";
@@ -50,6 +50,7 @@ import { notify } from "./notify";
 import { t } from "../i18n/strings";
 import { iconEl } from "./icons";
 import { setTooltip } from "./tooltip";
+import { openLifetime, type Lifetime, type Teardown } from "./lifetime";
 
 const viewsLeftEl = $("#views-left");
 const viewsRightEl = $("#views-right");
@@ -70,6 +71,10 @@ interface Mounted {
   container: HTMLElement;
   instance: string;
   params: unknown;
+  /// Epoch dell'istanza: cambia quando l'istanza viene smontata, così un
+  /// risultato che ha attraversato un `await` non può riapparire sul suo
+  /// contenitore se nel frattempo il pannello è stato ricreato.
+  epoch: number;
   /// I ridisegni di questo pannello, di cui conta solo l'ultimo (0134). Sta
   /// dentro la `Montata` e non in una mappa accanto perché è **della stessa
   /// cosa**: quando la montata se ne va, i suoi giri in volo se ne vanno con
@@ -84,6 +89,9 @@ interface Mounted {
 /// n'era uno per view. Con l'area principale non lo è più — il grafo aperto in
 /// due riquadri è un pannello per riquadro — quindi la chiave è quella del
 /// pannello, e chi cerca «tutte le istanze di questa view» filtra su `view`.
+/// Numero monotono delle istanze: non si riusa un'epoca fra due montaggi dello
+/// stesso pannello, anche quando il contenitore DOM viene riutilizzato.
+let mountedEpoch = 0;
 const mounted = new Map<string, Mounted>();
 
 /// Le view che dichiarano la superficie principale, per id.
@@ -109,6 +117,25 @@ function panePanel(view: string, pane: string): string {
   return `${view}@${pane}`;
 }
 
+/// Smonta un esemplare e invalida prima i suoi ridisegni in volo.
+///
+/// L'identità della `Mounted` è parte del contratto locale: il callback di un
+/// render può conservare l'oggetto oltre la sua rimozione dalla mappa. Cancellare
+/// la corsa prima di togliere il nodo chiude quel giro; il controllo identitario
+/// in `renderDeclaredView` resta comunque necessario per la risposta che abbia
+/// già oltrepassato il cancello della `Race`.
+function unmountMounted(id: string, mountedView: Mounted): void {
+  // Anche una chiamata ritardata deve invalidare il suo render; se però la
+  // mappa contiene già un'altra istanza, non deve disiscriverla né svuotare il
+  // contenitore che quella nuova istanza potrebbe avere riutilizzato.
+  mountedView.race.cancel();
+  mountedView.epoch++;
+  if (mounted.get(id) !== mountedView) return;
+  mounted.delete(id);
+  unregisterPanel(id);
+  unmountTree(mountedView.container);
+}
+
 /// Monta (o rimonta) una view dichiarata dentro il riquadro `pane`.
 ///
 /// **Idempotente**: chiamarla di nuovo sullo stesso contenitore ridisegna e
@@ -126,11 +153,18 @@ export async function mountViewInPane(
   const id = panePanel(view, pane);
   const already = mounted.get(id);
   if (!already || already.container !== container) {
-    if (already) unmountTree(already.container);
+    if (already) unmountMounted(id, already);
     // L'esemplare **è il riquadro**: è la stessa identità che il `ViewContext`
     // porta di là dal confine (`pane`), quindi lo stato di vista di una view
     // aperta in due riquadri si separa esattamente dove l'utente vede due cose.
-    mounted.set(id, { view, container, instance: pane, params: null, race: new Race() });
+    mounted.set(id, {
+      view,
+      container,
+      instance: pane,
+      params: null,
+      epoch: ++mountedEpoch,
+      race: new Race(),
+    });
     registerPanel({
       id,
       title: spec.title,
@@ -150,9 +184,7 @@ export function unmountViewFromPane(view: string, pane: string): void {
   const id = panePanel(view, pane);
   const mountedView = mounted.get(id);
   if (!mountedView) return;
-  unregisterPanel(id);
-  unmountTree(mountedView.container);
-  mounted.delete(id);
+  unmountMounted(id, mountedView);
 }
 
 /// La superficie di una view → il contenitore che la ospita, o `null` se questa
@@ -207,8 +239,55 @@ const NOT_HOSTED: Record<string, string> = {
 /// finirebbe di montare dentro un mondo che la seconda ha appena svuotato.
 const mountRun = new Race();
 
-export async function mountDeclaredViews(): Promise<void> {
-  // **Si chiede prima, si smonta dopo**, ed è il difetto 0088: l'ordine di
+/// Svuota ogni stato posseduto dalle view dichiarate.
+///
+/// Questo è anche il teardown della finestra: prima si fanno scadere le
+/// risposte dei provider, poi si tolgono pannelli e alberi. `unmountTree`
+/// percorre gli elementi custom e invoca i loro disposer, quindi nessun
+/// renderer può restare vivo dopo la chiusura del parent.
+function clearMountedViews(): void {
+  mountRun.cancel();
+  for (const [id, mountedView] of mounted) {
+    unmountMounted(id, mountedView);
+  }
+  mounted.clear();
+  primarySpecs.clear();
+  for (const el of [
+    viewsLeftEl,
+    viewsRightEl,
+    viewsBottomEl,
+    viewsStatusEl,
+    viewsModalEl,
+    viewsSettingsEl,
+    viewsMenuExtraEl,
+  ]) {
+    el.replaceChildren();
+  }
+  // La rail non si svuota tutta: `#rail-shell` (le icone della shell) resta,
+  // e si tolgono solo le view dichiarate che il giro precedente aveva
+  // appoggiato dopo di lui.
+  for (const viewBtn of viewsRibbonEl.querySelectorAll(".rail-btn-view")) {
+    viewBtn.remove();
+  }
+  releaseModalTrap();
+  viewsModalEl.removeAttribute("aria-labelledby");
+  viewsBottomEl.hidden = true;
+  viewsStatusEl.hidden = true;
+  viewsModalEl.hidden = true;
+}
+
+function registerParentTeardown(parent: Lifetime | undefined): void {
+  if (!parent) return;
+  // Registrarlo prima della query è importante: una chiusura mentre
+  // `list_views` è in volo deve cancellare anche quella Race, non solo ciò che
+  // è già comparso nel DOM.
+  parent.add(clearMountedViews);
+}
+
+export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
+  if (parent?.closed) return;
+  registerParentTeardown(parent);
+
   // prima buttava giù tutto — pannelli, alberi, le due mappe, i sette
   // contenitori, il nome della superficie modale — e *poi* chiedeva l'elenco.
   // Se la domanda falliva, e basta un vault che si apre male o un kernel che si
@@ -223,12 +302,13 @@ export async function mountDeclaredViews(): Promise<void> {
   // che si possono scegliere.
   const specs = await mountRun.last(async (expected) => await expected(api.listViews()));
   // Il giro è scaduto: un rimontaggio più nuovo sta già lavorando, e questo non
-  // deve smontare ciò che quello ha montato.
-  if (!specs) return;
+  // deve smontare ciò che quello ha montato. Una finestra chiusa non può
+  // adottare una risposta arrivata tardi: il suo DOM appartiene già al mondo
+  // che si sta smontando.
+  if (!specs || parent?.closed) return;
 
   for (const [id, mountedView] of mounted) {
-    unregisterPanel(id);
-    unmountTree(mountedView.container);
+    unmountMounted(id, mountedView);
   }
   mounted.clear();
   primarySpecs.clear();
@@ -287,12 +367,18 @@ export async function mountDeclaredViews(): Promise<void> {
   // L'inspector a tab: per le view `right_sidebar` costruisce un tablist in
   // cima. Va dopo il montaggio, perché legge i pannelli già nati.
   buildInspector();
-  modalTrap();
+  modalTrap(parent);
   await Promise.all([...mounted.keys()].map((id) => refreshPanel(id)));
 }
 
 /// Come si scioglie la trappola del fuoco della superficie modale.
-let releaseModal: (() => void) | null = null;
+let releaseModal: Teardown | null = null;
+
+function releaseModalTrap(): void {
+  const release = releaseModal;
+  releaseModal = null;
+  release?.();
+}
 
 /// Tiene il fuoco dentro `#views-modal` finché ci sta dentro qualcosa (§12.4).
 ///
@@ -307,14 +393,20 @@ let releaseModal: (() => void) | null = null;
 /// ha rinunciato», che è roba del contratto e non di questa voce. La view
 /// ricompare al prossimo `mountDeclaredViews`, che è quanto basta perché
 /// Escape non sia una via d'uscita definitiva da qualcosa che serviva.
-function modalTrap(): void {
-  releaseModal?.();
-  releaseModal = null;
+function modalTrap(parent?: Lifetime): void {
+  releaseModalTrap();
   if (viewsModalEl.hidden) return;
-  releaseModal = trapFocus(viewsModalEl, () => {
+  const release = trapFocus(viewsModalEl, () => {
     viewsModalEl.hidden = true;
-    releaseModal?.();
-    releaseModal = null;
+    releaseModalTrap();
+  });
+  releaseModal = release;
+  // La trappola è una risorsa della finestra, non della singola risposta a
+  // `list_views`: il parent la chiude anche quando la pagina viene smontata
+  // senza un nuovo giro di discovery.
+  parent?.add(() => {
+    if (releaseModal === release) releaseModal = null;
+    release();
   });
 }
 
@@ -396,6 +488,7 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
     container,
     instance: spec.id,
     params: null,
+    epoch: ++mountedEpoch,
     race: new Race(),
   });
 
@@ -427,6 +520,8 @@ function mountSpec(spec: ViewSpec, host: HTMLElement): void {
 async function renderDeclaredView(id: string): Promise<void> {
   const mountedView = mounted.get(id);
   if (!mountedView) return;
+  const container = mountedView.container;
+  const epoch = mountedView.epoch;
   // La corsa è **del pannello montato**, non del modulo: le view dichiarate si
   // ridisegnano tutte insieme (un `stale-views`, un `batch_ended`), e un
   // contatore unico le farebbe annullare a vicenda lasciando disegnata solo
@@ -440,6 +535,17 @@ async function renderDeclaredView(id: string): Promise<void> {
   // sono i più frequenti.
   await mountedView.race.last(async (expected) => {
     const tree = await expected(api.renderView(mountedView.view, mountedView.instance, mountedView.params));
+    // La risposta ha attraversato un confine asincrono: nel frattempo il
+    // pannello può essere stato smontato e rimontato nello stesso contenitore.
+    // Servono tutti e tre i controlli: la mappa per l'identità, il contenitore
+    // per il bersaglio reale, l'epoca per l'istanza che ha chiesto il render.
+    if (
+      mounted.get(id) !== mountedView ||
+      mountedView.container !== container ||
+      mountedView.epoch !== epoch
+    ) {
+      return;
+    }
     draw(id, mountedView, tree);
   });
 }
@@ -447,8 +553,15 @@ async function renderDeclaredView(id: string): Promise<void> {
 /// Disegna un albero nel contenitore della sua istanza e chiude il giro
 /// azione→`ViewUpdate`: un click torna al provider via `view_action` con le sue
 /// due metà, e la risposta si interpreta qui.
-function draw(id: string, mounted: Mounted, tree: UiNode): void {
-  mountTree(mounted.container, tree, async (action: ActionRef, fields: FieldValue[]) => {
+function draw(id: string, mountedView: Mounted, tree: UiNode): void {
+  mountTree(mountedView.container, tree, async (action: ActionRef, fields: FieldValue[]) => {
+    const actionContainer = mountedView.container;
+    const actionEpoch = mountedView.epoch;
+    const isAuthoritative = (): boolean =>
+      mounted.get(id) === mountedView &&
+      mountedView.container === actionContainer &&
+      mountedView.epoch === actionEpoch;
+
     // **Il buffer esce prima.** Un'azione di view può finire in una scrittura
     // del vault — la cronologia che ripristina una versione, il cestino che
     // ripristina una nota — e la riscrittura del kernel finirebbe altrimenti
@@ -461,6 +574,7 @@ function draw(id: string, mounted: Mounted, tree: UiNode): void {
     // `write_document` (§18.1), che toglie la corsa invece di ordinarla. Questa
     // toglie l'unico caso in cui la corsa la perdeva sempre lo stesso.
     await flushPendingSave();
+    if (!isAuthoritative()) return;
     // **Qui non c'è un `try`, ed è deliberato.** Un'azione che va storta la dice
     // la `Port` di `ui/node.ts` — l'unica strada che un'azione ha per uscire da
     // un albero montato — e scriverne uno anche qui vorrebbe dire due frasi per
@@ -468,25 +582,28 @@ function draw(id: string, mounted: Mounted, tree: UiNode): void {
     // difetto misurato nominava questa riga: era il testimone, non l'autore.
     const update = await api.viewAction(
       // La view, non il pannello: vedi la nota su `renderDeclaredView`.
-      mounted.view,
-      mounted.instance,
-      mounted.params,
+      mountedView.view,
+      mountedView.instance,
+      mountedView.params,
       action.action,
       action.payload,
       fields,
     );
+    if (!isAuthoritative()) return;
     if (update.kind === "replace") {
-      draw(id, mounted, update.root);
+      draw(id, mountedView, update.root);
       return;
     }
     if (update.kind === "patch") {
       // Una chiave che non c'è più non è un errore: è una view cambiata sotto,
       // e la si ridisegna intera invece di lasciarla stantia.
-      if (!patchTree(mounted.container, update.key, update.node)) {
+      if (!patchTree(actionContainer, update.key, update.node)) {
+        if (!isAuthoritative()) return;
         await renderDeclaredView(id);
       }
       return;
     }
+    if (!isAuthoritative()) return;
     await applyIntent(update);
   });
 }
@@ -509,9 +626,6 @@ function buildInspector(): void {
   viewsRightEl.querySelector(".inspector-tabs")?.remove();
   if (panels.length === 0) return;
 
-  // Il tablist: un bottone per view, con ruolo `tab`. L'aria-selected segue
-  // quale è attivo, e le frecce lo spostano — la navigazione da tastiera
-  // che un tablist ARIA richiede.
   const tablist = document.createElement("div");
   tablist.className = "inspector-tabs";
   tablist.setAttribute("role", "tablist");
@@ -521,20 +635,31 @@ function buildInspector(): void {
   // o la prima in assoluto. La si scopre dopo aver costruito i tab, perché
   // la persistenza è async e il default è sincrono.
   let active = 0;
+  const tabs: HTMLButtonElement[] = [];
   for (let i = 0; i < panels.length; i++) {
     const panel = panels[i]!;
     const viewId = panel.dataset.viewId ?? `view-${i}`;
     const title = panel.querySelector<HTMLElement>(".panel-title");
     const name = title?.textContent ?? viewId;
     const icon = title?.dataset.icon ?? "outline";
+    const panelId = panel.id || stableIdentifier("inspector-panel", viewId);
+    const tabId = stableIdentifier("inspector-tab", viewId);
+
+    // Il pannello è il contenuto della tab, non solo un contenitore visivo:
+    // il ruolo, l'id e il legame col titolo devono vivere sullo stesso nodo.
+    panel.id = panelId;
+    panel.setAttribute("role", "tabpanel");
+    panel.setAttribute("aria-labelledby", tabId);
 
     const tab = document.createElement("button");
     tab.type = "button";
     tab.className = "inspector-tab";
+    tab.id = tabId;
     tab.setAttribute("role", "tab");
     tab.dataset.viewId = viewId;
+    tab.tabIndex = -1;
     tab.setAttribute("aria-selected", "false");
-    tab.setAttribute("aria-controls", panel.id || viewId);
+    tab.setAttribute("aria-controls", panelId);
     setTooltip(tab, name);
     // L'icona: se la view ne dichiara una la si usa, altrimenti il fallback.
     const svg = iconEl(icon) ?? iconEl("outline");
@@ -543,59 +668,64 @@ function buildInspector(): void {
     // per tenere l'inspector compatto come una barra laterale deve essere.
     tab.setAttribute("aria-label", name);
 
-    tab.addEventListener("click", () => activateTab(i));
-    // Frecce sinistra/destra: navigazione del tablist, come ARIA chiede.
+    tab.addEventListener("click", () => activateTab(i, false));
     tab.addEventListener("keydown", (e) => {
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        const next = (i + 1) % panels.length;
-        activateTab(next);
-        (tablist.children[next] as HTMLElement)?.focus();
-      } else if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        const previous = (i - 1 + panels.length) % panels.length;
-        activateTab(previous);
-        (tablist.children[previous] as HTMLElement)?.focus();
-      }
+      const next = moveInspectorTab(i, e.key, tabs.length);
+      if (next === null) return;
+      e.preventDefault();
+      activateTab(next, true);
     });
 
+    tabs.push(tab);
     tablist.append(tab);
   }
 
-  // Mostra solo il pannello attivo, nasconde gli altri. `aria-selected` e
-  // `hidden` seguono la stessa scelta, ed è ciò che li tiene coerenti.
-  function activateTab(index: number): void {
-    active = index;
+  // Mostra solo il pannello attivo, nasconde gli altri. `aria-selected`,
+  // `tabIndex` e `hidden` seguono la stessa scelta, ed è ciò che li tiene
+  // coerenti per mouse, tastiera e lettore di schermo.
+  function activateTab(index: number, focus: boolean): void {
+    if (panels.length === 0) return;
+    active = Math.min(Math.max(index, 0), panels.length - 1);
     for (let i = 0; i < panels.length; i++) {
       const panel = panels[i]!;
-      const tab = tablist.children[i] as HTMLElement;
-      const on = i === index;
-      panel.hidden = !on;
-      tab?.setAttribute("aria-selected", String(on));
+      const tab = tabs[i]!;
+      const selected = i === active;
+      panel.hidden = !selected;
+      tab.tabIndex = selected ? 0 : -1;
+      tab.setAttribute("aria-selected", String(selected));
     }
-    const viewId = panels[index]?.dataset.viewId;
+    if (focus) tabs[active]?.focus();
+    const viewId = panels[active]?.dataset.viewId;
     if (viewId) void api.setViewState("inspector.tab", viewId);
   }
 
   // Il tablist va in cima, prima dei pannelli.
   viewsRightEl.prepend(tablist);
 
-  // Ripristina la scelta persistita, o il default. La persistenza è async
-  // — arriva dal backend — e il default è la prima `open_by_default` o la
-  // prima in assoluto: la si sceglie ora, e se la persistenza arriva dopo
-  // la si applica sovrascrivendo.
   // «Quella che nasce aperta» si legge dal contenuto che non è nascosto: era
   // una classe `collapsed` sul pannello, ed era la stessa cosa scritta due
   // volte (§31.4).
   const defaultIndex = panels.findIndex(
     (p) => !p.querySelector<HTMLElement>(":scope > .declared-view")?.hidden,
   );
-  activateTab(defaultIndex >= 0 ? defaultIndex : 0);
+  activateTab(defaultIndex >= 0 ? defaultIndex : 0, false);
+
+  // Ripristina la scelta persistita senza rubare il fuoco a chi ha già
+  // iniziato a usare l'inspector.
   void api.viewState<string>("inspector.tab").then((saved) => {
     if (!saved) return;
     const idx = panels.findIndex((p) => p.dataset.viewId === saved);
-    if (idx >= 0 && idx !== active) activateTab(idx);
+    if (idx >= 0 && idx !== active) activateTab(idx, false);
   });
+}
+
+function moveInspectorTab(current: number, key: string, count: number): number | null {
+  if (count < 1) return null;
+  if (key === "ArrowLeft") return (current - 1 + count) % count;
+  if (key === "ArrowRight") return (current + 1) % count;
+  if (key === "Home") return 0;
+  if (key === "End") return count - 1;
+  return null;
 }
 
 /// Attacca l'invito a ridisegnare che arriva da un provider (§2.5).
@@ -605,10 +735,21 @@ function buildInspector(): void {
 /// saperlo è chi disegna. La finestra è un microtask — cioè "quando questo giro
 /// di eventi è finito" — che è la grana giusta: un job che chiude e un evento
 /// del vault che arrivano insieme non producono due giri di query.
-export function mountViewInvalidation(): void {
+export function mountViewInvalidation(parent?: Lifetime): Teardown {
+  invalidationTeardown?.();
+  const lifetime = openLifetime();
+  const teardown = () => lifetime.close();
+  invalidationTeardown = teardown;
+  if (parent?.closed) {
+    lifetime.close();
+    return teardown;
+  }
+  parent?.add(teardown);
+
   const staleViews = new Set<string>();
   let scheduled = false;
-  onEvent("view_invalidated", (event) => {
+  lifetime.add(() => staleViews.clear());
+  const stop = onEvent("view_invalidated", (event) => {
     // `instance` assente = tutte le istanze di quella view. Con una sola
     // istanza per view le due cose coincidono, e la distinzione conta il giorno
     // che le istanze saranno N: chi ne ha invecchiata una non deve pagare il
@@ -624,9 +765,17 @@ export function mountViewInvalidation(): void {
     scheduled = true;
     queueMicrotask(() => {
       scheduled = false;
+      if (lifetime.closed) {
+        staleViews.clear();
+        return;
+      }
       const from = [...staleViews];
       staleViews.clear();
       for (const id of from) void refreshPanel(id);
     });
   });
+  if (typeof stop === "function") lifetime.add(stop);
+  return teardown;
 }
+
+let invalidationTeardown: Teardown | null = null;

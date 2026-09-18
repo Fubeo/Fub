@@ -10,10 +10,17 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BundleInfo,
+  InstalledPluginInfo,
   CommandOutcome,
   CommandSpec,
   DocumentSource,
   FieldValue,
+  GridApplyRequest,
+  GridCommit,
+  GridSession,
+  GridSurfaceSpec,
+  GridWindow,
+  GridWindowRequest,
   IndexQuery,
   IndexResult,
   InvokeMode,
@@ -21,6 +28,9 @@ import type {
   Locale,
   PluginError,
   SettingValue,
+  ThemeInfo,
+  ThemeLight,
+  ThemePayload,
   KnownVault,
   UiNode,
   VaultInfo,
@@ -51,6 +61,17 @@ export const api = {
   // regola per cui è opaca — due implementazioni della stessa impronta sono due
   // verità, e la seconda mente in silenzio.
   readDocument: (id: string) => invoke<DocumentSource>("read_document", { id }),
+  listGridSurfaces: () => invoke<GridSurfaceSpec[]>("list_grid_surfaces"),
+  openGrid: (surface: string, source: string, revision: string) =>
+    invoke<GridSession>("open_grid", { surface, source, revision }),
+  gridWindow: (surface: string, instance: string, request: GridWindowRequest) =>
+    invoke<GridWindow>("grid_window", { surface, instance, request }),
+  applyGrid: (surface: string, instance: string, request: GridApplyRequest) =>
+    invoke<GridCommit>("apply_grid", { surface, instance, request }),
+  reloadGrid: (surface: string, instance: string, source: string, revision: string) =>
+    invoke<GridSession>("reload_grid", { surface, instance, source, revision }),
+  closeGrid: (surface: string, instance: string) =>
+    invoke<void>("close_grid", { surface, instance }),
   // `base` dice **da cosa si parte**, e non ha un default (§23.11, decisione
   // 0092): `descends_from` = «scrivi solo se il file è ancora quello», e un
   // `PluginError` di specie `conflict` vuol dire che non lo era e che **non è
@@ -180,11 +201,34 @@ export const api = {
   // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
   // elenca chi è dichiarato nel kernel — un componente spento non lo è.
   listBundles: () => invoke<BundleInfo[]>("list_bundles"),
+  // Elenca soltanto i temi installati i cui file dichiarati sono leggibili.
+  listThemes: () => invoke<ThemeInfo[]>("list_themes"),
+  // La shell nomina id e luce tipizzati; il backend risolve il payload dal
+  // proprio inventario, quindi nessun path attraversa il confine.
+  readTheme: (id: string, light: ThemeLight) =>
+    invoke<ThemePayload>("read_theme", { id, light }),
   // Ciò che torna sono gli errori dello **spegnimento**, interi: la specie e
   // non solo la frase (decisione 0041), che è l'unica cosa su cui questa shell
   // può ramificare.
   setPluginEnabled: (id: string, enabled: boolean) =>
     invoke<PluginError[]>("set_plugin_enabled", { id, enabled }),
+  // L'inventario installato è macchina, quindi resta leggibile anche senza un
+  // guest montato. `vault` serve soltanto a riferire lo stato runtime.
+  listInstalledPlugins: (vault?: string) =>
+    invoke<InstalledPluginInfo[]>("list_installed_plugins", { vault: vault ?? null }),
+  installPlugin: (path: string) =>
+    invoke<InstalledPluginInfo>("install_plugin", { path }),
+  // Le mutazioni nominano l'installazione u64, non l'id del manifest: due
+  // sorgenti che dichiarano lo stesso id non possono cambiare l'una l'altra.
+  setInstalledPluginEnabled: (installation: string, enabled: boolean) =>
+    invoke<PluginError[]>("set_installed_plugin_enabled", { installation, enabled }),
+  setInstalledPluginConsent: (
+    installation: string,
+    consent: InstalledPluginInfo["consent"],
+  ) =>
+    invoke<PluginError[]>("set_installed_plugin_consent", { installation, consent }),
+  removeInstalledPlugin: (installation: string) =>
+    invoke<PluginError[]>("remove_installed_plugin", { installation }),
   // I vault che questa macchina conosce, fra un avvio e l'altro: un elenco di
   // vault non sta in nessun vault, quindi vive nel livello macchina.
   knownVaults: () => invoke<KnownVault[]>("known_vaults"),

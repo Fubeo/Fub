@@ -67,7 +67,20 @@ export type Gate =
   | "syntax_rule"
   | "custom_render"
   | "job"
+  | "index_query"
 ;
+
+export type GridFormulaError =
+  | "parse"
+  | "ref"
+  | "name"
+  | "value"
+  | "div_zero"
+  | "num"
+  | "cycle"
+;
+
+export type GridHorizontalAlign = "start" | "center" | "end";
 
 export type HealthCheck =
   | "broken_links"
@@ -113,6 +126,8 @@ export type TextTolerance = "exact" | "typos";
 export type ThemeEngine = "theme-1";
 
 export type ThemeLight = "dark" | "light";
+
+export type ThemeMotion = "opacity" | "transform";
 
 export type ViewSurface =
   | "left_sidebar"

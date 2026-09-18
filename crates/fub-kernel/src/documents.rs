@@ -29,6 +29,7 @@ use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::custom::SyntaxForm;
+use fub_abi::edit::Revision;
 use fub_abi::format::{
     DocumentFormat, DocumentSource, FormatCapabilities, ParseContext, SourceKind,
 };
@@ -38,7 +39,7 @@ use crate::error::{KernelError, Result};
 use crate::registry::FormatRegistry;
 use crate::renderer::RendererRegistry;
 use crate::syntax::SyntaxRegistry;
-use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
+use crate::vault::{data_root, PreparedVaultRestore, TrashEntry, Vault, FUB_DIR};
 
 /// Radice dello storage persistente dei plugin, dentro il vault: ogni plugin
 /// ha `<vault>/.fub/plugins/<id>/` per i dati autorevoli e non vede nient'altro;
@@ -48,6 +49,141 @@ use crate::vault::{data_root, TrashEntry, Vault, FUB_DIR};
 /// dati derivati da un vault appartengono a quel vault: copiarlo, spostarlo o
 /// metterlo in sync deve portarsi dietro anche loro.
 const PLUGIN_DATA_DIR: &str = "plugins";
+
+fn plugin_data_roots(vault: &Vault) -> Vec<Utf8PathBuf> {
+    let mut roots = Vec::new();
+    for plugins in [
+        vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
+        data_root(vault.root()).join(PLUGIN_DATA_DIR),
+    ] {
+        roots.extend(
+            vault
+                .storage()
+                .list(&plugins)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|entry| entry.stat.is_dir())
+                .map(|entry| entry.path),
+        );
+    }
+    roots
+}
+
+/// Parser risolto senza eseguire codice esterno. Provider, descriptor e regole
+/// sono una fotografia coerente che può attraversare il confine del lock.
+pub(crate) struct PreparedParse {
+    id: DocId,
+    descriptor: fub_abi::format::FormatDescriptor,
+    provider: Arc<dyn fub_abi::FormatProvider>,
+    syntax: SyntaxRegistry,
+}
+
+impl PreparedParse {
+    pub(crate) fn invoke(&self, source: DocumentSource) -> Result<DocumentModel> {
+        let ctx = ParseContext::obsidian(self.id.as_str());
+        let mut model = crate::safety::caught(
+            &self.descriptor.id,
+            crate::safety::Gate::FormatParse,
+            self.id.as_str(),
+            fub_abi::error::FormatError::Parse,
+            || self.provider.parse(&source, &ctx),
+        )?;
+        ensure_model_identity(&self.id, &model.id)?;
+        self.syntax.apply(&mut model, &ctx, &self.descriptor.id);
+        Ok(model)
+    }
+
+    /// Rende un modello con la stessa fotografia di provider usata dal parse.
+    /// Il chiamante può così tenere l'intera proiezione oltre il confine di un
+    /// lock senza risolvere di nuovo un provider nel frattempo.
+    pub(crate) fn render(
+        &self,
+        model: &DocumentModel,
+        renderers: &RendererRegistry,
+        options: &fub_abi::format::RenderOptions,
+    ) -> Result<crate::renderer::RenderedDocument> {
+        Ok(crate::renderer::compose(
+            model,
+            &self.descriptor.id,
+            self.provider.as_ref(),
+            renderers,
+            options,
+        )?)
+    }
+}
+/// Handle owned per le sole letture di una preparazione staccata.
+///
+/// Clona gli handle condivisi e la fotografia delle sintassi, non lo stato
+/// mutabile del [`Workspace`](crate::Workspace).
+pub(crate) struct DocumentStoreHandle {
+    vault: Vault,
+    registry: Arc<FormatRegistry>,
+    syntax: SyntaxRegistry,
+}
+
+impl DocumentStoreHandle {
+    pub(crate) fn list_trash(&self) -> Result<Vec<TrashEntry>> {
+        self.vault.list_trash()
+    }
+
+    pub(crate) fn read(&self, id: &DocId) -> Result<String> {
+        self.vault.read(id)
+    }
+
+    pub(crate) fn read_bytes(&self, id: &DocId) -> Result<Vec<u8>> {
+        self.vault.read_bytes(id)
+    }
+
+    pub(crate) fn prepare_restore(
+        &self,
+        entry: TrashEntry,
+        target: DocId,
+        revision: Revision,
+    ) -> Result<PreparedVaultRestore> {
+        self.vault.prepare_restore(entry, target, revision)
+    }
+
+    /// Censisce e migra gli spazi per-documento soltanto quando il token
+    /// detached viene invocato.
+    pub(crate) fn migrate_data(&self, from: &DocId, to: &DocId) -> Vec<String> {
+        let roots = plugin_data_roots(&self.vault);
+        crate::docdata::migrate_data(self.vault.storage().as_ref(), &roots, from, to)
+    }
+    /// Osserva una revisione soltanto se metadati e identità del file restano
+    /// uguali ai due lati della lettura. Il chiamante può così riconvalidare un
+    /// feed senza tenere in prestito il workspace durante l'I/O.
+    pub(crate) fn observe_revision_stable(
+        &self,
+        id: &DocId,
+    ) -> Result<Option<(Revision, Option<crate::storage::FileIdentity>)>> {
+        let Some(before) = self.vault.stat(id) else {
+            return Ok(None);
+        };
+        let identity_before = self.vault.file_identity(id);
+        let revision = Revision::of_bytes(&self.vault.read_bytes(id)?);
+        let Some(after) = self.vault.stat(id) else {
+            return Ok(None);
+        };
+        let identity_after = self.vault.file_identity(id);
+        Ok((before == after && identity_before == identity_after)
+            .then_some((revision, identity_after)))
+    }
+
+    pub(crate) fn prepare_parse_with_kind(
+        &self,
+        id: &DocId,
+    ) -> Result<Option<(fub_abi::format::SourceKind, PreparedParse)>> {
+        let ext = extension_of(id).unwrap_or_default();
+        let Some(descriptor) = self.registry.descriptor_for_ext(&ext) else {
+            return Ok(None);
+        };
+        if self.registry.provider_arc_for_ext(&ext).is_none() {
+            return Ok(None);
+        }
+        let source = descriptor.source;
+        prepare_parse(&self.registry, &self.syntax, id).map(|parser| Some((source, parser)))
+    }
+}
 
 pub struct DocumentStore {
     /// I byte sul disco. `pub(crate)` e non dietro accessori perché le
@@ -92,6 +228,14 @@ impl DocumentStore {
             renderers: RendererRegistry::new(),
         })
     }
+    /// Fotografia owned delle sole dipendenze necessarie alle letture staccate.
+    pub(crate) fn detached(&self) -> DocumentStoreHandle {
+        DocumentStoreHandle {
+            vault: self.vault.clone(),
+            registry: Arc::clone(&self.registry),
+            syntax: self.syntax.clone(),
+        }
+    }
 
     /// La radice del vault.
     pub fn root(&self) -> &Utf8Path {
@@ -111,6 +255,12 @@ impl DocumentStore {
     /// C'è un provider per l'estensione di questo id?
     pub(crate) fn has_provider_for(&self, id: &DocId) -> bool {
         extension_of(id).is_some_and(|ext| self.registry.provider_for_ext(&ext).is_some())
+    }
+
+    /// Risolve il parser senza eseguire callback. Il descriptor viene dalla
+    /// cache del registro, le regole sono una fotografia condivisa.
+    pub(crate) fn prepare_parse(&self, id: &DocId) -> Result<PreparedParse> {
+        prepare_parse(&self.registry, &self.syntax, id)
     }
 
     // --- cestino -----------------------------------------------------------
@@ -167,7 +317,12 @@ impl DocumentStore {
     /// di lì. Lo stesso file aveva due destini a seconda di chi lo leggeva
     /// (§21.8).
     pub(crate) fn source_from_disk(&self, id: &DocId) -> Result<DocumentSource> {
-        Ok(match self.provider_for(id)?.descriptor().source {
+        let ext = extension_of(id).unwrap_or_default();
+        let descriptor = self
+            .registry
+            .descriptor_for_ext(&ext)
+            .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+        Ok(match descriptor.source {
             SourceKind::Text => DocumentSource::Text(self.vault.read(id)?),
             SourceKind::Bytes => DocumentSource::Bytes(self.vault.read_bytes(id)?),
         })
@@ -179,26 +334,7 @@ impl DocumentStore {
     }
 
     pub(crate) fn parse_source(&self, id: &DocId, source: DocumentSource) -> Result<DocumentModel> {
-        let provider = self.provider_for(id)?;
-        let ctx = ParseContext::obsidian(id.as_str());
-        // Il parse è dentro ogni scrittura, quindi sotto il prestito esclusivo
-        // di chi scrive: un provider di formato che pania su un documento
-        // storto si porterebbe via il vault, e non il documento (§9.3). Con la
-        // rete il panico diventa un `FormatError` come un altro, e la scrittura
-        // fallisce dicendo di chi è la colpa.
-        let mut model = crate::safety::caught(
-            &provider.descriptor().id,
-            crate::safety::Gate::FormatParse,
-            id.as_str(),
-            fub_abi::error::FormatError::Parse,
-            || provider.parse(&source, &ctx),
-        )?;
-        // L'innesto del §3.1: le regole sintattiche registrate girano DOPO il
-        // provider, sul modello. È ciò che le rende innestabili su un provider
-        // che non le conosce — vedi `syntax::apply_rules`.
-        self.syntax
-            .apply(&mut model, &ctx, &provider.descriptor().id);
-        Ok(model)
+        self.prepare_parse(id)?.invoke(source)
     }
 
     pub(crate) fn provider_for(&self, id: &DocId) -> Result<&dyn fub_abi::FormatProvider> {
@@ -219,12 +355,15 @@ impl DocumentStore {
     /// L'ordine della sovrapposizione dice chi vince su una chiave condivisa,
     /// ed è il provider: se sa fare `fub:math` per conto suo, il suo dettaglio
     /// è più informativo del semplice «acceso» che una regola può dichiarare.
+    /// Descrittore e capacità native sono la fotografia di registrazione: qui
+    /// non si richiama codice del provider.
     pub fn format_of(&self, id: &DocId) -> Option<DocumentFormat> {
-        let provider = self.provider_for(id).ok()?;
-        let descriptor = provider.descriptor();
+        let ext = extension_of(id).unwrap_or_default();
+        let descriptor = self.registry.descriptor_for_ext(&ext)?.clone();
+        let native = self.registry.capabilities_for_ext(&ext)?;
         let grafted = self.syntax.grafted_syntax(&descriptor.id);
         let capabilities = FormatCapabilities {
-            syntax: grafted.overlay(&provider.capabilities().syntax),
+            syntax: grafted.overlay(&native.syntax),
         };
         Some(DocumentFormat {
             descriptor,
@@ -266,17 +405,22 @@ impl DocumentStore {
     /// decorata e il parse non l'avrebbe letta. Nessun provider di questo repo
     /// la usa, il che è precisamente il motivo per cui la divergenza poteva
     /// restare lì.
+    /// Anche questa via legge soltanto metadati congelati e lo snapshot delle
+    /// forme: non entra nel provider.
     pub fn syntax_forms(&self, id: &DocId) -> Vec<SyntaxForm> {
-        let Ok(provider) = self.provider_for(id) else {
+        let ext = extension_of(id).unwrap_or_default();
+        let Some(descriptor) = self.registry.descriptor_for_ext(&ext) else {
+            return Vec::new();
+        };
+        let Some(capabilities) = self.registry.capabilities_for_ext(&ext) else {
             return Vec::new();
         };
         let snapshot = self.syntax.snapshot();
-        let grafted = snapshot.forms(&provider.descriptor().id).to_vec();
+        let grafted = snapshot.forms(&descriptor.id).to_vec();
         // La domanda «è già innestato?» si fa una volta per nome che il
         // provider dichiara: su un insieme, non rescandendo l'elenco.
         let nested: HashSet<&str> = grafted.iter().map(|g| g.name.as_str()).collect();
-        let mut out: Vec<SyntaxForm> = provider
-            .capabilities()
+        let mut out: Vec<SyntaxForm> = capabilities
             .syntax
             .active()
             .filter(|(name, _)| !nested.contains(*name))
@@ -315,27 +459,41 @@ impl DocumentStore {
     /// non può accorgersi di niente, ed è esattamente chi ha più bisogno che
     /// qualcun altro se ne accorga per lui.
     pub(crate) fn plugin_data_roots(&self) -> Vec<Utf8PathBuf> {
-        let mut roots = Vec::new();
-        for plugins in [
-            self.vault.root().join(FUB_DIR).join(PLUGIN_DATA_DIR),
-            data_root(self.vault.root()).join(PLUGIN_DATA_DIR),
-        ] {
-            // In ordine — lo dà `VaultStorage::list` — perché gli errori che ne
-            // escono finiscono in un messaggio, e un messaggio che cambia ordine a
-            // ogni giro non si confronta. Le due radici restano entrambe leggibili
-            // durante il passaggio additivo del layout.
-            roots.extend(
-                self.vault
-                    .storage()
-                    .list(&plugins)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .filter(|and| and.stat.is_dir())
-                    .map(|and| and.path),
-            );
-        }
-        roots
+        plugin_data_roots(&self.vault)
     }
+}
+
+fn prepare_parse(
+    registry: &FormatRegistry,
+    syntax: &SyntaxRegistry,
+    id: &DocId,
+) -> Result<PreparedParse> {
+    let ext = extension_of(id).unwrap_or_default();
+    let provider = registry
+        .provider_arc_for_ext(&ext)
+        .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+    let descriptor = registry
+        .descriptor_for_ext(&ext)
+        .cloned()
+        .ok_or_else(|| KernelError::NoProvider(ext.clone()))?;
+    Ok(PreparedParse {
+        id: id.clone(),
+        descriptor,
+        provider,
+        syntax: syntax.clone(),
+    })
+}
+
+fn ensure_model_identity(requested: &DocId, returned: &DocId) -> Result<()> {
+    if requested == returned {
+        return Ok(());
+    }
+
+    Err(KernelError::Format(fub_abi::error::FormatError::Parse(
+        format!(
+            "format provider returned document id {returned} while parsing requested document {requested}"
+        ),
+    )))
 }
 
 /// L'estensione di un `DocId`, in minuscolo e senza il punto.
@@ -343,4 +501,32 @@ pub(crate) fn extension_of(id: &DocId) -> Option<String> {
     id.as_str()
         .rsplit_once('.')
         .map(|(_, ext)| ext.to_lowercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_rejects_a_model_for_a_different_document() {
+        let requested = DocId::new("notes/requested.md");
+        let returned = DocId::new("notes/other.md");
+
+        let error = ensure_model_identity(&requested, &returned)
+            .expect_err("a provider must not replace the requested document identity");
+
+        match error {
+            KernelError::Format(fub_abi::error::FormatError::Parse(message)) => {
+                assert!(message.contains(requested.as_str()));
+                assert!(message.contains(returned.as_str()));
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+    }
+
+    #[test]
+    fn parse_accepts_the_requested_document_identity() {
+        let requested = DocId::new("notes/requested.md");
+        ensure_model_identity(&requested, &requested).unwrap();
+    }
 }

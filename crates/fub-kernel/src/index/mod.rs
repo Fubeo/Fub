@@ -30,6 +30,7 @@ pub(crate) mod core;
 pub mod plan;
 pub(crate) mod routing;
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
@@ -40,6 +41,110 @@ use fub_abi::PluginError;
 pub(crate) use core::CoreIndex;
 pub use routing::RouteConflict;
 pub(crate) use routing::{RouteTable, Target};
+
+pub(crate) type SharedIndexProvider = Arc<crate::poison::SharedShelter<Box<dyn IndexProvider>>>;
+
+/// Lascia andare una fotografia di handle senza alcuna guardia del provider.
+///
+/// L'ultimo `Arc` può eseguire il distruttore di un provider nativo. Anche
+/// quello è codice esterno: deve cadere dentro la rete contro i panici, dopo
+/// che l'eventuale guardia `read`/`write` della callback è già uscita.
+pub(crate) fn release_handles(
+    providers: Vec<(String, SharedIndexProvider)>,
+) -> Result<(), PluginError> {
+    crate::safety::external(
+        "rilascio degli handle staccati degli indici",
+        |message| PluginError::Internal(message.into()),
+        || {
+            drop(providers);
+            Ok(())
+        },
+    )
+}
+
+thread_local! {
+    static ACTIVE_INDEXES: RefCell<BTreeSet<usize>> = const { RefCell::new(BTreeSet::new()) };
+}
+
+/// La stessa istanza mutabile non può rientrare nel proprio lock. Il timbro è
+/// locale al thread: altre istanze e chiamate concorrenti conservano il normale
+/// protocollo dell'handle. Il Drop ripristina il frame anche dopo un panic.
+pub(crate) struct IndexCall(usize, std::marker::PhantomData<std::rc::Rc<()>>);
+
+impl IndexCall {
+    pub(crate) fn enter(who: &str, provider: &SharedIndexProvider) -> Result<Self, PluginError> {
+        let identity = Arc::as_ptr(provider) as usize;
+        if ACTIVE_INDEXES.with(|active| active.borrow_mut().insert(identity)) {
+            Ok(Self(identity, std::marker::PhantomData))
+        } else {
+            Err(PluginError::Conflict(
+                format!("l'indice `{who}` è già in chiamata su questo thread").into(),
+            ))
+        }
+    }
+}
+
+impl Drop for IndexCall {
+    fn drop(&mut self) {
+        ACTIVE_INDEXES.with(|active| active.borrow_mut().remove(&self.0));
+    }
+}
+
+/// Attraversa la porta `query` di un indice con la stessa rete usata dagli
+/// altri callback dei provider. La guardia dell'handle appartiene al provider,
+/// non al workspace: se il callback panica, lo srotolamento la rilascia dentro
+/// [`safety::calling`](crate::safety::calling) e al chiamante torna un errore.
+pub(crate) fn query_handle(
+    who: &str,
+    provider: &SharedIndexProvider,
+    query: IndexQuery,
+) -> Result<IndexResult, PluginError> {
+    let _call = IndexCall::enter(who, provider)?;
+    let detail = format!("{:?}", query.kind());
+    let provider = provider.read();
+    crate::safety::calling(who, Gate::IndexQuery, &detail, || provider.query(query))
+}
+
+/// Una fotografia immutabile del routing e degli handle degli indici esterni.
+///
+/// Prepararla richiede soltanto una lettura breve del [`Workspace`](crate::Workspace);
+/// eseguirla non richiede più il suo prestito. Il core viene fornito da chi
+/// monta il workspace tramite [`plan::QueryCore`], così ogni accesso allo stato
+/// locale può prendere una nuova guardia breve senza attraversare il confine di
+/// un provider.
+pub struct PreparedIndexQuery {
+    routes: RouteTable,
+    providers: Vec<(String, SharedIndexProvider)>,
+    routing_generation: u64,
+}
+
+/// Risposta staccata che non conserva più alcun handle del provider.
+pub struct CompletedIndexQuery {
+    pub(crate) result: IndexResult,
+    pub(crate) routing_generation: u64,
+}
+
+impl PreparedIndexQuery {
+    /// Esegue il piano congelato. Le callback degli indici usano soltanto gli
+    /// handle contenuti nella fotografia; poi li rilascia nella rete esterna,
+    /// prima che il chiamante rientri nel workspace.
+    pub fn invoke(
+        mut self,
+        core: &dyn plan::QueryCore,
+        query: IndexQuery,
+    ) -> Result<CompletedIndexQuery, PluginError> {
+        let outcome = plan::run_detached(&self, core, query);
+        let providers = std::mem::take(&mut self.providers);
+        let released = release_handles(providers);
+        match (outcome, released) {
+            (_, Err(error)) | (Err(error), Ok(())) => Err(error),
+            (Ok(result), Ok(())) => Ok(CompletedIndexQuery {
+                result,
+                routing_generation: self.routing_generation,
+            }),
+        }
+    }
+}
 
 use crate::organization::OrganizationStore;
 use crate::providers::ProviderTable;
@@ -63,7 +168,7 @@ use crate::settings::SharedSettings;
 /// `ids` è ciò che va dichiarato perduto **se pania**, e i tre chiamanti lo
 /// passano diverso perché la domanda è diversa: chi alimenta perde ciò che gli
 /// è stato dato, chi riconcilia perde dei morti di cui non si conosce il nome
-/// (vedi [`Indexes::reconcile`]).
+/// (vedi [`reconcile_handles`]).
 fn feeding<'a>(
     who: &str,
     gate: Gate,
@@ -82,14 +187,129 @@ fn feeding<'a>(
     }
 }
 
+pub(crate) fn feed_handles(
+    providers: &[(String, SharedIndexProvider)],
+    models: &[DocumentModel],
+) -> Vec<IndexLoss> {
+    let mut lost = Vec::new();
+    for (id, provider) in providers {
+        let _call = match IndexCall::enter(id, provider) {
+            Ok(call) => call,
+            Err(error) => {
+                lost.extend(
+                    models
+                        .iter()
+                        .map(|model| IndexLoss::new(model.id.clone(), error.clone())),
+                );
+                continue;
+            }
+        };
+        let mut provider = provider.write();
+        lost.extend(feeding(
+            id,
+            Gate::IndexFeed,
+            models.iter().map(|model| &model.id),
+            || provider.on_documents_indexed(models),
+        ));
+    }
+    lost
+}
+
+pub(crate) fn forget_handles(
+    providers: &[(String, SharedIndexProvider)],
+    ids: &[DocId],
+) -> Vec<IndexLoss> {
+    let mut lost = Vec::new();
+    for (who, provider) in providers {
+        let _call = match IndexCall::enter(who, provider) {
+            Ok(call) => call,
+            Err(error) => {
+                lost.extend(
+                    ids.iter()
+                        .map(|id| IndexLoss::new(id.clone(), error.clone())),
+                );
+                continue;
+            }
+        };
+        let mut provider = provider.write();
+        lost.extend(feeding(who, Gate::IndexForget, ids.iter(), || {
+            provider.on_documents_removed(ids)
+        }));
+    }
+    lost
+}
+
+/// Interroga gli indici registrati usando soltanto handle staccati dal
+/// `Workspace`. Chi chiama può quindi rilasciare `Custody<Workspace>` prima di
+/// attraversare il confine del provider.
+pub(crate) fn up_to_date_handles(
+    providers: &[(String, SharedIndexProvider)],
+    entries: &[VaultEntry],
+) -> BTreeSet<DocId> {
+    let mut agreed: BTreeSet<DocId> = entries.iter().map(|entry| entry.id.clone()).collect();
+    for (id, index) in providers {
+        if agreed.is_empty() {
+            break;
+        }
+        let Ok(_call) = IndexCall::enter(id, index) else {
+            return BTreeSet::new();
+        };
+        let index = index.read();
+        let theirs =
+            crate::safety::calling(
+                id,
+                Gate::IndexUpToDate,
+                "",
+                || Ok(index.up_to_date(entries)),
+            )
+            .unwrap_or_default();
+        let theirs: BTreeSet<&DocId> = theirs.iter().collect();
+        agreed.retain(|doc| theirs.contains(doc));
+    }
+    agreed
+}
+
+/// Riconcilia gli indici registrati usando una fotografia dei loro handle. Il
+/// core resta al chiamante: è stato locale del `Workspace` e si finalizza sotto
+/// il suo lock solo dopo il ritorno delle callback esterne.
+pub(crate) fn reconcile_handles(
+    providers: &[(String, SharedIndexProvider)],
+    ids: &[DocId],
+) -> Vec<IndexLoss> {
+    let mut lost = Vec::new();
+    for (plugin, index) in providers {
+        let _call = match IndexCall::enter(plugin, index) {
+            Ok(call) => call,
+            Err(error) => {
+                lost.extend(
+                    ids.iter()
+                        .take(1)
+                        .map(|id| IndexLoss::new(id.clone(), error.clone())),
+                );
+                continue;
+            }
+        };
+        let mut index = index.write();
+        lost.extend(feeding(
+            plugin,
+            Gate::IndexReconcile,
+            ids.iter().take(1),
+            || index.reconcile(ids),
+        ));
+    }
+    lost
+}
+
 pub(crate) struct Indexes {
     /// L'indice del kernel: metadati, tag, grafo. È `Target::Core` nella
     /// tabella, ed è registrato **per primo** — che è ciò che gli dà la
     /// precedenza sulle foglie che sa valutare, non un privilegio nel codice.
     pub(crate) core: CoreIndex,
     /// Gli indici registrati, col proprio id (che è anche il loro spazio dati).
-    pub(crate) providers: ProviderTable<(String, Box<dyn IndexProvider>)>,
+    pub(crate) providers: ProviderTable<(String, SharedIndexProvider)>,
     pub(crate) routes: RouteTable,
+    /// Cambia ogni volta che una fotografia di routing diventa obsoleta.
+    routing_generation: u64,
 }
 
 impl Indexes {
@@ -108,32 +328,33 @@ impl Indexes {
             core,
             providers: ProviderTable::new(),
             routes,
+            routing_generation: 0,
         }
     }
 
-    /// Un indice in più, con ciò che ha dichiarato di servire.
-    pub(crate) fn declare(
+    /// Un indice in più, con le rotte già dichiarate fuori dal workspace.
+    pub(crate) fn declare_routes(
         &mut self,
         id: &str,
-        index: &dyn IndexProvider,
+        routes: &[fub_abi::traits::QueryRoute],
     ) -> Result<Target, RouteConflict> {
         let target = Target::Provider(self.providers.len());
-        self.routes
-            .declare(target, &index.routes())
-            .map_err(|mut c| {
-                c.challenger = id.to_string();
-                c
-            })?;
+        self.routes.declare(target, routes).map_err(|mut c| {
+            c.challenger = id.to_string();
+            c
+        })?;
+        self.routing_generation = self.routing_generation.wrapping_add(1);
         Ok(target)
     }
 
-    /// Come [`declare`](Indexes::declare), ma **sostituendo** chi rivendicava le
+    /// Come [`declare_routes`](Indexes::declare_routes), ma **sostituendo** chi rivendicava le
     /// stesse famiglie. È l'operazione che il dispatch per tentativi faceva
     /// senza dirlo (vinceva chi si era registrato prima, e nessuno lo sapeva):
     /// resta possibile, ma adesso chi la vuole la chiede per nome.
     pub(crate) fn declare_replacing(&mut self, index: &dyn IndexProvider) -> Target {
         let target = Target::Provider(self.providers.len());
         self.routes.replace(target, &index.routes());
+        self.routing_generation = self.routing_generation.wrapping_add(1);
         target
     }
 
@@ -143,7 +364,7 @@ impl Indexes {
     ///
     /// Le rotte seguono: quelle di chi se n'è andato spariscono, quelle di chi
     /// resta si spostano con lui ([`RouteTable::retarget`]).
-    pub(crate) fn remove(&mut self, plugin: &str) -> Vec<(String, Box<dyn IndexProvider>)> {
+    pub(crate) fn remove(&mut self, plugin: &str) -> Vec<(String, SharedIndexProvider)> {
         let doomed: Vec<usize> = self
             .providers
             .iter()
@@ -165,6 +386,7 @@ impl Indexes {
             )),
         };
         self.routes.retarget(&moved);
+        self.routing_generation = self.routing_generation.wrapping_add(1);
         let mut removed = Vec::with_capacity(doomed.len());
         let mut kept = Vec::new();
         for (at, entry) in self.providers.take().into_iter().enumerate() {
@@ -180,104 +402,57 @@ impl Indexes {
         removed
     }
 
-    /// Un lotto di documenti va all'indice del kernel e poi a tutti quelli
-    /// registrati, e ciò che nessuno ha preso **torna indietro** (§20.1).
-    ///
-    /// I registrati passano dalla rete contro i panici (§9.3): questo giro è
-    /// dentro **ogni scrittura**, cioè sotto il prestito esclusivo di chi ha
-    /// chiamato, e un indice che pania su un documento strano si porterebbe via
-    /// il vault invece che sé stesso. Un panico qui **è** una perdita, e adesso
-    /// si dice come si dice ogni altra: chi pania alimentando non ha preso
-    /// niente di ciò che gli era stato dato, quindi il lotto intero torna
-    /// indietro a suo nome. Prima si fermava e finiva su `stderr`, che è il
-    /// posto dove il §20.2 ha smesso di mandare le cose.
-    ///
-    /// L'indice del kernel **non** è in rete: se pania lui è un difetto del
-    /// kernel, e nasconderlo vorrebbe dire cercarlo poi in un vault che
-    /// risponde a metà.
-    pub(crate) fn on_documents_indexed(&mut self, models: &[DocumentModel]) -> Vec<IndexLoss> {
-        let mut lost = self.core.on_documents_indexed(models);
-        for (id, index) in self.providers.iter_mut() {
-            lost.extend(feeding(
-                id,
-                Gate::IndexFeed,
-                models.iter().map(|m| &m.id),
-                || index.on_documents_indexed(models),
-            ));
-        }
-        lost
-    }
-
-    pub(crate) fn on_documents_removed(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
-        let mut lost = self.core.on_documents_removed(ids);
-        for (plugin, index) in self.providers.iter_mut() {
-            lost.extend(feeding(plugin, Gate::IndexForget, ids.iter(), || {
-                index.on_documents_removed(ids)
-            }));
-        }
-        lost
-    }
-
-    /// **Cosa hanno già tutti**, di queste voci (§14.2): l'intersezione delle
-    /// risposte, non l'unione.
-    ///
-    /// L'intersezione perché un documento si salta solo se **nessuno** lo
-    /// aspetta: basta un indice che non ce l'ha, e il kernel deve comunque
-    /// leggerlo e parsarlo per darglielo — a quel punto tanto vale darlo a
-    /// tutti, che è ciò che rende il salto un tutto-o-niente per documento e
-    /// non una consegna a metà.
-    ///
-    /// Senza indici registrati l'intersezione è l'insieme intero, ed è la
-    /// risposta giusta e non un caso limite: se nessuno aspetta niente, non
-    /// c'è niente da rileggere per nessuno.
-    ///
-    /// Chi pania rispondendo non blocca l'apertura, e non fa nemmeno saltare
-    /// niente: si porta via solo la propria risposta, che senza di lui è vuota
-    /// — cioè «mandami tutto», che è il verso sicuro dello sbaglio.
-    pub(crate) fn up_to_date(&self, entries: &[VaultEntry]) -> BTreeSet<DocId> {
-        let mut agreed: BTreeSet<DocId> = entries.iter().map(|and| and.id.clone()).collect();
-        for (id, index) in self.providers.iter() {
-            if agreed.is_empty() {
-                break;
+    pub(crate) fn ensure_mutation_available(&self) -> crate::error::Result<()> {
+        for (who, provider) in self.providers.iter() {
+            let identity = Arc::as_ptr(provider) as usize;
+            if ACTIVE_INDEXES.with(|active| active.borrow().contains(&identity)) {
+                return Err(crate::error::KernelError::IndexReentry(who.clone()));
             }
-            let theirs = crate::safety::calling(id, Gate::IndexUpToDate, "", || {
-                Ok(index.up_to_date(entries))
-            })
-            .unwrap_or_default();
-            let theirs: BTreeSet<&DocId> = theirs.iter().collect();
-            agreed.retain(|id| theirs.contains(id));
         }
-        agreed
-    }
-
-    /// Chi non è riuscito ad allinearsi lo dice, e **nomina i morti che si
-    /// tiene**: gli id che tornano di qui non stanno in `ids` — sono ciò che
-    /// l'indice ha in più, cioè quello che avrebbe dovuto dimenticare.
-    ///
-    /// La rete contro i panici c'è come nell'alimentazione, ma ciò che torna
-    /// indietro è **diverso**: chi pania riconciliando non ha lasciato indietro
-    /// i documenti che gli sono stati dati (quelli ci sono), ha lasciato
-    /// indietro dei morti di cui nessuno conosce il nome — nemmeno il kernel,
-    /// che sa solo chi è vivo. La perdita si nomina quindi sul primo id del
-    /// lotto se c'è, e su nessuno se il vault è vuoto: dice *quale indice* e
-    /// *cosa è successo*, che è ciò su cui si può agire (riaprire il vault),
-    /// e non finge di sapere un elenco che non esiste.
-    pub(crate) fn reconcile(&mut self, ids: &[DocId]) -> Vec<IndexLoss> {
-        let mut lost = self.core.reconcile(ids);
-        for (plugin, index) in self.providers.iter_mut() {
-            lost.extend(feeding(
-                plugin,
-                Gate::IndexReconcile,
-                ids.iter().take(1),
-                || index.reconcile(ids),
-            ));
-        }
-        lost
+        Ok(())
     }
 
     /// Interroga: il **percorso unico** di dispatch (vedi [`plan`]).
     pub(crate) fn query(&self, query: IndexQuery) -> Result<IndexResult, PluginError> {
         plan::run(self, query)
+    }
+
+    /// Congela routing e handle prima che l'host lasci andare
+    /// `Custody<Workspace>`. Nessun provider viene interrogato durante questa
+    /// fase.
+    pub(crate) fn prepare_query(&self) -> PreparedIndexQuery {
+        PreparedIndexQuery {
+            routes: self.routes.clone(),
+            providers: self.feed_handles(),
+            routing_generation: self.routing_generation,
+        }
+    }
+
+    /// Una risposta preparata non si applica a una tabella di routing diversa:
+    /// l'handle resta vivo grazie all'`Arc`, ma non è più il proprietario della
+    /// domanda. Restituirne comunque la risposta renderebbe visibile stato di
+    /// un provider ritirato o sostituito.
+    pub(crate) fn ensure_query_is_current(
+        &self,
+        routing_generation: u64,
+    ) -> Result<(), PluginError> {
+        if routing_generation == self.routing_generation {
+            return Ok(());
+        }
+        Err(PluginError::Conflict(
+            "il routing degli indici è cambiato durante la query".into(),
+        ))
+    }
+
+    pub(crate) fn routing_generation(&self) -> u64 {
+        self.routing_generation
+    }
+
+    /// Le quattro query composte dal `Workspace` possono seguire la fast-path
+    /// locale soltanto finché la loro rotta appartiene davvero al core. Una
+    /// sostituzione esplicita le trasforma in callback esterne come ogni altra.
+    pub(crate) fn query_owner_is_external(&self, query: &IndexQuery) -> bool {
+        matches!(self.routes.owner(&query.kind()), Some(Target::Provider(_)))
     }
 
     /// Chi risponderebbe a questa domanda, e come. Non attraversa il contratto —
@@ -289,12 +464,25 @@ impl Indexes {
         plan::explain(self, query)
     }
 
-    /// L'indice a cui punta un bersaglio (il core non ha un id di plugin).
-    pub(crate) fn at(&self, target: Target) -> Option<&dyn IndexProvider> {
+    pub(crate) fn query_at(
+        &self,
+        target: Target,
+        query: IndexQuery,
+    ) -> Option<Result<IndexResult, PluginError>> {
         match target {
-            Target::Core => Some(&self.core),
-            Target::Provider(at) => self.providers.get(at).map(|(_, p)| p.as_ref()),
+            Target::Core => Some(self.core.query(query)),
+            Target::Provider(at) => self
+                .providers
+                .get(at)
+                .map(|(id, provider)| query_handle(id, provider, query)),
         }
+    }
+
+    pub(crate) fn feed_handles(&self) -> Vec<(String, SharedIndexProvider)> {
+        self.providers
+            .iter()
+            .map(|(id, provider)| (id.clone(), Arc::clone(provider)))
+            .collect()
     }
 
     /// Il nome con cui un bersaglio compare in un piano o in un errore.

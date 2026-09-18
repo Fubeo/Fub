@@ -26,6 +26,10 @@ use fub_abi::command::CommandOutcome;
 use fub_abi::edit::{EditReport, EditRequest, Revision, WriteBase};
 use fub_abi::event::Event;
 use fub_abi::format::{DocumentFormat, FormatCapabilities, FormatDescriptor};
+use fub_abi::grid::{
+    validate_grid_source, GridApplyRequest, GridCommit, GridProvider, GridSession, GridSurfaceSpec,
+    GridWindow, GridWindowRequest,
+};
 use fub_abi::locale::Locale;
 use fub_abi::model::{DocId, DocumentModel, Heading, Span};
 use fub_abi::net::{HttpRequest, HttpResponse};
@@ -204,6 +208,14 @@ pub struct MemoryHost {
     /// operazioni e non un tempo: su una macchina condivisa un tempo non è un
     /// segnale.
     reads: Mutex<BTreeMap<String, (usize, usize)>>,
+    /// Finestre e commit preparati per i test del provider grid. Il doppio
+    /// non interpreta la sorgente: risponde soltanto ai dati scriptati.
+    grid_surfaces: Mutex<Vec<GridSurfaceSpec>>,
+    grid_sessions: Mutex<BTreeMap<String, GridSession>>,
+    grid_windows: Mutex<BTreeMap<(String, String), GridWindow>>,
+    grid_commits: Mutex<BTreeMap<String, GridCommit>>,
+    grid_calls: Mutex<Vec<String>>,
+    grid_next_instance: AtomicU64,
 }
 
 impl MemoryHost {
@@ -211,6 +223,35 @@ impl MemoryHost {
         let host = MemoryHost::default();
         host.now.store(1_700_000_000_000, Ordering::Relaxed);
         host
+    }
+    /// Registra un binding della famiglia grid senza introdurre un parser.
+    pub fn with_grid_surface(self, surface: GridSurfaceSpec) -> Self {
+        self.grid_surfaces.lock().unwrap().push(surface);
+        self
+    }
+
+    /// Prepara una finestra che il provider di test restituirà per istanza e
+    /// foglio. Gli id delle istanze sono quelli restituiti da `open`.
+    pub fn with_grid_window(self, instance: &str, window: GridWindow) -> Self {
+        self.grid_windows
+            .lock()
+            .unwrap()
+            .insert((instance.to_owned(), window.sheet.clone()), window);
+        self
+    }
+
+    /// Prepara un esito di commit; il valore è già derivato da un provider
+    /// autorevole e il doppio non rivaluta formule.
+    pub fn with_grid_commit(self, instance: &str, commit: GridCommit) -> Self {
+        self.grid_commits
+            .lock()
+            .unwrap()
+            .insert(instance.to_owned(), commit);
+        self
+    }
+
+    pub fn grid_calls(&self) -> Vec<String> {
+        self.grid_calls.lock().unwrap().clone()
     }
 
     /// La prossima domanda di un nome libero la **perde**: qualcun altro prende
@@ -894,7 +935,7 @@ impl VaultStructure for MemoryHost {
         // documenti rifiuta apposta: chi lo valida è la ricerca fra le voci del
         // cestino, appena sopra. Il `to` invece atterra nel vault, ed è un nome
         // che **nasce**: senza `to` torna quello che c'era, e quello non si
-        // rigiudica (è la stessa asimmetria di `Workspace::restore_from_trash`).
+        // rigiudica (è la stessa asimmetria del protocollo staged del kernel).
         let target = match to {
             Some(to) => born_here(&fenced_doc_id(&to)?)?,
             None => entry.original,
@@ -1383,6 +1424,200 @@ impl HostServices for MemoryHost {
     }
 }
 
+impl GridProvider for MemoryHost {
+    fn surfaces(&self) -> Vec<GridSurfaceSpec> {
+        self.grid_surfaces.lock().unwrap().clone()
+    }
+
+    fn open(
+        &mut self,
+        surface: &str,
+        source: &str,
+        revision: Revision,
+    ) -> Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        if !self
+            .grid_surfaces
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|candidate| candidate.id == surface)
+        {
+            return Err(PluginError::Unserved(
+                format!("grid surface `{surface}` is not served").into(),
+            ));
+        }
+        if revision.0.is_empty() {
+            return Err(PluginError::BadArgs(
+                "grid revision must not be empty".into(),
+            ));
+        }
+        let instance = format!(
+            "grid-memory-{}",
+            self.grid_next_instance.fetch_add(1, Ordering::Relaxed) + 1
+        );
+        let session = GridSession {
+            instance: instance.clone(),
+            revision,
+            sheets: Vec::new(),
+        };
+        session.validate()?;
+        self.grid_calls
+            .lock()
+            .unwrap()
+            .push(format!("open:{surface}:{instance}"));
+        self.grid_sessions
+            .lock()
+            .unwrap()
+            .insert(instance, session.clone());
+        Ok(session)
+    }
+
+    fn window(
+        &mut self,
+        instance: &str,
+        request: GridWindowRequest,
+    ) -> Result<GridWindow, PluginError> {
+        request.validate()?;
+        let session = self
+            .grid_sessions
+            .lock()
+            .unwrap()
+            .get(instance)
+            .cloned()
+            .ok_or_else(|| {
+                PluginError::Unserved(format!("grid instance `{instance}` is not open").into())
+            })?;
+        if session.revision != request.revision {
+            return Err(PluginError::Conflict(
+                format!("grid instance `{instance}` revision is stale").into(),
+            ));
+        }
+        let window = self
+            .grid_windows
+            .lock()
+            .unwrap()
+            .get(&(instance.to_owned(), request.sheet.clone()))
+            .cloned()
+            .ok_or_else(|| {
+                PluginError::Unserved(
+                    format!("no scripted grid window for `{instance}/{}`", request.sheet).into(),
+                )
+            })?;
+        if window.revision != request.revision {
+            return Err(PluginError::Conflict(
+                "scripted grid window revision is stale".into(),
+            ));
+        }
+        window.validate()?;
+        self.grid_calls
+            .lock()
+            .unwrap()
+            .push(format!("window:{instance}:{}", request.sheet));
+        Ok(window)
+    }
+
+    fn apply(
+        &mut self,
+        instance: &str,
+        request: GridApplyRequest,
+    ) -> Result<GridCommit, PluginError> {
+        request.validate()?;
+        let mut sessions = self.grid_sessions.lock().unwrap();
+        let session = sessions.get_mut(instance).ok_or_else(|| {
+            PluginError::Unserved(format!("grid instance `{instance}` is not open").into())
+        })?;
+        if session.revision != request.revision {
+            return Err(PluginError::Conflict(
+                format!("grid instance `{instance}` revision is stale").into(),
+            ));
+        }
+        let commit = self
+            .grid_commits
+            .lock()
+            .unwrap()
+            .get(instance)
+            .cloned()
+            .ok_or_else(|| {
+                PluginError::Unserved(format!("no scripted grid commit for `{instance}`").into())
+            })?;
+        commit.validate()?;
+        if commit.revision == request.revision {
+            return Err(PluginError::Conflict(
+                "scripted grid commit did not advance revision".into(),
+            ));
+        }
+        session.revision = commit.revision.clone();
+        self.grid_calls
+            .lock()
+            .unwrap()
+            .push(format!("apply:{instance}"));
+        Ok(commit)
+    }
+
+    fn reload(
+        &mut self,
+        instance: &str,
+        expected: Revision,
+        source: &str,
+        revision: Revision,
+    ) -> Result<GridSession, PluginError> {
+        validate_grid_source(source)?;
+        if revision.0.is_empty() {
+            return Err(PluginError::BadArgs(
+                "grid revision must not be empty".into(),
+            ));
+        }
+        let mut sessions = self.grid_sessions.lock().unwrap();
+        let session = sessions.get_mut(instance).ok_or_else(|| {
+            PluginError::Unserved(format!("grid instance `{instance}` is not open").into())
+        })?;
+        if session.revision != expected {
+            return Err(PluginError::Conflict(
+                format!("grid instance `{instance}` revision is stale").into(),
+            ));
+        }
+        session.revision = revision;
+        self.grid_calls
+            .lock()
+            .unwrap()
+            .push(format!("reload:{instance}"));
+        Ok(session.clone())
+    }
+
+    fn close(&mut self, instance: &str) -> Result<(), PluginError> {
+        if self
+            .grid_sessions
+            .lock()
+            .unwrap()
+            .remove(instance)
+            .is_none()
+        {
+            return Err(PluginError::Unserved(
+                format!("grid instance `{instance}` is not open").into(),
+            ));
+        }
+        self.grid_windows
+            .lock()
+            .unwrap()
+            .retain(|(candidate, _), _| candidate != instance);
+        self.grid_commits.lock().unwrap().remove(instance);
+        self.grid_calls
+            .lock()
+            .unwrap()
+            .push(format!("close:{instance}"));
+        Ok(())
+    }
+
+    fn shutdown(&mut self) -> Result<(), PluginError> {
+        self.grid_sessions.lock().unwrap().clear();
+        self.grid_windows.lock().unwrap().clear();
+        self.grid_commits.lock().unwrap().clear();
+        self.grid_calls.lock().unwrap().push("shutdown".into());
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1458,6 +1693,79 @@ mod tests {
         let outcome = host.read_model(&DocId::new("nota.md"));
         assert!(
             matches!(outcome, Err(PluginError::Internal(msg)) if msg.to_string().contains("nota.md"))
+        );
+    }
+    #[test]
+    fn memory_host_uses_the_grid_protocol_as_a_scripted_provider() {
+        let revision = Revision("r1".into());
+        let next = Revision("r2".into());
+        let surface = GridSurfaceSpec::new("sheet", "grid");
+        let window = GridWindow {
+            revision: revision.clone(),
+            sheet: "sheet-1".into(),
+            row_start: 0,
+            column_start: 0,
+            total_rows: 1,
+            total_columns: 1,
+            rows: Vec::new(),
+            columns: Vec::new(),
+            cells: Vec::new(),
+        };
+        let commit = GridCommit {
+            revision: next.clone(),
+            edit: fub_abi::grid::GridSourceEdit {
+                from: 0,
+                to: 0,
+                deleted: String::new(),
+                inserted: String::new(),
+            },
+            invalidation: fub_abi::grid::GridInvalidation::All,
+        };
+        let mut host = MemoryHost::new()
+            .with_grid_surface(surface)
+            .with_grid_window("grid-memory-1", window);
+        host = host.with_grid_commit("grid-memory-1", commit);
+
+        let session = host.open("sheet", "=1", revision.clone()).unwrap();
+        let returned = host
+            .window(
+                &session.instance,
+                GridWindowRequest {
+                    revision: revision.clone(),
+                    sheet: "sheet-1".into(),
+                    row_start: 0,
+                    row_count: 1,
+                    column_start: 0,
+                    column_count: 1,
+                },
+            )
+            .unwrap();
+        assert_eq!(returned.revision, revision);
+        let applied = host
+            .apply(
+                &session.instance,
+                GridApplyRequest {
+                    revision: Revision("r1".into()),
+                    patches: vec![fub_abi::grid::GridCellPatch {
+                        cell: fub_abi::grid::GridCellKey {
+                            sheet: "sheet-1".into(),
+                            row: "row-1".into(),
+                            column: "column-1".into(),
+                        },
+                        before: Some("".into()),
+                        after: "2".into(),
+                    }],
+                },
+            )
+            .unwrap();
+        assert_eq!(applied.revision, next);
+        assert_eq!(
+            host.grid_calls(),
+            vec![
+                "open:sheet:grid-memory-1",
+                "window:grid-memory-1:sheet-1",
+                "apply:grid-memory-1"
+            ]
         );
     }
 }

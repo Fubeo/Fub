@@ -29,6 +29,26 @@ describe("sanitizeThemeCss", () => {
     expect(sanitizeThemeCss(css, POLICY)).toBe(css);
   });
 
+  it("non si lascia aggirare da escape CSS, stringhe o commenti", () => {
+    const css = `
+      :root { --t\\65 xt: #fff; --bg: #000; content: "url(https://innocuo.test)"; }
+      /* @import url(https://innocuo.test); .cattiva {} */
+      .ui\\2d button { color: var(--text); background: url(\\68 ttps\\3a //evil.test/x); }
+      b\\6f dy { color: red; }
+    `;
+    const violations = themeCssViolations(css, POLICY);
+    expect(violations.map(({ code }) => code)).toEqual(["remote-url", "selector-token"]);
+    expect(violations[0]?.detail).toContain("https://evil.test/x");
+    expect(violations[1]?.detail).toContain("body");
+  });
+
+  it("un CSS sintatticamente rotto è un rifiuto strutturato", () => {
+    const violations = themeCssViolations(":root { --text: red;", POLICY);
+    expect(violations).toHaveLength(1);
+    expect(violations[0]?.code).toBe("syntax-error");
+    expect(() => sanitizeThemeCss(":root { --text: red;", POLICY)).toThrow(ThemeCssError);
+  });
+
   it("nomina insieme tutte le violazioni in ordine deterministico", () => {
     const css = `
       @import url("https://example.test/spia.css");
@@ -71,6 +91,46 @@ describe("sanitizeThemeCss", () => {
       expect((error as Error).message).toContain("asset ../fuori.svg fuori da theme://acme.paper/");
       expect((error as Error).message).toContain("ruolo --bg mancante");
     }
+  });
+});
+describe("image-set URL guarding", () => {
+  it("rifiuta candidate remote anche con casing, escape e prefisso vendor", () => {
+    const css = `:root { --text: #fff; --bg: #000; } .brand {
+      background-image: IMAGE-SET("https://evil.test/a.svg" 1x);
+      background-image: i\\6d age-set("\\68 ttps\\3a //evil.test/b.svg" 1x);
+      background-image: -\\77 ebkit-image-set("https://evil.test/c.svg" 1x);
+      background-image: image-set(url("https://evil.test/d.svg") 1x, "theme://acme.paper/d.svg" 2x);
+    }`;
+    const violations = themeCssViolations(css, POLICY);
+    expect(violations.filter(({ code }) => code === "remote-url")).toHaveLength(4);
+    expect(violations.filter(({ code }) => code === "remote-url").map(({ detail }) => detail)).toEqual([
+      "URL remoto https://evil.test/a.svg vietato",
+      "URL remoto https://evil.test/b.svg vietato",
+      "URL remoto https://evil.test/c.svg vietato",
+      "URL remoto https://evil.test/d.svg vietato",
+    ]);
+  });
+
+  it("controlla candidate stringa locali nello stesso namespace degli url()", () => {
+    const valid = `:root { --text: #fff; --bg: #000; } .brand {
+      background-image: image-set("theme://acme.paper/one.svg" 1x);
+    }`;
+    expect(themeCssViolations(valid, POLICY)).toEqual([]);
+    const invalid = `:root { --text: #fff; --bg: #000; } .brand {
+      background-image: image-set("icons/local.svg" 1x);
+    }`;
+    expect(themeCssViolations(invalid, POLICY).map(({ code }) => code)).toEqual(["asset-namespace"]);
+  });
+
+  it("rifiuta candidate non classificabili senza interpretare le stringhe content", () => {
+    const unsafe = `:root { --text: #fff; --bg: #000; } .brand {
+      background-image: image-set("theme://acme.paper/safe.svg" 1x, linear-gradient(red, blue) 2x);
+    }`;
+    expect(themeCssViolations(unsafe, POLICY).map(({ code }) => code)).toEqual(["disallowed-value"]);
+    const content = `:root { --text: #fff; --bg: #000; } .brand {
+      content: "image-set(https://evil.test/not-a-resource 1x)";
+    }`;
+    expect(themeCssViolations(content, POLICY)).toEqual([]);
   });
 });
 

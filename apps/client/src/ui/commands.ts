@@ -68,6 +68,16 @@ export function keybindingKey(commandId: string): string {
 /// La dichiara il pannello al montaggio, e non un elenco in `main.ts`: è la
 /// regola che tiene i moduli aciclici e che ha già smontato il monolite (§1.1) —
 /// chi ha interesse dichiara, e nessuno tiene la lista di tutti.
+
+export type CommandLayer = "surface" | "profile" | "document" | "pane" | "global";
+
+const LAYER_ORDER: Record<CommandLayer, number> = {
+  surface: 0,
+  profile: 1,
+  document: 2,
+  pane: 3,
+  global: 4,
+};
 export interface ShellCommand {
   /// Uno degli id in tabella, e nessun altro: è così che l'accordo di un
   /// comando di shell finisce dove il presidio dei conflitti lo può leggere
@@ -75,6 +85,8 @@ export interface ShellCommand {
   id: ShellCommandId;
   title: Key;
   description: Key;
+  layer: CommandLayer;
+  available?: () => boolean;
   run: () => void | Promise<void>;
 }
 
@@ -84,6 +96,7 @@ export interface CommandEntry {
   id: string;
   title: string;
   description: string;
+  layer: CommandLayer;
   /// L'accordo che vale adesso: l'impostazione se l'utente l'ha cambiata,
   /// altrimenti quello dichiarato. Vuoto diventa `null` — una scorciatoia
   /// azzerata è una scorciatoia che non c'è, non una che risponde a nessun
@@ -184,32 +197,37 @@ export function chordMap(entries: SettingEntry[]): Map<string, string> {
   return m;
 }
 
-/// Tutti i comandi: quelli del kernel per primi, nell'ordine in cui li dichiara,
-/// poi quelli della shell.
+/// Tutti i comandi disponibili, ordinati secondo l'arbitrato della tastiera:
+/// superficie, profilo, documento, riquadro, globale. L'ordine entro uno
+/// strato resta quello dichiarato.
 export function allCommands(): CommandEntry[] {
-  const from_kernel = state.commandSpecs.map((spec) => ({
+  const fromKernel: CommandEntry[] = state.commandSpecs.map((spec) => ({
     id: spec.id,
     title: spec.title,
     description: spec.description,
+    layer: spec.scope.reach === "document" ? "document" : "global",
     binding: emptyToNull(overrides.get(keybindingKey(spec.id)) ?? spec.keybinding),
     declared: spec.keybinding,
     spec,
     run: null,
   }));
-  const fromShell = [...shell.values()].map((c) => ({
-    id: c.id,
-    title: t(c.title),
-    description: t(c.description),
-    // La stessa riga dei comandi del kernel, e da questa voce lo è per davvero
-    // (§16.3): l'accordo riconfigurato se c'è, il dichiarato se no. La chiave si
-    // compone allo stesso modo, perché la regola è una sola — cambia solo il
-    // livello in cui il valore vive, che per un comando di shell è la macchina.
-    binding: emptyToNull(overrides.get(keybindingKey(c.id)) ?? SHELL_KEYS[c.id]),
-    declared: SHELL_KEYS[c.id] ?? null,
-    spec: null,
-    run: c.run,
-  }));
-  return [...from_kernel, ...fromShell];
+  const fromShell: CommandEntry[] = [...shell.values()]
+    .filter((command) => command.available?.() ?? true)
+    .map((command) => ({
+      id: command.id,
+      title: t(command.title),
+      description: t(command.description),
+      layer: command.layer,
+      // La stessa riga dei comandi del kernel, e da questa voce lo è per davvero
+      // (§16.3): l'accordo riconfigurato se c'è, il dichiarato se no.
+      binding: emptyToNull(overrides.get(keybindingKey(command.id)) ?? SHELL_KEYS[command.id]),
+      declared: SHELL_KEYS[command.id] ?? null,
+      spec: null,
+      run: command.run,
+    }));
+  return [...fromKernel, ...fromShell].sort(
+    (left, right) => LAYER_ORDER[left.layer] - LAYER_ORDER[right.layer],
+  );
 }
 
 function emptyToNull(binding: string | null | undefined): string | null {
