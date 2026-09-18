@@ -58,7 +58,7 @@ impossibile il mount e vengono nominate nell'errore.
 
 ## Stato del runtime WASM
 
-Nel tree audit corrente sono consegnati:
+In `main@7c263d…` sono consegnati:
 
 - caricamento e istanziazione di un componente;
 - manifest e lifecycle `Plugin`;
@@ -75,8 +75,8 @@ Nel tree audit corrente sono consegnati:
 `IndexProvider` e `EventHandler` inbound restano deferred. Anche un provider
 consegnato non è montato automaticamente: capability dichiarata, consenso
 `granted`, scelta `enabled` e capability effettiva del `Guard` restano fatti
-distinti. Il percorso è presente nella base audit, ma non è una dichiarazione
-di completamento di `main` o dei gate G14/G15.
+distinti. Il percorso è consegnato in `main`. Le issue di milestone ancora aperte
+servono alla verifica formale dei criteri; non retrocedono queste capacità.
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 
