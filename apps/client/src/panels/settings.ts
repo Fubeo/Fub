@@ -215,6 +215,7 @@ function installRadioGroup(
 }
 
 function selectTab(next: SettingsTab, focus: boolean): void {
+  if (tab === "settings" && next !== "settings") void cancelThemePreview();
   tab = next;
   componentsGeneration++;
   const owner = settingsLifetime;
