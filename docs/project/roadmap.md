@@ -60,17 +60,18 @@ foglio di contatto, ripetibilità nello stesso ambiente, soglie e diagnosi del
 drift restano in [#17](https://github.com/Fubeo/Fub/issues/17), tracker unico che
 ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
 
-## Consegne sulla base audit corrente
+## Superfici condivise e Grid v1
 
-M5 e fase 10 sono integrate in `fix/audit-integration`; la PR #50 aggiunge
-matrice 56/56 e remediation finale. ABI/WIT, mirror TypeScript, provider
-nativo, componente WASM, client shell a finestre/patch, fallback, ownership e
-teardown sono presenti. La consegna diventa definitiva solo dopo required
-checks, G15/GO, merge in `main` e verifica post-merge.
+La fase 10 di #11 è in `main` tramite #53. ABI/WIT, mirror TypeScript,
+provider nativo, componente WASM e shell a finestre/patch condividono Grid v1;
+fallback, ownership e teardown sono coperti dai banchi di conformità. Le
+invarianti stabili vivono in
+[frontend e IPC](../architecture/frontend-and-ipc.md),
+[editor e anteprima](../product/editor-and-preview.md),
+[runtime plugin](../architecture/plugin-runtime.md) e
+[ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md).
 
-- Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
-- Piano operativo:
-  [TODO — superfici di editing condivise](todo-superfici-di-editing-condivise.md).
+Tracker storico: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 
 ## Dopo
 
