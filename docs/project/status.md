@@ -121,17 +121,16 @@ solo `enabled && consent == granted`; il consenso non concede capability e
 `enabled` non equivale a un'istanza montata. La rimozione ritira prima il
 record, richiede disabilitazione e non cancella `.fub/plugins/<id>/`.
 
-La fase 10 di #11 è consegnata su questo tree: il protocollo Grid v1 attraversa
-ABI/WIT, provider nativo e componente WASM, con finestre, patch, invalidazioni,
-ownership e teardown. Il TODO conserva le sue checkbox vincolate alla consegna
-in `main`, non descrive un'assenza nel tree audit.
+La fase 10 di #11 è consegnata in `main` tramite #53: il protocollo Grid v1
+attraversa ABI/WIT, provider nativo e componente WASM, con finestre, patch,
+invalidazioni, ownership e teardown. Le invarianti stabili vivono ora nella
+documentazione di frontend/IPC, editor, runtime plugin e ADR 0201; il piano
+temporaneo è stato ritirato.
 
 ## Lavoro residuo
-Per #11, la fase 10 è nel candidato PR #50: il pannello monta Markdown, plain
-text e `.fubsheet` attraverso `DocumentSurfaceRegistry`; Grid v1 attraversa
-ABI/WIT, provider nativo e WASM con finestre, patch, invalidazioni, limiti,
-fallback, ownership e teardown. Il lavoro residuo di questa integrazione è
-governance: required checks finali, G15/GO, merge e verifica post-merge.
+Per #11 non resta lavoro di consegna del protocollo. Le guardie del registry e
+delle famiglie pubbliche rendono meccaniche rispettivamente la validità di
+profili/fallback e la presenza di shell, fallback, mirror, nativo e WASM.
 
 ### Qualità e resilienza
 
@@ -144,16 +143,14 @@ governance: required checks finali, G15/GO, merge e verifica post-merge.
 ### Architettura della shell
 
 - [#11 — superfici di editing condivise](https://github.com/Fubeo/Fub/issues/11)
-  ([piano operativo](todo-superfici-di-editing-condivise.md))
 - [#12 — modularizzazione della Graph View 2.0](https://github.com/Fubeo/Fub/issues/12)
 - [#13 — contratto dei temi e consegna agli autori](https://github.com/Fubeo/Fub/issues/13)
 
-Per #11, le fasi 0–9 e la fase 10 sono consegnate sulla base audit corrente.
-Il pannello monta Markdown, plain text e `.fubsheet` attraverso
-`DocumentSurfaceRegistry`, con collisioni, fallback e teardown posseduto.
-Il contratto Grid v1 è in ABI/WIT, ha clienti nativo e WASM e mantiene
-finestre, patch coordinate, invalidazioni, limiti, fallback e parità nei casi
-coperti. Questa consegna non è stata portata in `main`.
+Per #11, le fasi 0–10 sono in `main`. Il pannello monta Markdown, plain text e
+`.fubsheet` attraverso `DocumentSurfaceRegistry`, con collisioni, profili e
+fallback registrati e teardown posseduto. Il contratto Grid v1 è in ABI/WIT,
+ha clienti nativo e WASM e mantiene finestre, patch coordinate, invalidazioni,
+limiti, fallback e parità nei casi coperti.
 
 ## Bloccato
 
@@ -182,6 +179,5 @@ Decisione: **NO-GO — NOT READY FOR PHASE 9 — NON MERGIARE IN `main`**.
 
 - [Roadmap](roadmap.md)
 - [M5](m5-wasm-runtime.md)
-- [TODO sulle superfici di editing](todo-superfici-di-editing-condivise.md)
 - [Changelog](../../CHANGELOG.md)
 - [Issue aperte](https://github.com/Fubeo/Fub/issues)
