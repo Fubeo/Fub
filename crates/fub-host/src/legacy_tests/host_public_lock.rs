@@ -28,6 +28,20 @@ const VIEW: &str = "host-public-lock-view";
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 type WorkspaceSlot = Arc<Mutex<Option<Custody<Workspace>>>>;
+// `try_write` is a point-in-time observation. macOS can report transient
+// contention while the runner finishes a short, unrelated workspace access,
+// so wait through the test watchdog before reporting a retained guard.
+fn workspace_is_free(workspace: &Custody<Workspace>) -> bool {
+    let deadline = Instant::now() + TIMEOUT;
+    while Instant::now() < deadline {
+        if let Some(write) = workspace.try_write() {
+            drop(write);
+            return true;
+        }
+        std::thread::yield_now();
+    }
+    false
+}
 
 fn vault(extension: &str) -> (tempfile::TempDir, Utf8PathBuf) {
     let dir = tempfile::tempdir().expect("temporary vault");
@@ -45,24 +59,12 @@ impl ReentrantFormat {
     fn check_workspace_is_free(&self) -> Result<(), FormatError> {
         let workspace = self.workspace.lock().expect("workspace slot");
         if let Some(workspace) = workspace.as_ref() {
-            // `try_write` is a point-in-time observation. macOS can report
-            // `EBUSY` while the runner is finishing a short, unrelated
-            // workspace access, even though no guard crosses this callback.
-            // Retry until the watchdog: a real guard retained by the host
-            // never becomes writable while this callback is active, whereas
-            // transient contention does.
-            let deadline = Instant::now() + TIMEOUT;
-            while Instant::now() < deadline {
-                if let Some(write) = workspace.try_write() {
-                    drop(write);
-                    return Ok(());
-                }
-                std::thread::yield_now();
+            if !workspace_is_free(workspace) {
+                self.free.store(false, Ordering::Release);
+                return Err(FormatError::Parse(
+                    "Host retained the workspace lock during a format callback".into(),
+                ));
             }
-            self.free.store(false, Ordering::Release);
-            return Err(FormatError::Parse(
-                "Host retained the workspace lock during a format callback".into(),
-            ));
         }
         Ok(())
     }
@@ -146,7 +148,7 @@ impl ReentrantView {
     fn check_workspace_is_free(&self) {
         let workspace = self.workspace.lock().expect("workspace slot");
         if let Some(workspace) = workspace.as_ref() {
-            if workspace.try_write().is_none() {
+            if !workspace_is_free(workspace) {
                 self.free.store(false, Ordering::Release);
             }
         }
