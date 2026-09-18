@@ -176,6 +176,12 @@ jobs:
           cache-dependency-path: apps/client/package-lock.json
       - run: npm ci
         working-directory: apps/client
+      - name: i derivati del tema si rigenerano byte per byte
+        run: |
+          npm run theme:generate
+          git diff --exit-code -- src/theme/serie theme/author
+          npm run theme:verify
+        working-directory: apps/client
       - run: npm run typecheck
         working-directory: apps/client
       - run: npm test

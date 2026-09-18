@@ -60,6 +60,20 @@ consentire una fuga.
 
 Un handle di transfer non diventa automaticamente un path filesystem.
 
+## Temi installati
+
+Un tema non riceve capability e non può dichiarare permessi. L'host accetta
+soltanto il contratto `theme-1`, un id sicuro e il namespace
+`theme://<id>/`; installazione e lettura rifiutano symlink, traversal e file
+non regolari. La pubblicazione avviene da staging con rename atomico e non
+sovrascrive un id esistente. I limiti correnti sono 64 KiB per il manifest,
+4 MiB per ciascun foglio/skin, 1.024 asset, 64 MiB per asset e 256 MiB totali.
+
+Il client rivalida fogli, skin, asset, ruoli e contrasto prima del mount. Una
+preview dalle Impostazioni non cambia la scelta persistente: annullamento o
+chiusura rimontano il tema autorevole precedente; un bundle non leggibile o
+rifiutato non ottiene un mount parziale.
+
 ## Runtime WASM
 
 Il runtime:

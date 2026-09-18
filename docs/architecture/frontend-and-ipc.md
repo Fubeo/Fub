@@ -114,6 +114,12 @@ La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
 scrittura del documento aperto; il core resta l'autorità del file persistente e
 della revisione verificata dalla scrittura.
 
+Per i temi, la selezione autorevole passa dalla porta settings; la cache browser
+è soltanto bootstrap del primo fotogramma. `previewTheme` monta invece una
+selezione effimera senza IPC di scrittura: `cancelThemePreview`, la chiusura
+delle Impostazioni o un'applicazione esplicita terminano la preview. Solo
+`selectTheme` persiste la scelta.
+
 ## Superfici di editing
 
 La sessione documento e la superficie non sono la stessa cosa. Il percorso

@@ -26,6 +26,11 @@ export type Theme = "light" | "dark";
 export type Density = "compact" | "comfortable" | "relaxed";
 export type ReadingFont = "literata" | "inter" | "system";
 
+export interface ThemePreviewSelection {
+  id: string;
+  light: Theme;
+}
+
 // Gemelle delle chiavi dichiarate in fub-host/src/settings.rs.
 export const THEME_KEY = "appearance.theme";
 export const CONTRAST_KEY = "appearance.contrast";
@@ -85,6 +90,7 @@ let themeChoice: Theme | "" = "";
 let contrastChoice = "";
 let preferences: AppearancePreferences = { ...DEFAULT_PREFERENCES };
 let selectedThemeId = SERIES_MANIFEST.id;
+let previewSelection: ThemePreviewSelection | null = null;
 let installedThemes: ThemeInfo[] = [];
 let catalogLoaded = false;
 let catalogRequest: Promise<ThemeInfo[]> | null = null;
@@ -206,9 +212,12 @@ function persistSelection(): void {
 
 async function apply(): Promise<void> {
   const generation = ++applyGeneration;
-  const light = effectiveTheme(themeChoice, mediaMatches(DARK_QUERY, true));
+  const light = effectiveTheme(
+    previewSelection?.light ?? themeChoice,
+    mediaMatches(DARK_QUERY, true),
+  );
   const contrast = effectiveContrast(contrastChoice, mediaMatches(CONTRAST_QUERY, false));
-  const requestedId = selectedThemeId;
+  const requestedId = previewSelection?.id ?? selectedThemeId;
   let mounted: ThemeMountResult | null = null;
   let actualId = SERIES_THEME_ID;
   const waitingForCatalog = requestedId !== SERIES_THEME_ID && !catalogLoaded;
@@ -361,6 +370,44 @@ export function currentThemeId(): string {
   return selectedThemeId;
 }
 
+/** L'anteprima temporanea corrente, che non modifica impostazioni o cache. */
+export function currentThemePreview(): ThemePreviewSelection | null {
+  return previewSelection ? { ...previewSelection } : null;
+}
+
+/**
+ * Monta temporaneamente un tema senza persisterlo.
+ *
+ * La selezione autorevole resta invariata: chiude o annulla il pannello e
+ * cancelThemePreview rimonta il tema precedente. Più richieste rapide sono
+ * serializzate dalla stessa generazione usata dalla selezione persistente.
+ */
+export async function previewTheme(id: string, light: Theme): Promise<void> {
+  if (id !== SERIES_THEME_ID) {
+    const info = installedThemes.find((theme) => theme.manifest.id === id);
+    if (!info || !info.manifest.lights.includes(light)) {
+      throw new Error("tema non disponibile");
+    }
+  }
+  const generation = ++selectionGeneration;
+  previewSelection = { id, light };
+  await apply();
+  if (generation !== selectionGeneration) return;
+  if (!mountedVariant.startsWith(id + ":" + light + ":")) {
+    previewSelection = null;
+    await apply();
+    throw new Error("anteprima tema non disponibile");
+  }
+}
+
+/** Annulla l'anteprima e rimonta la selezione autorevole precedente. */
+export async function cancelThemePreview(): Promise<void> {
+  if (!previewSelection) return;
+  ++selectionGeneration;
+  previewSelection = null;
+  await apply();
+}
+
 /** Seleziona un tema e persiste insieme il suo id e la luce esplicita. */
 export async function selectTheme(id: string, light: Theme | ""): Promise<void> {
   if (id !== SERIES_THEME_ID) {
@@ -372,6 +419,7 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
   const generation = ++selectionGeneration;
   const previousId = selectedThemeId;
   const previousChoice = themeChoice;
+  previewSelection = null;
   selectedThemeId = id;
   themeChoice = light;
   try {
@@ -393,6 +441,7 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
 function loadCache(): void {
   themeChoice = "";
   selectedThemeId = SERIES_THEME_ID;
+  previewSelection = null;
   contrastChoice = "";
   preferences = { ...DEFAULT_PREFERENCES };
   try {
@@ -433,6 +482,7 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   lifetime.add(() => {
     applyGeneration++;
     selectionGeneration++;
+    previewSelection = null;
   });
   selectionGeneration++;
   loadCache();

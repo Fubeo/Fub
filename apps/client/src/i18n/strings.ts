@@ -315,6 +315,13 @@ const IT = {
   "settings.themes.light.dark": "scuro",
   "settings.themes.light.light": "chiaro",
   "settings.themes.source": "Temi installati: {ids}",
+  "settings.themes.preview_hint":
+    "Scegli un tema per provarlo senza salvare. Applica rende la scelta autorevole; Annulla ripristina il tema precedente.",
+  "settings.themes.apply": "Applica tema",
+  "settings.themes.cancel_preview": "Annulla anteprima",
+  "settings.themes.preview_none": "Nessuna anteprima attiva.",
+  "settings.themes.preview_active": "Anteprima attiva: {theme}. La scelta salvata non è cambiata.",
+  "settings.themes.preview_failed": "Anteprima tema non disponibile: {reason}",
   // --- i tasti che il vault propone (§23.13) -----------------------------
   //
   // Il testo dice che **non sono attive**, e lo dice per primo: chi legge deve
@@ -843,6 +850,13 @@ const EN: Record<Key, string> = {
   "settings.themes.light.dark": "dark",
   "settings.themes.light.light": "light",
   "settings.themes.source": "Installed themes: {ids}",
+  "settings.themes.preview_hint":
+    "Choose a theme to preview it without saving. Apply makes it authoritative; Cancel restores the previous theme.",
+  "settings.themes.apply": "Apply theme",
+  "settings.themes.cancel_preview": "Cancel preview",
+  "settings.themes.preview_none": "No active preview.",
+  "settings.themes.preview_active": "Preview active: {theme}. The saved choice has not changed.",
+  "settings.themes.preview_failed": "Theme preview unavailable: {reason}",
   "settings.vault_keys.title": "This vault proposes {count} shortcuts",
   "settings.vault_keys.hint":
     "A vault carries its own shortcuts with it, and these come from outside: until you look at them they press nothing, and the combinations declared by the commands are what counts.",

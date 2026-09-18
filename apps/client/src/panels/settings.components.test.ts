@@ -13,6 +13,7 @@ const box = vi.hoisted(() => ({
   themes: [] as ThemeInfo[],
   themeId: "fub.serie",
   themeLight: "light" as "light" | "dark",
+  preview: null as { id: string; light: "light" | "dark" } | null,
   reloadProvider: vi.fn(async () => {}),
   notify: vi.fn(),
 }));
@@ -44,7 +45,17 @@ vi.mock("../theme/theme", () => ({
   SERIES_THEME_ID: "fub.serie",
   THEME_KEY: "appearance.theme",
   currentThemeId: () => box.themeId,
+  currentThemePreview: () => (box.preview ? { ...box.preview } : null),
+  previewTheme: async (id: string, light: "light" | "dark") => {
+    box.preview = { id, light };
+    document.documentElement.dataset.theme = light;
+  },
+  cancelThemePreview: async () => {
+    box.preview = null;
+    document.documentElement.dataset.theme = box.themeLight;
+  },
   selectTheme: async (id: string, light: "light" | "dark") => {
+    box.preview = null;
     box.themeId = id;
     box.themeLight = light;
     document.documentElement.dataset.theme = light;
@@ -198,6 +209,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   box.themeId = "fub.serie";
   box.themeLight = "light";
+  box.preview = null;
   box.themes = [];
   box.confirm = true;
   box.file = null;
@@ -417,6 +429,81 @@ describe("radiogroup del tema e della luce", () => {
       expect(currentRadios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
       expect(currentRadios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
     });
+  });
+
+  it("prova senza persistere, annulla al tema precedente e applica solo su richiesta", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    await openSettings(entries, [
+      theme("fub.serie", ["light", "dark"]),
+      theme("org.fub.paper", ["light", "dark"]),
+    ]);
+
+    const catalog = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')][1]!;
+    const radios = [...catalog.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    const paperDark = radios.find(
+      (radio) =>
+        radio.dataset.themeId === "org.fub.paper" && radio.dataset.themeLight === "dark",
+    )!;
+    paperDark.click();
+
+    await vi.waitFor(() => {
+      expect(box.preview).toEqual({ id: "org.fub.paper", light: "dark" });
+      expect(document.documentElement.dataset.theme).toBe("dark");
+    });
+    expect(box.themeId).toBe("fub.serie");
+    expect(box.themeLight).toBe("light");
+    expect(entries[0]!.value).toBe("light");
+
+    const cancel = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
+      (button) => button.textContent === "Annulla anteprima",
+    )!;
+    cancel.click();
+    await vi.waitFor(() => {
+      expect(box.preview).toBeNull();
+      expect(document.documentElement.dataset.theme).toBe("light");
+    });
+    expect(box.themeId).toBe("fub.serie");
+    expect(entries[0]!.value).toBe("light");
+
+    const currentCatalog = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')][1]!;
+    const currentPaperDark = [...currentCatalog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+      (radio) =>
+        radio.dataset.themeId === "org.fub.paper" && radio.dataset.themeLight === "dark",
+    )!;
+    currentPaperDark.click();
+    await vi.waitFor(() =>
+      expect(box.preview).toEqual({ id: "org.fub.paper", light: "dark" }),
+    );
+
+    const apply = [...document.querySelectorAll<HTMLButtonElement>("#settings-body button")].find(
+      (button) => button.textContent === "Applica tema",
+    )!;
+    apply.click();
+    await vi.waitFor(() => {
+      expect(box.preview).toBeNull();
+      expect(box.themeId).toBe("org.fub.paper");
+      expect(box.themeLight).toBe("dark");
+      expect(entries[0]!.value).toBe("dark");
+    });
+  });
+
+  it("annulla una preview quando il pannello viene chiuso", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])]);
+
+    const catalog = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')][1]!;
+    const dark = [...catalog.querySelectorAll<HTMLButtonElement>('[role="radio"]')].find(
+      (radio) => radio.dataset.themeLight === "dark",
+    )!;
+    dark.click();
+    await vi.waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
+
+    document.querySelector<HTMLButtonElement>("#settings-close")!.click();
+    await vi.waitFor(() => {
+      expect(box.preview).toBeNull();
+      expect(document.documentElement.dataset.theme).toBe("light");
+    });
+    expect(entries[0]!.value).toBe("light");
   });
 
   it("mantiene un solo radio tabbabile e seleziona circolarmente la luce", async () => {
