@@ -67,7 +67,6 @@ flowchart LR
 - [Stato corrente](project/status.md)
 - [Roadmap](project/roadmap.md)
 - [M5: runtime WASM](project/m5-wasm-runtime.md)
-- [TODO: superfici di editing condivise](project/todo-superfici-di-editing-condivise.md)
 
 ## Capire le decisioni
 
@@ -82,7 +81,7 @@ Quando due fonti divergono, usa questo ordine:
 2. WIT, schemi e formati persistenti;
 3. pagine architetturali e riferimenti canonici;
 4. ADR, limitatamente alla motivazione;
-5. stato, roadmap e TODO attivi;
+5. stato e roadmap;
 6. cronologia Git.
 
 Una pagina non sostituisce il codice. Deve spiegare i confini, i flussi e le
