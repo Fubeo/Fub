@@ -5,7 +5,7 @@
 
 Il percorso prodotto è disponibile in `main@7c263d…`: la shell gestisce
 inventario, installazione, consenso, enabled/disabled, restart e remove. Questa
-guida distingue ciò che è consegnato oggi dai provider e dalle famiglie
+guida distingue ciò che è consegnato in `main` dai provider e dalle famiglie
 volutamente non promesse.
 
 ## Scegliere il backend
