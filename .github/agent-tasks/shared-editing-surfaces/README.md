@@ -1,8 +1,12 @@
 # Shared editing surfaces — agent execution pack
 
-Questo albero contiene gli artefatti operativi per eseguire con agenti GPT-5.6 Luna le Fasi 0–3 di `docs/project/todo-superfici-di-editing-condivise.md`, tracker issue #11.
+> **Archivio storico.** Questo pacchetto documenta l'esecuzione delle Fasi 0–3
+> di #11; il programma è concluso e il TODO operativo è stato ritirato. Non
+> usare questi task come backlog corrente.
 
-Non è documentazione architetturale canonica. È un pacchetto di esecuzione: i task descrivono lavoro ancora da fare e devono essere rimossi o archiviati fuori dalla documentazione canonica quando non servono più.
+Non è documentazione architetturale canonica. Le invarianti correnti vivono in
+`docs/architecture/frontend-and-ipc.md`, `docs/product/editor-and-preview.md`
+e nell'ADR 0201.
 
 ## Entry point
 
@@ -10,7 +14,7 @@ L'agente orchestratore deve leggere, nell'ordine:
 
 1. `AGENTS.md`;
 2. `CONTRIBUTING.md`;
-3. `docs/project/todo-superfici-di-editing-condivise.md`;
+3. `docs/architecture/frontend-and-ipc.md`;
 4. `GLOBAL-RULES.md`;
 5. `MANIFEST.md`;
 6. `ORCHESTRATOR.md`.
