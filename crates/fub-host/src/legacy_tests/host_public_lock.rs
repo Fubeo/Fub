@@ -1,6 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::registry::Registrar;
 use camino::Utf8PathBuf;
@@ -45,12 +45,24 @@ impl ReentrantFormat {
     fn check_workspace_is_free(&self) -> Result<(), FormatError> {
         let workspace = self.workspace.lock().expect("workspace slot");
         if let Some(workspace) = workspace.as_ref() {
-            if workspace.try_write().is_none() {
-                self.free.store(false, Ordering::Release);
-                return Err(FormatError::Parse(
-                    "Host retained the workspace lock during a format callback".into(),
-                ));
+            // `try_write` is a point-in-time observation. macOS can report
+            // `EBUSY` while the runner is finishing a short, unrelated
+            // workspace access, even though no guard crosses this callback.
+            // Retry until the watchdog: a real guard retained by the host
+            // never becomes writable while this callback is active, whereas
+            // transient contention does.
+            let deadline = Instant::now() + TIMEOUT;
+            while Instant::now() < deadline {
+                if let Some(write) = workspace.try_write() {
+                    drop(write);
+                    return Ok(());
+                }
+                std::thread::yield_now();
             }
+            self.free.store(false, Ordering::Release);
+            return Err(FormatError::Parse(
+                "Host retained the workspace lock during a format callback".into(),
+            ));
         }
         Ok(())
     }
