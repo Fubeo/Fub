@@ -274,6 +274,16 @@ export const SCENE = [
     prepare: async () => {},
   },
   {
+    id: "grid",
+    title: "Grid v1: superficie .fubsheet reale",
+    page: "catalog",
+    query: "catalog=grid",
+    prepare: async (page) => {
+      await page.waitForSelector('.grid-viewport[role="grid"]');
+      await page.waitForSelector('.grid-cell[role="gridcell"]');
+    },
+  },
+  {
     id: "catalog-palette",
     title: "Catalogo: ogni token col suo contrasto",
     page: "catalog",
