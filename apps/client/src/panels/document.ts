@@ -679,6 +679,7 @@ function drawTab(r: Pane, tabs: Tab[], active: number): void {
     const close = document.createElement("button");
     close.type = "button";
     close.className = "tab-close";
+    close.dataset.tabId = tab.id;
     close.textContent = "×";
     close.setAttribute("aria-label", t("app.close"));
     setTooltip(close, t("app.close"));

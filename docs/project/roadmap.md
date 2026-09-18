@@ -1,8 +1,8 @@
 # Roadmap
 
-> **Stato aggiornato per:** tree `audit-close` al merge
-> `2cc2e44c3f6dc619218354f6cc89fff2c1517cf2`, tree
-> `e8b9e0c0445ca9cf98ce503d4e07402097f9da62`, 17 settembre 2026.
+> **Stato aggiornato per:** candidato `audit-close` della
+> [PR #50](https://github.com/Fubeo/Fub/pull/50), basato su
+> `fix/audit-integration`, 18 settembre 2026.
 
 La roadmap descrive ordine e direzione. Le GitHub Issues restano il tracker
 delle attività eseguibili. Un prossimo passo approvato può avere un TODO
@@ -18,27 +18,23 @@ flowchart LR
 ## Vincolo di integrazione
 
 La [governance corrente](status.md#governance-di-integrazione) mantiene in
-vigore il piano audit di `fix/audit-integration`: prima di G15/GO non si
-integra in `main`, neppure una PR M5 o documentale verde. I candidati vanno
-riconciliati con il lavoro audit e certificati nuovamente dopo l'integrazione.
-Questa roadmap stabilisce l'ordine del lavoro, non deroga ai gate audit.
+vigore il piano audit: la PR #50 è il candidato G14 56/56, ma non si integra in
+`main` prima dei required checks sul commit finale e di un G15/GO esplicito.
+Questa roadmap stabilisce l'ordine del lavoro e non deroga a quei gate.
 
 ## Ora
 
-### M5 consegnata sulla linea audit
+### M5, fase 10 e remediation consegnate nel candidato
 
-Il tree `2cc2e44c` contiene il percorso prodotto installato: inventario
-persistente nella configurazione macchina, installazione da file scelto,
-consenso per gli esatti byte, scelta `enabled`, startup filtrato su
-`enabled && granted`, restart e rimozione da disabilitato. Collisioni di id,
-digest alterati, file incompleti e cleanup sono errori espliciti; `.fub/plugins/`
-resta storage autorevole, non una directory di eseguibili.
+La PR #50 contiene inventario persistente, installazione, consenso sugli esatti
+byte, scelta `enabled`, startup autorizzato, restart e rimozione; collisioni,
+digest alterati e file incompleti restano errori espliciti.
 
-Sono consegnati i provider `ViewProvider`, `FormatProvider` e `GridProvider`
-nei percorsi nativo/WASM coperti, con validazione UI non fidata, limiti,
-fallback, ownership e teardown. #8 e #10 restano i tracker **OPEN** per la
-chiusura formale e le evidenze audit; questa roadmap non li dichiara chiusi e
-non trasferisce il risultato in `main`.
+I provider `ViewProvider`, `FormatProvider` e `GridProvider` attraversano i
+percorsi nativo/WASM coperti, con validazione UI non fidata, finestre globali,
+fallback, ownership e teardown. La remediation conclusiva chiude le race di
+view/doc-search/grid, i confini lock/capability e la parità tema. #8 e #10
+restano tracker aperti fino al record G15 e alla promozione in `main`.
 
 ### Stabilizzare i dati
 
@@ -66,11 +62,11 @@ ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
 
 ## Consegne sulla base audit corrente
 
-La fase 10 di #11 è integrata nella base `fix/audit-integration` con
-`2cc2e44c` e tree `e8b9e0c`. ABI/WIT, mirror TypeScript, provider nativo,
-componente WASM, client shell a finestre/patch, fallback, ownership e teardown
-sono presenti e certificati sulla PR #49. La consegna è reale su questa base,
-ma le checkbox del TODO restano vincolate alla promozione in `main`.
+M5 e fase 10 sono integrate in `fix/audit-integration`; la PR #50 aggiunge
+matrice 56/56 e remediation finale. ABI/WIT, mirror TypeScript, provider
+nativo, componente WASM, client shell a finestre/patch, fallback, ownership e
+teardown sono presenti. La consegna diventa definitiva solo dopo required
+checks, G15/GO, merge in `main` e verifica post-merge.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:

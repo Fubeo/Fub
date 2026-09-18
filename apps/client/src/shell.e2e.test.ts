@@ -907,7 +907,11 @@ describe("chiudere linguette e superfici", () => {
     const tabs = [...document.querySelectorAll<HTMLElement>(".pane .tab")];
     expect(tabs).toHaveLength(2);
 
-    const close = tabs[1]?.nextElementSibling;
+    const tab = tabs[1];
+    const tabId = tab?.id;
+    const close = tabId
+      ? document.querySelector<HTMLElement>(`.pane .tab-close[data-tab-id="${tabId}"]`)
+      : null;
     expect(close?.classList.contains("tab-close")).toBe(true);
     close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     await waitFor(

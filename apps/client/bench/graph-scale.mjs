@@ -275,7 +275,11 @@ const collectHeap = async (session) => {
 async function closeGraph(page) {
   const tab = page.locator('.pane .tab.tab-view[aria-selected="true"]');
   if (!(await tab.count())) throw new Error("active Graph tab is absent");
-  const close = tab.locator(".tab-close");
+  const tabId = await tab.getAttribute("id");
+  if (!tabId) throw new Error("active Graph tab has no stable id");
+  // The close button is an a11y-valid sibling of the tab, not a descendant:
+  // use their explicit data relation instead of relying on DOM adjacency.
+  const close = page.locator(`.pane .tab-close[data-tab-id="${tabId}"]`);
   if (!(await close.count())) throw new Error("active Graph tab close control is absent");
   await close.dispatchEvent("mousedown");
   await page.waitForSelector("canvas.graph-main", { state: "detached" });

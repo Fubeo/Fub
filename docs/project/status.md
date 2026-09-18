@@ -1,45 +1,40 @@
 # Stato del progetto
 
-> **Stato aggiornato per:** tree `audit-close` al merge
-> `2cc2e44c3f6dc619218354f6cc89fff2c1517cf2`, con tree
-> `e8b9e0c0445ca9cf98ce503d4e07402097f9da62`, 17 settembre 2026.
-> `ARCH-001` e G3 restano chiusi sulla linea audit; questo non è `main`.
+> **Stato aggiornato per:** candidato `audit-close` della
+> [PR #50](https://github.com/Fubeo/Fub/pull/50), basato su
+> `fix/audit-integration`, 18 settembre 2026.
+> La remediation è completa localmente; questo non è ancora `main`.
 
 ## Governance di integrazione
 
 Il piano `PIANO-AZIONE-FUB-AUDIT-2026-09-01.md` della linea
-`fix/audit-integration` resta operativo. La roadmap non lo ritira e il verde
-di una PR basata su `main` non costituisce un'autorizzazione al merge.
+`fix/audit-integration` resta l'autorità. La [PR #50](https://github.com/Fubeo/Fub/pull/50)
+raccoglie il candidato riconciliato: registro G14 56/56, WIT frozen preservati,
+remediation e prove locali complete.
 
-**NOT READY FOR PHASE 9 — NON MERGIARE IN `main`.**
+**NOT READY FOR PHASE 9 — NON MERGIARE IN `main` FINO AL G15/GO.**
 
-La riconciliazione del 9 settembre ha confrontato la baseline `main` con
-`fix/audit-integration`; la linea audit conserva il lavoro esclusivo delle due
-storie e non autorizza a riscrivere o riaprire la correzione #22.
-
-Il tree corrente viene verificato sulla linea audit senza sovrascriverne i
-contratti. Il passaggio a `main` richiede G0–G14 e un G15/GO esplicito sul
-candidato corrente, seguito dalla verifica dello SHA integrato.
-`ARCH-001` e G3 sono chiusi, ma il piano audit non è completato e i finding
-ancora privi di evidenza finale restano aperti.
+Il passaggio a `main` richiede i required checks Linux/macOS/Windows e supply
+chain sullo stesso commit finale, la chiusura G14 e una decisione G15/GO
+esplicita registrata sulla PR. Un run storico o relativo a uno SHA precedente
+non soddisfa il gate.
 
 ## Stato della base audit
 
-Il tree `2cc2e44c` integra la consegna della fase 10 di #11 nella base
-`fix/audit-integration`, con merge tree `e8b9e0c`. La certificazione del
-candidato e quella post-merge sono registrate nella [PR #49](https://github.com/Fubeo/Fub/pull/49):
-questa evidenza vale per la base audit, non promuove il lavoro in `main`.
+La base `fix/audit-integration` contiene le consegne M5 e fase 10 già integrate;
+la PR #50 aggiunge la chiusura della matrice audit e le remediation emerse dalla
+review conclusiva. Il candidato serve `FormatProvider`, `ViewProvider` e
+`GridProvider` nei percorsi nativo/WASM coperti, con lifecycle, fallback,
+limiti e parità verificati.
 
-Sul tree corrente sono presenti anche le consegne M5: inventario installato,
-installazione e rimozione, consenso e scelta `enabled`, startup autorizzato,
-`FormatProvider`, `ViewProvider` e `GridProvider` con i loro percorsi nativi e
-WASM coperti. #8 e #10 restano **OPEN** come issue tracker: la presenza delle
-implementazioni su questa base non ne chiude formalmente le issue né sostituisce
-la matrice G14.
+#8 e #10 restano tracker aperti fino alla registrazione della decisione finale:
+la presenza dell'implementazione non sostituisce G14/G15 né i check sullo SHA
+di merge.
 
-La decisione di integrazione resta **NO-GO — NOT READY FOR PHASE 9 — NON
-MERGIARE IN `main`**. Il piano audit non è completato e G14 non ha ancora la
-matrice finale 56/56; G15/GO non è stato ottenuto.
+La decisione resta **NO-GO** finché i check finali o G15 mancano. Dopo il verde
+completo, i rischi residui espliciti del registro — writer esterni non
+cooperativi, rename staged, famiglie WASM inbound differite e limiti sandbox —
+devono essere accettati o dichiarati bloccanti nel record G15.
 
 Restano vincolanti i WIT frozen e le guardie dell'audit: niente `allow` per
 Clippy, test ignorati o saltati, `sleep` usati come sincronizzazione o mutex
@@ -59,17 +54,16 @@ TypeScript. Il protocollo Grid negozia famiglia e versione prima dell'invocazion
 e mantiene fallback, limiti e parità nativo/WASM.
 
 Milestone 1–4 sono assorbite nel prodotto e nell'architettura correnti.
-La consegna M5 e la fase 10 sono presenti nel tree audit corrente; non sono
-ancora una consegna di `main` e non chiudono i gate G14/G15.
+M5, fase 10 e remediation audit sono presenti nel candidato PR #50; diventano
+consegna di `main` solo dopo G15/GO, merge e verifica post-merge.
 
 ## CI e qualità visuale
 
-La regressione del fallback dei blocchi Markdown personalizzati è risolta in
-[PR #22](https://github.com/Fubeo/Fub/pull/22). La
-[run di riferimento del 6 settembre](https://github.com/Fubeo/Fub/actions/runs/34039818672)
-è verde sul commit indicato: test Rust sulle piattaforme supportate, frontend,
-baseline visuali e accessibilità. La correzione non rigenera le immagini e non
-cambia le soglie del banco.
+Sul candidato locale: Rust 2171 pass/3 ignored in 168 suite; client 95 file e
+1380 test; build e typecheck verdi; `npm audit` 0; axe 42/42 scene, 48.612
+elementi, 0 failure e 0 debito dichiarato. I 388 `incomplete` axe sono
+indeterminati riportati, non violazioni soppresse. L'autorità remota resta il
+rollup dei required checks della PR #50 sul commit finale.
 
 La provenienza e la stabilità delle baseline di
 [#17](https://github.com/Fubeo/Fub/issues/17) sono certificate sul candidato:
@@ -133,12 +127,11 @@ ownership e teardown. Il TODO conserva le sue checkbox vincolate alla consegna
 in `main`, non descrive un'assenza nel tree audit.
 
 ## Lavoro residuo
-Per #11, la fase 10 è consegnata sulla base audit `2cc2e44c`; il pannello monta
-Markdown, plain text e `.fubsheet` attraverso `DocumentSurfaceRegistry`, con
-collisioni, fallback e teardown posseduto. Il contratto Grid v1 è in ABI/WIT,
-ha clienti nativo e WASM e mantiene finestre, patch coordinate, invalidazioni,
-limiti, fallback e parità nei casi coperti. Questa consegna non è stata portata
-in `main`.
+Per #11, la fase 10 è nel candidato PR #50: il pannello monta Markdown, plain
+text e `.fubsheet` attraverso `DocumentSurfaceRegistry`; Grid v1 attraversa
+ABI/WIT, provider nativo e WASM con finestre, patch, invalidazioni, limiti,
+fallback, ownership e teardown. Il lavoro residuo di questa integrazione è
+governance: required checks finali, G15/GO, merge e verifica post-merge.
 
 ### Qualità e resilienza
 
