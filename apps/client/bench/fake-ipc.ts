@@ -667,6 +667,55 @@ const TREES: Record<string, UiNode> = {
 // La porta.
 // ---------------------------------------------------------------------------
 
+const GRID: NonNullable<Options["grid"]> = {
+  surface: { id: "sheet", format: "fubsheet", family: "grid", protocol_version: 1 },
+  session: {
+    instance: "bench-grid",
+    revision: "bench-revision",
+    sheets: [{ id: "budget", name: "Budget 2026", row_count: 24, column_count: 10 }],
+  },
+  windows: [{
+    revision: "bench-revision",
+    sheet: "budget",
+    row_start: 0,
+    column_start: 0,
+    total_rows: 24,
+    total_columns: 10,
+    rows: Array.from({ length: 24 }, (_, index) => ({
+      id: `r${index}`, index, height: null, hidden: false,
+    })),
+    columns: Array.from({ length: 10 }, (_, index) => ({
+      id: `c${index}`, index, width: null, hidden: false,
+    })),
+    cells: [
+      ["r0", "c0", "Voce", { kind: "text", value: "Voce" }],
+      ["r0", "c1", "Gennaio", { kind: "text", value: "Gennaio" }],
+      ["r0", "c2", "Febbraio", { kind: "text", value: "Febbraio" }],
+      ["r1", "c0", "Ricavi", { kind: "text", value: "Ricavi" }],
+      ["r1", "c1", "12500", { kind: "number", value: 12500 }],
+      ["r1", "c2", "13200", { kind: "number", value: 13200 }],
+      ["r2", "c0", "Costi", { kind: "text", value: "Costi" }],
+      ["r2", "c1", "7800", { kind: "number", value: 7800 }],
+      ["r2", "c2", "8100", { kind: "number", value: 8100 }],
+      ["r3", "c0", "Margine", { kind: "text", value: "Margine" }],
+      ["r3", "c1", "=B2-B3", { kind: "number", value: 4700 }],
+      ["r3", "c2", "=C2-C3", { kind: "number", value: 5100 }],
+    ].map(([row, column, input, value]) => ({
+      key: { sheet: "budget", row, column },
+      input,
+      style: {
+        bold: row === "r0",
+        italic: false,
+        text_color: null,
+        fill_color: null,
+        horizontal: null,
+        number_format: null,
+      },
+      value,
+    })),
+  }],
+};
+
 const options: Options = {
   file: CORPUS,
   root: ROOT,
@@ -674,6 +723,7 @@ const options: Options = {
   commands: BENCH_COMMANDS,
   settings: SETTINGS,
   syntaxForms: [...MARKDOWN_SYNTAX],
+  grid: GRID,
 };
 
 const host = createFakeHost(options);
