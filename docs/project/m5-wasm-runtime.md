@@ -1,26 +1,29 @@
 # M5: runtime WASM
 
-> **Stato aggiornato per:** tree `audit-close` al merge
-> `2cc2e44c3f6dc619218354f6cc89fff2c1517cf2`, tree
-> `e8b9e0c0445ca9cf98ce503d4e07402097f9da62`, 17 settembre 2026.
+> **Retrospettiva della milestone consegnata in `main` dalla PR #53.**
 
-## Gate di integrazione
+## Stato della milestone
 
-Vale la [governance audit](status.md#governance-di-integrazione): il tree
-corrente è una base di `fix/audit-integration`; nessun merge in `main` prima
-di G15/GO. Le capacità descritte qui sono consegnate su questa base, ma non
-sono una dichiarazione di completamento di `main`, G14 o G15.
+M5 è consegnata in `main` dalla
+[PR #53](https://github.com/Fubeo/Fub/pull/53), merge commit
+`7c263d2950176846bc45d85381c72f46b822bfd8`.
+
+La governance audit è conclusa: G14 è completo 56/56 e G15/GO è registrato.
+Le run push post-merge
+[CI 35331754822](https://github.com/Fubeo/Fub/actions/runs/35331754822) e
+[NPM supply chain 35331754778](https://github.com/Fubeo/Fub/actions/runs/35331754778)
+sono entrambe verdi sul merge SHA. I rischi residui accettati sono documentati
+come limiti correnti, non come gate di integrazione.
 
 ## Obiettivo
 
 Dimostrare che un componente WASM può usare gli stessi trait dei provider
-nativi, con compatibilità, capability, limiti e lifecycle applicati
-dall'host.
+nativi, con compatibilità, capability, limiti e lifecycle applicati dall'host.
 
-Il criterio è soddisfatto sulla base audit corrente: un autore può seguire un
-percorso documentato, esercitato end-to-end e privo di rami speciali nel
-kernel. La pagina resta una scheda di progetto finché la consegna non è
-autorizzata e promossa in `main`.
+Il criterio è soddisfatto in `main`: un autore può seguire un percorso
+documentato, esercitato end-to-end e privo di rami speciali nel kernel. Questa
+pagina è ora una **retrospettiva della milestone**, mantenuta temporaneamente
+per la riconciliazione formale di #8 e #10.
 
 ## Architettura consegnata
 
@@ -180,57 +183,65 @@ non esiste upgrade implicito. Una reinstallazione ha nuova identità e nuovo
 consenso. Un componente selezionato corrotto o non caricabile viene
 diagnosticato e saltato per quell'apertura senza impedire il vault.
 
-La [PR #49](https://github.com/Fubeo/Fub/pull/49) registra la consegna della
-fase 10 sul medesimo tree audit. #8 e #10 restano **OPEN** come tracker per la
-chiusura formale e la matrice audit, non perché manchi questo percorso nella
-base corrente.
+La [PR #53](https://github.com/Fubeo/Fub/pull/53) integra in `main` la consegna. #8 e #10 sono chiuse con matrici di verifica sul prodotto integrato.
 
-## Stato di consegna e limiti
+## Capacità M5 consegnate
 
-Sul tree `2cc2e44c` M5 ha il percorso installato e i provider esercitati:
-`CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider`, con
-capability, timeout, memoria, trap, output malformato, UI non fidata, rollback
-e teardown coperti nei casi dichiarati. La fase 10 Grid è presente in
-ABI/WIT, nel provider nativo, nel proxy WASM e nel client shell.
+In `main@7c263d…` M5 comprende:
 
-Questa pagina resta una scheda di progetto perché la base non è `main` e
-G14/G15 non sono conclusi. #8 e #10 restano aperte nei tracker; non vanno
-interpretate come capacità assenti. I limiti non promessi sono
-`IndexProvider` e `EventHandler` inbound, oltre a operazioni provider non
-esercitate dagli esempi.
+- `CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider`
+  nei percorsi nativi/WASM esercitati;
+- component model Wasmtime, manifest, ABI, capability, timeout, memoria, trap e
+  output malformati gestiti al confine;
+- UI non fidata con validazione per `Trust::Community`;
+- installazione da file, consenso, stato `enabled`, restart, teardown e
+  rimozione da disabilitato;
+- rollback degli snapshot startup stantii e ownership delle risorse preparate;
+- Grid v1 in ABI/WIT, provider nativo, proxy WASM e client shell con
+  negoziazione, finestre, patch, invalidazioni e fallback;
+- esempi riproducibili, inclusi `format-wasm`, `view-wasm` e
+  `grid-wasm`.
 
-Il tutorial per riprodurre il ciclo reale è
-[`../development/plugin-authoring.md`](../development/plugin-authoring.md).
-Un componente incompatibile viene rifiutato prima del mount; un permesso o
-consenso negato non lascia stato parziale; il filtro startup conserva
-separati installazione, consenso, enabled, capability e istanza montata.
+La parità dichiarata resta limitata alle operazioni e ai casi coperti dai test:
+la consegna di una famiglia non implica automaticamente tutte le future
+operazioni della stessa famiglia.
 
-## Rischi
+## Limiti volutamente non promessi
 
-| Rischio | Presidio |
+- `IndexProvider` WASM non è esposto finché una route reale non prova
+  feed/query/flush/close;
+- `EventHandler` inbound non è esposto finché un componente reale non prova
+  la reazione a `Notice`; `host-events` outbound resta supportato;
+- deadline a epoche e limite di memoria confinano il guest, ma non costituiscono
+  una quota assoluta CPU/RAM dell'intero processo;
+- operazioni non esercitate dagli esempi e dai test di parità non vengono
+  promesse per inferenza.
+
+Questi sono confini del prodotto corrente, non lavoro necessario a rendere
+valida l'integrazione già avvenuta.
+
+## Residui trasferiti ad altre issue
+
+- [#57](https://github.com/Fubeo/Fub/issues/57) possiede `WASM-002`: `IndexProvider` e `EventHandler` inbound;
+- [#58](https://github.com/Fubeo/Fub/issues/58) possiede `WASM-003`: quote assolute CPU/RAM di processo.
+
+## Rischi accettati
+
+I rischi WASM accettati a G15 restano tracciati nel registro audit:
+
+| Rischio | Limite corrente |
 |---|---|
-| espansione del WIT senza consumatori | provider aggiunto con esempio reale |
-| policy duplicata | un solo `Guard` |
-| UI attiva non fidata | validazione prima dell'IPC |
-| chiamata infinita | deadline a epoche |
-| memoria senza limite | store limiter |
-| mount parziale | transazione e teardown |
-| differenza nativo/WASM | test di parità |
-| tutorial non riproducibile | stesso artefatto e stessa sequenza dell'e2e |
+| `WASM-002` | `IndexProvider` e `EventHandler` inbound non sono esposti |
+| `WASM-003` | deadline e memoria confinano il guest, senza quota assoluta del processo |
+
+Gli altri rischi accettati da G15, come writer esterni e rename concorrenti,
+appartengono alle pagine permanenti di storage e lifecycle e non sono gate M5.
 
 ## Issue
 
 - [#8 — percorso end-to-end](https://github.com/Fubeo/Fub/issues/8)
 - [#10 — provider e UI non fidata](https://github.com/Fubeo/Fub/issues/10)
 
-## Passaggio successivo
+## Stato documentale
 
-La consegna corrente resta nelle guide e negli ADR; questa scheda si mantiene
-per tracciare il passaggio audit e l'eventuale chiusura formale di #8/#10.
-Dopo G14 e G15/GO:
-
-- aggiornare changelog e stato della release;
-- conservare nelle guide le capability e i limiti correnti;
-- spostare il lavoro successivo in nuove issue;
-- rimuovere questa scheda solo quando la policy del progetto la considera
-  superata sulla linea di rilascio.
+Questa pagina è una retrospettiva. Le regole normative vivono in [Runtime dei plugin](../architecture/plugin-runtime.md), nella [guida per gli autori](../development/plugin-authoring.md), in [ABI e WIT](../reference/abi-and-wit.md) e nel [layout su disco](../reference/on-disk-layout.md).
