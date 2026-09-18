@@ -103,6 +103,13 @@ nativo `.fubsheet` e un componente WASM di esempio. Entrambi attraversano gli
 stessi tipi e la stessa semantica; il valutatore Rust rimane l'unica autorità
 del linguaggio formule.
 
+Due guard rendono meccanica questa decisione. Nel client una registrazione di
+superficie deve dichiarare profili e fallback, e ogni binding deve riferirsi a
+un profilo registrato. Nel repository il guard delle famiglie pubbliche deriva
+i `*_FAMILY` da `fub-abi` e pretende, per ciascuno, shell, fallback, mirror
+TypeScript, nativo e WASM. La completezza non dipende quindi da una checklist
+temporanea.
+
 ## Conseguenze
 
 ### Positive
