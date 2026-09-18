@@ -367,7 +367,6 @@ pub(crate) fn mount_with_formats(
                     && !disabled.contains(id)
             })
             .collect::<Vec<_>>();
-
         for (id, error) in registry.enable_in_dependency_order(ws, selected) {
             tracing::error!(target: "fub.host", "bundle `{id}` not mounted: {error}");
         }

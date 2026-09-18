@@ -2,7 +2,7 @@ import { createEditor, type Editor } from "../../editor/editor";
 import type { CompletionSources } from "../../editor/completions";
 import type { SyntaxForm } from "../../host/contract";
 import type { GridHost } from "../grid/engine";
-import { t } from "../../i18n/strings";
+import { onLanguage, t, type Key } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
 import { createTextEngine } from "../text/engine";
@@ -100,14 +100,25 @@ function staticSurface(
   family: Extract<SurfaceFamily, "viewer" | "error">,
   profile: string,
   context: SurfaceMountContext,
-  message: string,
+  messageKey: Key,
 ): EditorSurface {
   const element = document.createElement("div");
   element.className = `document-surface document-surface-${family}`;
   element.tabIndex = 0;
   element.setAttribute("role", family === "error" ? "alert" : "document");
-  element.textContent = message;
+  element.dataset.i18nLabel = messageKey;
   context.parent.replaceChildren(element);
+
+  let active = true;
+  const redraw = () => {
+    if (!active) return;
+    const message = t(messageKey);
+    element.textContent = message;
+    element.setAttribute("aria-label", message);
+  };
+  redraw();
+  const stopLanguage = onLanguage(redraw);
+
   let source = "";
   return {
     family,
@@ -134,6 +145,9 @@ function staticSurface(
       element.dataset.theme = theme;
     },
     destroy() {
+      if (!active) return;
+      active = false;
+      stopLanguage();
       element.remove();
     },
   };
@@ -241,7 +255,7 @@ export function createDocumentSurfaceRegistry(
     sources: { bytes: "bytes-read-only" },
     factory: {
       mount(profile, context) {
-        return staticSurface("viewer", profile, context, "Anteprima binaria non disponibile");
+        return staticSurface("viewer", profile, context, "viewer.unavailable");
       },
     },
   });
@@ -251,7 +265,7 @@ export function createDocumentSurfaceRegistry(
     defaultProfile: "unsupported",
     factory: {
       mount(profile, context) {
-        return staticSurface("error", profile, context, "Nessuna superficie disponibile");
+        return staticSurface("error", profile, context, "surface.unavailable");
       },
     },
   });

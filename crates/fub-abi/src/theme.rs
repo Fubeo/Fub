@@ -26,6 +26,13 @@ pub enum ThemeLight {
     Dark,
     Light,
 }
+/// Una proprietà CSS il cui moto è dichiarato dal tema.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ThemeMotion {
+    Opacity,
+    Transform,
+}
 
 /// Manifest versionato di un tema installabile.
 ///
@@ -39,6 +46,14 @@ pub struct ThemeManifest {
     pub engine: ThemeEngine,
     pub lights: Vec<ThemeLight>,
     pub asset_namespace: String,
+    /// `theme-1` originally omitted this field. Keep that wire form
+    /// backwards-compatible while making the default explicit and stable.
+    #[serde(default = "default_theme_motion")]
+    pub motion: Vec<ThemeMotion>,
+}
+
+fn default_theme_motion() -> Vec<ThemeMotion> {
+    vec![ThemeMotion::Opacity, ThemeMotion::Transform]
 }
 
 #[cfg(test)]
@@ -59,10 +74,32 @@ mod tests {
             engine: ThemeEngine::Theme1,
             lights: vec![ThemeLight::Dark, ThemeLight::Light],
             asset_namespace: "theme://fub.serie/".into(),
+            motion: vec![ThemeMotion::Opacity, ThemeMotion::Transform],
         };
 
         assert_eq!(manifest.engine.as_str(), THEME_ENGINE);
         assert_eq!(manifest.lights, [ThemeLight::Dark, ThemeLight::Light]);
         assert_eq!(manifest.asset_namespace, "theme://fub.serie/");
+        assert_eq!(
+            manifest.motion,
+            [ThemeMotion::Opacity, ThemeMotion::Transform]
+        );
+    }
+
+    #[test]
+    fn legacy_theme_1_manifest_defaults_motion_exactly() {
+        let raw = r#"{
+            "id": "fub.serie",
+            "name": "Fub di serie",
+            "version": "1.0.0",
+            "engine": "theme-1",
+            "lights": ["dark", "light"],
+            "asset_namespace": "theme://fub.serie/"
+        }"#;
+        let manifest: ThemeManifest = serde_json::from_str(raw).expect("legacy manifest");
+        assert_eq!(
+            manifest.motion,
+            [ThemeMotion::Opacity, ThemeMotion::Transform]
+        );
     }
 }

@@ -40,6 +40,7 @@ import type {
   TextTolerance,
   ThemeEngine,
   ThemeLight,
+  ThemeMotion,
   ViewSurface,
   Weekday,
 } from "./enums.generated";
@@ -47,7 +48,7 @@ import type {
 // Manifest congelato della pelle: non passa dal WIT, ma resta parte del confine.
 export const THEME_ENGINE = "theme-1" as const;
 
-export type { ThemeEngine, ThemeLight } from "./enums.generated";
+export type { ThemeEngine, ThemeLight, ThemeMotion } from "./enums.generated";
 
 export interface ThemeManifest {
   id: string;
@@ -56,6 +57,21 @@ export interface ThemeManifest {
   engine: ThemeEngine;
   lights: ThemeLight[];
   asset_namespace: string;
+  motion: ThemeMotion[];
+}
+
+/** Un tema installato che il backend può consegnare alla shell. */
+export interface ThemeInfo {
+  manifest: ThemeManifest;
+}
+
+/** Una luce di un tema installato, già letta dal backend. */
+export interface ThemePayload {
+  manifest: ThemeManifest;
+  light: ThemeLight;
+  sheet: string;
+  skin: string | null;
+  assets: Record<string, readonly number[]>;
 }
 
 export interface VaultInfo {

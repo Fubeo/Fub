@@ -859,6 +859,19 @@ pub(crate) fn from_grid_surface(
     }
     Ok(surface)
 }
+/// Translate a declared binding while treating a family/protocol we do not
+/// understand as an optional capability.  Identity validation remains strict
+/// for the supported Grid v1 surface.
+pub(crate) fn from_optional_grid_surface(
+    surface: w_grid::GridSurfaceSpec,
+) -> Result<Option<fub_abi::grid::GridSurfaceSpec>, PluginError> {
+    if surface.family != fub_abi::grid::GRID_FAMILY
+        || surface.protocol_version != fub_abi::grid::GRID_PROTOCOL_VERSION
+    {
+        return Ok(None);
+    }
+    from_grid_surface(surface).map(Some)
+}
 
 fn from_grid_revision(revision: String) -> fub_abi::Revision {
     fub_abi::Revision(revision)

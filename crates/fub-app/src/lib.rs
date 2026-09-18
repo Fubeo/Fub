@@ -35,6 +35,7 @@ use fub_abi::grid::{
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
+use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
@@ -48,7 +49,9 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
-pub use fub_host::{BundleInfo, EmbedContent, UnreadDoc, VaultEntry, VaultInfo};
+pub use fub_host::{
+    BundleInfo, EmbedContent, ThemeInfo, ThemePayload, UnreadDoc, VaultEntry, VaultInfo,
+};
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 
 /// I vault aperti e quale è il corrente (§9.6): rispecchiato da `OpenVaults` in
@@ -831,6 +834,21 @@ fn set_view_state(
 fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleInfo>, PluginError> {
     host.bundles(vault.as_deref())
 }
+/// Elenca i temi installati che l'host ha verificato caricabili.
+#[tauri::command]
+fn list_themes(host: State<Host>) -> Result<Vec<ThemeInfo>, PluginError> {
+    host.themes()
+}
+
+/// Legge una sola luce del tema richiesto; il filesystem non attraversa l'IPC.
+#[tauri::command]
+fn read_theme(
+    host: State<Host>,
+    id: String,
+    light: ThemeLight,
+) -> Result<ThemePayload, PluginError> {
+    host.read_theme(&id, light)
+}
 
 fn parse_installation(installation: &str) -> Result<u64, PluginError> {
     if installation.is_empty() || !installation.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -1087,6 +1105,8 @@ pub fn run() {
             view_state,
             set_view_state,
             list_bundles,
+            list_themes,
+            read_theme,
             list_installed_plugins,
             install_plugin,
             set_installed_plugin_enabled,

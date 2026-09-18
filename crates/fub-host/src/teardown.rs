@@ -45,7 +45,15 @@ pub(crate) fn unmount(
                 match registry.write() {
                     Ok(mut registry) => {
                         let body = registry.prepare_stop(id);
+                        // Un bundle conosciuto ma mai montato non ha una
+                        // dichiarazione kernel da ritirare: spegnerlo è un
+                        // no-op idempotente. Un corpo estratto, invece, prova
+                        // che il registry e il kernel divergevano davvero.
+                        let known = body.is_some() || registry.knows(id);
                         drop(registry);
+                        if body.is_none() && known {
+                            return Ok(Vec::new());
+                        }
                         errors.extend(dispose_body(body, id));
                     }
                     Err(error) => errors.push(error),

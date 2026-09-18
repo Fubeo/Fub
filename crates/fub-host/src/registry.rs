@@ -20,7 +20,8 @@ use fub_kernel::{RegistryError, Trust, Workspace};
 #[cfg(feature = "search")]
 use fub_features::SEARCH_ID;
 
-use crate::{Custody, JobHost};
+use crate::custody::Custody;
+use crate::JobHost;
 
 /// Di che famiglia è un bundle nell'inventario.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -1443,8 +1444,12 @@ fn retire_guarded(workspace: &Custody<Workspace>, permit: &RegistrationPermit) -
         Ok(prepared) => prepared,
         Err(error) => return vec![PluginError::Internal(error.to_string().into())],
     };
-    let mut host = JobHost::new(workspace.clone(), prepared.owner());
-    let mut errors = prepared.close_indexes(&mut host);
+    // Grids remain owned by the prepared retirement until their external
+    // shutdown has completed. Keep this before indexes are closed and before
+    // finalization/disposal, matching the complete teardown path.
+    let mut errors = prepared.close_grids();
+    let mut host = JobHost::new(workspace.clone(), permit.owner());
+    errors.extend(prepared.close_indexes(&mut host));
     let finalized =
         crate::jobs::with_event_drain(workspace, |ws| ws.finish_plugin_deactivation(&mut prepared));
     match finalized {

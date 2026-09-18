@@ -237,6 +237,23 @@ impl From<RenderedDocument> for fub_abi::RenderedDocument {
     }
 }
 
+impl From<fub_abi::RenderedDocument> for RenderedDocument {
+    fn from(doc: fub_abi::RenderedDocument) -> Self {
+        RenderedDocument {
+            html: doc.html,
+            parts: doc
+                .parts
+                .into_iter()
+                .map(|p| RenderedPart {
+                    slot: p.slot,
+                    kind: p.kind,
+                    node: p.node,
+                })
+                .collect(),
+        }
+    }
+}
+
 /// Il segnaposto in cui la shell monta una parte dichiarativa.
 ///
 /// Lo scrive **il kernel**, non il provider: se lo scrivesse il provider, il suo

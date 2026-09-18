@@ -33,7 +33,7 @@ import {
 import { $ } from "../ui/dom";
 import { activatable } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
-import { refreshOn, registerPanel } from "../ui/panel-host";
+import { refreshOn, registerPanel, registeredPanels, unregisterPanel } from "../ui/panel-host";
 import { focusEditor, openDocument } from "./document";
 import { flushPendingSave, renameKeepingBuffer, type RenameResult } from "../state/document-session";
 import { trashWithConfirm } from "./trash";
@@ -41,6 +41,7 @@ import { errorText } from "../host/errors";
 import { nameFault, normalizedName, type NameFault } from "../rules/mirrored";
 import { onLanguage, t, type Key } from "../i18n/strings";
 import { notify } from "../ui/notify";
+import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 
 const fileListEl = $("#file-list");
@@ -80,25 +81,25 @@ const levelWindows = new Map<string, number>();
 /// l'albero distrugge gli `<li>` sotto il mouse.
 let lastSignature = "";
 
-export function mountExplorer(): void {
-  $("#new-note").addEventListener("click", () => void newNote());
-  spaceTitleEl.addEventListener("click", openSpaceNote);
-  treeArrows();
-  wireRootDropTarget();
+export function mountExplorer(lifetime: Lifetime): void {
+  lifetime.listen($("#new-note"), "click", () => void newNote());
+  lifetime.listen(spaceTitleEl, "click", openSpaceNote);
+  treeArrows(lifetime);
+  wireRootDropTarget(lifetime);
   // Il titolo del pannello è **di qui** e non del testo fermo di `index.html`:
   // a casa dice «Note», dentro uno spazio dice il nome dello spazio. Un
   // `data-i18n` sopra glielo riscriverebbe a «Note» a ogni cambio di lingua,
   // cioè proprio quando l'utente non ha cambiato spazio.
-  onLanguage(renderSpaceTitle);
+  lifetime.add(onLanguage(renderSpaceTitle));
   renderSpaceTitle();
 
   // Una lista chiesta esplicitamente (apertura del vault, creazione, rinomina,
   // ripristino) si richiede sempre: il segnale dice *quando*, non *cosa*.
-  on("documents", () => void refreshFromKernel(true));
+  lifetime.add(on("documents", () => void refreshFromKernel(true)));
   // L'organizzazione cambiata ridisegna la stessa vista senza richiederla:
   // icone, pin e ordine non passano dal kernel.
-  on("organization", renderFileList);
-  on("active-doc", markActive);
+  lifetime.add(on("organization", renderFileList));
+  lifetime.add(on("active-doc", markActive));
 
   // Una rinomina non è solo una lista invecchiata: l'organizzazione (icona,
   // pin, ordine) è indicizzata per path, e va riletta prima del ridisegno.
@@ -109,12 +110,14 @@ export function mountExplorer(): void {
   // e resta un'iscrizione diretta, non una riga nel `refresh` del pannello,
   // perché il router consegna gli ascoltatori generici prima dei tipizzati e un
   // ridisegno innescato dal registro partirebbe con l'organizzazione vecchia.
-  onEvent("document_renamed", () => {
-    void (async () => {
-      await loadOrganization();
-      await refreshFromKernel();
-    })();
-  });
+  lifetime.add(
+    onEvent("document_renamed", () => {
+      void (async () => {
+        await loadOrganization();
+        await refreshFromKernel();
+      })();
+    }),
+  );
 
   // Dentro un lotto (decisione 0011) `index_updated` NON arriva: arriva
   // `batch_ended`, una volta sola. È tutta la differenza fra una rinomina con
@@ -122,12 +125,16 @@ export function mountExplorer(): void {
   // Nessun `visible`: l'albero si tiene aggiornato anche mentre la sidebar
   // mostra la ricerca o il cestino, perché alimenta anche ciò che si vede
   // altrove (le appuntate, la striscia degli spazi).
-  registerPanel({
+  const panel = {
     id: "shell:explorer",
     title: "Note",
-    placement: "left_sidebar",
+    placement: "left_sidebar" as const,
     refresh: refreshOn("index_updated", "batch_ended"),
     render: () => refreshFromKernel(),
+  };
+  registerPanel(panel);
+  lifetime.add(() => {
+    if (registeredPanels().some((current) => current === panel)) unregisterPanel(panel.id);
   });
 }
 
@@ -312,8 +319,8 @@ function roving(preferred?: string): void {
 /// qui e non nel campo — chi mette un input dentro l'albero non deve saperlo —
 /// ed è la stessa che vale per ogni contenitore che ascolta la tastiera dei
 /// propri figli: **i tasti di un campo sono del campo**.
-function treeArrows(): void {
-  fileListEl.addEventListener("keydown", (e) => {
+function treeArrows(lifetime: Lifetime): void {
+  lifetime.listen(fileListEl, "keydown", (e) => {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.closest("input, textarea, select, [contenteditable]")) return;
@@ -1045,16 +1052,16 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
 
 /// Il titolo "Note" accoglie le note trascinate fuori da ogni cartella: è la
 /// radice (del vault, o dello spazio attivo).
-function wireRootDropTarget(): void {
-  filesTitleEl.addEventListener("dragover", (e) => {
+function wireRootDropTarget(lifetime: Lifetime): void {
+  lifetime.listen(filesTitleEl, "dragover", (e) => {
     const root = state.activeSpace ?? "";
     if (drag?.kind === "note" && drag.parent !== root) {
       e.preventDefault();
       filesTitleEl.classList.add("drop-into");
     }
   });
-  filesTitleEl.addEventListener("dragleave", () => filesTitleEl.classList.remove("drop-into"));
-  filesTitleEl.addEventListener("drop", async (e) => {
+  lifetime.listen(filesTitleEl, "dragleave", () => filesTitleEl.classList.remove("drop-into"));
+  lifetime.listen(filesTitleEl, "drop", async (e) => {
     filesTitleEl.classList.remove("drop-into");
     if (drag?.kind !== "note") return;
     e.preventDefault();

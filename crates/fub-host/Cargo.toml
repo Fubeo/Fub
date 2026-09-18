@@ -19,6 +19,7 @@ fub-kernel = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+cap-std = { workspace = true }
 
 # Il watcher di default, e l'unico che oggi esiste. Sta dietro una cargo feature
 # perché il trait `VaultWatcher` esiste proprio per i posti dove `notify` non
@@ -123,6 +124,10 @@ ureq = { version = "3", default-features = false, features = [
     "platform-verifier",
     "gzip",
 ], optional = true }
+
+# Unix descriptor opens use rustix's portable O_NOFOLLOW/O_NONBLOCK flags.
+[target.'cfg(unix)'.dependencies]
+rustix = { workspace = true }
 
 [features]
 default = ["notify-watcher", "http-client", "official-features"]

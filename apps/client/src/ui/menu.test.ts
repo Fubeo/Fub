@@ -73,6 +73,79 @@ describe("il menu contestuale", () => {
     expect(tab().defaultPrevented).toBe(false);
   });
 });
+describe("tastiera e fuoco del menu", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    document.body.replaceChildren();
+  });
+
+  afterEach(() => {
+    closeContextMenu();
+    vi.useRealTimers();
+  });
+
+  it("entra sulla voce selezionata e mantiene un solo stop Tab", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    showContextMenu(clickEvent(), [
+      { label: "Prima", run: () => {} },
+      { label: "Scelta", selected: true, run: () => {} },
+      { label: "Terza", run: () => {} },
+    ]);
+
+    const menu = document.getElementById("context-menu")!;
+    const items = [...menu.querySelectorAll<HTMLButtonElement>("[role=menuitem]")];
+    expect(document.activeElement).toBe(items[1]);
+    expect(items.map((item) => item.tabIndex)).toEqual([-1, 0, -1]);
+
+    items[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(items[2]);
+    expect(items.map((item) => item.tabIndex)).toEqual([-1, -1, 0]);
+    items[2]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+    expect(document.activeElement).toBe(items[0]);
+    items[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true }));
+    expect(document.activeElement).toBe(items[2]);
+    items[2]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+    expect(document.activeElement).toBe(items[2]);
+  });
+
+  it("attiva una sola volta con Enter, Space e click, e Escape restituisce il fuoco", () => {
+    const opener = document.createElement("button");
+    document.body.appendChild(opener);
+    opener.focus();
+    const run = vi.fn();
+    showContextMenu(clickEvent(), [{ label: "Esegui", run }]);
+    const item = document.querySelector<HTMLButtonElement>("[role=menuitem]")!;
+
+    item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(run).toHaveBeenCalledTimes(1);
+    // Un eventuale click nativo ritardato (in particolare dopo Space) non
+    // deve rieseguire la voce già consumata.
+    item.click();
+    expect(run).toHaveBeenCalledTimes(1);
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+
+    showContextMenu(clickEvent(), [{ label: "Esegui", run }]);
+    const second = document.querySelector<HTMLButtonElement>("[role=menuitem]")!;
+    second.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
+    expect(run).toHaveBeenCalledTimes(2);
+
+    showContextMenu(clickEvent(), [{ label: "Esegui", run }]);
+    document.querySelector<HTMLButtonElement>("[role=menuitem]")!.click();
+    expect(run).toHaveBeenCalledTimes(3);
+
+    showContextMenu(clickEvent(), [{ label: "Chiudi", run }]);
+    document.querySelector<HTMLElement>("#context-menu")!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+    vi.runAllTimers();
+    expect(document.getElementById("context-menu")).toBeNull();
+    expect(document.activeElement).toBe(opener);
+  });
+});
 
 describe("il selettore di icona", () => {
   beforeEach(() => {

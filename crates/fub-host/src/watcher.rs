@@ -58,7 +58,7 @@ use crate::jobs::{drain_events, with_event_drain};
 /// proprio `Drop`; chi non ne ha — [`NoWatcher`] — non ha niente da aspettare.
 ///
 /// [decisione 0120]: ../../../docs/decisions/README.md
-pub trait VaultWatcher: Send + Sync {
+pub(crate) trait VaultWatcher: Send + Sync {
     /// `true` se questo vault ha il rilevamento delle modifiche esterne
     /// **adesso**.
     ///
@@ -74,7 +74,7 @@ pub trait VaultWatcher: Send + Sync {
 ///
 /// Sta separato dal watcher perché è la parte che si sceglie **prima** di avere
 /// un vault: `Host::with_watcher` la prende una volta, e ogni apertura la usa.
-pub trait WatcherFactory: Send + Sync {
+pub(crate) trait WatcherFactory: Send + Sync {
     /// Avvia il rilevamento su `root`, sincronizzando `workspace` a ogni
     /// cambiamento. L'apertura chiama questo metodo senza un read-lock o un
     /// write-lock del workspace: una fabbrica può quindi verificarlo, leggere o
@@ -114,12 +114,22 @@ impl RunningWatcher {
             || Ok(watcher.is_watching()),
         );
         match status {
-            Ok(watching) => watching,
+            Ok(watching) => {
+                // Il valore osservato dalla callback diventa anche quello del
+                // canale dati: un watcher difettoso non può lasciare due
+                // risposte diverse alla stessa domanda.
+                self.watching.store(watching, Ordering::Relaxed);
+                watching
+            }
             Err(error) => {
                 // Lo stato esterno non è più affidabile, quindi la risposta
-                // conservativa è «non sta guardando». Il watcher resta però
-                // posseduto dalla sessione: `close` ne esegue ancora il Drop e
-                // il reset host della bandiera.
+                // conservativa è «non sta guardando». La stessa decisione va
+                // pubblicata anche nel bit del kernel: altrimenti
+                // `Host::is_watching` direbbe `false` mentre
+                // `VaultStatus.watching` resterebbe `true`.
+                self.watching.store(false, Ordering::Relaxed);
+                // Il watcher resta però posseduto dalla sessione: `close`
+                // ne esegue ancora il Drop e il reset host della bandiera.
                 tracing::error!(target: "fub.host", "watcher status failed: {error}");
                 false
             }
@@ -285,7 +295,7 @@ fn start_safely(
 /// ciò che doveva provare.
 ///
 /// Serve sia da fabbrica sia da rilevatore: non c'è niente da tenere vivo.
-pub struct NoWatcher;
+pub(crate) struct NoWatcher;
 
 impl VaultWatcher for NoWatcher {
     fn is_watching(&self) -> bool {
@@ -315,7 +325,7 @@ impl WatcherFactory for NoWatcher {
 /// il rilevamento di una piattaforma diversa — o un test, che è il primo
 /// cliente non-`notify` che questo tipo ha.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ExternalChange {
+pub(crate) enum ExternalChange {
     /// Un path che è cambiato: creato, riscritto, sparito. Chi lo riceve non sa
     /// quale dei tre, e non deve: lo scopre il kernel guardando il disco.
     Touched(Utf8PathBuf),
@@ -614,21 +624,46 @@ impl Drop for EventDispatchGuard {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum SyncDisposition {
+    /// Nessun errore: il rilevatore può continuare normalmente.
+    Complete,
+    /// Un documento non si è potuto sincronizzare, ma il vault resta osservato.
+    Warning,
+    /// Il percorso del lotto non è più affidabile: il rilevatore va fermato.
+    Fatal,
+}
+
 struct BatchApply {
     outcome: Result<(), PluginError>,
     mutated: bool,
+    /// `prepare_sync_path_prepared` has already recorded its own per-path
+    /// failure through `Workspace::notes_sync`; do not emit that Trouble twice.
+    outcome_reported: bool,
 }
 
-pub struct ExternalSync {
+pub(crate) struct ExternalSync {
     workspace: Custody<Workspace>,
     lifecycle: Arc<SyncLifecycle>,
+    watching: Arc<AtomicBool>,
 }
 
 impl ExternalSync {
-    pub fn new(workspace: Custody<Workspace>) -> Self {
+    pub(crate) fn new(workspace: Custody<Workspace>) -> Self {
+        let watching = match workspace.read() {
+            Ok(ws) => ws.watch_flag(),
+            Err(error) => {
+                // A poisoned workspace cannot publish a notice, but keeping a
+                // private flag lets every later fatal path still report the
+                // conservative status to callers that retain this syncer.
+                tracing::error!(target: "fub.host", "watcher workspace status failed: {error}");
+                Arc::new(AtomicBool::new(false))
+            }
+        };
         ExternalSync {
             workspace,
             lifecycle: Arc::new(SyncLifecycle::new()),
+            watching,
         }
     }
 
@@ -637,21 +672,29 @@ impl ExternalSync {
     }
 
     /// Applica un lotto di cambiamenti. Vedi le tre fasi nel doc del tipo.
-    /// **Un vault avvelenato smette di sincronizzarsi** (decisione 0120), e
-    /// smette in silenzio *qui*: la riga che dice perché l'ha già scritta la
-    /// porta, una volta sola. Ciò che si perde è il rilevamento — cioè un
-    /// derivato — su un vault che è già irrecuperabile.
-    pub fn batch(&mut self, changes: &[ExternalChange]) {
+    /// L'esito non viene abbandonato: un errore di un singolo documento resta
+    /// un avviso osservabile e lascia vivo il rilevamento, mentre un errore del
+    /// percorso di sincronizzazione pubblica un guasto fatale e abbassa la
+    /// bandiera condivisa del vault.
+    pub(crate) fn batch(&mut self, changes: &[ExternalChange]) {
+        self.batch_outcome(changes);
+    }
+
+    fn batch_outcome(&mut self, changes: &[ExternalChange]) -> SyncDisposition {
         let Some(_operation) = self.lifecycle.enter() else {
-            return;
+            return SyncDisposition::Complete;
         };
         if changes.is_empty() {
-            return;
+            return SyncDisposition::Complete;
         }
         // Fase 1a — politica e handle owned, senza I/O, sotto read.
         let preflights = {
-            let Ok(ws) = self.workspace.read() else {
-                return;
+            let ws = match self.workspace.read() {
+                Ok(ws) => ws,
+                Err(error) => {
+                    self.report_fatal(error);
+                    return SyncDisposition::Fatal;
+                }
             };
             changes
                 .iter()
@@ -676,8 +719,12 @@ impl ExternalSync {
             .collect::<Vec<_>>();
         // Fase 1c — routing e piani puri sotto read, dai soli esiti del filtro.
         let planned = {
-            let Ok(ws) = self.workspace.read() else {
-                return;
+            let ws = match self.workspace.read() {
+                Ok(ws) => ws,
+                Err(error) => {
+                    self.report_fatal(error);
+                    return SyncDisposition::Fatal;
+                }
             };
             preflighted
                 .into_iter()
@@ -686,15 +733,15 @@ impl ExternalSync {
         };
         // Fase 1d — stat/read/parse e side-data restano fuori da Custody.
         let invoked = planned.into_iter().flat_map(PlannedWatcherChange::invoke);
-        let BatchApply { outcome, mutated } = self.apply_batch_prepared(invoked);
+        let apply = self.apply_batch_prepared(invoked);
         // Fase 3 — la durevolezza è un finally soltanto dopo una mutazione:
         // un errore di prepare pulito non ha feed staged da flushare.
-        let flushed = if outcome.is_ok() || mutated {
+        let flushed = if apply.outcome.is_ok() || apply.mutated {
             self.flush()
         } else {
-            Ok(())
+            Ok(false)
         };
-        let _ = outcome.and(flushed);
+        self.finish_batch(apply, flushed)
     }
 
     /// **Il primo lotto del rilevatore, calcolato per differenza** (§15.7).
@@ -717,15 +764,25 @@ impl ExternalSync {
     /// fotografie e le brevi mutazioni del core. Anche un vault senza
     /// rilevatore la chiama: la finestra c'è per ogni fabbrica, e ciò che il
     /// rilevatore avrebbe visto se fosse stato acceso lo vede il workspace.
-    pub fn catch_up(&mut self) {
+    #[cfg(test)]
+    pub(crate) fn catch_up(&mut self) {
+        self.catch_up_outcome();
+    }
+
+    #[cfg(test)]
+    fn catch_up_outcome(&mut self) -> SyncDisposition {
         let Some(_operation) = self.lifecycle.enter() else {
-            return;
+            return SyncDisposition::Complete;
         };
         let _phase = tracing::info_span!(target: "fub.opening", "catch_up").entered();
         // Fase 1a — soltanto handle e cache owned sotto prestito condiviso.
         let scan = {
-            let Ok(ws) = self.workspace.read() else {
-                return;
+            let ws = match self.workspace.read() {
+                Ok(ws) => ws,
+                Err(error) => {
+                    self.report_fatal(error);
+                    return SyncDisposition::Fatal;
+                }
             };
             ws.prepare_catch_up()
         };
@@ -733,36 +790,47 @@ impl ExternalSync {
         let snapshot = match scan.invoke() {
             Ok(snapshot) => snapshot,
             Err(error) => {
-                if let Ok(mut ws) = self.workspace.write() {
-                    ws.note_catch_up_failure(error);
+                match self.workspace.write() {
+                    Ok(mut ws) => ws.note_catch_up_failure(error),
+                    Err(error) => {
+                        self.report_fatal(error);
+                        return SyncDisposition::Fatal;
+                    }
                 }
-                let _ = drain_events(&self.workspace);
-                return;
+                if let Err(error) = drain_events(&self.workspace) {
+                    self.report_fatal(error);
+                    return SyncDisposition::Fatal;
+                }
+                return SyncDisposition::Warning;
             }
         };
         // Fase 1c — piani puri sullo stato corrente del kernel.
         let plans = {
-            let Ok(ws) = self.workspace.read() else {
-                return;
+            let ws = match self.workspace.read() {
+                Ok(ws) => ws,
+                Err(error) => {
+                    self.report_fatal(error);
+                    return SyncDisposition::Fatal;
+                }
             };
             ws.plan_catch_up(snapshot)
         };
         if plans.is_empty() {
-            return;
+            return SyncDisposition::Complete;
         }
         // Fase 1d — stat-read-stat e Format/Syntax fuori da Custody.
         let prepared = plans
             .into_iter()
             .map(|(path, plan)| InvokedWatcherChange::Sync(path, plan.map(SyncPlan::invoke)));
-        let BatchApply { outcome, mutated } = self.apply_batch_prepared(prepared);
+        let apply = self.apply_batch_prepared(prepared);
         // Fase 3 — come per un lotto notificato, i feed già riusciti vanno resi
         // durevoli anche se un piano successivo ha fallito.
-        let flushed = if outcome.is_ok() || mutated {
+        let flushed = if apply.outcome.is_ok() || apply.mutated {
             self.flush()
         } else {
-            Ok(())
+            Ok(false)
         };
-        let _ = outcome.and(flushed);
+        self.finish_batch(apply, flushed)
     }
 
     // Il lotto conserva un solo drain, ma ogni feed/rimozione lascia il guard
@@ -779,18 +847,30 @@ impl ExternalSync {
                 return BatchApply {
                     outcome: Err(error),
                     mutated: false,
+                    outcome_reported: false,
                 };
             }
         };
         let mut mutated = false;
-        let outcome = (|| {
+        let mut outcome_reported = false;
+        let outcome: Result<(), PluginError> = (|| {
             for change in changes {
                 match change {
                     InvokedWatcherChange::Sync(path, parsed) => {
-                        let pending = self
-                            .workspace
-                            .write()?
-                            .prepare_sync_path_prepared(&path, parsed)?;
+                        let pending = {
+                            let mut ws = self.workspace.write()?;
+                            match ws.prepare_sync_path_prepared(&path, parsed) {
+                                Ok(pending) => pending,
+                                Err(error) => {
+                                    // The kernel records this per-path failure
+                                    // (including malformed input) before
+                                    // returning it; the caller must not emit a
+                                    // duplicate Trouble.
+                                    outcome_reported = true;
+                                    return Err(error.into());
+                                }
+                            }
+                        };
                         let Some(pending) = pending else {
                             continue;
                         };
@@ -860,6 +940,57 @@ impl ExternalSync {
         BatchApply {
             outcome: outcome.and(restored).and(drained),
             mutated,
+            outcome_reported,
+        }
+    }
+    /// Conclude a batch without losing either half of its durability attempt.
+    ///
+    /// Per-path parse/read failures have already gone through the kernel's
+    /// warning path. Everything else means that the synchronization machinery
+    /// itself is no longer trustworthy: publish a fatal Trouble and stop
+    /// advertising the watcher instead of silently continuing with stale state.
+    fn finish_batch(
+        &self,
+        apply: BatchApply,
+        flushed: Result<bool, PluginError>,
+    ) -> SyncDisposition {
+        let mut disposition = SyncDisposition::Complete;
+        if let Err(error) = apply.outcome {
+            if apply.outcome_reported {
+                disposition = SyncDisposition::Warning;
+            } else {
+                self.report_fatal(error);
+                disposition = SyncDisposition::Fatal;
+            }
+        }
+        match flushed {
+            Ok(true) => {
+                if disposition == SyncDisposition::Complete {
+                    disposition = SyncDisposition::Warning;
+                }
+            }
+            Ok(false) => {}
+            Err(error) => {
+                self.report_fatal(error);
+                disposition = SyncDisposition::Fatal;
+            }
+        }
+        disposition
+    }
+
+    /// Publish a fatal synchronization failure and make the shared status
+    /// conservative even if event delivery itself is unavailable.
+    fn report_fatal(&self, error: PluginError) {
+        self.watching.store(false, Ordering::Release);
+        tracing::error!(target: "fub.host", "watcher synchronization stopped: {error}");
+        if let Err(delivery) = with_event_drain(&self.workspace, |ws| {
+            ws.watch_flag().store(false, Ordering::Release);
+            ws.report_host_trouble(Severity::Failure, error);
+        }) {
+            tracing::error!(
+                target: "fub.host",
+                "watcher synchronization failure could not be reported: {delivery}"
+            );
         }
     }
 
@@ -871,23 +1002,23 @@ impl ExternalSync {
     /// perdita che l'utente ha il diritto di sapere: chi cerca, fino alla
     /// prossima apertura, riceve una risposta incompleta. Pavimento e porta
     /// insieme (0062): una riga nel log, una nel canale.
-    fn flush(&mut self) -> Result<(), PluginError> {
+    fn flush(&mut self) -> Result<bool, PluginError> {
         let flush_errors = crate::teardown::flush_indexes(&self.workspace)?;
         if flush_errors.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
         for error in &flush_errors {
             tracing::warn!(target: "fub.host", "flush index: {error}");
         }
-        let _ = with_event_drain(&self.workspace, |ws| {
+        with_event_drain(&self.workspace, |ws| {
             for error in flush_errors {
                 ws.report_host_trouble(
                     Severity::Warning,
                     PluginError::Internal(format!("flush index: {error}").into()),
                 );
             }
-        });
-        Ok(())
+        })?;
+        Ok(true)
     }
 
     /// **Il rilevamento è finito, e da adesso si vede** (§9.7). Un errore del
@@ -901,23 +1032,30 @@ impl ExternalSync {
     /// È `pub` come `batch`, e per la stessa ragione: le due cose che un
     /// rilevatore ha da dire al workspace sono «ecco cosa è cambiato» e «ho
     /// smesso di vedere», e la seconda non è meno di `notify` della prima.
-    pub fn watch_died(&mut self, reasons: Vec<String>) {
+    pub(crate) fn watch_died(&mut self, reasons: Vec<String>) {
         // I motivi si scrivono nel log **prima** del prestito: se il vault è
         // avvelenato il canale degli eventi non c'è più, e la ragione per cui
         // il rilevamento è morto resterebbe l'unica cosa che nessuno ha detto.
+        self.watching.store(false, Ordering::Release);
         for reason in &reasons {
             tracing::error!(target: "fub.host", "{reason}");
         }
-        let _ = with_event_drain(&self.workspace, |ws| {
+        if let Err(error) = with_event_drain(&self.workspace, |ws| {
+            ws.watch_flag().store(false, Ordering::Release);
             for reason in reasons {
                 ws.report_host_trouble(Severity::Failure, PluginError::Internal(reason.into()));
             }
-        });
+        }) {
+            tracing::error!(
+                target: "fub.host",
+                "watcher failure could not be reported: {error}"
+            );
+        }
     }
 }
 
 #[cfg(feature = "notify-watcher")]
-pub use notify_watcher::NotifyWatcher;
+pub(crate) use notify_watcher::NotifyWatcher;
 
 #[cfg(feature = "notify-watcher")]
 mod notify_watcher {
@@ -937,7 +1075,7 @@ mod notify_watcher {
     use super::{ExternalChange, ExternalSync, SyncLifecycle, VaultWatcher, WatcherFactory};
 
     /// Il rilevatore di default: `notify` con un debouncer da 300 ms.
-    pub struct NotifyWatcher;
+    pub(crate) struct NotifyWatcher;
 
     /// Il debouncer vivo, **e il thread che consegna i lotti**.
     ///
@@ -1152,13 +1290,15 @@ mod notify_watcher {
                 },
             )
             .map_err(|and| and.to_string())?;
+            // La callback può essere invocata immediatamente da `watch` (per
+            // esempio se il backend riporta già un errore della radice). La
+            // bandiera deve essere vera prima di consegnarle il controllo:
+            // così un errore osservato durante l'avvio la abbassa e nessuna
+            // scrittura finale può sovrascriverlo con `true`.
+            watching.store(true, Ordering::Release);
             debouncer
                 .watch(root.as_std_path(), RecursiveMode::Recursive)
                 .map_err(|and| and.to_string())?;
-            // Alzata **dopo** che `watch` è riuscita: fra il debouncer costruito
-            // e la radice osservata c'è un errore possibile, e in mezzo la
-            // risposta giusta è ancora `false`.
-            watching.store(true, Ordering::Relaxed);
             Ok(Box::new(Debounced {
                 debouncer: Some(debouncer),
                 watching,

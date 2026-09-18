@@ -40,6 +40,7 @@ import { syntaxTree } from "@codemirror/language";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
+import { t } from "../../../../i18n/strings";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
@@ -438,6 +439,9 @@ class CheckboxWidget extends WidgetType {
     box.checked = this.checked;
     box.className = "cm-fub-checkbox";
     box.tabIndex = -1; // il focus resta all'editor
+    const labelKey = this.checked ? "editor.task.completed" : "editor.task.pending";
+    box.dataset.i18nLabel = labelKey;
+    box.setAttribute("aria-label", t(labelKey));
     return box;
   }
   ignoreEvent() {

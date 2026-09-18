@@ -8,13 +8,13 @@
 | Strumento | Versione |
 |---|---|
 | Rust | 1.89 |
-| Node.js | 22 |
+| Node.js | >=22.12.0 |
 | npm | quello compatibile con il lockfile |
 | Tauri CLI | major 2 |
 | Git | una versione recente |
 
 Rust 1.89 è il valore di `rust-version` nel workspace e la toolchain usata in
-CI. Node 22 è la versione usata dai job frontend e documentazione.
+CI. Node.js >=22.12.0 è la versione usata dai job frontend e documentazione.
 
 ### Linux
 

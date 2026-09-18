@@ -1,6 +1,8 @@
 # Roadmap
 
-> **Stato aggiornato per:** `main`, 9 settembre 2026.
+> **Stato aggiornato per:** candidato `audit-close` della
+> [PR #50](https://github.com/Fubeo/Fub/pull/50), basato su
+> `fix/audit-integration`, 18 settembre 2026.
 
 La roadmap descrive ordine e direzione. Le GitHub Issues restano il tracker
 delle attività eseguibili. Un prossimo passo approvato può avere un TODO
@@ -9,44 +11,30 @@ sequenza tecnica estesa.
 
 ```mermaid
 flowchart LR
-    NOW["Ora<br/>M5 e stabilizzazione"] --> NEXT["Dopo<br/>superfici condivise e release"]
+    NOW["Ora<br/>stabilizzazione e audit"] --> NEXT["Dopo<br/>release e temi"]
     NEXT --> LATER["Più avanti<br/>nuovi formati e servizi opt-in"]
 ```
 
 ## Vincolo di integrazione
 
 La [governance corrente](status.md#governance-di-integrazione) mantiene in
-vigore il piano audit di `fix/audit-integration`: prima di G15/GO non si
-integra in `main`, neppure una PR M5 o documentale verde. I candidati vanno
-riconciliati con il lavoro audit e certificati nuovamente dopo l'integrazione.
-Questa roadmap stabilisce l'ordine del lavoro, non deroga ai gate audit.
+vigore il piano audit: la PR #50 è il candidato G14 56/56, ma non si integra in
+`main` prima dei required checks sul commit finale e di un G15/GO esplicito.
+Questa roadmap stabilisce l'ordine del lavoro e non deroga a quei gate.
 
 ## Ora
 
-### Riconciliare le linee prima di M5
+### M5, fase 10 e remediation consegnate nel candidato
 
-Il fix CAS #27 e la riconciliazione #25 hanno superato le run push e PR;
-#25 è integrata nella linea audit. Completare i gate della discovery #26 e del
-port documentale #28 sul candidato effettivo. Adattare #23 al lifecycle audit
-senza callback sotto il lock del workspace, compresi i percorsi di produzione. Preservare il lavoro
-esclusivo di entrambe le linee. Non ritirare il piano audit per aggirare G15.
+La PR #50 contiene inventario persistente, installazione, consenso sugli esatti
+byte, scelta `enabled`, startup autorizzato, restart e rimozione; collisioni,
+digest alterati e file incompleti restano errori espliciti.
 
-### Completare M5
-
-La CI di riferimento di `main` è tornata verde dopo la correzione dei blocchi
-Markdown in #22; il runtime WASM segue la riconciliazione delle linee.
-
-- discovery e installazione di un componente;
-- proxy dei provider richiesti da casi reali;
-- view WASM e validazione non fidata;
-- errori, timeout, memoria e teardown dimostrati end-to-end.
-
-Issue: [#8](https://github.com/Fubeo/Fub/issues/8) e
-[#10](https://github.com/Fubeo/Fub/issues/10). La
-[PR #23](https://github.com/Fubeo/Fub/pull/23) è il primo incremento nativo in
-revisione, ancora draft per l'adattamento audit, non il completamento della
-milestone. Installazione, consenso, inventario e abilitazione persistenti nel
-percorso prodotto restano distinti dal banco di sviluppo.
+I provider `ViewProvider`, `FormatProvider` e `GridProvider` attraversano i
+percorsi nativo/WASM coperti, con validazione UI non fidata, finestre globali,
+fallback, ownership e teardown. La remediation conclusiva chiude le race di
+view/doc-search/grid, i confini lock/capability e la parità tema. #8 e #10
+restano tracker aperti fino al record G15 e alla promozione in `main`.
 
 ### Stabilizzare i dati
 
@@ -72,29 +60,19 @@ foglio di contatto, ripetibilità nello stesso ambiente, soglie e diagnosi del
 drift restano in [#17](https://github.com/Fubeo/Fub/issues/17), tracker unico che
 ha assorbito #16. Non rigenerare immagini per nascondere regressioni.
 
-## Dopo
+## Consegne sulla base audit corrente
 
-### Proseguire le superfici condivise
-
-Le fasi 0–9 del piano sono concluse nello stack candidato: il motore testuale ha
-il secondo cliente, `DocumentSession` è estratta, `DocumentSurfaceRegistry`
-risolve formato, specie della sorgente e fallback senza collisioni silenziose e
-ogni superficie dichiara le proprie modalità. La tastiera arbitra popup,
-editor, superficie, profilo, documento, riquadro e globale senza listener
-aggiuntivi nei renderer.
-
-Il formato pilota `.fubsheet` dispone di schema testuale v1, identità stabili,
-limiti e proiezioni comuni. La vertical slice `GridEngine` aggiunge viewport
-virtualizzata, editor condivisi, operazioni atomiche, undo separato, TSV,
-accessibilità e valutazione Rust autorevole. La misura del protocollo è fissata
-nella [ADR 0201](../decisions/0201-superfici-strutturate-a-finestre.md):
-sessione derivata, finestre limitate, patch coordinate e invalidazioni
-dipendenti sostituiscono sorgente e valutazione complete a ogni commit. La fase
-10 pubblica soltanto questi tipi minimi in ABI/WIT con clienti nativo e WASM.
+M5 e fase 10 sono integrate in `fix/audit-integration`; la PR #50 aggiunge
+matrice 56/56 e remediation finale. ABI/WIT, mirror TypeScript, provider
+nativo, componente WASM, client shell a finestre/patch, fallback, ownership e
+teardown sono presenti. La consegna diventa definitiva solo dopo required
+checks, G15/GO, merge in `main` e verifica post-merge.
 
 - Tracker: [issue #11](https://github.com/Fubeo/Fub/issues/11).
 - Piano operativo:
   [TODO — superfici di editing condivise](todo-superfici-di-editing-condivise.md).
+
+## Dopo
 
 ### Contratto dei temi
 

@@ -90,14 +90,10 @@ const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
 const VIEW_INTERFACE: &str = "fub:abi/view";
 const VIEW_EXPORT: &str = "fub:abi/view@0.1.1";
 const GRID_INTERFACE: &str = "fub:abi/grid";
-const GRID_EXPORT: &str = "fub:abi/grid@0.1.1";
+const GRID_EXPORT: &str = "fub:abi/grid@0.1.2";
 
 fn is_supported_grid_export(name: &str) -> bool {
-    name == GRID_INTERFACE
-        || name == GRID_EXPORT
-        || name
-            .strip_prefix(GRID_INTERFACE)
-            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+    name == GRID_INTERFACE || name == GRID_EXPORT
 }
 fn is_supported_view_export(name: &str) -> bool {
     name == VIEW_INTERFACE
@@ -977,11 +973,15 @@ impl WasmBundle {
         let surfaces = grid
             .call_surfaces(&mut *store)
             .map_err(|error| format!("grid non dichiarate: il componente è caduto: {error:#}"))?;
-        surfaces
-            .into_iter()
-            .map(tr::from_grid_surface)
-            .collect::<Result<_, _>>()
-            .map_err(|error| format!("grid non traducibili: {error}"))
+        let mut supported = Vec::new();
+        for surface in surfaces {
+            if let Some(surface) = tr::from_optional_grid_surface(surface)
+                .map_err(|error| format!("grid non traducibili: {error}"))?
+            {
+                supported.push(surface);
+            }
+        }
+        Ok(supported)
     }
 
     fn instantiate_plugin(&self) -> Box<dyn Plugin> {

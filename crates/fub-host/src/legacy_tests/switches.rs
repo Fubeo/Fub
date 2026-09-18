@@ -470,9 +470,18 @@ fn turning_on_records_intention_even_when_mounting_fails() {
 
     // Prima si spegne — ed è un no-op sul montaggio, perché montato non lo è
     // mai stato: quello che conta è la riga che entra nel file.
-    host.set_plugin_enabled(None, BROKEN, false)
+    let errors = host
+        .set_plugin_enabled(None, BROKEN, false)
         .expect("disables");
+    assert!(errors.is_empty(), "never-mounted disable: {errors:?}");
     assert!(disabled(&host).contains(&BROKEN.to_string()));
+    let repeated = host
+        .set_plugin_enabled(None, BROKEN, false)
+        .expect("repeated disable");
+    assert!(
+        repeated.is_empty(),
+        "repeated never-mounted disable: {repeated:?}"
+    );
 
     // E poi si riaccende, e il montaggio non riesce. L'errore si dice — non si
     // finge che sia acceso — ma la riga se n'è andata lo stesso.

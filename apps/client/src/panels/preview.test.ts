@@ -63,6 +63,23 @@ describe("un wikilink cliccato in Lettura", () => {
     el.querySelector<HTMLElement>("a.wikilink")!.click();
     expect(calls).toEqual([["", undefined, "blocco"]]);
   });
+  it("nomina blocchi di codice e task con chiavi localizzabili", async () => {
+    const el = await renderPreview(
+      '<pre>const x = 1;</pre><ul><li><input type="checkbox"></li><li><input type="checkbox" checked></li></ul>',
+    );
+    const code = el.querySelector("pre")!;
+    expect(code.getAttribute("data-i18n-label")).toBe("preview.code_block");
+    expect(code.getAttribute("aria-label")).toBe("Blocco di codice");
+    const tasks = [...el.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(tasks.map((task) => task.getAttribute("data-i18n-label"))).toEqual([
+      "editor.task.pending",
+      "editor.task.completed",
+    ]);
+    expect(tasks.map((task) => task.getAttribute("aria-label"))).toEqual([
+      "Attività da completare",
+      "Attività completata",
+    ]);
+  });
 });
 
 describe("mappatura dagli offset sorgente ai blocchi dell'anteprima", () => {

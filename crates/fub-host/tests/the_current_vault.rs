@@ -15,7 +15,7 @@
 //! not broken.
 
 use camino::{Utf8Path, Utf8PathBuf};
-use fub_host::{Host, NoWatcher};
+use fub_host::Host;
 
 struct Vault {
     _dir: tempfile::TempDir,
@@ -40,9 +40,7 @@ impl Vault {
 /// Il livello macchina e il registro dei vault in una cartella di prova: senza
 /// questa riga un test scriverebbe nella configurazione di chi lo esegue.
 fn installed(config: &Utf8Path) -> Host {
-    Host::new()
-        .with_watcher(Box::new(NoWatcher))
-        .with_config_dir(config)
+    Host::without_watcher().with_config_dir(config)
 }
 
 fn config() -> (tempfile::TempDir, Utf8PathBuf) {

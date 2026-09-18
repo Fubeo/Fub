@@ -11,6 +11,7 @@ import type {
 } from "../../host/contract";
 import type { TextOperation } from "../../editor/text-operation";
 import type { Theme } from "../../theme/theme";
+import { t, onLanguage } from "../../i18n/strings";
 import { createTextEngine, type EditorChangeOrigin, type TextEngine } from "../text/engine";
 import { createFormulaProfile } from "../text/profiles/formula";
 import {
@@ -43,6 +44,13 @@ const ROW_HEADER_WIDTH = 52;
 const COLUMN_HEADER_HEIGHT = 28;
 const EMPTY_SHEET: GridSheet = { id: "", name: "", rows: [], columns: [] };
 export const GRID_OVERSCAN = 2;
+export const GRID_WINDOW_ROWS = 256;
+export const GRID_WINDOW_COLUMNS = 128;
+export const MAX_GRID_SESSION_SHEETS = 1_024;
+export const MAX_GRID_SESSION_ROWS = 1_048_576;
+export const MAX_GRID_SESSION_COLUMNS = 16_384;
+export const MAX_GRID_SESSION_WINDOWS = 256;
+export const MAX_GRID_INVALIDATED_CELLS = 32_768;
 
 export interface GridHost {
   readonly listGridSurfaces: () => Promise<readonly GridSurfaceSpec[]>;
@@ -120,6 +128,33 @@ function boundedWindow(layout: AxisLayout, start: number, length: number) {
     end: Math.min(layout.sizes.length - 1, last + GRID_OVERSCAN),
   };
 }
+function viewportRange(
+  total: number,
+  layout: AxisLayout,
+  offset: number,
+  extent: number,
+  header: number,
+  fallback: number,
+): { start: number; end: number } | null {
+  if (total <= 0) return null;
+  const visibleOffset = Math.max(0, offset - header);
+  const visibleExtent = Math.max(1, extent);
+  const usesLayout = layout.sizes.length === total;
+  const first = usesLayout ? indexAt(layout, visibleOffset) : Math.floor(visibleOffset / fallback);
+  const last = usesLayout
+    ? indexAt(layout, visibleOffset + visibleExtent)
+    : Math.floor((visibleOffset + visibleExtent) / fallback);
+  return {
+    start: Math.max(0, Math.min(total - 1, first - GRID_OVERSCAN)),
+    end: Math.max(0, Math.min(total - 1, last + GRID_OVERSCAN)),
+  };
+}
+function clamp(value: number, maximum: number): number {
+  return Math.max(0, Math.min(maximum, value));
+}
+function samePosition(left: GridPosition, right: GridPosition): boolean {
+  return left.row === right.row && left.column === right.column;
+}
 
 function key(sheet: string, row: string, column: string): string {
   return `${sheet}\u0000${row}\u0000${column}`;
@@ -147,39 +182,68 @@ function displayValue(value: SheetCellValue | undefined, fallback: string): stri
   }
 }
 
-function samePosition(left: GridPosition, right: GridPosition): boolean {
-  return left.row === right.row && left.column === right.column;
+function byteOffset(value: number): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error("grid source diff offset is not a safe integer");
+  }
+  return value;
 }
 
-function clamp(value: number, maximum: number): number {
-  return Math.max(0, Math.min(maximum, value));
+function safeSourceBoundary(bytes: Uint8Array, at: number): boolean {
+  return at >= 0
+    && at <= bytes.length
+    && !(at > 0 && at < bytes.length && bytes[at - 1] === 0x0d && bytes[at] === 0x0a);
 }
-function utf16Offset(source: string, byteOffset: number): number {
+
+function utf16Offset(source: string, rawByteOffset: number): number {
   const bytes = new TextEncoder().encode(source);
-  if (!Number.isInteger(byteOffset) || byteOffset < 0 || byteOffset > bytes.length) {
-    throw new Error("grid source diff offset is out of bounds");
+  const offset = byteOffset(rawByteOffset);
+  if (offset > bytes.length || !safeSourceBoundary(bytes, offset)) {
+    throw new Error("grid source diff splits UTF-8 or CRLF");
   }
-  return new TextDecoder().decode(bytes.slice(0, byteOffset)).length;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(0, offset)).length;
+  } catch {
+    throw new Error("grid source diff splits UTF-8 or CRLF");
+  }
 }
 
 function applySourceEdit(source: string, edit: GridCommit["edit"]): string {
+  if (typeof edit.deleted !== "string" || typeof edit.inserted !== "string") {
+    throw new Error("grid source diff has invalid text");
+  }
   const bytes = new TextEncoder().encode(source);
-  if (edit.from > edit.to || edit.to > bytes.length) throw new Error("grid source diff is out of bounds");
-  const deleted = new TextDecoder().decode(bytes.slice(Number(edit.from), Number(edit.to)));
+  const from = byteOffset(edit.from);
+  const to = byteOffset(edit.to);
+  if (from > to || to > bytes.length || !safeSourceBoundary(bytes, from) || !safeSourceBoundary(bytes, to)) {
+    throw new Error("grid source diff splits UTF-8 or CRLF");
+  }
+  let deleted: string;
+  try {
+    deleted = new TextDecoder("utf-8", { fatal: true }).decode(bytes.slice(from, to));
+  } catch {
+    throw new Error("grid source diff splits UTF-8 or CRLF");
+  }
   if (deleted !== edit.deleted) throw new Error("grid source diff preimage mismatch");
   const inserted = new TextEncoder().encode(edit.inserted);
-  const result = new Uint8Array(Number(edit.from) + inserted.length + bytes.length - Number(edit.to));
-  result.set(bytes.slice(0, Number(edit.from)), 0);
-  result.set(inserted, Number(edit.from));
-  result.set(bytes.slice(Number(edit.to)), Number(edit.from) + inserted.length);
-  return new TextDecoder().decode(result);
+  const resultLength = from + inserted.length + bytes.length - to;
+  if (!Number.isSafeInteger(resultLength)) throw new Error("grid source diff result is too large");
+  const result = new Uint8Array(resultLength);
+  result.set(bytes.slice(0, from), 0);
+  result.set(inserted, from);
+  result.set(bytes.slice(to), from + inserted.length);
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(result);
+  } catch {
+    throw new Error("grid source diff has invalid UTF-8");
+  }
 }
 
 function operationFromCommit(source: string, commit: GridCommit, patches: readonly GridCellPatch[]): GridOperation {
   const after = applySourceEdit(source, commit.edit);
   const edit = {
-    from: utf16Offset(source, Number(commit.edit.from)),
-    to: utf16Offset(source, Number(commit.edit.to)),
+    from: utf16Offset(source, commit.edit.from),
+    to: utf16Offset(source, commit.edit.to),
     deleted: commit.edit.deleted,
     inserted: commit.edit.inserted,
   };
@@ -199,32 +263,69 @@ function columnFromProtocol(column: { id: string; index: number; width: number |
   return { id: column.id, width: column.width ?? undefined, hidden: column.hidden };
 }
 
+
+
 function workbookFromWindows(
   session: GridSession,
   windows: readonly GridWindow[],
+  base: GridWorkbook | null = null,
+  activeIdOverride?: string,
 ): GridWorkbook {
-  const sheets = session.sheets.map((sheet) => {
-    const sheetWindows = windows.filter((window) => window.sheet === sheet.id);
-    const rows = [...new Map(sheetWindows.flatMap((window) => window.rows.map((row) => [row.index, row]))).values()]
-      .sort((left, right) => left.index - right.index)
-      .map(rowFromProtocol);
-    const columns = [...new Map(sheetWindows.flatMap((window) => window.columns.map((column) => [column.index, column]))).values()]
-      .sort((left, right) => left.index - right.index)
-      .map(columnFromProtocol);
-    const cells = sheetWindows.flatMap((window) => window.cells.map((cell): GridCell => ({
-      row: cell.key.row,
-      column: cell.key.column,
-      input: cell.input,
-      style: {
-        bold: cell.style.bold,
-        italic: cell.style.italic,
-        text_color: cell.style.text_color ?? undefined,
-        fill_color: cell.style.fill_color ?? undefined,
-        horizontal: cell.style.horizontal ?? undefined,
-        number_format: cell.style.number_format ?? undefined,
-      },
-    })));
-    return { id: sheet.id, name: sheet.name, rows, columns, cells };
+  const baseSheets = new Map((base?.sheets ?? []).map((sheet) => [sheet.id, sheet]));
+  const activeId = activeIdOverride ?? base?.sheets[0]?.id ?? session.sheets[0]?.id;
+  const sheets = session.sheets.map((sessionSheet) => {
+    const baseSheet = baseSheets.get(sessionSheet.id);
+    if (sessionSheet.id !== activeId) {
+      return {
+        id: sessionSheet.id,
+        name: sessionSheet.name,
+        rows: baseSheet?.rows ?? [],
+        columns: baseSheet?.columns ?? [],
+        ...(baseSheet?.cells ? { cells: [...baseSheet.cells] } : {}),
+      };
+    }
+    const sheetWindows = windows.filter((window) => window.sheet === sessionSheet.id);
+    const loadedRows = new Map(sheetWindows.flatMap((window) => window.rows.map((row) => [row.index, row] as const)));
+    const loadedColumns = new Map(sheetWindows.flatMap((window) => window.columns.map((column) => [column.index, column] as const)));
+    const rows = Array.from({ length: sessionSheet.row_count }, (_, index) => {
+      const row = loadedRows.get(index);
+      if (row) return rowFromProtocol(row);
+      const prior = baseSheet?.rows[index];
+      return prior ? { ...prior } : { id: `__grid_row_${sessionSheet.id}_${index}`, hidden: false };
+    });
+    const columns = Array.from({ length: sessionSheet.column_count }, (_, index) => {
+      const column = loadedColumns.get(index);
+      if (column) return columnFromProtocol(column);
+      const prior = baseSheet?.columns[index];
+      return prior ? { ...prior } : { id: `__grid_column_${sessionSheet.id}_${index}`, hidden: false };
+    });
+    const loadedRowsById = new Set([...loadedRows.values()].map((row) => row.id));
+    const loadedColumnsById = new Set([...loadedColumns.values()].map((column) => column.id));
+    const cells = new Map<string, GridCell>();
+    for (const cell of baseSheet?.cells ?? []) {
+      if (loadedRowsById.has(cell.row) && loadedColumnsById.has(cell.column)) {
+        cells.set(`${cell.row}\u0000${cell.column}`, { ...cell, style: cell.style ? { ...cell.style } : undefined });
+      }
+    }
+    for (const window of sheetWindows) {
+      for (const cell of window.cells) {
+        const style = {
+          ...(cell.style.bold ? { bold: true } : {}),
+          ...(cell.style.italic ? { italic: true } : {}),
+          ...(cell.style.text_color === null ? {} : { text_color: cell.style.text_color }),
+          ...(cell.style.fill_color === null ? {} : { fill_color: cell.style.fill_color }),
+          ...(cell.style.horizontal === null ? {} : { horizontal: cell.style.horizontal }),
+          ...(cell.style.number_format === null ? {} : { number_format: cell.style.number_format }),
+        };
+        cells.set(`${cell.key.row}\u0000${cell.key.column}`, {
+          row: cell.key.row,
+          column: cell.key.column,
+          input: cell.input,
+          ...(Object.keys(style).length ? { style } : {}),
+        });
+      }
+    }
+    return { id: sessionSheet.id, name: sessionSheet.name, rows, columns, cells: [...cells.values()] };
   });
   return { version: 1, sheets };
 }
@@ -234,27 +335,85 @@ function valuesFromWindows(windows: readonly GridWindow[]): Map<string, SheetCel
     windows.flatMap((window) => window.cells.map((cell) => [key(cell.key.sheet, cell.key.row, cell.key.column), cell.value] as const)),
   );
 }
+
+function validateGridSession(session: GridSession): void {
+  if (
+    !session
+    || typeof session.instance !== "string"
+    || session.instance.length === 0
+    || typeof session.revision !== "string"
+    || session.revision.length === 0
+    || !Array.isArray(session.sheets)
+    || session.sheets.length > MAX_GRID_SESSION_SHEETS
+  ) {
+    throw new Error("malformed grid session");
+  }
+  const ids = new Set<string>();
+  for (const sheet of session.sheets) {
+    if (
+      typeof sheet.id !== "string"
+      || sheet.id.length === 0
+      || typeof sheet.name !== "string"
+      || sheet.name.length === 0
+      || ids.has(sheet.id)
+      || !Number.isSafeInteger(sheet.row_count)
+      || !Number.isSafeInteger(sheet.column_count)
+      || sheet.row_count < 0
+      || sheet.column_count < 0
+      || sheet.row_count > MAX_GRID_SESSION_ROWS
+      || sheet.column_count > MAX_GRID_SESSION_COLUMNS
+    ) {
+      throw new Error("malformed grid session axes");
+    }
+    ids.add(sheet.id);
+  }
+}
+function validateGridWindow(window: GridWindow, session: GridSession): void {
+  const sheet = session.sheets.find((candidate) => candidate.id === window.sheet);
+  if (
+    !sheet
+    || window.revision !== session.revision
+    || !Number.isSafeInteger(window.row_start)
+    || !Number.isSafeInteger(window.column_start)
+    || window.row_start < 0
+    || window.column_start < 0
+    || window.total_rows !== sheet.row_count
+    || window.total_columns !== sheet.column_count
+    || !Array.isArray(window.rows)
+    || !Array.isArray(window.columns)
+    || !Array.isArray(window.cells)
+    || window.rows.length > GRID_WINDOW_ROWS
+    || window.columns.length > GRID_WINDOW_COLUMNS
+    || window.cells.length > GRID_WINDOW_ROWS * GRID_WINDOW_COLUMNS
+    || window.row_start + window.rows.length > sheet.row_count
+    || window.column_start + window.columns.length > sheet.column_count
+  ) {
+    throw new Error("malformed grid window");
+  }
+}
 export class GridEngine {
   readonly #root: HTMLElement;
   readonly #formulaHost: HTMLElement;
   readonly #viewport: HTMLElement;
   readonly #canvas: HTMLElement;
-  readonly #cells: HTMLElement;
-  readonly #columnHeaders: HTMLElement;
-  readonly #rowHeaders: HTMLElement;
   readonly #corner: HTMLElement;
   readonly #cellEditorHost: HTMLElement;
   readonly #formulaEditor: TextEngine;
   readonly #cellEditor: TextEngine;
   readonly #options: GridEngineOptions;
+  readonly #stopLanguage: () => void;
   readonly #abort = new AbortController();
   #workbook: GridWorkbook | null = null;
+  #sourceWorkbook: GridWorkbook | null = null;
   #sheetIndex = 0;
   #source = "";
   #revision = "";
   #instance: string | null = null;
   #surface: string | null = null;
   #provider = false;
+  #session: GridSession | null = null;
+  #viewportLoad: Promise<void> | null = null;
+  #viewportLoadQueued = false;
   #selection: GridSelection = { anchor: { row: 0, column: 0 }, focus: { row: 0, column: 0 } };
   #values = new Map<string, SheetCellValue>();
   #rows: AxisLayout = { offsets: [0], sizes: [], total: 0 };
@@ -262,6 +421,7 @@ export class GridEngine {
   #editing: EditingState | null = null;
   #readOnly = false;
   #destroyed = false;
+  #providerCommitTail: Promise<void> = Promise.resolve();
   #evaluationGeneration = 0;
   #protocolGeneration = 0;
   #undo: GridCellPatch[][] = [];
@@ -269,6 +429,7 @@ export class GridEngine {
   #pointerAnchor: GridPosition | null = null;
 
   constructor(parent: HTMLElement, options: GridEngineOptions) {
+    const signal = this.#abort.signal;
     this.#options = options;
     this.#root = document.createElement("div");
     this.#root.className = "grid-surface";
@@ -286,25 +447,23 @@ export class GridEngine {
     this.#viewport.className = "grid-viewport";
     this.#viewport.tabIndex = 0;
     this.#viewport.setAttribute("role", "grid");
-    this.#viewport.setAttribute("aria-label", "Foglio di calcolo");
+    this.#viewport.setAttribute("aria-label", t("grid.surface"));
     this.#canvas = document.createElement("div");
     this.#canvas.className = "grid-canvas";
-    this.#cells = document.createElement("div");
-    this.#cells.className = "grid-cells";
-    this.#columnHeaders = document.createElement("div");
-    this.#columnHeaders.className = "grid-column-headers";
-    this.#rowHeaders = document.createElement("div");
-    this.#rowHeaders.className = "grid-row-headers";
+    this.#canvas.setAttribute("role", "presentation");
     this.#corner = document.createElement("div");
     this.#corner.className = "grid-corner";
-    this.#corner.setAttribute("role", "presentation");
     this.#cellEditorHost = document.createElement("div");
     this.#cellEditorHost.className = "grid-cell-editor";
     this.#cellEditorHost.hidden = true;
-    this.#canvas.append(this.#cells, this.#columnHeaders, this.#rowHeaders, this.#corner, this.#cellEditorHost);
+    this.#cellEditorHost.setAttribute("aria-hidden", "true");
+    this.#canvas.append(this.#cellEditorHost);
     this.#viewport.append(this.#canvas);
     this.#root.append(formula, this.#viewport);
     parent.replaceChildren(this.#root);
+    this.#stopLanguage = onLanguage(() => {
+      this.#viewport.setAttribute("aria-label", t("grid.surface"));
+    });
 
     const formulaProfile = createFormulaProfile({
       callbacks: {
@@ -331,8 +490,10 @@ export class GridEngine {
       extensions: () => cellProfile.extensions(),
     });
 
-    const signal = this.#abort.signal;
-    this.#viewport.addEventListener("scroll", () => this.#render(), { signal });
+    this.#viewport.addEventListener("scroll", () => {
+      this.#render();
+      void this.#loadViewport();
+    }, { signal });
     this.#viewport.addEventListener("keydown", (event) => this.#keydown(event), { signal });
     this.#viewport.addEventListener("pointerdown", (event) => this.#pointerDown(event), { signal });
     this.#viewport.addEventListener("pointermove", (event) => this.#pointerMove(event), { signal });
@@ -340,15 +501,13 @@ export class GridEngine {
     this.#viewport.addEventListener("copy", (event) => this.#copy(event), { signal });
     this.#viewport.addEventListener("cut", (event) => this.#cut(event), { signal });
     this.#viewport.addEventListener("paste", (event) => this.#paste(event), { signal });
-    this.#cells.addEventListener("dblclick", (event) => {
+    this.#viewport.addEventListener("dblclick", (event) => {
       const position = this.#eventPosition(event);
       if (position) this.#beginEditing("cell", position);
     }, { signal });
     this.#formulaHost.addEventListener("focusin", () => this.#beginEditing("formula", this.#selection.focus), { signal });
     this.#formulaHost.addEventListener("focusout", () => this.#commitAfterBlur("formula"), { signal });
-    this.#cellEditorHost.addEventListener("focusout", () => this.#commitAfterBlur("cell"), { signal });
   }
-
   setDoc(source: string): void {
     if (this.#destroyed) return;
     this.#protocolGeneration++;
@@ -360,9 +519,11 @@ export class GridEngine {
     this.#instance = null;
     this.#surface = null;
     this.#provider = false;
+    this.#session = null;
     this.#source = source;
     this.#revision = this.#options.revision ?? "";
-    this.#workbook = parseWorkbook(source);
+    this.#sourceWorkbook = parseWorkbook(source);
+    this.#workbook = this.#sourceWorkbook;
     this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
     this.#selection = this.#clampedSelection(this.#selection);
     this.#undo = [];
@@ -381,6 +542,7 @@ export class GridEngine {
     const operation = typeof update === "string" ? null : update.operation;
     if (this.#provider) {
       this.#source = source;
+      this.#sourceWorkbook = null;
       void this.#reloadProtocol(source);
       return;
     }
@@ -398,9 +560,12 @@ export class GridEngine {
       this.#source = source;
       reloaded = true;
     }
+    this.#sourceWorkbook = this.#workbook;
     if (reloaded && this.#editing) {
+      this.#detachCellEditor();
       this.#editing = null;
       this.#cellEditorHost.hidden = true;
+      this.#cellEditorHost.setAttribute("aria-hidden", "true");
     }
     if (stable) {
       const position = positionOf(this.#sheet(), stable);
@@ -458,7 +623,7 @@ export class GridEngine {
   }
 
   renderedCellCount(): number {
-    return this.#cells.childElementCount;
+    return this.#viewport.querySelectorAll(".grid-cell").length;
   }
 
   selection(): GridSelection { return this.#selection; }
@@ -466,6 +631,7 @@ export class GridEngine {
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#stopLanguage();
     this.#protocolGeneration++;
     this.#abort.abort();
     const instance = this.#instance;
@@ -508,29 +674,88 @@ export class GridEngine {
       this.#viewport.clientWidth,
     );
     const range = normalizedSelection(this.#selection);
-    const cells: HTMLElement[] = [];
-    const rowHeaders: HTMLElement[] = [];
-    const columnHeaders: HTMLElement[] = [];
+    const editingPosition = this.#editing?.owner === "cell" ? this.#editing.position : null;
+    const renderedRows: number[] = [];
+    for (let row = rowWindow.start; row <= rowWindow.end; row += 1) renderedRows.push(row);
+    if (
+      editingPosition
+      && editingPosition.row >= 0
+      && editingPosition.row < this.#rows.sizes.length
+      && (editingPosition.row < rowWindow.start || editingPosition.row > rowWindow.end)
+    ) {
+      renderedRows.push(editingPosition.row);
+      renderedRows.sort((left, right) => left - right);
+    }
+    const renderedColumns: number[] = [];
+    for (let column = columnWindow.start; column <= columnWindow.end; column += 1) renderedColumns.push(column);
+    if (
+      editingPosition
+      && editingPosition.column >= 0
+      && editingPosition.column < this.#columns.sizes.length
+      && (editingPosition.column < columnWindow.start || editingPosition.column > columnWindow.end)
+    ) {
+      renderedColumns.push(editingPosition.column);
+      renderedColumns.sort((left, right) => left - right);
+    }
+    const rows: HTMLElement[] = [];
+
+    const columnHeaderRow = document.createElement("div");
+    columnHeaderRow.className = "grid-row grid-column-header-row";
+    columnHeaderRow.setAttribute("role", "row");
+    columnHeaderRow.setAttribute("aria-rowindex", "1");
+    this.#place(
+      columnHeaderRow,
+      0,
+      this.#viewport.scrollTop,
+      ROW_HEADER_WIDTH + this.#columns.total,
+      COLUMN_HEADER_HEIGHT,
+    );
+    this.#corner.className = "grid-corner";
+    this.#corner.setAttribute("role", "presentation");
+    this.#corner.textContent = "";
+    this.#corner.style.pointerEvents = "none";
+    this.#place(this.#corner, this.#viewport.scrollLeft, 0, ROW_HEADER_WIDTH, COLUMN_HEADER_HEIGHT);
+    columnHeaderRow.append(this.#corner);
     for (let column = columnWindow.start; column <= columnWindow.end; column += 1) {
       if (this.#columns.sizes[column] === 0) continue;
       const header = document.createElement("div");
       header.className = "grid-header grid-column-header";
       header.setAttribute("role", "columnheader");
+      header.setAttribute("aria-rowindex", "1");
       header.setAttribute("aria-colindex", String(column + 2));
       header.textContent = columnLabel(column);
-      this.#place(header, ROW_HEADER_WIDTH + this.#columns.offsets[column], this.#viewport.scrollTop, this.#columns.sizes[column], COLUMN_HEADER_HEIGHT);
-      columnHeaders.push(header);
+      header.style.pointerEvents = "none";
+      this.#place(header, ROW_HEADER_WIDTH + this.#columns.offsets[column], 0, this.#columns.sizes[column], COLUMN_HEADER_HEIGHT);
+      columnHeaderRow.append(header);
     }
-    for (let row = rowWindow.start; row <= rowWindow.end; row += 1) {
+    rows.push(columnHeaderRow);
+
+    for (const row of renderedRows) {
       if (this.#rows.sizes[row] === 0) continue;
+      const rowElement = document.createElement("div");
+      rowElement.className = "grid-row";
+      rowElement.dataset.row = String(row);
+      rowElement.setAttribute("role", "row");
+      rowElement.setAttribute("aria-rowindex", String(row + 2));
+      this.#place(
+        rowElement,
+        0,
+        COLUMN_HEADER_HEIGHT + this.#rows.offsets[row],
+        ROW_HEADER_WIDTH + this.#columns.total,
+        this.#rows.sizes[row],
+      );
+
       const header = document.createElement("div");
       header.className = "grid-header grid-row-header";
       header.setAttribute("role", "rowheader");
       header.setAttribute("aria-rowindex", String(row + 2));
+      header.setAttribute("aria-colindex", "1");
       header.textContent = String(row + 1);
-      this.#place(header, this.#viewport.scrollLeft, COLUMN_HEADER_HEIGHT + this.#rows.offsets[row], ROW_HEADER_WIDTH, this.#rows.sizes[row]);
-      rowHeaders.push(header);
-      for (let column = columnWindow.start; column <= columnWindow.end; column += 1) {
+      header.style.pointerEvents = "none";
+      this.#place(header, this.#viewport.scrollLeft, 0, ROW_HEADER_WIDTH, this.#rows.sizes[row]);
+      rowElement.append(header);
+
+      for (const column of renderedColumns) {
         if (this.#columns.sizes[column] === 0) continue;
         const position = { row, column };
         const persisted = cellAt(sheet, position);
@@ -555,14 +780,30 @@ export class GridEngine {
           ? this.#values.get(key(sheet.id, persisted.row, persisted.column))
           : undefined;
         element.textContent = displayValue(value, persisted?.input ?? "");
-        this.#place(element, ROW_HEADER_WIDTH + this.#columns.offsets[column], COLUMN_HEADER_HEIGHT + this.#rows.offsets[row], this.#columns.sizes[column], this.#rows.sizes[row]);
-        cells.push(element);
+        this.#place(element, ROW_HEADER_WIDTH + this.#columns.offsets[column], 0, this.#columns.sizes[column], this.#rows.sizes[row]);
+        rowElement.append(element);
+      }
+      rows.push(rowElement);
+    }
+
+    this.#detachCellEditor();
+    for (const row of this.#viewport.querySelectorAll<HTMLElement>(".grid-row")) row.remove();
+    this.#viewport.append(...rows);
+    const editing = this.#editing?.owner === "cell" ? this.#editing : null;
+    if (editing) {
+      const cell = this.#findCell(editing.position);
+      if (cell && this.#isVisiblePosition(editing.position)) {
+        cell.append(this.#cellEditorHost);
+        this.#cellEditorHost.hidden = false;
+        this.#cellEditorHost.removeAttribute("aria-hidden");
+        this.#positionEditor(editing.position);
+      } else {
+        this.#editing = null;
+        this.#cellEditorHost.hidden = true;
+        this.#cellEditorHost.setAttribute("aria-hidden", "true");
+        this.#canvas.append(this.#cellEditorHost);
       }
     }
-    this.#cells.replaceChildren(...cells);
-    this.#rowHeaders.replaceChildren(...rowHeaders);
-    this.#columnHeaders.replaceChildren(...columnHeaders);
-    this.#place(this.#corner, this.#viewport.scrollLeft, this.#viewport.scrollTop, ROW_HEADER_WIDTH, COLUMN_HEADER_HEIGHT);
     if (this.#isVisiblePosition(this.#selection.focus)) {
       this.#viewport.setAttribute("aria-activedescendant", this.#cellId(this.#selection.focus));
     } else {
@@ -574,14 +815,24 @@ export class GridEngine {
         ? `${columnLabel(this.#selection.focus.column)}${this.#selection.focus.row + 1}`
         : "";
     }
-    if (this.#editing?.owner === "cell") this.#positionEditor(this.#editing.position);
   }
 
   #place(element: HTMLElement, left: number, top: number, width: number, height: number): void {
+    element.style.position = "absolute";
     element.style.left = `${left}px`;
     element.style.top = `${top}px`;
     element.style.width = `${width}px`;
     element.style.height = `${height}px`;
+  }
+  #findCell(position: GridPosition): HTMLElement | null {
+    for (const cell of this.#viewport.querySelectorAll<HTMLElement>(".grid-cell")) {
+      if (cell.dataset.row === String(position.row) && cell.dataset.column === String(position.column)) return cell;
+    }
+    return null;
+  }
+
+  #detachCellEditor(): void {
+    if (this.#cellEditorHost.parentElement !== this.#canvas) this.#canvas.append(this.#cellEditorHost);
   }
 
   #cellId(position: GridPosition): string {
@@ -766,7 +1017,14 @@ export class GridEngine {
     }
     this.#editing = { position, original: current, draft: initial ?? current, owner };
     if (owner === "cell") {
+      const cell = this.#findCell(position);
+      if (!cell) {
+        this.#editing = null;
+        return;
+      }
+      cell.append(this.#cellEditorHost);
       this.#cellEditorHost.hidden = false;
+      this.#cellEditorHost.removeAttribute("aria-hidden");
       this.#positionEditor(position);
       this.#cellEditor.setDoc(this.#editing.draft);
       this.#cellEditor.focus();
@@ -791,7 +1049,9 @@ export class GridEngine {
     const editing = this.#editing;
     if (!editing) return;
     this.#editing = null;
+    this.#detachCellEditor();
     this.#cellEditorHost.hidden = true;
+    this.#cellEditorHost.setAttribute("aria-hidden", "true");
     if (commit && editing.draft !== editing.original) {
       const patch = inputPatch(this.#sheet(), editing.position, editing.draft);
       if (patch) this.#commit([patch], origin, true);
@@ -802,10 +1062,11 @@ export class GridEngine {
   }
 
   #positionEditor(position: GridPosition): void {
+    const inCell = this.#cellEditorHost.parentElement?.classList.contains("grid-cell") ?? false;
     this.#place(
       this.#cellEditorHost,
-      ROW_HEADER_WIDTH + this.#columns.offsets[position.column],
-      COLUMN_HEADER_HEIGHT + this.#rows.offsets[position.row],
+      inCell ? 0 : ROW_HEADER_WIDTH + this.#columns.offsets[position.column],
+      inCell ? 0 : COLUMN_HEADER_HEIGHT + this.#rows.offsets[position.row],
       this.#columns.sizes[position.column],
       this.#rows.sizes[position.row],
     );
@@ -814,24 +1075,34 @@ export class GridEngine {
   #commit(patches: readonly GridCellPatch[], origin: EditorChangeOrigin, recordHistory: boolean): boolean {
     if (!this.#workbook || this.#readOnly) return false;
     const beforeSource = this.#source;
-    const committed = commitGridPatches(this.#workbook, this.#source, patches);
+    const sourceWorkbook = this.#sourceWorkbook ?? parseWorkbook(beforeSource);
+    const committed = commitGridPatches(sourceWorkbook, beforeSource, patches);
     if (!committed) return false;
+    this.#sourceWorkbook = sourceWorkbook;
+    if (this.#workbook !== sourceWorkbook && !applyGridPatches(this.#workbook, patches)) return false;
     this.#source = committed.source;
     if (recordHistory) {
       this.#undo.push([...patches]);
       this.#redo = [];
     }
     this.#render();
-    if (this.#provider && this.#instance && this.#options.grid) {
-      const request: GridApplyRequest = {
-        revision: this.#revision,
-        patches: patches.map((patch) => ({
-          cell: patch.coordinate,
-          before: patch.before?.input ?? null,
-          after: patch.after?.input ?? "",
-        })),
-      };
-      void this.#applyProvider(request, beforeSource, patches, origin, this.#protocolGeneration);
+    if (this.#provider && this.#instance && this.#surface && this.#options.grid) {
+      const instance = this.#instance;
+      const surface = this.#surface;
+      const generation = this.#protocolGeneration;
+      const queuedPatches = patches.map((patch) => ({
+        coordinate: { ...patch.coordinate },
+        before: patch.before
+          ? { input: patch.before.input, style: patch.before.style ? { ...patch.before.style } : undefined }
+          : null,
+        after: patch.after
+          ? { input: patch.after.input, style: patch.after.style ? { ...patch.after.style } : undefined }
+          : null,
+      }));
+      this.#providerCommitTail = this.#providerCommitTail
+        .catch(() => {})
+        .then(() => this.#applyProvider(beforeSource, queuedPatches, origin, generation, instance, surface))
+        .catch(() => {});
     } else {
       this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
       void this.#evaluateLegacy();
@@ -931,6 +1202,13 @@ export class GridEngine {
     }
   }
 
+  #protocolIsCurrent(generation: number, instance: string, surface: string): boolean {
+    return !this.#destroyed
+      && generation === this.#protocolGeneration
+      && this.#instance === instance
+      && this.#surface === surface;
+  }
+
   async #openProtocol(source: string): Promise<void> {
     const host = this.#options.grid;
     if (!host || !this.#options.revision) return;
@@ -948,6 +1226,7 @@ export class GridEngine {
       const session = await host.openGrid(surface.id, source, this.#options.revision);
       opened = session;
       openedSurface = surface.id;
+      validateGridSession(session);
       if (generation !== this.#protocolGeneration || this.#destroyed) {
         await host.closeGrid(surface.id, session.instance).catch(() => {});
         opened = null;
@@ -964,9 +1243,15 @@ export class GridEngine {
       this.#revision = session.revision;
       this.#instance = session.instance;
       this.#surface = surface.id;
+      this.#session = session;
       this.#provider = true;
       this.#values = valuesFromWindows(windows);
-      this.#workbook = workbookFromWindows(session, windows);
+      this.#workbook = workbookFromWindows(
+        session,
+        windows,
+        this.#sourceWorkbook,
+        this.#workbook?.sheets[this.#sheetIndex]?.id,
+      );
       this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
       this.#selection = this.#visibleSelection(this.#clampedSelection(this.#selection));
       this.#rebuildLayout();
@@ -983,6 +1268,8 @@ export class GridEngine {
       if (generation !== this.#protocolGeneration || this.#destroyed) return;
       this.#provider = false;
       this.#instance = null;
+      this.#session = null;
+      this.#surface = null;
       this.#root.dataset.evaluation = "unavailable";
       this.#root.dataset.gridProtocol = "fallback";
       this.#render();
@@ -992,22 +1279,113 @@ export class GridEngine {
   async #readWindows(surface: string, session: GridSession): Promise<GridWindow[]> {
     const host = this.#options.grid;
     if (!host) return [];
-    const windows: GridWindow[] = [];
-    for (const sheet of session.sheets) {
-      for (let row = 0; row < sheet.row_count; row += 256) {
-        for (let column = 0; column < sheet.column_count; column += 128) {
-          windows.push(await host.gridWindow(surface, session.instance, {
-            revision: session.revision,
-            sheet: sheet.id,
-            row_start: row,
-            row_count: Math.min(256, sheet.row_count - row),
-            column_start: column,
-            column_count: Math.min(128, sheet.column_count - column),
-          }));
-        }
+    validateGridSession(session);
+    const activeId = this.#workbook?.sheets[this.#sheetIndex]?.id;
+    const sheet = session.sheets.find((candidate) => candidate.id === activeId) ?? session.sheets[0];
+    if (!sheet) return [];
+    const rowRange = viewportRange(
+      sheet.row_count,
+      this.#rows,
+      this.#viewport.scrollTop,
+      this.#viewport.clientHeight,
+      COLUMN_HEADER_HEIGHT,
+      DEFAULT_ROW_HEIGHT,
+    );
+    const columnRange = viewportRange(
+      sheet.column_count,
+      this.#columns,
+      this.#viewport.scrollLeft,
+      this.#viewport.clientWidth,
+      ROW_HEADER_WIDTH,
+      DEFAULT_COLUMN_WIDTH,
+    );
+    if (!rowRange || !columnRange) return [];
+    const requests: GridWindowRequest[] = [];
+    const firstRowWindow = Math.floor(rowRange.start / GRID_WINDOW_ROWS) * GRID_WINDOW_ROWS;
+    const lastRowWindow = Math.floor(rowRange.end / GRID_WINDOW_ROWS) * GRID_WINDOW_ROWS;
+    const firstColumnWindow = Math.floor(columnRange.start / GRID_WINDOW_COLUMNS) * GRID_WINDOW_COLUMNS;
+    const lastColumnWindow = Math.floor(columnRange.end / GRID_WINDOW_COLUMNS) * GRID_WINDOW_COLUMNS;
+    for (let row = firstRowWindow; row <= lastRowWindow; row += GRID_WINDOW_ROWS) {
+      for (let column = firstColumnWindow; column <= lastColumnWindow; column += GRID_WINDOW_COLUMNS) {
+        requests.push({
+          revision: session.revision,
+          sheet: sheet.id,
+          row_start: row,
+          row_count: Math.min(GRID_WINDOW_ROWS, sheet.row_count - row),
+          column_start: column,
+          column_count: Math.min(GRID_WINDOW_COLUMNS, sheet.column_count - column),
+        });
       }
     }
+    if (requests.length > MAX_GRID_SESSION_WINDOWS) {
+      throw new Error("grid viewport requests exceed limit");
+    }
+    const windows = await Promise.all(requests.map(async (request) => {
+      const window = await host.gridWindow(surface, session.instance, request);
+      validateGridWindow(window, session);
+      return window;
+    }));
     return windows;
+  }
+  #loadViewport(): Promise<void> {
+    const host = this.#options.grid;
+    const session = this.#session;
+    const instance = this.#instance;
+    const surface = this.#surface;
+    if (!host || !session || !instance || !surface || !this.#provider || this.#destroyed) {
+      return Promise.resolve();
+    }
+    if (this.#viewportLoad) {
+      this.#viewportLoadQueued = true;
+      return this.#viewportLoad;
+    }
+    const generation = this.#protocolGeneration;
+    const load = (async () => {
+      try {
+        const windows = await this.#readWindows(surface, session);
+        if (!this.#protocolIsCurrent(generation, instance, surface) || this.#session !== session) return;
+        this.#values = valuesFromWindows(windows);
+        this.#workbook = workbookFromWindows(
+          session,
+          windows,
+          this.#sourceWorkbook,
+          this.#workbook?.sheets[this.#sheetIndex]?.id,
+        );
+        this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
+        this.#selection = this.#visibleSelection(this.#clampedSelection(this.#selection));
+        this.#rebuildLayout();
+        this.#syncFormulaBar();
+        this.#render();
+      } catch {
+        if (!this.#protocolIsCurrent(generation, instance, surface)) return;
+        this.#protocolGeneration++;
+        this.#provider = false;
+        this.#instance = null;
+        this.#surface = null;
+        this.#session = null;
+        await host.closeGrid(surface, instance).catch(() => {});
+        if (this.#destroyed) return;
+        this.#sourceWorkbook = parseWorkbook(this.#source);
+        this.#workbook = this.#sourceWorkbook;
+        this.#values.clear();
+        this.#selection = this.#clampedSelection(this.#selection);
+        this.#rebuildLayout();
+        this.#selection = this.#visibleSelection(this.#selection);
+        this.#syncFormulaBar();
+        this.#root.dataset.evaluation = "unavailable";
+        this.#root.dataset.gridProtocol = "fallback";
+        this.#render();
+        void this.#evaluateLegacy();
+      }
+    })().finally(() => {
+      this.#viewportLoad = null;
+      if (this.#viewportLoadQueued) {
+        this.#viewportLoadQueued = false;
+        void this.#loadViewport();
+      }
+    });
+    this.#viewportLoad = load;
+    return load;
   }
 
   async #reloadProtocol(source: string): Promise<void> {
@@ -1018,11 +1396,19 @@ export class GridEngine {
     const generation = ++this.#protocolGeneration;
     try {
       const session = await host.reloadGrid(surface, instance, source, this.#revision);
+      validateGridSession(session);
+      if (session.instance !== instance) throw new Error("grid reload changed its instance");
       const windows = await this.#readWindows(surface, session);
-      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       this.#revision = session.revision;
+      this.#session = session;
       this.#values = valuesFromWindows(windows);
-      this.#workbook = workbookFromWindows(session, windows);
+      this.#workbook = workbookFromWindows(
+        session,
+        windows,
+        this.#sourceWorkbook,
+        this.#workbook?.sheets[this.#sheetIndex]?.id,
+      );
       this.#sheetIndex = Math.max(0, Math.min(this.#sheetIndex, this.#workbook.sheets.length - 1));
       this.#selection = this.#visibleSelection(this.#clampedSelection(this.#selection));
       this.#provider = true;
@@ -1030,13 +1416,15 @@ export class GridEngine {
       this.#syncFormulaBar();
       this.#render();
     } catch {
-      if (generation !== this.#protocolGeneration || this.#destroyed) return;
-      const stale = this.#instance;
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       this.#provider = false;
       this.#instance = null;
       this.#surface = null;
-      if (stale) await host.closeGrid(surface, stale).catch(() => {});
-      this.#workbook = parseWorkbook(source);
+      this.#session = null;
+      await host.closeGrid(surface, instance).catch(() => {});
+      if (this.#destroyed) return;
+      this.#sourceWorkbook = parseWorkbook(source);
+      this.#workbook = this.#sourceWorkbook;
       this.#values.clear();
       this.#selection = this.#clampedSelection(this.#selection);
       this.#rebuildLayout();
@@ -1050,22 +1438,31 @@ export class GridEngine {
   }
 
   async #applyProvider(
-    request: GridApplyRequest,
     beforeSource: string,
     patches: readonly GridCellPatch[],
     origin: EditorChangeOrigin,
     generation: number,
+    instance: string,
+    surface: string,
   ): Promise<void> {
     const host = this.#options.grid;
-    const instance = this.#instance;
-    const surface = this.#surface;
-    if (!host || !instance || !surface) return;
+    if (!host || !this.#protocolIsCurrent(generation, instance, surface)) return;
+    const request: GridApplyRequest = {
+      revision: this.#revision,
+      patches: patches.map((patch) => ({
+        cell: patch.coordinate,
+        before: patch.before?.input ?? null,
+        after: patch.after?.input ?? "",
+      })),
+    };
     let committedSource: string | null = null;
     try {
       const commit = await host.applyGrid(surface, instance, request);
-      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       const source = applySourceEdit(beforeSource, commit.edit);
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       this.#revision = commit.revision;
+      this.#session = this.#session ? { ...this.#session, revision: commit.revision } : null;
       this.#source = source;
       committedSource = source;
       this.#options.onChange({
@@ -1073,17 +1470,19 @@ export class GridEngine {
         operation: operationFromCommit(beforeSource, commit, patches),
         origin,
       });
-      await this.#readInvalidation(commit.invalidation, generation);
+      await this.#readInvalidation(commit.invalidation, generation, instance, surface);
     } catch {
-      const stale = this.#instance;
-      this.#protocolGeneration++;
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       this.#provider = false;
       this.#instance = null;
       this.#surface = null;
-      if (stale) await host.closeGrid(surface, stale).catch(() => {});
+      this.#session = null;
+      await host.closeGrid(surface, instance).catch(() => {});
+      if (this.#destroyed) return;
       this.#source = committedSource ?? beforeSource;
+      this.#sourceWorkbook = parseWorkbook(this.#source);
       this.#values.clear();
-      this.#workbook = parseWorkbook(this.#source);
+      this.#workbook = this.#sourceWorkbook;
       this.#root.dataset.evaluation = "unavailable";
       this.#root.dataset.gridProtocol = "fallback";
       this.#rebuildLayout();
@@ -1092,13 +1491,38 @@ export class GridEngine {
     }
   }
 
-  async #readInvalidation(invalidation: GridInvalidation, generation: number): Promise<void> {
+  async #readInvalidation(
+    invalidation: GridInvalidation,
+    generation: number,
+    instance: string,
+    surface: string,
+  ): Promise<void> {
     const host = this.#options.grid;
-    const instance = this.#instance;
-    const surface = this.#surface;
-    if (!host || !instance || !surface || !this.#workbook) return;
+    if (!host || !this.#protocolIsCurrent(generation, instance, surface) || !this.#workbook) return;
     if (invalidation.kind === "all") {
-      const session: GridSession = {
+      const session = this.#session
+        ? { ...this.#session, instance, revision: this.#revision }
+        : {
+            instance,
+            revision: this.#revision,
+            sheets: this.#workbook.sheets.map((sheet) => ({
+              id: sheet.id,
+              name: sheet.name,
+              row_count: sheet.rows.length,
+              column_count: sheet.columns.length,
+            })),
+          };
+      const windows = await this.#readWindows(surface, session);
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
+      this.#values = valuesFromWindows(windows);
+      this.#workbook = workbookFromWindows(
+        session,
+        windows,
+        this.#sourceWorkbook,
+        this.#workbook?.sheets[this.#sheetIndex]?.id,
+      );
+    } else {
+      const session = this.#session ?? {
         instance,
         revision: this.#revision,
         sheets: this.#workbook.sheets.map((sheet) => ({
@@ -1108,37 +1532,53 @@ export class GridEngine {
           column_count: sheet.columns.length,
         })),
       };
-      const windows = await this.#readWindows(surface, session);
-      if (generation !== this.#protocolGeneration || this.#destroyed) return;
-      this.#values = valuesFromWindows(windows);
-      this.#workbook = workbookFromWindows(session, windows);
-    } else {
-      const requests = invalidation.cells.map((cell) => {
-        const sheet = this.#workbook!.sheets.find((candidate) => candidate.id === cell.sheet);
-        const row = Math.max(0, sheet?.rows.findIndex((candidate) => candidate.id === cell.row) ?? 0);
-        const column = Math.max(0, sheet?.columns.findIndex((candidate) => candidate.id === cell.column) ?? 0);
-        const rowStart = Math.floor(row / 256) * 256;
-        const columnStart = Math.floor(column / 128) * 128;
-        return host.gridWindow(surface, instance, {
-          revision: this.#revision,
+      const requests = invalidation.cells.flatMap((cell) => {
+        const sourceSheet = (this.#sourceWorkbook ?? this.#workbook)?.sheets.find((candidate) => candidate.id === cell.sheet);
+        const sessionSheet = session.sheets.find((candidate) => candidate.id === cell.sheet);
+        if (!sourceSheet || !sessionSheet) return [];
+        const row = sourceSheet.rows.findIndex((candidate) => candidate.id === cell.row);
+        const column = sourceSheet.columns.findIndex((candidate) => candidate.id === cell.column);
+        if (
+          row < 0
+          || column < 0
+          || row >= sessionSheet.row_count
+          || column >= sessionSheet.column_count
+        ) {
+          return [];
+        }
+        const rowStart = Math.floor(row / GRID_WINDOW_ROWS) * GRID_WINDOW_ROWS;
+        const columnStart = Math.floor(column / GRID_WINDOW_COLUMNS) * GRID_WINDOW_COLUMNS;
+        const request = {
+          revision: session.revision,
           sheet: cell.sheet,
           row_start: rowStart,
-          row_count: Math.min(256, Math.max(1, (sheet?.rows.length ?? 1) - rowStart)),
+          row_count: Math.min(GRID_WINDOW_ROWS, sessionSheet.row_count - rowStart),
           column_start: columnStart,
-          column_count: Math.min(128, Math.max(1, (sheet?.columns.length ?? 1) - columnStart)),
-        });
+          column_count: Math.min(GRID_WINDOW_COLUMNS, sessionSheet.column_count - columnStart),
+        };
+        return [host.gridWindow(surface, instance, request).then((window) => {
+          validateGridWindow(window, session);
+          return window;
+        })];
       });
       const windows = await Promise.all(requests);
-      if (generation !== this.#protocolGeneration || this.#destroyed) return;
+      if (!this.#protocolIsCurrent(generation, instance, surface)) return;
       for (const window of windows) {
         const sheet = this.#workbook.sheets.find((candidate) => candidate.id === window.sheet);
         if (!sheet) continue;
         for (const cell of window.cells) {
           this.#values.set(key(cell.key.sheet, cell.key.row, cell.key.column), cell.value);
-          const existing = cellAt(sheet, {
-            row: window.rows.findIndex((row) => row.id === cell.key.row),
-            column: window.columns.findIndex((column) => column.id === cell.key.column),
-          });
+          const row = window.rows.find((candidate) => candidate.id === cell.key.row);
+          const column = window.columns.find((candidate) => candidate.id === cell.key.column);
+          if (
+            !row
+            || !column
+            || row.index < 0
+            || column.index < 0
+            || sheet.rows[row.index]?.id !== row.id
+            || sheet.columns[column.index]?.id !== column.id
+          ) continue;
+          const existing = cellAt(sheet, { row: row.index, column: column.index });
           if (existing) {
             existing.input = cell.input;
             existing.style = {
@@ -1153,7 +1593,7 @@ export class GridEngine {
         }
       }
     }
-    this.#render();
+    if (this.#protocolIsCurrent(generation, instance, surface)) this.#render();
   }
 }
 

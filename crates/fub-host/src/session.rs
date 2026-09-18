@@ -4,9 +4,9 @@
 //! La differenza non è il nome: è che le tre cose che rendevano quel tipo
 //! inutilizzabile fuori dall'app — il montaggio cablato dentro un comando, il
 //! watcher costruito sul posto e il ponte eventi che parlava a un webview —
-//! adesso sono [`mount`](crate::mount()), un [`WatcherFactory`] e un
-//! [`EventSink`]. Chi non ha un webview passa un `NoWatcher` e nessun sink, e
-//! ottiene lo stesso vault.
+//! adesso il montaggio sceglie il watcher internamente e il ponte resta un
+//! [`EventSink`]. Chi non ha un webview usa [`Host::without_watcher`] e nessun
+//! sink, e ottiene lo stesso vault.
 //!
 //! **Le sessioni sono una mappa** (§9.6,
 //! [decisione 0029](../../../docs/decisions/0183-composizione-host-kernel.md)).
@@ -48,12 +48,15 @@ use fub_abi::grid::{
 };
 use fub_abi::model::DocId;
 use fub_abi::session::ViewContext;
-use fub_abi::traits::{JobId, ViewInstance, ViewSpec};
+use fub_abi::traits::{JobId, JobSpec, ViewInstance, ViewSpec};
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{Actor, Notice, PluginError};
 #[cfg(feature = "versioning")]
 use fub_features::{VersionRef, VersionStore, VERSIONING_ID};
-use fub_kernel::{Guard, MachineSettings, ReadOnly, SystemLocale, ViewStates, Workspace};
+use fub_kernel::{
+    Capability, Guard, JournalRead, MachineSettings, Policy, ReadOnly, Subscription, SystemLocale,
+    ViewStates, Workspace,
+};
 
 use crate::config::{config_dir, machine_settings_path, vault_registry_path, view_states_path};
 use crate::custody::Custody;
@@ -123,14 +126,11 @@ pub struct VaultSession {
     root: Utf8PathBuf,
     /// Il workspace, dietro il lock che distingue chi legge da chi scrive.
     ///
-    /// Era un `Mutex`, ed è la §8.3. Il cambio non ha voluto niente — il
-    /// `Workspace` era già `Sync`, perché i trait di provider dell'ABI sono
-    /// `Send + Sync` — e ha comprato due cose, di cui la seconda non era
-    /// prevista: N view che si ridisegnano insieme (da 7 a 25 volte più
-    /// veloci), e soprattutto **chi salva che non viene più affamato**. Sotto
-    /// il `Mutex` i lettori in ciclo stretto scavalcavano chi aspettava di
-    /// scrivere, senza nessun limite: 6,4 secondi di attesa misurati per un
-    /// salvataggio, contro 0,12 ms adesso. Il banco è `examples/contesa.rs`.
+    /// Le misure del banco in `examples/contention.rs` confrontano un gate
+    /// esterno omologo al percorso pubblico (`Mutex<()>` contro `RwLock<()>`):
+    /// entrambe le varianti eseguono le stesse letture e scritture sotto la
+    /// rispettiva guardia. Quel banco non osserva il `Custody<Workspace>` privato
+    /// e quindi non dimostra un rapporto di velocità del lock interno.
     workspace: Custody<Workspace>,
     /// **Chi possiede i bundle** di questo vault (§9.3): i plugin montati, in
     /// ordine di montaggio. Vive quanto la sessione perché è chi chiama
@@ -193,15 +193,15 @@ impl VaultSession {
     pub fn root(&self) -> &Utf8Path {
         &self.root
     }
-
-    pub fn workspace(&self) -> &Custody<Workspace> {
+    #[cfg(test)]
+    pub(crate) fn workspace(&self) -> &Custody<Workspace> {
         &self.workspace
     }
 
-    /// Chi possiede i bundle di questo vault (§9.3): serve a chi ne monta uno a
     /// mano — un test, e a M5 il caricatore che installa un plugin a vault già
     /// aperto.
-    pub fn bundles(&self) -> &Custody<BundleRegistry> {
+    #[cfg(test)]
+    pub(crate) fn bundles(&self) -> &Custody<BundleRegistry> {
         &self.registry
     }
 
@@ -230,8 +230,8 @@ impl VaultSession {
     ///
     /// «Smette di guardare» vuol dire **e ha smesso**: lasciarlo andare aspetta
     /// il suo thread di consegna, ed è una riga del rilevatore e non di qui
-    /// ([`crate::watcher::VaultWatcher`], difetto 0159). Prima non lo aspettava,
-    /// e questo commento raccontava un ordine che la riga sotto non teneva.
+    /// (difetto 0159). Prima non lo aspettava, e questo commento raccontava un
+    /// ordine che la riga sotto non teneva.
     ///
     /// La chiusura passa dal registry e non dal workspace, ed è l'unica
     /// differenza col §9.5: l'ordine resta quello di [`Workspace::close`] —
@@ -644,17 +644,20 @@ fn with_the_schema(machine: Arc<MachineSettings>) -> Arc<MachineSettings> {
     machine
 }
 
-/// Esegue una lettura del versioning con il prestito condiviso del workspace.
+/// Esegue la lettura del versioning con una capacità dati posseduta.
 ///
-/// È un seam privato, così il percorso lock-sensitive di [`Host::read_version`]
-/// resta verificabile senza esporre un'API solo ai test.
-#[cfg(all(feature = "versioning", test))]
-fn with_read_version_host<R>(
-    workspace: &Custody<Workspace>,
-    f: impl FnOnce(&dyn fub_abi::traits::ReadApi) -> R,
-) -> Result<R, PluginError> {
-    let workspace = workspace.read()?;
-    Ok(workspace.with_read_host(VERSIONING_ID, f))
+/// `JobHost` prende il prestito condiviso solo per preparare ogni token di
+/// accesso allo spazio dati; il token contiene supporto, namespace e path
+/// validati, quindi l'I/O del provider avviene dopo il rilascio del lock.
+#[cfg(feature = "versioning")]
+fn read_version_with_workspace(
+    workspace: Custody<Workspace>,
+    store: VersionStore,
+    id: &DocId,
+    ts: u64,
+) -> Result<String, PluginError> {
+    let host = JobHost::new(workspace, VERSIONING_ID);
+    store.read(id, ts, &host)
 }
 
 /// Esegue una mutazione dell'organizzazione dopo avere estratto lo store owned:
@@ -689,10 +692,10 @@ fn update_view_state(
 
 impl Host {
     /// Un host col rilevatore di default e nessun ponte eventi.
-    ///
     /// Il rilevatore di default è `notify` se la cargo feature
-    /// `notify-watcher` è accesa (lo è), e [`NoWatcher`](crate::NoWatcher)
-    /// altrimenti — cioè su PWA e mobile, dove `notify` non esiste affatto.
+    /// `notify-watcher` è accesa (lo è), e l'implementazione interna senza
+    /// rilevamento altrimenti — cioè su PWA e mobile, dove `notify` non esiste
+    /// affatto.
     pub fn new() -> Self {
         #[cfg(feature = "notify-watcher")]
         let watcher: Box<dyn WatcherFactory> = Box::new(crate::watcher::NotifyWatcher);
@@ -774,11 +777,172 @@ impl Host {
         self
     }
 
-    /// Sostituisce il rilevatore. Un e2e headless passa `NoWatcher`.
-    pub fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
+    /// Sostituisce il rilevatore con l'implementazione interna che non osserva
+    /// il filesystem. È la variante pubblica per host senza un backend watcher:
+    /// il trait e la capacità del workspace restano confinati al crate.
+    pub fn without_watcher() -> Self {
+        let mut host = Self::new();
+        host.watcher = Box::new(crate::watcher::NoWatcher);
+        host
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_watcher(mut self, watcher: Box<dyn WatcherFactory>) -> Self {
         self.watcher = watcher;
         self
     }
+    /// Registers an unclaimed native bundle in the selected vault without
+    /// exposing the workspace or registry locks to callers.
+    pub fn remember_unclaimed_bundle(
+        &self,
+        vault: Option<&str>,
+        bundle: Arc<dyn Bundle>,
+    ) -> Result<(), PluginError> {
+        let registry = self.in_session(vault, |session| Ok(session.registry.clone()))?;
+        BundleRegistry::remember_guarded(&registry, bundle)
+    }
+
+    /// Mounts a native bundle through the host's typed registration boundary.
+    pub fn mount_bundle(
+        &self,
+        vault: Option<&str>,
+        bundle: Arc<dyn Bundle>,
+    ) -> Result<(), PluginError> {
+        let id = bundle.manifest().id;
+        self.remember_unclaimed_bundle(vault, bundle)?;
+        self.set_plugin_enabled(vault, &id, true).map(|_| ())
+    }
+
+    /// Unmounts a previously mounted bundle without exposing custody handles.
+    pub fn unmount_bundle(
+        &self,
+        vault: Option<&str>,
+        id: &str,
+    ) -> Result<Vec<PluginError>, PluginError> {
+        let (workspace, registry, _shutdown) = self.in_session(vault, |session| {
+            Ok((
+                session.workspace.clone(),
+                session.registry.clone(),
+                session.runner.shutdown_bundle(id),
+            ))
+        })?;
+        Ok(BundleRegistry::unmount_guarded(&registry, &workspace, id))
+    }
+
+    /// Queues a job for a mounted plugin through its typed host port.
+    pub fn spawn_job(
+        &self,
+        vault: Option<&str>,
+        plugin: &str,
+        job: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<JobId, PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace.with_host(plugin, |host| {
+                host.spawn_job(JobSpec {
+                    job: job.into(),
+                    payload,
+                })
+            })
+        })
+    }
+    /// Invokes one plugin job through the runner's normal admission boundary.
+    pub fn invoke_job(
+        &self,
+        vault: Option<&str>,
+        plugin: &str,
+        job: &str,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        self.in_session(vault, |session| {
+            session.runner.invoke_job(plugin, job, payload)
+        })
+    }
+
+    /// Subscribes to events from the selected vault without exposing its bus.
+    pub fn subscribe(&self, vault: Option<&str>) -> Result<Subscription, PluginError> {
+        self.read_workspace(vault, |workspace| Ok(workspace.bus().subscribe()))
+    }
+
+    /// Emits one event through the selected vault's typed event port.
+    pub fn emit_event(
+        &self,
+        vault: Option<&str>,
+        event: fub_abi::Event,
+    ) -> Result<(), PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.bus().emit(Notice::of(event));
+            Ok(())
+        })
+    }
+
+    /// IDs of plugins declared by the selected vault.
+    pub fn plugin_ids(&self, vault: Option<&str>) -> Result<Vec<String>, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            Ok(workspace
+                .plugins()
+                .into_iter()
+                .map(|plugin| plugin.id)
+                .collect())
+        })
+    }
+
+    /// Declares a native plugin manifest in the selected vault.
+    pub fn declare_plugin(
+        &self,
+        vault: Option<&str>,
+        manifest: fub_abi::traits::PluginManifest,
+        trust: fub_kernel::Trust,
+    ) -> Result<(), PluginError> {
+        self.write_workspace(vault, |workspace| {
+            workspace
+                .register_plugin(manifest, trust)
+                .map_err(|error| PluginError::BadArgs(error.to_string().into()))
+        })
+    }
+
+    /// Reports whether a plugin currently has a capability permission.
+    pub fn permission_granted(
+        &self,
+        vault: Option<&str>,
+        plugin: &str,
+        permission: &str,
+    ) -> Result<bool, PluginError> {
+        let capability = Capability::ALL
+            .into_iter()
+            .find(|capability| capability.permission() == Some(permission))
+            .ok_or_else(|| {
+                PluginError::BadArgs(format!("unknown permission: {permission}").into())
+            })?;
+        self.read_workspace(vault, |workspace| {
+            Ok(workspace
+                .granted_policy(plugin)
+                .denies(capability)
+                .is_none())
+        })
+    }
+
+    /// Reads the journal snapshot for the selected vault.
+    pub fn journal(&self, vault: Option<&str>) -> Result<JournalRead, PluginError> {
+        self.read_workspace(vault, |workspace| {
+            workspace.journal().map_err(PluginError::from)
+        })
+    }
+    /// Returns the interest declaration for one view instance.
+    pub fn view_interests(
+        &self,
+        vault: Option<&str>,
+        instance: &ViewInstance,
+    ) -> Result<fub_abi::traits::ViewInterests, PluginError> {
+        let prepared = self.read_workspace(vault, |workspace| {
+            workspace.prepare_view_interests(instance)
+        })?;
+        let outcome = prepared.invoke();
+        self.read_workspace(vault, |workspace| {
+            workspace.finish_view_interests(prepared, outcome)
+        })
+    }
+
     /// Imposta la sorgente runtime interrogata per ogni nuova apertura.
     ///
     /// La sorgente decide quali bundle richiedere; l'host non persiste né
@@ -1323,6 +1487,28 @@ impl Host {
     // aperto adesso (`vaults()`): il secondo muore col processo, il primo è la
     // memoria fra un avvio e l'altro.
 
+    /// Elenca i temi installati con un manifest e fogli completi.
+    pub fn themes(&self) -> Result<Vec<crate::theme::ThemeInfo>, PluginError> {
+        Ok(self
+            .config_dir
+            .as_deref()
+            .map(crate::theme::list_themes)
+            .unwrap_or_default())
+    }
+
+    /// Legge una luce di un tema installato senza esporre il filesystem.
+    pub fn read_theme(
+        &self,
+        id: &str,
+        light: fub_abi::theme::ThemeLight,
+    ) -> Result<crate::theme::ThemePayload, PluginError> {
+        let dir = self
+            .config_dir
+            .as_deref()
+            .ok_or_else(|| PluginError::Unserved("theme inventory unavailable".into()))?;
+        crate::theme::read_theme(dir, id, light).map_err(Into::into)
+    }
+
     /// I vault conosciuti: prima i preferiti, poi i recenti.
     pub fn known_vaults(&self) -> Vec<VaultEntry> {
         self.vaults.list()
@@ -1576,6 +1762,9 @@ impl Host {
                 );
                 (deferred, persisted)
             };
+            // Il teardown tratta come no-op soltanto l'`UnknownPlugin` del
+            // kernel quando il registry conosce ancora il bundle ma non ne ha
+            // alcun corpo: un corpo residuo o un id sconosciuto resta un errore.
             let outcome =
                 persisted.and_then(|()| crate::teardown::unmount(&workspace, &registry, id));
             workspace.write()?.restore_event_dispatch(deferred);
@@ -1846,7 +2035,7 @@ impl Host {
                 self.machine_settings(),
             ));
         }
-        self.in_session(vault, |session| query_workspace(session.workspace(), query))
+        self.in_session(vault, |session| query_workspace(&session.workspace, query))
     }
 
     /// Questa scrittura riguarda una chiave che **un vault non le serve**, e
@@ -2119,7 +2308,7 @@ impl Host {
     /// È il punto unico in cui «quale vault» si risolve, ed è per questo che
     /// nessun chiamante deve saperlo: la shell passa ciò che ha (spesso niente),
     /// e chi ne ha due passa quale.
-    pub fn with_session<R>(
+    pub(crate) fn with_session<R>(
         &self,
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> R,
@@ -2154,7 +2343,7 @@ impl Host {
     /// Esiste per non lasciare in giro `Result<Result<_, _>, _>`: due errori
     /// della stessa specie, uno dentro l'altro, si appiattiscono qui una volta
     /// invece che a ogni chiamante.
-    pub fn in_session<R>(
+    pub(crate) fn in_session<R>(
         &self,
         vault: Option<&str>,
         f: impl FnOnce(&VaultSession) -> Result<R, PluginError>,
@@ -2210,6 +2399,40 @@ impl Host {
             .map(|(source, revision, _format)| (source, revision))
     }
 
+    /// Reads the parsed model through a detached prepare/call/finalize cycle.
+    pub fn read_model(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<fub_abi::model::DocumentModel, PluginError> {
+        let prepared = self.read_workspace(vault, |workspace| {
+            workspace.prepare_detached_document_model(id)
+        })?;
+        let completed = prepared.invoke()?;
+        self.read_workspace(vault, |workspace| {
+            workspace.finish_detached_document_model(completed)
+        })
+    }
+
+    /// Renders a document preview through the detached projection planner.
+    pub fn render_preview(
+        &self,
+        vault: Option<&str>,
+        id: &DocId,
+    ) -> Result<fub_kernel::RenderedDocument, PluginError> {
+        let result = self.in_session(vault, |session| {
+            query_workspace(
+                &session.workspace,
+                fub_abi::traits::IndexQuery::RenderPreview { doc: id.clone() },
+            )
+        })?;
+        match result {
+            fub_abi::traits::IndexResult::RenderPreview(rendered) => Ok(rendered.into()),
+            other => Err(PluginError::Internal(
+                format!("preview query returned {}", other.kind_name()).into(),
+            )),
+        }
+    }
     pub fn grid_surfaces(&self, vault: Option<&str>) -> Result<Vec<GridSurfaceSpec>, PluginError> {
         self.read_workspace(vault, |workspace| Ok(workspace.grid_surfaces()))
     }
@@ -2489,15 +2712,14 @@ impl Host {
         update_view_state(&workspace, owner, instance, key, value)
     }
 
-    /// Accesso al workspace soltanto nei build di debug, per i banchi interni.
-    /// La shell e i consumer di produzione non ricevono più questa capacità.
-    #[cfg(debug_assertions)]
-    #[doc(hidden)]
-    pub fn debug_workspace(&self, vault: Option<&str>) -> Result<Custody<Workspace>, PluginError> {
+    /// La radice del vault (o del corrente).
+    #[cfg(test)]
+    pub(crate) fn debug_workspace(
+        &self,
+        vault: Option<&str>,
+    ) -> Result<Custody<Workspace>, PluginError> {
         self.with_session(vault, |session| session.workspace.clone())
     }
-
-    /// La radice del vault (o del corrente).
     pub fn root(&self, vault: Option<&str>) -> Result<Utf8PathBuf, PluginError> {
         self.with_session(vault, |s| s.root.clone())
     }
@@ -2540,24 +2762,10 @@ impl Host {
     /// Rileggere una versione passa dall'host come tutto il resto: l'host presta
     /// al versioning le sue stesse capacità, non una scorciatoia sul filesystem.
     ///
-    /// **`with_read_host` e non `with_host`**, cioè il prestito **condiviso**.
-    /// Rileggere una versione è una lettura, e prendere qui l'esclusivo ferma
-    /// chi scrive per il tempo di una lettura da disco — il difetto che la
-    /// [0024] ha misurato e per cui il workspace sta dietro un `RwLock`. Ci si
-    /// arrivava per una premessa che oggi è falsa: che un host lo desse solo un
-    /// `&mut Workspace`. Ne esiste uno di sola lettura dalla [0021], e da lì una
-    /// lettura si serve leggendo.
-    ///
-    /// **A dirlo è un banco e non il compilatore**, e va scritto perché la cosa
-    /// ovvia è sbagliata: `VersionStore::read` chiede un `&dyn ReadApi`, ma un
-    /// `&mut dyn HostApi` ci si converte da sé — `HostApi: ReadApi`, e Rust sa
-    /// risalire una supertrait. Rimettere qui `write()` compila senza una parola.
-    /// Chi se ne accorge è
-    /// `rileggere_una_versione_non_ferma_chi_scrive` (`tests/concorrenza.rs`),
-    /// accanto ai tre presidi che la 0024 aveva già lasciato.
-    ///
-    /// [0024]: ../../../docs/decisions/README.md
-    /// [0021]: ../../../docs/decisions/0185-capability-un-solo-guard.md
+    /// La capacità dati viene preparata dal [`JobHost`] sotto un prestito
+    /// condiviso breve; il token posseduto rilascia il lock prima che
+    /// `VersionStore::read` invochi il provider e attraversi lo storage. Così
+    /// una lettura di cronologia non trattiene il workspace durante l'I/O.
     #[cfg(feature = "versioning")]
     pub fn read_version(
         &self,
@@ -2572,8 +2780,7 @@ impl Host {
                 .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
             Ok((session.workspace.clone(), store))
         })?;
-        let workspace = workspace.read()?;
-        workspace.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))
+        read_version_with_workspace(workspace, store, id, ts)
     }
 
     /// Ripristina una versione riscrivendo il documento (D8): passa da parse,
@@ -2593,10 +2800,7 @@ impl Host {
                 .ok_or_else(|| PluginError::Unserved("Versioning disattivato.".into()))?;
             Ok((session.workspace.clone(), store))
         })?;
-        let source = {
-            let ws = workspace.read()?;
-            ws.with_read_host(VERSIONING_ID, |host| store.read(id, ts, host))?
-        };
+        let source = read_version_with_workspace(workspace.clone(), store, id, ts)?;
         // **Detta**, come l'importer (§18.1): un ripristino non discende dal
         // testo che c'è adesso — lo sostituisce **apposta**.
         self.write_document_in(workspace, id, &source, WriteBase::Dictated)
@@ -3029,53 +3233,117 @@ mod vanished_session_key_tests {
 
 #[cfg(all(test, feature = "versioning"))]
 mod tests {
-    use std::sync::mpsc;
-    use std::time::Duration;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     use camino::Utf8PathBuf;
-    use fub_kernel::FormatRegistry;
+    use fub_kernel::storage::{DirEntry, Merge, Stat, VaultStorage};
+    use fub_kernel::{FormatRegistry, MachineSettings, MemStorage};
 
     use super::*;
 
-    #[test]
-    fn read_version_host_takes_a_shared_workspace_borrow() {
-        let dir = match tempfile::tempdir() {
-            Ok(dir) => dir,
-            Err(error) => panic!("tempdir: {error}"),
-        };
-        let root = match Utf8PathBuf::from_path_buf(dir.path().to_path_buf()) {
-            Ok(root) => root,
-            Err(path) => panic!("path is not utf8: {path:?}"),
-        };
-        let registry = FormatRegistry::new();
-        let workspace = match Workspace::new(&root, registry) {
-            Ok(workspace) => workspace,
-            Err(error) => panic!("workspace opens: {error}"),
-        };
-        let mut workspace = workspace;
-        if let Err(error) = workspace.register_core_feature(VERSIONING_ID, "Versioning") {
-            panic!("versioning registers: {error}");
-        }
-        let workspace = Custody::new("test workspace", workspace);
-        let inside = match workspace.read() {
-            Ok(inside) => inside,
-            Err(error) => panic!("workspace is not poisoned: {error}"),
-        };
-        let (send, receive) = mpsc::channel();
-        let worker_workspace = workspace.clone();
-        let worker = std::thread::spawn(move || {
-            let result = with_read_version_host(&worker_workspace, |_| ());
-            let _ = send.send(result);
-        });
+    struct ProbeStorage {
+        inner: MemStorage,
+        workspace: Mutex<Option<Custody<Workspace>>>,
+        armed: AtomicBool,
+        write_progressed: AtomicBool,
+    }
 
-        let result = match receive.recv_timeout(Duration::from_secs(1)) {
-            Ok(result) => result,
-            Err(error) => panic!("a shared reader is blocked by another shared reader: {error}"),
-        };
-        drop(inside);
-        if let Err(error) = worker.join() {
-            panic!("reader thread panicked: {error:?}");
+    impl VaultStorage for ProbeStorage {
+        fn read(&self, path: &Utf8Path) -> std::io::Result<Vec<u8>> {
+            if self.armed.load(Ordering::Acquire) {
+                let workspace = self
+                    .workspace
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone();
+                if workspace.is_some_and(|workspace| workspace.try_write().is_some()) {
+                    self.write_progressed.store(true, Ordering::Release);
+                }
+            }
+            self.inner.read(path)
         }
-        assert!(result.is_ok(), "read host is unavailable: {result:?}");
+
+        fn write(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<Stat> {
+            self.inner.write(path, bytes)
+        }
+
+        fn update(&self, path: &Utf8Path, merge: Merge<'_>) -> std::io::Result<()> {
+            self.inner.update(path, merge)
+        }
+
+        fn append(&self, path: &Utf8Path, bytes: &[u8]) -> std::io::Result<()> {
+            self.inner.append(path, bytes)
+        }
+
+        fn rename(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.inner.rename(from, to)
+        }
+
+        fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+            self.inner.rename_no_replace(from, to)
+        }
+
+        fn remove(&self, path: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove(path)
+        }
+
+        fn list(&self, dir: &Utf8Path) -> std::io::Result<Vec<DirEntry>> {
+            self.inner.list(dir)
+        }
+
+        fn stat(&self, path: &Utf8Path) -> std::io::Result<Stat> {
+            self.inner.stat(path)
+        }
+
+        fn remove_empty_dir(&self, dir: &Utf8Path) -> std::io::Result<()> {
+            self.inner.remove_empty_dir(dir)
+        }
+    }
+
+    #[test]
+    fn read_version_provider_does_not_hold_workspace_lock_during_storage_io() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");
+        let storage = Arc::new(ProbeStorage {
+            inner: MemStorage::new(),
+            workspace: Mutex::new(None),
+            armed: AtomicBool::new(false),
+            write_progressed: AtomicBool::new(false),
+        });
+        let mut workspace = Workspace::on(
+            &root,
+            FormatRegistry::new(),
+            Arc::clone(&storage) as Arc<dyn VaultStorage>,
+            MachineSettings::in_memory(),
+        )
+        .expect("workspace opens");
+        workspace
+            .register_core_feature(VERSIONING_ID, "Versioning")
+            .expect("versioning registers");
+        let store = workspace
+            .with_host(VERSIONING_ID, VersionStore::open)
+            .expect("versioning opens");
+        let id = DocId::new("Nota.md");
+        workspace
+            .with_host(VERSIONING_ID, |host| {
+                store.snapshot(&id, "# Nota\n\nversione\n", host)
+            })
+            .expect("the seed version is stored");
+        let ts = store.list(&id).first().expect("the seed version exists").ts;
+        let workspace = Custody::new("test workspace", workspace);
+        *storage
+            .workspace
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(workspace.clone());
+        storage.armed.store(true, Ordering::Release);
+
+        let source = read_version_with_workspace(workspace, store, &id, ts)
+            .expect("the version is readable");
+
+        assert_eq!(source, "# Nota\n\nversione\n");
+        assert!(
+            storage.write_progressed.load(Ordering::Acquire),
+            "VersionStore/provider I/O retained the workspace lock"
+        );
     }
 }

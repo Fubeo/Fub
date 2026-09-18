@@ -34,6 +34,7 @@ import { notify } from "../ui/notify";
 import type { Tone } from "../ui/notify";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
+import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
 
 /// Una riga del centro attività. È `JobStatus` senza i campi che una riga non
@@ -143,36 +144,40 @@ function describe(error: unknown): string {
 let jobs: JobRow[] = [];
 let open = false;
 
-export function mountActivity(): void {
-  $("#activity-button").addEventListener("click", () => {
+export function mountActivity(lifetime: Lifetime): void {
+  lifetime.listen($("#activity-button"), "click", () => {
     open = !open;
     // Aprire è il secondo momento in cui conviene riconciliare: costa una query
     // e toglie di mezzo ogni deriva accumulata mentre nessuno guardava.
     if (open) void request();
     else redraw();
   });
-  document.getElementById("activity-close")?.addEventListener("click", () => {
-    open = false;
-    redraw();
-  });
+  const close = document.getElementById("activity-close");
+  if (close) {
+    lifetime.listen(close, "click", () => {
+      open = false;
+      redraw();
+    });
+  }
 
   // Si ascolta **tutto** e si sceglie dentro `applica`: la regola sta in una
   // funzione sola, e questo pannello non si iscrive a cinque tipi che poi
   // qualcuno dimentica di allineare al contratto.
-  onAnyEvent((eventNotice) => {
-    const result = apply(jobs, eventNotice);
-    jobs = result.jobs;
-    redraw();
-    if (result.reconcile) void request();
-    // L'esito di un lavoro lungo è l'unico dei tre eventi del ciclo che l'utente
-    // deve **leggere**: gli altri due li racconta la riga.
-    const resultNotice = noticeOf(eventNotice);
-    if (resultNotice) notify(resultNotice.text, resultNotice.tone);
-  });
-
+  lifetime.add(
+    onAnyEvent((eventNotice) => {
+      const result = apply(jobs, eventNotice);
+      jobs = result.jobs;
+      redraw();
+      if (result.reconcile) void request();
+      // L'esito di un lavoro lungo è l'unico dei tre eventi del ciclo che l'utente
+      // deve **leggere**: gli altri due li racconta la riga.
+      const resultNotice = noticeOf(eventNotice);
+      if (resultNotice) notify(resultNotice.text, resultNotice.tone);
+    }),
+  );
   // La lingua che cambia rifà il pulsante e le righe: il pulsante porta un
   // conteggio, quindi il testo fermo di `index.html` non lo può possedere.
-  onLanguage(redraw);
+  lifetime.add(onLanguage(redraw));
 
   redraw();
 }

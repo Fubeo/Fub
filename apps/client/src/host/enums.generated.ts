@@ -127,6 +127,8 @@ export type ThemeEngine = "theme-1";
 
 export type ThemeLight = "dark" | "light";
 
+export type ThemeMotion = "opacity" | "transform";
+
 export type ViewSurface =
   | "left_sidebar"
   | "right_sidebar"

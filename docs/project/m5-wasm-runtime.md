@@ -1,13 +1,15 @@
 # M5: runtime WASM
 
-> **Stato aggiornato per:** `main` al commit
-> `cf50f60fd17e53d11e74ff2e7af96d572f69b10e`, 9 settembre 2026.
+> **Stato aggiornato per:** tree `audit-close` al merge
+> `2cc2e44c3f6dc619218354f6cc89fff2c1517cf2`, tree
+> `e8b9e0c0445ca9cf98ce503d4e07402097f9da62`, 17 settembre 2026.
 
 ## Gate di integrazione
 
-Vale la [governance audit](status.md#governance-di-integrazione): nessun merge
-in `main` prima di G15/GO. Un incremento M5 verificato su una branch non
-certifica il suo port nella linea audit né completa la milestone.
+Vale la [governance audit](status.md#governance-di-integrazione): il tree
+corrente è una base di `fix/audit-integration`; nessun merge in `main` prima
+di G15/GO. Le capacità descritte qui sono consegnate su questa base, ma non
+sono una dichiarazione di completamento di `main`, G14 o G15.
 
 ## Obiettivo
 
@@ -15,9 +17,10 @@ Dimostrare che un componente WASM può usare gli stessi trait dei provider
 nativi, con compatibilità, capability, limiti e lifecycle applicati
 dall'host.
 
-M5 non consiste nel collegare Wasmtime. È completa quando un autore può seguire
-un percorso documentato, esercitato end-to-end e privo di rami speciali nel
-kernel.
+Il criterio è soddisfatto sulla base audit corrente: un autore può seguire un
+percorso documentato, esercitato end-to-end e privo di rami speciali nel
+kernel. La pagina resta una scheda di progetto finché la consegna non è
+autorizzata e promossa in `main`.
 
 ## Architettura consegnata
 
@@ -112,12 +115,17 @@ implicitamente capability host al componente.
 coperte `parse`, `render_html` e `serialize`. Errori dichiarati dal guest,
 modelli malformati e trap sono coperti end-to-end nel percorso WASM e vengono
 recuperati come `FormatError`, ma non costituiscono un confronto di parità
-nativo/WASM.
+oltre ai casi esercitati.
 
-`IndexProvider` non viene aggiunto senza un componente che ne possieda una
-route e provi il feed, la query, il flush e la close. `EventHandler` inbound
-resta deferred finché un componente deve reagire a `Notice`; non va confuso
-con `host-events`, già supportato per il percorso outbound verso il guest.
+`ViewProvider` è consegnato con export WIT `view`, spec/interests/render,
+azioni `Replace`/`Patch`, validazione non fidata e teardown. `GridProvider` è
+consegnato con protocollo Grid v1 in ABI/WIT, provider nativo e proxy WASM:
+negozia famiglia/versione, finestre, patch, invalidazioni, fallback e
+ownership senza chiamate al provider sotto il lock.
+
+`IndexProvider` e `EventHandler` inbound restano deferred: non vengono
+promessi senza una route e un componente che provino feed/query/flush/close o
+la reazione a `Notice`. `host-events` outbound resta invece supportato.
 
 ## Consegnato nel percorso ViewProvider
 
@@ -148,64 +156,54 @@ e `WebView` secondo la policy.
 
 ### Discovery e installazione
 
-Manca su `main` un percorso supportato che:
+Nel tree corrente il percorso prodotto è supportato dalla shell e dal manager
+installato:
 
-1. trova il componente;
-2. legge manifest e import;
-3. valida ABI e capability;
-4. monta;
-5. invoca;
-6. disattiva;
-7. rimuove;
-8. dimostra zero risorse residue.
+1. `install_plugin` legge un file scelto esplicitamente, valida manifest e ABI
+   e pubblica blob e inventario senza montare o chiamare il guest;
+2. il record parte con `consent = undecided` e `enabled = false`;
+3. `set_installed_plugin_consent` registra `denied` o `granted` per gli esatti
+   byte installati, senza concedere capability;
+4. `set_installed_plugin_enabled` registra la selezione e riconcilia il
+   runtime, ma il mount avviene soltanto per `enabled && granted`;
+5. il riavvio rilegge lo snapshot persistente e filtra prima di load,
+   validazione attiva e istanziazione;
+6. la disabilitazione esegue teardown e ritira il claim in tutti i vault
+   interessati;
+7. `remove_installed_plugin` richiede lo stato disabilitato, ritira il record
+   e pulisce il blob senza toccare `.fub/plugins/<id>/`.
 
-La [PR #23](https://github.com/Fubeo/Fub/pull/23) propone discovery da directory
-esplicita, un componente costruito dai sorgenti, prova del lifecycle nativo e
-rilascio dell'istanza dopo attivazione fallita. La CI sul candidato `66141ad`
-è conclusa con successo, ma la PR resta draft per l'adattamento ai confini
-audit: il banco non deve chiamare il guest sotto `Custody<Workspace>` e deve
-preservare il lifecycle esplicito `BundleMount` già presente in quella linea.
-L'incremento non è incluso nella sezione consegnata.
+`list_installed_plugins` legge solo metadata e stato runtime: non compila,
+istanza o chiama il guest. Duplicati di id, digest alterati, file
+incompleti, ABI incompatibile e collisioni CAS producono errori espliciti;
+non esiste upgrade implicito. Una reinstallazione ha nuova identità e nuovo
+consenso. Un componente selezionato corrotto o non caricabile viene
+diagnosticato e saltato per quell'apertura senza impedire il vault.
 
-La [PR #26](https://github.com/Fubeo/Fub/pull/26) ne porta soltanto discovery
-sulla linea audit, con candidati corrotti indipendenti da quelli validi,
-file `.part` invisibili e duplicati espliciti. Conserva `BundleMount` e non
-reintroduce il protocollo temporale della PR #23. Il lifecycle resta da
-adattare anche nelle porte di produzione: spostare soltanto il banco non
-soddisfa C-04. Né #26 né il fix CAS #27 chiudono #8.
+La [PR #49](https://github.com/Fubeo/Fub/pull/49) registra la consegna della
+fase 10 sul medesimo tree audit. #8 e #10 restano **OPEN** come tracker per la
+chiusura formale e la matrice audit, non perché manchi questo percorso nella
+base corrente.
 
-`InstalledPluginStore` fornisce agli host nativi una radice di configurazione
-passata esplicitamente, inventario, consenso e scelta enabled persistenti,
-installazione e rimozione sicure, collisioni esplicite e integrità verificata
-dei componenti.
-La composizione desktop sceglie una sola configurazione e monta allo startup
-soltanto i componenti enabled con consenso `granted`, filtrati prima del load
-e della validazione attiva. Il banco attraversa store, comando WASM e restart
-enabled/disabled. Restano gestione desktop di installazione, scelte e rimozione,
-IPC e guida dello stesso ciclo end-to-end.
-Componente installato, storage persistente del plugin, scelta di abilitazione e
-istanza montata restano separati. `InstalledPluginStore` non salva né scopre
-componenti installati in `.fub/plugins/` e non cancella quella directory.
+## Stato di consegna e limiti
 
-## Criteri di completamento
+Sul tree `2cc2e44c` M5 ha il percorso installato e i provider esercitati:
+`CommandProvider`, `FormatProvider`, `ViewProvider` e `GridProvider`, con
+capability, timeout, memoria, trap, output malformato, UI non fidata, rollback
+e teardown coperti nei casi dichiarati. La fase 10 Grid è presente in
+ABI/WIT, nel provider nativo, nel proxy WASM e nel client shell.
 
-M5 è completa quando:
+Questa pagina resta una scheda di progetto perché la base non è `main` e
+G14/G15 non sono conclusi. #8 e #10 restano aperte nei tracker; non vanno
+interpretate come capacità assenti. I limiti non promessi sono
+`IndexProvider` e `EventHandler` inbound, oltre a operazioni provider non
+esercitate dagli esempi.
 
-- [ ] #8 dimostra il percorso installazione-esecuzione-rimozione;
-- #10: View consegnata = export WIT `view` + spec validata + `interests`/render
-  equivalenti al provider nativo + action `Replace`/`Patch` + trap/panic
-  convertito a `PluginError::Internal` al confine `Workspace`, senza richiedere
-  discovery, `IndexProvider` o `EventHandler` inbound futuri;
-- [ ] il tutorial riproduce lo stesso percorso dei test;
-- [ ] un plugin incompatibile viene rifiutato prima del mount;
-- [ ] un permesso negato non lascia stato parziale;
-- [ ] timeout, memoria e trap hanno test end-to-end;
-- [ ] mount e teardown rilasciano istanza, registrazioni e handler;
-- [ ] il kernel non distingue backend nativo e WASM;
-- [ ] la documentazione corrente descrive i limiti reali.
-
-Le checklist sono ammesse qui perché questa pagina è stato di progetto e viene
-eliminata quando la milestone è conclusa.
+Il tutorial per riprodurre il ciclo reale è
+[`../development/plugin-authoring.md`](../development/plugin-authoring.md).
+Un componente incompatibile viene rifiutato prima del mount; un permesso o
+consenso negato non lascia stato parziale; il filtro startup conserva
+separati installazione, consenso, enabled, capability e istanza montata.
 
 ## Rischi
 
@@ -225,12 +223,14 @@ eliminata quando la milestone è conclusa.
 - [#8 — percorso end-to-end](https://github.com/Fubeo/Fub/issues/8)
 - [#10 — provider e UI non fidata](https://github.com/Fubeo/Fub/issues/10)
 
-## Dopo M5
+## Passaggio successivo
 
-Quando i criteri sono soddisfatti:
+La consegna corrente resta nelle guide e negli ADR; questa scheda si mantiene
+per tracciare il passaggio audit e l'eventuale chiusura formale di #8/#10.
+Dopo G14 e G15/GO:
 
-- questa pagina viene eliminata;
-- il risultato entra nel changelog;
-- le capacità correnti restano nelle guide;
-- le motivazioni stabili restano negli ADR;
-- il lavoro successivo vive in nuove issue.
+- aggiornare changelog e stato della release;
+- conservare nelle guide le capability e i limiti correnti;
+- spostare il lavoro successivo in nuove issue;
+- rimuovere questa scheda solo quando la policy del progetto la considera
+  superata sulla linea di rilascio.

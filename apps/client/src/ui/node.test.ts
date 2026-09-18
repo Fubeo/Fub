@@ -462,6 +462,38 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
     expect(choices.map((i) => i.checked)).toEqual([true, false]);
     expect(read(host)).toEqual([{ field: "r", value: { type: "text", value: "x" } }]);
   });
+  it("un radio attivo conserva la scelta davanti a un rerender stantio", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const action = { action: "scegli", payload: null };
+    const onAction = async () => {};
+
+    mountTree(host, buttons({ value: "a", action }), onAction);
+    const first = host.querySelector<HTMLInputElement>('input[type="radio"][value="a"]')!;
+    const second = host.querySelector<HTMLInputElement>('input[type="radio"][value="b"]')!;
+    second.focus();
+    second.click();
+    expect(second.checked).toBe(true);
+
+    // Il provider non ha ancora visto la scelta: il suo `a` non può
+    // sovrascrivere il `b` che l'utente ha appena attivato.
+    mountTree(host, buttons({ value: "a", action }), onAction);
+    expect(second.checked).toBe(true);
+    expect(first.checked).toBe(false);
+
+    // Uscire dal gruppo consente di riconciliare il valore autorevole
+    // precedente; un ack con `b` invece resta visibile anche dopo il blur.
+    second.blur();
+    expect(first.checked).toBe(true);
+    expect(second.checked).toBe(false);
+    mountTree(host, buttons({ value: "a", action }), onAction);
+    const acknowledged = host.querySelector<HTMLInputElement>('input[type="radio"][value="b"]')!;
+    acknowledged.focus();
+    acknowledged.click();
+    mountTree(host, buttons({ value: "b", action }), onAction);
+    acknowledged.blur();
+    expect(acknowledged.checked).toBe(true);
+  });
 });
 
 // A chi appartiene l'identità di un gruppo di radio.
@@ -706,6 +738,18 @@ describe("controlli statici e righe valide", () => {
     mountTree(host, node, async () => {});
     return host;
   };
+
+  it("una checkbox porta l'etichetta accessibile del campo", () => {
+    const host = mount({
+      node: "checkbox",
+      field: "completed",
+      label: "Completata",
+      value: true,
+      action: null,
+    } as UiNode);
+    const input = host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    expect(input.labels?.[0]?.textContent).toContain("Completata");
+  });
 
   it.each([
     [{ node: "text_input", field: "x", label: null, value: "a", placeholder: null, action: null }, "input"],

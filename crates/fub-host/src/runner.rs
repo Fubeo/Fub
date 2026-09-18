@@ -39,15 +39,20 @@
 //! chiudono, che è esattamente il caso a due thread contro cui il watcher viene
 //! lasciato andare per primo.
 
+use std::any::Any;
 use std::collections::{HashMap, HashSet};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(test)]
+use std::sync::Barrier;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use fub_abi::traits::{JobId, JobProgress, TimerSchedule};
-use fub_abi::PluginError;
-use fub_kernel::{Indexing, JobBell, PendingJob, Workspace};
+use fub_abi::event::{Actor, Event, Origin};
+use fub_abi::traits::{JobId, JobProgress, JobSpec, TimerSchedule};
+use fub_abi::{Notice, PluginError};
+use fub_kernel::{EventBus, Indexing, JobBell, PendingJob, Workspace};
 use jiff::Timestamp;
 
 use crate::wall::{verdict, Position, Zone};
@@ -464,14 +469,51 @@ impl Alarms {
     }
 }
 
+#[cfg(test)]
+/// Presidia la finestra fra il controllo di `stopping` e la presa del biglietto.
+///
+/// Il banco della corsa deve poter mettere in scena quell'ordine senza
+/// aspettare che lo scheduler lo scelga. È un gancio solo per i test: in
+/// produzione non esiste né stato né attesa aggiuntiva.
+pub(crate) struct StopRaceProbe {
+    reached: Barrier,
+    stopping: Barrier,
+}
+
+#[cfg(test)]
+impl StopRaceProbe {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            reached: Barrier::new(2),
+            stopping: Barrier::new(2),
+        })
+    }
+
+    fn pause_before_ticket(&self) {
+        self.reached.wait();
+        self.stopping.wait();
+    }
+
+    pub(crate) fn reached(&self) {
+        self.reached.wait();
+    }
+
+    fn stop_requested(&self) {
+        self.stopping.wait();
+    }
+}
+
 /// Ciò che i thread condividono: il vault, i bundle, il campanello, lo stato
 /// dei job e i quadranti delle sveglie.
 struct Shared {
     workspace: Custody<Workspace>,
     bundles: Custody<BundleRegistry>,
     bell: Arc<JobBell>,
+    #[cfg(test)]
+    stop_race_probe: Option<Arc<StopRaceProbe>>,
     stopping: AtomicBool,
     opening: Custody<Option<InProgress>>,
+    bus: EventBus,
     flags: Custody<Flags>,
     alarms: Custody<Alarms>,
     in_flight: Arc<(Mutex<InFlight>, Condvar)>,
@@ -501,6 +543,107 @@ pub struct InProgress {
     pub(crate) end: Arc<(Mutex<bool>, Condvar)>,
 }
 
+enum OpeningAdvance {
+    More(InProgress),
+    Finished(Result<serde_json::Value, PluginError>),
+}
+
+/// Completes the opening job and wakes waiters even when an opening phase
+/// returns an error or unwinds.
+struct OpeningCompletion<'a> {
+    shared: &'a Shared,
+    id: JobId,
+    end: Arc<(Mutex<bool>, Condvar)>,
+    armed: bool,
+}
+
+impl<'a> OpeningCompletion<'a> {
+    fn new(shared: &'a Shared, in_progress: &InProgress) -> Self {
+        Self {
+            shared,
+            id: in_progress.id,
+            end: Arc::clone(&in_progress.end),
+            armed: true,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+
+    fn finish(
+        &mut self,
+        outcome: Result<serde_json::Value, PluginError>,
+    ) -> Result<(), PluginError> {
+        if !self.armed {
+            return Ok(());
+        }
+        self.armed = false;
+        let fallback_bus = self.shared.bus.clone();
+        let fallback_outcome = outcome.clone();
+        let mut queued = false;
+        let completion = catch_unwind(AssertUnwindSafe(|| {
+            let _ = self.shared.forget(self.id);
+            with_event_drain(&self.shared.workspace, |ws| {
+                ws.complete_job(self.id, fub_kernel::INDEX_JOB.to_string(), outcome);
+                queued = true;
+            })
+        }));
+
+        if !queued {
+            let _ = catch_unwind(AssertUnwindSafe(|| {
+                fallback_bus.emit(Notice::new(
+                    Event::JobDone {
+                        id: self.id,
+                        job: fub_kernel::INDEX_JOB.to_string(),
+                        result: fallback_outcome,
+                    },
+                    Origin::by(Actor::Kernel),
+                ));
+            }));
+        }
+        signal_opening_end(&self.end);
+
+        match completion {
+            Ok(result) => result,
+            Err(payload) => Err(panic_error(
+                payload,
+                "la chiusura dell'apertura è andata in panico",
+            )),
+        }
+    }
+}
+
+impl Drop for OpeningCompletion<'_> {
+    fn drop(&mut self) {
+        if self.armed {
+            let _ = self.finish(Err(PluginError::Internal(
+                "l'indicizzazione del vault è terminata per un guasto del runner"
+                    .to_string()
+                    .into(),
+            )));
+        }
+    }
+}
+
+fn signal_opening_end(end: &Arc<(Mutex<bool>, Condvar)>) {
+    let (done, bell) = &**end;
+    match done.lock() {
+        Ok(mut done) => *done = true,
+        Err(poisoned) => *poisoned.into_inner() = true,
+    }
+    bell.notify_all();
+}
+
+fn panic_error(payload: Box<dyn Any + Send>, context: &str) -> PluginError {
+    let message = payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("payload di panico non testuale");
+    PluginError::Internal(format!("{context}: {message}").into())
+}
+
 impl Shared {
     /// **Porta avanti l'apertura di una fetta**, e dice se c'era qualcosa da
     /// portare avanti (§15.7).
@@ -516,9 +659,36 @@ impl Shared {
     /// popolando, e farlo aspettare la fine è il verso che gli fa vedere di
     /// più. Non è fame: una fetta è limitata, e fra due fette la coda si drena.
     fn advance_opening(&self) -> Result<bool, PluginError> {
-        let Some(mut in_progress) = self.opening.write()?.take() else {
+        let Some(in_progress) = self.opening.write()?.take() else {
             return Ok(false);
         };
+        let mut completion = OpeningCompletion::new(self, &in_progress);
+        match catch_unwind(AssertUnwindSafe(|| self.advance_opening_step(in_progress))) {
+            Ok(Ok(OpeningAdvance::More(in_progress))) => match self.opening.write() {
+                Ok(mut opening) => {
+                    *opening = Some(in_progress);
+                    completion.disarm();
+                    Ok(true)
+                }
+                Err(error) => Err(error),
+            },
+            Ok(Ok(OpeningAdvance::Finished(outcome))) => completion.finish(outcome).map(|()| true),
+            Ok(Err(error)) => {
+                let _ = completion.finish(Err(error.clone()));
+                Err(error)
+            }
+            Err(payload) => {
+                let error = panic_error(payload, "una fase dell'apertura è andata in panico");
+                let _ = completion.finish(Err(error.clone()));
+                Err(error)
+            }
+        }
+    }
+
+    fn advance_opening_step(
+        &self,
+        mut in_progress: InProgress,
+    ) -> Result<OpeningAdvance, PluginError> {
         // La bandiera è **quella di tutti**: annullare l'indicizzazione è
         // premere lo stesso pulsante che annulla un export, e passa dalla
         // stessa `Flags`. Senza questo, «annulla» avrebbe avuto due
@@ -537,7 +707,7 @@ impl Shared {
             // accanto. Il piano si porta dietro l'impronta che l'anagrafe dava
             // a ogni documento adesso, e chi applica la confronta: fra le due
             // fasi il prestito esclusivo passa di mano, e su un'apertura che
-            // dura secondi in mezzo ci sta un salvataggio dell'utente.
+            // dura secondi in mezzo ci sta comodo un salvataggio dell'utente.
             let checked = {
                 let ws = self.workspace.read()?;
                 ws.prepare_index_batch_check(&mut in_progress.work)
@@ -575,8 +745,7 @@ impl Shared {
                     },
                 );
             })?;
-            *self.opening.write()? = Some(in_progress);
-            return Ok(true);
+            return Ok(OpeningAdvance::More(in_progress));
         }
 
         // Finita, o smessa: si chiude comunque. Il grafo è CPU sull'insieme
@@ -630,17 +799,7 @@ impl Shared {
         } else {
             Ok(serde_json::json!({ "discarded": opening.discarded.len() }))
         };
-        self.forget(in_progress.id)?;
-        with_event_drain(&self.workspace, |ws| {
-            ws.complete_job(in_progress.id, fub_kernel::INDEX_JOB.to_string(), outcome);
-        })?;
-        // Ultimo, e dopo l'esito: chi si sveglia qui deve trovare il vault
-        // nello stato in cui l'indicizzazione lo ha lasciato, non mentre ce lo
-        // sta mettendo.
-        let (done, bell) = &*in_progress.end;
-        *done.lock().expect("fine avvelenata") = true;
-        bell.notify_all();
-        Ok(true)
+        Ok(OpeningAdvance::Finished(outcome))
     }
 
     /// Prende in carico un lotto appena drenato ([`Flags::claim`]).
@@ -750,6 +909,18 @@ impl Shared {
         })?;
         flags
     }
+    /// Esegue una richiesta sincrona usando la stessa ammissione, cancellazione,
+    /// contenimento dei panic e contabilità del percorso in coda.
+    fn run_direct(&self, job: PendingJob) -> Result<serde_json::Value, PluginError> {
+        let outcome = self.outcome(&job);
+        let flags = self.forget(job.id);
+        let completion = with_event_drain(&self.workspace, |ws| {
+            ws.complete_job(job.id, job.spec.job, outcome.clone());
+        });
+        completion?;
+        flags?;
+        outcome
+    }
 
     /// **Ciò che questo job risponde, comunque vada** — anche quando ciò che va
     /// storto non è il job ma il runner.
@@ -851,9 +1022,19 @@ impl Shared {
         &self,
         cursors: Vec<(String, String, fub_abi::traits::CivilTime)>,
     ) -> Result<(), PluginError> {
-        let workspace = self.workspace.read()?;
-        for (owner, timer, cursor) in cursors {
-            workspace.set_timer_cursor(&owner, &timer, cursor)?;
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            cursors
+                .into_iter()
+                .map(|(owner, timer, cursor)| {
+                    workspace
+                        .prepare_timer_cursors(&owner)
+                        .map(|token| (token, timer, cursor))
+                })
+                .collect::<Result<Vec<_>, PluginError>>()?
+        };
+        for (token, timer, cursor) in prepared {
+            token.write(&timer, cursor)?;
         }
         Ok(())
     }
@@ -863,12 +1044,22 @@ impl Shared {
         &self,
         declared: &[(String, fub_abi::traits::TimerSpec)],
     ) -> Result<HashMap<(String, String), fub_abi::traits::CivilTime>, PluginError> {
-        let workspace = self.workspace.read()?;
-        let owners: HashSet<&str> = declared.iter().map(|(owner, _)| owner.as_str()).collect();
+        let prepared = {
+            let workspace = self.workspace.read()?;
+            let owners: HashSet<&str> = declared.iter().map(|(owner, _)| owner.as_str()).collect();
+            owners
+                .into_iter()
+                .map(|owner| {
+                    workspace
+                        .prepare_timer_cursors(owner)
+                        .map(|token| (owner.to_owned(), token))
+                })
+                .collect::<Result<Vec<_>, PluginError>>()?
+        };
         let mut cursors = HashMap::new();
-        for owner in owners {
-            for (timer, cursor) in workspace.timer_cursors(owner)? {
-                cursors.insert((owner.to_owned(), timer), cursor);
+        for (owner, token) in prepared {
+            for (timer, cursor) in token.read()? {
+                cursors.insert((owner.clone(), timer), cursor);
             }
         }
         Ok(cursors)
@@ -948,6 +1139,11 @@ impl Shared {
                 std::thread::yield_now();
                 continue;
             }
+            #[cfg(test)]
+            if let Some(probe) = &self.stop_race_probe {
+                probe.pause_before_ticket();
+            }
+
             // Il biglietto si prende **prima** di drenare: un job accodato fra
             // il drenaggio e l'attesa cambia il conto, e l'attesa torna subito
             // invece di dormire su lavoro che c'è.
@@ -1127,13 +1323,51 @@ impl JobRunner {
         // che dopo la 0120 *prendere un prestito è una domanda*, e una funzione
         // che se la ponesse per conto suo sarebbe il secondo posto in cui la
         // politica è scritta.
-        let bell = workspace.read()?.job_bell();
+        let (bell, bus) = {
+            let workspace = workspace.read()?;
+            (workspace.job_bell(), workspace.bus().clone())
+        };
         let shared = Arc::new(Shared {
             workspace,
             bundles,
             bell,
+            bus,
+            #[cfg(test)]
+            stop_race_probe: None,
+
             stopping: AtomicBool::new(false),
             opening: Custody::new("l'apertura in corso", opening),
+            flags: Custody::empty("le bandiere dei job"),
+            alarms: Custody::empty("le sveglie del vault"),
+            in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
+        });
+        Self::start_workers_with(shared, threads, |builder, worker| builder.spawn(worker))
+    }
+    /// Avvia il pool con il presidio deterministico della corsa di chiusura.
+    ///
+    /// Il gancio vive solo nei test: il percorso di produzione continua a
+    /// costruire esattamente lo stesso `Shared`, senza stato aggiuntivo.
+    #[cfg(test)]
+    pub(crate) fn start_with_stop_probe(
+        workspace: Custody<Workspace>,
+        bundles: Custody<BundleRegistry>,
+        threads: usize,
+        opening: Option<InProgress>,
+        probe: Arc<StopRaceProbe>,
+    ) -> Result<Self, PluginError> {
+        let (bell, bus) = {
+            let workspace = workspace.read()?;
+            (workspace.job_bell(), workspace.bus().clone())
+        };
+        let shared = Arc::new(Shared {
+            workspace,
+            bundles,
+            bell,
+            stop_race_probe: Some(probe),
+
+            stopping: AtomicBool::new(false),
+            opening: Custody::new("l'apertura in corso", opening),
+            bus,
             flags: Custody::empty("le bandiere dei job"),
             alarms: Custody::empty("le sveglie del vault"),
             in_flight: Arc::new((Mutex::new(InFlight::default()), Condvar::new())),
@@ -1213,6 +1447,32 @@ impl JobRunner {
         // fermato da sé, e la riga che spiega perché è già stata scritta.
         let _ = self.shared.cancel(id);
     }
+    /// Esegue direttamente un job richiesto dall'host, senza creare una
+    /// seconda contabilità: l'id viene riservato dal workspace e il corpo passa
+    /// dalla stessa `Shared::outcome` usata dai worker.
+    pub fn invoke_job(
+        &self,
+        plugin: &str,
+        job: impl Into<String>,
+        payload: serde_json::Value,
+    ) -> Result<serde_json::Value, PluginError> {
+        if self.shared.bundles.read()?.body(plugin).is_none() {
+            return Err(PluginError::NotFound(
+                format!("plugin not mounted: {plugin}").into(),
+            ));
+        }
+        let pending = {
+            let mut workspace = self.shared.workspace.write()?;
+            workspace.issue_direct_job(
+                plugin,
+                JobSpec {
+                    job: job.into(),
+                    payload,
+                },
+            )?
+        };
+        self.shared.run_direct(pending)
+    }
 
     /// **Ferma i job di un componente**, e torna quando nessuno è più dentro il
     /// suo codice: da lì in poi si può spegnere.
@@ -1243,9 +1503,14 @@ impl JobRunner {
     /// risposta vera, ed è il deadline dell'host WASM.
     pub fn stop(&mut self) -> Vec<PluginError> {
         self.shared.stopping.store(true, Ordering::Release);
+
         let mut errors: Vec<PluginError> = self.shared.cancel_all().err().into_iter().collect();
         // Sveglia chi aspetta il campanello: si sveglia, vede `stopping`, esce.
         self.shared.bell.ring();
+        #[cfg(test)]
+        if let Some(probe) = &self.shared.stop_race_probe {
+            probe.stop_requested();
+        }
         for worker in self.workers.drain(..) {
             let _ = worker.join();
         }
@@ -1437,6 +1702,77 @@ mod tests {
         assert!(
             !shared.advance_opening().unwrap(),
             "l'apertura annullata è rimasta in mano a qualcuno"
+        );
+    }
+
+    #[test]
+    fn poisoned_opening_phase_still_completes_and_wakes_waiters() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let subscription = shared.workspace.read().unwrap().bus().subscribe();
+        let end = {
+            let opening = shared.opening.read().unwrap();
+            Arc::clone(&opening.as_ref().expect("un'apertura in corso").end)
+        };
+        let waiter_end = Arc::clone(&end);
+        let (woke_tx, woke_rx) = std::sync::mpsc::channel();
+        let waiter = std::thread::spawn(move || {
+            let (done, bell) = &*waiter_end;
+            let mut done = match done.lock() {
+                Ok(done) => done,
+                Err(poisoned) => poisoned.into_inner(),
+            };
+            while !*done {
+                done = match bell.wait(done) {
+                    Ok(done) => done,
+                    Err(poisoned) => poisoned.into_inner(),
+                };
+            }
+            woke_tx.send(()).expect("il test riceve il risveglio");
+        });
+
+        poison(&shared.flags);
+        assert!(
+            shared.advance_opening().is_err(),
+            "un custode avvelenato resta un errore osservabile"
+        );
+        assert!(
+            woke_rx.recv_timeout(Duration::from_secs(1)).is_ok(),
+            "un errore nella fase non deve lasciare il waiter bloccato"
+        );
+        waiter.join().expect("il waiter è terminato");
+        assert_eq!(
+            completed(&subscription),
+            vec![fub_kernel::INDEX_JOB.to_string()],
+            "anche un errore di fase consegna sempre JobDone"
+        );
+    }
+
+    #[test]
+    fn poisoned_workspace_still_emits_opening_completion() {
+        let (_dir, shared, _id) = a_vault_to_index();
+        let subscription = shared.workspace.read().unwrap().bus().subscribe();
+        let end = {
+            let opening = shared.opening.read().unwrap();
+            Arc::clone(&opening.as_ref().expect("un'apertura in corso").end)
+        };
+
+        poison(&shared.workspace);
+        assert!(
+            shared.advance_opening().is_err(),
+            "il workspace avvelenato resta un errore osservabile"
+        );
+        let done = match end.0.lock() {
+            Ok(done) => done,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        assert!(
+            *done,
+            "il workspace avvelenato non può impedire il risveglio"
+        );
+        assert_eq!(
+            completed(&subscription),
+            vec![fub_kernel::INDEX_JOB.to_string()],
+            "il bus indipendente consegna JobDone anche senza workspace"
         );
     }
 
@@ -1939,11 +2275,15 @@ mod tests {
         let work = ws.scan_vault().expect("la scansione riesce");
         assert_eq!(work.total(), count as u64, "le note seminate si leggono");
         let id = ws.begin_index_job();
+        let bus = ws.bus().clone();
 
         let shared = Shared {
             workspace: Custody::new("il vault di prova", ws),
             bundles: Custody::new("i componenti di prova", BundleRegistry::new()),
             bell: Arc::new(JobBell::default()),
+            #[cfg(test)]
+            stop_race_probe: None,
+            bus,
             stopping: AtomicBool::new(false),
             opening: Custody::new(
                 "l'apertura di prova",

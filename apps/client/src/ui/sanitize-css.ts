@@ -10,6 +10,7 @@ export type ThemeCssViolationCode =
   | "selector-id"
   | "selector-token"
   | "structural-property"
+  | "disallowed-value"
   | "missing-role";
 
 export interface ThemeCssViolation {
@@ -85,6 +86,26 @@ interface Token {
 
 interface IndexedUrl {
   readonly value: string;
+  /** Function/candidate start, used for diagnostics and stable ordering. */
+  readonly index: number;
+  /** Exact range of the URL payload, excluding quotes and surrounding trivia. */
+  readonly start: number;
+  readonly end: number;
+}
+interface ImageSetAnalysis {
+  readonly candidates: IndexedUrl[];
+  readonly invalid: string | null;
+}
+
+interface QuotedRange {
+  readonly value: string;
+  readonly next: number;
+  readonly start: number;
+  readonly end: number;
+}
+
+interface ImageSetIssue {
+  readonly detail: string;
   readonly index: number;
 }
 
@@ -175,7 +196,7 @@ function decodeEscape(input: string, start: number): { value: string; next: numb
   return { value: input[i]!, next: i + 1 };
 }
 
-function decodeCssEscapes(input: string): string {
+export function decodeCssEscapes(input: string): string {
   let out = "";
   for (let i = 0; i < input.length; ) {
     if (input[i] !== "\\") {
@@ -229,6 +250,238 @@ function skipComment(input: string, start: number): number {
   const close = input.indexOf("*/", start + 2);
   return close < 0 ? input.length : close + 2;
 }
+function imageSetName(name: string): boolean {
+  return name === "image-set" || name === "-webkit-image-set";
+}
+
+function functionClose(input: string, open: number): number | null {
+  let depth = 1;
+  for (let i = open + 1; i < input.length; ) {
+    if (input.startsWith("/*", i)) {
+      i = skipComment(input, i);
+      continue;
+    }
+    if (input[i] === '"' || input[i] === "'") {
+      const quote = input[i]!;
+      let closed = false;
+      i += 1;
+      while (i < input.length) {
+        if (input[i] === "\\") i = decodeEscape(input, i).next;
+        else if (input[i] === quote) {
+          i += 1;
+          closed = true;
+          break;
+        } else i += 1;
+      }
+      if (!closed) return null;
+      continue;
+    }
+    if (input[i] === "\\") i = decodeEscape(input, i).next;
+    else if (input[i] === "(") {
+      depth += 1;
+      i += 1;
+    } else if (input[i] === ")") {
+      depth -= 1;
+      if (depth === 0) return i;
+      i += 1;
+    } else i += 1;
+  }
+  return null;
+}
+
+function skipTrivia(input: string, start: number, end: number): number {
+  let i = start;
+  while (i < end) {
+    if (/\s/.test(input[i]!)) i += 1;
+    else if (input.startsWith("/*", i)) i = Math.min(end, skipComment(input, i));
+    else break;
+  }
+  return i;
+}
+
+function quotedRange(input: string, start: number, end: number): QuotedRange | null {
+  const quote = input[start];
+  if (quote !== '"' && quote !== "'") return null;
+  let i = start + 1;
+  while (i < end) {
+    if (input[i] === "\\") i = decodeEscape(input, i).next;
+    else if (input[i] === quote) {
+      const [valueStart, valueEnd] = trimRange(input, start + 1, i);
+      return {
+        value: decodeCssEscapes(input.slice(valueStart, valueEnd)).trim(),
+        next: i + 1,
+        start: valueStart,
+        end: valueEnd,
+      };
+    } else i += 1;
+  }
+  return null;
+}
+
+function trimRange(input: string, start: number, end: number): [number, number] {
+  let valueStart = start;
+  let valueEnd = end;
+  while (valueStart < valueEnd && /\s/.test(input[valueStart]!)) valueStart += 1;
+  while (valueEnd > valueStart && /\s/.test(input[valueEnd - 1]!)) valueEnd -= 1;
+  return [valueStart, valueEnd];
+}
+
+function topLevelCommaRanges(input: string, start: number, end: number): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let depth = 0;
+  let piece = start;
+  for (let i = start; i < end; ) {
+    if (input.startsWith("/*", i)) i = skipComment(input, i);
+    else if (input[i] === '"' || input[i] === "'") i = Math.min(end, skipQuoted(input, i));
+    else if (input[i] === "\\") i = decodeEscape(input, i).next;
+    else if (input[i] === "(") {
+      depth += 1;
+      i += 1;
+    } else if (input[i] === ")") {
+      depth = Math.max(0, depth - 1);
+      i += 1;
+    } else if (input[i] === "," && depth === 0) {
+      ranges.push([piece, i]);
+      piece = i + 1;
+      i += 1;
+    } else i += 1;
+  }
+  ranges.push([piece, end]);
+  return ranges;
+}
+
+function analyzeImageSet(input: string, open: number): ImageSetAnalysis {
+  const candidates: IndexedUrl[] = [];
+  const close = functionClose(input, open);
+  if (close === null) return { candidates, invalid: "parentesi non bilanciate" };
+
+  for (const [start, end] of topLevelCommaRanges(input, open + 1, close)) {
+    let cursor = skipTrivia(input, start, end);
+    if (cursor >= end) return { candidates, invalid: "candidate vuoto" };
+    if (input[cursor] === '"' || input[cursor] === "'") {
+      const quoted = quotedRange(input, cursor, end);
+      if (!quoted) return { candidates, invalid: "candidate stringa non valido" };
+      candidates.push({
+        value: quoted.value,
+        index: cursor,
+        start: quoted.start,
+        end: quoted.end,
+      });
+      cursor = quoted.next;
+    } else {
+      const imageIndex = cursor;
+      const image = identifier(input, cursor);
+      if (!image || decodeCssEscapes(image.value).toLowerCase() !== "url") {
+        return { candidates, invalid: "candidate non classificabile" };
+      }
+      cursor = skipTrivia(input, image.next, end);
+      if (input[cursor] !== "(") return { candidates, invalid: "url() non valido" };
+      const imageClose = functionClose(input, cursor);
+      if (imageClose === null || imageClose >= end) return { candidates, invalid: "url() non valido" };
+      const urlStart = skipTrivia(input, cursor + 1, imageClose);
+      if (urlStart < imageClose && (input[urlStart] === '"' || input[urlStart] === "'")) {
+        const quoted = quotedRange(input, urlStart, imageClose);
+        if (!quoted || skipTrivia(input, quoted.next, imageClose) !== imageClose) {
+          return { candidates, invalid: "url() non valido" };
+        }
+        candidates.push({
+          value: quoted.value,
+          index: imageIndex,
+          start: quoted.start,
+          end: quoted.end,
+        });
+      } else {
+        const [valueStart, valueEnd] = trimRange(input, urlStart, imageClose);
+        candidates.push({
+          value: decodeCssEscapes(input.slice(valueStart, valueEnd)).trim(),
+          index: imageIndex,
+          start: valueStart,
+          end: valueEnd,
+        });
+      }
+      cursor = imageClose + 1;
+    }
+
+    let resolution = false;
+    let type = false;
+    while ((cursor = skipTrivia(input, cursor, end)) < end) {
+      const descriptor = identifier(input, cursor);
+      const descriptorName = descriptor && decodeCssEscapes(descriptor.value).toLowerCase();
+      if (descriptorName === "type") {
+        if (type) return { candidates, invalid: "descriptor type() duplicato" };
+        const typeOpen = skipTrivia(input, descriptor!.next, end);
+        if (input[typeOpen] !== "(") return { candidates, invalid: "type() non valido" };
+        const typeClose = functionClose(input, typeOpen);
+        if (typeClose === null || typeClose >= end) return { candidates, invalid: "type() non valido" };
+        const typeArg = skipTrivia(input, typeOpen + 1, typeClose);
+        const mime = quotedRange(input, typeArg, typeClose);
+        if (!mime || skipTrivia(input, mime.next, typeClose) !== typeClose) {
+          return { candidates, invalid: "type() non valido" };
+        }
+        type = true;
+        cursor = typeClose + 1;
+        continue;
+      }
+      const resolutionText = input.slice(cursor, end).match(/^(?:\d+(?:\.\d+)?|\.\d+)(?:x|dppx|dpi|dpcm)\b/i);
+      if (!resolutionText || resolution) return { candidates, invalid: "descriptor non classificabile" };
+      resolution = true;
+      cursor += resolutionText[0].length;
+    }
+  }
+  return { candidates, invalid: null };
+}
+
+function imageSetIssuesIn(input: string): ImageSetIssue[] {
+  const issues: ImageSetIssue[] = [];
+  for (let i = 0; i < input.length; ) {
+    if (input.startsWith("/*", i)) {
+      i = skipComment(input, i);
+      continue;
+    }
+    if (input[i] === '"' || input[i] === "'") {
+      i = skipQuoted(input, i);
+      continue;
+    }
+    const token = identifier(input, i);
+    if (!token) {
+      i += 1;
+      continue;
+    }
+    const open = skipTrivia(input, token.next, input.length);
+    if (input[open] === "(" && imageSetName(decodeCssEscapes(token.value).toLowerCase())) {
+      const analysis = analyzeImageSet(input, open);
+      if (analysis.invalid) issues.push({ detail: `${decodeCssEscapes(token.value)} non sicura: ${analysis.invalid}`, index: i });
+    }
+    i = token.next;
+  }
+  return issues;
+}
+
+function imageSetUrlsIn(input: string): IndexedUrl[] {
+  const urls: IndexedUrl[] = [];
+  for (let i = 0; i < input.length; ) {
+    if (input.startsWith("/*", i)) {
+      i = skipComment(input, i);
+      continue;
+    }
+    if (input[i] === '"' || input[i] === "'") {
+      i = skipQuoted(input, i);
+      continue;
+    }
+    const token = identifier(input, i);
+    if (!token) {
+      i += 1;
+      continue;
+    }
+    const open = skipTrivia(input, token.next, input.length);
+    if (input[open] === "(" && imageSetName(decodeCssEscapes(token.value).toLowerCase())) {
+      urls.push(...analyzeImageSet(input, open).candidates);
+    }
+    i = token.next;
+  }
+  return urls;
+}
+
 
 function skipAttribute(input: string, start: number): number {
   let depth = 1;
@@ -351,6 +604,19 @@ function atRuleViolations(source: string, root: Root): IndexedViolation[] {
   });
   return out;
 }
+function imageSetViolations(source: string, root: Root): IndexedViolation[] {
+  const out: IndexedViolation[] = [];
+  const check = (node: Declaration | AtRule, value: string) => {
+    const start = valueStart(source, node, value);
+    for (const issue of imageSetIssuesIn(value)) {
+      out.push(violation(source, start + issue.index, "disallowed-value", issue.detail));
+    }
+  };
+  root.walkDecls((decl: Declaration) => check(decl, decl.value));
+  root.walkAtRules((rule: AtRule) => check(rule, rule.params));
+  return out;
+}
+
 
 function urlsIn(input: string): IndexedUrl[] {
   const out: IndexedUrl[] = [];
@@ -369,36 +635,43 @@ function urlsIn(input: string): IndexedUrl[] {
       i = name?.next ?? i + 1;
       continue;
     }
-    let open = name.next;
-    while (open < input.length && /\s/.test(input[open]!)) open += 1;
+    const open = skipTrivia(input, name.next, input.length);
     if (input[open] !== "(") {
       i = name.next;
       continue;
     }
-    let cursor = open + 1;
-    while (cursor < input.length && /\s/.test(input[cursor]!)) cursor += 1;
-    let raw = "";
+    let cursor = skipTrivia(input, open + 1, input.length);
     if (input[cursor] === '"' || input[cursor] === "'") {
       const quote = input[cursor]!;
-      const begin = cursor + 1;
-      const end = skipQuoted(input, cursor) - 1;
-      raw = input.slice(begin, Math.max(begin, end));
-      cursor = Math.max(cursor + 1, end + 1);
-      while (cursor < input.length && /\s/.test(input[cursor]!)) cursor += 1;
+      const quoteEnd = skipQuoted(input, cursor);
+      if (quoteEnd <= cursor || input[quoteEnd - 1] !== quote) {
+        i = name.next;
+        continue;
+      }
+      const [start, end] = trimRange(input, cursor + 1, quoteEnd - 1);
+      out.push({
+        value: decodeCssEscapes(input.slice(start, end)).trim(),
+        index: i,
+        start,
+        end,
+      });
+      cursor = skipTrivia(input, quoteEnd, input.length);
       if (input[cursor] === ")") cursor += 1;
-      // `quote` è letto per distinguere il ramo; tenerlo esplicito evita di
-      // scambiare una stringa non chiusa per la forma non quotata.
-      void quote;
     } else {
-      const begin = cursor;
+      const start = cursor;
       while (cursor < input.length && input[cursor] !== ")") {
         if (input[cursor] === "\\") cursor = decodeEscape(input, cursor).next;
         else cursor += 1;
       }
-      raw = input.slice(begin, cursor).trim();
+      const [valueStart, valueEnd] = trimRange(input, start, cursor);
+      out.push({
+        value: decodeCssEscapes(input.slice(valueStart, valueEnd)).trim(),
+        index: i,
+        start: valueStart,
+        end: valueEnd,
+      });
       if (input[cursor] === ")") cursor += 1;
     }
-    out.push({ value: decodeCssEscapes(raw).trim(), index: i });
     i = cursor;
   }
   return out;
@@ -415,13 +688,64 @@ function allUrls(source: string, root: Root): IndexedUrl[] {
   const out: IndexedUrl[] = [];
   root.walkDecls((decl: Declaration) => {
     const start = valueStart(source, decl, decl.value);
-    for (const url of urlsIn(decl.value)) out.push({ value: url.value, index: start + url.index });
+    for (const url of urlsIn(decl.value)) {
+      out.push({
+        value: url.value,
+        index: start + url.index,
+        start: start + url.start,
+        end: start + url.end,
+      });
+    }
+    for (const url of imageSetUrlsIn(decl.value)) {
+      out.push({
+        value: url.value,
+        index: start + url.index,
+        start: start + url.start,
+        end: start + url.end,
+      });
+    }
   });
   root.walkAtRules((rule: AtRule) => {
     const start = valueStart(source, rule, rule.params);
-    for (const url of urlsIn(rule.params)) out.push({ value: url.value, index: start + url.index });
+    for (const url of urlsIn(rule.params)) {
+      out.push({
+        value: url.value,
+        index: start + url.index,
+        start: start + url.start,
+        end: start + url.end,
+      });
+    }
+    for (const url of imageSetUrlsIn(rule.params)) {
+      out.push({
+        value: url.value,
+        index: start + url.index,
+        start: start + url.start,
+        end: start + url.end,
+      });
+    }
   });
-  return out.sort((a, b) => a.index - b.index);
+  const sorted = out.sort((a, b) => a.index - b.index);
+  return sorted.filter((item, index) => {
+    const previous = sorted[index - 1];
+
+    return !previous || previous.index !== item.index || previous.value !== item.value;
+  });
+}
+/** An asset reference with source offsets for exact, syntax-preserving replacement. */
+export interface ThemeAssetReference {
+  readonly value: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+export function themeAssetReferences(css: string): ThemeAssetReference[] {
+  try {
+    return allUrls(css, parse(css))
+      .filter(({ value }) => !value.startsWith("#"))
+      .map(({ value, start, end }) => ({ value, start, end }));
+  } catch {
+    return [];
+  }
 }
 
 function urlViolations(source: string, root: Root, assetNamespace: string): IndexedViolation[] {
@@ -491,6 +815,7 @@ export function themeCssViolations(css: string, policy: ThemeCssPolicy): ThemeCs
   const skin = policy.kind === "skin";
   const violations: IndexedViolation[] = [
     ...atRuleViolations(css, root),
+    ...imageSetViolations(css, root),
     ...urlViolations(css, root, policy.assetNamespace),
     ...selectorViolations(css, root, policy.allowedHooks, skin),
     ...(skin ? [] : structuralViolations(css, root)),

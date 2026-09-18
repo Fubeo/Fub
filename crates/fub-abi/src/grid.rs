@@ -21,6 +21,14 @@ pub const MAX_GRID_PATCHES: usize = 16_384;
 pub const MAX_GRID_PATCH_INPUT_BYTES: usize = 4 * 1024 * 1024;
 pub const MAX_GRID_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 pub const MAX_GRID_INVALIDATED_CELLS: usize = 32_768;
+/// Upper bounds for a session summary.  They are deliberately stricter than
+/// the wire `u32` width: a client must be able to inspect a session without
+/// first allocating one request per possible coordinate.
+pub const MAX_GRID_SESSION_SHEETS: usize = 1_024;
+pub const MAX_GRID_SESSION_ROWS: u32 = 1_048_576;
+pub const MAX_GRID_SESSION_COLUMNS: u32 = 16_384;
+pub const MAX_GRID_SESSION_CELLS: u64 = 4_000_000;
+pub const MAX_GRID_SESSION_WINDOWS: usize = 256;
 
 /// Binding dichiarato dal provider: il formato sceglie una famiglia e una
 /// versione di protocollo, mai una versione simile per tentativi.
@@ -65,16 +73,32 @@ pub struct GridSession {
 
 impl GridSession {
     pub fn validate(&self) -> Result<(), PluginError> {
-        if self.instance.is_empty()
-            || self.revision.0.is_empty()
-            || self
-                .sheets
-                .iter()
-                .any(|sheet| sheet.id.is_empty() || sheet.name.is_empty())
-        {
+        if self.instance.is_empty() || self.revision.0.is_empty() {
             return Err(PluginError::BadArgs(
                 "grid session has an empty identity".into(),
             ));
+        }
+        if self.sheets.len() > MAX_GRID_SESSION_SHEETS {
+            return Err(PluginError::BadArgs(
+                "grid session exceeds sheet limit".into(),
+            ));
+        }
+        for sheet in &self.sheets {
+            if sheet.id.is_empty() || sheet.name.is_empty() {
+                return Err(PluginError::BadArgs(
+                    "grid session has an empty identity".into(),
+                ));
+            }
+            if sheet.row_count > MAX_GRID_SESSION_ROWS
+                || sheet.column_count > MAX_GRID_SESSION_COLUMNS
+            {
+                return Err(PluginError::BadArgs(
+                    "grid session axes exceed limits".into(),
+                ));
+            }
+            // Total session area is intentionally not multiplied here:
+            // providers may expose large lazy sheets, while every requested
+            // window remains bounded below.
         }
         let encoded = serde_json::to_vec(self)
             .map_err(|error| PluginError::Internal(error.to_string().into()))?;
@@ -224,12 +248,27 @@ impl GridWindow {
     pub fn validate(&self) -> Result<(), PluginError> {
         if self.revision.0.is_empty()
             || self.sheet.is_empty()
+            || self.total_rows > MAX_GRID_SESSION_ROWS
+            || self.total_columns > MAX_GRID_SESSION_COLUMNS
             || self.rows.len() > MAX_GRID_WINDOW_ROWS as usize
             || self.columns.len() > MAX_GRID_WINDOW_COLUMNS as usize
             || self.cells.len() > MAX_GRID_WINDOW_CELLS
         {
             return Err(PluginError::BadArgs(
                 "grid response exceeds window limits".into(),
+            ));
+        }
+        let row_end = self
+            .row_start
+            .checked_add(self.rows.len() as u32)
+            .ok_or_else(|| PluginError::BadArgs("grid row range overflows".into()))?;
+        let column_end = self
+            .column_start
+            .checked_add(self.columns.len() as u32)
+            .ok_or_else(|| PluginError::BadArgs("grid column range overflows".into()))?;
+        if row_end > self.total_rows || column_end > self.total_columns {
+            return Err(PluginError::BadArgs(
+                "grid window lies outside its session axes".into(),
             ));
         }
         let encoded = serde_json::to_vec(self)
@@ -339,6 +378,42 @@ impl GridSourceEdit {
         }
         Ok(())
     }
+
+    /// Validates the byte range and deleted preimage before a caller mutates
+    /// the authoritative source.  Offsets are UTF-8 byte offsets, never
+    /// JavaScript/UTF-16 positions.
+    pub fn validate_against(&self, source: &str) -> Result<(), PluginError> {
+        self.validate()?;
+        validate_grid_source(source)?;
+        let from = usize::try_from(self.from)
+            .map_err(|_| PluginError::BadArgs("grid source diff offset overflows usize".into()))?;
+        let to = usize::try_from(self.to)
+            .map_err(|_| PluginError::BadArgs("grid source diff offset overflows usize".into()))?;
+        if to > source.len() || from > to {
+            return Err(PluginError::BadArgs(
+                "grid source diff is outside its source".into(),
+            ));
+        }
+        if !safe_source_boundary(source, from) || !safe_source_boundary(source, to) {
+            return Err(PluginError::BadArgs(
+                "grid source diff splits UTF-8 or CRLF".into(),
+            ));
+        }
+        if source[from..to] != self.deleted {
+            return Err(PluginError::BadArgs(
+                "grid source diff preimage mismatch".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+fn safe_source_boundary(source: &str, at: usize) -> bool {
+    if !source.is_char_boundary(at) {
+        return false;
+    }
+    let bytes = source.as_bytes();
+    !(at > 0 && at < bytes.len() && bytes[at - 1] == b'\r' && bytes[at] == b'\n')
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -510,6 +585,74 @@ mod tests {
         spec.family = "future-grid".into();
         spec.protocol_version = 2;
         assert!(spec.validate().is_ok());
+    }
+
+    #[test]
+    fn session_axes_reject_u32_max_but_allow_large_lazy_sheets() {
+        let mut session = GridSession {
+            instance: "instance".into(),
+            revision: Revision("r1".into()),
+            sheets: vec![GridSheet {
+                id: "sheet".into(),
+                name: "Sheet".into(),
+                row_count: u32::MAX,
+                column_count: 1,
+            }],
+        };
+        assert!(session.validate().is_err());
+        session.sheets[0].row_count = 100_000;
+        session.sheets[0].column_count = 1_000;
+        assert!(session.validate().is_ok());
+        session.sheets[0].row_count = 1;
+        session.sheets[0].column_count = u32::MAX;
+        assert!(session.validate().is_err());
+    }
+
+    #[test]
+    fn source_edit_checks_utf8_crlf_boundaries_and_deleted_preimage() {
+        let source = "😀\r\nvalue";
+        let split_utf8 = GridSourceEdit {
+            from: 1,
+            to: 4,
+            deleted: "�".into(),
+            inserted: String::new(),
+        };
+        assert!(split_utf8.validate_against(source).is_err());
+
+        let split_crlf = GridSourceEdit {
+            from: "😀\r".len() as u64,
+            to: "😀\r".len() as u64,
+            deleted: String::new(),
+            inserted: String::new(),
+        };
+        assert!(split_crlf.validate_against(source).is_err());
+
+        let mismatch = GridSourceEdit {
+            from: "😀".len() as u64,
+            to: "😀\r\n".len() as u64,
+            deleted: "\n".into(),
+            inserted: String::new(),
+        };
+        assert!(mismatch.validate_against(source).is_err());
+
+        let valid = GridSourceEdit {
+            from: "😀\r\n".len() as u64,
+            to: source.len() as u64,
+            deleted: "value".into(),
+            inserted: "test".into(),
+        };
+        assert!(valid.validate_against(source).is_ok());
+    }
+
+    #[test]
+    fn source_edit_rejects_u64_offsets_that_do_not_fit_or_reach_source() {
+        let edit = GridSourceEdit {
+            from: u64::MAX,
+            to: u64::MAX,
+            deleted: String::new(),
+            inserted: String::new(),
+        };
+        assert!(edit.validate_against("source").is_err());
     }
 
     #[test]

@@ -316,6 +316,20 @@ describe("vita della finestra", () => {
 
     stopSecond();
   });
+
+  it("ignora una risposta IPC arrivata dopo la chiusura", async () => {
+    const mounted = await mount({}, [], "/vault", ["listViews"]);
+    await settle();
+    expect(mounted.host.atGate("listViews")).toHaveLength(1);
+
+    await mounted.host.close();
+    mounted.unlock.get("listViews")!();
+    await mounted.startup;
+    await settle();
+
+    expect(document.querySelector("#views-left")?.childElementCount).toBe(0);
+    expect(mounted.host.atGate("renderView")).toHaveLength(0);
+  });
 });
 
 describe("apri un vault", () => {
@@ -893,7 +907,12 @@ describe("chiudere linguette e superfici", () => {
     const tabs = [...document.querySelectorAll<HTMLElement>(".pane .tab")];
     expect(tabs).toHaveLength(2);
 
-    const close = tabs[1]?.querySelector<HTMLElement>(".tab-close");
+    const tab = tabs[1];
+    const tabId = tab?.id;
+    const close = tabId
+      ? document.querySelector<HTMLElement>(`.pane .tab-close[data-tab-id="${tabId}"]`)
+      : null;
+    expect(close?.classList.contains("tab-close")).toBe(true);
     close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
     await waitFor(
       "resta la linguetta iniziale",
@@ -902,6 +921,19 @@ describe("chiudere linguette e superfici", () => {
     expect(textToVideo()).toContain("Il primo documento");
     expect(host.files()["Benvenuto.md"]).toBe(VAULT["Benvenuto.md"]);
   });
+  it("il controllo di chiusura è nominato, nativo e raggiungibile da tastiera", async () => {
+    await start(VAULT);
+    const close = document.querySelector<HTMLButtonElement>(".pane .tab-close");
+    expect(close?.tagName).toBe("BUTTON");
+    expect(close?.type).toBe("button");
+    expect(close?.getAttribute("aria-label")).toBe("Chiudi");
+
+    close?.focus();
+    close?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await waitFor("la linguetta si chiude con Invio", () => document.querySelectorAll(".pane .tab").length === 0);
+    expect(document.activeElement?.classList.contains("pane")).toBe(true);
+  });
+
 
   it("chiude l'ultima linguetta, salva una volta e non lascia timer", async () => {
     const host = await start(VAULT);
@@ -1336,7 +1368,11 @@ describe("cerca", () => {
       () => document.querySelectorAll("#search-results li").length > 0,
     );
 
-    const results = [...document.querySelectorAll<HTMLElement>("#search-results li")];
+    const results = [
+      ...document.querySelectorAll<HTMLButtonElement>(
+        "#search-results li > button.search-result",
+      ),
+    ];
     expect(results.map((r) => r.textContent)).toHaveLength(1);
     expect(results[0].textContent).toContain("Spesa");
 

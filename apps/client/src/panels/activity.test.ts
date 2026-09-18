@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 // Le regole del centro attività (§10.3): come un evento cambia l'elenco dei
 // lavori, e quando l'elenco va **richiesto da capo**.
 //
@@ -6,7 +7,9 @@
 // qualcosa — cioè un vault sotto carico. Qui è un caso di test.
 import { describe, expect, it } from "vitest";
 import type { KernelEvent, KernelNotice } from "../host/contract";
-import { apply, noticeOf, labelOf, type JobRow } from "./activity";
+import { openLifetime } from "../ui/lifetime";
+import { forwardNotice, onAnyEvent } from "../state/kernel";
+import { apply, mountActivity, noticeOf, labelOf, type JobRow } from "./activity";
 
 function notice(event: KernelEvent): KernelNotice {
   return { event, origin: { actor: { kind: "kernel" }, batch: null } };
@@ -114,5 +117,42 @@ describe("l'esito di un lavoro lungo", () => {
   it("gli altri eventi non sono avvisi", () => {
     expect(noticeOf(STARTED)).toBeNull();
     expect(noticeOf(step("7", 1))).toBeNull();
+  });
+});
+
+describe("durata degli ascolti del centro attività", () => {
+  it("smonta la sola registrazione generica rimossa, anche con lo stesso callback", () => {
+    const seen: KernelNotice[] = [];
+    const handler = (value: KernelNotice) => seen.push(value);
+    const first = onAnyEvent(handler);
+    const second = onAnyEvent(handler);
+
+    second();
+    forwardNotice(STARTED);
+    expect(seen).toEqual([STARTED]);
+
+    first();
+    forwardNotice(STARTED);
+    expect(seen).toEqual([STARTED]);
+  });
+});
+
+describe("rimontaggio del centro attività", () => {
+  it("dopo dispose e remount una notifica torna una sola volta", () => {
+    document.body.innerHTML = `
+      <button id="activity-button"></button>
+      <section id="activity-panel" hidden><ul id="activity-list"></ul></section>
+    `;
+
+    const first = openLifetime();
+    mountActivity(first);
+    first.close();
+
+    const second = openLifetime();
+    mountActivity(second);
+    forwardNotice(STARTED);
+
+    expect(document.getElementById("activity-button")?.classList.contains("in-corso")).toBe(true);
+    second.close();
   });
 });

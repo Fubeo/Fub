@@ -90,7 +90,10 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
 - registri generici per provider;
 - feature ufficiali selezionabili con feature Cargo;
 - plugin nativi nel composition root;
-- runtime WASM funzionante per lifecycle e comandi;
+- runtime WASM per lifecycle, comandi, formati, view e griglia nei casi
+  esercitati;
+- inventario macchina con installazione, consenso, enabled/disabled, restart e
+  remove;
 - capability applicate nel kernel.
 
 ## Stato delle grandi aree
@@ -101,13 +104,16 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
 | editor, preview e shell | disponibili nel codice |
 | ricerca, backlink e grafo | disponibili nel codice |
 | plugin nativi | disponibili nel codice |
-| runtime WASM | parziale, M5 in corso |
-| installazione di plugin di terzi | non completata |
-| superfici testuali interne | `TextEngine` e profili reali nel codice; solo Markdown è montato dall'utente |
+| runtime WASM e provider M5 | consegnati nella base audit corrente |
+| installazione di plugin di terzi | percorso file singolo disponibile nella base audit |
+| superfici testuali e `.fubsheet` | disponibili nella base audit con protocollo Grid v1 |
 | database, sync, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
 
-Una descrizione dettagliata di un'idea non la rende parte del prodotto. Lo stato
-autorevole è in [`../project/status.md`](../project/status.md).
+La base audit corrente non è `main`: la promozione delle consegne resta
+subordinata a G14 e G15/GO. Una descrizione dettagliata di un'idea non la rende
+parte del prodotto. Lo stato autorevole è in
+[`../project/status.md`](../project/status.md).
+
 
 ## Approfondimenti
 

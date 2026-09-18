@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FakeHost } from "../host/fake";
-import type { BundleInfo, InstalledPluginInfo, SettingEntry } from "../host/contract";
+import type { BundleInfo, InstalledPluginInfo, SettingEntry, SettingValue, ThemeInfo } from "../host/contract";
 import { state } from "../state/store";
 import { permissionKey } from "../ui/permissions";
 
@@ -10,6 +10,9 @@ const box = vi.hoisted(() => ({
   confirm: true,
   file: null as string | null,
   entries: [] as SettingEntry[],
+  themes: [] as ThemeInfo[],
+  themeId: "fub.serie",
+  themeLight: "light" as "light" | "dark",
   reloadProvider: vi.fn(async () => {}),
   notify: vi.fn(),
 }));
@@ -23,10 +26,32 @@ vi.mock("../host/ipc", () => ({
         const method = box.host.module.api[name as keyof typeof box.host.module.api] as (
           ...values: unknown[]
         ) => unknown;
-        return method(...args);
+        const result = method(...args);
+        if (name !== "setSetting" && name !== "resetSetting") return result;
+        return Promise.resolve(result).then(() => {
+          const key = args[0] as string;
+          const row = box.entries.find((entry) => entry.spec.key === key);
+          if (!row) return;
+          row.value = name === "resetSetting" ? row.spec.kind.default : (args[1] as SettingValue);
+          row.source = name === "resetSetting" ? "default" : row.spec.scope;
+        });
       },
     },
   ),
+}));
+vi.mock("../theme/theme", () => ({
+  CONTRAST_KEY: "appearance.contrast",
+  SERIES_THEME_ID: "fub.serie",
+  THEME_KEY: "appearance.theme",
+  currentThemeId: () => box.themeId,
+  selectTheme: async (id: string, light: "light" | "dark") => {
+    box.themeId = id;
+    box.themeLight = light;
+    document.documentElement.dataset.theme = light;
+    const entry = box.entries.find((candidate) => candidate.spec.key === "appearance.theme");
+    if (entry) entry.value = light;
+  },
+  themeCatalog: async () => box.themes,
 }));
 vi.mock("../host/dialog", () => ({
   confirm: () => Promise.resolve(box.confirm),
@@ -115,9 +140,65 @@ async function openComponents(): Promise<void> {
   });
 }
 
+function choiceEntry(key: string, value: string, options: string[]): SettingEntry {
+  return {
+    spec: {
+      key,
+      label: key,
+      description: "",
+      group: "Appearance",
+      scope: "vault",
+      kind: {
+        kind: "choice",
+        default: options[0] ?? "",
+        options: options.map((option) => ({ value: option, label: option })),
+      },
+      program_writable: false,
+    },
+    value,
+    source: "default",
+  };
+}
+
+function theme(id: string, lights: Array<"light" | "dark">): ThemeInfo {
+  return {
+    manifest: {
+      id,
+      name: id,
+      version: "1.0.0",
+      engine: "theme-1",
+      lights,
+      asset_namespace: `theme://${id}/`,
+      motion: [],
+    },
+  };
+}
+
+async function openSettings(entries: SettingEntry[], themes: ThemeInfo[] = []): Promise<void> {
+  document.body.innerHTML = `
+    <button id="open-settings"></button>
+    <section id="settings-panel" hidden>
+      <div id="settings-tabs"><button data-tab="settings"></button></div>
+      <button id="settings-close"></button>
+      <div id="settings-body"></div>
+    </section>`;
+  box.entries = entries;
+  box.themes = themes;
+  document.documentElement.dataset.theme = box.themeLight;
+  box.host = createFakeHost({ settings: entries });
+  mountSettings({ openVault: async () => {}, reloadProvider: box.reloadProvider });
+  document.querySelector<HTMLButtonElement>("#open-settings")!.click();
+  await vi.waitFor(() => {
+    expect(document.querySelector('[role="radiogroup"]')).not.toBeNull();
+  });
+}
+
 beforeEach(() => {
   document.querySelector<HTMLButtonElement>("#settings-close")?.click();
   vi.clearAllMocks();
+  box.themeId = "fub.serie";
+  box.themeLight = "light";
+  box.themes = [];
   box.confirm = true;
   box.file = null;
   box.entries = [];
@@ -300,4 +381,80 @@ describe("inventario dei componenti installati", () => {
     });
   });
 
+});
+
+describe("radiogroup del tema e della luce", () => {
+  it("mantiene il roving e attiva frecce, Home e End nel catalogo", async () => {
+    const entries = [choiceEntry("appearance.theme", "light", ["light", "dark"])];
+    await openSettings(entries, [theme("fub.serie", ["light", "dark"])]);
+
+    const groups = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')];
+    const catalog = groups[1]!;
+    const radios = [...catalog.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+    expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+
+    radios[0]!.focus();
+    const right = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    radios[0]!.dispatchEvent(right);
+    expect(right.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(radios[1]);
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([-1, 0]);
+    expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+
+    const end = new KeyboardEvent("keydown", { key: "End", bubbles: true, cancelable: true });
+    radios[1]!.dispatchEvent(end);
+    expect(document.activeElement).toBe(radios[1]);
+    const home = new KeyboardEvent("keydown", { key: "Home", bubbles: true, cancelable: true });
+    radios[1]!.dispatchEvent(home);
+    expect(document.activeElement).toBe(radios[0]);
+    expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+    expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+
+    await vi.waitFor(() => {
+      const current = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')][1]!;
+      const currentRadios = [...current.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+      expect(currentRadios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
+      expect(currentRadios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
+    });
+  });
+
+  it("mantiene un solo radio tabbabile e seleziona circolarmente la luce", async () => {
+    await openSettings([
+      choiceEntry("appearance.theme", "light", ["light", "dark"]),
+      choiceEntry("appearance.contrast", "normal", ["normal", "high"]),
+    ]);
+
+    const groups = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')];
+    expect(groups).toHaveLength(2);
+    for (const group of groups) {
+      const radios = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+      expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+      radios[0]!.focus();
+      const left = new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true });
+      radios[0]!.dispatchEvent(left);
+      expect(left.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(radios[1]);
+      expect(radios.map((radio) => radio.tabIndex)).toEqual([-1, 0]);
+      expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+      radios[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+      expect(document.activeElement).toBe(radios[0]);
+      expect(radios.map((radio) => radio.tabIndex)).toEqual([0, -1]);
+      expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["true", "false"]);
+      radios[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+      expect(document.activeElement).toBe(radios[1]);
+      expect(radios.map((radio) => radio.tabIndex)).toEqual([-1, 0]);
+      expect(radios.map((radio) => radio.getAttribute("aria-checked"))).toEqual(["false", "true"]);
+    }
+
+    await vi.waitFor(() => {
+      const currentGroups = [...document.querySelectorAll<HTMLElement>('[role="radiogroup"]')];
+      expect(currentGroups).toHaveLength(2);
+      for (const group of currentGroups) {
+        const radios = [...group.querySelectorAll<HTMLButtonElement>('[role="radio"]')];
+        expect(radios.filter((radio) => radio.tabIndex === 0)).toHaveLength(1);
+        expect(radios.filter((radio) => radio.getAttribute("aria-checked") === "true")).toHaveLength(1);
+      }
+    });
+  });
 });

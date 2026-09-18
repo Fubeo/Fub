@@ -126,6 +126,11 @@ describe("il testo fermo di index.html", () => {
       }
     }
   });
+  it("ogni nome statico è legato a una chiave del catalogo", () => {
+    const missing = [...document.querySelectorAll<HTMLElement>("[aria-label]")]
+      .filter((el) => !el.hasAttribute("data-i18n-label"));
+    expect(missing.map((el) => el.outerHTML)).toEqual([]);
+  });
 });
 
 
@@ -256,6 +261,7 @@ describe("il testo fermo si riempie", () => {
     const field = root.querySelector("input")!;
     expect(field.getAttribute("placeholder")).toBe("Cerca nel vault…");
     expect(field.getAttribute("aria-label")).toBe("Cerca nel vault");
+    expect(globalThis.document.documentElement.lang).toBe("it-IT");
   });
 
   it("e lascia in pace ciò che non ha chiesto niente", () => {

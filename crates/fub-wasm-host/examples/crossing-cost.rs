@@ -82,10 +82,10 @@ use camino::Utf8PathBuf;
 use fub_abi::event::Event;
 use fub_abi::model::DocId;
 use fub_abi::options::permission;
-use fub_abi::traits::{HostApi, JobSpec, Plugin, PluginManifest, PluginPermissions};
+use fub_abi::traits::{HostApi, Plugin, PluginManifest, PluginPermissions};
 use fub_abi::PluginError;
 use fub_host::registry::Bundle;
-use fub_host::{Host, NoWatcher};
+use fub_host::Host;
 use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::{Component, WasmBundle};
 
@@ -215,17 +215,8 @@ impl Vault {
 
 /// Accoda un job come lo accoderebbe una feature: dall'`HostApi`, e basta.
 fn ask(host: &Host, job: &str) {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        ws.with_host(ID, |h| {
-            h.spawn_job(JobSpec {
-                job: job.to_string(),
-                payload: serde_json::json!(null),
-            })
-        })
-        .expect("accodato");
-    })
-    .expect("aperto");
+    host.spawn_job(None, ID, job.to_string(), serde_json::json!(null))
+        .expect("aperto");
 }
 
 /// Il primo `JobDone` che arriva, o il panico di chi aspettava.
@@ -396,19 +387,15 @@ struct Measures {
 /// `load` è ciò che ricostruisce il bundle da zero — per il nativo è una
 /// `struct`, per il WASM è `WasmBundle::from_file`. Sta come chiusura e non come
 /// valore perché il caricamento è **una delle misure**, e va rifatto.
-fn measure_backend(bundle: &dyn Bundle, mut load: impl FnMut()) -> Measures {
+fn measure_backend(bundle: Arc<dyn Bundle>, mut load: impl FnMut()) -> Measures {
     let v = Vault::new();
-    let host = Host::new()
-        .with_watcher(Box::new(NoWatcher))
-        .with_job_threads(1);
+    let host = Host::without_watcher().with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     // La seconda fase dell'apertura è un job come gli altri, e su un banco a un
     // thread solo occuperebbe l'unico turno: si aspetta che abbia finito prima
     // di cronometrare qualunque cosa.
     host.wait_indexed(None).expect("l'apertura ha finito");
-    let events = host
-        .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
-        .expect("aperto");
+    let events = host.subscribe(None).expect("aperto");
 
     // 1. Caricare. Fuori dalla sessione: non tocca né workspace né registry.
     //    Un giro solo di scaldamento, che serve a togliere di mezzo la prima
@@ -417,42 +404,21 @@ fn measure_backend(bundle: &dyn Bundle, mut load: impl FnMut()) -> Measures {
     let loading = sample(REPEATS_LOAD, 1, &mut load);
 
     // 2. Montare, e restare montati per le due misure che vengono dopo.
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(bundle, &mut ws)
-            .expect("il bundle si monta");
-    })
-    .expect("aperto");
+    host.mount_bundle(None, Arc::clone(&bundle))
+        .expect("il bundle si monta");
 
     // 3. Il confine nudo: `run_job` chiamato dal corpo che il registry
     //    possiede, con l'`HostApi` che il kernel presta — le stesse due cose
     //    che il runner del §9.3 tiene in mano quando esegue un job vero, senza
     //    la coda e senza il risveglio di thread in mezzo. Il prestito dell'host
     //    sta **fuori** dal ciclo: dentro ci resta solo la chiamata.
-    let (job, answer) = host
-        .with_session(None, |s| {
-            let mut ws = s.workspace().write().unwrap();
-            let body: Arc<dyn Plugin> = s
-                .bundles()
-                .read()
-                .unwrap()
-                .body(ID)
-                .expect("il bundle è montato");
-            ws.with_host(ID, |h| {
-                let answer = body
-                    .run_job("ping", serde_json::json!(null), h)
-                    .expect("il ping risponde");
-                let sample = sample(REPEATS_JOB, WARMUP, || {
-                    let status = body.run_job("ping", serde_json::json!(null), h);
-                    black_box(status).expect("il ping risponde");
-                });
-                (sample, answer)
-            })
-        })
-        .expect("aperto");
+    let answer = host
+        .invoke_job(None, ID, "ping", serde_json::json!(null))
+        .expect("il ping risponde");
+    let job = sample(REPEATS_JOB, WARMUP, || {
+        let status = host.invoke_job(None, ID, "ping", serde_json::json!(null));
+        black_box(status).expect("il ping risponde");
+    });
 
     // 4. Lo stesso job dalla porta da cui arriva davvero: accodato e atteso.
     //    È la riga che dice quanto pesa il confine **in proporzione a ciò che
@@ -478,27 +444,23 @@ fn measure_backend(bundle: &dyn Bundle, mut load: impl FnMut()) -> Measures {
 
     // 5. Montare e smontare, a ripetizione. Solo il montaggio è cronometrato:
     //    lo smontaggio è la pulizia che serve a poter rimontare, non la misura.
-    let mount = host
-        .with_session(None, |s| {
-            let mut ws = s.workspace().write().unwrap();
-            let mut reg = s.bundles().write().unwrap();
-            let errors = reg.unmount(&mut ws, ID);
-            assert!(errors.is_empty(), "lo smount è pulito: {errors:?}");
-
-            let mut durations = Vec::with_capacity(REPEATS_MOUNT);
-            for round in 0..REPEATS_MOUNT + WARMUP {
-                let start = Instant::now();
-                reg.mount(bundle, &mut ws).expect("il bundle si monta");
-                let elapsed = start.elapsed();
-                if round >= WARMUP {
-                    durations.push(elapsed);
-                }
-                let errors = reg.unmount(&mut ws, ID);
-                assert!(errors.is_empty(), "lo smount è pulito: {errors:?}");
+    let mount = {
+        let errors = host.unmount_bundle(None, ID).expect("unmount");
+        assert!(errors.is_empty(), "lo smount è pulito: {errors:?}");
+        let mut durations = Vec::with_capacity(REPEATS_MOUNT);
+        for round in 0..REPEATS_MOUNT + WARMUP {
+            let start = Instant::now();
+            host.mount_bundle(None, Arc::clone(&bundle))
+                .expect("il bundle si monta");
+            let elapsed = start.elapsed();
+            if round >= WARMUP {
+                durations.push(elapsed);
             }
-            Sample::new(durations)
-        })
-        .expect("aperto");
+            let errors = host.unmount_bundle(None, ID).expect("unmount");
+            assert!(errors.is_empty(), "lo smount è pulito: {errors:?}");
+        }
+        Sample::new(durations)
+    };
 
     host.close();
 
@@ -658,13 +620,13 @@ fn main() {
     // dargliene uno vorrebbe dire darle anche il primo ramo che distingue i due.
     // Vanno su `stderr`, che è dove sta ciò che non è il risultato.
     eprintln!("misuro il ping native…");
-    let native = measure_backend(&NativeBundle, || {
+    let native = measure_backend(Arc::new(NativeBundle), || {
         black_box(NativeBundle);
     });
 
     eprintln!("misuro il ping WASM…");
     let mut wasm_measures = measure_backend(
-        &WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica"),
+        Arc::new(WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica")),
         || {
             let b =
                 WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");

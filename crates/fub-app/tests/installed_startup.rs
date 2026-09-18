@@ -10,7 +10,7 @@ use fub_abi::command::InvokeMode;
 use fub_abi::edit::Revision;
 use fub_abi::settings::SettingValue;
 use fub_abi::PluginError;
-use fub_host::{Host, NoWatcher, StartupSource};
+use fub_host::{Host, StartupSource};
 use fub_wasm_host::installed::{Consent, InstalledPlugin};
 use fub_wasm_host::managed::InstalledPluginManager;
 
@@ -35,9 +35,8 @@ fn component(config: &Utf8Path, plugin: &InstalledPlugin) -> Utf8PathBuf {
 }
 
 fn configured_host(config: &Utf8Path, manager: Arc<InstalledPluginManager>) -> Host {
-    Host::new()
+    Host::without_watcher()
         .with_config_dir(config)
-        .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1)
         .with_startup_source(manager)
 }

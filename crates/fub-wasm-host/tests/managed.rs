@@ -9,10 +9,7 @@ use fub_abi::command::InvokeMode;
 use fub_abi::traits::{Plugin, PluginManifest};
 use fub_abi::PluginError;
 use fub_host::registry::Registrar;
-use fub_host::{
-    Bundle, BundleRegistry, Host, NoWatcher, OnlyProviders, StartupSnapshot, StartupSource,
-    StartupValidity,
-};
+use fub_host::{Bundle, Host, OnlyProviders, StartupSnapshot, StartupSource, StartupValidity};
 use fub_kernel::Trust;
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::InstalledPluginManager;
@@ -52,8 +49,7 @@ fn installed_blob(config: &Utf8Path) -> Utf8PathBuf {
 }
 
 fn managed_host(source: Arc<InstalledPluginManager>) -> Host {
-    Host::new()
-        .with_watcher(Box::new(NoWatcher))
+    Host::without_watcher()
         .with_job_threads(1)
         .with_startup_source(source)
 }
@@ -212,7 +208,7 @@ fn metadata_and_unapproved_choices_never_load_a_corrupt_guest() {
         .expect("component installs");
     std::fs::write(installed_blob(root(&config)), b"altered after installation")
         .expect("installed blob is altered");
-    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    let host = Host::without_watcher();
 
     let listed = manager
         .list(&host, None)
@@ -278,11 +274,8 @@ fn an_installed_collision_never_replaces_or_routes_the_official_identity() {
     let host = managed_host(Arc::clone(&manager));
     host.open(&vault.root).expect("vault opens");
     host.wait_indexed(None).expect("opening finishes");
-    host.with_session(Some(vault.root.as_str()), |session| {
-        BundleRegistry::remember_guarded(session.bundles(), Arc::new(OfficialCollision))
-    })
-    .expect("vault remains open")
-    .expect("official identity is remembered");
+    host.remember_unclaimed_bundle(Some(vault.root.as_str()), Arc::new(OfficialCollision))
+        .expect("official identity is remembered");
 
     assert!(manager
         .set_enabled(&host, installed.installation, true)
@@ -440,7 +433,7 @@ fn a_committed_disable_invalidates_an_opening_snapshot_without_retry() {
     let second = manager
         .install(&common::component("eventi-wasm", "eventi_wasm", ""))
         .expect("second component installs");
-    let empty_host = Host::new().with_watcher(Box::new(NoWatcher));
+    let empty_host = Host::without_watcher();
     assert!(manager
         .set_enabled(&empty_host, installed.installation, true)
         .expect("enabled persists")
@@ -462,8 +455,7 @@ fn a_committed_disable_invalidates_an_opening_snapshot_without_retry() {
         release: Mutex::new(release_rx),
     });
     let host = Arc::new(
-        Host::new()
-            .with_watcher(Box::new(NoWatcher))
+        Host::without_watcher()
             .with_job_threads(1)
             .with_startup_source(source),
     );
