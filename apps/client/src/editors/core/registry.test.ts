@@ -64,6 +64,7 @@ describe("DocumentSurfaceRegistry", () => {
       owner: "core.text",
       family: "text",
       defaultProfile: "plain-text",
+      profiles: ["markdown"],
       factory: factory("text", [], []),
       formats: { markdown: "markdown" },
       sources: { text: "plain-text" },
@@ -88,6 +89,40 @@ describe("DocumentSurfaceRegistry", () => {
       family: "text",
       profile: "plain-text",
     });
+  });
+
+  it("rejects bindings to profiles the family did not register", () => {
+    const registry = new DocumentSurfaceRegistry();
+    expect(() =>
+      registry.register({
+        owner: "core.text",
+        family: "text",
+        defaultProfile: "plain-text",
+        factory: factory("text", [], []),
+        formats: { markdown: "markdown" },
+      }),
+    ).toThrow("selects unregistered profile markdown");
+  });
+
+  it("ignores an override profile the family did not register and uses the registered binding", () => {
+    const registry = new DocumentSurfaceRegistry();
+    registry.register({
+      owner: "core.text",
+      family: "text",
+      defaultProfile: "plain-text",
+      profiles: ["markdown"],
+      factory: factory("text", [], []),
+      formats: { markdown: "markdown" },
+      sources: { text: "plain-text" },
+    });
+
+    expect(
+      registry.resolve({
+        formatId: "markdown",
+        sourceKind: "text",
+        override: { family: "text", profile: "invented" },
+      }),
+    ).toMatchObject({ family: "text", profile: "markdown" });
   });
 
   it("routes the fubsheet format to the grid sheet surface", () => {
@@ -138,6 +173,7 @@ describe("DocumentSurfaceRegistry", () => {
       owner: "first.owner",
       family: "text",
       defaultProfile: "plain-text",
+      profiles: ["markdown"],
       factory: factory("text", [], []),
       formats: { markdown: "markdown" },
       sources: { text: "plain-text" },
