@@ -145,6 +145,13 @@ Ogni `Pane` possiede invece una `EditorSurface`.
 per byte ed errore. Il registro possiede le istanze e le distrugge quando il
 riquadro o l'owner vengono smontati.
 
+Ogni registrazione dichiara l'insieme chiuso dei `profiles`, un
+`defaultProfile` e un `fallbackProfile`. Formati e specie di sorgente possono
+legarsi soltanto a profili di quell'insieme; un override con profilo sconosciuto
+usa il fallback registrato e una factory che restituisce famiglia o profilo
+diversi dalla risoluzione viene distrutta e rifiutata. Questa è una proprietà
+del registry, non una convenzione dei singoli editor.
+
 `TextEngine` in `apps/client/src/editors/text/engine.ts` è il motore testuale
 corrente. Possiede la `EditorView` e la meccanica condivisa: aggiornamenti e
 sincronizzazione del documento, selezioni e offset byte UTF-8, terminatori di
