@@ -285,6 +285,69 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+describe("la menubar applicativa", () => {
+  it("apre File, seleziona una voce, si chiude e si rimonta senza errori", async () => {
+    const first = await mount({});
+    const stopFirst = await first.startup;
+    await settle();
+    const file = document.querySelector<HTMLButtonElement>("#app-menu > button");
+    if (!file) throw new Error("il menu File non è stato montato");
+
+    const errors: unknown[] = [];
+    const rejections: unknown[] = [];
+    const onError = (event: ErrorEvent) => {
+      event.preventDefault();
+      errors.push(event.error ?? event.message);
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      event.preventDefault();
+      rejections.push(event.reason);
+    };
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    let stopSecond: (() => void) | undefined;
+    try {
+      file.click();
+      const menu = document.getElementById("context-menu");
+      if (!menu) throw new Error("il menu File non si è aperto");
+      menu.querySelector<HTMLButtonElement>("[role=menuitem]")!.click();
+      await settle();
+      expect(first.host.atGate("openVault").length).toBeGreaterThan(0);
+
+      file.click();
+      expect(file.getAttribute("aria-expanded")).toBe("true");
+      file.click();
+      expect(file.getAttribute("aria-expanded")).toBe("false");
+      file.click();
+      const openMenu = document.getElementById("context-menu");
+      expect(openMenu).not.toBeNull();
+
+      stopFirst();
+      openMenu?.dispatchEvent(new Event("animationend"));
+      file.click();
+      expect(document.getElementById("context-menu")).toBeNull();
+
+      const second = await mount({});
+      stopSecond = await second.startup;
+      await settle();
+      const secondFile = document.querySelector<HTMLButtonElement>("#app-menu > button");
+      if (!secondFile) throw new Error("il menu File non è stato rimontato");
+      secondFile.click();
+      expect(document.getElementById("context-menu")).not.toBeNull();
+    } finally {
+      const secondMenu = document.getElementById("context-menu");
+      stopSecond?.();
+      secondMenu?.dispatchEvent(new Event("animationend"));
+      stopFirst();
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    }
+
+    expect(errors).toEqual([]);
+    expect(rejections).toEqual([]);
+  });
+});
+
 describe("vita della finestra", () => {
   it("smette i gesti quando si smonta e non duplica al rimontaggio", async () => {
     const first = await mount({});

@@ -91,11 +91,11 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
 /// `check-ascoltatori.mjs` esiste perché è già successo (0133).
 export function mountAppMenu(host: MenuHost): Teardown {
   const menubar = $("#app-menu");
-  const teardowns: Teardown[] = [];
   // La vita degli ascoltatori globali di questa menubar: si chiude nello
   // smontaggio qui sotto, ed è l'unica cosa che li tiene.
   const lifetime = openLifetime();
   let menuOpen: number | null = null;
+  const buttons: HTMLButtonElement[] = [];
 
   MENU.forEach((menu, i) => {
     const button = document.createElement("button");
@@ -105,24 +105,23 @@ export function mountAppMenu(host: MenuHost): Teardown {
     button.type = "button";
     button.dataset.i18n = menu.title;
     button.textContent = t(menu.title as never);
-
-    button.addEventListener("click", (e) => {
+    lifetime.listen(button, "click", (e) => {
       e.stopPropagation();
       toggleMenu(i, button, host);
     });
     // Hover su un'altra voce mentre un menu è aperto: passa a quella, come
     // ogni menubar che l'utente abbia mai usato. È il gesto che chi cerca
-    // «Vista» fa dopo aver aperto «File» senza chiuderlo.
-    button.addEventListener("mouseenter", () => {
+    lifetime.listen(button, "mouseenter", () => {
       if (menuOpen !== null && menuOpen !== i) toggleMenu(i, button, host);
     });
 
     menubar.append(button);
+    buttons.push(button);
   });
 
   // Click fuori o Escape chiude il menu aperto. Sono sul `document` e non
-  // sulla menubar perché il menu è un overlay che vive fuori dalla menubar
-  // (`showContextMenu` lo appende a `body`), e chiude chi ci clicca dentro.
+  // sulla menubar perché il menu è un overlay che vive fuori dalla menubar,
+  // dentro la superficie del workspace.
   const close = () => {
     if (menuOpen !== null) {
       setExpanded(menuOpen, false);
@@ -138,7 +137,6 @@ export function mountAppMenu(host: MenuHost): Teardown {
   };
   lifetime.listen(document, "click", onDocClick);
   lifetime.listen(document, "keydown", onKey);
-  teardowns.push(() => lifetime.close());
 
   function setExpanded(index: number, open: boolean): void {
     const btn = menubar.children[index] as HTMLElement | undefined;
@@ -186,5 +184,9 @@ export function mountAppMenu(host: MenuHost): Teardown {
     showContextMenu(fake, items);
   }
 
-  return () => teardowns.forEach((s) => s());
+  return () => {
+    close();
+    lifetime.close();
+    buttons.forEach((button) => button.remove());
+  };
 }
