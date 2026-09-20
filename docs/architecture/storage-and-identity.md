@@ -110,7 +110,9 @@ versioning e non dell'IPC. `fub_kernel::snapshot` enumera soltanto lo stato
 autorevole: documenti, allegati e sconosciuti condividono la classe `user`
 perché il kernel non possiede il `FormatRegistry`; cestino,
 settings/organizzazione/drafts/journal, sidecar autorevoli e storage persistente
-dei plugin hanno classi core proprie. La configurazione macchina e i derivati
+dei plugin hanno classi core proprie. La cache `.fub/data/plugins/<id>/` è
+derivata soltanto quando contiene `.fub-cache-root`; senza marker è storage
+autorevole legacy. La configurazione macchina e gli altri derivati
 ricostruibili restano fuori.
 
 La fotografia produce un manifest schema 1 deterministico. Ogni path relativo

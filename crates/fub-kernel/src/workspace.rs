@@ -2919,7 +2919,7 @@ const TIMER_CURSORS_FILE: &str = "timers.json";
 /// Marca `.fub/data/plugins/<id>/` come cache. Senza di esso quella cartella
 /// è l'albero autorevole *legacy*: `cache_write` la crea, e data_* non deve
 /// scambiarla per dati.
-const PLUGIN_CACHE_MARK: &str = ".fub-cache-root";
+pub(crate) const PLUGIN_CACHE_MARK: &str = ".fub-cache-root";
 
 enum SettingMutation {
     Set(SettingValue),

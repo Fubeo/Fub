@@ -106,7 +106,9 @@ Lo snapshot globale offline comprende l'intero stato autorevole del vault:
 documenti, allegati, file sconosciuti, `.trash/`, stato autorevole sotto
 `.fub/` e storage autorevole dei plugin. La configurazione macchina è esclusa.
 Le cache dichiarate ricostruibili vengono invalidate e ricostruite alla
-riapertura, non copiate come se fossero autorità.
+riapertura, non copiate come se fossero autorità. In particolare,
+`.fub/data/plugins/<id>/` è cache soltanto se contiene `.fub-cache-root`; senza
+quel marker resta storage autorevole legacy.
 
 `fub_kernel::snapshot` prepara e valida in memoria un manifest schema 1 con
 path relativo normalizzato, classe, owner, schema quando applicabile, size e
@@ -118,14 +120,15 @@ di size o digest.
 La base revision è il digest deterministico del manifest autorevole live e viene
 ricontrollata immediatamente prima del commit.
 
-L'applicazione richiede un vault chiuso e quiescente. Un lock sibling stabile,
-staging privato, record persistente e le fasi `prepare`/`commit`/`finalize`
-conservano il contenitore precedente fino alla pubblicazione verificata. Dopo un
-crash, l'host esegue la recovery prima dell'apertura: riconosce soltanto i
-propri artefatti con schema e transaction id validi, completa o annulla la
-fase deterministica e preserva file ignoti. La garanzia all-or-old-or-new vale
-tra writer cooperativi; writer esterni, filesystem senza rename/fsync durevoli
-e rollback impossibile restano limiti espliciti.
+L'applicazione richiede un vault chiuso e quiescente e una radice già canonica,
+senza symlink. Un lock sibling stabile, staging privato, record persistente e
+le fasi `prepare`/`commit`/`finalize` conservano il contenitore precedente fino
+alla pubblicazione verificata. Dopo un crash, l'host esegue la recovery prima
+dell'apertura: riconosce soltanto i propri artefatti con schema e transaction id
+validi, completa o annulla la fase deterministica e preserva file ignoti. La
+garanzia all-or-old-or-new vale tra writer cooperativi; writer esterni,
+filesystem senza rename/fsync durevoli e rollback impossibile restano limiti
+espliciti.
 
 Questo flusso è distinto da `fub.versioning`:
 `version.restore` ripristina un solo documento con CAS per-file e non è una

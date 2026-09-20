@@ -1102,7 +1102,7 @@ impl FsStorage {
                 return Err(and);
             }
         };
-        if let Err(and) = std::fs::rename(&tmp, path) {
+        if let Err(and) = atomic_replace(&tmp, path) {
             let _ = std::fs::remove_file(&tmp);
             return Err(and);
         }
@@ -1224,6 +1224,124 @@ pub fn folders_to_sync(from: &Utf8Path, a: Option<&Utf8Path>) -> Vec<Utf8PathBuf
 /// misura con cui `update` tratta il proprio lock.
 pub fn sync_folder(dir: &Utf8Path) -> bool {
     std::fs::File::open(dir).and_then(|d| d.sync_all()).is_ok()
+}
+
+/// Sostituisce il nome di un file con un temporaneo già sincronizzato.
+///
+/// `std::fs::rename` sostituisce atomicamente su Unix ma fallisce su Windows
+/// quando la destinazione esiste; questa primitive mantiene la stessa promessa
+/// su entrambe le famiglie.
+pub(crate) fn atomic_replace(from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            MoveFileExW, MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH,
+        };
+
+        let from: Vec<u16> = from
+            .as_std_path()
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect();
+        let to: Vec<u16> = to
+            .as_std_path()
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect();
+        if unsafe {
+            MoveFileExW(
+                from.as_ptr(),
+                to.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        } == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        std::fs::rename(from, to)
+    }
+}
+
+/// Pubblica un file o una cartella soltanto se il nome destinazione è libero.
+pub(crate) fn rename_no_replace_path(from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    {
+        use std::ffi::CString;
+
+        let from = CString::new(from.as_str())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path con NUL"))?;
+        let to = CString::new(to.as_str())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path con NUL"))?;
+        let result = unsafe {
+            libc::renameat2(
+                libc::AT_FDCWD,
+                from.as_ptr(),
+                libc::AT_FDCWD,
+                to.as_ptr(),
+                libc::RENAME_NOREPLACE as _,
+            )
+        };
+        if result == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    {
+        use std::ffi::CString;
+
+        let from = CString::new(from.as_str())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path con NUL"))?;
+        let to = CString::new(to.as_str())
+            .map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, "path con NUL"))?;
+        let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) };
+        if result == -1 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
+        let from: Vec<u16> = from
+            .as_std_path()
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect();
+        let to: Vec<u16> = to
+            .as_std_path()
+            .as_os_str()
+            .encode_wide()
+            .chain([0])
+            .collect();
+        if unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_WRITE_THROUGH) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+    #[cfg(not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "ios",
+        windows
+    )))]
+    {
+        let _ = (from, to);
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "rename no-replace non disponibile su questa piattaforma",
+        ))
+    }
 }
 
 impl VaultStorage for FsStorage {

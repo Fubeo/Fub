@@ -18,9 +18,9 @@ macchina è fuori dal vault.
 ## Decisione
 
 `fub-kernel::snapshot` possiede manifest, validazione e applicazione offline.
-L'host può invocarlo solo con il vault chiuso e quiescente; non mantiene un lock
-`Workspace` durante l'I/O. Prima di montare un vault l'host esegue la recovery
-degli artefatti riconosciuti.
+L'host può invocarlo solo con il vault chiuso e quiescente e con una radice
+canonica priva di symlink; non mantiene un lock `Workspace` durante l'I/O.
+Prima di montare un vault l'host esegue la recovery degli artefatti riconosciuti.
 
 Lo scope autorevole comprende:
 
@@ -31,8 +31,11 @@ Lo scope autorevole comprende:
 - `.fub/plugins/<id>/`, classificato dal proprietario del plugin.
 
 Sono esclusi configurazione macchina e derivati dichiarati dal catalogo, inclusi
-anagrafe `.fub/data/entries.json` e cache nello spazio dati derivato dei plugin.
-Un file sconosciuto non viene scartato solo perché vive sotto `.fub/data/`.
+anagrafe `.fub/data/entries.json` e cache nello spazio dati dei plugin che
+contengono il marker `.fub-cache-root`. Una directory
+`.fub/data/plugins/<id>/` senza quel marker è invece storage autorevole legacy e
+entra nel manifest come `plugin:<id>`. Un file sconosciuto non viene scartato
+solo perché vive sotto `.fub/data/`.
 
 Il manifest è schema 1, ordinato per path relativo normalizzato e serializzato in
 modo deterministico. Ogni entry dichiara una classe, owner, schema quando

@@ -6,9 +6,9 @@
 //!
 //! Il manifest è una fotografia deterministica. Ogni voce porta path relativo
 //! normalizzato, classe, proprietario, schema (quando il formato lo dichiara),
-//! dimensione e SHA-256. Le cache note (`.fub/data/entries.json` e lo spazio
-//! dati derivato dei plugin) non entrano nel manifest; alla riapertura vengono
-//! ricostruite dal kernel.
+//! dimensione e SHA-256. Le cache dei plugin (`.fub/data/plugins/<id>/`) sono
+//! escluse soltanto quando la radice contiene il marker `.fub-cache-root`;
+//! la stessa directory senza marker resta storage autorevole legacy.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
@@ -298,16 +298,16 @@ impl SnapshotBundle {
         fs::create_dir_all(parent)
             .map_err(|source| io_error("create snapshot parent", parent, source))?;
         let _lock = acquire_lock(path)?;
-        if symlink_metadata(path).is_ok() {
-            return Err(SnapshotError::AlreadyExists(path.to_owned()));
-        }
         let temporary = parent.join(format!(".{MANIFEST_FILE}.{}", transaction_id()));
         if let Err(error) = self.write_container(&temporary) {
             let _ = fs::remove_dir_all(temporary.as_std_path());
             return Err(error);
         }
-        if let Err(source) = fs::rename(temporary.as_std_path(), path.as_std_path()) {
+        if let Err(source) = crate::storage::rename_no_replace_path(&temporary, path) {
             let _ = fs::remove_dir_all(temporary.as_std_path());
+            if source.kind() == io::ErrorKind::AlreadyExists {
+                return Err(SnapshotError::AlreadyExists(path.to_owned()));
+            }
             return Err(io_error("publish snapshot", path, source));
         }
         sync_parent(parent)?;
@@ -799,12 +799,12 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
     }
     Ok(report)
 }
-
 fn finalize_record(
     paths: &TransactionPaths,
     _record: &RecoveryRecord,
 ) -> Result<(), SnapshotError> {
     remove_dir_if_exists(&paths.old)?;
+    remove_file_if_exists(&paths.record)?;
     sync_parent(paths.record.parent().unwrap_or(Utf8Path::new(".")))?;
     Ok(())
 }
@@ -861,7 +861,7 @@ fn collect_authoritative(
             .map_err(|_| SnapshotError::InvalidPath(path.to_string_lossy().into_owned()))?;
         let relative = normalize_path(relative)?;
         if metadata.is_dir() {
-            if is_derived_directory(&relative) {
+            if is_derived_directory(root, &relative)? {
                 continue;
             }
             let child = Utf8PathBuf::from_path_buf(path)
@@ -974,7 +974,10 @@ fn classify_path(
             Some(crate::vault::SCHEMA_VERSION),
         ));
     }
-    if let Some(rest) = path.strip_prefix(".fub/plugins/") {
+    if let Some(rest) = path
+        .strip_prefix(".fub/plugins/")
+        .or_else(|| path.strip_prefix(".fub/data/plugins/"))
+    {
         let owner = rest
             .split('/')
             .next()
@@ -982,7 +985,7 @@ fn classify_path(
             .ok_or_else(|| SnapshotError::InvalidPath(path.to_owned()))?;
         return Ok((SnapshotClass::Plugin, format!("plugin:{owner}"), None));
     }
-    if path == ".fub/data/entries.json" || is_derived_directory(path) {
+    if path == ".fub/data/entries.json" {
         return Err(SnapshotError::ExcludedDerived(path.to_owned()));
     }
     if path.starts_with(".trash/") {
@@ -1085,8 +1088,24 @@ fn normalize_path(path: &Path) -> Result<String, SnapshotError> {
     Ok(parts.join("/"))
 }
 
-fn is_derived_directory(path: &str) -> bool {
-    path == ".fub/data/plugins" || path.starts_with(".fub/data/plugins/")
+fn is_derived_directory(root: &Utf8Path, path: &str) -> Result<bool, SnapshotError> {
+    let Some(rest) = path.strip_prefix(".fub/data/plugins/") else {
+        return Ok(false);
+    };
+    let Some(plugin) = rest.split('/').next().filter(|plugin| !plugin.is_empty()) else {
+        return Ok(false);
+    };
+    let marker = root
+        .join(".fub/data/plugins")
+        .join(plugin)
+        .join(crate::workspace::PLUGIN_CACHE_MARK);
+    match symlink_metadata(&marker) {
+        Ok(metadata) => Ok(metadata.is_file()),
+        Err(SnapshotError::Io { source, .. }) if source.kind() == io::ErrorKind::NotFound => {
+            Ok(false)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn is_derived_file(path: &str) -> bool {
@@ -1155,7 +1174,7 @@ fn persist_record(path: &Utf8Path, record: &RecoveryRecord) -> Result<(), Snapsh
         let _ = remove_file_if_exists(&temporary);
         return Err(error);
     }
-    if let Err(source) = fs::rename(temporary.as_std_path(), path.as_std_path()) {
+    if let Err(source) = crate::storage::atomic_replace(&temporary, path) {
         let _ = remove_file_if_exists(&temporary);
         return Err(io_error("publish snapshot recovery record", path, source));
     }
@@ -1382,9 +1401,11 @@ mod tests {
     }
 
     #[test]
-    fn capture_excludes_known_derived_but_keeps_unknown() {
+    fn capture_excludes_marked_derived_but_keeps_unknown() {
         let (_dir, root) = root();
         fs::create_dir_all(root.join(".fub/data/plugins/x")).expect("cache");
+        fs::write(root.join(".fub/data/plugins/x/.fub-cache-root"), b"cache\n")
+            .expect("cache marker");
         fs::write(root.join(".fub/data/plugins/x/index.bin"), b"derived").expect("cache");
         fs::create_dir_all(root.join(".fub/data")).expect("data");
         fs::write(root.join(".fub/data/unknown.bin"), b"keep").expect("unknown");
@@ -1392,6 +1413,48 @@ mod tests {
         let snapshot = SnapshotBundle::capture(&root).expect("capture");
         assert!(snapshot.bytes(".fub/data/plugins/x/index.bin").is_none());
         assert_eq!(snapshot.bytes(".fub/data/unknown.bin"), Some(&b"keep"[..]));
+    }
+
+    #[test]
+    fn unmarked_plugin_cache_is_legacy_authority_and_survives_apply() {
+        let (_dir, root) = root();
+        let legacy = root.join(".fub/data/plugins/legacy");
+        fs::create_dir_all(&legacy).expect("legacy plugin root");
+        fs::write(legacy.join("state.json"), b"legacy").expect("legacy state");
+        let marked = root.join(".fub/data/plugins/cache");
+        fs::create_dir_all(&marked).expect("marked plugin root");
+        fs::write(marked.join(crate::workspace::PLUGIN_CACHE_MARK), b"cache\n")
+            .expect("cache marker");
+        fs::write(marked.join("index.bin"), b"derived").expect("derived cache");
+
+        let captured = SnapshotBundle::capture(&root).expect("capture");
+        assert_eq!(
+            captured.bytes(".fub/data/plugins/legacy/state.json"),
+            Some(&b"legacy"[..])
+        );
+        assert!(captured
+            .bytes(".fub/data/plugins/cache/index.bin")
+            .is_none());
+
+        fs::remove_file(legacy.join("state.json")).expect("remove legacy");
+        let current = SnapshotBundle::capture(&root).expect("current");
+        let target = SnapshotBundle::new(
+            captured.manifest.clone(),
+            current.base_revision.clone(),
+            captured.files.clone(),
+        )
+        .expect("target");
+        SnapshotApplier::apply(&root, &target).expect("apply legacy");
+        assert_eq!(
+            fs::read(legacy.join("state.json")).expect("restored legacy"),
+            b"legacy"
+        );
+        let leftovers = fs::read_dir(root.parent().expect("parent"))
+            .expect("transaction parent")
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .any(|name| name.ends_with(".record"));
+        assert!(!leftovers, "successful apply leaves no recovery record");
     }
 
     #[test]

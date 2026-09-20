@@ -188,7 +188,9 @@ L'applicazione globale di uno snapshot è distinta dal backup per-file di
 [#7](https://github.com/Fubeo/Fub/issues/7). Lo scope completo comprende
 documenti, allegati, file sconosciuti, `.trash/`, ogni voce autorevole sotto
 `.fub/` e lo storage autorevole dei plugin. La configurazione macchina resta
-fuori dal vault. Le cache dichiarate ricostruibili non entrano nel manifest.
+fuori dal vault. Le cache dichiarate ricostruibili non entrano nel manifest:
+`.fub/data/plugins/<id>/` è cache solo quando contiene `.fub-cache-root`;
+altrimenti è storage autorevole legacy.
 
 Il modulo `fub_kernel::snapshot` usa un manifest schema 1, ordinato per path
 relativo normalizzato. Ogni entry registra classe, proprietario, schema quando
@@ -200,8 +202,9 @@ traversal, duplicati, symlink, file speciali, entry mancanti e mismatch di
 dimensione o digest.
 
 La base revision è il digest deterministico del manifest autorevole live.
-L'applicazione richiede un vault chiuso/quiescente, prende un lock cooperativo
-stabile sibling, prepara uno staging privato e ricontrolla la base revision
+L'applicazione richiede un vault chiuso/quiescente e una radice canonica priva
+di symlink, prende un lock cooperativo stabile sibling, prepara uno staging
+privato e ricontrolla la base revision
 immediatamente prima del commit. Un record persistente coordina `prepare`,
 `commit` e `finalize`: la root precedente resta in un contenitore `.old` finché
 la nuova è pubblicata. La recovery startup riconosce solo schema, id e nomi

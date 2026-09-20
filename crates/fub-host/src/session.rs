@@ -1172,6 +1172,10 @@ impl Host {
 
     /// Applica uno snapshot globale con il vault chiuso e lo riapre.
     ///
+    /// Il chiamante deve fornire la radice già canonica e priva di symlink:
+    /// l'applicazione non accetta alias, perché il record persistente deve
+    /// restare recuperabile anche se il nome alternativo sparisce.
+    ///
     /// Un vault aperto o in chiusura viene rifiutato invece di tentare una
     /// quiescenza implicita: watcher, job e provider devono essere terminati
     /// dal chiamante tramite [`Host::close_vault`] prima dell'I/O offline.
@@ -1180,27 +1184,23 @@ impl Host {
         root: &Utf8Path,
         snapshot: &fub_kernel::snapshot::SnapshotBundle,
     ) -> Result<fub_kernel::snapshot::SnapshotApplyReport, SnapshotHostError> {
-        let recovery_root = snapshot_recovery_root(root).map_err(SnapshotHostError::Lifecycle)?;
-        let root = if root.is_dir() {
-            canonical(root).map_err(SnapshotHostError::Lifecycle)?
-        } else {
-            fub_kernel::snapshot::recover_snapshots(&recovery_root)?;
-            if !root.is_dir() {
-                return Err(SnapshotHostError::Lifecycle(PluginError::NotFound(
-                    format!("Non è una cartella valida: {root}").into(),
-                )));
-            }
-            canonical(root).map_err(SnapshotHostError::Lifecycle)?
-        };
-        let claim = self.claim_snapshot(&root)?;
-        fub_kernel::snapshot::recover_snapshots(&recovery_root)?;
-        if root != recovery_root {
-            fub_kernel::snapshot::recover_snapshots(&root)?;
+        if !root.is_dir() {
+            return Err(SnapshotHostError::Lifecycle(PluginError::NotFound(
+                format!("Non è una cartella valida: {root}").into(),
+            )));
         }
-        let report = fub_kernel::snapshot::apply_snapshot(&root, snapshot)?;
-        self.mounts_after_apply(&root, claim.token())
+        let canonical_root = canonical(root).map_err(SnapshotHostError::Lifecycle)?;
+        if canonical_root != root {
+            return Err(SnapshotHostError::Lifecycle(PluginError::Conflict(
+                format!("La radice snapshot deve essere canonica: {root}.").into(),
+            )));
+        }
+        let claim = self.claim_snapshot(&canonical_root)?;
+        fub_kernel::snapshot::recover_snapshots(&canonical_root)?;
+        let report = fub_kernel::snapshot::apply_snapshot(&canonical_root, snapshot)?;
+        self.mounts_after_apply(&canonical_root, claim.token())
             .map_err(SnapshotHostError::Reopen)?;
-        self.become_current(&root)
+        self.become_current(&canonical_root)
             .map_err(SnapshotHostError::Reopen)?;
         drop(claim);
         Ok(report)
