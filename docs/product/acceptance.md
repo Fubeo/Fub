@@ -1,7 +1,7 @@
 # Criteri di accettazione della Graph View
 
 > **Ambito:** scala, lifecycle e teardown della Graph View.
-> **Stato:** criteri consegnati nella PR #40; release **NO-GO**.
+> **Stato:** criteri consegnati e chiusi con la consegna integrata.
 
 I numeri e le condizioni prestazionali sono definiti nel
 [budget prestazionale](performance-budget.md). Questa pagina separa i controlli
@@ -55,10 +55,7 @@ stesso SHA.
 Questa evidenza vale per la fixture deterministica. I limiti di qualità e
 complessità della [Graph View](search-links-and-graph.md#graph-view) impediscono
 di estenderla a grafi arbitrari o a ogni ambiente.
-
-## Stato di uscita
-
-#12 e #40 sono chiuse come consegna integrata. Il residuo heap trasferito da
+Le consegne integrate sono chiuse. Il residuo heap trasferito da
 [#6](https://github.com/Fubeo/Fub/issues/6) a [#56](https://github.com/Fubeo/Fub/issues/56)
 è stato soddisfatto dal gate a 16 finestre in esecuzioni consecutive sullo stesso
 SHA; i budget di frame time restano review-only.
