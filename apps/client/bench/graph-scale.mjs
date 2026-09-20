@@ -2,7 +2,7 @@ import * as os from "node:os";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { openStage, openPage, OUTPUT } from "./stage.mjs";
-
+import { HEAP_SAMPLES_PER_WINDOW, heapStability, linearSlope, summarizeHeapSamples } from "./graph-heap.mjs";
 const countKinds = (resources) => Object.fromEntries([...new Set(resources)].map((kind) => [kind, resources.filter((entry) => entry === kind).length]));
 
 const REPORT = join(OUTPUT, "graph-scale.json");
@@ -16,15 +16,6 @@ const READY_SAFETY_TIMEOUT_MS = 30_000;
 const FRAME_SAMPLE_TARGET = 120;
 const FRAME_SAMPLE_SAFETY_TIMEOUT_MS = 30_000;
 const HEAP_GC_ROUNDS = 3;
-const HEAP_STABILITY = Object.freeze({
-  nodes: 10_000,
-  seed: 6,
-  minWindows: 16,
-  warmupWindows: 8,
-  measurementWindows: 8,
-  maxSlopeBytesPerWindow: 65_536,
-  maxMonotonicIncreases: 6,
-});
 
 function args() {
   const out = { ...DEFAULTS };
@@ -295,58 +286,6 @@ const heap = async (session) => {
     return metric && Number.isFinite(metric.value) ? metric.value : { status: "unsupported", reason: "JSHeapUsedSize unavailable" };
   } catch (error) { return { status: "unsupported", reason: String(error?.message ?? error) }; }
 };
-const linearSlope = (values) => {
-  const points = values.map((value, index) => [index + 1, value]).filter(([, y]) => Number.isFinite(y));
-  if (points.length < 2) return null;
-  const meanX = points.reduce((sum, [x]) => sum + x, 0) / points.length;
-  const meanY = points.reduce((sum, [, y]) => sum + y, 0) / points.length;
-  const denominator = points.reduce((sum, [x]) => sum + (x - meanX) ** 2, 0);
-  return denominator ? points.reduce((sum, [x, y]) => sum + (x - meanX) * (y - meanY), 0) / denominator : null;
-};
-const heapStability = (config, series) => {
-  const canonical = config.nodes === HEAP_STABILITY.nodes && config.seed === HEAP_STABILITY.seed;
-  if (!canonical || config.soakWindows < HEAP_STABILITY.minWindows) {
-    return {
-      required: false,
-      pass: null,
-      reason: canonical
-        ? `requires at least ${HEAP_STABILITY.minWindows} soak windows`
-        : "only the 10k/seed-6 fixture has a hard heap oracle",
-      policy: HEAP_STABILITY,
-    };
-  }
-  if (!series.every(Number.isFinite)) {
-    return {
-      required: true,
-      pass: false,
-      reason: "heap series is incomplete after forced GC",
-      policy: HEAP_STABILITY,
-      measured: null,
-    };
-  }
-  const measured = series.slice(-HEAP_STABILITY.measurementWindows);
-  const slope = linearSlope(measured);
-  const increases = measured.slice(1).reduce(
-    (count, value, index) => count + (value > measured[index] ? 1 : 0),
-    0,
-  );
-  const pass =
-    slope !== null
-    && slope <= HEAP_STABILITY.maxSlopeBytesPerWindow
-    && increases <= HEAP_STABILITY.maxMonotonicIncreases;
-  return {
-    required: true,
-    pass,
-    reason: pass ? null : "tail heap did not stabilize within the hard oracle",
-    policy: HEAP_STABILITY,
-    measured: {
-      windows: measured.length,
-      series: measured,
-      slopeBytesPerWindow: slope,
-      monotonicIncreaseCount: increases,
-    },
-  };
-};
 
 const collectHeap = async (session) => {
   try {
@@ -357,6 +296,11 @@ const collectHeap = async (session) => {
     return { status: "unsupported", reason: String(error?.message ?? error) };
   }
   return heap(session);
+};
+const collectHeapWindow = async (session) => {
+  const samples = [];
+  for (let i = 0; i < HEAP_SAMPLES_PER_WINDOW; i++) samples.push(await collectHeap(session));
+  return summarizeHeapSamples(samples);
 };
 
 async function closeGraph(page) {
@@ -407,6 +351,8 @@ const successSummary = (report) => ({
   frames: report.frames ?? null,
   soak: {
     heapAvailability: report.soak?.heapAvailability ?? null,
+    heapSamplesPerWindow: report.soak?.heapSamplesPerWindow ?? null,
+    heapSelection: report.soak?.heapSelection ?? null,
     heapSeries: report.soak?.heapSeries ?? null,
     slopeBytesPerWindow: report.soak?.linearRegressionSlopeBytesPerWindow ?? null,
     monotonicIncreaseCount: report.soak?.monotonicIncreaseCount ?? null,
@@ -461,6 +407,8 @@ async function main() {
     report.memory.before = await heap(cdp); report.resources.scope = "DOM listeners are tracked only on window/document and elements within canvas.graph-main, canvas.graph-bg, or .graph-panel; timers, rAF, and observers are tracked only when their creation stack contains /src/graph/ or /src/panels/graph.ts while the probe is active."; report.resources.baseline = base.probe.resources.length; report.resources.baselineByKind = countKinds(base.probe.resources);
     report.soak = {
       requestedWindows: config.soakWindows,
+      heapSamplesPerWindow: HEAP_SAMPLES_PER_WINDOW,
+      heapSelection: "median",
       windows: [],
       totalActiveFrames: 0,
       heapAvailability: { status: "unsupported", reasons: [] },
@@ -526,13 +474,13 @@ async function main() {
           await page.evaluate(() => window.__graphScaleProbe.stopFrames());
           const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
           if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);
-          const heapUsed = await collectHeap(cdp);
+          const heapWindow = await collectHeapWindow(cdp);
           const entry = {
             window: windowIndex,
             wallMs: performance.now() - windowStarted,
             frames: { count: frameTimes.length, intervals: stats(frameTimes.slice(1).map((v, j) => v - frameTimes[j])) },
             longTasks: { ...stats(observed.longtasks), over50ms: observed.longtasks.filter((x) => x > 50).length },
-            heapUsed,
+            ...heapWindow,
           };
           report.soak.windows.push(entry);
           report.soak.totalActiveFrames += frameTimes.length;
