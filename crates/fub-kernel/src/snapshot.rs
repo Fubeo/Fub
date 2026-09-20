@@ -1291,7 +1291,7 @@ mod tests {
 
     #[test]
     fn manifest_revision_is_deterministic_and_sorted() {
-        let mut files = BTreeMap::new();
+        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
         files.insert("b.md".into(), b"b".to_vec());
         files.insert("a.md".into(), b"a".to_vec());
         let entries = files
