@@ -107,9 +107,11 @@ esterni che ignorano il lock la protezione resta best-effort.
 
 Lo snapshot globale è una responsabilità del kernel, non del provider di
 versioning e non dell'IPC. `fub_kernel::snapshot` enumera soltanto lo stato
-autorevole dichiarato dal catalogo: documenti, allegati, sconosciuti, cestino,
+autorevole: documenti, allegati e sconosciuti condividono la classe `user`
+perché il kernel non possiede il `FormatRegistry`; cestino,
 settings/organizzazione/drafts/journal, sidecar autorevoli e storage persistente
-dei plugin. La configurazione macchina e i derivati ricostruibili restano fuori.
+dei plugin hanno classi core proprie. La configurazione macchina e i derivati
+ricostruibili restano fuori.
 
 La fotografia produce un manifest schema 1 deterministico. Ogni path relativo
 normalizzato porta classe, owner, schema quando applicabile, size e SHA-256.

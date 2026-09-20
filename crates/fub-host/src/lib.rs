@@ -119,7 +119,7 @@ pub use registry::{
     StartupLease, StartupSnapshot, StartupSource, StartupValidity,
 };
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
-pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
+pub use session::{doc_id, Delivery, EventSink, Host, SnapshotHostError, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use theme::{ThemeInfo, ThemePayload};
 pub use vaults::{VaultEntry, VaultRegistry};

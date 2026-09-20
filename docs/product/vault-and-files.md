@@ -110,9 +110,12 @@ riapertura, non copiate come se fossero autorità.
 
 `fub_kernel::snapshot` prepara e valida in memoria un manifest schema 1 con
 path relativo normalizzato, classe, owner, schema quando applicabile, size e
-digest SHA-256. Rifiuta prima di ogni mutazione schema futuro, entry mancante o
-duplicata, traversal, symlink/file speciali e mismatch di size o digest. La
-base revision è il digest deterministico del manifest autorevole live e viene
+digest SHA-256. Il kernel non possiede il `FormatRegistry`: documenti, allegati
+e sconosciuti hanno la classe unica `user`, mentre i dati core, del cestino,
+sidecar e plugin hanno classi proprie. Rifiuta prima di ogni mutazione schema
+futuro, entry mancante o duplicata, traversal, symlink/file speciali e mismatch
+di size o digest.
+La base revision è il digest deterministico del manifest autorevole live e viene
 ricontrollata immediatamente prima del commit.
 
 L'applicazione richiede un vault chiuso e quiescente. Un lock sibling stabile,

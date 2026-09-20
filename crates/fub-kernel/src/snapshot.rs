@@ -12,7 +12,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Component, Path};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -36,17 +36,14 @@ static TRANSACTION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Classificazione esplicita della voce nel manifest.
 ///
-/// `Unknown` è intenzionale: un file che nessun provider riconosce resta parte
-/// dello snapshot e non viene promosso a cache dal solo nome.
+/// Il kernel non possiede il [`FormatRegistry`](crate::registry::FormatRegistry):
+/// tutto il contenuto utente resta quindi nella classe unica `User`, senza
+/// dedurre documenti o allegati dal nome.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SnapshotClass {
-    /// Documento riconosciuto dal catalogo statico minimo del kernel.
-    Document,
-    /// Allegato o altro contenuto utente binario.
-    Attachment,
-    /// File utente non riconosciuto.
-    Unknown,
+    /// Documento, allegato o file sconosciuto posseduto dall'utente.
+    User,
     /// Voce del cestino condiviso del vault.
     Trash,
     /// Impostazioni del vault.
@@ -295,22 +292,25 @@ impl SnapshotBundle {
     /// Pubblica il contenitore con una directory temporanea sorella e rename.
     pub fn write_to(&self, path: &Utf8Path) -> Result<(), SnapshotError> {
         self.validate()?;
-        if path.exists() {
-            return Err(SnapshotError::AlreadyExists(path.to_owned()));
-        }
         let parent = path
             .parent()
             .ok_or_else(|| SnapshotError::InvalidArtifact(path.to_owned()))?;
         fs::create_dir_all(parent)
             .map_err(|source| io_error("create snapshot parent", parent, source))?;
+        let _lock = acquire_lock(path)?;
+        if symlink_metadata(path).is_ok() {
+            return Err(SnapshotError::AlreadyExists(path.to_owned()));
+        }
         let temporary = parent.join(format!(".{MANIFEST_FILE}.{}", transaction_id()));
         if let Err(error) = self.write_container(&temporary) {
             let _ = fs::remove_dir_all(temporary.as_std_path());
             return Err(error);
         }
-        fs::rename(temporary.as_std_path(), path.as_std_path())
-            .map_err(|source| io_error("publish snapshot", path, source))?;
-        sync_parent(parent);
+        if let Err(source) = fs::rename(temporary.as_std_path(), path.as_std_path()) {
+            let _ = fs::remove_dir_all(temporary.as_std_path());
+            return Err(io_error("publish snapshot", path, source));
+        }
+        sync_parent(parent)?;
         Ok(())
     }
 
@@ -365,7 +365,7 @@ impl SnapshotBundle {
             }
             write_regular_file(&destination, bytes)?;
         }
-        sync_dir(path);
+        sync_tree(path)?;
         Ok(())
     }
 }
@@ -386,6 +386,10 @@ pub enum SnapshotFault {
     AfterPrepare,
     /// Fallisce dopo aver scritto `entries` payload nello staging.
     DuringWrite { entries: usize },
+    /// Lascia `OldMoved`: la root live è assente, la vecchia è conservata.
+    AfterOldMoved,
+    /// Lascia `Published`: la root live è assente, staging e vecchia root esistono.
+    AfterPublished,
     /// Fallisce subito dopo la pubblicazione della nuova root, prima di
     /// finalizzare e cancellare la vecchia.
     AfterCommit,
@@ -455,9 +459,12 @@ impl SnapshotApplier {
         let paths = TransactionPaths::new(&root, &id)?;
         fs::create_dir(&paths.staging)
             .map_err(|source| io_error("create snapshot staging", &paths.staging, source))?;
+        sync_parent(paths.staging.parent().unwrap_or(Utf8Path::new(".")))
+            .map_err(|error| abort_precommit(&paths, error))?;
         let mut record = RecoveryRecord::new(&root, &paths, &id, snapshot.manifest.digest());
-        persist_record(&paths.record, &record)?;
-        sync_parent(paths.record.parent().unwrap_or(Utf8Path::new(".")));
+        persist_record(&paths.record, &record).map_err(|error| abort_precommit(&paths, error))?;
+        sync_parent(paths.record.parent().unwrap_or(Utf8Path::new(".")))
+            .map_err(|error| abort_precommit(&paths, error))?;
 
         if matches!(fault, Some(SnapshotFault::AfterPrepare)) {
             return Err(SnapshotError::FaultInjected("after prepare"));
@@ -484,7 +491,7 @@ impl SnapshotApplier {
             )
             .map_err(|error| abort_precommit(&paths, error))?;
         }
-        sync_dir(&paths.staging);
+        sync_tree(&paths.staging).map_err(|error| abort_precommit(&paths, error))?;
 
         // Ultima rilettura immediatamente prima del commit: il lock esclude gli
         // altri writer cooperativi, ma non può fermare processi esterni.
@@ -499,20 +506,36 @@ impl SnapshotApplier {
             ));
         }
         record.phase = RecoveryPhase::OldMoved;
-        persist_record(&paths.record, &record)?;
+        persist_record(&paths.record, &record).map_err(|error| abort_precommit(&paths, error))?;
         fs::rename(root.as_std_path(), paths.old.as_std_path()).map_err(|source| {
             SnapshotError::RecoveryNeeded {
                 transaction_id: id.clone(),
                 reason: format!("move old snapshot root: {source}"),
             }
         })?;
-        sync_parent(paths.old.parent().unwrap_or(Utf8Path::new(".")));
+        sync_parent(paths.old.parent().unwrap_or(Utf8Path::new("."))).map_err(|error| {
+            SnapshotError::RecoveryNeeded {
+                transaction_id: id.clone(),
+                reason: format!("sync old snapshot root: {error}"),
+            }
+        })?;
+
+        if matches!(fault, Some(SnapshotFault::AfterOldMoved)) {
+            return Err(SnapshotError::FaultInjected("after old moved"));
+        }
 
         // Il marker Published è persistente prima della rename: dopo un crash
         // la recovery può distinguere una pubblicazione non ancora iniziata
         // dalla nuova root già resa visibile.
         record.phase = RecoveryPhase::Published;
-        persist_record(&paths.record, &record)?;
+        persist_record(&paths.record, &record).map_err(|error| SnapshotError::RecoveryNeeded {
+            transaction_id: id.clone(),
+            reason: format!("persist published marker: {error}"),
+        })?;
+
+        if matches!(fault, Some(SnapshotFault::AfterPublished)) {
+            return Err(SnapshotError::FaultInjected("after published"));
+        }
 
         fs::rename(paths.staging.as_std_path(), root.as_std_path()).map_err(|source| {
             // Il vecchio contenitore è ancora disponibile. La recovery può
@@ -522,13 +545,20 @@ impl SnapshotApplier {
                 reason: format!("publish new snapshot root: {source}"),
             }
         })?;
-        sync_parent(root.parent().unwrap_or(Utf8Path::new(".")));
-
+        sync_parent(root.parent().unwrap_or(Utf8Path::new("."))).map_err(|error| {
+            SnapshotError::RecoveryNeeded {
+                transaction_id: id.clone(),
+                reason: format!("sync published root: {error}"),
+            }
+        })?;
         if matches!(fault, Some(SnapshotFault::AfterCommit)) {
             return Err(SnapshotError::FaultInjected("after commit"));
         }
 
-        finalize_record(&paths, &record)?;
+        finalize_record(&paths, &record).map_err(|error| SnapshotError::RecoveryNeeded {
+            transaction_id: id.clone(),
+            reason: format!("finalize snapshot: {error}"),
+        })?;
         Ok(SnapshotApplyReport {
             transaction_id: id,
             base_revision: snapshot.base_revision.clone(),
@@ -568,6 +598,11 @@ struct RecoveryRecord {
     record: String,
     expected_manifest: Revision,
     phase: RecoveryPhase,
+}
+
+#[derive(Deserialize)]
+struct RecoverySchema {
+    schema_version: SchemaVersion,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -641,15 +676,20 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
     let mut report = SnapshotRecoveryReport::default();
     for record_path in records {
         let bytes = read_regular_file(&record_path)?;
+        let schema: RecoverySchema =
+            serde_json::from_slice(&bytes).map_err(|error| SnapshotError::MalformedRecovery {
+                path: record_path.clone(),
+                reason: error.to_string(),
+            })?;
+        if schema.schema_version != SNAPSHOT_SCHEMA_VERSION {
+            // Artefatto futuro o di un altro programma: non toccarlo.
+            continue;
+        }
         let record: RecoveryRecord =
             serde_json::from_slice(&bytes).map_err(|error| SnapshotError::MalformedRecovery {
                 path: record_path.clone(),
                 reason: error.to_string(),
             })?;
-        if record.schema_version != SNAPSHOT_SCHEMA_VERSION {
-            // Artefatto futuro o di un altro programma: non toccarlo.
-            continue;
-        }
         if !valid_transaction_id(&record.transaction_id) {
             return Err(SnapshotError::MalformedRecovery {
                 path: record_path,
@@ -702,6 +742,7 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
                             reason: format!("rollback della root precedente: {source}"),
                         }
                     })?;
+                    sync_parent(parent)?;
                     remove_dir_if_exists(&paths.staging)?;
                     remove_file_if_exists(&paths.record)?;
                 }
@@ -735,6 +776,7 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
                             reason: format!("completamento della pubblicazione: {source}"),
                         },
                     )?;
+                    sync_parent(parent)?;
                     let current = SnapshotBundle::capture(root)?;
                     if current.manifest.digest() != record.expected_manifest {
                         return Err(SnapshotError::RecoveryNeeded {
@@ -752,7 +794,7 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
                 }
             }
         }
-        sync_parent(parent);
+        sync_parent(parent)?;
         report.recovered += 1;
     }
     Ok(report)
@@ -763,8 +805,7 @@ fn finalize_record(
     _record: &RecoveryRecord,
 ) -> Result<(), SnapshotError> {
     remove_dir_if_exists(&paths.old)?;
-    remove_file_if_exists(&paths.record)?;
-    sync_parent(paths.record.parent().unwrap_or(Utf8Path::new(".")));
+    sync_parent(paths.record.parent().unwrap_or(Utf8Path::new(".")))?;
     Ok(())
 }
 
@@ -836,8 +877,7 @@ fn collect_authoritative(
         }
         let child = Utf8PathBuf::from_path_buf(path)
             .map_err(|path| SnapshotError::InvalidPath(path.to_string_lossy().into_owned()))?;
-        let bytes = fs::read(child.as_std_path())
-            .map_err(|source| io_error("read vault entry", &child, source))?;
+        let bytes = read_regular_file(&child)?;
         files.insert(relative, bytes);
     }
     Ok(())
@@ -948,24 +988,12 @@ fn classify_path(
     if path.starts_with(".trash/") {
         return Ok((SnapshotClass::Trash, "trash".into(), None));
     }
-    if path.starts_with("attachments/") {
-        return Ok((SnapshotClass::Attachment, "user".into(), None));
-    }
-    let class = SnapshotClass::Unknown;
-    Ok((class, "user".into(), None))
+    Ok((SnapshotClass::User, "user".into(), None))
 }
 
 fn validate_catalog_entry(entry: &SnapshotEntry) -> Result<(), SnapshotError> {
     let (class, owner, schema) = classify_path(&entry.path)?;
-    let class_matches = if class == SnapshotClass::Unknown && owner == "user" {
-        matches!(
-            entry.class,
-            SnapshotClass::Document | SnapshotClass::Attachment | SnapshotClass::Unknown
-        )
-    } else {
-        class == entry.class
-    };
-    if !class_matches || owner != entry.owner {
+    if class != entry.class || owner != entry.owner {
         return Err(SnapshotError::EntryClassMismatch(entry.path.clone()));
     }
     match (schema, entry.schema) {
@@ -984,13 +1012,7 @@ fn validate_catalog_entry(entry: &SnapshotEntry) -> Result<(), SnapshotError> {
             expected,
         }),
         (None, Some(_))
-            if matches!(
-                entry.class,
-                SnapshotClass::Document
-                    | SnapshotClass::Attachment
-                    | SnapshotClass::Unknown
-                    | SnapshotClass::Trash
-            ) =>
+            if entry.class == SnapshotClass::User || entry.class == SnapshotClass::Trash =>
         {
             Err(SnapshotError::UnexpectedSchema(entry.path.clone()))
         }
@@ -1010,7 +1032,8 @@ fn validate_relative_path(path: &str) -> Result<(), SnapshotError> {
             _ => return Err(SnapshotError::InvalidPath(path.to_owned())),
         }
     }
-    if !saw || candidate.to_string_lossy() != path {
+    let normalized = normalize_path(candidate)?;
+    if !saw || normalized != path {
         return Err(SnapshotError::InvalidPath(path.to_owned()));
     }
     Ok(())
@@ -1036,7 +1059,6 @@ fn validate_digest(digest: &Revision, path: &str) -> Result<(), SnapshotError> {
     }
     Ok(())
 }
-
 fn normalize_path(path: &Path) -> Result<String, SnapshotError> {
     let mut parts = Vec::new();
     for component in path.components() {
@@ -1072,11 +1094,33 @@ fn is_derived_file(path: &str) -> bool {
 }
 
 fn read_regular_file(path: &Utf8Path) -> Result<Vec<u8>, SnapshotError> {
-    let metadata = symlink_metadata(path)?;
-    if !metadata.is_file() {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+        options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+    }
+    let mut file = options
+        .open(path.as_std_path())
+        .map_err(|source| io_error("open snapshot payload", path, source))?;
+    if !file
+        .metadata()
+        .map_err(|source| io_error("stat snapshot payload handle", path, source))?
+        .is_file()
+    {
         return Err(SnapshotError::UnsupportedFile(path.to_string()));
     }
-    fs::read(path.as_std_path()).map_err(|source| io_error("read snapshot payload", path, source))
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)
+        .map_err(|source| io_error("read snapshot payload", path, source))?;
+    Ok(bytes)
 }
 
 fn write_regular_file(path: &Utf8Path, bytes: &[u8]) -> Result<(), SnapshotError> {
@@ -1100,14 +1144,22 @@ fn write_regular_file(path: &Utf8Path, bytes: &[u8]) -> Result<(), SnapshotError
 fn persist_record(path: &Utf8Path, record: &RecoveryRecord) -> Result<(), SnapshotError> {
     let bytes = serde_json::to_vec(record)
         .map_err(|error| SnapshotError::Serialization(error.to_string()))?;
-    let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
-    let mut file = options
-        .open(path.as_std_path())
-        .map_err(|source| io_error("open snapshot recovery record", path, source))?;
-    file.write_all(&bytes)
-        .and_then(|_| file.sync_all())
-        .map_err(|source| io_error("write snapshot recovery record", path, source))?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| SnapshotError::InvalidArtifact(path.to_owned()))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| SnapshotError::InvalidArtifact(path.to_owned()))?;
+    let temporary = parent.join(format!(".{name}.tmp-{}", transaction_id()));
+    if let Err(error) = write_regular_file(&temporary, &bytes) {
+        let _ = remove_file_if_exists(&temporary);
+        return Err(error);
+    }
+    if let Err(source) = fs::rename(temporary.as_std_path(), path.as_std_path()) {
+        let _ = remove_file_if_exists(&temporary);
+        return Err(io_error("publish snapshot recovery record", path, source));
+    }
+    sync_parent(parent)?;
     Ok(())
 }
 
@@ -1131,14 +1183,41 @@ fn remove_dir_if_exists(path: &Utf8Path) -> Result<(), SnapshotError> {
     }
 }
 
-fn sync_dir(path: &Utf8Path) {
-    let _ = File::open(path.as_std_path()).and_then(|file| file.sync_all());
+fn sync_tree(path: &Utf8Path) -> Result<(), SnapshotError> {
+    let metadata = symlink_metadata(path)?;
+    if !metadata.is_dir() {
+        return Err(SnapshotError::InvalidArtifact(path.to_owned()));
+    }
+    let mut entries = Vec::new();
+    let read_dir = fs::read_dir(path.as_std_path())
+        .map_err(|source| io_error("enumerate directory for sync", path, source))?;
+    for item in read_dir {
+        let item = item.map_err(|source| io_error("read directory for sync", path, source))?;
+        entries.push(item.path());
+    }
+    entries.sort();
+    for child in entries {
+        let child = Utf8PathBuf::from_path_buf(child)
+            .map_err(|path| SnapshotError::InvalidPath(path.to_string_lossy().into_owned()))?;
+        let metadata = symlink_metadata(&child)?;
+        if metadata.is_dir() {
+            sync_tree(&child)?;
+        } else if !metadata.is_file() {
+            return Err(SnapshotError::UnsupportedFile(child.to_string()));
+        }
+    }
+    sync_dir(path)
 }
 
-fn sync_parent(path: &Utf8Path) {
-    if let Some(parent) = path.parent() {
-        sync_dir(parent);
-    }
+fn sync_dir(path: &Utf8Path) -> Result<(), SnapshotError> {
+    let file = File::open(path.as_std_path())
+        .map_err(|source| io_error("open directory for sync", path, source))?;
+    file.sync_all()
+        .map_err(|source| io_error("sync directory", path, source))
+}
+
+fn sync_parent(path: &Utf8Path) -> Result<(), SnapshotError> {
+    sync_dir(path)
 }
 
 fn symlink_metadata(path: &Utf8Path) -> Result<std::fs::Metadata, SnapshotError> {
@@ -1167,7 +1246,6 @@ fn absolute_utf8(path: &Utf8Path) -> Result<Utf8PathBuf, SnapshotError> {
     };
     Ok(absolute)
 }
-
 fn valid_transaction_id(id: &str) -> bool {
     !id.is_empty()
         && id
@@ -1343,7 +1421,7 @@ mod tests {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
             entries: vec![SnapshotEntry {
                 path: "../outside".into(),
-                class: SnapshotClass::Unknown,
+                class: SnapshotClass::User,
                 owner: "user".into(),
                 schema: None,
                 size: 0,
@@ -1364,6 +1442,42 @@ mod tests {
         assert_eq!(fs::read(root.join("note.md")).expect("old"), b"note");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn capture_rejects_symlink_without_reading_target() {
+        use std::os::unix::fs::symlink;
+
+        let (directory, root) = root();
+        let outside = directory.path().join("outside.txt");
+        fs::write(&outside, b"outside").expect("outside");
+        symlink(&outside, root.join("link.txt")).expect("symlink");
+        assert!(matches!(
+            SnapshotBundle::capture(&root),
+            Err(SnapshotError::UnsupportedFile(path)) if path == "link.txt"
+        ));
+    }
+
+    #[test]
+    fn path_preflight_rejects_noncanonical_forms() {
+        for path in ["a//b", "a/", "a/./b"] {
+            let manifest = SnapshotManifest {
+                schema_version: SNAPSHOT_SCHEMA_VERSION,
+                entries: vec![SnapshotEntry {
+                    path: path.into(),
+                    class: SnapshotClass::User,
+                    owner: "user".into(),
+                    schema: None,
+                    size: 0,
+                    digest: Revision::of_bytes(b""),
+                }],
+            };
+            assert!(matches!(
+                manifest.validate_structure(),
+                Err(SnapshotError::InvalidPath(found)) if found == path
+            ));
+        }
+    }
+
     #[test]
     fn artifact_rejects_payload_not_listed_in_manifest() {
         let (_dir, root) = root();
@@ -1376,6 +1490,53 @@ mod tests {
             SnapshotBundle::read_from(&artifact),
             Err(SnapshotError::UnexpectedEntry(path)) if path == "rogue.bin"
         ));
+        assert!(matches!(
+            snapshot.write_to(&artifact),
+            Err(SnapshotError::AlreadyExists(path)) if path == artifact
+        ));
+        assert!(SnapshotBundle::read_from(&artifact).is_err());
+    }
+
+    #[test]
+    fn recovery_handles_root_absence_and_unknown_records_idempotently() {
+        for fault in [SnapshotFault::AfterOldMoved, SnapshotFault::AfterPublished] {
+            let (_dir, root) = root();
+            fs::write(root.join("note.md"), b"stable").expect("note");
+            let snapshot = SnapshotBundle::capture(&root).expect("capture");
+            assert!(matches!(
+                SnapshotApplier::apply_with_fault(&root, &snapshot, Some(fault)),
+                Err(SnapshotError::FaultInjected(_))
+            ));
+            assert!(!root.exists());
+            let recovered = SnapshotApplier::recover(&root).expect("recover missing root");
+            assert_eq!(recovered.recovered, 1);
+            assert_eq!(
+                fs::read(root.join("note.md")).expect("restored note"),
+                b"stable"
+            );
+            assert_eq!(
+                SnapshotApplier::recover(&root)
+                    .expect("idempotent recovery")
+                    .recovered,
+                0
+            );
+        }
+
+        let (_dir, root) = root();
+        fs::write(root.join("note.md"), b"stable").expect("note");
+        let parent = root.parent().expect("parent");
+        let future = parent.join(".fub-snapshot-vault-future.record");
+        fs::write(&future, br#"{"schema_version":99}"#).expect("future record");
+        let foreign = parent.join(".foreign-vault-artifact");
+        fs::write(&foreign, b"keep").expect("foreign artifact");
+        assert_eq!(
+            SnapshotApplier::recover(&root)
+                .expect("future recovery")
+                .recovered,
+            0
+        );
+        assert!(future.exists());
+        assert!(foreign.exists());
     }
 
     #[test]

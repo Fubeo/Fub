@@ -192,10 +192,12 @@ fuori dal vault. Le cache dichiarate ricostruibili non entrano nel manifest.
 
 Il modulo `fub_kernel::snapshot` usa un manifest schema 1, ordinato per path
 relativo normalizzato. Ogni entry registra classe, proprietario, schema quando
-applicabile, dimensione e digest SHA-256. Il preflight rifiuta versioni future,
-path assoluti o con traversal, duplicati, symlink, file speciali, entry mancanti
-e mismatch di dimensione o digest. La classe è verificata dal catalogo
-esplicito: non si deduce che una directory intera sia cache dal solo prefisso.
+applicabile, dimensione e digest SHA-256. Il kernel non possiede il
+`FormatRegistry`: documenti, allegati e sconosciuti usano una sola classe
+`user`; settings/organizzazione/drafts/journal, cestino, sidecar e plugin hanno
+classi proprie. Il preflight rifiuta versioni future, path assoluti o con
+traversal, duplicati, symlink, file speciali, entry mancanti e mismatch di
+dimensione o digest.
 
 La base revision è il digest deterministico del manifest autorevole live.
 L'applicazione richiede un vault chiuso/quiescente, prende un lock cooperativo

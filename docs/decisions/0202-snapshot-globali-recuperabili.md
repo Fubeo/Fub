@@ -35,11 +35,14 @@ anagrafe `.fub/data/entries.json` e cache nello spazio dati derivato dei plugin.
 Un file sconosciuto non viene scartato solo perché vive sotto `.fub/data/`.
 
 Il manifest è schema 1, ordinato per path relativo normalizzato e serializzato in
-modo deterministico. Ogni entry dichiara classe, owner, schema quando applicabile,
-dimensione e digest SHA-256. Preflight rifiuta schema futuro, path assoluti,
-traversal, separatori non canonici, duplicati, symlink, file speciali, entry
-mancanti, dimensioni o digest errati e classi incompatibili col catalogo. La
-revisione di base è il digest SHA-256 del manifest autorevole live e viene
+modo deterministico. Ogni entry dichiara una classe, owner, schema quando
+applicabile, dimensione e digest SHA-256. La classe `user` è unica per documenti,
+allegati e file sconosciuti perché il kernel non possiede il `FormatRegistry`;
+settings/organizzazione/drafts/journal, sidecar, cestino e plugin hanno classi
+core proprie. Preflight rifiuta schema futuro, path assoluti, traversal,
+separatori non canonici, duplicati, symlink, file speciali, entry mancanti,
+dimensioni o digest errati e classi incompatibili con il catalogo path del kernel.
+La revisione di base è il digest SHA-256 del manifest autorevole live e viene
 ricontrollata sotto il lock subito prima della pubblicazione.
 
 L'applicazione usa un lock cooperativo stabile sibling e una transazione
