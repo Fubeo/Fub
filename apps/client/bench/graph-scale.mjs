@@ -15,6 +15,7 @@ const LIMITS = { nodes: [0, 0xffff_ffff], seed: [0, 0xffff_ffff], cycles: [1, 20
 const READY_SAFETY_TIMEOUT_MS = 30_000;
 const FRAME_SAMPLE_TARGET = 120;
 const FRAME_SAMPLE_SAFETY_TIMEOUT_MS = 30_000;
+const HEAP_GC_ROUNDS = 3;
 const HEAP_STABILITY = Object.freeze({
   nodes: 10_000,
   seed: 6,
@@ -240,6 +241,36 @@ async function installProbe(page) {
         nativeClearTimeout(sample.timer);
         return sample.times;
       },
+      // Warm keeps the simulation active past the measured 120 frames. Drain
+      // its app-owned rAF before GC so the next frame cannot perturb the heap
+      // sample. The poll uses the native rAF directly and allocates no tracked
+      // timer/resource records of its own.
+      waitIdle: (deadlineMs = 30_000) => new Promise((resolve, reject) => {
+        let timeoutId = null;
+        let pollId = null;
+        let settled = false;
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          if (timeoutId !== null) nativeClearTimeout(timeoutId);
+          if (pollId !== null) caf(pollId);
+          if (error) reject(error);
+          else resolve();
+        };
+        const check = () => {
+          pollId = null;
+          if ([...state.resources].every((record) => record.kind !== "raf")) {
+            finish();
+            return;
+          }
+          pollId = raf(check);
+        };
+        timeoutId = nativeSetTimeout(
+          () => finish(new Error(`graph idle deadline exceeded after ${deadlineMs}ms`)),
+          deadlineMs,
+        );
+        check();
+      }),
       snapshot,
       discard,
       details: () => {
@@ -319,7 +350,9 @@ const heapStability = (config, series) => {
 
 const collectHeap = async (session) => {
   try {
-    await session.send("HeapProfiler.collectGarbage");
+    for (let i = 0; i < HEAP_GC_ROUNDS; i++) {
+      await session.send("HeapProfiler.collectGarbage");
+    }
   } catch (error) {
     return { status: "unsupported", reason: String(error?.message ?? error) };
   }
@@ -486,6 +519,10 @@ async function main() {
           await warm.dispatchEvent("click");
           const framePromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
           const frameTimes = await framePromise;
+          await page.evaluate(
+            (deadlineMs) => window.__graphScaleProbe.waitIdle(deadlineMs),
+            FRAME_SAMPLE_SAFETY_TIMEOUT_MS,
+          );
           await page.evaluate(() => window.__graphScaleProbe.stopFrames());
           const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
           if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);

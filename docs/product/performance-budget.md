@@ -47,10 +47,11 @@ espone modello CPU e RAM dei runner, quindi quei dati restano non disponibili.
   del teardown, prima della scrittura del report.
 - **Resource delta:** risorse tracciate dopo close meno la baseline prima del
   mount, per tipo e totale. Il criterio desiderato è `0`.
-- **Heap complete:** ogni finestra del soak ha un valore numerico
-  `JSHeapUsedSize` dopo `HeapProfiler.collectGarbage`; da questa serie derivano
-  delta, conteggio degli incrementi monotoni e pendenza della regressione
-  lineare in byte/finestra.
+- **Heap complete:** ogni finestra del soak attende l'esaurimento del rAF
+  posseduto dal grafo, invia tre `HeapProfiler.collectGarbage` consecutivi e
+  registra un valore numerico `JSHeapUsedSize`; da questa serie derivano delta,
+  conteggio degli incrementi monotoni e pendenza della regressione lineare in
+  byte/finestra.
 
 ## Evidenza delle tre distribuzioni
 
@@ -90,7 +91,8 @@ Disponibilità incompleta o violazione di monotonia/slope rende il referto rosso
 
 La baseline è acquisita prima del mount e il controllo avviene dopo ogni close.
 Un delta positivo è una regressione di lifecycle per quella distribuzione; il
-valore osservato qui è `0`. Il soak raccoglie l'heap dopo GC a ogni finestra. Nel gate prolungato
+valore osservato qui è `0`. Il soak attende che il grafo sia quiescente e
+raccoglie l'heap dopo tre GC a ogni finestra. Nel gate prolungato
 `JSHeapUsedSize` deve essere disponibile per tutte le 16 finestre: heap
 incompleto è un fallimento, non un successo. Il controllo di stabilizzazione è
 separato dal resource delta strutturale, che resta pari a zero dopo ogni close.
