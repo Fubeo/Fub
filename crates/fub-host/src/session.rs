@@ -3692,8 +3692,10 @@ mod tests {
         let canonical_root = canonical_parent.join("vault");
         let aliased_root = alias_parent.join("sub").join("..").join("vault");
         let host = Host::without_watcher();
+        let canonical_key =
+            snapshot_recovery_root(&canonical_root).expect("canonical recovery root");
         let claim = host
-            .claim_snapshot(&canonical_root)
+            .claim_snapshot(&canonical_key)
             .expect("canonical snapshot claim");
 
         assert!(!canonical_root.exists());
