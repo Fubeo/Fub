@@ -436,11 +436,7 @@ impl SnapshotApplier {
         fault: Option<SnapshotFault>,
     ) -> Result<SnapshotApplyReport, SnapshotError> {
         snapshot.validate()?;
-        let metadata = symlink_metadata(root)?;
-        if !metadata.is_dir() {
-            return Err(SnapshotError::InvalidRoot(root.to_owned()));
-        }
-        let root = absolute_utf8(root)?;
+        let root = canonical_apply_root(root)?;
         let _lock = acquire_lock(&root)?;
         recover_locked(&root)?;
 
@@ -569,7 +565,7 @@ impl SnapshotApplier {
 
     /// Riconosce e risolve soltanto record con schema e nomi propri.
     pub fn recover(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotError> {
-        let root = absolute_utf8(root)?;
+        let root = recovery_root(root)?;
         let _lock = acquire_lock(&root)?;
         recover_locked(&root)
     }
@@ -1229,10 +1225,25 @@ fn sync_tree(path: &Utf8Path) -> Result<(), SnapshotError> {
 }
 
 fn sync_dir(path: &Utf8Path) -> Result<(), SnapshotError> {
-    let file = File::open(path.as_std_path())
-        .map_err(|source| io_error("open directory for sync", path, source))?;
-    file.sync_all()
-        .map_err(|source| io_error("sync directory", path, source))
+    #[cfg(windows)]
+    {
+        // Windows does not expose a durable directory handle through
+        // `File::open`; the rename itself is made write-through by the
+        // storage primitive. Preserve real metadata errors, but do not turn
+        // the platform's unsupported directory fsync into a false failure.
+        let metadata = symlink_metadata(path)?;
+        if !metadata.is_dir() {
+            return Err(SnapshotError::InvalidArtifact(path.to_owned()));
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        let file = File::open(path.as_std_path())
+            .map_err(|source| io_error("open directory for sync", path, source))?;
+        file.sync_all()
+            .map_err(|source| io_error("sync directory", path, source))
+    }
 }
 
 fn sync_parent(path: &Utf8Path) -> Result<(), SnapshotError> {
@@ -1264,6 +1275,43 @@ fn absolute_utf8(path: &Utf8Path) -> Result<Utf8PathBuf, SnapshotError> {
             .join(path)
     };
     Ok(absolute)
+}
+
+fn canonicalize_utf8(path: &Utf8Path, operation: &str) -> Result<Utf8PathBuf, SnapshotError> {
+    let canonical = path
+        .canonicalize()
+        .map_err(|source| io_error(operation, path, source))?;
+    Utf8PathBuf::from_path_buf(canonical)
+        .map_err(|path| SnapshotError::InvalidPath(path.to_string_lossy().into_owned()))
+}
+
+fn canonical_apply_root(root: &Utf8Path) -> Result<Utf8PathBuf, SnapshotError> {
+    let metadata = symlink_metadata(root)?;
+    if !metadata.is_dir() {
+        return Err(SnapshotError::InvalidRoot(root.to_owned()));
+    }
+    let absolute = absolute_utf8(root)?;
+    canonicalize_utf8(&absolute, "canonicalize snapshot root")
+}
+
+fn recovery_root(root: &Utf8Path) -> Result<Utf8PathBuf, SnapshotError> {
+    let absolute = absolute_utf8(root)?;
+    match fs::metadata(absolute.as_std_path()) {
+        Ok(metadata) if metadata.is_dir() => {
+            canonicalize_utf8(&absolute, "canonicalize recovery root")
+        }
+        Ok(_) => Err(SnapshotError::InvalidRoot(root.to_owned())),
+        Err(source) if source.kind() == io::ErrorKind::NotFound => {
+            let parent = absolute
+                .parent()
+                .ok_or_else(|| SnapshotError::InvalidRoot(root.to_owned()))?;
+            let name = absolute
+                .file_name()
+                .ok_or_else(|| SnapshotError::InvalidRoot(root.to_owned()))?;
+            Ok(canonicalize_utf8(parent, "canonicalize recovery parent")?.join(name))
+        }
+        Err(source) => Err(io_error("stat recovery root", &absolute, source)),
+    }
 }
 fn valid_transaction_id(id: &str) -> bool {
     !id.is_empty()

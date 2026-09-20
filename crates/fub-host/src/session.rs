@@ -3589,6 +3589,7 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
         std::fs::create_dir(&root).expect("vault root");
+        let root = root.canonicalize_utf8().expect("canonical root");
         let host = Host::without_watcher();
         let claim = host.claim_snapshot(&root).expect("snapshot claim");
         assert!(matches!(host.open(&root), Err(PluginError::Conflict(_))));
