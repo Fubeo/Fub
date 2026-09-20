@@ -1,6 +1,6 @@
 # Stato del progetto
 
-> **Stato aggiornato per `main@94f3f3e17c813b7cee4334f2ad37f35c482487de`, 20 settembre 2026.**
+> **Stato aggiornato per `main@d5a14aa40138081c2e3923a8970aae0bd0c3b582`, 20 settembre 2026.**
 
 ## Baseline corrente
 
