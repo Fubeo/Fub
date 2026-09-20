@@ -458,10 +458,8 @@ fn a_truncated_queue_does_not_steal_the_line_after_in_an_open_vault() {
 /// profondità dichiara la classe ([0048](../../../docs/decisions/0188-identita-path-e-rename.md)),
 /// e un registro di ciò che è successo non si rifà da niente.
 ///
-/// Il presidio è sul path e non su una frase, perché la riga di `todo.md` che
-/// apriva questa voce diceva `.fub/data/` — cioè la classe sbagliata scritta in
-/// prosa, che nessuno avrebbe visto diventare rossa.
-/// prosa, che nessuno avrebbe visto diventare rossa.
+/// Il presidio è sul path e non su una frase: `.fub/data/` sarebbe la classe
+/// sbagliata, e nessuno avrebbe visto diventare rossa questa distinzione.
 #[test]
 fn the_journal_is_authoritative_and_the_path_says_so() {
     let bench = Bench::new().mounts();

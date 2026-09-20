@@ -1,6 +1,6 @@
 //! **Hard e soft break restano due nodi distinti, dal parse alla resa.**
 //!
-//! Il difetto ([`todo.md`] voce MEDIUM) era in `convert_inlines`:
+//! Il difetto era in `convert_inlines`:
 //! `NodeValue::SoftBreak` e `NodeValue::LineBreak` producevano lo **stesso**
 //! `Inline::Text(" ")`. Il hard break spariva — un documento che in Obsidian
 //! si legge su due righe ne tornava una — e al giro dopo i due `Text`

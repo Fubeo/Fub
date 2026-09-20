@@ -1057,8 +1057,8 @@ impl CoreCommands {
             // `trash.restore`, che sta in questo stesso registro.
             // Nessuna scorciatoia, e in particolare **non** `Mod-Enter`:
             // quella la tiene l'editor, che spunta le todo delle righe
-            // selezionate nel **buffer** (`editor-commands.ts`). Sono due
-            // gesti su due oggetti diversi — il buffer e il file — e dare a
+            // selezionate nel **buffer** tramite i comandi Markdown dell'editor.
+            // Sono due gesti su due oggetti diversi — il buffer e il file — e dare a
             // entrambi la stessa combinazione vorrebbe dire che l'accordo
             // fa due cose a seconda di chi vince la corsa. Chi la invoca
             // oggi è chi ha una posizione da dare: la palette, un altro
