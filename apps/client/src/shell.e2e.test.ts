@@ -21,9 +21,9 @@
 // [decisione 0015](../../docs/decisions/0190-sessioni-documento-e-undo.md) diceva
 // che questi giri sarebbero diventati possibili.
 //
-// # Trentanove gesti, contati da fuori
+// # Quarantatré gesti, contati da fuori
 //
-// I gesti sono **trentanove** [conta: gesti-della-shell], e il numero è contato da
+// I gesti sono **quarantatré** [conta: gesti-della-shell], e il numero è contato da
 // `conteggi.mjs` invece che ricordato. Non è pedanteria: la
 // [0109](../../docs/decisions/0192-impostazioni-locale-e-temi.md)
 // ha misurato che *una suite che si svuota in silenzio è indistinguibile da una
@@ -345,6 +345,50 @@ describe("la menubar applicativa", () => {
 
     expect(errors).toEqual([]);
     expect(rejections).toEqual([]);
+  });
+});
+
+describe("il pannello delle impostazioni", () => {
+  it("si apre e si chiude senza una View Transition nativa", async () => {
+    const mounted = await mount({});
+    const stop = await mounted.startup;
+    await settle();
+    const start = vi.fn(() => {
+      throw new Error("View Transition non disponibile nel WebKit della shell");
+    });
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: start,
+    });
+
+    try {
+      const open = document.querySelector<HTMLButtonElement>("#open-settings");
+      const close = document.querySelector<HTMLButtonElement>("#settings-close");
+      const panel = document.querySelector<HTMLElement>("#settings-panel");
+      if (!open || !close || !panel) throw new Error("il pannello impostazioni non è montato");
+
+      open.click();
+      await settle();
+      expect(panel.hidden).toBe(false);
+      expect(panel.dataset.shellMotion).toBe("enter");
+      expect(start).not.toHaveBeenCalled();
+
+      close.click();
+      panel.dispatchEvent(new Event("animationend"));
+      expect(panel.hidden).toBe(true);
+      expect(start).not.toHaveBeenCalled();
+
+      open.click();
+      await settle();
+      expect(panel.hidden).toBe(false);
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      stop();
+      Object.defineProperty(document, "startViewTransition", {
+        configurable: true,
+        value: undefined,
+      });
+    }
   });
 });
 
