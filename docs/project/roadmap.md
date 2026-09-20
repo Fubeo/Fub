@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Stato aggiornato per `main@94f3f3e17c813b7cee4334f2ad37f35c482487de`, 20 settembre 2026.**
+> **Stato aggiornato per `main@d5a14aa40138081c2e3923a8970aae0bd0c3b582`, 20 settembre 2026.**
 
 La roadmap descrive direzione e ordine. Le GitHub Issues restano il tracker
 operativo; una capacità già consegnata non torna incompleta soltanto perché un
@@ -41,8 +41,7 @@ separati, determinismo, lifecycle, benchmark 2k/10k e gate hard sull'heap.
 
 ## Ora — preparazione del primo release candidate
 
-1. completare #5, ripristino atomico degli snapshot del database;
-2. classificare #9 rispetto al primo release candidate.
+1. completare #5, ripristino atomico degli snapshot del database.
 
 ## Prossimo — primo release candidate
 
@@ -61,6 +60,18 @@ Il candidato deve avere almeno:
 
 Lavoro post-release può includere l'evoluzione delle famiglie WASM differite,
 sync/collaborazione e altre capacità non necessarie al primo candidato.
+
+### #9 — sincronizzazione distribuita
+
+#9 resta OPEN e fuori dalla prima release. Fub non offre ancora una capacità
+utente distribuita: watcher, catch-up, rejoin e sincronizzazione fra superfici
+restano locali. L'issue non è il test mancante di una feature già pubblicata e
+non blocca il primo release candidate.
+
+Rientrerà in scope soltanto con una capacità end-to-end che offra e dimostri
+trasporto, almeno due repliche, disconnessione e riaggancio, consegna fuori
+ordine, esiti espliciti per le modifiche concorrenti, convergenza o conflitto
+non distruttivo, durabilità al riavvio e limiti di coda e memoria.
 
 ## Regola di avanzamento
 
