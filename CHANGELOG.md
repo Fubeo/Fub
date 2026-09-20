@@ -38,7 +38,11 @@ ciò che formerà la prima versione.
 
 - staccate da `Custody<Workspace>` le callback di produzione per lifecycle,
   restore, rename, watcher, manutenzione, flush degli indici e `BeforeWrite`,
-  con riconvalida, rollback e isolamento dei panic.
+  con riconvalida, rollback e isolamento dei panic;
+- evitati i crash WebKitGTK di File e Impostazioni disabilitando le transizioni
+  native sulle superfici problematiche senza rimuovere il moto CSS;
+- legati i timer differiti dei tooltip alla finestra proprietaria per rendere
+  sicuro il teardown dell'ambiente.
 
 ### In corso
 
