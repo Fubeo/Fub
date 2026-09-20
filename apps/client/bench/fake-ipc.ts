@@ -667,6 +667,57 @@ const TREES: Record<string, UiNode> = {
 // La porta.
 // ---------------------------------------------------------------------------
 
+const GRID: NonNullable<Options["grid"]> = {
+  surface: { id: "sheet", format: "fubsheet", family: "grid", protocol_version: 1 },
+  session: {
+    instance: "bench-grid",
+    revision: "bench-revision",
+    sheets: [{ id: "budget", name: "Budget 2026", row_count: 24, column_count: 10 }],
+  },
+  windows: [{
+    revision: "bench-revision",
+    sheet: "budget",
+    row_start: 0,
+    column_start: 0,
+    total_rows: 24,
+    total_columns: 10,
+    rows: Array.from({ length: 24 }, (_, index) => ({
+      id: `r${index}`, index, height: null, hidden: false,
+    })),
+    columns: Array.from({ length: 10 }, (_, index) => ({
+      id: `c${index}`, index, width: null, hidden: false,
+    })),
+    cells: [
+      ["r0", "c0", "Voce", "text", "Voce"],
+      ["r0", "c1", "Gennaio", "text", "Gennaio"],
+      ["r0", "c2", "Febbraio", "text", "Febbraio"],
+      ["r1", "c0", "Ricavi", "text", "Ricavi"],
+      ["r1", "c1", "12500", "number", 12500],
+      ["r1", "c2", "13200", "number", 13200],
+      ["r2", "c0", "Costi", "text", "Costi"],
+      ["r2", "c1", "7800", "number", 7800],
+      ["r2", "c2", "8100", "number", 8100],
+      ["r3", "c0", "Margine", "text", "Margine"],
+      ["r3", "c1", "=B2-B3", "number", 4700],
+      ["r3", "c2", "=C2-C3", "number", 5100],
+    ].map(([row, column, input, kind, value]) => ({
+      key: { sheet: "budget", row: String(row), column: String(column) },
+      input: String(input),
+      style: {
+        bold: row === "r0",
+        italic: false,
+        text_color: null,
+        fill_color: null,
+        horizontal: null,
+        number_format: null,
+      },
+      value: kind === "number"
+        ? { kind: "number" as const, value: Number(value) }
+        : { kind: "text" as const, value: String(value) },
+    })),
+  }],
+};
+
 const options: Options = {
   file: CORPUS,
   root: ROOT,
@@ -674,6 +725,7 @@ const options: Options = {
   commands: BENCH_COMMANDS,
   settings: SETTINGS,
   syntaxForms: [...MARKDOWN_SYNTAX],
+  grid: GRID,
 };
 
 const host = createFakeHost(options);

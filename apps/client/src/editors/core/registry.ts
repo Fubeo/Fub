@@ -61,6 +61,8 @@ export interface SurfaceRegistration {
   readonly owner: string;
   readonly family: SurfaceFamily;
   readonly defaultProfile: string;
+  /** Every profile a binding or explicit override may select for this family. */
+  readonly profiles?: readonly string[];
   readonly factory: SurfaceFactory;
   readonly formats?: Readonly<Record<string, string>>;
   readonly sources?: Readonly<Partial<Record<SourceKind, string>>>;
@@ -74,6 +76,7 @@ export interface ResolvedSurface {
 }
 
 interface RegistrationRecord extends SurfaceRegistration {
+  readonly profileSet: ReadonlySet<string>;
   readonly formats: Readonly<Record<string, string>>;
   readonly sources: Readonly<Partial<Record<SourceKind, string>>>;
 }
@@ -117,6 +120,10 @@ export class DocumentSurfaceRegistry {
     const owner = required("surface owner", registration.owner);
     const family = registration.family;
     const defaultProfile = required("surface default profile", registration.defaultProfile);
+    const profiles = new Set<string>([defaultProfile]);
+    for (const profile of registration.profiles ?? []) {
+      profiles.add(required("surface profile", profile));
+    }
     const formats = Object.fromEntries(
       Object.entries(registration.formats ?? {}).map(([format, profile]) => [
         required("format id", format),
@@ -129,6 +136,14 @@ export class DocumentSurfaceRegistry {
         required(`profile for source ${source}`, profile),
       ]),
     ) as Partial<Record<SourceKind, string>>;
+    for (const [binding, profile] of [
+      ...Object.entries(formats).map(([key, value]) => [`format:${key}`, value] as const),
+      ...Object.entries(sources).map(([key, value]) => [`source:${key}`, value] as const),
+    ]) {
+      if (!profiles.has(profile)) {
+        throw new TypeError(`surface binding ${binding} selects unregistered profile ${profile}`);
+      }
+    }
 
     const occupiedFamily = this.#families.get(family);
     if (occupiedFamily) {
@@ -151,6 +166,7 @@ export class DocumentSurfaceRegistry {
       owner,
       family,
       defaultProfile,
+      profileSet: profiles,
       factory: registration.factory,
       formats,
       sources,
@@ -175,7 +191,8 @@ export class DocumentSurfaceRegistry {
     if (request.override) {
       const overridden = this.#families.get(request.override.family);
       if (overridden) {
-        return this.#resolved(overridden, request.override.profile ?? overridden.defaultProfile);
+        const profile = request.override.profile ?? overridden.defaultProfile;
+        if (overridden.profileSet.has(profile)) return this.#resolved(overridden, profile);
       }
     }
     if (request.formatId) {
@@ -200,10 +217,10 @@ export class DocumentSurfaceRegistry {
       throw new Error(`surface family ${resolved.family} was unregistered before mount`);
     }
     const surface = resolved.factory.mount(resolved.profile, context);
-    if (surface.family !== resolved.family) {
+    if (surface.family !== resolved.family || surface.profile !== resolved.profile) {
       surface.destroy();
       throw new Error(
-        `surface factory ${resolved.owner} returned family ${surface.family}, expected ${resolved.family}`,
+        `surface factory ${resolved.owner} returned ${surface.family}/${surface.profile}, expected ${resolved.family}/${resolved.profile}`,
       );
     }
     const modeIds = new Set<string>();

@@ -33,7 +33,11 @@ verificata e `open/window/apply/reload/close/shutdown` passano da un token
 detached. Nessuna chiamata al provider Grid o al guest WASM vive sotto il lock;
 il risultato viene finalizzato dopo la riconvalida di workspace, owner e
 generazione. Il binding espone famiglia/versione e il registro conserva
-fallback e disposer per l'unload.
+fallback e disposer per l'unload. Una famiglia di superficie pubblica non è
+considerata consegnata per il solo fatto di esistere nell'ABI: il guard
+`public_surface_family_delivery` richiede insieme shell, fallback esplicito,
+mirror TypeScript, provider nativo e attraversamento WASM. Aggiungere una nuova
+costante pubblica `*_FAMILY` senza questi cinque consumatori rende rossa la CI.
 La cattura conserva il corpo fuori dalla rete di panic della dichiarazione:
 anche un errore di `Drop` successivo viene isolato, senza un doppio panic.
 
@@ -363,8 +367,8 @@ Schema, atomicità e rimozione sono descritti nel
 | startup autorizzato e gestione desktop | presenti |
 | UI non fidata | presente per provider `Trust::Community`; `Trust::Core` ammesso |
 
-Queste capacità sono presenti nella base audit corrente `2cc2e44c`; la loro
-promozione in `main` resta subordinata a G14 e G15/GO.
+Queste capacità sono presenti in `main` dalla PR #53; i limiti accettati da
+G15 restano documentati separatamente e non retrocedono le famiglie consegnate.
 
 Vedi [`../project/m5-wasm-runtime.md`](../project/m5-wasm-runtime.md).
 

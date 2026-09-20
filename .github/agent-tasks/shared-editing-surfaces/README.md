@@ -1,6 +1,6 @@
 # Shared editing surfaces — agent execution pack
 
-Questo albero contiene gli artefatti operativi per eseguire con agenti GPT-5.6 Luna le Fasi 0–3 di `docs/project/todo-superfici-di-editing-condivise.md`, tracker issue #11.
+Questo albero contiene gli artefatti operativi per eseguire con agenti GPT-5.6 Luna le Fasi 0–3 di il piano storico `docs/project/todo-superfici-di-editing-condivise.md` (rimosso dopo la chiusura di #11), tracker issue #11.
 
 Non è documentazione architetturale canonica. È un pacchetto di esecuzione: i task descrivono lavoro ancora da fare e devono essere rimossi o archiviati fuori dalla documentazione canonica quando non servono più.
 
@@ -10,7 +10,7 @@ L'agente orchestratore deve leggere, nell'ordine:
 
 1. `AGENTS.md`;
 2. `CONTRIBUTING.md`;
-3. `docs/project/todo-superfici-di-editing-condivise.md`;
+3. issue #11 e le pagine canoniche collegate;
 4. `GLOBAL-RULES.md`;
 5. `MANIFEST.md`;
 6. `ORCHESTRATOR.md`.
