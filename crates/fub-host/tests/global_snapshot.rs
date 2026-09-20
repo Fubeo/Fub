@@ -14,11 +14,15 @@ fn host_rejects_open_vault_and_reopens_after_offline_apply() {
 
     let host = Host::without_watcher();
     host.open(&root).expect("open");
-    let error = host.apply_snapshot(&root, &snapshot).expect_err("open vault is not quiescent");
+    let error = host
+        .apply_snapshot(&root, &snapshot)
+        .expect_err("open vault is not quiescent");
     assert!(matches!(error, fub_abi::PluginError::Conflict(_)));
     assert!(host.close().is_empty());
 
-    let report = host.apply_snapshot(&root, &snapshot).expect("apply and reopen");
+    let report = host
+        .apply_snapshot(&root, &snapshot)
+        .expect("apply and reopen");
     assert_eq!(report.entries, 1);
     host.wait_indexed(None).expect("reopen indexing");
     assert_eq!(fs::read(root.join("note.md")).expect("note"), b"offline");

@@ -1087,7 +1087,9 @@ impl Host {
         snapshot: &fub_kernel::snapshot::SnapshotBundle,
     ) -> Result<fub_kernel::snapshot::SnapshotApplyReport, PluginError> {
         if !root.is_dir() {
-            return Err(PluginError::NotFound(format!("Non è una cartella valida: {root}").into()));
+            return Err(PluginError::NotFound(
+                format!("Non è una cartella valida: {root}").into(),
+            ));
         }
         let root = canonical(root)?;
         let already_open = {
