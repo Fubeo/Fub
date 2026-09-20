@@ -100,30 +100,36 @@ Fub comprende convenzioni usate nei vault Markdown, tra cui frontmatter YAML,
 wikilink, tag, heading, ancore ed embed. Il provider decide la semantica del
 formato; il kernel conserva path e sorgente senza incorporare regole Markdown.
 
-## Backup e ripristino
+## Snapshot globale e backup
 
-Il backup completo riguarda l'intero vault: documenti, allegati, file
-sconosciuti, `.trash/`, stato autorevole sotto `.fub/` e storage autorevole
-dei plugin. La configurazione macchina è esclusa. Il banco focalizzato si
-esegue con:
+Lo snapshot globale offline comprende l'intero stato autorevole del vault:
+documenti, allegati, file sconosciuti, `.trash/`, stato autorevole sotto
+`.fub/` e storage autorevole dei plugin. La configurazione macchina è esclusa.
+Le cache dichiarate ricostruibili vengono invalidate e ricostruite alla
+riapertura, non copiate come se fossero autorità.
 
-```bash
-cargo +1.89.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
-```
+`fub_kernel::snapshot` prepara e valida in memoria un manifest schema 1 con
+path relativo normalizzato, classe, owner, schema quando applicabile, size e
+digest SHA-256. Rifiuta prima di ogni mutazione schema futuro, entry mancante o
+duplicata, traversal, symlink/file speciali e mismatch di size o digest. La
+base revision è il digest deterministico del manifest autorevole live e viene
+ricontrollata immediatamente prima del commit.
 
-Il fixture è versionato e il manifesto indipendente controlla ogni path,
-classe, dimensione, impronta FNV-1a e schema; symlink e file speciali sono
-rifiutati. Il flusso resta offline, con parent temporaneo privato ed
-esclusivo, staging adiacente e un solo rename di pubblicazione. Sono espliciti
-i limiti: nessuna garanzia universale di no-replace concorrente e nessuna
-garanzia di durabilità dopo un crash.
+L'applicazione richiede un vault chiuso e quiescente. Un lock sibling stabile,
+staging privato, record persistente e le fasi `prepare`/`commit`/`finalize`
+conservano il contenitore precedente fino alla pubblicazione verificata. Dopo un
+crash, l'host esegue la recovery prima dell'apertura: riconosce soltanto i
+propri artefatti con schema e transaction id validi, completa o annulla la
+fase deterministica e preserva file ignoti. La garanzia all-or-old-or-new vale
+tra writer cooperativi; writer esterni, filesystem senza rename/fsync durevoli
+e rollback impossibile restano limiti espliciti.
 
-Artefatti corrotti o mancanti falliscono la validazione prima dello staging e
-della destinazione. Una destinazione occupata conserva il contenuto esistente
-e lo staging completo. `Host` reale apre il vault ripristinato, attende
-l'indicizzazione, verifica la lettura del documento e chiude senza errori.
-
-`fub.backup` copia snapshot delle sole note nello storage namespaced dello stesso vault e al restore ricrea soltanto note mancanti; il drill completo resta separato.
+Questo flusso è distinto da `fub.versioning`:
+`version.restore` ripristina un solo documento con CAS per-file e non è una
+transazione dell'intero vault. È distinto anche dal drill backup/restore offline
+dell'issue [#7](https://github.com/Fubeo/Fub/issues/7), che conserva il proprio
+fixture e manifesto indipendente. La feature `fub.backup` resta invece uno
+snapshot namespaced delle sole note nello stesso vault.
 
 ## Limiti
 

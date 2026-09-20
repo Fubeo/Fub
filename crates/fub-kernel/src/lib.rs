@@ -75,6 +75,7 @@ pub mod safety;
 pub mod session;
 pub mod settings;
 pub mod storage;
+pub mod snapshot;
 pub mod syntax;
 mod tag_counts;
 pub mod time;
@@ -104,6 +105,11 @@ pub use registry::{FormatRegistry, RegistryConflict};
 pub use renderer::{RenderedDocument, RenderedPart, RendererConflict, RendererRegistry};
 pub use session::Session;
 pub use settings::{MachineSettings, SettingsStore, SharedSettings};
+pub use snapshot::{
+    apply_snapshot, recover_snapshots, SnapshotApplier, SnapshotApplyReport, SnapshotBundle,
+    SnapshotClass, SnapshotEntry, SnapshotError, SnapshotFault, SnapshotManifest,
+    SnapshotRecoveryReport, SNAPSHOT_SCHEMA_VERSION,
+};
 pub use storage::{update_atomic, write_atomic, Durable};
 pub use storage::{
     ConditionalWrite, DirEntry, EntryKind, FileIdentity, FsStorage, MemStorage, RootedFsStorage,

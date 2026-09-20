@@ -1052,10 +1052,60 @@ impl Host {
         };
         let info = match already_open {
             Some(info) => info,
-            None => self.mounts(&root)?,
+            None => {
+                // Gli artefatti di una transazione interrotta vengono risolti
+                // prima di montare watcher, provider o workspace. La recovery
+                // usa il lock sibling del kernel e non attraversa lock di
+                // `Custody`.
+                fub_kernel::snapshot::recover_snapshots(&root)
+                    .map_err(|error| PluginError::Io(error.to_string().into()))?;
+                self.mounts(&root)?
+            }
         };
         self.become_current(&root)?;
         Ok(info)
+    }
+    /// Esegue la recovery di eventuali snapshot globali lasciati da un crash
+    /// mentre il vault è chiuso. Non prende il lock del workspace.
+    pub fn recover_snapshot_artifacts(
+        &self,
+        root: &Utf8Path,
+    ) -> Result<fub_kernel::snapshot::SnapshotRecoveryReport, PluginError> {
+        let root = canonical(root)?;
+        fub_kernel::snapshot::recover_snapshots(&root)
+            .map_err(|error| PluginError::Io(error.to_string().into()))
+    }
+
+    /// Applica uno snapshot globale con il vault chiuso e lo riapre.
+    ///
+    /// Un vault aperto o in chiusura viene rifiutato invece di tentare una
+    /// quiescenza implicita: watcher, job e provider devono essere terminati
+    /// dal chiamante tramite [`Host::close_vault`] prima dell'I/O offline.
+    pub fn apply_snapshot(
+        &self,
+        root: &Utf8Path,
+        snapshot: &fub_kernel::snapshot::SnapshotBundle,
+    ) -> Result<fub_kernel::snapshot::SnapshotApplyReport, PluginError> {
+        if !root.is_dir() {
+            return Err(PluginError::NotFound(format!("Non è una cartella valida: {root}").into()));
+        }
+        let root = canonical(root)?;
+        let already_open = {
+            let sessions = self.sessions.read()?;
+            sessions.slots.contains_key(&root)
+        };
+        if already_open {
+            return Err(PluginError::Conflict(
+                "Il vault deve essere chiuso e quiescente prima di applicare uno snapshot globale."
+                    .into(),
+            ));
+        }
+        fub_kernel::snapshot::recover_snapshots(&root)
+            .map_err(|error| PluginError::Io(error.to_string().into()))?;
+        let report = fub_kernel::snapshot::apply_snapshot(&root, snapshot)
+            .map_err(|error| PluginError::Io(error.to_string().into()))?;
+        self.open(&root)?;
+        Ok(report)
     }
 
     /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):

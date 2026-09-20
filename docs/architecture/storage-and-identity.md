@@ -103,6 +103,48 @@ distingue lo stadio del lock dall'operazione protetta.
 La CAS è esatta fra writer che rispettano questo protocollo. Con writer
 esterni che ignorano il lock la protezione resta best-effort.
 
+## Snapshot globale
+
+Lo snapshot globale è una responsabilità del kernel, non del provider di
+versioning e non dell'IPC. `fub_kernel::snapshot` enumera soltanto lo stato
+autorevole dichiarato dal catalogo: documenti, allegati, sconosciuti, cestino,
+settings/organizzazione/drafts/journal, sidecar autorevoli e storage persistente
+dei plugin. La configurazione macchina e i derivati ricostruibili restano fuori.
+
+La fotografia produce un manifest schema 1 deterministico. Ogni path relativo
+normalizzato porta classe, owner, schema quando applicabile, size e SHA-256.
+Preflight completo rifiuta prima di scrivere schema futuro, path traversal,
+duplicati, symlink/file speciali, entry mancanti e mismatch di size/digest. La
+base revision è il digest del manifest live; il kernel la rilegge sotto un lock
+sibling stabile immediatamente prima del commit. Non deduce l'autorità dal solo
+prefisso `.fub/data/`.
+
+L'applicazione offline usa staging sibling privato e un record persistente
+idempotente:
+
+```mermaid
+sequenceDiagram
+    participant H as Host chiuso
+    participant K as Kernel snapshot
+    participant L as Root live
+    participant S as Staging sibling
+    H->>K: recovery startup
+    H->>K: apply(snapshot)
+    K->>K: preflight + base revision sotto lock
+    K->>S: prepare e fsync
+    K->>L: rename vecchia root in .old
+    K->>L: rename staging in root
+    K->>K: finalize solo dopo verifica
+    H->>K: riapertura e ricostruzione derivati
+```
+
+La vecchia root resta disponibile fino a `finalize`; un crash fra le fasi viene
+risolto dalla recovery riconoscendo soltanto schema, transaction id e nomi
+propri. File ignoti non vengono rimossi. La garanzia all-or-old-or-new vale tra
+writer cooperativi; writer esterni e filesystem senza rename/fsync durevoli non
+sono coperti da atomicità universale. Il restore per-file di `fub.versioning` e
+il drill backup #7 rimangono percorsi separati.
+
 ## Rename
 
 Un rename deve considerare:
