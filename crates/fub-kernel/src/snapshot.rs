@@ -347,7 +347,7 @@ impl SnapshotBundle {
     }
 
     fn write_container(&self, path: &Utf8Path) -> Result<(), SnapshotError> {
-        fs::create_dir_all(path.join(PAYLOAD_DIR).as_std_path())
+        create_private_directory_all(&path.join(PAYLOAD_DIR))
             .map_err(|source| io_error("create snapshot staging", path, source))?;
         let envelope = SnapshotEnvelope {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
@@ -360,7 +360,7 @@ impl SnapshotBundle {
         for (relative, bytes) in &self.files {
             let destination = path.join(PAYLOAD_DIR).join(relative);
             if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent.as_std_path())
+                create_private_directory_all(parent)
                     .map_err(|source| io_error("create snapshot payload parent", parent, source))?;
             }
             write_regular_file(&destination, bytes)?;
@@ -453,7 +453,7 @@ impl SnapshotApplier {
 
         let id = transaction_id();
         let paths = TransactionPaths::new(&root, &id)?;
-        fs::create_dir(&paths.staging)
+        create_private_directory(&paths.staging)
             .map_err(|source| io_error("create snapshot staging", &paths.staging, source))?;
         sync_parent(paths.staging.parent().unwrap_or(Utf8Path::new(".")))
             .map_err(|error| abort_precommit(&paths, error))?;
@@ -477,7 +477,7 @@ impl SnapshotApplier {
             }
             let destination = paths.staging.join(&entry.path);
             if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent.as_std_path()).map_err(|source| {
+                create_private_directory_all(parent).map_err(|source| {
                     abort_precommit(&paths, io_error("create staged parent", parent, source))
                 })?;
             }
@@ -766,6 +766,10 @@ fn recover_locked(root: &Utf8Path) -> Result<SnapshotRecoveryReport, SnapshotErr
                     // Crash dopo il marker Published ma prima della rename:
                     // completare il commit è deterministico e conserva la
                     // vecchia root fino alla verifica del nuovo manifest.
+                    sync_tree(&paths.staging).map_err(|error| SnapshotError::RecoveryNeeded {
+                        transaction_id: record.transaction_id.clone(),
+                        reason: format!("preparazione della pubblicazione: {error}"),
+                    })?;
                     fs::rename(paths.staging.as_std_path(), root.as_std_path()).map_err(
                         |source| SnapshotError::RecoveryNeeded {
                             transaction_id: record.transaction_id.clone(),
@@ -1027,12 +1031,43 @@ fn validate_relative_path(path: &str) -> Result<(), SnapshotError> {
     let mut saw = false;
     for component in candidate.components() {
         match component {
-            Component::Normal(name) if !name.is_empty() => saw = true,
+            Component::Normal(name) if !name.is_empty() => {
+                let name = name
+                    .to_str()
+                    .ok_or_else(|| SnapshotError::InvalidPath(path.to_owned()))?;
+                validate_portable_component(name, path)?;
+                saw = true;
+            }
             _ => return Err(SnapshotError::InvalidPath(path.to_owned())),
         }
     }
     let normalized = normalize_path(candidate)?;
     if !saw || normalized != path {
+        return Err(SnapshotError::InvalidPath(path.to_owned()));
+    }
+    Ok(())
+}
+
+fn validate_portable_component(name: &str, path: &str) -> Result<(), SnapshotError> {
+    if name.ends_with(['.', ' '])
+        || name.chars().any(|character| {
+            character.is_control() || matches!(character, '<' | '>' | ':' | '"' | '|' | '?' | '*')
+        })
+    {
+        return Err(SnapshotError::InvalidPath(path.to_owned()));
+    }
+    let device = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim_end_matches(['.', ' '])
+        .to_ascii_uppercase();
+    let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (device.len() == 4
+            && (device.starts_with("COM") || device.starts_with("LPT"))
+            && device.as_bytes()[3].is_ascii_digit()
+            && device.as_bytes()[3] != b'0');
+    if reserved {
         return Err(SnapshotError::InvalidPath(path.to_owned()));
     }
     Ok(())
@@ -1108,14 +1143,46 @@ fn is_derived_file(path: &str) -> bool {
     path == ".fub/data/entries.json"
 }
 
+fn create_private_directory(path: &Utf8Path) -> io::Result<()> {
+    fs::create_dir(path.as_std_path())?;
+    set_private_directory_permissions(path)
+}
+
+fn create_private_directory_all(path: &Utf8Path) -> io::Result<()> {
+    fs::create_dir_all(path.as_std_path())?;
+    set_private_directory_permissions(path)
+}
+
+fn set_private_directory_permissions(path: &Utf8Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path.as_std_path(), fs::Permissions::from_mode(0o700))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}
+
+fn set_private_file_permissions(file: &File, path: &Utf8Path) -> io::Result<()> {
+    let _ = path;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        file.set_permissions(fs::Permissions::from_mode(0o600))
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (file, path);
+        Ok(())
+    }
+}
+
 fn read_regular_file(path: &Utf8Path) -> Result<Vec<u8>, SnapshotError> {
     let mut options = OpenOptions::new();
     options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW);
-    }
     #[cfg(windows)]
     {
         use std::os::windows::fs::OpenOptionsExt;
@@ -1149,7 +1216,10 @@ fn write_regular_file(path: &Utf8Path, bytes: &[u8]) -> Result<(), SnapshotError
     let mut file = options
         .open(path.as_std_path())
         .map_err(|source| io_error("create snapshot payload", path, source))?;
-    if let Err(source) = file.write_all(bytes).and_then(|_| file.sync_all()) {
+    if let Err(source) = set_private_file_permissions(&file, path)
+        .and_then(|_| file.write_all(bytes))
+        .and_then(|_| file.sync_all())
+    {
         let _ = fs::remove_file(path.as_std_path());
         return Err(io_error("write snapshot payload", path, source));
     }
@@ -1203,6 +1273,8 @@ fn sync_tree(path: &Utf8Path) -> Result<(), SnapshotError> {
     if !metadata.is_dir() {
         return Err(SnapshotError::InvalidArtifact(path.to_owned()));
     }
+    set_private_directory_permissions(path)
+        .map_err(|source| io_error("set private snapshot directory", path, source))?;
     let mut entries = Vec::new();
     let read_dir = fs::read_dir(path.as_std_path())
         .map_err(|source| io_error("enumerate directory for sync", path, source))?;
@@ -1554,6 +1626,7 @@ mod tests {
 
         let traversal = SnapshotManifest {
             schema_version: SNAPSHOT_SCHEMA_VERSION,
+
             entries: vec![SnapshotEntry {
                 path: "../outside".into(),
                 class: SnapshotClass::User,
@@ -1611,6 +1684,91 @@ mod tests {
                 Err(SnapshotError::InvalidPath(found)) if found == path
             ));
         }
+    }
+
+    #[test]
+    fn path_preflight_rejects_windows_reserved_syntax_on_every_platform() {
+        for path in [
+            "a:b",
+            "a<b",
+            "a>b",
+            "a\"b",
+            "a|b",
+            "a?b",
+            "a*b",
+            "CON",
+            "con.txt",
+            "PrN.md",
+            "AUX.data",
+            "nul.bin",
+            "COM1.log",
+            "com9",
+            "LPT1.txt",
+            "lpt9",
+            "trailing.",
+            "trailing ",
+            "control\u{1}.txt",
+        ] {
+            assert!(matches!(
+                validate_relative_path(path),
+                Err(SnapshotError::InvalidPath(found)) if found == path
+            ));
+        }
+        for path in [
+            "CONSOLE.txt",
+            "COM10.txt",
+            "LPT0.txt",
+            "normal.txt",
+            "dir/NULable.txt",
+        ] {
+            assert!(
+                validate_relative_path(path).is_ok(),
+                "valid near-case rejected: {path}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn apply_normalizes_new_tree_permissions_to_private_modes() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_dir, root) = root();
+        let nested = root.join("nested");
+        fs::create_dir(&nested).expect("nested");
+        fs::write(nested.join("note.md"), b"note").expect("note");
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).expect("root mode");
+        fs::set_permissions(&nested, fs::Permissions::from_mode(0o755)).expect("nested mode");
+        fs::set_permissions(nested.join("note.md"), fs::Permissions::from_mode(0o644))
+            .expect("file mode");
+
+        let snapshot = SnapshotBundle::capture(&root).expect("capture");
+        SnapshotApplier::apply(&root, &snapshot).expect("apply");
+
+        assert_eq!(
+            fs::metadata(&root)
+                .expect("root metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(&nested)
+                .expect("nested metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        assert_eq!(
+            fs::metadata(nested.join("note.md"))
+                .expect("file metadata")
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
     }
 
     #[test]

@@ -210,6 +210,13 @@ immediatamente prima del commit. Un record persistente coordina `prepare`,
 la nuova è pubblicata. La recovery startup riconosce solo schema, id e nomi
 propri, completa o annulla la fase osservata e non cancella artefatti ignoti.
 
+
+Per lo schema 1 la pubblicazione ricrea il contenitore con directory POSIX
+`0700` e file `0600`, anche se la sorgente aveva permessi più permissivi:
+owner, ACL, xattr e bit executable non fanno parte del manifest e non vengono
+preservati. Su Windows non c'è questa normalizzazione POSIX: ACL e proprietà
+sono quelle con cui il filesystem crea lo staging (normalmente ereditate dal
+parent), non sono rappresentate né garantite dallo snapshot.
 Writer cooperativi ottengono all-or-old-or-new. Writer esterni, filesystem senza
 rename o fsync durevoli e guasti che impediscono il rollback sono fuori dalla
 garanzia universale; l'esito espone una necessità di recovery invece di fingere

@@ -75,6 +75,49 @@ fn host_rejects_open_vault_and_reopens_after_offline_apply() {
     assert!(host.close().is_empty());
 }
 
+#[test]
+fn host_recovery_requires_quiescent_vault() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let root = Utf8PathBuf::from_path_buf(directory.path().join("vault")).expect("utf8 root");
+    fs::create_dir(&root).expect("vault root");
+    fs::write(root.join("note.md"), b"stable").expect("note");
+
+    let host = Host::without_watcher();
+    host.open(&root).expect("open");
+    let error = host
+        .recover_snapshot_artifacts(&root)
+        .expect_err("recovery must conflict with an open vault");
+    assert!(matches!(
+        error,
+        SnapshotHostError::Lifecycle(fub_abi::PluginError::Conflict(_))
+    ));
+    assert!(host.close().is_empty());
+}
+
+#[test]
+fn host_open_reports_not_found_for_missing_and_non_directory_roots() {
+    let directory = tempfile::tempdir().expect("tempdir");
+    let missing = Utf8PathBuf::from_path_buf(directory.path().join("missing")).expect("missing");
+    let missing_nested =
+        Utf8PathBuf::from_path_buf(directory.path().join("missing/vault")).expect("nested");
+    let file = Utf8PathBuf::from_path_buf(directory.path().join("vault.txt")).expect("file");
+    fs::write(&file, b"not a vault").expect("file");
+    let host = Host::without_watcher();
+
+    assert!(matches!(
+        host.open(&missing),
+        Err(fub_abi::PluginError::NotFound(_))
+    ));
+    assert!(matches!(
+        host.open(&file),
+        Err(fub_abi::PluginError::NotFound(_))
+    ));
+    assert!(matches!(
+        host.open(&missing_nested),
+        Err(fub_abi::PluginError::NotFound(_))
+    ));
+}
+
 #[cfg(unix)]
 #[test]
 fn host_rejects_symlink_alias_for_snapshot_apply() {

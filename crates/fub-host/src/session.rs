@@ -1105,8 +1105,36 @@ impl Host {
     /// spostava il corrente e lasciava i recenti nell'ordine vecchio — cioè
     /// l'unica delle due cose che l'utente rivede al prossimo avvio.
     pub fn open(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
+        let root_is_directory = match std::fs::metadata(root.as_std_path()) {
+            Ok(metadata) if metadata.is_dir() => true,
+            Ok(_) => {
+                return Err(PluginError::NotFound(
+                    format!("Non è una cartella valida: {root}").into(),
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(PluginError::Io(
+                    format!("non riesco a leggere {root}: {error}").into(),
+                ));
+            }
+        };
+        if !root_is_directory {
+            let parent = root
+                .parent()
+                .filter(|parent| !parent.as_str().is_empty())
+                .unwrap_or(Utf8Path::new("."));
+            let parent_is_directory = std::fs::metadata(parent.as_std_path())
+                .map(|metadata| metadata.is_dir())
+                .unwrap_or(false);
+            if !parent_is_directory {
+                return Err(PluginError::NotFound(
+                    format!("Non è una cartella valida: {root}").into(),
+                ));
+            }
+        }
         let recovery_root = snapshot_recovery_root(root)?;
-        let existing_root = root.is_dir().then(|| canonical(root)).transpose()?;
+        let existing_root = root_is_directory.then(|| canonical(root)).transpose()?;
         let root = if let Some(root) = existing_root {
             let already_open = {
                 let sessions = self.sessions.read()?;
@@ -1153,21 +1181,27 @@ impl Host {
         Ok(info)
     }
     /// Esegue la recovery di eventuali snapshot globali lasciati da un crash
-    /// mentre il vault è chiuso. Non prende il lock del workspace.
+    /// mentre il vault è chiuso. Prende lo stesso claim `Applying` di
+    /// [`Host::apply_snapshot`], anche quando la root live è assente, e non
+    /// prende il lock del workspace.
     pub fn recover_snapshot_artifacts(
         &self,
         root: &Utf8Path,
     ) -> Result<fub_kernel::snapshot::SnapshotRecoveryReport, SnapshotHostError> {
-        let recovery_root = snapshot_recovery_root(root).map_err(SnapshotHostError::Lifecycle)?;
-        let mut report = fub_kernel::snapshot::recover_snapshots(&recovery_root)?;
-        if root.is_dir() {
-            let canonical = canonical(root).map_err(SnapshotHostError::Lifecycle)?;
-            if canonical != recovery_root {
-                let next = fub_kernel::snapshot::recover_snapshots(&canonical)?;
-                report.recovered += next.recovered;
-            }
+        if root.exists() && !root.is_dir() {
+            return Err(SnapshotHostError::Lifecycle(PluginError::NotFound(
+                format!("Non è una cartella valida: {root}").into(),
+            )));
         }
-        Ok(report)
+        let recovery_root = if root.is_dir() {
+            canonical(root).map_err(SnapshotHostError::Lifecycle)?
+        } else {
+            snapshot_recovery_root(root).map_err(SnapshotHostError::Lifecycle)?
+        };
+        let claim = self.claim_snapshot(&recovery_root)?;
+        let result = fub_kernel::snapshot::recover_snapshots(&recovery_root).map_err(Into::into);
+        drop(claim);
+        result
     }
 
     /// Applica uno snapshot globale con il vault chiuso e lo riapre.
@@ -2445,25 +2479,31 @@ impl Host {
     /// L'ordine che conta è dentro ciascuno — l'inverso della dichiarazione dei
     /// suoi plugin — e lo tiene [`Workspace::close`].
     pub fn close(&self) -> Vec<PluginError> {
-        let claimed = {
-            let mut sessions = match self.sessions.write() {
-                Ok(sessions) => sessions,
-                Err(and) => return vec![and],
-            };
-            let mut claimed = Vec::new();
-            for (root, slot) in &mut sessions.slots {
-                if matches!(slot, SessionSlot::Open(_)) {
-                    let token = Arc::new(ClosingToken);
-                    let SessionSlot::Open(session) =
-                        std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
-                    else {
-                        unreachable!("lo slot verificato era aperto")
-                    };
-                    claimed.push((root.clone(), token, session));
+        let claimed =
+            {
+                let mut sessions = match self.sessions.write() {
+                    Ok(sessions) => sessions,
+                    Err(and) => return vec![and],
+                };
+                if let Some(root) = sessions.slots.iter().find_map(|(root, slot)| {
+                    matches!(slot, SessionSlot::Applying(_)).then_some(root)
+                }) {
+                    return vec![applying_conflict(root)];
                 }
-            }
-            claimed
-        };
+                let mut claimed = Vec::new();
+                for (root, slot) in &mut sessions.slots {
+                    if matches!(slot, SessionSlot::Open(_)) {
+                        let token = Arc::new(ClosingToken);
+                        let SessionSlot::Open(session) =
+                            std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
+                        else {
+                            unreachable!("lo slot verificato era aperto")
+                        };
+                        claimed.push((root.clone(), token, session));
+                    }
+                }
+                claimed
+            };
         let claimed: Vec<_> = claimed
             .into_iter()
             .map(|(root, token, session)| CloseClaim {
@@ -3116,10 +3156,12 @@ fn snapshot_recovery_root(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
             ))
         };
     };
-    let parent = root.parent().unwrap_or(Utf8Path::new("."));
-    Ok(canonical(parent)?.join(leaf))
+    let parent = root
+        .parent()
+        .filter(|parent| !parent.as_str().is_empty())
+        .unwrap_or(Utf8Path::new("."));
+    Ok(parent.join(leaf))
 }
-
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
         .canonicalize()
@@ -3592,7 +3634,26 @@ mod tests {
         let host = Host::without_watcher();
         let claim = host.claim_snapshot(&root).expect("snapshot claim");
         assert!(matches!(host.open(&root), Err(PluginError::Conflict(_))));
+        let close_errors = host.close();
+        assert!(matches!(
+            close_errors.as_slice(),
+            [PluginError::Conflict(_)]
+        ));
         drop(claim);
         assert!(host.sessions.read().expect("sessions").slots.is_empty());
+    }
+
+    #[test]
+    fn applying_claim_blocks_recovery_for_missing_root() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+        let host = Host::without_watcher();
+        let recovery_root = snapshot_recovery_root(&root).expect("recovery root");
+        let claim = host.claim_snapshot(&recovery_root).expect("snapshot claim");
+        assert!(matches!(
+            host.recover_snapshot_artifacts(&root),
+            Err(SnapshotHostError::Lifecycle(PluginError::Conflict(_)))
+        ));
+        drop(claim);
     }
 }

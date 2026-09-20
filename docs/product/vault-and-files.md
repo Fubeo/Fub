@@ -130,6 +130,12 @@ garanzia all-or-old-or-new vale tra writer cooperativi; writer esterni,
 filesystem senza rename/fsync durevoli e rollback impossibile restano limiti
 espliciti.
 
+Per lo schema 1 la pubblicazione usa directory POSIX `0700` e file `0600`;
+owner, ACL, xattr e bit executable non sono portabili nel manifest e quindi
+non vengono preservati. Su Windows ACL e proprietà restano quelle applicate
+dal filesystem alla creazione dello staging, normalmente ereditate dal
+parent, e non sono rappresentate né garantite dallo snapshot.
+
 Questo flusso è distinto da `fub.versioning`:
 `version.restore` ripristina un solo documento con CAS per-file e non è una
 transazione dell'intero vault. È distinto anche dal drill backup/restore offline
