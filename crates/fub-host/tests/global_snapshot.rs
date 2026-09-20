@@ -19,6 +19,7 @@ fn host_rejects_open_vault_and_reopens_after_offline_apply() {
         .expect_err("open vault is not quiescent");
     assert!(matches!(error, fub_abi::PluginError::Conflict(_)));
     assert!(host.close().is_empty());
+    let snapshot = SnapshotBundle::capture(&root).expect("current snapshot");
 
     let report = host
         .apply_snapshot(&root, &snapshot)
