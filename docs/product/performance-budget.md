@@ -18,14 +18,15 @@ script npm in [`apps/client/package.json`](../../apps/client/package.json#L12-L1
 cd apps/client
 npm run bench:graph-scale -- --nodes 2000 --seed 6 --cycles 3
 npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 8
+npm run bench:graph-scale -- --nodes 10000 --seed 6 --cycles 1 --soak-windows 16
 npm run bench:verify
 ```
 
 La stessa sequenza di scala è nel workflow CI
 [`ci.yml`](../../.github/workflows/ci.yml#L195-L222). Il timeout di sicurezza
-canonico resta **30 s per campione**. Il gate automatico primario è il referto
-`pass`; le soglie numeriche di questa pagina sono criteri di review provvisori
-e **non sono applicate dalla CI**.
+canonico resta **30 s per campione**. Il referto `pass` include i controlli hard di lifecycle e, sul comando
+10k/seed 6 con almeno 16 finestre, anche il gate di stabilizzazione heap.
+I budget di frame time restano osservazionali e non sono applicati dalla CI.
 
 La distribuzione locale è stata misurata su Linux x64
 `6.12.107+deb13-amd64`, Node `22.23.1`, Intel N150 con 4 CPU logiche e
@@ -46,10 +47,11 @@ espone modello CPU e RAM dei runner, quindi quei dati restano non disponibili.
   del teardown, prima della scrittura del report.
 - **Resource delta:** risorse tracciate dopo close meno la baseline prima del
   mount, per tipo e totale. Il criterio desiderato è `0`.
-- **Heap complete:** ogni finestra del soak ha un valore numerico
-  `JSHeapUsedSize` dopo `HeapProfiler.collectGarbage`; da questa serie derivano
-  delta, conteggio degli incrementi monotoni e pendenza della regressione
-  lineare in byte/finestra.
+- **Heap complete:** ogni finestra del soak attende l'esaurimento del rAF
+  posseduto dal grafo, invia tre `HeapProfiler.collectGarbage` consecutivi e
+  registra un valore numerico `JSHeapUsedSize`; da questa serie derivano delta,
+  conteggio degli incrementi monotoni e pendenza della regressione lineare in
+  byte/finestra.
 
 ## Evidenza delle tre distribuzioni
 
@@ -75,20 +77,25 @@ Sono budget per la review, non ancora gate CI numerici:
 | 2k | ≤ 25 ms | ≤ 50 ms | total ≤ 10 s | initial: 120 frame | **Review-only**, non CI-enforced |
 | 10k | initial ≤ 35 ms | ≤ 50 ms | total soak ≤ 60 s | initial: 120 frame; soak: 8 × 120 = 960 frame | **Review-only**, non CI-enforced |
 
-Il runner già fallisce su digest inatteso, campione incompleto, interazione non
-causale, risorse positive dopo close, errori primari o cleanup non riuscito;
-questi sono controlli hard del referto. La review richiede inoltre heap
-`complete`, conteggio degli incrementi monotoni `< 7` e slope
-`≤ 65536 B/window`. Questi limiti heap restano review-only finché non sono
-promossi esplicitamente a gate CI.
+Il runner fallisce su digest inatteso, campione incompleto, interazione non
+causale, risorse positive dopo close, errori primari o cleanup non riuscito.
+Per la fixture 10k/seed 6 il gate prolungato usa 16 finestre: 8 di warm-up e
+8 di misura. Dopo GC, tutte le misure di coda devono essere disponibili; la
+coda deve avere meno di 7 incrementi su 7 transizioni e slope lineare
+`≤ 65536 B/window`. La soglia è il precedente limite di review, ora applicato
+soltanto dopo il warm-up: tollera il rumore già osservato in CI ma rifiuta una
+crescita persistente superiore a circa 0,5 MiB sull'intera coda misurata.
+Disponibilità incompleta o violazione di monotonia/slope rende il referto rosso.
 
 ## Regole di memoria e risorse
 
 La baseline è acquisita prima del mount e il controllo avviene dopo ogni close.
 Un delta positivo è una regressione di lifecycle per quella distribuzione; il
-valore osservato qui è `0`. Il soak raccoglie l'heap dopo GC a ogni finestra e
-non deve essere dichiarato completo se il browser non espone
-`JSHeapUsedSize`. Heap non disponibile è un'assenza di evidenza, non un successo.
+valore osservato qui è `0`. Il soak attende che il grafo sia quiescente e
+raccoglie l'heap dopo tre GC a ogni finestra. Nel gate prolungato
+`JSHeapUsedSize` deve essere disponibile per tutte le 16 finestre: heap
+incompleto è un fallimento, non un successo. Il controllo di stabilizzazione è
+separato dal resource delta strutturale, che resta pari a zero dopo ogni close.
 
 Il cleanup deve chiudere browser e server e riportare `success: true`. La
 completezza del heap, il delta delle risorse e il cleanup vanno conservati nel
@@ -110,15 +117,12 @@ dalla complessità asintotica.
 
 ## Stato e ricalibrazione
 
-Le issue [#6](https://github.com/Fubeo/Fub/issues/6) (scala e durata) e
-[#12](https://github.com/Fubeo/Fub/issues/12) (modularizzazione del renderer)
-restano **OPEN**. La [PR #40](https://github.com/Fubeo/Fub/pull/40) resta
-**OPEN, DRAFT** e la decisione corrente è **NO-GO**; questa pagina non chiude
-nessuno dei tre lavori.
+#12 e #40 sono chiuse come consegna integrata. #56 possiede il residuo heap di
+[#6](https://github.com/Fubeo/Fub/issues/6): #6 può essere chiusa soltanto dopo
+più esecuzioni verdi sullo stesso SHA del gate prolungato.
 
 Ricalibrare dopo ulteriori distribuzioni o quando cambiano browser, sistema,
 hardware, fixture, renderer o algoritmo. Confrontare sempre la stessa fixture e
 lo stesso digest, aggiungere le nuove distribuzioni alla serie e riesaminare
-p50/p95/max, total, delta, heap e slope insieme. Fino a quel riesame, mantenere
-le soglie numeriche come criteri di review osservazionali e non convertirle in
-claim universali o in gate CI impliciti.
+p50/p95/max, total, delta, heap e slope insieme. I budget di frame time restano osservazionali; il solo limite numerico heap
+descritto sopra è invece un gate CI esplicito e limitato alla fixture canonica.

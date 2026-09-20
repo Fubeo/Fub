@@ -70,4 +70,19 @@ describe("il suggerimento della shell", () => {
     expect(document.querySelector('[role="tooltip"]')).toBeNull();
     expect(row.hasAttribute("aria-describedby")).toBe(false);
   });
+
+  it("smonta un bersaglio staccato anche durante il teardown dell'ambiente", () => {
+    const row = document.createElement("div");
+    document.body.append(row);
+    attachTooltip(row, "Progetti/Archivio");
+    row.dispatchEvent(new MouseEvent("mouseenter"));
+    row.remove();
+
+    vi.stubGlobal("window", undefined);
+    try {
+      expect(() => vi.advanceTimersByTime(TOOLTIP_DELAY_MS)).not.toThrow();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
