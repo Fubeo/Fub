@@ -463,8 +463,7 @@ impl SnapshotApplier {
             return Err(SnapshotError::FaultInjected("after prepare"));
         }
 
-        let mut written = 0usize;
-        for entry in &snapshot.manifest.entries {
+        for (written, entry) in snapshot.manifest.entries.iter().enumerate() {
             if let Some(SnapshotFault::DuringWrite { entries }) = fault {
                 if written >= entries {
                     return Err(abort_precommit(
@@ -484,7 +483,6 @@ impl SnapshotApplier {
                 snapshot.files.get(&entry.path).expect("validated payload"),
             )
             .map_err(|error| abort_precommit(&paths, error))?;
-            written += 1;
         }
         sync_dir(&paths.staging);
 
@@ -794,6 +792,7 @@ fn acquire_lock(root: &Utf8Path) -> Result<File, SnapshotError> {
         .create(true)
         .read(true)
         .write(true)
+        .truncate(false)
         .open(path.as_std_path())
         .map_err(|source| io_error("open snapshot lock", &path, source))?;
     file.lock()
