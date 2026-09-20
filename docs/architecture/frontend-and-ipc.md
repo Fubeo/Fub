@@ -286,18 +286,21 @@ lo stesso JSON strict nel client, virtualizza righe e colonne e produce
 guardata; i reload full-text restano il fallback autorevole.
 
 Editor in-cell e formula bar usano due istanze di `TextEngine` con
-`FormulaProfile`, ma nessuna battuta attraversa IPC. Dopo un commit,
-`host/sheet.ts` invia la sorgente completa con `query_index`, nel namespace
-`fub.sheet`. Il provider nativo usa `Workbook::parse()` e
-`Workbook::evaluate()`. La richiesta privata ha specie `evaluate`, versione
-intera e campi chiusi; il risultato conserva valori ed errori formula tipizzati.
-La sorgente è limitata a 16 MiB e la risposta JSON, envelope compreso, a 8 MiB.
+`FormulaProfile`, ma nessuna battuta attraversa IPC. Il pilot read-only
+`fub.sheet` passa dalla route `query_index` in
+`crates/fub-host/src/sheet/index.rs`; il mirror TypeScript di
+`SheetEvaluation` è in `apps/client/src/host/contract.ts`. Il provider nativo
+usa `Workbook::parse()` e `Workbook::evaluate()`. La richiesta privata ha
+specie `evaluate`, versione intera e campi chiusi; il risultato conserva valori
+ed errori formula tipizzati. La sorgente è limitata a 16 MiB e la risposta JSON,
+envelope compreso, a 8 MiB.
 
-Il bundle `fub.sheet` possiede la route nel registro. Disabilitarlo ritira la
-valutazione senza rimuovere il formato sorgente; riabilitarlo registra di nuovo
-il provider. Le generazioni asincrone scartano risposte stantie. Se la query
-non è servita, la superficie dichiara `data-evaluation="unavailable"` e mostra
-gli input grezzi senza duplicare il linguaggio formule in TypeScript.
+Il bundle `fub.sheet` possiede la route nel registro. Disabilitarlo ritira il
+pilot e rende la query `Unserved`; questo percorso resta distinto dalla famiglia
+Grid. `GridEngine` usa infatti il `GridHost` tipizzato per negoziare il
+protocollo a finestre. Se il provider Grid non è disponibile o una finestra
+fallisce, la superficie dichiara `data-grid-protocol="fallback"` e mostra gli
+input grezzi senza duplicare il linguaggio formule in TypeScript.
 
 `crates/fub-format-sheet/src/session.rs` possiede il motore derivato. Apertura e
 reload costruiscono una sola valutazione e gli indici delle coordinate; le
@@ -325,10 +328,10 @@ Questi tipi attraversano ora il contratto Rust↔WIT↔TypeScript e le porte IPC
 tipizzate della famiglia Grid. La shell non riceve DOM, callback JavaScript o
 oggetti CodeMirror: possiede rendering, input, clipboard, selezione e stato
 visuale, mentre il provider possiede parsing, formule e dipendenze.
-`query_index` resta read-only; per `.fubsheet` serve soltanto la valutazione
-privata completa e non è il percorso delle finestre, patch, invalidazioni o
-lifecycle Grid. Limiti, coordinate, fallback, diff UTF-8 e parità nativo/WASM
-sono normati in [ABI e WIT](../reference/abi-and-wit.md) e nel [contratto
+`query_index` resta read-only e ospita il pilot `fub.sheet`; non è il percorso
+delle finestre, patch, invalidazioni o lifecycle Grid, che passano da `GridHost`.
+Limiti, coordinate, fallback, diff UTF-8 e parità nativo/WASM sono normati in
+[ABI e WIT](../reference/abi-and-wit.md) e nel [contratto
 IPC](../reference/ipc-contract.md). Nessuna battuta genera IPC o WASM.
 
 ## Confine CodeMirror
