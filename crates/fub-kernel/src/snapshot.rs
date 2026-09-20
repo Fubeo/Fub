@@ -1228,9 +1228,11 @@ fn sync_dir(path: &Utf8Path) -> Result<(), SnapshotError> {
     #[cfg(windows)]
     {
         // Windows does not expose a durable directory handle through
-        // `File::open`; the rename itself is made write-through by the
-        // storage primitive. Preserve real metadata errors, but do not turn
-        // the platform's unsupported directory fsync into a false failure.
+        // `File::open`; directory moves retain the ordinary `fs::rename`
+        // durability guarantee. Only record/file replacement uses the
+        // write-through storage primitive. This is the platform limitation
+        // recorded by decision 0202; preserve real metadata errors, but do
+        // not turn unsupported directory fsync into a false failure.
         let metadata = symlink_metadata(path)?;
         if !metadata.is_dir() {
             return Err(SnapshotError::InvalidArtifact(path.to_owned()));
