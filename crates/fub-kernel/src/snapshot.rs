@@ -1062,11 +1062,24 @@ fn validate_portable_component(name: &str, path: &str) -> Result<(), SnapshotErr
         .unwrap_or(name)
         .trim_end_matches(['.', ' '])
         .to_ascii_uppercase();
-    let reserved = matches!(device.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || (device.len() == 4
-            && (device.starts_with("COM") || device.starts_with("LPT"))
-            && device.as_bytes()[3].is_ascii_digit()
-            && device.as_bytes()[3] != b'0');
+    let reserved = matches!(
+        device.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "CONIN$"
+            | "CONOUT$"
+            | "COM¹"
+            | "COM²"
+            | "COM³"
+            | "LPT¹"
+            | "LPT²"
+            | "LPT³"
+    ) || (device.len() == 4
+        && (device.starts_with("COM") || device.starts_with("LPT"))
+        && device.as_bytes()[3].is_ascii_digit()
+        && device.as_bytes()[3] != b'0');
     if reserved {
         return Err(SnapshotError::InvalidPath(path.to_owned()));
     }
@@ -1703,8 +1716,16 @@ mod tests {
             "nul.bin",
             "COM1.log",
             "com9",
+            "COM¹.log",
+            "com²",
+            "COM³.txt",
             "LPT1.txt",
             "lpt9",
+            "LPT¹.log",
+            "lpt²",
+            "LPT³.txt",
+            "CONIN$",
+            "conout$.txt",
             "trailing.",
             "trailing ",
             "control\u{1}.txt",
@@ -1717,7 +1738,11 @@ mod tests {
         for path in [
             "CONSOLE.txt",
             "COM10.txt",
+            "COM⁴.txt",
             "LPT0.txt",
+            "LPT⁴.txt",
+            "CONINPUT.txt",
+            "CONOUT.txt",
             "normal.txt",
             "dir/NULable.txt",
         ] {

@@ -3160,6 +3160,25 @@ fn snapshot_recovery_root(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
         .parent()
         .filter(|parent| !parent.as_str().is_empty())
         .unwrap_or(Utf8Path::new("."));
+    match std::fs::metadata(parent.as_std_path()) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => {
+            return Err(PluginError::NotFound(
+                format!("Parent snapshot non valida: {parent}").into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(PluginError::NotFound(
+                format!("Parent snapshot non trovata: {parent}").into(),
+            ));
+        }
+        Err(error) => {
+            return Err(PluginError::Io(
+                format!("non riesco a leggere {parent}: {error}").into(),
+            ));
+        }
+    }
+    let parent = canonical(parent)?;
     Ok(parent.join(leaf))
 }
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
@@ -3655,5 +3674,45 @@ mod tests {
             Err(SnapshotHostError::Lifecycle(PluginError::Conflict(_)))
         ));
         drop(claim);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn applying_claim_blocks_recovery_for_missing_root_through_alias_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canonical_parent =
+            Utf8PathBuf::from_path_buf(dir.path().join("canonical")).expect("canonical parent");
+        let alias_parent =
+            Utf8PathBuf::from_path_buf(dir.path().join("alias")).expect("alias parent");
+        std::fs::create_dir(&canonical_parent).expect("canonical parent");
+        symlink(&canonical_parent, &alias_parent).expect("alias parent");
+        let canonical_root = canonical_parent.join("vault");
+        let aliased_root = alias_parent.join("..").join("alias").join("vault");
+        let host = Host::without_watcher();
+        let claim = host
+            .claim_snapshot(&canonical_root)
+            .expect("canonical snapshot claim");
+
+        assert!(!canonical_root.exists());
+        assert!(matches!(
+            host.recover_snapshot_artifacts(&aliased_root),
+            Err(SnapshotHostError::Lifecycle(PluginError::Conflict(_)))
+        ));
+        drop(claim);
+    }
+
+    #[test]
+    fn recovery_reports_not_found_for_missing_parent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root =
+            Utf8PathBuf::from_path_buf(dir.path().join("missing/vault")).expect("missing root");
+        let host = Host::without_watcher();
+
+        assert!(matches!(
+            host.recover_snapshot_artifacts(&root),
+            Err(SnapshotHostError::Lifecycle(PluginError::NotFound(_)))
+        ));
     }
 }
