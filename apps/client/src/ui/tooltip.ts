@@ -22,6 +22,9 @@ let serial = 0;
 
 /** Collega un suggerimento a un elemento della shell e restituisce lo smontaggio. */
 export function attachTooltip(target: HTMLElement, text: string): () => void {
+  // Conserva il timer dell'ambiente che possiede il bersaglio: il callback può
+  // scattare durante il teardown, quando il binding globale `window` non esiste più.
+  const ownerWindow = target.ownerDocument.defaultView ?? window;
   const previous = registrations.get(target);
   previous?.dispose();
 
@@ -32,11 +35,11 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
 
   const schedule = () => {
     if (registration.disposed || registration.text.trim() === "") return;
-    window.clearTimeout(registration.timer);
-    registration.timer = window.setTimeout(registration.show, TOOLTIP_DELAY_MS);
+    ownerWindow.clearTimeout(registration.timer);
+    registration.timer = ownerWindow.setTimeout(registration.show, TOOLTIP_DELAY_MS);
   };
   const cancel = () => {
-    window.clearTimeout(registration.timer);
+    ownerWindow.clearTimeout(registration.timer);
     registration.timer = undefined;
     if (current?.target === target) registration.hide();
   };
@@ -79,7 +82,7 @@ export function attachTooltip(target: HTMLElement, text: string): () => void {
   registration.dispose = () => {
     if (registration.disposed) return;
     registration.disposed = true;
-    window.clearTimeout(registration.timer);
+    ownerWindow.clearTimeout(registration.timer);
     registration.timer = undefined;
     registration.hide();
     target.removeEventListener("focus", schedule);
