@@ -300,7 +300,7 @@ let release: (() => void) | null = null;
 async function open(): Promise<void> {
   if (settingsLifetime?.closed || release) return;
   panelEl.hidden = false;
-  enterSurface(panelEl);
+  enterSurface(panelEl, { viewTransition: false });
   // Il fuoco entra e resta: mentre le impostazioni sono aperte, sono quello che
   // si sta facendo (è la ragione per cui stanno sopra tutto anche visivamente,
   // scritto accanto al loro `z-index`). Una modale da cui il linguetta scappa mette
@@ -316,9 +316,13 @@ function close(): void {
   void cancelThemePreview();
   componentsGeneration++;
   release = null;
-  exitSurface(panelEl, () => {
-    panelEl.hidden = true;
-  });
+  exitSurface(
+    panelEl,
+    () => {
+      panelEl.hidden = true;
+    },
+    { viewTransition: false },
+  );
 }
 
 /// Quale disegno è l'ultimo chiesto.
