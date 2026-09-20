@@ -28,7 +28,11 @@ ciò che formerà la prima versione.
 - test Rust, frontend, visuali, accessibilità e guard architetturali;
 - policy di sicurezza, supply chain e SBOM;
 - documentazione canonica organizzata per prodotto, architettura, sviluppo,
-  riferimento e stato.
+  riferimento e stato;
+- temi installabili con contratto `theme-1`, preview isolata e ripristino della
+  scelta autorevole;
+- Graph View modularizzata con fixture 2k/10k, teardown verificato e gate hard
+  sulla stabilizzazione dell'heap.
 
 ### Corretto
 
@@ -38,10 +42,8 @@ ciò che formerà la prima versione.
 
 ### In corso
 
-- completamento di M5: provider WASM aggiuntivi, UI non fidata e percorso
-  installazione-esecuzione end-to-end;
-- estensione delle superfici condivise a griglia e contratto pubblico;
-- modularizzazione e prova di scala della Graph View;
-- definizione del contratto pubblico dei temi.
+- preparazione del primo release candidate, inclusi il ripristino atomico degli
+  snapshot del database e la classificazione della guida plugin;
+- follow-up espliciti per famiglie WASM differite e quote assolute di processo.
 
 Lo stato operativo è in [`docs/project/status.md`](docs/project/status.md).

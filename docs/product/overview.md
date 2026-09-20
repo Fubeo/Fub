@@ -104,15 +104,13 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
 | editor, preview e shell | disponibili nel codice |
 | ricerca, backlink e grafo | disponibili nel codice |
 | plugin nativi | disponibili nel codice |
-| runtime WASM e provider M5 | consegnati nella base audit corrente |
-| installazione di plugin di terzi | percorso file singolo disponibile nella base audit |
-| superfici testuali e `.fubsheet` | disponibili nella base audit con protocollo Grid v1 |
+| runtime WASM e provider M5 | consegnati in `main` |
+| installazione di plugin di terzi | percorso file singolo disponibile in `main` |
+| superfici testuali e `.fubsheet` | disponibili in `main` con protocollo Grid v1 |
 | database, sync, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
 
-La base audit corrente non è `main`: la promozione delle consegne resta
-subordinata a G14 e G15/GO. Una descrizione dettagliata di un'idea non la rende
-parte del prodotto. Lo stato autorevole è in
-[`../project/status.md`](../project/status.md).
+Una descrizione dettagliata di un'idea non la rende parte del prodotto. Lo
+stato autorevole è in [`../project/status.md`](../project/status.md).
 
 
 ## Approfondimenti

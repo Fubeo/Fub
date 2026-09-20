@@ -3,10 +3,10 @@
 > **Per chi:** autori di provider nativi o componenti WASM.
 > **Risultato:** un bundle montabile, con manifest, permessi, test e teardown.
 
-Il percorso prodotto è disponibile sulla base audit corrente: la shell gestisce
-inventario, installazione, consenso, enabled/disabled, restart e remove. Questa
-guida distingue ciò che è consegnato nel tree `audit-close` da ciò che non è
-ancora stato promosso in `main`.
+Il percorso prodotto è disponibile in `main`: la shell gestisce inventario,
+installazione, consenso, enabled/disabled, restart e remove. Questa guida
+distingue ciò che è consegnato dai provider e dalle famiglie volutamente non
+promesse.
 
 ## Scegliere il backend
 
@@ -329,6 +329,5 @@ esplicitamente dalla shell. Non esiste ancora un marketplace o un ecosistema
 di distribuzione dei pacchetti: il formato del componente, l'ABI dichiarata e
 il ciclo di inventario sono invece verificati prima del mount.
 
-L'issue [#8](https://github.com/Fubeo/Fub/issues/8) resta il tracker per la
-chiusura formale del percorso end-to-end; non usare questo stato per dedurre
-che la capability sia disponibile su `main`.
+Il percorso file singolo è disponibile in `main`; marketplace, catalogo e
+distribuzione dei pacchetti restano fuori dal contratto corrente.
