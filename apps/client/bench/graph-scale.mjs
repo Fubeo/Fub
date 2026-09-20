@@ -467,13 +467,13 @@ async function main() {
           await warm.dispatchEvent("click");
           const framePromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
           const frameTimes = await framePromise;
+          await page.evaluate(() => window.__graphScaleProbe.stopFrames());
+          const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
+          if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);
           await page.evaluate(
             (deadlineMs) => window.__graphScaleProbe.waitIdle(deadlineMs),
             FRAME_SAMPLE_SAFETY_TIMEOUT_MS,
           );
-          await page.evaluate(() => window.__graphScaleProbe.stopFrames());
-          const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
-          if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);
           const heapWindow = await collectHeapWindow(cdp);
           const entry = {
             window: windowIndex,
