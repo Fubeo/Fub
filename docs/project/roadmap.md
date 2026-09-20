@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Stato aggiornato per `main@416282569bb78798cfd271480f99140d6307bf5c`, 19 settembre 2026.**
+> **Stato aggiornato per `main@94f3f3e17c813b7cee4334f2ad37f35c482487de`, 20 settembre 2026.**
 
 La roadmap descrive direzione e ordine. Le GitHub Issues restano il tracker
 operativo; una capacità già consegnata non torna incompleta soltanto perché un
@@ -8,7 +8,7 @@ follow-up è aperto.
 
 ```mermaid
 flowchart LR
-    NOW["Ora<br/>chiusure tecniche e resilienza"]
+    NOW["Ora<br/>preparazione release candidate"]
     RC["Prossimo<br/>release candidate"]
     LATER["Dopo<br/>evoluzione ecosistema"]
     NOW --> RC --> LATER
@@ -28,23 +28,21 @@ futuro è tracciato in #57. Le quote assolute CPU/RAM di processo sono #58.
 ### Superfici condivise e Grid v1
 
 `DocumentSession`, `DocumentSurfaceRegistry`, `.fubsheet`, `GridEngine` e
-Grid v1 sono in `main`. La chiusura di #11 aggiunge i guard che rendono
-meccaniche due invarianti: ogni binding usa profili registrati; ogni famiglia
-pubblica ha shell, fallback, mirror, nativo e WASM. Il TODO operativo viene
-rimosso dopo il trasferimento delle invarianti nelle pagine permanenti.
+Grid v1 sono in `main`. I guard rendono meccaniche due invarianti: ogni binding
+usa profili registrati; ogni famiglia pubblica ha shell, fallback, mirror,
+nativo e WASM. La scena Grid è certificata in entrambe le luci e il TODO
+operativo è stato rimosso dopo il trasferimento delle invarianti.
 
 ### Temi e Graph View
 
-#13 e #12 sono chiuse. Il contratto tema, preview/revert, artefatti generati,
-visuali e accessibilità sono consegnati. La Graph View ha moduli separati,
-determinismo, lifecycle e benchmark 2k/10k.
+#13, #12, #56 e #6 sono chiuse. Il contratto tema, preview/revert, artefatti
+generati, visuali e accessibilità sono consegnati. La Graph View ha moduli
+separati, determinismo, lifecycle, benchmark 2k/10k e gate hard sull'heap.
 
-## Ora — chiusure tecniche e resilienza
+## Ora — preparazione del primo release candidate
 
-1. chiudere #11 con guardie, scena visuale Grid e documentazione permanente;
-2. completare #56 e solo allora rivalutare la chiusura di #6;
-3. completare #5;
-4. classificare #9 rispetto al primo release candidate.
+1. completare #5, ripristino atomico degli snapshot del database;
+2. classificare #9 rispetto al primo release candidate.
 
 ## Prossimo — primo release candidate
 

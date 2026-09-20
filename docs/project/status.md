@@ -1,18 +1,17 @@
 # Stato del progetto
 
-> **Stato aggiornato per `main@416282569bb78798cfd271480f99140d6307bf5c`, 19 settembre 2026.**
+> **Stato aggiornato per `main@94f3f3e17c813b7cee4334f2ad37f35c482487de`, 20 settembre 2026.**
 
 ## Baseline corrente
 
-La linea audit è integrata in `main` dalla PR #53. G14 è completo 56/56 e
-G15/GO è registrato. La PR #59 ha poi completato preview/revert e guida autore
-dei temi senza cambiare il contratto pubblico.
+La linea audit è integrata in `main` dalla PR #53; G14 è completo 56/56 e
+G15/GO è registrato. Le PR #59 e #60 hanno completato temi installabili,
+superfici condivise, guardie permanenti e baseline Grid. La PR #62 ha corretto
+il crash WebKitGTK delle Impostazioni; la PR #61 ha reso hard il gate heap
+della Graph View.
 
-Le issue #7, #8, #10, #12, #13 e #17 sono chiuse con matrici riferite a codice,
-test, documentazione e CI. #11 conserva soltanto la chiusura tecnica delle
-superfici condivise: guardie di completezza, scena Grid dedicata e rimozione del
-TODO temporaneo. #6 resta aperta perché il criterio di stabilizzazione heap è
-posseduto da #56 e non è sostituito da una metrica review-only.
+Le milestone #6, #7, #8, #10, #11, #12, #13, #17 e #56 sono chiuse con
+evidenze riferite a codice, test, documentazione e CI.
 
 ## Release corrente
 
@@ -65,18 +64,15 @@ piano ancora aperto.
 
 ## Graph View
 
-La modularizzazione e il teardown strutturale sono consegnati; #12 è chiusa.
-I benchmark 2k/10k restano riproducibili e il delta di listener, observer,
-timer e `requestAnimationFrame` dopo destroy è un controllo hard.
-
-#6 resta invece aperta finché #56 non introduce e dimostra un criterio hard
-ripetibile per la stabilizzazione della memoria in una sessione prolungata.
+La modularizzazione, il teardown strutturale e i benchmark 2k/10k sono
+consegnati. Il gate hard usa la fixture 10k/seed 6 per 16 finestre: dopo otto
+finestre di warm-up richiede heap completo, slope della coda non superiore a
+65.536 byte per finestra, al massimo sei incrementi monotoni e delta risorse
+post-close pari a zero. Due run CI ordinari sullo stesso head hanno certificato
+il criterio; #6 e #56 sono chiuse.
 
 ## Lavoro residuo
 
-- #11: completare la certificazione finale delle guardie e della scena Grid;
-- #56 → #6: criterio hard di stabilizzazione heap e più esecuzioni sullo stesso
-  SHA;
 - #5: ripristino atomico degli snapshot del database;
 - #9: classificazione rispetto al primo release candidate;
 - #57 e #58: follow-up WASM esplicitamente differiti.
@@ -89,5 +85,4 @@ issue e non retrocedono le capacità già integrate.
 - [Roadmap](roadmap.md)
 - [M5 — retrospettiva](m5-wasm-runtime.md)
 - [Changelog](../../CHANGELOG.md)
-- [Baseline post-PR #53 — #54](https://github.com/Fubeo/Fub/issues/54)
 - [Issue aperte](https://github.com/Fubeo/Fub/issues)

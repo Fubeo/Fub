@@ -15,8 +15,9 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 La superficie plain text offre soltanto **sorgente**: non simula capacità
 Markdown. I documenti `.fubsheet` usano invece la modalità **foglio** della
 famiglia Grid; se il provider Grid non è servito, la stessa superficie resta
-navigabile e mostra gli input grezzi senza un secondo valutatore formule. Il commutatore della shell legge la dichiarazione della superficie
-attiva; cambiando tab cambia anche l'insieme dei pulsanti e delle scorciatoie
+navigabile e mostra gli input grezzi senza un secondo valutatore formule. Il
+commutatore della shell legge la dichiarazione della superficie attiva;
+cambiando tab cambia anche l'insieme dei pulsanti e delle scorciatoie
 disponibili.
 
 ## Flusso
@@ -116,9 +117,8 @@ grezzo o contenuto attivo non deve diventare automaticamente codice eseguibile.
 
 La UI dichiarativa di un plugin WASM passa da `UiNode::validate_untrusted()`
 prima di raggiungere la shell; `Html` e `WebView` sono rifiutati per
-`Trust::Community`. Il percorso è consegnato nella base audit corrente con
-`ViewProvider`; l'issue [#10](https://github.com/Fubeo/Fub/issues/10) resta il
-tracker per la chiusura formale, non un'indicazione che la validazione manchi.
+`Trust::Community`. Il percorso consegnato attraversa `ViewProvider` e la
+validazione non fidata prima di raggiungere la shell.
 
 ## Superfici condivise
 
