@@ -25,7 +25,8 @@ Sono presenti:
 - `DocumentSession` condivisa e `DocumentSurfaceRegistry`;
 - formato `.fubsheet`, `GridEngine` e protocollo Grid a finestre/patch;
 - temi installabili con contratto `theme-1`;
-- runtime WASM, capability, UI non fidata e percorso prodotto installato.
+- runtime WASM, capability, UI non fidata e percorso prodotto installato;
+- sincronizzazione fra superfici limitata alla stessa sessione locale.
 
 ## Superfici condivise
 
@@ -74,11 +75,16 @@ il criterio; #6 e #56 sono chiuse.
 ## Lavoro residuo
 
 - #5: ripristino atomico degli snapshot del database;
-- #9: classificazione rispetto al primo release candidate;
+- #9: sincronizzazione distribuita esclusa dalla prima release. L'issue resta
+  OPEN come lavoro futuro perché Fub non offre ancora una capacità utente
+  distribuita;
 - #57 e #58: follow-up WASM esplicitamente differiti.
 
-Non esiste un blocco audit globale: i residui appartengono alle rispettive
-issue e non retrocedono le capacità già integrate.
+La decisione su #9 non è un blocker del primo release candidate: non è un test
+mancante su una feature già pubblicata, ma lavoro futuro per introdurre una
+capacità distribuita. Watcher, catch-up, rejoin e sincronizzazione fra superfici
+restano capacità locali e non promettono due repliche, trasporto, convergenza o
+assenza di perdita distribuita.
 
 ## Fonti
 

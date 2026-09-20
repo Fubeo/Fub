@@ -26,6 +26,17 @@ La normale apertura, modifica e ricerca non richiedono account o servizio
 remoto. Il workspace corrente non include un client HTTP nel percorso
 principale dell'app.
 
+### Confine della prima release
+
+La prima release resta local-first e non include la sincronizzazione
+distribuita del vault. Watcher, catch-up e riaggancio (`rejoin`) riallineano
+soltanto lo stato locale; la sincronizzazione fra superfici riguarda i
+riquadri e le sessioni dello stesso workspace locale.
+
+Non vengono promessi due repliche, un trasporto, la convergenza fra dispositivi
+o l'assenza di perdita in caso di guasti distribuiti. Questa capacità utente
+non è quindi pubblicata.
+
 ### Formati come provider
 
 `fub-kernel` lavora su `DocumentModel`, `DocId`, query, comandi ed eventi. Il
@@ -69,7 +80,8 @@ possono attraversare il runtime WASM quando la relativa interfaccia è servita.
 - wikilink, tag, heading, task, tabelle, callout ed embed supportati dal
   provider Markdown;
 - revisioni e conflitti espliciti;
-- sincronizzazione fra più riquadri sullo stesso documento.
+- sincronizzazione fra più riquadri dello stesso documento nella stessa
+  sessione locale.
 
 La shell monta Markdown, plain text e `.fubsheet` attraverso
 `DocumentSurfaceRegistry`. I profili testuali condividono `TextEngine`; la
@@ -106,8 +118,7 @@ Rust, con fallback sugli input grezzi quando non è disponibile.
 | plugin nativi | disponibili nel codice |
 | runtime WASM e provider M5 | consegnati in `main` |
 | installazione di plugin di terzi | percorso file singolo disponibile in `main` |
-| superfici testuali e `.fubsheet` | disponibili in `main` con protocollo Grid v1 |
-| database, sync, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
+| database, sincronizzazione distribuita, collaborazione, publishing, AI e marketplace | non sono capacità consegnate |
 
 Una descrizione dettagliata di un'idea non la rende parte del prodotto. Lo
 stato autorevole è in [`../project/status.md`](../project/status.md).
