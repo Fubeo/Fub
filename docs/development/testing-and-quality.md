@@ -61,6 +61,23 @@ I guard del contratto verificano:
 - proiezioni TypeScript;
 - enum e fixture generate;
 - dipendenze vietate.
+
+### Snapshot globale (#5)
+
+Il protocollo globale e la sua orchestrazione host si verificano separatamente
+dal drill storico di backup/restore per-file:
+
+```bash
+cargo +1.89.0 test -p fub-kernel snapshot
+cargo +1.89.0 test -p fub-host --test global_snapshot
+cargo +1.89.0 test -p fub-app --test schemas_on_disk
+```
+
+I primi due comandi esercitano manifest, preflight, transazione, recovery e
+riapertura osservabile del vault per #5. `schemas_on_disk` presidia invece la
+registrazione persistente dello schema; il comando legacy di #7 resta quello
+indicato nella sezione seguente.
+
 ### Drill backup/restore
 
 Il banco d'integrazione eseguibile è:
@@ -86,8 +103,8 @@ lo staging completo resta disponibile. La verifica finale usa `Host` reale:
 apertura, attesa dell'indicizzazione e lettura del documento, poi chiusura.
 
 `fub.backup` riguarda soltanto le note nello stesso vault; non è il backup
-completo esercitato da questo drill. Il banco documenta il comportamento
-presente, mentre l'issue resta aperta fino alla verifica CI.
+completo esercitato da questo drill. Il drill storico di #7 documenta il
+comportamento legacy e resta distinto dalla verifica del protocollo globale #5.
 
 
 ## Frontend

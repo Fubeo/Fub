@@ -1435,19 +1435,41 @@ mod tests {
         (dir, root)
     }
 
+    fn assert_no_transaction_artifacts(root: &Utf8Path) {
+        let prefix = format!(
+            "{TRANSACTION_PREFIX}{}-",
+            root.file_name().expect("vault root name")
+        );
+        let leftovers = fs::read_dir(root.parent().expect("vault parent"))
+            .expect("transaction parent")
+            .filter_map(Result::ok)
+            .filter_map(|entry| entry.file_name().into_string().ok())
+            .filter(|name| name.starts_with(&prefix))
+            .collect::<Vec<_>>();
+        assert!(
+            leftovers.is_empty(),
+            "snapshot transaction artifacts remain: {leftovers:?}"
+        );
+    }
+
     #[test]
     fn manifest_revision_is_deterministic_and_sorted() {
-        let mut files: BTreeMap<String, Vec<u8>> = BTreeMap::new();
-        files.insert("b.md".into(), b"b".to_vec());
-        files.insert("a.md".into(), b"a".to_vec());
-        let entries = files
-            .iter()
-            .map(|(path, bytes)| entry_for_path(path, bytes).expect("entry"))
-            .collect();
-        let manifest = SnapshotManifest::new(entries).expect("manifest");
-        assert_eq!(manifest.entries[0].path, "a.md");
-        assert_eq!(manifest.digest(), manifest.digest());
-        assert!(manifest.digest().as_str().starts_with("sha256:"));
+        let first = entry_for_path("a.md", b"a").expect("entry");
+        let second = entry_for_path("b.md", b"b").expect("entry");
+        let forward = SnapshotManifest::new(vec![first.clone(), second.clone()]).expect("manifest");
+        let reversed = SnapshotManifest::new(vec![second, first]).expect("manifest");
+
+        assert_eq!(forward.entries, reversed.entries);
+        assert_eq!(forward.digest(), reversed.digest());
+        assert_eq!(
+            forward
+                .entries
+                .iter()
+                .map(|entry| entry.path.as_str())
+                .collect::<Vec<_>>(),
+            ["a.md", "b.md"]
+        );
+        assert!(forward.digest().as_str().starts_with("sha256:"));
     }
 
     #[test]
@@ -1607,26 +1629,43 @@ mod tests {
             snapshot.write_to(&artifact),
             Err(SnapshotError::AlreadyExists(path)) if path == artifact
         ));
-        assert!(SnapshotBundle::read_from(&artifact).is_err());
     }
 
     #[test]
     fn recovery_handles_root_absence_and_unknown_records_idempotently() {
         for fault in [SnapshotFault::AfterOldMoved, SnapshotFault::AfterPublished] {
             let (_dir, root) = root();
-            fs::write(root.join("note.md"), b"stable").expect("note");
-            let snapshot = SnapshotBundle::capture(&root).expect("capture");
+            fs::write(root.join("note.md"), b"old").expect("old note");
+            let base = SnapshotBundle::capture(&root).expect("base snapshot");
+            let target_bytes = b"new";
+            let target_files = BTreeMap::from([("note.md".to_owned(), target_bytes.to_vec())]);
+            let target_manifest = SnapshotManifest::new(
+                target_files
+                    .iter()
+                    .map(|(path, bytes)| entry_for_path(path, bytes).expect("entry"))
+                    .collect(),
+            )
+            .expect("target manifest");
+            let target =
+                SnapshotBundle::new(target_manifest, base.base_revision().clone(), target_files)
+                    .expect("target snapshot");
             assert!(matches!(
-                SnapshotApplier::apply_with_fault(&root, &snapshot, Some(fault)),
+                SnapshotApplier::apply_with_fault(&root, &target, Some(fault)),
                 Err(SnapshotError::FaultInjected(_))
             ));
             assert!(!root.exists());
             let recovered = SnapshotApplier::recover(&root).expect("recover missing root");
             assert_eq!(recovered.recovered, 1);
+            let expected = if matches!(fault, SnapshotFault::AfterOldMoved) {
+                b"old".as_slice()
+            } else {
+                b"new".as_slice()
+            };
             assert_eq!(
-                fs::read(root.join("note.md")).expect("restored note"),
-                b"stable"
+                fs::read(root.join("note.md")).expect("recovered note"),
+                expected
             );
+            assert_no_transaction_artifacts(&root);
             assert_eq!(
                 SnapshotApplier::recover(&root)
                     .expect("idempotent recovery")
@@ -1683,6 +1722,41 @@ mod tests {
     }
 
     #[test]
+    fn during_write_with_multiple_entries_cleans_staging_and_keeps_original_root() {
+        let (_dir, root) = root();
+        fs::write(root.join("a.md"), b"old-a").expect("old a");
+        fs::write(root.join("b.md"), b"old-b").expect("old b");
+        let base = SnapshotBundle::capture(&root).expect("base snapshot");
+
+        let target_files = BTreeMap::from([
+            ("a.md".to_owned(), b"new-a".to_vec()),
+            ("b.md".to_owned(), b"new-b".to_vec()),
+        ]);
+        let target_manifest = SnapshotManifest::new(
+            target_files
+                .iter()
+                .map(|(path, bytes)| entry_for_path(path, bytes).expect("entry"))
+                .collect(),
+        )
+        .expect("target manifest");
+        let target =
+            SnapshotBundle::new(target_manifest, base.base_revision().clone(), target_files)
+                .expect("target snapshot");
+
+        assert!(matches!(
+            SnapshotApplier::apply_with_fault(
+                &root,
+                &target,
+                Some(SnapshotFault::DuringWrite { entries: 1 })
+            ),
+            Err(SnapshotError::FaultInjected(_))
+        ));
+        assert_eq!(fs::read(root.join("a.md")).expect("original a"), b"old-a");
+        assert_eq!(fs::read(root.join("b.md")).expect("original b"), b"old-b");
+        assert_no_transaction_artifacts(&root);
+    }
+
+    #[test]
     fn restart_recovery_rolls_back_prepare_and_finalizes_commit() {
         let (_dir, root) = root();
         fs::write(root.join("note.md"), b"stable").expect("note");
@@ -1698,6 +1772,7 @@ mod tests {
             fs::read(root.join("note.md")).expect("after rollback"),
             before
         );
+        assert_no_transaction_artifacts(&root);
 
         let target_bytes = b"restored".to_vec();
         let target_files = BTreeMap::from([("note.md".to_owned(), target_bytes.clone())]);

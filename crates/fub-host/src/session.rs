@@ -1196,7 +1196,6 @@ impl Host {
             )));
         }
         let claim = self.claim_snapshot(&canonical_root)?;
-        fub_kernel::snapshot::recover_snapshots(&canonical_root)?;
         let report = fub_kernel::snapshot::apply_snapshot(&canonical_root, snapshot)?;
         self.mounts_after_apply(&canonical_root, claim.token())
             .map_err(SnapshotHostError::Reopen)?;

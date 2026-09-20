@@ -146,6 +146,6 @@ snapshot namespaced delle sole note nello stesso vault.
 - eliminare soltanto una cache è sicuro solo quando il riferimento tecnico la
   dichiara ricostruibile.
 
-La prova è tracciata nell'issue
-[#7](https://github.com/Fubeo/Fub/issues/7), ancora aperta finché CI non la
-verifica.
+La prova del drill storico è tracciata nell'issue
+[#7](https://github.com/Fubeo/Fub/issues/7); il suo fixture resta distinto dalla
+verifica del protocollo globale #5.
