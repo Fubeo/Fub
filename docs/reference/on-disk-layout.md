@@ -181,30 +181,50 @@ I file autorevoli seguono:
 - nessuna riscrittura se il file di partenza non è stato letto in modo
   affidabile.
 
-## Backup
+## Snapshot globale offline
 
-Il backup completo del vault comprende documenti, allegati, file sconosciuti,
-`.trash/`, ogni voce autorevole in `.fub/` e lo storage autorevole dei plugin.
-La configurazione macchina è fuori dallo scope del vault e resta esclusa dal
-drill. Il comando focalizzato è:
+L'applicazione globale di uno snapshot è distinta dal backup per-file di
+`fub.versioning` e dal drill indipendente dell'issue
+[#7](https://github.com/Fubeo/Fub/issues/7). Lo scope completo comprende
+documenti, allegati, file sconosciuti, `.trash/`, ogni voce autorevole sotto
+`.fub/` e lo storage autorevole dei plugin. La configurazione macchina resta
+fuori dal vault. Le cache dichiarate ricostruibili non entrano nel manifest:
+`.fub/data/plugins/<id>/` è cache solo quando contiene `.fub-cache-root`;
+altrimenti è storage autorevole legacy.
 
-```bash
-cargo +1.89.0 test -p fub-host --lib legacy_tests::backup_restore_drill -- --nocapture
-```
+Il modulo `fub_kernel::snapshot` usa un manifest schema 1, ordinato per path
+relativo normalizzato. Ogni entry registra classe, proprietario, schema quando
+applicabile, dimensione e digest SHA-256. Il kernel non possiede il
+`FormatRegistry`: documenti, allegati e sconosciuti usano una sola classe
+`user`; settings/organizzazione/drafts/journal, cestino, sidecar e plugin hanno
+classi proprie. Il preflight rifiuta versioni future, path assoluti o con
+traversal, duplicati, symlink, file speciali, entry mancanti e mismatch di
+dimensione o digest.
 
-Il fixture versionato contiene l'intero scope del vault e il manifesto
-indipendente registra path, classe, dimensione, impronta FNV-1a e schema.
-L'enumerazione rifiuta symlink e file speciali. Il banco lavora offline in un
-parent temporaneo privato ed esclusivo, prepara uno staging adiacente alla
-destinazione e pubblica con un solo rename. Non dimostra no-replace
-concorrente universale né durabilità dopo un crash.
+La base revision è il digest deterministico del manifest autorevole live.
+L'applicazione richiede un vault chiuso/quiescente e una radice canonica priva
+di symlink, prende un lock cooperativo stabile sibling, prepara uno staging
+privato e ricontrolla la base revision
+immediatamente prima del commit. Un record persistente coordina `prepare`,
+`commit` e `finalize`: la root precedente resta in un contenitore `.old` finché
+la nuova è pubblicata. La recovery startup riconosce solo schema, id e nomi
+propri, completa o annulla la fase osservata e non cancella artefatti ignoti.
 
-La validazione di un artefatto corrotto o mancante avviene prima dello staging
-e della destinazione. Se la destinazione è occupata, resta invariata e lo
-staging completo resta disponibile. La verifica conclusiva apre il vault con
-`Host` reale, attende l'indicizzazione, legge il documento e chiude l'host.
 
-La feature `fub.backup` annota soltanto le note nello stesso vault: non è il
-flusso completo documentato da questo drill. La prova è tracciata nell'issue
-[#7](https://github.com/Fubeo/Fub/issues/7), ancora aperta finché CI non la
-verifica.
+Per lo schema 1 la pubblicazione ricrea il contenitore con directory POSIX
+`0700` e file `0600`, anche se la sorgente aveva permessi più permissivi:
+owner, ACL, xattr e bit executable non fanno parte del manifest e non vengono
+preservati. Su Windows non c'è questa normalizzazione POSIX: ACL e proprietà
+sono quelle con cui il filesystem crea lo staging (normalmente ereditate dal
+parent), non sono rappresentate né garantite dallo snapshot.
+Writer cooperativi ottengono all-or-old-or-new. Writer esterni, filesystem senza
+rename o fsync durevoli e guasti che impediscono il rollback sono fuori dalla
+garanzia universale; l'esito espone una necessità di recovery invece di fingere
+atomicità. Alla riapertura le cache escluse sono invalidate e ricostruite.
+
+Il drill backup/restore dell'issue #7 resta una prova offline separata del
+fixture storico e del restore completo con `Host`; non è l'applicatore globale
+e il suo manifesto indipendente può mantenere l'impronta legacy prevista dal
+drill. `fub.versioning::version.restore` resta invece una scrittura CAS di un
+solo documento.
+

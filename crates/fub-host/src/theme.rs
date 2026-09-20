@@ -1038,6 +1038,7 @@ fn validate_asset_limits_in(
 struct ThemesRoot {
     path: Utf8PathBuf,
     dir: cap_std::fs::Dir,
+    #[cfg(unix)]
     identity: std::fs::Metadata,
 }
 
@@ -1129,9 +1130,12 @@ fn open_themes_root(config_dir: &Utf8Path, id: &str) -> Result<Option<ThemesRoot
             });
         }
     }
+    #[cfg(not(unix))]
+    let _ = identity;
     Ok(Some(ThemesRoot {
         path: canonical,
         dir,
+        #[cfg(unix)]
         identity,
     }))
 }

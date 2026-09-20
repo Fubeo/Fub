@@ -75,7 +75,7 @@ use fub_abi::schema::SchemaVersion;
 /// questa voce si apre e si legge; la prima scrittura lo porta alla 1. È il
 /// motivo per cui la versione va messa *dal primo giorno* — la si aggiunge dopo
 /// solo indovinando che ciò che non ce l'ha venga da prima.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il file com'è su disco: l'organizzazione, più il numero di formato.
 #[derive(Default, Serialize, Deserialize)]

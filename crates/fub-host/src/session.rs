@@ -37,6 +37,7 @@
 //! lettura, che compila e rimette tutti in fila in silenzio.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::sync::{Arc, Mutex};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -468,6 +469,43 @@ impl Drop for OpeningTransaction<'_> {
     }
 }
 
+/// Errore locale dell'orchestrazione host per uno snapshot globale.
+///
+/// Il kernel error resta strutturato nel ramo `Snapshot`; il ramo lifecycle
+/// separa un vault aperto/assente dall'I/O del contenitore, senza estendere ABI
+/// o WIT. `Reopen` conserva invece il fallimento della riapertura dopo commit.
+#[derive(Debug)]
+pub enum SnapshotHostError {
+    Snapshot(fub_kernel::snapshot::SnapshotError),
+    Lifecycle(PluginError),
+    Reopen(PluginError),
+}
+
+impl fmt::Display for SnapshotHostError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Snapshot(error) => write!(formatter, "snapshot: {error}"),
+            Self::Lifecycle(error) => write!(formatter, "lifecycle snapshot: {error}"),
+            Self::Reopen(error) => write!(formatter, "reopen snapshot: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for SnapshotHostError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Snapshot(error) => Some(error),
+            Self::Lifecycle(error) | Self::Reopen(error) => Some(error),
+        }
+    }
+}
+
+impl From<fub_kernel::snapshot::SnapshotError> for SnapshotHostError {
+    fn from(error: fub_kernel::snapshot::SnapshotError) -> Self {
+        Self::Snapshot(error)
+    }
+}
+
 /// Uno slot pubblicato per una radice.
 ///
 /// `Closing` resta nella mappa per tutta la durata del teardown: è il confine
@@ -476,10 +514,42 @@ impl Drop for OpeningTransaction<'_> {
 enum SessionSlot {
     Open(VaultSession),
     Closing(Arc<ClosingToken>),
+    Applying(Arc<ApplyingToken>),
 }
 
 /// Identità opaca di una singola chiusura.
 struct ClosingToken;
+
+/// Identità opaca di un'applicazione offline.
+struct ApplyingToken;
+
+/// Possesso esclusivo del marker `Applying`, senza trattenere lock durante I/O.
+struct ApplyClaim<'a> {
+    sessions: &'a Custody<Sessions>,
+    root: Utf8PathBuf,
+    token: Arc<ApplyingToken>,
+}
+
+impl ApplyClaim<'_> {
+    fn token(&self) -> Arc<ApplyingToken> {
+        Arc::clone(&self.token)
+    }
+}
+
+impl Drop for ApplyClaim<'_> {
+    fn drop(&mut self) {
+        let Ok(mut sessions) = self.sessions.write() else {
+            return;
+        };
+        let owned = matches!(
+            sessions.slots.get(&self.root),
+            Some(SessionSlot::Applying(token)) if Arc::ptr_eq(token, &self.token)
+        );
+        if owned {
+            sessions.slots.remove(&self.root);
+        }
+    }
+}
 
 /// Possesso esclusivo del teardown di una sessione.
 ///
@@ -521,6 +591,10 @@ fn closing_conflict(root: &Utf8Path) -> PluginError {
     PluginError::Conflict(format!("Il vault su {root} è in chiusura.").into())
 }
 
+fn applying_conflict(root: &Utf8Path) -> PluginError {
+    PluginError::Conflict(format!("Il vault su {root} è in applicazione snapshot.").into())
+}
+
 /// I vault aperti, **in ordine d'uso**, e quelli il cui teardown è in corso.
 ///
 /// Il vault "corrente" è **della shell**: serve a chi non ne nomina uno, e non
@@ -543,7 +617,7 @@ impl Sessions {
             .iter()
             .filter_map(|(root, slot)| match slot {
                 SessionSlot::Open(session) => Some((root, session)),
-                SessionSlot::Closing(_) => None,
+                SessionSlot::Closing(_) | SessionSlot::Applying(_) => None,
             })
             .max_by_key(|(_, session)| session.used)
             .map(|(root, _)| root)
@@ -560,6 +634,7 @@ impl Sessions {
                 Ok(true)
             }
             Some(SessionSlot::Closing(_)) => Err(closing_conflict(root)),
+            Some(SessionSlot::Applying(_)) => Err(applying_conflict(root)),
             None => Ok(false),
         }
     }
@@ -1030,32 +1105,157 @@ impl Host {
     /// spostava il corrente e lasciava i recenti nell'ordine vecchio — cioè
     /// l'unica delle due cose che l'utente rivede al prossimo avvio.
     pub fn open(&self, root: &Utf8Path) -> Result<VaultInfo, PluginError> {
-        if !root.is_dir() {
-            // `NotFound` e non `BadArgs`: chi arriva qui ha scelto una cartella
-            // da un dialogo, o ha riaperto un recente. Non ha sbagliato a
-            // scrivere — quella cartella non c'è (più).
-            return Err(PluginError::NotFound(
-                format!("Non è una cartella valida: {root}").into(),
-            ));
-        }
-        let root = canonical(root)?;
-
-        let _phase = tracing::info_span!(target: "fub.apertura", "open").entered();
-
-        let already_open = {
-            let sessions = self.sessions.read()?;
-            match sessions.slots.get(&root) {
-                Some(SessionSlot::Open(session)) => Some(info_of(session)?),
-                Some(SessionSlot::Closing(_)) => return Err(closing_conflict(&root)),
-                None => None,
+        let root_is_directory = match std::fs::metadata(root.as_std_path()) {
+            Ok(metadata) if metadata.is_dir() => true,
+            Ok(_) => {
+                return Err(PluginError::NotFound(
+                    format!("Non è una cartella valida: {root}").into(),
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => false,
+            Err(error) => {
+                return Err(PluginError::Io(
+                    format!("non riesco a leggere {root}: {error}").into(),
+                ));
             }
         };
-        let info = match already_open {
-            Some(info) => info,
-            None => self.mounts(&root)?,
+        if !root_is_directory {
+            let parent = root
+                .parent()
+                .filter(|parent| !parent.as_str().is_empty())
+                .unwrap_or(Utf8Path::new("."));
+            let parent_is_directory = std::fs::metadata(parent.as_std_path())
+                .map(|metadata| metadata.is_dir())
+                .unwrap_or(false);
+            if !parent_is_directory {
+                return Err(PluginError::NotFound(
+                    format!("Non è una cartella valida: {root}").into(),
+                ));
+            }
+        }
+        let recovery_root = snapshot_recovery_root(root)?;
+        let existing_root = root_is_directory.then(|| canonical(root)).transpose()?;
+        let root = if let Some(root) = existing_root {
+            let already_open = {
+                let sessions = self.sessions.read()?;
+                match sessions.slots.get(&root) {
+                    Some(SessionSlot::Open(session)) => Some(info_of(session)?),
+                    Some(SessionSlot::Closing(_)) => return Err(closing_conflict(&root)),
+                    Some(SessionSlot::Applying(_)) => return Err(applying_conflict(&root)),
+                    None => None,
+                }
+            };
+            if let Some(info) = already_open {
+                self.become_current(&root)?;
+                return Ok(info);
+            }
+            fub_kernel::snapshot::recover_snapshots(&recovery_root)
+                .map_err(|error| PluginError::Io(error.to_string().into()))?;
+            if root != recovery_root {
+                fub_kernel::snapshot::recover_snapshots(&root)
+                    .map_err(|error| PluginError::Io(error.to_string().into()))?;
+            }
+            root
+        } else {
+            fub_kernel::snapshot::recover_snapshots(&recovery_root)
+                .map_err(|error| PluginError::Io(error.to_string().into()))?;
+            if !root.is_dir() {
+                // `NotFound` e non `BadArgs`: chi arriva qui ha scelto una cartella
+                // da un dialogo, o ha riaperto un recente. Non ha sbagliato a
+                // scrivere — quella cartella non c'è (più).
+                return Err(PluginError::NotFound(
+                    format!("Non è una cartella valida: {root}").into(),
+                ));
+            }
+            let root = canonical(root)?;
+            if root != recovery_root {
+                fub_kernel::snapshot::recover_snapshots(&root)
+                    .map_err(|error| PluginError::Io(error.to_string().into()))?;
+            }
+            root
         };
+
+        let _phase = tracing::info_span!(target: "fub.apertura", "open").entered();
+        let info = self.mounts(&root)?;
         self.become_current(&root)?;
         Ok(info)
+    }
+    /// Esegue la recovery di eventuali snapshot globali lasciati da un crash
+    /// mentre il vault è chiuso. Prende lo stesso claim `Applying` di
+    /// [`Host::apply_snapshot`], anche quando la root live è assente, e non
+    /// prende il lock del workspace.
+    pub fn recover_snapshot_artifacts(
+        &self,
+        root: &Utf8Path,
+    ) -> Result<fub_kernel::snapshot::SnapshotRecoveryReport, SnapshotHostError> {
+        if root.exists() && !root.is_dir() {
+            return Err(SnapshotHostError::Lifecycle(PluginError::NotFound(
+                format!("Non è una cartella valida: {root}").into(),
+            )));
+        }
+        let recovery_root = if root.is_dir() {
+            canonical(root).map_err(SnapshotHostError::Lifecycle)?
+        } else {
+            snapshot_recovery_root(root).map_err(SnapshotHostError::Lifecycle)?
+        };
+        let claim = self.claim_snapshot(&recovery_root)?;
+        let result = fub_kernel::snapshot::recover_snapshots(&recovery_root).map_err(Into::into);
+        drop(claim);
+        result
+    }
+
+    /// Applica uno snapshot globale con il vault chiuso e lo riapre.
+    ///
+    /// Il chiamante deve fornire la radice già canonica e priva di symlink:
+    /// l'applicazione non accetta alias, perché il record persistente deve
+    /// restare recuperabile anche se il nome alternativo sparisce.
+    ///
+    /// Un vault aperto o in chiusura viene rifiutato invece di tentare una
+    /// quiescenza implicita: watcher, job e provider devono essere terminati
+    /// dal chiamante tramite [`Host::close_vault`] prima dell'I/O offline.
+    pub fn apply_snapshot(
+        &self,
+        root: &Utf8Path,
+        snapshot: &fub_kernel::snapshot::SnapshotBundle,
+    ) -> Result<fub_kernel::snapshot::SnapshotApplyReport, SnapshotHostError> {
+        if !root.is_dir() {
+            return Err(SnapshotHostError::Lifecycle(PluginError::NotFound(
+                format!("Non è una cartella valida: {root}").into(),
+            )));
+        }
+        let canonical_root = canonical(root).map_err(SnapshotHostError::Lifecycle)?;
+        if canonical_root != root {
+            return Err(SnapshotHostError::Lifecycle(PluginError::Conflict(
+                format!("La radice snapshot deve essere canonica: {root}.").into(),
+            )));
+        }
+        let claim = self.claim_snapshot(&canonical_root)?;
+        let report = fub_kernel::snapshot::apply_snapshot(&canonical_root, snapshot)?;
+        self.mounts_after_apply(&canonical_root, claim.token())
+            .map_err(SnapshotHostError::Reopen)?;
+        self.become_current(&canonical_root)
+            .map_err(SnapshotHostError::Reopen)?;
+        drop(claim);
+        Ok(report)
+    }
+
+    fn claim_snapshot(&self, root: &Utf8Path) -> Result<ApplyClaim<'_>, SnapshotHostError> {
+        let token = Arc::new(ApplyingToken);
+        let mut sessions = self
+            .sessions
+            .write()
+            .map_err(SnapshotHostError::Lifecycle)?;
+        if sessions.slots.contains_key(root) {
+            return Err(SnapshotHostError::Lifecycle(applying_conflict(root)));
+        }
+        sessions
+            .slots
+            .insert(root.to_owned(), SessionSlot::Applying(Arc::clone(&token)));
+        Ok(ApplyClaim {
+            sessions: &self.sessions,
+            root: root.to_owned(),
+            token,
+        })
     }
 
     /// Il montaggio vero e proprio, che è la via lunga di [`open`](Host::open):
@@ -1068,12 +1268,29 @@ impl Host {
         self.mounts_with_info(root, info_of)
     }
 
+    fn mounts_after_apply(
+        &self,
+        root: &Utf8Path,
+        token: Arc<ApplyingToken>,
+    ) -> Result<VaultInfo, PluginError> {
+        self.mounts_with_claim(root, info_of, Some(token))
+    }
+
     /// Variante privata che rende iniettabile la sola lettura pre-pubblicazione.
     ///
     fn mounts_with_info(
         &self,
         root: &Utf8Path,
         session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
+    ) -> Result<VaultInfo, PluginError> {
+        self.mounts_with_claim(root, session_info, None)
+    }
+
+    fn mounts_with_claim(
+        &self,
+        root: &Utf8Path,
+        session_info: impl Fn(&VaultSession) -> Result<VaultInfo, PluginError>,
+        applying: Option<Arc<ApplyingToken>>,
     ) -> Result<VaultInfo, PluginError> {
         let root = root.to_owned();
         let startup = self
@@ -1350,6 +1567,41 @@ impl Host {
                     // mentre il mount era in corso. Il marker non si sovrascrive.
                     let (session, lease) = opening.into_session_with_lease();
                     (Err(closing_conflict(&root)), Some((session, lease)))
+                }
+                Some(SessionSlot::Applying(current)) => {
+                    let owns = applying
+                        .as_ref()
+                        .is_some_and(|expected| Arc::ptr_eq(expected, current));
+                    if !owns {
+                        let (session, lease) = opening.into_session_with_lease();
+                        (Err(applying_conflict(&root)), Some((session, lease)))
+                    } else {
+                        match session_info(opening.session()) {
+                            Ok(info) => {
+                                let validity = startup_validity
+                                    .as_ref()
+                                    .map(|validity| validity.read())
+                                    .transpose()?;
+                                if validity.as_ref().is_some_and(|valid| !**valid) {
+                                    (
+                                        Err(PluginError::Conflict(
+                                            "La decisione dei componenti è cambiata durante l'apertura."
+                                                .into(),
+                                        )),
+                                        None,
+                                    )
+                                } else {
+                                    let (session, lease) = opening.into_session_with_lease();
+                                    sessions
+                                        .slots
+                                        .insert(root.clone(), SessionSlot::Open(session));
+                                    drop(lease);
+                                    (Ok(info), None)
+                                }
+                            }
+                            Err(error) => (Err(error), None),
+                        }
+                    }
                 }
                 None => match session_info(opening.session()) {
                     // `VaultInfo` è l'ultima operazione fallibile. Il token di
@@ -2203,6 +2455,7 @@ impl Host {
                     session
                 }
                 SessionSlot::Closing(_) => return Err(closing_conflict(&root)),
+                SessionSlot::Applying(_) => return Err(applying_conflict(&root)),
             }
         };
         // Il claim conserva il marker, ma non la guardia della mappa: watcher,
@@ -2226,25 +2479,31 @@ impl Host {
     /// L'ordine che conta è dentro ciascuno — l'inverso della dichiarazione dei
     /// suoi plugin — e lo tiene [`Workspace::close`].
     pub fn close(&self) -> Vec<PluginError> {
-        let claimed = {
-            let mut sessions = match self.sessions.write() {
-                Ok(sessions) => sessions,
-                Err(and) => return vec![and],
-            };
-            let mut claimed = Vec::new();
-            for (root, slot) in &mut sessions.slots {
-                if matches!(slot, SessionSlot::Open(_)) {
-                    let token = Arc::new(ClosingToken);
-                    let SessionSlot::Open(session) =
-                        std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
-                    else {
-                        unreachable!("lo slot verificato era aperto")
-                    };
-                    claimed.push((root.clone(), token, session));
+        let claimed =
+            {
+                let mut sessions = match self.sessions.write() {
+                    Ok(sessions) => sessions,
+                    Err(and) => return vec![and],
+                };
+                if let Some(root) = sessions.slots.iter().find_map(|(root, slot)| {
+                    matches!(slot, SessionSlot::Applying(_)).then_some(root)
+                }) {
+                    return vec![applying_conflict(root)];
                 }
-            }
-            claimed
-        };
+                let mut claimed = Vec::new();
+                for (root, slot) in &mut sessions.slots {
+                    if matches!(slot, SessionSlot::Open(_)) {
+                        let token = Arc::new(ClosingToken);
+                        let SessionSlot::Open(session) =
+                            std::mem::replace(slot, SessionSlot::Closing(Arc::clone(&token)))
+                        else {
+                            unreachable!("lo slot verificato era aperto")
+                        };
+                        claimed.push((root.clone(), token, session));
+                    }
+                }
+                claimed
+            };
         let claimed: Vec<_> = claimed
             .into_iter()
             .map(|(root, token, session)| CloseClaim {
@@ -2330,6 +2589,7 @@ impl Host {
         match sessions.slots.get(&key) {
             Some(SessionSlot::Open(session)) => Ok(f(session)),
             Some(SessionSlot::Closing(_)) => Err(closing_conflict(&key)),
+            Some(SessionSlot::Applying(_)) => Err(applying_conflict(&key)),
             None => Err(PluginError::NotFound(
                 format!("Nessun vault aperto su {key}.").into(),
             )),
@@ -2884,6 +3144,43 @@ fn info_of(session: &VaultSession) -> Result<VaultInfo, PluginError> {
 /// già pretesa una riga sopra. Chi *usa* una radice coniata passa da
 /// [`Host::key`] e chi la dimentica da [`root_forms`], e in nessuno
 /// dei due casi si torna a chiedere al disco una risposta che si ha già.
+/// Risolve il contenitore sibling anche quando la root live è assente dopo una
+/// `OldMoved` o una `Published` interrotta.
+fn snapshot_recovery_root(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
+    let Some(leaf) = root.file_name() else {
+        return if root.is_dir() {
+            canonical(root)
+        } else {
+            Err(PluginError::NotFound(
+                format!("Root snapshot non valida: {root}").into(),
+            ))
+        };
+    };
+    let parent = root
+        .parent()
+        .filter(|parent| !parent.as_str().is_empty())
+        .unwrap_or(Utf8Path::new("."));
+    match std::fs::metadata(parent.as_std_path()) {
+        Ok(metadata) if metadata.is_dir() => {}
+        Ok(_) => {
+            return Err(PluginError::NotFound(
+                format!("Parent snapshot non valida: {parent}").into(),
+            ));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Err(PluginError::NotFound(
+                format!("Parent snapshot non trovata: {parent}").into(),
+            ));
+        }
+        Err(error) => {
+            return Err(PluginError::Io(
+                format!("non riesco a leggere {parent}: {error}").into(),
+            ));
+        }
+    }
+    let parent = canonical(parent)?;
+    Ok(parent.join(leaf))
+}
 fn canonical(root: &Utf8Path) -> Result<Utf8PathBuf, PluginError> {
     let canonical = root
         .canonicalize()
@@ -3345,5 +3642,80 @@ mod tests {
             storage.write_progressed.load(Ordering::Acquire),
             "VersionStore/provider I/O retained the workspace lock"
         );
+    }
+
+    #[test]
+    fn applying_claim_blocks_open_and_releases_on_drop() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+        std::fs::create_dir(&root).expect("vault root");
+        let root = root.canonicalize_utf8().expect("canonical root");
+        let host = Host::without_watcher();
+        let claim = host.claim_snapshot(&root).expect("snapshot claim");
+        assert!(matches!(host.open(&root), Err(PluginError::Conflict(_))));
+        let close_errors = host.close();
+        assert!(matches!(
+            close_errors.as_slice(),
+            [PluginError::Conflict(_)]
+        ));
+        drop(claim);
+        assert!(host.sessions.read().expect("sessions").slots.is_empty());
+    }
+
+    #[test]
+    fn applying_claim_blocks_recovery_for_missing_root() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = Utf8PathBuf::from_path_buf(dir.path().join("vault")).expect("utf8");
+        let host = Host::without_watcher();
+        let recovery_root = snapshot_recovery_root(&root).expect("recovery root");
+        let claim = host.claim_snapshot(&recovery_root).expect("snapshot claim");
+        assert!(matches!(
+            host.recover_snapshot_artifacts(&root),
+            Err(SnapshotHostError::Lifecycle(PluginError::Conflict(_)))
+        ));
+        drop(claim);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn applying_claim_blocks_recovery_for_missing_root_through_alias_parent() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let canonical_parent =
+            Utf8PathBuf::from_path_buf(dir.path().join("canonical")).expect("canonical parent");
+        let alias_parent =
+            Utf8PathBuf::from_path_buf(dir.path().join("alias")).expect("alias parent");
+        std::fs::create_dir(&canonical_parent).expect("canonical parent");
+        std::fs::create_dir(canonical_parent.join("sub")).expect("canonical sub");
+        symlink(&canonical_parent, &alias_parent).expect("alias parent");
+        let canonical_root = canonical_parent.join("vault");
+        let aliased_root = alias_parent.join("sub").join("..").join("vault");
+        let host = Host::without_watcher();
+        let canonical_key =
+            snapshot_recovery_root(&canonical_root).expect("canonical recovery root");
+        let claim = host
+            .claim_snapshot(&canonical_key)
+            .expect("canonical snapshot claim");
+
+        assert!(!canonical_root.exists());
+        assert!(matches!(
+            host.recover_snapshot_artifacts(&aliased_root),
+            Err(SnapshotHostError::Lifecycle(PluginError::Conflict(_)))
+        ));
+        drop(claim);
+    }
+
+    #[test]
+    fn recovery_reports_not_found_for_missing_parent() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root =
+            Utf8PathBuf::from_path_buf(dir.path().join("missing/vault")).expect("missing root");
+        let host = Host::without_watcher();
+
+        assert!(matches!(
+            host.recover_snapshot_artifacts(&root),
+            Err(SnapshotHostError::Lifecycle(PluginError::NotFound(_)))
+        ));
     }
 }

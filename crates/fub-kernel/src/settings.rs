@@ -87,7 +87,7 @@ pub const ATTACHMENT_FOLDER: &str = "files.attachment-folder";
 /// La versione di schema del file (§15.3): un numero scritto **dal primo
 /// giorno**, perché il file che non ce l'ha è quello che poi non si sa da che
 /// versione viene.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il file di un livello, com'è su disco.
 #[derive(Default, Serialize, Deserialize)]

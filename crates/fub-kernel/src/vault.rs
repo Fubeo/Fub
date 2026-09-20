@@ -147,7 +147,7 @@ const TRASH_METADATA_DIR: &str = "trash";
 /// previsto: senza un numero in testa, la versione dopo dovrebbe **indovinare**
 /// che un file senza campo viene da prima — e qui indovinare male vuol dire
 /// riportare la nota di qualcuno nella cartella sbagliata.
-const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
+pub const SCHEMA_VERSION: SchemaVersion = SchemaVersion::new(1);
 
 /// Il contenuto di un sidecar del cestino.
 #[derive(Serialize, Deserialize)]

@@ -26,7 +26,7 @@
 //! insieme prendono un formato **nato** e mai documentato, che è il caso che
 //! nessun `include_str!` può vedere — un file che il test non include è un file
 //! di cui il test non sa niente. Ma due conti uguali non dicono che siano gli
-//! stessi undici: quello lo dice questo test, riga per riga. È la lezione della
+//! stessi dodici: quello lo dice questo test, riga per riga. È la lezione della
 //! [0105](../../../docs/decisions/0191-ui-dichiarativa-e-renderer.md)
 //! applicata a un terzo caso — *il conto prende ciò che nessuno ha elencato, il
 //! test prende ciò che è elencato male* — e nessuno dei due basta da solo.
@@ -64,6 +64,10 @@ const SOURCES: &[(&str, &str)] = &[
     (
         "crates/fub-features/src/versioning.rs",
         include_str!("../../fub-features/src/versioning.rs"),
+    ),
+    (
+        "crates/fub-kernel/src/snapshot.rs",
+        include_str!("../../fub-kernel/src/snapshot.rs"),
     ),
     (
         "crates/fub-features/src/search.rs",
@@ -199,7 +203,7 @@ fn source(file: &str) -> Option<&'static str> {
 fn every_table_row_points_to_a_constant_that_exists() {
     let rows = table_rows();
     assert!(
-        rows.len() >= 11,
+        rows.len() >= 12,
         "the schema table has shrunk: {} rows read from \
          docs/development/versioning-and-releases.md. If a format was removed it must be removed from \
          SOURCES too; if the table shape changed, this parser is the one that \
