@@ -1,6 +1,6 @@
 # Stato del progetto
 
-> **Stato aggiornato per `main@d5a14aa40138081c2e3923a8970aae0bd0c3b582`, 20 settembre 2026.**
+> **Stato aggiornato per `main@9234d77fdc057e7c038de0c94dd52b883a7407c0`, 20 settembre 2026.**
 
 ## Baseline corrente
 
@@ -74,7 +74,9 @@ il criterio; #6 e #56 sono chiuse.
 
 ## Lavoro residuo
 
-- #5: ripristino atomico degli snapshot del database;
+- #5 è chiusa: lo snapshot globale offline è in `main` dalla PR #65 con
+  matrice di verifica su `main@9234d77f` (CI `35536285360` e NPM supply chain
+  `35536285427` verdi);
 - #9: sincronizzazione distribuita esclusa dalla prima release. L'issue resta
   OPEN come lavoro futuro perché Fub non offre ancora una capacità utente
   distribuita;

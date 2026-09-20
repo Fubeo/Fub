@@ -29,10 +29,11 @@ ciò che formerà la prima versione.
 - policy di sicurezza, supply chain e SBOM;
 - documentazione canonica organizzata per prodotto, architettura, sviluppo,
   riferimento e stato;
+- snapshot globali offline con manifest schema 1, validazione pre-commit,
+  revisione di base SHA-256, staging sibling, record persistente e recovery
+  prima del mount (PR #65);
 - temi installabili con contratto `theme-1`, preview isolata e ripristino della
   scelta autorevole;
-- Graph View modularizzata con fixture 2k/10k, teardown verificato e gate hard
-  sulla stabilizzazione dell'heap.
 
 ### Corretto
 

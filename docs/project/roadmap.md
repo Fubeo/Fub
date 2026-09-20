@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Stato aggiornato per `main@d5a14aa40138081c2e3923a8970aae0bd0c3b582`, 20 settembre 2026.**
+> **Stato aggiornato per `main@9234d77fdc057e7c038de0c94dd52b883a7407c0`, 20 settembre 2026.**
 
 La roadmap descrive direzione e ordine. Le GitHub Issues restano il tracker
 operativo; una capacità già consegnata non torna incompleta soltanto perché un
@@ -41,7 +41,8 @@ separati, determinismo, lifecycle, benchmark 2k/10k e gate hard sull'heap.
 
 ## Ora — preparazione del primo release candidate
 
-1. completare #5, ripristino atomico degli snapshot del database.
+#5 è chiusa: il ripristino atomico degli snapshot globali è in `main` dalla
+PR #65. Il resto della preparazione segue sotto.
 
 ## Prossimo — primo release candidate
 
