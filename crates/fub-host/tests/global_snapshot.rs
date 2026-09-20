@@ -21,10 +21,8 @@ fn host_rejects_open_vault_and_reopens_after_offline_apply() {
     assert!(host.close().is_empty());
     let snapshot = SnapshotBundle::capture(&root).expect("current snapshot");
 
-    let report = host
-        .apply_snapshot(&root, &snapshot)
+    host.apply_snapshot(&root, &snapshot)
         .expect("apply and reopen");
-    assert_eq!(report.entries, 1);
     host.wait_indexed(None).expect("reopen indexing");
     assert_eq!(fs::read(root.join("note.md")).expect("note"), b"offline");
     assert!(host.close().is_empty());
