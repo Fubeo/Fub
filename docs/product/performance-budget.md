@@ -117,9 +117,10 @@ dalla complessità asintotica.
 
 ## Stato e ricalibrazione
 
-#12 e #40 sono chiuse come consegna integrata. #56 possiede il residuo heap di
-[#6](https://github.com/Fubeo/Fub/issues/6): #6 può essere chiusa soltanto dopo
-più esecuzioni verdi sullo stesso SHA del gate prolungato.
+#12 e #40 sono chiuse come consegna integrata. Il residuo heap di
+[#6](https://github.com/Fubeo/Fub/issues/6), posseduto da [#56](https://github.com/Fubeo/Fub/issues/56),
+è stato soddisfatto da esecuzioni consecutive verdi del gate prolungato.
+Entrambe le issue risultano chiuse; i budget di frame time restano osservazionali.
 
 Ricalibrare dopo ulteriori distribuzioni o quando cambiano browser, sistema,
 hardware, fixture, renderer o algoritmo. Confrontare sempre la stessa fixture e

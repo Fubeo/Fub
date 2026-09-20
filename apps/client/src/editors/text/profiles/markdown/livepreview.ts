@@ -15,8 +15,8 @@
 //   interpreta la dichiarazione del contratto (§4.4, decisione 0115). Gli
 //   indici che ne tornano sono già code unit, quindi accenti ed emoji non
 //   spostano nulla. Prima queste regex stavano scritte qui, e le stesse
-//   sintassi erano riscritte diverse in `editor-commands.ts` e in
-//   `completions.ts`.
+//   sintassi erano riscritte diverse nei comandi Markdown
+//   (`editors/text/profiles/markdown/commands.ts`) e in `completions.ts`.
 //
 // Il modulo è diviso in due strati, e la divisione è ciò che lo rende
 // testabile: `computeDecorations` è una funzione pura (stato → lista di

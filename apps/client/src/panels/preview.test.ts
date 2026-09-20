@@ -12,23 +12,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RenderedDocument } from "../host/contract";
 
 const rendered = vi.hoisted(() => ({ value: null as RenderedDocument | null }));
-
-vi.mock("../host/ipc", () => ({
-  api: {
-    queryIndex: async (q: { kind: string; doc?: string }) => {
-      if (q.kind === "render_preview") return { kind: "render_preview", value: rendered.value };
-      throw new Error(`query inattesa: ${q.kind}`);
-    },
-  },
+const query = vi.hoisted(() => ({
+  renderPreview: vi.fn(),
+  renderEmbed: vi.fn(),
 }));
+
+vi.mock("../host/query", () => query);
 
 import { configurePreview, sourceBlockAt, updatePreview } from "./preview";
 
 describe("un wikilink cliccato in Lettura", () => {
   const calls: [string, string | undefined, string | undefined][] = [];
-
   beforeEach(() => {
     calls.length = 0;
+    query.renderPreview.mockImplementation(async () => {
+      if (!rendered.value) throw new Error("rendered preview missing");
+      return rendered.value;
+    });
     document.body.innerHTML = "";
     configurePreview({
       openPage: async (page, heading, block) => {
@@ -36,6 +36,7 @@ describe("un wikilink cliccato in Lettura", () => {
       },
     });
   });
+
 
   async function renderPreview(html: string): Promise<HTMLElement> {
     rendered.value = { html, parts: [] } as unknown as RenderedDocument;

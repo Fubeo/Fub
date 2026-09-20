@@ -2,11 +2,11 @@
 //
 // La §4.4 chiedeva chi, fra il parser Lezer del buffer e il modello del file,
 // fosse la verità. La misura ha risposto che la domanda era mal posta e che i
-// parser erano più di due: dentro `apps/client/` la stessa sintassi era scritto
+// parser erano più di due: dentro `apps/client/` la stessa sintassi era scritta
 // **tredici** volte in sei costrutti, in tre moduli che non si parlavano —
-// `livepreview.ts` per decorare, `editor-commands.ts` per i gesti,
-// `completions.ts` per il popup — e le tre non erano d'accordo fra loro. Su
-// `> - [ ] x` la vivi preview disegnava una casella e `Mod-Enter` non vedeva
+// `livepreview.ts` per decorare, `editors/text/profiles/markdown/commands.ts` per
+// i gesti, `completions.ts` per il popup — e le tre non erano d'accordo fra loro.
+// Su `> - [ ] x` la vivi preview disegnava una casella e `Mod-Enter` non vedeva
 // una todo; su `vedi.#tag` il popup si apriva e la decorazione non compariva.
 //
 // La verità non è nessuno dei due parser, ed è la **dichiarazione**:

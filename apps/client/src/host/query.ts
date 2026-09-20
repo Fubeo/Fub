@@ -6,12 +6,13 @@
 // chiamante è il moltiplicatore che il §16.6 conta: tre righe qui, invece di
 // tre `match` con tre messaggi d'errore diversi là.
 //
-// Non è un livello di astrazione sul canale — un pannello che volesse una query
-// che qui non c'è la manda con `api.queryIndex` e basta, come farebbe un
-// plugin. È solo il posto dove la risposta si apre.
+// I pannelli usano le funzioni tipizzate di questo modulo; `queryIndex` resta
+// confinata al bordo host e agli helper che aprono le sue risposte.
 import { api } from "./ipc";
 import type {
   DraftInfo,
+  EmbedContent,
+  RenderedDocument,
   Organization,
   DocumentMatch,
   EntryKind,
@@ -84,6 +85,28 @@ function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadO
   // sa restringere un generico su un discriminante, e il cast è l'unico punto
   // in cui glielo si dice.
   return (result as { value: unknown }).value as PayloadOf[K];
+}
+
+/// Rende il documento richiesto dalla superficie di lettura.
+export async function renderPreview(doc: string): Promise<RenderedDocument> {
+  return open(await api.queryIndex({ kind: "render_preview", doc }), "render_preview");
+}
+
+/// Rende un ritaglio per un embed, mantenendo l'ancora eventualmente indicata.
+export async function renderEmbed(
+  page: string,
+  heading?: string | null,
+  block?: string | null,
+): Promise<EmbedContent> {
+  return open(
+    await api.queryIndex({
+      kind: "render_embed",
+      page,
+      heading: heading ?? null,
+      block: block ?? null,
+    }),
+    "render_embed",
+  );
 }
 
 /// I documenti che combaciano.

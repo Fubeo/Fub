@@ -4,7 +4,7 @@ import { foldKeymap } from "@codemirror/language";
 import { lintKeymap } from "@codemirror/lint";
 import { searchKeymap } from "@codemirror/search";
 import { EditorView, type KeyBinding } from "@codemirror/view";
-import { obsidianKeymap } from "../../editor/editor-commands";
+import { obsidianKeymap } from "./profiles/markdown/commands";
 
 /// Recupera la vista montata nel contenitore di una superficie testuale.
 export function findTextEditor(parent: HTMLElement): EditorView | null {

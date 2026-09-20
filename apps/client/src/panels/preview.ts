@@ -15,7 +15,7 @@
 // sarebbe un ciclo, e la forma iniettata è la stessa dei tre moduli
 // dell'editor.
 import type { EmbedContent, RenderedDocument } from "../host/contract";
-import { api } from "../host/ipc";
+import { renderEmbed, renderPreview } from "../host/query";
 import { mountTree, unmountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
@@ -135,12 +135,7 @@ export function clearPreview(previewEl: HTMLElement): void {
 /// documento.
 export async function updatePreview(previewEl: HTMLElement, id: string): Promise<void> {
   await runOf(previewEl).last(async (expected) => {
-    const rendered = await expected(
-      api.queryIndex({ kind: "render_preview", doc: id }).then((r) => {
-        if (r.kind !== "render_preview") throw new Error("risposta inattesa");
-        return r.value;
-      }),
-    );
+    const rendered = await expected(renderPreview(id));
     mountRendered(previewEl, rendered);
     // L'`atteso` scende nell'idratazione, e non è una comodità: gli embed sono
     // il **grosso** delle attese di un'anteprima — una nota che ne trascluda
@@ -287,12 +282,7 @@ async function hydrateEmbeds(
       const key = JSON.stringify([page, heading, block]);
       let requestedContent = memo.get(key);
       if (!requestedContent) {
-        requestedContent = api
-          .queryIndex({ kind: "render_embed", page, heading, block })
-          .then((r) => {
-            if (r.kind !== "render_embed") throw new Error("risposta inattesa");
-            return r.value;
-          });
+        requestedContent = renderEmbed(page, heading, block);
         memo.set(key, requestedContent);
       }
       // L'errore diventa un valore prima del cancello — un embed che non si

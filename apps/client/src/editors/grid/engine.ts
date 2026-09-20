@@ -7,7 +7,6 @@ import type {
   GridWindow,
   GridWindowRequest,
   SheetCellValue,
-  SheetEvaluation,
 } from "../../host/contract";
 import type { TextOperation } from "../../editor/text-operation";
 import type { Theme } from "../../theme/theme";
@@ -73,8 +72,6 @@ export interface GridEngineOptions {
   readonly revision?: string;
   readonly onChange: (change: GridChange) => void;
   readonly onSelectionChange: () => void;
-  /** Kept for isolated legacy engine tests; production uses the GridHost. */
-  readonly evaluate?: (source: string) => Promise<SheetEvaluation>;
   readonly grid?: GridHost;
   readonly theme?: Theme;
 }
@@ -422,7 +419,6 @@ export class GridEngine {
   #readOnly = false;
   #destroyed = false;
   #providerCommitTail: Promise<void> = Promise.resolve();
-  #evaluationGeneration = 0;
   #protocolGeneration = 0;
   #undo: GridCellPatch[][] = [];
   #redo: GridCellPatch[][] = [];
@@ -533,7 +529,6 @@ export class GridEngine {
     this.#syncFormulaBar();
     this.#render();
     if (this.#options.grid) void this.#openProtocol(source);
-    else void this.#evaluateLegacy();
   }
 
   syncDoc(update: { readonly text: string; readonly operation: TextOperation | null } | string): void {
@@ -577,7 +572,6 @@ export class GridEngine {
     this.#selection = this.#visibleSelection(this.#selection);
     if (!this.#editing) this.#syncFormulaBar();
     this.#render();
-    if (!this.#options.grid) void this.#evaluateLegacy();
   }
 
   getDoc(): string { return this.#source; }
@@ -1105,7 +1099,6 @@ export class GridEngine {
         .catch(() => {});
     } else {
       this.#options.onChange({ text: committed.source, operation: committed.operation, origin });
-      void this.#evaluateLegacy();
     }
     return true;
   }
@@ -1184,23 +1177,6 @@ export class GridEngine {
     if (top < this.#viewport.scrollTop + COLUMN_HEADER_HEIGHT) this.#viewport.scrollTop = Math.max(0, top - COLUMN_HEADER_HEIGHT);
     else if (bottom > this.#viewport.scrollTop + this.#viewport.clientHeight) this.#viewport.scrollTop = bottom - this.#viewport.clientHeight;
   }
-  async #evaluateLegacy(): Promise<void> {
-    if (!this.#options.evaluate) return;
-    const generation = ++this.#evaluationGeneration;
-    const source = this.#source;
-    try {
-      const evaluation = await this.#options.evaluate(source);
-      if (generation !== this.#evaluationGeneration || this.#destroyed || source !== this.#source) return;
-      this.#values = new Map(evaluation.cells.map((cell) => [key(cell.sheet, cell.row, cell.column), cell.value]));
-      delete this.#root.dataset.evaluation;
-      this.#render();
-    } catch {
-      if (generation !== this.#evaluationGeneration || this.#destroyed) return;
-      this.#values.clear();
-      this.#root.dataset.evaluation = "unavailable";
-      this.#render();
-    }
-  }
 
   #protocolIsCurrent(generation: number, instance: string, surface: string): boolean {
     return !this.#destroyed
@@ -1256,7 +1232,6 @@ export class GridEngine {
       this.#selection = this.#visibleSelection(this.#clampedSelection(this.#selection));
       this.#rebuildLayout();
       this.#syncFormulaBar();
-      delete this.#root.dataset.evaluation;
       this.#root.dataset.gridProtocol = "v1";
       this.#render();
       opened = null;
@@ -1270,7 +1245,6 @@ export class GridEngine {
       this.#instance = null;
       this.#session = null;
       this.#surface = null;
-      this.#root.dataset.evaluation = "unavailable";
       this.#root.dataset.gridProtocol = "fallback";
       this.#render();
     }
@@ -1372,10 +1346,8 @@ export class GridEngine {
         this.#rebuildLayout();
         this.#selection = this.#visibleSelection(this.#selection);
         this.#syncFormulaBar();
-        this.#root.dataset.evaluation = "unavailable";
         this.#root.dataset.gridProtocol = "fallback";
         this.#render();
-        void this.#evaluateLegacy();
       }
     })().finally(() => {
       this.#viewportLoad = null;
@@ -1430,10 +1402,8 @@ export class GridEngine {
       this.#rebuildLayout();
       this.#selection = this.#visibleSelection(this.#selection);
       this.#syncFormulaBar();
-      this.#root.dataset.evaluation = "unavailable";
       this.#root.dataset.gridProtocol = "fallback";
       this.#render();
-      void this.#evaluateLegacy();
     }
   }
 
@@ -1483,11 +1453,9 @@ export class GridEngine {
       this.#sourceWorkbook = parseWorkbook(this.#source);
       this.#values.clear();
       this.#workbook = this.#sourceWorkbook;
-      this.#root.dataset.evaluation = "unavailable";
       this.#root.dataset.gridProtocol = "fallback";
       this.#rebuildLayout();
       this.#render();
-      void this.#evaluateLegacy();
     }
   }
 

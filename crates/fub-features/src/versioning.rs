@@ -475,8 +475,8 @@ pub struct VersionStore {
     /// mezzo darebbe a due salvataggi la stessa base, e il secondo cancellerebbe
     /// il primo senza che nessuno dei due se ne accorga. Là il prestito che
     /// attraversa il `data_write` **è** l'atomicità, non un difetto, e togliere
-    /// l'I/O da sotto sposterebbe una riga di questo `todo.md` da una famiglia a
-    /// un'altra.
+    /// l'I/O da sotto spezzerebbe questa proprietà e confonderebbe il confine
+    /// fra lettura e scrittura.
     ///
     /// In lettura no: quello che serve è il path, e [`Inner::path`] lo
     /// consegna con la guardia già finita. Vedi [`VersionStore::read`].

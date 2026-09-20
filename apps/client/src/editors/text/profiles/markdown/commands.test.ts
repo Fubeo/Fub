@@ -5,6 +5,8 @@ import {
   autoPairDecision,
   dedentListItem,
   indentListItem,
+  markdownKeymap,
+  obsidianKeymap,
   smartListEnter,
   toggleBold,
   toggleBulletList,
@@ -15,6 +17,7 @@ import {
   toggleStrikethrough,
   toggleWikilink,
 } from "./commands";
+import { textKeymap } from "../../commands";
 
 // I comandi sono `StateCommand` puri: si testano creando un `EditorState` e
 // catturando la transazione dal dispatch, senza mai istanziare una view (i
@@ -331,5 +334,35 @@ describe("autoPairDecision", () => {
 
   it("gli offset in code unit reggono le emoji", () => {
     expect(decide("🎯[|", "[")).toEqual({ action: "insert", text: "[]]", cursor: 1 });
+  });
+});
+
+describe("composizione keymap Markdown", () => {
+  it("mantiene l'ordine e gli accordi montati dall'editor", () => {
+    expect(obsidianKeymap.map(({ key }) => key)).toEqual([
+      "Mod-b",
+      "Mod-i",
+      "Mod-Shift-x",
+      "Mod-`",
+      "Mod-k",
+      "Enter",
+      "Mod-Enter",
+      "Tab",
+      "Shift-Tab",
+      "Mod-d",
+      "Alt-ArrowUp",
+      "Alt-ArrowDown",
+      "Mod-Shift-8",
+      "Mod-Shift-7",
+    ]);
+  });
+
+  it("compone il keymap Markdown con quello condiviso senza duplicati", () => {
+    const expected = [
+      ...markdownKeymap.slice(0, 9),
+      ...textKeymap,
+      ...markdownKeymap.slice(9),
+    ];
+    expect(obsidianKeymap).toEqual(expected);
   });
 });
