@@ -256,7 +256,7 @@ export const SCENE = [
       await page.waitForSelector('.grid-surface[data-grid-protocol="v1"]');
       await page.waitForFunction(() => {
         const grid = document.querySelector(".grid-surface");
-        return grid?.getAttribute("data-evaluation") !== "unavailable"
+        return grid?.getAttribute("data-grid-protocol") === "v1"
           && (grid?.querySelectorAll('[role="gridcell"]').length ?? 0) > 0;
       });
     },

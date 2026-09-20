@@ -206,8 +206,8 @@ fn a_failing_rename_counts_only_once() {
 /// **Un fallimento di sincronizzazione esce anche dalla porta**, e non solo nel
 /// registro (difetto 0200).
 ///
-/// La riga di todo diceva «non produce nessun segnale», e rimisurata è per metà
-/// falsa: il segnale c'è ed è il conto del banco qui sopra, messo lì dalla 0030
+/// La verifica iniziale lasciava intendere «non produce nessun segnale», e
+/// rimisurata è per metà falsa: il segnale c'è ed è il conto del banco qui sopra,
 /// proprio perché un chiamante distratto non potesse nasconderlo. Ma un fatto
 /// interrogabile è una risposta a chi chiede, e chi chiede deve prima
 /// sospettare: `VaultStatus` sta in un pannello che si apre quando ci si è già

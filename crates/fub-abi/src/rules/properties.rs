@@ -549,8 +549,8 @@ mod tests {
 
     #[test]
     fn a_text_in_a_number_column_sorts_last_in_both_directions() {
-        // Lo scenario di issues.md §12: un testo sporco in una colonna di
-        // numeri. Il rango mette il testo dopo i numeri in entrambi i versi,
+        // Lo scenario §12: un testo sporco in una colonna di numeri. Il rango
+        // mette il testo dopo i numeri in entrambi i versi,
         // e l'assente ancora dopo — sul caso che il difetto misurava, Excel
         // e «in fondo» coincidono.
         let vault = vec![

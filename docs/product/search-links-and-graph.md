@@ -92,4 +92,6 @@ nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
   quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
   O(n²), quindi il risultato a 10k non è una garanzia universale;
 - le issue [#6](https://github.com/Fubeo/Fub/issues/6) e
-  [#12](https://github.com/Fubeo/Fub/issues/12) restano aperte.
+  [#12](https://github.com/Fubeo/Fub/issues/12) sono chiuse; il residuo heap
+  trasferito a [#56](https://github.com/Fubeo/Fub/issues/56) è stato verificato
+  e chiuso.

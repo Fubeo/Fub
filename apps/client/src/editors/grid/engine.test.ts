@@ -4,7 +4,7 @@ import { findTextEditorOrThrow } from "../text/test-support";
 import { parseWorkbook } from "./model";
 import { commitGridPatches, inputPatch } from "./operation";
 import type { GridWindow } from "../../host/contract";
-import { GridEngine, type GridChange, type GridEngineOptions, type GridHost } from "./engine";
+import { GridEngine, type GridChange, type GridHost } from "./engine";
 
 function workbook(rows = 100, columns = 50): string {
   return JSON.stringify({
@@ -20,21 +20,18 @@ function workbook(rows = 100, columns = 50): string {
 }
 
 function mounted(
-  evaluator: GridEngineOptions["evaluate"] = async () => ({ cells: [], dependencies: [] }),
   grid?: GridHost,
   source = workbook(),
 ) {
   const host = document.createElement("div");
   document.body.append(host);
   const changes: GridChange[] = [];
-  const evaluate = vi.fn(evaluator);
   const engine = new GridEngine(host, {
     surfaceId: "test",
     formatId: "fubsheet",
     revision: "rev-1",
     onChange: (change) => changes.push(change),
     onSelectionChange: () => {},
-    evaluate,
     grid,
   });
   const viewport = host.querySelector<HTMLElement>(".grid-viewport")!;
@@ -43,7 +40,7 @@ function mounted(
     clientHeight: { configurable: true, value: 300 },
   });
   engine.setDoc(source);
-  return { engine, host, viewport, changes, evaluate };
+  return { engine, host, viewport, changes };
 }
 function protocolHost(
   source: string,
@@ -180,12 +177,10 @@ describe("GridEngine", () => {
   });
 
   it("tiene le battute locali e pubblica una sola operazione al commit", () => {
-    const { engine, host, viewport, changes, evaluate } = mounted();
-    const evaluationsBeforeTyping = evaluate.mock.calls.length;
+    const { engine, host, viewport, changes } = mounted();
 
     viewport.dispatchEvent(new KeyboardEvent("keydown", { key: "X", bubbles: true }));
     expect(changes).toHaveLength(0);
-    expect(evaluate).toHaveBeenCalledTimes(evaluationsBeforeTyping);
     expect(host.querySelector<HTMLElement>(".grid-cell-editor")!.hidden).toBe(false);
 
     host.querySelector<HTMLElement>(".grid-cell-editor .cm-content")!
@@ -194,7 +189,6 @@ describe("GridEngine", () => {
     expect(changes[0].operation.kind).toBe("grid");
     expect(changes[0].operation.patches).toHaveLength(1);
     expect(parseWorkbook(engine.getDoc()).sheets[0].cells?.[0].input).toBe("X");
-    expect(evaluate.mock.calls.length).toBe(evaluationsBeforeTyping + 1);
     engine.destroy();
   });
 
@@ -226,7 +220,7 @@ describe("GridEngine", () => {
   it("negozia Grid v1, non chiama l'host per battuta e applica il diff guardato", async () => {
     const source = workbook();
     const grid = protocolHost(source);
-    const { engine, host, viewport, changes } = mounted(undefined, grid);
+    const { engine, host, viewport, changes } = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -342,7 +336,7 @@ describe("GridEngine", () => {
         };
       },
     });
-    const { engine, host, viewport } = mounted(undefined, grid, source);
+    const { engine, host, viewport } = mounted(grid, source);
     for (let index = 0; index < 12; index += 1) await Promise.resolve();
 
     viewport.scrollTop = 300 * 28;
@@ -468,38 +462,6 @@ describe("GridEngine", () => {
     engine.destroy();
   });
 
-  it("scarta una valutazione stantia senza sovrascrivere il valore più recente", async () => {
-    const pending: ((value: {
-      cells: { sheet: string; row: string; column: string; value: { kind: "number"; value: number } }[];
-      dependencies: never[];
-    }) => void)[] = [];
-    const evaluator = () => new Promise<{
-      cells: { sheet: string; row: string; column: string; value: { kind: "number"; value: number } }[];
-      dependencies: never[];
-    }>((resolve) => pending.push(resolve));
-    const { engine, host } = mounted(evaluator);
-    const latest = JSON.parse(workbook());
-    latest.sheets[0].cells[0].input = "2";
-    engine.setDoc(JSON.stringify(latest));
-
-
-    pending[1]!({
-      cells: [{ sheet: "main", row: "r0", column: "c0", value: { kind: "number", value: 22 } }],
-      dependencies: [],
-    });
-    await Promise.resolve();
-    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="0"][data-column="0"]')!.textContent)
-      .toBe("22");
-
-    pending[0]!({
-      cells: [{ sheet: "main", row: "r0", column: "c0", value: { kind: "number", value: 11 } }],
-      dependencies: [],
-    });
-    await Promise.resolve();
-    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="0"][data-column="0"]')!.textContent)
-      .toBe("22");
-    engine.destroy();
-  });
 
   it("sceglie deterministicamente la prima superficie compatibile dichiarata", async () => {
     const grid = protocolHost(workbook());
@@ -515,7 +477,7 @@ describe("GridEngine", () => {
         return open(surface, source, revision);
       },
     });
-    const { engine } = mounted(undefined, grid);
+    const { engine } = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -528,7 +490,7 @@ describe("GridEngine", () => {
     const grid = protocolHost(workbook(), () => {
       mountedAtClose = document.querySelector(".grid-surface") !== null;
     });
-    const first = mounted(undefined, grid);
+    const first = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -543,7 +505,7 @@ describe("GridEngine", () => {
     expect(mountedAtClose).toBe(true);
     expect(first.host.querySelector(".grid-surface")).toBeNull();
 
-    const second = mounted(undefined, grid);
+    const second = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -611,7 +573,7 @@ describe("GridEngine", () => {
         };
       },
     });
-    const { engine, viewport } = mounted(undefined, grid);
+    const { engine, viewport } = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -637,7 +599,7 @@ describe("GridEngine", () => {
         { id: "wrong-version", format: "fubsheet", family: "grid", protocol_version: 2 },
       ],
     });
-    const { engine, host } = mounted(undefined, grid);
+    const { engine, host } = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     expect(grid.calls.filter((call) => call === "open")).toHaveLength(0);
@@ -653,7 +615,7 @@ describe("GridEngine", () => {
         throw new Error("provider trap");
       },
     });
-    const { engine, host } = mounted(undefined, grid);
+    const { engine, host } = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -673,7 +635,7 @@ describe("GridEngine", () => {
   it("chiude la sessione e ricostruisce il fallback se reload fallisce", async () => {
     const source = workbook();
     const grid = protocolHost(source);
-    const { engine, host } = mounted(undefined, grid);
+    const { engine, host } = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -716,7 +678,7 @@ describe("GridEngine", () => {
   it("ignora un reload stantio senza chiudere la nuova istanza", async () => {
     const source = workbook();
     const grid = protocolHost(source);
-    const current = mounted(undefined, grid);
+    const current = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -759,7 +721,7 @@ describe("GridEngine", () => {
   it("ignora il rifiuto di un apply stantio senza abbattere il provider nuovo", async () => {
     const source = workbook();
     const grid = protocolHost(source);
-    const current = mounted(undefined, grid);
+    const current = mounted(grid);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -791,15 +753,4 @@ describe("GridEngine", () => {
     current.engine.destroy();
   });
 
-  it("mostra l'input autorevole quando il valutatore Rust non è disponibile", async () => {
-    const { engine, host } = mounted(async () => {
-      throw new Error("host fake: il motore formule Rust non è montato");
-    });
-    await Promise.resolve();
-
-    expect(host.querySelector<HTMLElement>(".grid-surface")!.dataset.evaluation).toBe("unavailable");
-    expect(host.querySelector<HTMLElement>('.grid-cell[data-row="0"][data-column="0"]')!.textContent)
-      .toBe("1");
-    engine.destroy();
-  });
 });

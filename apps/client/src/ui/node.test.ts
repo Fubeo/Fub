@@ -501,8 +501,8 @@ describe("un campo riusato è il nodo di adesso, tutto intero (§2.8)", () => {
 // Era il **nome del campo**, cioè una stringa sola per tutto il documento: ogni
 // `radio` con quel `field` finiva nello stesso gruppo nativo, dovunque fosse.
 //
-// La metà che `todo.md` nominava — *«due form con lo stesso `field` si
-// deselezionano a vicenda»* — è **falsa**, e il caso qui sotto la tiene ferma:
+// L'ipotesi *«due form con lo stesso `field` si deselezionano a vicenda»* è
+// **falsa**, e il caso qui sotto la tiene ferma:
 // un gruppo di radio dentro un `<form>` il browser lo scopa già al form, per
 // specifica, e la shell disegna un `form` vero. Vera è l'altra metà, che
 // nessuno aveva guardato: due view **senza** form — due pannelli che mostrano

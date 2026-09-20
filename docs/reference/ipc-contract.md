@@ -53,10 +53,12 @@ invalidazioni e il diff UTF-8 seguono i limiti del contratto ABI/WIT e non
 trasportano DOM, CodeMirror, callback JavaScript o una battuta.
 Il payload non è il percorso Grid pubblico a finestre.
 
-Le fonti sono `crates/fub-host/src/sheet/index.rs` e
-`apps/client/src/host/sheet.ts`. La fixture
-`apps/client/src/__fixtures__/sheet-query.json` è generata dal test host reale
-e consumata dai test TypeScript. Nessun interprete formule vive nel fake host.
+Le fonti sono `crates/fub-host/src/sheet/index.rs` e il mirror TypeScript in
+`apps/client/src/host/contract.ts`. La fixture
+`apps/client/src/__fixtures__/sheet-query.json` è generata e verificata dal test
+Rust [`crates/fub-host/tests/sheet_query.rs`](../../crates/fub-host/tests/sheet_query.rs);
+non è un percorso di esecuzione del fake host e nessun interprete formule vive
+nel fake host.
 
 ## Limiti e semantica Grid
 

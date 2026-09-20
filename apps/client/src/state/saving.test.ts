@@ -149,13 +149,13 @@ describe("chi possiede il conto degli echoes", () => {
   });
 });
 
-// **Il difetto 0010** (issues.md): l'eco consumava anche riscritture vere. Il
-// conto diceva «nostro» a ogni evento non-watcher sul path, quindi una
-// riscrittura del kernel o di un plugin in volo mentre la nostra scrittura era
-// in corso veniva consumata come l'eco: l'avviso spariva, e alla scrittura
-// fallita il conto scendeva sotto zero. Il rimedio del todo.md — «appaiare
-// l'eco all'evento, non a un contatore nudo» — è qui: l'eco si consuma solo
-// con l'evento che porta l'identità di una scrittura diretta della shell.
+// **Il difetto 0010**: l'eco consumava anche riscritture vere. Il conto diceva
+// «nostro» a ogni evento non-watcher sul path, quindi una riscrittura del kernel
+// o di un plugin in volo mentre la nostra scrittura era in corso veniva
+// consumata come l'eco: l'avviso spariva, e alla scrittura fallita il conto
+// scendeva sotto zero. Il rimedio — «appaiare l'eco all'evento, non a un
+// contatore nudo» — è qui: l'eco si consuma solo con l'evento che porta
+// l'identità di una scrittura diretta della shell.
 describe("un evento con identità diversa non è il nostro eco", () => {
   it("una riscrittura del kernel non consuma l'eco e si dice", () => {
     const buf = { dirty: true, echoes: 1 };

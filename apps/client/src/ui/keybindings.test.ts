@@ -17,7 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { editorKeymap } from "../editors/text/test-support";
 import kernelKeys from "../__fixtures__/command-keys.json";
-import { obsidianKeymap } from "../editor/editor-commands";
+import { obsidianKeymap } from "../editors/text/profiles/markdown/commands";
 import { conflicts, normalize, shadowedPrefixes, registerShellCommand, resetShellCommands, type CommandEntry } from "./commands";
 import { mountKeyboard } from "./keyboard";
 import { openLifetime, type Lifetime } from "./lifetime";
