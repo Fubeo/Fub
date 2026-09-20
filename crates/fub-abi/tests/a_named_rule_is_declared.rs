@@ -498,6 +498,15 @@ fn rules() -> BTreeMap<&'static str, (Family, &'static str)> {
             ),
         ),
         (
+            "crates/fub-kernel/src/snapshot.rs::validate_portable_component",
+            (
+                Family::AsciiCase,
+                "canonizza soltanto il prefisso ASCII del componente per confrontarlo \
+                 con i device Windows riservati; i suffissi Unicode, come i \
+                 superscritti di COM/LPT, restano espliciti nella tabella dei nomi.",
+            ),
+        ),
+        (
             "crates/fub-kernel/src/host/guard.rs::normalized_host",
             (
                 Family::AsciiCase,

@@ -3687,9 +3687,10 @@ mod tests {
         let alias_parent =
             Utf8PathBuf::from_path_buf(dir.path().join("alias")).expect("alias parent");
         std::fs::create_dir(&canonical_parent).expect("canonical parent");
+        std::fs::create_dir(canonical_parent.join("sub")).expect("canonical sub");
         symlink(&canonical_parent, &alias_parent).expect("alias parent");
         let canonical_root = canonical_parent.join("vault");
-        let aliased_root = alias_parent.join("..").join("alias").join("vault");
+        let aliased_root = alias_parent.join("sub").join("..").join("vault");
         let host = Host::without_watcher();
         let claim = host
             .claim_snapshot(&canonical_root)
