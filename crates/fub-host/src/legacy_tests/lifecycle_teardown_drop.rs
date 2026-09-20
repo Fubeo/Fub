@@ -451,8 +451,32 @@ fn exercise(path: Path, panic_at: Option<Resource>) {
         first_handler < second_handler,
         "a first handler's panic must not skip the next: {journal:?}"
     );
-    assert!(workspace.try_write().is_some(), "workspace remains healthy");
-    assert!(registry.try_write().is_some(), "registry remains healthy");
+    // A disable accoda fatti già avvenuti: il custode può essere preso
+    // brevemente da quel lavoro interno dopo che il teardown è finito. La
+    // proprietà è che torni acquisibile entro il watchdog, non che `try_write`
+    // vinca proprio in questo istante.
+    let (workspace_healthy_tx, workspace_healthy_rx) = mpsc::channel();
+    let health_workspace = workspace.clone();
+    std::thread::spawn(move || {
+        let _ = workspace_healthy_tx.send(health_workspace.write().is_ok());
+    });
+    assert!(
+        workspace_healthy_rx
+            .recv_timeout(WATCHDOG)
+            .expect("workspace write lock remains reachable"),
+        "workspace remains healthy"
+    );
+    let (registry_healthy_tx, registry_healthy_rx) = mpsc::channel();
+    let health_registry = registry.clone();
+    std::thread::spawn(move || {
+        let _ = registry_healthy_tx.send(health_registry.write().is_ok());
+    });
+    assert!(
+        registry_healthy_rx
+            .recv_timeout(WATCHDOG)
+            .expect("registry write lock remains reachable"),
+        "registry remains healthy"
+    );
     assert!(workspace.read().unwrap().trust_of(OWNER).is_none());
     assert!(host.close().is_empty());
 }

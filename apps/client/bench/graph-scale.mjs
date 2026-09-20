@@ -15,6 +15,16 @@ const LIMITS = { nodes: [0, 0xffff_ffff], seed: [0, 0xffff_ffff], cycles: [1, 20
 const READY_SAFETY_TIMEOUT_MS = 30_000;
 const FRAME_SAMPLE_TARGET = 120;
 const FRAME_SAMPLE_SAFETY_TIMEOUT_MS = 30_000;
+const HEAP_GC_ROUNDS = 3;
+const HEAP_STABILITY = Object.freeze({
+  nodes: 10_000,
+  seed: 6,
+  minWindows: 16,
+  warmupWindows: 8,
+  measurementWindows: 8,
+  maxSlopeBytesPerWindow: 65_536,
+  maxMonotonicIncreases: 6,
+});
 
 function args() {
   const out = { ...DEFAULTS };
@@ -231,6 +241,36 @@ async function installProbe(page) {
         nativeClearTimeout(sample.timer);
         return sample.times;
       },
+      // Warm keeps the simulation active past the measured 120 frames. Drain
+      // its app-owned rAF before GC so the next frame cannot perturb the heap
+      // sample. The poll uses the native rAF directly and allocates no tracked
+      // timer/resource records of its own.
+      waitIdle: (deadlineMs = 30_000) => new Promise((resolve, reject) => {
+        let timeoutId = null;
+        let pollId = null;
+        let settled = false;
+        const finish = (error) => {
+          if (settled) return;
+          settled = true;
+          if (timeoutId !== null) nativeClearTimeout(timeoutId);
+          if (pollId !== null) caf(pollId);
+          if (error) reject(error);
+          else resolve();
+        };
+        const check = () => {
+          pollId = null;
+          if ([...state.resources].every((record) => record.kind !== "raf")) {
+            finish();
+            return;
+          }
+          pollId = raf(check);
+        };
+        timeoutId = nativeSetTimeout(
+          () => finish(new Error(`graph idle deadline exceeded after ${deadlineMs}ms`)),
+          deadlineMs,
+        );
+        check();
+      }),
       snapshot,
       discard,
       details: () => {
@@ -263,9 +303,56 @@ const linearSlope = (values) => {
   const denominator = points.reduce((sum, [x]) => sum + (x - meanX) ** 2, 0);
   return denominator ? points.reduce((sum, [x, y]) => sum + (x - meanX) * (y - meanY), 0) / denominator : null;
 };
+const heapStability = (config, series) => {
+  const canonical = config.nodes === HEAP_STABILITY.nodes && config.seed === HEAP_STABILITY.seed;
+  if (!canonical || config.soakWindows < HEAP_STABILITY.minWindows) {
+    return {
+      required: false,
+      pass: null,
+      reason: canonical
+        ? `requires at least ${HEAP_STABILITY.minWindows} soak windows`
+        : "only the 10k/seed-6 fixture has a hard heap oracle",
+      policy: HEAP_STABILITY,
+    };
+  }
+  if (!series.every(Number.isFinite)) {
+    return {
+      required: true,
+      pass: false,
+      reason: "heap series is incomplete after forced GC",
+      policy: HEAP_STABILITY,
+      measured: null,
+    };
+  }
+  const measured = series.slice(-HEAP_STABILITY.measurementWindows);
+  const slope = linearSlope(measured);
+  const increases = measured.slice(1).reduce(
+    (count, value, index) => count + (value > measured[index] ? 1 : 0),
+    0,
+  );
+  const pass =
+    slope !== null
+    && slope <= HEAP_STABILITY.maxSlopeBytesPerWindow
+    && increases <= HEAP_STABILITY.maxMonotonicIncreases;
+  return {
+    required: true,
+    pass,
+    reason: pass ? null : "tail heap did not stabilize within the hard oracle",
+    policy: HEAP_STABILITY,
+    measured: {
+      windows: measured.length,
+      series: measured,
+      slopeBytesPerWindow: slope,
+      monotonicIncreaseCount: increases,
+    },
+  };
+};
+
 const collectHeap = async (session) => {
   try {
-    await session.send("HeapProfiler.collectGarbage");
+    for (let i = 0; i < HEAP_GC_ROUNDS; i++) {
+      await session.send("HeapProfiler.collectGarbage");
+    }
   } catch (error) {
     return { status: "unsupported", reason: String(error?.message ?? error) };
   }
@@ -323,6 +410,7 @@ const successSummary = (report) => ({
     heapSeries: report.soak?.heapSeries ?? null,
     slopeBytesPerWindow: report.soak?.linearRegressionSlopeBytesPerWindow ?? null,
     monotonicIncreaseCount: report.soak?.monotonicIncreaseCount ?? null,
+    stability: report.soak?.stability ?? null,
   },
   resourceDelta: report.resources?.cycles?.map(({ delta, deltaByKind }) => ({ delta, deltaByKind })) ?? null,
   totalMs: report.timings?.totalMs ?? null,
@@ -379,6 +467,7 @@ async function main() {
       heapDeltasFromFirst: null,
       monotonicIncreaseCount: null,
       linearRegressionSlopeBytesPerWindow: null,
+      stability: null,
     };
     for (let i = 0; i < config.cycles; i++) {
       await page.evaluate(() => window.__graphScaleProbe.begin());
@@ -430,6 +519,10 @@ async function main() {
           await warm.dispatchEvent("click");
           const framePromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
           const frameTimes = await framePromise;
+          await page.evaluate(
+            (deadlineMs) => window.__graphScaleProbe.waitIdle(deadlineMs),
+            FRAME_SAMPLE_SAFETY_TIMEOUT_MS,
+          );
           await page.evaluate(() => window.__graphScaleProbe.stopFrames());
           const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
           if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);
@@ -456,6 +549,10 @@ async function main() {
           report.soak.heapDeltasFromFirst = heapSeries.map((value) => value - firstHeap);
           report.soak.monotonicIncreaseCount = heapSeries.slice(1).reduce((count, value, index) => count + (value > heapSeries[index] ? 1 : 0), 0);
           report.soak.linearRegressionSlopeBytesPerWindow = linearSlope(heapSeries);
+        }
+        report.soak.stability = heapStability(config, heapSeries);
+        if (report.soak.stability.required && !report.soak.stability.pass) {
+          throw new Error(`graph heap stability failed: ${JSON.stringify(report.soak.stability)}`);
         }
       }
       await page.evaluate(() => window.__graphScaleProbe.end());
