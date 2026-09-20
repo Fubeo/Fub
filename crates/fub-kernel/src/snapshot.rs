@@ -277,9 +277,7 @@ impl SnapshotBundle {
         validate_payload_tree(&payload_root, "", &expected)?;
         let mut files = BTreeMap::new();
         for entry in &envelope.manifest.entries {
-            let payload = payload_root.join(Path::new(&entry.path));
-            let payload = Utf8PathBuf::from_path_buf(payload)
-                .map_err(|path| SnapshotError::InvalidPath(path.to_string_lossy().into_owned()))?;
+            let payload = payload_root.join(&entry.path);
             let bytes = match read_regular_file(&payload) {
                 Err(SnapshotError::Io { source, .. })
                     if source.kind() == io::ErrorKind::NotFound =>
@@ -1247,13 +1245,13 @@ pub enum SnapshotError {
         expected: u64,
         found: u64,
     },
-    #[error("digest errato per {path}: atteso {expected}, trovato {found}")]
+    #[error("digest errato per {path}: atteso {expected:?}, trovato {found:?}")]
     DigestMismatch {
         path: String,
         expected: Revision,
         found: Revision,
     },
-    #[error("revisione di base obsoleta: snapshot {expected}, vault {found}")]
+    #[error("revisione di base obsoleta: snapshot {expected:?}, vault {found:?}")]
     BaseRevisionStale { expected: Revision, found: Revision },
     #[error("path già esistente: {0}")]
     AlreadyExists(Utf8PathBuf),
