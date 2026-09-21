@@ -5,13 +5,10 @@ Le modifiche degne di nota seguono
 descritto in
 [`docs/development/versioning-and-releases.md`](docs/development/versioning-and-releases.md).
 
-## [0.1.0-rc.1] - 2026-09-21
+## [Non rilasciato]
 
-Primo release candidate da `main@9ae1351b`. Capacità e requisiti:
-applicazione e crate `0.1.0`, frontend `0.1.0`, ABI `fub:abi@0.1.2`, protocollo
-Grid v1, snapshot globale manifest schema 1, WIT frozen `0.1.0`/`0.1.1`.
-CI verde sullo SHA (`35546560771` + NPM `35546560770`). Sincronizzazione
-distribuita esclusa (issue #9); follow-up differiti #57, #58, #70.
+Fub non ha ancora pubblicato un tag di rilascio. La sezione seguente descrive
+ciò che formerà la prima versione.
 
 ### Aggiunto
 
@@ -51,6 +48,10 @@ distribuita esclusa (issue #9); follow-up differiti #57, #58, #70.
   sicuro il teardown dell'ambiente;
 - campionato l'heap del banco grafo dopo lo stop dei frame, non durante.
 
-## [Non rilasciato]
+### In corso
+
+- preparazione del primo release candidate, inclusi versione, artefatti firmati
+  e matrice CI completa sullo SHA del candidato;
+- follow-up espliciti per famiglie WASM differite e quote assolute di processo.
 
 Lo stato operativo è in [`docs/project/status.md`](docs/project/status.md).
