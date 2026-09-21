@@ -185,12 +185,20 @@ fn a_job_that_not_touches_the_host_remains_a_calculation_pure() {
 ///
 /// Col rendez-vous la seconda incognita **non esiste**. Quando `fatto` consegna
 /// un numero, chi cammina è tornato a `via.recv()`: non ha in mano nessun
-/// prestito e non ne può prendere uno finché non gli si dà il via. Quello che
+/// prestito e non ne può prendere uno finché non gli si dà il via. Il protocollo
+/// vale in entrambi i versi: `step()` attende anche che il thread di camminata
+/// abbia davvero ricevuto il via prima di tornare, altrimenti il segnale di
+/// `done` di un passo potrebbe arrivare mentre il passo precedente non ha ancora
+/// rilasciato il prestito sullo scheduler lento — e `try_write` misurerebbe un
+/// prestito ancora in mano invece dello spiraglio fra due chiamate.
 struct Walk {
     /// «Ho letto la n-esima nota, e adesso sono fermo.»
     done: Receiver<usize>,
     /// «Vai avanti.» Chiuderlo fa finire la camminata.
     prosegui: SyncSender<()>,
+    /// «Ho ricevuto il via e sto per leggere.» Chiude il buco fra `send` del via
+    /// e `recv` del thread di camminata.
+    via_ricevuto: Receiver<()>,
     thread: JoinHandle<()>,
 }
 
@@ -200,6 +208,11 @@ impl Walk {
     /// test. `None` quando la camminata è finita.
     fn step(&self) -> Option<usize> {
         self.prosegui.send(()).ok()?;
+        // Il via è partito ma il thread di camminata potrebbe non averlo ancora
+        // ricevuto: senza questa attesa il `done` del passo precedente — già in
+        // coda sul canale a capacità zero solo dopo il `recv` — non basta a dire
+        // che il prestito del passo corrente è già stato rilasciato.
+        self.via_ricevuto.recv().ok()?;
         self.done.recv().ok()
     }
 
@@ -214,17 +227,23 @@ impl Walk {
 
 /// Avvia una camminata passo-passo. Il corpo riceve i due capi del rendez-vous e
 /// deve rispettarne il protocollo: `via.recv()` prima di ogni lettura,
-/// `fatto.send(n)` dopo.
-fn step_step(body: impl FnOnce(&Receiver<()>, &SyncSender<usize>) + Send + 'static) -> Walk {
-    // Capacità **zero** in tutti e due i versi: una `send` che tornasse senza che
+/// `fatto.send(n)` dopo. Il terzo canale conferma che il `via.recv()` è davvero
+/// avvenuto, così `step()` non torna sul `done` del passo precedente mentre il
+/// thread di camminata deve ancora svegliarsi.
+fn step_step(
+    body: impl FnOnce(&Receiver<()>, &SyncSender<()>, &SyncSender<usize>) + Send + 'static,
+) -> Walk {
+    // Capacità **zero** in tutti e tre i versi: una `send` che tornasse senza che
     // l'altro l'abbia presa rimetterebbe dentro l'incertezza che questo banco
     // esiste per togliere.
     let (prosegui, via) = sync_channel::<()>(0);
+    let (via_confermato, via_ricevuto) = sync_channel::<()>(0);
     let (step_done, done) = sync_channel::<usize>(0);
-    let thread = std::thread::spawn(move || body(&via, &step_done));
+    let thread = std::thread::spawn(move || body(&via, &via_confermato, &step_done));
     Walk {
         done,
         prosegui,
+        via_ricevuto,
         thread,
     }
 }
@@ -279,11 +298,14 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     // --- la colonna del job: il prestito è **per chiamata** -----------------
     let job = {
         let ws_job = ws.clone();
-        step_step(move |via, done| {
+        step_step(move |via, via_confermato, done| {
             let job_host = JobHost::new(ws_job, INVENTORY);
             let documents = job_host.list_documents(None).unwrap().items;
             for (read, id) in documents.iter().enumerate() {
                 if via.recv().is_err() {
+                    return;
+                }
+                if via_confermato.send(()).is_err() {
                     return;
                 }
                 let _ = job_host.read_model(id);
@@ -329,17 +351,18 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
         last, NOTE,
         "the walk did not reach the end: the saver cut across it, not into it"
     );
-    job.finish();
-
     // --- la colonna di controllo: un prestito solo, per tutta la camminata --
     // È la strada di prima, ed era l'unica che avesse il chiamante di un job.
     let synchronous = {
         let ws_loan = ws.clone();
-        step_step(move |via, done| {
+        step_step(move |via, via_confermato, done| {
             let w = ws_loan.read().unwrap();
             let documents = w.documents();
             for (read, id) in documents.iter().enumerate() {
                 if via.recv().is_err() {
+                    return;
+                }
+                if via_confermato.send(()).is_err() {
                     return;
                 }
                 let _ = w.read_model(id);
