@@ -1,6 +1,6 @@
 # Stato del progetto
 
-> **Stato aggiornato per `main@9234d77fdc057e7c038de0c94dd52b883a7407c0`, 20 settembre 2026.**
+> **Stato aggiornato per `main@8797bb1e183e6e0d292e782f06e309600bd62bfd`, 21 settembre 2026.**
 
 ## Baseline corrente
 
@@ -8,15 +8,22 @@ La linea audit è integrata in `main` dalla PR #53; G14 è completo 56/56 e
 G15/GO è registrato. Le PR #59 e #60 hanno completato temi installabili,
 superfici condivise, guardie permanenti e baseline Grid. La PR #62 ha corretto
 il crash WebKitGTK delle Impostazioni; la PR #61 ha reso hard il gate heap
-della Graph View.
+della Graph View. La PR #65 ha consegnato lo snapshot globale offline (#5
+chiusa); la PR #69 ha corretto il campionamento heap del banco; la PR #68 ha
+consolidato lo stato documentale; la PR #71 ha versionato `0.1.0-rc.1`.
 
-Le milestone #6, #7, #8, #10, #11, #12, #13, #17 e #56 sono chiuse con
+Il release candidate `v0.1.0-rc.1` è pubblicato come draft su
+`main@8797bb1e` con tag annotato non firmato (nessuna chiave GPG disponibile),
+note dal changelog e artefatto Linux amd64 con checksum verificata. CI
+`35551966290` e NPM supply chain `35551966276` verdi sullo SHA.
+
+Le milestone #5, #6, #7, #8, #10, #11, #12, #13, #17 e #56 sono chiuse con
 evidenze riferite a codice, test, documentazione e CI.
 
 ## Release corrente
 
-Fub non ha ancora pubblicato un tag. Workspace e shell dichiarano `0.1.0`; il
-contratto plugin corrente include Grid v1 in ABI/WIT e mirror TypeScript.
+Il candidato `v0.1.0-rc.1` è in draft. Workspace e shell dichiarano `0.1.0`; il
+contratto plugin è `fub:abi@0.1.2` e include Grid v1 in ABI/WIT e mirror TypeScript.
 
 Sono presenti:
 
