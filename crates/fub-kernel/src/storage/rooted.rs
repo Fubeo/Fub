@@ -39,10 +39,14 @@ fn rename_no_replace_windows(
 ) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::Storage::FileSystem::{
-        FileRenameInfo, SetFileInformationByHandle, FILE_GENERIC_READ, FILE_RENAME_INFO,
-        FILE_RENAME_INFO_0, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    use windows_sys::Wdk::Storage::FileSystem::{
+        FileRenameInformation, NtSetInformationFile, FILE_RENAME_INFORMATION,
     };
+    use windows_sys::Win32::Foundation::RtlNtStatusToDosError;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FILE_GENERIC_READ, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+    use windows_sys::Win32::System::IO::IO_STATUS_BLOCK;
 
     let mut options = OpenOptions::new();
     options
@@ -51,61 +55,46 @@ fn rename_no_replace_windows(
         .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
     let source = source_dir.open_with(from, &options)?;
     let name: Vec<u16> = destination_name.as_os_str().encode_wide().collect();
-    let name_bytes = name
-        .len()
-        .checked_mul(std::mem::size_of::<u16>())
+    let name_bytes = std::mem::size_of_val(name.as_slice());
+    // Il contratto NT richiede sizeof(struct) più i byte del nome, inclusa
+    // quindi la coda della struttura e non soltanto l'offset di FileName.
+    let total = std::mem::size_of::<FILE_RENAME_INFORMATION>()
+        .checked_add(name_bytes)
+        .and_then(|total| u32::try_from(total).ok())
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "nome di destinazione troppo lungo",
             )
         })?;
-    let name_bytes = u32::try_from(name_bytes).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "nome di destinazione troppo lungo",
-        )
-    })?;
-    let header = std::mem::size_of::<FILE_RENAME_INFO>() - std::mem::size_of::<u16>();
-    let total = header
-        .checked_add(name.len() * std::mem::size_of::<u16>())
-        .ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "nome di destinazione troppo lungo",
-            )
-        })?;
-    let words = total.div_ceil(std::mem::size_of::<u64>());
+    let words = (total as usize).div_ceil(std::mem::size_of::<u64>());
     let mut buffer = vec![0_u64; words];
-    let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
-    // `FILE_RENAME_INFO` is a variable-sized structure. The u64 backing store
-    // gives the cast the alignment required by its handle field.
+    let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFORMATION>();
+    let mut status_block = IO_STATUS_BLOCK::default();
+    // Il buffer azzerato e allineato a u64 contiene l'intero record e il nome.
+    // NtSetInformationFile risolve il nome relativamente al directory handle:
+    // non riconverte la destinazione in un path Win32 ambientale.
+    // L'handle sorgente è sincrono e rimane vivo fino al completamento.
     unsafe {
-        std::ptr::write(
-            info,
-            FILE_RENAME_INFO {
-                Anonymous: FILE_RENAME_INFO_0 {
-                    ReplaceIfExists: false,
-                },
-                RootDirectory: destination_dir.as_raw_handle() as _,
-                FileNameLength: name_bytes,
-                FileName: [0],
-            },
+        (*info).Anonymous.Flags = 0;
+        (*info).RootDirectory = destination_dir.as_raw_handle() as _;
+        (*info).FileNameLength = name_bytes as u32;
+        std::ptr::copy_nonoverlapping(
+            name.as_ptr(),
+            std::ptr::addr_of_mut!((*info).FileName).cast::<u16>(),
+            name.len(),
         );
-        std::ptr::copy_nonoverlapping(name.as_ptr(), (*info).FileName.as_mut_ptr(), name.len());
-        if SetFileInformationByHandle(
+        let status = NtSetInformationFile(
             source.as_raw_handle() as _,
-            FileRenameInfo,
+            &mut status_block,
             info.cast(),
-            u32::try_from(total).map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "nome di destinazione troppo lungo",
-                )
-            })?,
-        ) == 0
-        {
-            return Err(io::Error::last_os_error());
+            total,
+            FileRenameInformation,
+        );
+        if status < 0 {
+            return Err(io::Error::from_raw_os_error(
+                RtlNtStatusToDosError(status) as i32
+            ));
         }
     }
     Ok(())
@@ -582,22 +571,26 @@ impl VaultStorage for RootedFsStorage {
 
         #[cfg(windows)]
         {
-            let from_rel = self.rel(from)?;
-            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
-            match rename_no_replace_windows(&self.dir, from_rel, &to_parent, &to_name) {
-                Ok(()) => {
-                    self.sync_parents(from, Some(to));
-                    Ok(())
+            self.with_lock(to, || {
+                // Due handle già aperti sullo stesso file possono rinominarlo
+                // entrambi con successo. Il lock precede l'apertura della sorgente.
+                let from_rel = self.rel(from)?;
+                let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+                match rename_no_replace_windows(&self.dir, from_rel, &to_parent, &to_name) {
+                    Ok(()) => {
+                        self.sync_parents(from, Some(to));
+                        Ok(())
+                    }
+                    Err(error)
+                        if error.kind() == io::ErrorKind::AlreadyExists
+                            && same_parent_resolution_name(from, to)
+                            && self.same_file(from, to) =>
+                    {
+                        self.rename(from, to)
+                    }
+                    Err(error) => Err(error),
                 }
-                Err(error)
-                    if error.kind() == io::ErrorKind::AlreadyExists
-                        && same_parent_resolution_name(from, to)
-                        && self.same_file(from, to) =>
-                {
-                    self.rename(from, to)
-                }
-                Err(error) => Err(error),
-            }
+            })
         }
 
         #[cfg(not(any(unix, windows)))]
@@ -811,6 +804,31 @@ mod tests {
         assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
         assert_eq!(a.read(&to).unwrap(), b"source");
         assert!(!a.exists(&from));
+    }
+
+    #[test]
+    fn no_replace_keeps_the_root_capability_and_unicode_destination() {
+        let temp = tempfile::tempdir().unwrap();
+        let parent = Utf8Path::from_path(temp.path()).unwrap();
+        let root = parent.join("vault");
+        let moved = parent.join("vault-originale");
+        std::fs::create_dir(&root).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+        let from = root.join("source.txt");
+        let destination = "cartella/caffè-𐐀.txt";
+        let to = root.join(destination);
+        storage.write(&from, b"source").unwrap();
+
+        std::fs::rename(&root, &moved).unwrap();
+        std::fs::create_dir(&root).unwrap();
+        std::fs::write(&from, b"outside").unwrap();
+
+        storage.rename_no_replace(&from, &to).unwrap();
+
+        assert_eq!(std::fs::read(moved.join(destination)).unwrap(), b"source");
+        assert!(!moved.join("source.txt").exists());
+        assert_eq!(std::fs::read(&from).unwrap(), b"outside");
+        assert!(!to.exists());
     }
 
     #[cfg(unix)]

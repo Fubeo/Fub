@@ -1335,11 +1335,10 @@ fn rename_no_replace_move_file(from: &Utf8Path, to: &Utf8Path) -> io::Result<()>
     }
 }
 
-#[cfg(not(windows))]
 /// Acquisisce il lock del protocollo senza il fallback best-effort usato dalle
-/// scritture storiche. Serve solo quando il sistema non offre una syscall
-/// no-replace: se il lock non è disponibile, l'operazione fallisce invece di
-/// eseguire una coppia `exists` + `rename` non atomica.
+/// scritture storiche. Protegge il fallback senza syscall no-replace e, su
+/// Windows, impedisce che due aperture della stessa sorgente producano due
+/// successi. Un errore del lock impedisce sempre la mossa.
 fn exclusive_lock_required(path: &Utf8Path) -> io::Result<std::fs::File> {
     let dir = path.parent().unwrap_or(Utf8Path::new(""));
     let lock_path = lock_path(path);
@@ -1728,6 +1727,9 @@ impl VaultStorage for FsStorage {
 
         #[cfg(windows)]
         {
+            // MoveFileExW può aprire la sorgente in entrambe le chiamate prima
+            // di rinominarla: la seconda diventerebbe un no-op riuscito.
+            let _lock = exclusive_lock_required(to)?;
             match rename_no_replace_move_file(from, to) {
                 Ok(()) => {
                     for dir in folders_to_sync(from, Some(to)) {

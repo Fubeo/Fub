@@ -78,6 +78,8 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   attraverso i controlli nativi;
 - impediti aggiornamenti regressivi dei cursori persistenti dei timer anche
   nel percorso di scrittura esterno al lock del workspace;
+- corretti su Windows gli spostamenti senza sovrascrittura, conservando
+  l'ancoraggio alla directory aperta e un solo successo fra writer concorrenti;
 - isolati i temi illeggibili senza nascondere gli altri temi installati.
 
 ### In corso

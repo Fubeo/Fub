@@ -166,6 +166,12 @@ Un rename deve considerare:
 La validazione dell'identità del nome vive in regole condivise, non in ogni
 chiamante.
 
+Su Windows il backend ancorato usa `NtSetInformationFile` con il directory
+handle e un nome UTF-16, senza riaprire il path ambientale della root. Il lock
+sibling precede l'apertura della sorgente: due writer Fub concorrenti non
+possono dichiarare entrambi lo stesso spostamento. Il rifiuto di una
+destinazione occupata resta atomico nella syscall.
+
 ## Sidecar
 
 Un sidecar contiene informazioni che non appartengono al file principale ma ne
