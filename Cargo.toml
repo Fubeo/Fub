@@ -44,6 +44,8 @@ exclude = [
     "esempi/format-wasm",
     "esempi/view-wasm",
     "esempi/grid-wasm",
+    "esempi/event-handler-wasm",
+    "esempi/index-provider-wasm",
 ]
 
 [workspace.package]

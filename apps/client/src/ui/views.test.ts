@@ -277,10 +277,10 @@ describe("ogni superficie del contratto è classificata", () => {
         return;
       }
       // `#views-ribbon` ha un figlio permanente (`#rail-shell`, §Fase 2):
-      // la view si aggiunge dopo, non lo sostituisce. `#views-right` ha la
-      // tablist dell'inspector (§Fase 3) che va in cima.
-      const expectedChildren =
-        where === "views-ribbon" || where === "views-right" ? 2 : 1;
+      // la view si aggiunge dopo, non lo sostituisce. `#views-right` ha titolo
+      // + tablist dell'inspector sopra il pannello (U38: titolo testuale preso
+      // dal registro, tab come selettore).
+      const expectedChildren = where === "views-ribbon" ? 2 : where === "views-right" ? 3 : 1;
       expect(document.getElementById(where)!.children).toHaveLength(expectedChildren);
     });
   }
@@ -332,9 +332,10 @@ describe("un rimontaggio che non riesce", () => {
     resolveOld([spec("backlinks", "left_sidebar"), spec("stats", "right_sidebar")]);
     await old;
 
-
     expect(document.querySelector("#views-left")!.innerHTML).toBe(afterTheNewItem);
-    expect(document.querySelector("#views-right")!.childElementCount).toBe(0);
+    // U42: a destra non c'è nessuna vista, e l'ispettore lo dice con una
+    // tablist di stato vuoto — un figlio, non zero.
+    expect(document.querySelector("#views-right")!.childElementCount).toBe(1);
   });
 });
 describe("lifecycle delle view dichiarate", () => {

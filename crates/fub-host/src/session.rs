@@ -70,7 +70,7 @@ use crate::registry::{
     Bundle, BundleClaim, BundleInfo, BundleRegistry, StartupLease, StartupSnapshot, StartupSource,
 };
 use crate::runner::{JobRunner, DEFAULT_JOB_THREADS};
-use crate::vaults::{VaultEntry, VaultRegistry};
+use crate::vaults::{VaultEntry, VaultRegistry, VaultRegistryHandle};
 use crate::watcher::{OpeningWatcher, RunningWatcher, WatcherFactory};
 
 /// Dove finiscono gli eventi del kernel una volta usciti dall'host.
@@ -670,6 +670,8 @@ pub struct Host {
     /// Il **registro dei vault** (§11.1): recenti, preferiti, icone. Vive nello
     /// stesso livello, che prima di questa voce non esisteva affatto — ed è la
     /// ragione per cui la 0029 non poteva chiudere questa metà del §9.6.
+    /// Il servizio di registro è posseduto dall'host; i percorsi concorrenti
+    /// ricevono soltanto [`VaultRegistryHandle`] tramite [`Host::vault_registry`].
     vaults: VaultRegistry,
     /// La cartella di configurazione della macchina (§11.1), se questo host
     /// ne ha una. È la radice di cui [`themes_dir`](crate::config::themes_dir)
@@ -1017,7 +1019,6 @@ impl Host {
             workspace.finish_view_interests(prepared, outcome)
         })
     }
-
     /// Imposta la sorgente runtime interrogata per ogni nuova apertura.
     ///
     /// La sorgente decide quali bundle richiedere; l'host non persiste né
@@ -1453,8 +1454,10 @@ impl Host {
         // cosa questa macchina ha già visto — e uno store di configurazione che
         // leggesse il registro dei vault per rispondere a una lettura sarebbe il
         // kernel che conosce l'installazione.
-        let suspended =
-            crate::settings::keys_to_watch(&ws.vault_keybindings(), &self.vaults.seen_keys(&root));
+        let suspended = crate::settings::keys_to_watch(
+            &ws.vault_keybindings(),
+            &self.vaults.handle().seen_keys(&root),
+        );
         ws.suspend_settings(suspended);
 
         let workspace = Custody::new("il vault aperto", ws);
@@ -1678,6 +1681,7 @@ impl Host {
         // una scrittura di comodità.
         if let Err(and) = self
             .vaults
+            .handle()
             .notes_opened(root, fub_kernel::time::now_unix_millis())
         {
             // Solo log: il registro dei recenti è una comodità, non il vault,
@@ -1730,7 +1734,7 @@ impl Host {
         self.sessions
             .read()
             .is_ok_and(|sessions| sessions.slots.contains_key(root))
-            || self.vaults.knows(root)
+            || self.vaults.handle().knows(root)
     }
 
     // --- il registro dei vault (§11.1) -------------------------------------
@@ -1738,6 +1742,14 @@ impl Host {
     // Ciò che questa macchina **conosce**, che è un'altra cosa da ciò che è
     // aperto adesso (`vaults()`): il secondo muore col processo, il primo è la
     // memoria fra un avvio e l'altro.
+
+    /// Handle cloneable al registro di macchina, senza accesso al workspace.
+    ///
+    /// L'host ne possiede l'owner; il valore restituito è soltanto una porta
+    /// tipizzata per l'elenco e le preferenze dei vault conosciuti.
+    pub fn vault_registry(&self) -> VaultRegistryHandle {
+        self.vaults.handle()
+    }
 
     /// Elenca i temi installati con un manifest e fogli completi.
     pub fn themes(&self) -> Result<Vec<crate::theme::ThemeInfo>, PluginError> {
@@ -1763,7 +1775,7 @@ impl Host {
 
     /// I vault conosciuti: prima i preferiti, poi i recenti.
     pub fn known_vaults(&self) -> Vec<VaultEntry> {
-        self.vaults.list()
+        self.vaults.handle().list()
     }
 
     /// Il **vault da aprire all'avvio**, se la shell non ha ricevuto un
@@ -1782,6 +1794,7 @@ impl Host {
     /// `canonicalize` non risponde su ciò che non c'è).
     pub fn last_vault(&self) -> Option<String> {
         self.vaults
+            .handle()
             .in_recency_order()
             .into_iter()
             .find(|and| Utf8Path::new(&and.root).is_dir())
@@ -1791,7 +1804,9 @@ impl Host {
     /// Appunta (o spunta) un vault. Il path **non** deve essere aperto: si
     /// preferisce un vault anche quando è chiuso, ed è quasi sempre allora.
     pub fn set_vault_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
-        self.vaults.set_favorite(&self.key(root)?, favorite)
+        self.vaults
+            .handle()
+            .set_favorite(&self.key(root)?, favorite)
     }
 
     /// L'icona e il nome con cui un vault compare nell'elenco: **l'aspetto
@@ -1803,7 +1818,7 @@ impl Host {
         icon: Option<String>,
         name: String,
     ) -> Result<(), PluginError> {
-        self.vaults.set_look(&self.key(root)?, icon, name)
+        self.vaults.handle().set_look(&self.key(root)?, icon, name)
     }
 
     /// Toglie un vault dall'elenco. **Non lo cancella dal disco**: dimenticare
@@ -1828,7 +1843,7 @@ impl Host {
     /// rimasto in elenco.
     pub fn forget_vault(&self, root: &Utf8Path) -> Result<(), PluginError> {
         let forms = root_forms(root);
-        self.vaults.forget(&forms)?;
+        self.vaults.handle().forget(&forms)?;
         // **Le forme insieme, non una per volta**: sono due file diversi, quindi
         // due scritture ci vogliono per forza, ma dentro ciascuno la potatura è
         // *una* mossa. Il ciclo che stava qui ne faceva N sullo stesso file, e
@@ -1850,7 +1865,7 @@ impl Host {
     }
 
     /// Ricorda un bundle runtime senza scrivere alcuna preferenza.
-    pub fn remember_bundle(
+    pub fn remember_claimed_bundle(
         &self,
         vault: Option<&str>,
         bundle: Arc<dyn Bundle>,
@@ -2423,7 +2438,7 @@ impl Host {
             seen.retain(|key, _| !suspended.contains(key));
             Ok((session.root.clone(), seen))
         })?;
-        self.vaults.notes_keys_seen(&root, seen)
+        self.vaults.handle().notes_keys_seen(&root, seen)
     }
 
     /// Chiude **un** vault: flush, `close` degli indici, disattivazione di ogni
@@ -2972,8 +2987,10 @@ impl Host {
         update_view_state(&workspace, owner, instance, key, value)
     }
 
-    /// La radice del vault (o del corrente).
+    /// Accesso al workspace soltanto nei build di debug, per i banchi interni.
+    /// La shell e i consumer di produzione non ricevono più questa capacità.
     #[cfg(test)]
+    #[doc(hidden)]
     pub(crate) fn debug_workspace(
         &self,
         vault: Option<&str>,
@@ -3717,5 +3734,96 @@ mod tests {
             host.recover_snapshot_artifacts(&root),
             Err(SnapshotHostError::Lifecycle(PluginError::NotFound(_)))
         ));
+    }
+}
+
+#[cfg(test)]
+mod independent_service_lock_tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use camino::{Utf8Path, Utf8PathBuf};
+
+    use super::*;
+    use crate::watcher::NoWatcher;
+
+    const WATCHDOG: Duration = Duration::from_secs(2);
+
+    #[test]
+    fn vault_registry_handle_progresses_while_workspace_write_lock_is_held() {
+        let directory = tempfile::tempdir().expect("temporary vault");
+        let root = Utf8PathBuf::from_path_buf(directory.path().to_path_buf())
+            .expect("temporary path is UTF-8");
+        std::fs::write(root.join("Nota.md"), "# Nota\n").expect("seed note");
+
+        let host = Host::new()
+            .with_watcher(Box::new(NoWatcher))
+            .with_job_threads(1);
+        host.open(&root).expect("the vault opens");
+        host.wait_indexed(None).expect("opening indexing finishes");
+
+        // Il test prende la custodia dalla struttura privata della sessione:
+        // nessuna API generica del workspace serve al percorso pubblico del
+        // servizio.
+        let workspace = {
+            let sessions = host.sessions.read().expect("sessions are alive");
+            sessions
+                .slots
+                .values()
+                .find_map(|slot| match slot {
+                    SessionSlot::Open(session) => Some(session.workspace.clone()),
+                    SessionSlot::Applying(_) | SessionSlot::Closing(_) => None,
+                })
+                .expect("the opened session has a workspace")
+        };
+        let service = host.vault_registry();
+
+        let (locked_tx, locked_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let locker = std::thread::spawn(move || {
+            let _write = workspace.write().expect("workspace is not poisoned");
+            locked_tx.send(()).expect("the lock observer remains alive");
+            release_rx
+                .recv_timeout(WATCHDOG)
+                .expect("the lock owner receives the release");
+        });
+        locked_rx
+            .recv_timeout(WATCHDOG)
+            .expect("thread A holds the workspace write lock");
+
+        let (done_tx, done_rx) = mpsc::sync_channel(1);
+        let worker_service = service.clone();
+        let service_worker = std::thread::spawn(move || {
+            let result = worker_service.notes_opened(Utf8Path::new("/independent"), 7);
+            done_tx
+                .send(result)
+                .expect("the service observer remains alive");
+        });
+        done_rx
+            .recv_timeout(WATCHDOG)
+            .expect("the independent service completes under the workspace lock")
+            .expect("the in-memory registry accepts the update");
+
+        release_tx.send(()).expect("thread A is released");
+        locker.join().expect("thread A does not panic");
+        service_worker.join().expect("thread B does not panic");
+
+        assert!(
+            service
+                .list()
+                .iter()
+                .any(|entry| entry.root == "/independent" && entry.last_opened == 7),
+            "the real service completed the operation while the workspace was locked"
+        );
+
+        assert!(
+            host.close().is_empty(),
+            "session teardown leaves no errors after the lock probe"
+        );
+        drop(host);
+        assert!(
+            service.is_shutdown(),
+            "dropping the owner explicitly shuts down the shared service"
+        );
     }
 }

@@ -24,8 +24,7 @@ use camino::Utf8PathBuf;
 use fub_abi::event::Event;
 use fub_abi::options::permission;
 use fub_abi::PluginError;
-use fub_host::registry::Bundle;
-use fub_host::Host;
+use fub_host::{Bundle, Host};
 use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::WasmBundle;
 

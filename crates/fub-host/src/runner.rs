@@ -1019,11 +1019,11 @@ impl Shared {
     }
 
     fn persist_cursors(
-        &self,
+        workspace: &Custody<Workspace>,
         cursors: Vec<(String, String, fub_abi::traits::CivilTime)>,
     ) -> Result<(), PluginError> {
         let prepared = {
-            let workspace = self.workspace.read()?;
+            let workspace = workspace.read()?;
             cursors
                 .into_iter()
                 .map(|(owner, timer, cursor)| {
@@ -1078,28 +1078,30 @@ impl Shared {
         let cursors = self.load_cursors(&declared)?;
         let zone = self.machine_zone()?;
         let now = Instant::now();
-        let (until, changed) = {
-            let mut alarms = self.alarms.write()?;
-            alarms.reconcile_with_cursors(&declared, now, &zone, &cursors);
-            (alarms.time_until(now), alarms.cursors())
-        };
-        self.persist_cursors(changed)?;
+        // Snapshot e persistenza stanno sotto lo stesso lock delle sveglie:
+        // un worker che ha preso una fotografia più vecchia non può scriverla
+        // dopo che un altro worker ha già avanzato il quadrante.
+        let mut alarms = self.alarms.write()?;
+        alarms.reconcile_with_cursors(&declared, now, &zone, &cursors);
+        let until = alarms.time_until(now);
+        Self::persist_cursors(&self.workspace, alarms.cursors())?;
         Ok(until)
     }
 
     /// Fa suonare ciò che è scaduto.
     ///
-    /// Il quadrante si avanza tenendo il lock delle sveglie, l'evento si emette
-    /// **dopo** averlo lasciato; il cursore si scrive prima dell'evento, così un
-    /// riavvio durante il dispatch non ripete l'occorrenza.
+    /// Il quadrante si avanza e la fotografia si scrive tenendo il lock delle
+    /// sveglie; l'evento si emette **dopo** averlo lasciato. Il cursore si scrive
+    /// prima dell'evento, così un riavvio durante il dispatch non ripete
+    /// l'occorrenza e due worker non possono invertire le fotografie persistite.
     fn ring(&self) -> Result<(), PluginError> {
         let zone = self.machine_zone()?;
-        let (expired, cursors) = {
+        let expired = {
             let mut alarms = self.alarms.write()?;
             let expired = alarms.expired(Instant::now(), &zone);
-            (expired, alarms.cursors())
+            Self::persist_cursors(&self.workspace, alarms.cursors())?;
+            expired
         };
-        self.persist_cursors(cursors)?;
         for (owner, timer) in expired {
             if self.stopping.load(Ordering::Acquire) {
                 return Ok(());

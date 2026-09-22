@@ -51,4 +51,17 @@ describe("helper tipizzati per la resa", () => {
     await expect(renderPreview("Nota.md")).rejects.toBe(failure);
     await expect(renderEmbed("Nota.md")).rejects.toBe(failure);
   });
+
+  it("mantiene la domanda dell'embed quando il canale rifiuta", async () => {
+    const failure = new Error("canale non disponibile");
+    queryIndex.mockRejectedValue(failure);
+
+    await expect(renderEmbed("Altra", "Sezione", "blocco")).rejects.toBe(failure);
+    expect(queryIndex).toHaveBeenCalledWith({
+      kind: "render_embed",
+      page: "Altra",
+      heading: "Sezione",
+      block: "blocco",
+    });
+  });
 });

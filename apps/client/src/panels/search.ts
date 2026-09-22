@@ -16,6 +16,7 @@ import { rememberSearch } from "../state/recent";
 import { createNote } from "../state/vault";
 import { notify } from "../ui/notify";
 import { Race } from "../ui/race";
+import { on } from "../state/store";
 
 const searchInputEl = $<HTMLInputElement>("#search-input");
 const searchSummaryEl = $("#search-summary");
@@ -29,11 +30,26 @@ let searchTimer: number | undefined;
 /// d'errore, e l'annullamento a mani vuote.
 const race = new Race();
 
+/// La query del vault **di questa sessione**: aprire un risultato non la azzera
+/// (U17) e cambiarla non tocca quella di un altro vault (R07: il cambio vault
+/// passa da `clearSearch`, non da una memoria condivisa).
 export function mountSearch(): void {
   searchInputEl.addEventListener("input", scheduleSearch);
   searchInputEl.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") clearSearch();
+    // La casella ha i suoi tasti, e sono questi: Invio apre il primo risultato,
+    // Escape pulisce l'input e resta nel campo. La navigazione completa della
+    // lista (Frecce/Enter/Esc) vive sulla lista, che è una listbox.
+    if (e.key === "Enter") {
+      e.preventDefault();
+      openFirstResult();
+    } else if (e.key === "Escape") {
+      searchInputEl.value = "";
+      race.cancel();
+      searchResultsEl.innerHTML = "";
+      searchSummaryEl.textContent = "";
+    }
   });
+  wireSearchListKeys();
   // Risultati aperti su un vault che è cambiato: rifarli, non lasciarli
   // invecchiare sotto gli occhi di chi legge. Dentro un lotto (decisione 0011)
   // `index_updated` non arriva — arriva `batch_ended` — e chi reagisce
@@ -48,6 +64,9 @@ export function mountSearch(): void {
     visible: () => isPanelVisible("search"),
     render: scheduleSearch,
   });
+  // Cambio vault (R07): la query non si eredita — si azzera input e risultati,
+  // senza forzare i file se l'utente stava guardando una view dichiarata.
+  on("vault", clearSearchState);
 }
 
 function scheduleSearch(): void {
@@ -55,14 +74,20 @@ function scheduleSearch(): void {
   searchTimer = window.setTimeout(() => void runSearch(), 180);
 }
 
-export function clearSearch(): void {
+/// Azzera input e risultati senza toccare il pannello mostrato: il cambio
+/// vault non eredita la query del vault precedente (R07), ma non chiude
+/// arbitrariamente una view ancora valida — `syncRail` decide cosa mostrare.
+function clearSearchState(): void {
   window.clearTimeout(searchTimer);
   searchInputEl.value = "";
-  // I giri in volo scadono anche qui: una risposta già in volo non deve
-  // ripopolare un pannello che l'utente ha appena chiuso.
   race.cancel();
-  showPanel("files");
   searchResultsEl.innerHTML = "";
+  searchSummaryEl.textContent = "";
+}
+
+export function clearSearch(): void {
+  clearSearchState();
+  showPanel("files");
 }
 
 /// Avvia una ricerca da fuori (il click su un tag, `ViewUpdate::RunSearch`, un
@@ -73,60 +98,93 @@ export function searchFor(query: string): void {
   void runSearch();
 }
 
+/// Stati distinti (U15): iniziale (casella vuota), caricamento (solo se la
+/// risposta tarda), risultati, zero risultati, indicizzazione, errore — mai
+/// l'errore travestito da zero risultati. Le risposte obsolete le scarta `Race`.
+/// Conteggi limitati con `search.count_limited` {shown, total} e `search.more`.
+type ChiaveP8 = "search.loading" | "search.count_limited" | "search.more";
+function testoP8(chiave: ChiaveP8, mostrati = 0, totale = 0): string {
+  switch (chiave) {
+    case "search.loading":
+      return t("search.loading");
+    case "search.count_limited":
+      return t("search.count_limited", { shown: mostrati, total: totale });
+    case "search.more":
+      return t("search.more", { shown: mostrati, total: totale });
+  }
+}
 async function runSearch(): Promise<void> {
   const query = searchInputEl.value.trim();
   if (!query) {
-    clearSearch();
+    race.cancel();
+    searchResultsEl.innerHTML = "";
+    searchSummaryEl.textContent = "";
     return;
   }
+  // Caricamento: si mostra solo se il giro è ancora l'ultimo dopo 180ms, così
+  // una risposta rapida non lampeggia.
+  const slow = window.setTimeout(() => {
+    if (searchInputEl.value.trim() === query) {
+      searchSummaryEl.textContent = testoP8("search.loading");
+      showPanel("search");
+    }
+  }, 180);
   await race.last(async (expected) => {
-    // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
-    // è il campo di una foglia, e non c'è più un parser di terzi che possa
-    // rifiutarla a metà parola (§5.3).
-    //
-    // E l'ultimo termine è **incompleto**: questa casella cerca mentre si
-    // digita, quindi `arch` deve trovare *architettura* prima che la parola sia
-    // finita (§21.2). Lo dice la query, non un `*` appeso qui: la lingua è una
-    // sola per la casella, la CLI, l'API locale e le automazioni.
-    //
-    // **L'errore diventa un valore prima del cancello.** Resta il caso in cui
-    // nessuno serve la ricerca — un vault aperto senza indice full-text — ed è
-    // una mancanza, non zero risultati, quindi va detta; ma dirla è una
-    // scrittura come le altre, e passa dallo stesso `atteso` dei risultati
-    // invece di essere un secondo posto in cui ricordarsi il controllo. Un
-    // `try` attorno all'`atteso` ingoierebbe la scadenza insieme all'errore.
-    const result = await expected(
-      matchingDocuments(textQuery(query, true), { offset: 0, limit: 50 })
-        .then((p) => ({ hits: p.items }))
-        .catch((e: unknown) => ({ error: errorText(e) })),
-    );
-    if ("error" in result) {
-      showSearchResults([], result.error);
-      return;
-    }
-    const hits: DocumentMatch[] = result.hits;
-
-    // **Zero risultati mentre il vault indicizza non è «niente trovato»** (§15.7).
-    // Un vault si apre in due tempi: appena scansionato è utilizzabile, e la
-    // ricerca si popola dopo. Nei primi secondi di un vault grande la risposta
-    // vera è *non lo so ancora*, e disegnarla come una risposta negativa
-    // manderebbe a cercare altrove chi aveva cercato bene.
-    //
-    // Lo si chiede **solo quando la risposta è vuota**: è l'unico caso in cui la
-    // distinzione cambia cosa si scrive, e a ogni tasto premuto su una ricerca
-    // che trova non si paga niente.
-    let partial = false;
-    if (hits.length === 0) {
-      // Lo stato del vault è una **rifinitura del messaggio**: se non si riesce
-      // a chiederlo, si dice «nessun risultato» come si è sempre fatto. Un
-      // errore qui non deve togliere all'utente i risultati che ha.
-      partial = await expected(
-        vaultStatus()
-          .then((s) => s.indexing === "running")
-          .catch(() => false),
+    try {
+      // Ciò che l'utente digita è **testo cercato**, non una sintassi: la stringa
+      // è il campo di una foglia, e non c'è più un parser di terzi che possa
+      // rifiutarla a metà parola (§5.3).
+      //
+      // E l'ultimo termine è **incompleto**: questa casella cerca mentre si
+      // digita, quindi `arch` deve trovare *architettura* prima che la parola sia
+      // finita (§21.2). Lo dice la query, non un `*` appeso qui: la lingua è una
+      // sola per la casella, la CLI, l'API locale e le automazioni.
+      //
+      // **L'errore diventa un valore prima del cancello.** Resta il caso in cui
+      // nessuno serve la ricerca — un vault aperto senza indice full-text — ed è
+      // una mancanza, non zero risultati, quindi va detta; ma dirla è una
+      // scrittura come le altre, e passa dallo stesso `atteso` dei risultati
+      // invece di essere un secondo posto in cui ricordarsi il controllo. Un
+      // `try` attorno all'`atteso` ingoierebbe la scadenza insieme all'errore.
+      type SearchPage = { items: DocumentMatch[]; total: number };
+      type SearchFailure = { error: string };
+      const isFailure = (v: SearchPage | SearchFailure): v is SearchFailure => "error" in v;
+      const page = await expected(
+        matchingDocuments(textQuery(query, true), { offset: 0, limit: SEARCH_PAGE }).catch(
+          (e: unknown): SearchFailure => ({ error: errorText(e) }),
+        ),
       );
+      if (isFailure(page)) {
+        showSearchResults([], page.error, false, 0);
+        return;
+      }
+      const hits: DocumentMatch[] = page.items;
+      const total = page.total;
+
+      // **Zero risultati mentre il vault indicizza non è «niente trovato»** (§15.7).
+      // Un vault si apre in due tempi: appena scansionato è utilizzabile, e la
+      // ricerca si popola dopo. Nei primi secondi di un vault grande la risposta
+      // vera è *non lo so ancora*, e disegnarla come una risposta negativa
+      // manderebbe a cercare altrove chi aveva cercato bene.
+      //
+      // Lo si chiede **solo quando la risposta è vuota**: è l'unico caso in cui la
+      // distinzione cambia cosa si scrive, e a ogni tasto premuto su una ricerca
+      // che trova non si paga niente.
+      let partial = false;
+      if (hits.length === 0) {
+        // Lo stato del vault è una **rifinitura del messaggio**: se non si riesce
+        // a chiederlo, si dice «nessun risultato» come si è sempre fatto. Un
+        // errore qui non deve togliere all'utente i risultati che ha.
+        partial = await expected(
+          vaultStatus()
+            .then((s) => s.indexing === "running")
+            .catch(() => false),
+        );
+      }
+      showSearchResults(hits, null, partial, total);
+    } finally {
+      window.clearTimeout(slow);
     }
-    showSearchResults(hits, null, partial);
   });
 }
 
@@ -134,19 +192,38 @@ function showSearchResults(
   hits: DocumentMatch[],
   error: string | null,
   indexing = false,
+  total = hits.length,
 ): void {
   showPanel("search");
   // Il conteggio è un **argomento**, non una parola declinata: «1 risultato»
   // e «2 risultati» erano due rami di un ternario, che è la forma che una
   // lingua con tre plurali non può scrivere. Vale qui come vale in Rust, dove
   // il motore dei template non sceglie una forma plurale (§12.4).
-  searchSummaryEl.textContent = error
-    ? t("search.unavailable")
-    : hits.length === 0
+  //
+  // L'errore non è mai zero risultati (U15): ha testo suo e azione Riprova.
+  // Il totale oltre la finestra non si tace (U12): si dice quante restano.
+  if (error) {
+    searchSummaryEl.textContent = t("search.unavailable");
+    searchResultsEl.innerHTML = "";
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "search-result";
+    retry.textContent = `${error} · ${t("app.retry")}`;
+    retry.addEventListener("click", () => void runSearch());
+    const li = document.createElement("li");
+    li.appendChild(retry);
+    searchResultsEl.appendChild(li);
+    setTooltip(searchSummaryEl, error);
+    return;
+  }
+  searchSummaryEl.textContent =
+    hits.length === 0
       ? indexing
         ? t("search.indexing")
         : t("search.empty")
-      : t("search.count", { count: hits.length });
+      : total > hits.length
+        ? testoP8("search.count_limited", hits.length, total)
+        : t("search.count", { count: hits.length });
 
   searchResultsEl.innerHTML = "";
   // Le righe si montano **fuori dal documento** e si attaccano in una volta
@@ -165,18 +242,36 @@ function showSearchResults(
     if (row.occurrence === undefined) {
       const title = document.createElement("span");
       title.className = "hit-title";
+      // Omonimi disambiguati (U14): titolo + percorso secondario, mai solo il
+      // nome. Lo snippet solo se il provider l'ha fornito.
       title.textContent = pageName(row.doc);
-
-      const snippet = document.createElement("span");
-      snippet.className = "hit-snippet";
-      snippet.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
-      button.append(title, snippet);
+      button.append(title);
+      const path = document.createElement("span");
+      path.className = "hit-path";
+      path.textContent = row.doc;
+      button.append(path);
+      if (row.snippet !== undefined && row.snippet !== "") {
+        const snippet = document.createElement("span");
+        snippet.className = "hit-snippet";
+        snippet.appendChild(highlighted(row.snippet, row.highlights ?? []));
+        button.append(snippet);
+      }
     } else {
       button.classList.add("hit-occurrence");
       button.textContent = t("search.occurrence", { n: row.occurrence });
     }
     openAt(button, row.doc, row.byteOffset);
     li.appendChild(button);
+    newItems.appendChild(li);
+  }
+  if (total > hits.length) {
+    const li = document.createElement("li");
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "search-result";
+    more.textContent = testoP8("search.more", hits.length, total);
+    more.addEventListener("click", () => void runSearchMore(total));
+    li.appendChild(more);
     newItems.appendChild(li);
   }
   // **Non l'ho trovata, creala** (§21.7): il gesto che chiude il giro in
@@ -194,6 +289,7 @@ function showSearchResults(
     if (name) newItems.appendChild(createRow(name));
   }
   searchResultsEl.appendChild(newItems);
+  wireSearchListSelection();
 }
 
 /// La riga «crea questa nota».
@@ -201,10 +297,6 @@ function showSearchResults(
 /// Non si controlla se il nome sia **libero**: lo sa solo il vault, e il comando
 /// glielo chiede già — `note.create` usa `create_document`, che su un path
 /// occupato fallisce invece di sovrascrivere. È un caso possibile anche a
-/// risultati vuoti, perché la ricerca combacia sul **contenuto**: una nota che
-/// si chiama come la query può esistere senza contenerla. Quando succede si
-/// mostra l'errore del kernel, che è la sola risposta onesta — inventare un
-/// `nome (2)` sarebbe creare una seconda nota a chi ne stava cercando una.
 function createRow(name: string): HTMLElement {
   const li = document.createElement("li");
   li.className = "hit-create";
@@ -237,6 +329,9 @@ function createRow(name: string): HTMLElement {
 /// conversione a posizione dell'editor la fa `revealByteOffset`, la stessa che
 /// usano l'outline e `ViewUpdate::Reveal`: la ricerca era l'unico cliente
 /// naturale di quel giro e non aveva le coordinate da passargli.
+///
+/// Aprire non azzera la query (U17): la casella resta per affinare, i
+/// risultati restano per tornarci.
 function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
   el.addEventListener("click", () => {
     // La ricerca si ricorda **qui**, non a ogni tasto: questa casella interroga
@@ -248,6 +343,67 @@ function openAt(el: HTMLElement, doc: string, byteOffset?: number): void {
       if (byteOffset !== undefined) revealByteOffset(byteOffset);
     });
   });
+}
+
+/// La finestra della ricerca nel vault (U12/R06): prima pagina da 50, poi
+/// pagine successive con la stessa query — mai l'intero vault in memoria.
+const SEARCH_PAGE = 50;
+
+/// Pagina successiva della stessa query: oltre-200 trovabile (R06) senza
+/// caricare tutto il vault — si chiede la finestra dopo, col `total` che il
+/// kernel ha già contato prima della finestra.
+async function runSearchMore(knownTotal: number): Promise<void> {
+  const query = searchInputEl.value.trim();
+  if (!query) return;
+  const shown = searchResultsEl.querySelectorAll(".search-result").length;
+  await race.last(async (expected) => {
+    type SearchPage = { items: DocumentMatch[]; total: number };
+    const page: SearchPage = await expected(
+      matchingDocuments(textQuery(query, true), { offset: 0, limit: shown + SEARCH_PAGE }).then((p) => ({
+        items: p.items,
+        total: p.total,
+      })),
+    );
+    showSearchResults(page.items, null, false, Math.max(knownTotal, page.total));
+  });
+}
+
+/// Invio nella casella apre il primo risultato; la lista è una listbox con
+/// selezione a frecce (U16): il focus resta nel campo, le frecce muovono la
+/// selezione senza spostarlo.
+function openFirstResult(): void {
+  searchResultsEl.querySelector<HTMLButtonElement>(".search-result")?.click();
+}
+
+/// Risultati come lista di comandi, non listbox: le righe aprono documenti o
+/// eseguono azioni, non selezionano opzioni. Le frecce spostano il focus fra
+/// i pulsanti nativi; Esc riporta al campo.
+function wireSearchListKeys(): void {
+  searchResultsEl.setAttribute("aria-label", t("search.results"));
+  searchResultsEl.tabIndex = -1;
+  searchResultsEl.addEventListener("keydown", (e) => {
+    const items = [...searchResultsEl.querySelectorAll<HTMLButtonElement>(".search-result")];
+    if (items.length === 0) return;
+    const current = document.activeElement;
+    const at = current instanceof HTMLButtonElement ? items.indexOf(current) : -1;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = e.key === "ArrowDown" ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+      items[next]?.focus();
+    } else if (e.key === "Enter" && current instanceof HTMLButtonElement) {
+      e.preventDefault();
+      current.click();
+    } else if (e.key === "Escape") {
+      searchInputEl.focus();
+    }
+  });
+}
+
+/// Dopo ogni disegno la prima riga è selezionabile da tastiera senza rubare il
+/// focus: il campo resta dov'è (U16), la lista si naviga con Tab/frecce.
+function wireSearchListSelection(): void {
+  const first = searchResultsEl.querySelector<HTMLButtonElement>(".search-result");
+  if (first) first.tabIndex = 0;
 }
 
 /// Lo snippet con le porzioni evidenziate, come nodi DOM.

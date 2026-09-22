@@ -42,7 +42,6 @@ use fub_abi::{Notice, PluginError};
 use fub_host::{doc_id, Delivery, EventSink, Host};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
-
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // I tre record che attraversano l'IPC vivono nell'host — un'API locale
@@ -1074,6 +1073,9 @@ pub fn run() {
             open_vault,
             close_vault,
             list_vaults,
+            discard_draft,
+            set_active_context,
+            set_system_locale,
             set_current_vault,
             initial_vault,
             session_notice,
@@ -1086,9 +1088,10 @@ pub fn run() {
             close_grid,
             write_document,
             save_draft,
-            discard_draft,
-            set_active_context,
-            set_system_locale,
+            list_bundles,
+            list_themes,
+            read_theme,
+            list_installed_plugins,
             list_views,
             render_view,
             view_action,
@@ -1104,10 +1107,7 @@ pub fn run() {
             reset_setting,
             view_state,
             set_view_state,
-            list_bundles,
-            list_themes,
-            read_theme,
-            list_installed_plugins,
+
             install_plugin,
             set_installed_plugin_enabled,
             set_installed_plugin_consent,

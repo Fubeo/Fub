@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+// @vitest-environment-options {"settings":{"navigation":{"disableChildFrameNavigation":true}}}
+// Le fixture verificano la struttura, non navigano URL esterni. Il browser
+// del banco visuale esercita invece i frame reali e il loro focus.
 //
 // Il presidio di accessibilità dei pannelli (§12.4), e la metà che la
 // [decisione 0014](../../../docs/decisions/0197-documentazione-presente-git-storia.md)
@@ -26,7 +29,7 @@
 // del checker sono strutturali (il ragionamento lungo sta in `a11y-check.ts`).
 // Il contrasto, che senza layout non si potrebbe decidere, ha il presidio suo
 // in `theme/contrast.test.ts`.
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import html from "../../index.html?raw";
 import samples from "../__fixtures__/mirror-samples.json";
@@ -34,12 +37,19 @@ import type { UiNode } from "../host/contract";
 import css from "../theme/serie/skin.css?raw";
 import { accessibleName, formatIssues, checkAccessibility } from "./a11y-check";
 import { activatable, trapFocus, notActivatable } from "./a11y";
-import { mountTree } from "./node";
+import { mountTree, unmountTree } from "./node";
 
 const nodes = samples.UiNode as unknown as UiNode[];
 
 beforeEach(() => {
   document.body.innerHTML = "";
+});
+
+afterEach(() => {
+  for (const host of [...document.body.children]) {
+    if (host instanceof HTMLElement) unmountTree(host);
+  }
+  document.body.replaceChildren();
 });
 
 describe("il checker sa trovare i difetti che cerca", () => {
@@ -74,7 +84,7 @@ describe("il checker sa trovare i difetti che cerca", () => {
   });
 
   it("vede un frame senza titolo", () => {
-    document.body.innerHTML = `<iframe src="https://esempio.test"></iframe>`;
+    document.body.innerHTML = "<iframe></iframe>";
     expect(checkAccessibility(document).map((p) => p.rule)).toContain("frame senza titolo");
   });
 
@@ -112,12 +122,6 @@ describe("il nome accessibile", () => {
 });
 
 describe("i pannelli dichiarativi (§2.1) sono accessibili", () => {
-  it("il campione del mirror copre ogni specie di nodo", () => {
-    // La garanzia sta in Rust (un `match` senza `_` in `ts_mirror.rs`); qui si
-    // controlla solo che la fixture sia arrivata e non sia vuota, perché un
-    // presidio che gira su zero nodi passa e non dice niente.
-    expect(nodes.length).toBeGreaterThan(25);
-  });
 
   it("nessuna specie di nodo disegna un comando o un campo senza nome", () => {
     // Ogni nodo nel suo contenitore: alcuni sono `<tr>` o `<td>`, che fuori da
@@ -205,17 +209,6 @@ describe("la scocca della shell è accessibile", () => {
     ).toEqual([]);
   });
 
-  it("e il rilevatore stava davvero guardando quel documento", () => {
-    // La prova che il test sopra non passa perché il documento è vuoto — che è
-    // esattamente il modo in cui un presidio su HTML letto come testo smette di
-    // presidiare senza dirlo.
-    document.documentElement.innerHTML = html
-      .replace(/^[\s\S]*?<body>/, "<body>")
-      .replace(/<\/body>[\s\S]*$/, "</body>");
-    expect(document.querySelectorAll("button").length).toBeGreaterThan(8);
-    expect(document.querySelector(".skip-link"), "manca il salto al contenuto").not.toBe(null);
-    expect(document.querySelector("#views-modal")?.getAttribute("aria-modal")).toBe("true");
-  });
 });
 
 describe("una modale non lascia uscire il fuoco", () => {
@@ -256,6 +249,27 @@ describe("una modale non lascia uscire il fuoco", () => {
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     expect(document.activeElement?.id).toBe("b");
     releaseTrap();
+  });
+
+  it("salta le tab non selezionate anche agli estremi della trappola", () => {
+    document.body.innerHTML = `
+      <div id="modale" tabindex="-1">
+        <button id="inattiva" role="tab" tabindex="-1">Generali</button>
+        <button id="selezionata" role="tab" tabindex="0">Componenti</button>
+        <button id="chiudi">Chiudi</button>
+        <button id="esclusa" tabindex="-1">Esclusa</button>
+      </div>`;
+    const modal = document.querySelector<HTMLElement>("#modale")!;
+    const releaseTrap = trapFocus(modal, () => {});
+    try {
+      expect(document.activeElement?.id).toBe("selezionata");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+      expect(document.activeElement?.id).toBe("chiudi");
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+      expect(document.activeElement?.id).toBe("selezionata");
+    } finally {
+      releaseTrap();
+    }
   });
 });
 

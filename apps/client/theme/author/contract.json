@@ -132,6 +132,8 @@
     "ui-button",
     "intent-primary",
     "intent-danger",
+    "onboarding",
+    "onboarding-actions",
     "views-bottom",
     "sidebar",
     "inspector-pane",
@@ -173,11 +175,13 @@
     "row",
     "col",
     "pane-tabs",
+    "tab-entry",
     "tab",
     "tab-name",
     "dirty",
     "tab-close",
     "pane",
+    "pane-toolbar",
     "focus",
     "pane-preview",
     "grid-surface",
@@ -212,6 +216,7 @@
     "embed-cycle",
     "embed-too-deep",
     "empty-note",
+    "mermaid-diagram",
     "ui-section",
     "ui-table",
     "ui-row",
@@ -246,6 +251,8 @@
     "rail",
     "inspector-tabs",
     "inspector-tab",
+    "inspector-tab-label",
+    "inspector-title",
     "setting-row--theme",
     "titlebar-side",
     "titlebar-center",
@@ -306,6 +313,16 @@
     "graph-panel-valore",
     "graph-panel-azioni",
     "tab-view",
+    "graph-empty",
+    "graph-status",
+    "graph-list",
+    "graph-list-summary",
+    "graph-list-items",
+    "graph-list-open",
+    "graph-list-empty",
+    "graph-list-page",
+    "graph-list-info",
+    "graph-list-more",
     "settings-panel",
     "settings-tabs",
     "setting-row",
@@ -338,7 +355,9 @@
     {
       "name": "app-surface",
       "hooks": [
-        "app"
+        "app",
+        "onboarding",
+        "onboarding-actions"
       ],
       "states": [
         "rest"
@@ -498,7 +517,9 @@
       "name": "inspector-tabs",
       "hooks": [
         "inspector-tabs",
-        "inspector-tab"
+        "inspector-tab",
+        "inspector-tab-label",
+        "inspector-title"
       ],
       "states": [
         "rest",
@@ -636,7 +657,8 @@
         "col",
         "pane",
         "focus",
-        "pane-preview"
+        "pane-preview",
+        "pane-toolbar"
       ],
       "states": [
         "rest",
@@ -647,6 +669,7 @@
       "name": "pane-tabs",
       "hooks": [
         "pane-tabs",
+        "tab-entry",
         "tab",
         "tab-name",
         "dirty",
@@ -770,7 +793,8 @@
         "empty-note",
         "block-footnote-definition",
         "footnote-ref",
-        "block-frontmatter-unparsed"
+        "block-frontmatter-unparsed",
+        "mermaid-diagram"
       ],
       "states": [
         "rest",
@@ -888,7 +912,17 @@
         "graph-panel-campo",
         "graph-panel-nome",
         "graph-panel-valore",
-        "graph-panel-azioni"
+        "graph-panel-azioni",
+        "graph-empty",
+        "graph-status",
+        "graph-list",
+        "graph-list-summary",
+        "graph-list-items",
+        "graph-list-open",
+        "graph-list-empty",
+        "graph-list-page",
+        "graph-list-info",
+        "graph-list-more"
       ],
       "states": [
         "rest",
@@ -1015,7 +1049,7 @@
       "bg",
       "accent-soft",
       4.5,
-      "button:hover, #mode-switch attivo, .hit-snippet mark"
+      "button.primary:hover, .hit-snippet mark"
     ],
     [
       "accent-soft",
@@ -1326,7 +1360,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 205,
+    "hooks": 222,
     "state_names": 7,
     "assigned_states": 117,
     "components": 40,

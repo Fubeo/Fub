@@ -40,8 +40,10 @@ espone modello CPU e RAM dei runner, quindi quei dati restano non disponibili.
 - **p50/p95/max:** quantili e massimo degli intervalli tra frame, in
   millisecondi, calcolati sul campione ordinato; `p95` è l'elemento alla
   posizione `floor(count × 0,95)` (limitata all'ultimo elemento).
-- **Initial:** il campione di interazione raccolto al primo mount.
-- **Soak:** finestre successive attivate dall'azione **Riscalda**; ogni finestra
+- **Initial:** 120 frame di interazione al primo mount, dopo l'azione
+  **Riscalda**. Il campionamento viene armato prima del riscaldo, nella stessa
+  chiamata al browser, per non perdere frame durante la preparazione.
+- **Soak:** finestre successive attivate dalla stessa sequenza; ogni finestra
   raccoglie 120 frame.
 - **Total:** `timings.totalMs` del referto, dall'avvio del runner al termine
   del teardown, prima della scrittura del report.

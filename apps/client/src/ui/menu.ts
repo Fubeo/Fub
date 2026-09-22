@@ -20,6 +20,16 @@ export interface MenuItem {
   run: () => void;
 }
 
+export interface ContextMenuOptions {
+  /// Notifica chi ha aperto il menu anche quando lo chiude un gesto esterno
+  /// (Escape, click fuori o una seconda superficie).
+  onClose?: () => void;
+  /// Lega il menu al suo trigger per i lettori di schermo.
+  labelledBy?: string;
+}
+
+type MenuClose = () => void;
+
 /// Quanto vive il menu aperto, se ce n'è uno.
 ///
 /// Una `Lifetime` e non più «la funzione che scioglie la trappola»: quella era una
@@ -27,19 +37,27 @@ export interface MenuItem {
 /// documento — erano scritte altrove, ognuna con la sua occasione di essere
 /// dimenticata. Adesso il posto è uno, e chiudere il menu è chiuderlo.
 let menuLifetime: Lifetime | null = null;
+let menuClose: MenuClose | null = null;
 
-export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
+export function showContextMenu(
+  at: MouseEvent,
+  items: MenuItem[],
+  options: ContextMenuOptions = {},
+): void {
   closeContextMenu();
   const previous = document.getElementById("context-menu");
   if (previous) finishSurface(previous);
   const lifetime = openLifetime();
   menuLifetime = lifetime;
+  menuClose = options.onClose ?? null;
   const menu = document.createElement("div");
   menu.id = "context-menu";
   menu.className = "context-menu";
   // Un menu è un menu: il ruolo è ciò che fa annunciare «menu, cinque voci» e
   // permette di uscirne sapendo di esserci entrati.
   menu.setAttribute("role", "menu");
+  menu.setAttribute("aria-orientation", "vertical");
+  if (options.labelledBy) menu.setAttribute("aria-labelledby", options.labelledBy);
   menu.tabIndex = -1;
   menu.style.left = `${at.clientX}px`;
   menu.style.top = `${at.clientY}px`;
@@ -50,15 +68,10 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
     b.tabIndex = -1;
     b.textContent = item.label;
     if (item.danger) b.className = "danger";
+    // L'attivazione da tastiera passa dal click nativo del button (Invio/Spazio):
+    // nessun gestore keydown qui, così il browser osserva esattamente un click
+    // e l'azione resta una sola grazie alla guardia in `activate`.
     b.addEventListener("click", () => activate(b, item));
-    b.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " " || e.key === "Spacebar") {
-        // Il browser attiva già un button con questi tasti. Fermiamo quel
-        // click implicito perché l'attivazione è gestita qui, una volta sola.
-        e.preventDefault();
-        activate(b, item);
-      }
-    });
     buttons.push(b);
     menu.appendChild(b);
   }
@@ -99,9 +112,7 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   menu.addEventListener("keydown", onKey);
   lifetime.add(() => menu.removeEventListener("keydown", onKey));
   function activate(button: HTMLButtonElement, item: MenuItem): void {
-    // Space può produrre il click nativo al rilascio anche se il keydown è
-    // stato annullato. Dopo la prima attivazione la vita non è più quella del
-    // menu, quindi quel click tardivo non può eseguire la voce una seconda volta.
+    // Una voce già chiusa non deve rispondere a click tardivi.
     if (menuLifetime !== lifetime) return;
     if (document.activeElement !== button) button.focus();
     closeContextMenu();
@@ -127,12 +138,22 @@ export function showContextMenu(at: MouseEvent, items: MenuItem[]): void {
   focusItem(active);
   setTimeout(() => lifetime.listen(document, "click", closeContextMenu, { once: true }), 0);
 }
-
 export function closeContextMenu(): void {
   const lifetime = menuLifetime;
+  const notify = menuClose;
   menuLifetime = null;
+  menuClose = null;
+  // La superficie può restare nel DOM durante l'uscita animata: togliere subito
+  // il riferimento evita un `aria-labelledby` nel vuoto se il trigger viene
+  // smontato nello stesso giro.
+  document.getElementById("context-menu")?.removeAttribute("aria-labelledby");
   lifetime?.close();
+  // Notifica dopo la chiusura della superficie: trapFocus ha così già rimesso
+  // il fuoco sul trigger. La variabile globale è stata azzerata prima, quindi
+  // il callback può chiamare closeContextMenu senza riaprire il ciclo.
+  notify?.();
 }
+
 
 const ICON_PRESETS = [
   "📝", "📁", "🗂️", "📌", "⭐", "🔥", "💡", "📚", "🎯", "✅",

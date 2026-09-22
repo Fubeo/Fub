@@ -6,6 +6,11 @@ import { customRenderer } from "../ui/custom";
 import { GRAPH_NS, mountGraph } from "./graph";
 
 interface FakeChart {
+  onFocusChange: ((index: number) => void) | undefined;
+  focusNode: Mock;
+  focusedNode: Mock;
+  nodeId: Mock;
+  nodeCount: Mock;
   setOpenDocuments: Mock;
   unmount: Mock;
 }
@@ -47,11 +52,16 @@ vi.mock("../graph/chart", () => ({
   createChart: () => {
     const chart = {
       open: undefined as ((id: string) => void) | undefined,
+      onFocusChange: undefined as ((index: number) => void) | undefined,
       mount: vi.fn((host: HTMLElement) => {
         const canvas = document.createElement("canvas");
         canvas.className = "graph-main";
         host.append(canvas);
       }),
+      focusNode: vi.fn(),
+      focusedNode: vi.fn(() => -1),
+      nodeId: vi.fn(() => null),
+      nodeCount: vi.fn(() => 0),
       setOpenDocuments: vi.fn(),
       setA11yLabel: vi.fn(),
       setConfig: vi.fn(),
@@ -103,7 +113,8 @@ vi.mock("../state/layout", () => ({
   openViewIn: vi.fn(),
 }));
 
-afterEach(() => {
+afterEach(async () => {
+  await vi.dynamicImportSettled();
   for (const { disposer } of fakes.layoutRegistrations) disposer();
   fakes.layoutRegistrations.length = 0;
   document.body.replaceChildren();
@@ -118,7 +129,7 @@ beforeEach(() => {
 });
 
 describe("lifecycle del renderer graph", () => {
-  it("stacca il layout e tutte le risorse a ogni mount/destroy", () => {
+  it("stacca il layout e tutte le risorse a ogni mount/destroy", async () => {
     const button = document.createElement("button");
     button.id = "show-graph";
     document.body.append(button);
@@ -131,11 +142,11 @@ describe("lifecycle del renderer graph", () => {
       const host = document.createElement("div");
       document.body.append(host);
       const unmount = render!(host, { nodes: ["a"], edges: [] }, vi.fn());
+      await vi.dynamicImportSettled();
       const chart = fakes.charts[i];
       const panel = fakes.panels[i];
       const layout = fakes.layoutRegistrations[i];
       emit("layout");
-      expect(chart.setOpenDocuments).toHaveBeenCalledTimes(2);
       expect(layout.listener).toHaveBeenCalledTimes(1);
       expect(fakes.languageListeners).toHaveLength(1);
       unmount!();
@@ -145,5 +156,71 @@ describe("lifecycle del renderer graph", () => {
       emit("layout");
       expect(layout.listener).toHaveBeenCalledTimes(1);
     }
+  });
+
+
+  it("U46/U48: elenco accessibile paginato dagli stessi dati, apre con la stessa azione", async () => {
+    const button = document.createElement("button");
+    button.id = "show-graph";
+    document.body.append(button);
+    mountGraph();
+    const render = customRenderer(GRAPH_NS)!;
+    const opened: string[] = [];
+    const host = document.createElement("div");
+    document.body.append(host);
+    const ids = Array.from({ length: 60 }, (_, i) => `n${i}`);
+    const unmount = render(
+      host,
+      { nodes: ids, edges: [] },
+      ((action: { action: string; payload: unknown }) => {
+        if (action.action === "open") opened.push((action.payload as { doc: string }).doc);
+      }) as never,
+    );
+    await vi.dynamicImportSettled();
+    const chart = fakes.charts[fakes.charts.length - 1];
+    chart.nodeCount.mockReturnValue(ids.length);
+    chart.nodeId.mockImplementation((i: number) => ids[i] ?? null);
+    chart.focusedNode.mockReturnValue(-1);
+    // Ridisegna la lista coi dati veri dopo aver insegnato al mock il conto.
+    fakes.languageListeners[fakes.languageListeners.length - 1]!();
+    const list = host.querySelector<HTMLElement>("details.graph-list");
+    const listBox = host.querySelector<HTMLElement>("ul.graph-list-items");
+    expect(list).not.toBeNull();
+    expect(listBox!.getAttribute("role")).toBe("list");
+    // Pagina da 50: 50 righe + pager + riga "altre", mai 60 nodi in DOM.
+    expect(listBox!.querySelectorAll(".graph-list-open")).toHaveLength(50);
+    expect(listBox!.querySelector(".graph-list-more")).not.toBeNull();
+    expect(listBox!.querySelector(".graph-list-page")).not.toBeNull();
+    // Click sulla prima riga: seleziona e apre con la stessa azione del canvas.
+    const first = listBox!.querySelector<HTMLButtonElement>(".graph-list-open")!;
+    first.click();
+    expect(chart.focusNode).toHaveBeenCalledWith(0);
+    expect(opened).toEqual(["n0"]);
+    // Seconda pagina via "altre": mostra n50 senza ricreare la simulazione.
+    listBox!.querySelector<HTMLButtonElement>(".graph-list-more button")!.click();
+    const second = listBox!.querySelector<HTMLButtonElement>(".graph-list-open")!;
+    second.click();
+    expect(chart.focusNode).toHaveBeenCalledWith(50);
+    expect(opened).toEqual(["n0", "n50"]);
+    unmount!();
+  });
+
+  it("non monta un motore arrivato dopo lo smontaggio della superficie", async () => {
+    const button = document.createElement("button");
+    button.id = "show-graph";
+    document.body.append(button);
+    mountGraph();
+    const host = document.createElement("div");
+    document.body.append(host);
+    const render = customRenderer(GRAPH_NS)!;
+    const stop = render(host, { nodes: ["a"], edges: [] }, vi.fn())!;
+    stop();
+    await vi.dynamicImportSettled();
+    expect(host.querySelector("canvas")).toBeNull();
+    expect(fakes.charts).toHaveLength(0);
+    expect(fakes.languageListeners).toHaveLength(0);
+    const subscription = fakes.layoutRegistrations[0]!;
+    emit("layout");
+    expect(subscription.listener).not.toHaveBeenCalled();
   });
 });

@@ -19,9 +19,24 @@ import { renderEmbed, renderPreview } from "../host/query";
 import { mountTree, unmountTree } from "../ui/node";
 import { setSanitizedHtml } from "../ui/sanitize";
 import { errorText } from "../host/errors";
-import { notify } from "../ui/notify";
 import { t } from "../i18n/strings";
+import { notify } from "../ui/notify";
 import { Race, type Expected } from "../ui/race";
+import { mountMermaidBlocks } from "../ui/mermaid";
+
+/// Dichiara quale versione mostra Lettura: persistito con buffer sporco
+export function describeReadingVersion(dirty: boolean): string {
+  if (dirty) return t("document.reading.stale");
+  return t("document.reading.current");
+}
+
+/// Annota la superficie resa dopo `updatePreview`, col dirty di sessione.
+/// `describeReadingVersion` espone il testo per i test; qui solo attributi.
+export function markReadingVersion(container: HTMLElement, dirty: boolean): void {
+  container.setAttribute("aria-label", describeReadingVersion(dirty));
+  if (dirty) container.setAttribute("data-reading-dirty", "true");
+  else container.removeAttribute("data-reading-dirty");
+}
 
 /// Profondità massima di transclusion: oltre, l'embed resta un legame.
 const MAX_EMBED_DEPTH = 5;
@@ -51,6 +66,7 @@ export function configurePreview(deps: PreviewDeps): void {
 /// corsa se ne va con lui, e non c'è nessuna cancellazione da ricordarsi. È la
 /// stessa regola della `Lifetime` (0133), col contenitore al posto della chiusura.
 const races = new WeakMap<HTMLElement, Race>();
+const diagramMounts = new WeakMap<HTMLElement, () => void>();
 
 function runOf(previewEl: HTMLElement): Race {
   const existing = races.get(previewEl);
@@ -61,6 +77,12 @@ function runOf(previewEl: HTMLElement): Race {
 }
 
 function unmountSlots(container: HTMLElement): void {
+  diagramMounts.get(container)?.();
+  diagramMounts.delete(container);
+  for (const embed of container.querySelectorAll<HTMLElement>(".embed")) {
+    diagramMounts.get(embed)?.();
+    diagramMounts.delete(embed);
+  }
   for (const slot of container.querySelectorAll<HTMLElement>("[data-ui-slot]")) {
     unmountTree(slot);
   }
@@ -158,18 +180,20 @@ function mountRendered(container: HTMLElement, rendered: RenderedDocument): void
   setSanitizedHtml(container, rendered.html);
   for (const pre of container.querySelectorAll<HTMLElement>("pre")) {
     pre.tabIndex = 0;
+    pre.setAttribute("role", "document");
     pre.dataset.i18nLabel = "preview.code_block";
     pre.setAttribute("aria-label", t("preview.code_block"));
   }
   for (const checkbox of container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) {
     if (!checkbox.hasAttribute("aria-label")) {
-      const labelKey = checkbox.checked ? "editor.task.completed" : "editor.task.pending";
-      checkbox.dataset.i18nLabel = labelKey;
-      checkbox.setAttribute("aria-label", t(labelKey));
+      const label = checkbox.checked ? "editor.task.completed" : "editor.task.pending";
+      checkbox.dataset.i18nLabel = label;
+      checkbox.setAttribute("aria-label", t(label));
     }
   }
   wireWikilinks(container);
   mountParts(container, rendered);
+  diagramMounts.set(container, mountMermaidBlocks(container));
 }
 
 /// Monta le parti dichiarative di un documento reso (§3.2, §3.3).

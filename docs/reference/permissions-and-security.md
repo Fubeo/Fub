@@ -122,6 +122,12 @@ del plugin senza sanitizzazione e una decisione esplicita.
 - artefatti generati verificati;
 - dipendenze duplicate sensibili controllate.
 
+Il controllo npm rifiuta le licenze assenti o sconosciute. Se i metadati
+dichiarano `NOASSERTION`, può concludere una licenza soltanto dal testo completo
+già esaminato e identificato dal suo SHA-256, verificando anche nome e versione
+del pacchetto installato. La SBOM conserva la dichiarazione originale e registra
+la conclusione con la provenienza; un testo diverso resta bloccante.
+
 ## Dati sensibili
 
 Fub è local-first ma i vault possono contenere dati sensibili. Log e bundle

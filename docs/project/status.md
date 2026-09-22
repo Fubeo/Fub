@@ -1,6 +1,6 @@
 # Stato del progetto
 
-> **Stato aggiornato per `main@8797bb1e183e6e0d292e782f06e309600bd62bfd`, 21 settembre 2026.**
+> **Stato aggiornato al 22 settembre 2026.**
 
 ## Baseline corrente
 
@@ -12,17 +12,17 @@ della Graph View. La PR #65 ha consegnato lo snapshot globale offline (#5
 chiusa); la PR #69 ha corretto il campionamento heap del banco; la PR #68 ha
 consolidato lo stato documentale; la PR #71 ha versionato `0.1.0-rc.1`.
 
-Il release candidate `v0.1.0-rc.1` è pubblicato come draft su
-`main@8797bb1e` con tag annotato non firmato (nessuna chiave GPG disponibile),
-note dal changelog e artefatto Linux amd64 con checksum verificata. CI
-`35551966290` e NPM supply chain `35551966276` verdi sullo SHA.
+Il primo release candidate è stato ritirato: su GitHub non sono presenti una
+release né il tag remoto `v0.1.0-rc.1`. Le modifiche restano non rilasciate;
+un nuovo candidato richiede la matrice CI sul proprio SHA e gli artefatti
+previsti dalla procedura di rilascio.
 
 Le milestone #5, #6, #7, #8, #10, #11, #12, #13, #17 e #56 sono chiuse con
 evidenze riferite a codice, test, documentazione e CI.
 
 ## Release corrente
 
-Il candidato `v0.1.0-rc.1` è in draft. Workspace e shell dichiarano `0.1.0`; il
+Non è pubblicata una release. Workspace e shell dichiarano `0.1.0`; il
 contratto plugin è `fub:abi@0.1.2` e include Grid v1 in ABI/WIT e mirror TypeScript.
 
 Sono presenti:

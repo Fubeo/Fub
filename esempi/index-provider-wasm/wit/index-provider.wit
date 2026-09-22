@@ -1,0 +1,9 @@
+package esempio:index-provider@0.1.0;
+
+// La porta canonica vive nel contratto ABI; il world la esporta senza
+// aggiungere un'interfaccia locale o uno stub alternativo.
+
+world index-provider {
+    export fub:abi/plugin@0.1.2;
+    export fub:abi/index@0.1.2;
+}

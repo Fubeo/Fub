@@ -852,16 +852,16 @@ fn a_completed_feed_does_not_announce_over_a_newer_write() {
         .filter(|notice| {
             matches!(
                 &notice.event,
-                Event::DocumentRenamed { from, to } if from == &from_id && to == &id
+                Event::DocumentRenamed { from, to } if *from == from_id && *to == id
             ) || matches!(
                 &notice.event,
-                Event::DocumentChanged { id: changed, .. } if changed == &id
+                Event::DocumentChanged { id: changed, .. } if *changed == id
             ) || matches!(
                 &notice.event,
                 Event::Trouble {
                     subject: Some(changed),
                     ..
-                } if changed == &id
+                } if *changed == id
             )
         })
         .map(|notice| notice.event)
@@ -903,7 +903,7 @@ fn an_explicit_rename_batch_migrates_identity_exactly_once() {
             matches!(
                 &notice.event,
                 Event::DocumentRenamed { from, to }
-                    if from == &from_id && to == &to_id
+                    if *from == from_id && *to == to_id
             )
         })
         .count();
@@ -929,7 +929,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
             .try_iter()
             .filter(|notice| matches!(
                 &notice.event,
-                Event::EntryChanged { id: changed, kind: EntryKind::Asset } if changed == &id
+                Event::EntryChanged { id: changed, kind: EntryKind::Asset } if *changed == id
             ))
             .count(),
         1,
@@ -947,7 +947,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
             .try_iter()
             .filter(|notice| matches!(
                 &notice.event,
-                Event::EntryChanged { id: changed, kind: EntryKind::Asset } if changed == &id
+                Event::EntryChanged { id: changed, kind: EntryKind::Asset } if *changed == id
             ))
             .count(),
         1,
@@ -958,7 +958,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
     assert_eq!(
         events
             .try_iter()
-            .filter(|notice| matches!(&notice.event, Event::EntryChanged { id: changed, .. } if changed == &id))
+            .filter(|notice| matches!(&notice.event, Event::EntryChanged { id: changed, .. } if *changed == id))
             .count(),
         0,
         "an unchanged entry is a no-op"
@@ -1057,7 +1057,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
                     from,
                     to,
                     kind: EntryKind::Asset
-                } if from == &id && to == &renamed_id
+                } if *from == id && *to == renamed_id
             )
         })
         .collect();
@@ -1074,7 +1074,7 @@ fn a_providerless_entry_survives_the_watcher_batch() {
             .try_iter()
             .filter(|notice| matches!(
                 &notice.event,
-                Event::EntryRemoved { id: removed, kind: EntryKind::Asset } if removed == &renamed_id
+                Event::EntryRemoved { id: removed, kind: EntryKind::Asset } if *removed == renamed_id
             ))
             .count(),
         1,

@@ -1,17 +1,19 @@
-/* Anteprima markdown */
+/* Anteprima markdown: titoli editoriali, non errori di sintassi. I titoli sono
+   testo — inchiostro del documento, non un rosso — e la gerarchia passa da
+   misura e respiro, non dal colore: un solo livello sottolineato, i pesi che
+   calano col livello, h5/h6 maiuscoletti muti. */
 .markdown-preview h1,
 .markdown-preview h2,
 .markdown-preview h3,
 .markdown-preview h4,
 .markdown-preview h5,
 .markdown-preview h6 {
-  color: var(--doc-heading);
+  color: var(--doc-fg);
+  font-weight: var(--weight-bold);
 }
-.markdown-preview h1,
-.markdown-preview h2,
-.markdown-preview h3 {
+.markdown-preview h1 {
   border-bottom: 1px solid var(--doc-rule-soft);
-  padding-bottom: var(--space-2);
+  padding-bottom: var(--space-3);
 }
 .markdown-preview a.wikilink {
   color: var(--doc-link);
@@ -208,6 +210,7 @@
 .pane[data-mode="live_preview"] .cm-content {
   max-width: var(--content-width);
   margin-inline: auto;
+  padding: var(--space-8) var(--space-7) var(--space-10);
   font-family: var(--font-reading);
   font-size: var(--text-reading);
   line-height: var(--leading-relaxed);
@@ -222,35 +225,74 @@
 .markdown-preview {
   width: min(100%, var(--content-width));
   margin-inline: auto;
+  padding-block: var(--space-7) var(--space-10);
+}
+.markdown-preview > :first-child {
+  margin-top: 0;
+}
+.markdown-preview > :last-child {
+  margin-bottom: 0;
 }
 .markdown-preview h1 {
   font-size: var(--text-3xl);
   line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  margin: var(--space-8) 0 var(--space-4);
 }
 .markdown-preview h2,
 .markdown-preview h3 {
-  font-size: var(--text-2xl);
   line-height: var(--leading-tight);
+  letter-spacing: -0.005em;
+  margin: var(--space-7) 0 var(--space-3);
+}
+.markdown-preview h2 {
+  font-size: var(--text-2xl);
+}
+.markdown-preview h3 {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-medium);
+}
+.markdown-preview h4 {
+  font-size: var(--text-lg);
+  margin: var(--space-6) 0 var(--space-2);
+}
+.markdown-preview h5,
+.markdown-preview h6 {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  margin: var(--space-6) 0 var(--space-2);
+}
+.markdown-preview h6 {
+  font-weight: var(--weight-medium);
 }
 .markdown-preview p,
 .markdown-preview li {
   line-height: var(--leading-relaxed);
 }
+.markdown-preview p,
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: var(--space-4) 0;
+}
 
 /* Il renderer distingue le tipo di callout nell'attributo, quindi la pelle
-   veste le specie senza riscrivere il modello. */
+   veste le specie senza riscrivere il modello. Le note informative restano
+   neutre — distinguere «nota» con un inchiostro colorato la farebbe leggere
+   come avviso — mentre gli avvisi veri prendono gli intenti della shell. */
 .markdown-preview .callout[data-callout="warning"],
 .markdown-preview .callout[data-callout="caution"],
 .markdown-preview .callout[data-callout="attention"] {
-  border-left-color: var(--doc-danger);
+  border-left-color: var(--warning);
 }
 .markdown-preview .callout[data-callout="tip"],
 .markdown-preview .callout[data-callout="success"] {
-  border-left-color: var(--doc-link);
+  border-left-color: var(--success);
 }
 .markdown-preview .callout[data-callout="info"],
 .markdown-preview .callout[data-callout="note"] {
-  border-left-color: var(--doc-heading);
+  border-left-color: var(--info);
 }
 .markdown-preview .block-footnote-definition {
   border-top: 1px solid var(--doc-rule-soft);
@@ -283,4 +325,50 @@
 .markdown-preview .embed[data-embed-url],
 .markdown-preview .embed[data-embed-path] {
   min-height: var(--text-3xl);
+}
+
+/* Il renderer condiviso usa immagini SVG inerti, non SVG attivo nella shell. */
+.mermaid-diagram {
+  margin: var(--space-5) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--doc-rule-soft);
+  border-radius: var(--radius-md);
+  background: var(--doc-fill-soft);
+  color: var(--doc-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  white-space: normal;
+  overflow: auto;
+}
+.mermaid-diagram figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+  font-weight: var(--weight-medium);
+}
+.mermaid-diagram img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-inline: auto;
+}
+.mermaid-diagram summary {
+  cursor: pointer;
+  padding-block: var(--space-2);
+}
+.mermaid-diagram pre {
+  max-height: 24em;
+  overflow: auto;
+  white-space: pre;
+  font-family: var(--font-mono);
+  padding: var(--space-3);
+}
+.mermaid-diagram[data-state="error"] {
+  border-color: var(--doc-danger);
+}
+.mermaid-diagram [role="status"] {
+  overflow-wrap: anywhere;
 }

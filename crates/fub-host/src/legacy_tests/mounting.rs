@@ -1063,9 +1063,9 @@ fn runtime_claims_cannot_replace_or_be_mutated_through_another_identity() {
     let owner = fub_host::BundleClaim::new();
     let other = fub_host::BundleClaim::new();
 
-    host.remember_bundle(None, Arc::new(BundleSpy::new(ID, &journal)), &owner)
+    host.remember_claimed_bundle(None, Arc::new(BundleSpy::new(ID, &journal)), &owner)
         .expect("owner remembers its runtime bundle");
-    host.remember_bundle(
+    host.remember_claimed_bundle(
         None,
         Arc::new(BundleSpy::new(ID, &Journal::default())),
         &owner,
@@ -1074,7 +1074,7 @@ fn runtime_claims_cannot_replace_or_be_mutated_through_another_identity() {
     assert!(host.bundle_is_owned(None, ID, &owner).unwrap());
     assert!(!host.bundle_is_owned(None, ID, &other).unwrap());
     assert!(matches!(
-        host.remember_bundle(
+        host.remember_claimed_bundle(
             None,
             Arc::new(BundleSpy::new(ID, &Journal::default())),
             &other,
@@ -1117,7 +1117,7 @@ fn runtime_claims_cannot_replace_or_be_mutated_through_another_identity() {
 
     let collision = fub_host::BundleClaim::new();
     assert!(matches!(
-        host.remember_bundle(
+        host.remember_claimed_bundle(
             None,
             Arc::new(BundleSpy::new("fub.stats", &Journal::default())),
             &collision,

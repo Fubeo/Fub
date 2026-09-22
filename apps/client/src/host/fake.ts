@@ -60,6 +60,8 @@ import type {
   SettingEntry,
   SettingValue,
   SyntaxForm,
+  ThemeInfo,
+  ThemePayload,
   UiNode,
   VaultEntry,
   VaultFolder,
@@ -106,11 +108,19 @@ export interface Options {
   commands?: CommandSpec[];
   settings?: SettingEntry[];
   syntaxForms?: SyntaxForm[];
-  customQueries?: Record<string, (query: unknown) => unknown>;
+  /// Bundle nativi/ufficiali che l'host conosce.
   bundles?: BundleInfo[];
+  /// Temi installati che il backend ha validato come caricabili.
+  themes?: ThemeInfo[];
+  /// Fascio per luce, indicizzato come `${id}:${light}`.
+  themePayloads?: Record<string, ThemePayload>;
+  /// Inventario installato della macchina, compresi elementi spenti o senza
+  /// consenso: il fake non li ricava dai bundle runtime.
   installedPlugins?: InstalledPluginInfo[];
   installablePlugins?: Record<string, InstalledPluginInfo>;
   grid?: GridFake;
+  /// Provider finti per le query custom, indicizzati dal namespace.
+  customQueries?: Record<string, (query: unknown) => unknown>;
 }
 
 /// L'host finto e le maniglie per guidarlo.
@@ -179,6 +189,8 @@ export function createFakeHost(options: Options = {}): FakeHost {
   const calls: Call[] = [];
   const view = options.view ?? [];
   const bundles = options.bundles ?? [];
+  const themes = options.themes ?? [];
+  const themePayloads = options.themePayloads ?? {};
   const installedPlugins = new Map(
     (options.installedPlugins ?? []).map((plugin) => [
       plugin.installation,
@@ -643,16 +655,20 @@ export function createFakeHost(options: Options = {}): FakeHost {
       setOrder: (folder, names) => gate("setOrder", [folder, names], Promise.resolve()),
       setSetting: (key, value) =>
         gate("setSetting", [key, value], Promise.resolve(writeSetting(key, value))),
-      resetSetting: (key) =>
-        gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
+      resetSetting: (key) => gate("resetSetting", [key], Promise.resolve(writeSetting(key, null))),
       listBundles: () => gate("listBundles", [], Promise.resolve(bundles)),
-      listThemes: () => gate("listThemes", [], Promise.resolve([])),
-      readTheme: (id, light) =>
-        gate(
-          "readTheme",
-          [id, light],
-          Promise.reject(new Error(`host fake: il tema «${id}» (${light}) non esiste`)),
-        ),
+      listThemes: () => gate("listThemes", [], Promise.resolve(themes)),
+      readTheme: (id, light) => {
+        const payload = themePayloads[`${id}:${light}`];
+        if (!payload) {
+          return gate(
+            "readTheme",
+            [id, light],
+            Promise.reject(new Error(`tema non leggibile: ${id}:${light}`)),
+          );
+        }
+        return gate("readTheme", [id, light], Promise.resolve(payload));
+      },
       setPluginEnabled: (id, enabled) =>
         gate("setPluginEnabled", [id, enabled], Promise.resolve([])),
       listInstalledPlugins: (vault) =>

@@ -35,6 +35,7 @@ jobs:
         run: |
           node --input-type=module -e '
             import fs from "node:fs";
+            import { createHash } from "node:crypto";
             const sbom = JSON.parse(fs.readFileSync("fub-client-sbom.spdx.json", "utf8"));
             if (sbom.spdxVersion !== "SPDX-2.3") {
               throw new Error(`versione SPDX inattesa: ${sbom.spdxVersion}`);
@@ -52,11 +53,38 @@ jobs:
               "Apache-2.0 OR MIT",
               "MPL-2.0",
               "OFL-1.1",
+              "Unlicense",
+              "(MPL-2.0 OR Apache-2.0)",
+            ]);
+            // Licenze complete esaminate, non euristiche né NOASSERTION ammesso.
+            // Il pacchetto khroma 2.1.0 distribuisce questa MIT ma omette license.
+            const reviewedLicenseFiles = new Map([
+              ["66b333b0f66759a0b710459e03f7029abe17f4358114a128d2c972e642961b49", "MIT"],
             ]);
             const rejected = [];
             for (const pkg of sbom.packages) {
               if (pkg.name === "fub-frontend") continue;
-              const license = pkg.licenseConcluded ?? pkg.licenseDeclared ?? "NOASSERTION";
+              let license = pkg.licenseConcluded ?? pkg.licenseDeclared ?? "NOASSERTION";
+              if (license === "NOASSERTION") {
+                const directory = `node_modules/${pkg.name}`;
+                const metadataPath = `${directory}/package.json`;
+                const metadata = fs.existsSync(metadataPath)
+                  ? JSON.parse(fs.readFileSync(metadataPath, "utf8"))
+                  : null;
+                if (metadata?.name === pkg.name && metadata?.version === pkg.versionInfo) {
+                  for (const filename of ["LICENSE", "LICENSE.md", "LICENSE.txt", "license"]) {
+                    const path = `${directory}/${filename}`;
+                    if (!fs.existsSync(path)) continue;
+                    const hash = createHash("sha256").update(fs.readFileSync(path)).digest("hex");
+                    const reviewed = reviewedLicenseFiles.get(hash);
+                    if (!reviewed) continue;
+                    license = reviewed;
+                    pkg.licenseConcluded = reviewed;
+                    pkg.licenseComments = `Testo verificato: ${filename}, SHA-256 ${hash}`;
+                    break;
+                  }
+                }
+              }
               if (!allowed.has(license)) {
                 rejected.push(`${pkg.name}@${pkg.versionInfo ?? "?"}: ${license}`);
               }
@@ -64,6 +92,7 @@ jobs:
             if (rejected.length > 0) {
               throw new Error(`licenze npm non approvate:\n${rejected.join("\n")}`);
             }
+            fs.writeFileSync("fub-client-sbom.spdx.json", JSON.stringify(sbom, null, 2) + "\n");
             console.log(`SBOM npm valido: ${sbom.packages.length} pacchetti; licenze approvate`);
           '
       - name: Pubblica SBOM npm

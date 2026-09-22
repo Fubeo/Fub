@@ -38,7 +38,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-5);
+  padding: var(--space-6) var(--space-6) var(--space-5);
   background: var(--elevation-dialog-surface);
   border: 1px solid var(--elevation-dialog-border);
   border-radius: var(--radius-lg);
@@ -64,18 +64,19 @@
 
 .modale .palette-input {
   font-size: var(--text-lg);
+  line-height: var(--leading-normal);
 }
 
 .modale .palette-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: var(--space-1);
   overflow: auto;
 }
 
 .modale .palette-list li {
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   cursor: pointer;
 }
 
@@ -83,19 +84,25 @@
    guarda lo sfondo non aveva modo di sapere su cosa stesse per premere, e la
    lista non si dichiarava nemmeno una lista di scelta. Adesso è una `listbox`
    con la sua opzione selezionata, e la pelle legge quella. */
-.modale .palette-list li[aria-selected="true"],
-.modale .palette-list li:hover {
-  background: var(--bg-hover);
+.modale .palette-list li[aria-selected="true"] {
+  background: var(--bg-active);
+}
+.modale .palette-list li:not([aria-selected="true"]):hover {
+  background: var(--overlay-hover);
 }
 
 .modale .palette-row {
   display: flex;
   align-items: baseline;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .modale .palette-title {
   flex: 1;
+  font-weight: var(--weight-medium);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modale .palette-scope,
@@ -128,23 +135,29 @@
 }
 
 .modale .palette-heading {
-  font-size: var(--text-lg);
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
 }
 
 .modale .palette-form {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
 
 .modale .palette-form label {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  font-weight: var(--weight-medium);
 }
 
 .modale .palette-label {
   font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
   color: var(--muted);
 }
 
@@ -200,8 +213,8 @@
 }
 
 .modale .palette-actions button.danger {
-  background: var(--doc-danger);
-  border-color: var(--doc-danger);
+  background: var(--danger);
+  border-color: var(--danger);
   color: var(--danger-contrast);
 }
 
@@ -212,8 +225,10 @@
 
 .modale .palette-error {
   padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
   background: var(--danger-wash);
-  color: var(--doc-danger);
-  font-size: var(--text-base);
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
 }

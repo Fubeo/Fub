@@ -86,11 +86,14 @@ export function onAnyEvent(handler: (n: KernelNotice) => void): () => void {
 function dispatchNotice(n: KernelNotice): void {
   // Prima i generici, poi i tipizzati. L'ordine conta per un motivo solo, ma
   // vero: le view dichiarative si ridisegnano da `refresh` qualunque sia
-  for (const { handler } of forAny) invokeHandler(() => handler(n));
-  for (const { handler } of forType.get(n.event.type) ?? []) {
+  // Copie: un ascoltatore può smontarsi mentre viene chiamato senza saltare il
+  // successivo, né far eseguire una registrazione aggiunta a metà del turno.
+  for (const { handler } of [...forAny]) invokeHandler(() => handler(n));
+  for (const { handler } of [...(forType.get(n.event.type) ?? [])]) {
     invokeHandler(() => handler(n.event, n.origin));
   }
 }
+
 
 /// Un ascoltatore che sbaglia non deve zittire gli altri: sarebbe metà finestra
 /// ferma senza che nulla lo dica, il difetto che il §20.3 chiama «esito buttato

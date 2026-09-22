@@ -136,6 +136,11 @@ export function openInDocumentSearch(): void {
   input.className = "palette-input";
   input.placeholder = t("docsearch.placeholder");
   input.setAttribute("aria-label", t("docsearch.title"));
+  // Etichetta di scope esplicita (U13): "Cerca nella nota" — raggio un solo
+  // documento, non il vault. Hook esistente `palette-desc`, nessun CSS nuovo.
+  const scope = document.createElement("p");
+  scope.className = "palette-desc";
+  scope.textContent = t("docsearch.title");
   const summary = document.createElement("p");
   summary.className = "docsearch-summary";
   const list = document.createElement("ul");
@@ -147,7 +152,7 @@ export function openInDocumentSearch(): void {
   list.tabIndex = 0;
   // L'overlay può essere ancora quello dell'uscita precedente: sostituire è
   // atomico e impedisce a una riapertura di accumulare alberi di risultati.
-  box.replaceChildren(input, summary, list);
+  box.replaceChildren(scope, input, summary, list);
 
   if (doc === null) {
     summary.textContent = t("docsearch.no_doc");
@@ -209,6 +214,8 @@ export function openInDocumentSearch(): void {
         button.className = "search-result";
         button.appendChild(content);
         const where = row.byteOffset;
+        // Il documento è già aperto: qui non si apre niente, ci si porta il
+        // cursore — e il modale si chiude, perché il gesto è finito.
         button.addEventListener("click", () => {
           if (!isCurrent(owner)) return;
           const targetDoc = owner.doc;
@@ -235,6 +242,23 @@ export function openInDocumentSearch(): void {
       if (!isCurrent(owner)) return;
       void search();
     }, 180);
+  });
+  // U16: Frecce/Enter/Esc senza rubare il focus — il focus resta nel campo,
+  // le frecce spostano la selezione fra i bottoni della lista.
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const items = [...list.querySelectorAll<HTMLButtonElement>(".search-result:not([disabled])")];
+      if (items.length === 0) return;
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === "ArrowDown" ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+      items[next]?.focus();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      list.querySelector<HTMLButtonElement>(".search-result:not([disabled])")?.click();
+    } else if (e.key === "Escape") {
+      closeInDocumentSearch();
+    }
   });
 }
 

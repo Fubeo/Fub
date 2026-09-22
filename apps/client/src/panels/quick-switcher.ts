@@ -159,6 +159,11 @@ export function openQuickSwitcher(): void {
   input.setAttribute("aria-autocomplete", "list");
   input.setAttribute("aria-expanded", "true");
   input.setAttribute("aria-haspopup", "listbox");
+  // Etichetta di scope esplicita (U13): non un generico "Cerca…", ma il nome
+  // della superficie con i suoi effetti (aprire, non cercare nel testo).
+  const scope = document.createElement("p");
+  scope.className = "palette-desc";
+  scope.textContent = t("switcher.title");
   const list = document.createElement("ul");
   list.id = LIST_ID;
   list.className = "plain-list palette-list";
@@ -170,7 +175,7 @@ export function openQuickSwitcher(): void {
   // La selezione resta sull'input; il popup non è una fermata del tab.
   list.tabIndex = -1;
   input.setAttribute("aria-controls", list.id);
-  box.append(input, list);
+  box.append(scope, input, list);
 
   let visibleItems: Entry[] = [];
   let selected = 0;
@@ -194,6 +199,12 @@ export function openQuickSwitcher(): void {
       li.id = optionId(entry);
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", String(i === selected));
+      // Riga nativa (C01): bottone vero invece di `li` attivo — omonimi con
+      // titolo + percorso disambiguante (U14), shortcut reale assente qui
+      // perché l'azione è aprire (nessuna stringa duplicata).
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "search-result";
       const title = document.createElement("span");
       title.className = "palette-title";
       const where = document.createElement("span");
@@ -204,6 +215,7 @@ export function openQuickSwitcher(): void {
         // è anche il caso in cui questa superficie serve di più.
         title.textContent = pageName(entry.doc);
         where.textContent = entry.doc;
+        setTooltip(button, entry.doc);
       } else if (entry.k === "query") {
         title.textContent = entry.q;
         where.textContent = t("switcher.recent_search");
@@ -211,7 +223,9 @@ export function openQuickSwitcher(): void {
         title.textContent = entry.name;
         where.textContent = t("switcher.create");
       }
-      li.addEventListener("click", () => active(entry));
+      button.append(title, where);
+      button.addEventListener("click", () => active(entry));
+      li.append(button);
       newItems.appendChild(li);
     }
     if (visibleItems.length === 0) {
@@ -354,6 +368,10 @@ export function openQuickSwitcher(): void {
       e.preventDefault();
       const entry = visibleItems[selected];
       if (entry) active(entry);
+    } else if (e.key === "Escape") {
+      // U16: Escape chiude la superficie appropriata, il focus resta dov'era
+      // prima dell'apertura (lo rimette `trapFocus` sciogliendosi).
+      closeQuickSwitcher();
     }
   });
 

@@ -71,9 +71,11 @@ import {
 } from "../state/layout";
 import { createNote } from "../state/vault";
 import { $ } from "../ui/dom";
+import { showContextMenu } from "../ui/menu";
+import { confirm } from "../host/dialog";
 import { allCommands, registerShellCommand } from "../ui/commands";
 import { notify } from "../ui/notify";
-import { clearPreview, sourceBlockAt, updatePreview } from "./preview";
+import { clearPreview, markReadingVersion, sourceBlockAt, updatePreview } from "./preview";
 import { mountViewInPane, unmountViewFromPane, primaryView } from "../ui/views";
 import { errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
@@ -100,6 +102,9 @@ interface Pane {
   tabsShell: HTMLElement;
   tabsEl: HTMLElement;
   contentEl: HTMLElement;
+  tabMenuEl: HTMLButtonElement;
+  toolbarEl: HTMLElement;
+  conflictEl: HTMLElement;
   editorEl: HTMLElement;
   previewEl: HTMLElement;
   /// Dove finisce una view dichiarata che questo riquadro sta ospitando (§3.3).
@@ -111,13 +116,20 @@ interface Pane {
   /// può essere una view, e sapere quale evita di rimontarla a ogni giro.
   shown: Tab | null;
   loadGeneration: number;
+  /// Firma dell'ultima striscia disegnata: un cambio di riquadro non deve
+  /// ricreare tab identiche e togliere il fuoco al loro nodo DOM.
+  tabsSignature: string | null;
   /// Il disposer della registrazione di questo riquadro alla sessione del
-  /// documento mostrato. Null finché il riquadro non mostra un documento.
+  /// documento mostrato. Null finché il documento mostrato non c'è.
   disposeSurface: (() => void) | null;
 }
-
+/// Nome breve della tab + stato testuale: non solo colore (U21).
+/// View: titolo dichiarato, mai finto file.
+export function describeTab(tab: Tab): { label: string; dirty: boolean; kind: "doc" | "view" } {
+  if (tab.k === "view") return { label: nameTab(tab), dirty: false, kind: "view" };
+  return { label: nameTab(tab), dirty: documentSessions.isDirty(tab.doc), kind: "doc" };
+}
 const panes = new Map<string, Pane>();
-
 let panesEl: HTMLElement;
 let sessionEventsStop: (() => void) | undefined;
 let deps: DocumentDeps;
@@ -163,10 +175,6 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
     if (sessionEventsStop === stopSessionEvents) sessionEventsStop = undefined;
   });
 
-  lifetime.listen($("#mode-switch"), "click", (event) => {
-    const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>("button[data-mode]") : null;
-    if (button?.dataset.mode) void setMode(button.dataset.mode);
-  });
 
   // Il layout è cambiato — qualcuno ha diviso, chiuso, cambiato linguetta — e il DOM
   // lo insegue. Il verso passa dal bus e non da una chiamata perché chi muta il
@@ -227,7 +235,7 @@ export function mountDocument(lifetime: Lifetime, d: DocumentDeps): void {
   lifetime.add(
     onLanguage(() => {
       drawSave();
-      updateToggle();
+      for (const pane of panes.values()) drawToolbar(pane);
       for (const id of layoutPanes()) {
         const pane = panes.get(id);
         const current = paneState(id);
@@ -488,8 +496,9 @@ async function render(): Promise<void> {
     r.root.classList.toggle("focus", id === layout.focus);
     await show(r, activeTab(id));
     r.root.dataset.mode = selectedMode(r)?.id ?? p.mode;
+    drawToolbar(r);
+    drawConflict(r, activeDoc(id));
   }
-  updateToggle();
   drawSave();
   if (state.currentDoc !== active) {
     state.currentDoc = active;
@@ -525,7 +534,12 @@ function buildStructure(): void {
       panes.delete(id);
     }
   }
+  const onboarding = document.getElementById("onboarding");
   panesEl.replaceChildren(node(layout.tree));
+  // La schermata senza vault vive nell'HTML statico dentro #panes: il layout
+  // la spazzerebbe via a ogni synchronize, quindi la si rimette in fondo —
+  // `hidden` resta padrone della visibilità (A01, syncOnboarding in shell).
+  if (onboarding) panesEl.append(onboarding);
 }
 
 function node(n: LayoutNode): HTMLElement {
@@ -560,6 +574,20 @@ function renderPane(id: string): Pane {
   // della tablist. `display: contents` lascia la striscia un'unica fila.
   tabsEl.style.display = "contents";
   tabsShell.append(tabsEl);
+  const tabMenuEl = document.createElement("button");
+  tabMenuEl.type = "button";
+  tabMenuEl.dataset.tabMenu = "";
+  tabMenuEl.setAttribute("aria-haspopup", "menu");
+  tabMenuEl.textContent = "▾";
+  tabMenuEl.addEventListener("click", (event) => {
+    const current = paneState(id);
+    if (!current) return;
+    showContextMenu(event, current.tabs.map((tab, index) => ({
+      label: (tab.k === "doc" && documentSessions.isDirty(tab.doc) ? "• " : "") + nameTab(tab),
+      run: () => activateTab(id, index),
+    })));
+  });
+  tabsShell.append(tabMenuEl);
 
   const contentEl = document.createElement("div");
   contentEl.setAttribute("role", "tabpanel");
@@ -575,6 +603,7 @@ function renderPane(id: string): Pane {
   const previewEl = document.createElement("div");
   previewEl.className = "pane-preview markdown-preview";
   previewEl.tabIndex = 0;
+  previewEl.setAttribute("role", "document");
 
   // La terza superficie del riquadro (§3.3). Non è `declared-view` come nella
   // sidebar e non deve esserlo: là una view è un pannello con un titolo che si
@@ -583,8 +612,15 @@ function renderPane(id: string): Pane {
   const viewEl = document.createElement("div");
   viewEl.className = "pane-view";
 
+  const toolbarEl = document.createElement("div");
+  toolbarEl.className = "pane-toolbar";
+  toolbarEl.setAttribute("role", "toolbar");
+
+  const conflictEl = document.createElement("div");
+  conflictEl.hidden = true;
+
   contentEl.append(editorEl, previewEl, viewEl);
-  root.append(tabsShell, contentEl);
+  root.append(tabsShell, toolbarEl, conflictEl, contentEl);
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
   // altrimenti il contesto pubblicato subito dopo sarebbe quello di prima.
@@ -595,15 +631,19 @@ function renderPane(id: string): Pane {
   const r: Pane = {
     id,
     root,
-    tabsEl,
     tabsShell,
+    tabsEl,
     contentEl,
+    tabMenuEl,
+    toolbarEl,
+    conflictEl,
     editorEl,
     previewEl,
     viewEl,
     surface: null,
     shown: null,
     loadGeneration: 0,
+    tabsSignature: null,
     disposeSurface: null,
   };
   panes.set(id, r);
@@ -619,12 +659,13 @@ function paneTabId(id: string, index: number): string {
 }
 
 function focusPaneTab(r: Pane, index: number): void {
-  r.tabsShell.querySelector<HTMLElement>(`[data-tab-index="${index}"]`)?.focus();
-}
-
-function switchPaneTab(r: Pane, index: number, focus = true): void {
-  activateTab(r.id, index);
-  if (focus) void synchronize().then(() => focusPaneTab(r, index));
+  const tabs = r.tabsShell.querySelectorAll<HTMLElement>(".tab");
+  tabs.forEach((tab, position) => {
+    tab.tabIndex = position === index ? 0 : -1;
+    const close = tab.parentElement?.querySelector<HTMLElement>(".tab-close");
+    if (close) close.tabIndex = tab.tabIndex;
+  });
+  tabs[index]?.focus();
 }
 
 function movePaneTab(current: number, key: string, count: number): number | null {
@@ -638,145 +679,176 @@ function movePaneTab(current: number, key: string, count: number): number | null
 
 /// Disegna la striscia delle tab di un riquadro.
 function drawTab(r: Pane, tabs: Tab[], active: number): void {
-  const children: HTMLElement[] = [];
-  const tabIds: string[] = [];
-
-  for (const [i, t0] of tabs.entries()) {
+  // Solo l'identità modifica la struttura: dirty, lingua e selezione
+  // ridipingono gli stessi controlli senza sottrarre il focus.
+  const signature = JSON.stringify(tabs);
+  const focused = document.activeElement;
+  const focusedTab = focused instanceof HTMLElement && r.tabsShell.contains(focused)
+    ? focused.closest(".tab-entry")?.querySelector<HTMLElement>(".tab")
+    : null;
+  const focusedKey = focusedTab?.dataset.key;
+  const focusedIndex = focusedTab ? Number(focusedTab.dataset.index) : -1;
+  const onClose = focused instanceof HTMLElement && focused.matches(".tab-close");
+  if (r.tabsSignature !== signature) {
+    const children = tabs.map((tab, index) => buildTab(r, tab, index));
+    const tabIds = children.map((entry) => entry.querySelector<HTMLElement>(".tab")!.id);
+    r.tabsShell.replaceChildren(r.tabsEl, ...children, r.tabMenuEl);
+    r.tabsSignature = signature;
     // Una tab con un comando di chiusura non può contenere il suo secondo
     // controllo: un `<button>` dentro una tab interattiva è HTML invalido e
     // axe lo segnala come `nested-interactive`. La tab è posseduta dalla
     // tablist tramite `aria-owns`; il bottone di chiusura resta il suo fratello
-    // nel flusso visivo.
-    const tab = document.createElement("div");
-    tab.className = "tab";
-    tab.id = paneTabId(r.id, i);
-    tabIds.push(tab.id);
-    tab.dataset.tabIndex = String(i);
-    tab.setAttribute("role", "tab");
-    tab.tabIndex = i === active ? 0 : -1;
-    tab.setAttribute("aria-controls", panePanelId(r.id));
-    // Quale tab è davanti lo dice **solo** `aria-selected`: la pelle lo
-    // legge da qui. Finché c'era anche una classe `.active`, la stessa
-    // cosa era scritta due volte e la seconda poteva restare indietro.
-    tab.setAttribute("aria-selected", String(i === active));
-    // Il `title` di una tab di documento è il **path intero**, perché due
-    // note omonime in cartelle diverse sono il caso in cui il nome non
-    // basta. Una view non ha un path: il suo titolo è già tutto ciò che
-    // c'è da sapere.
-    setTooltip(tab, t0.k === "doc" ? t0.doc : nameTab(t0));
-
-    const name = document.createElement("span");
-    name.className = "tab-name";
-    name.textContent = nameTab(t0);
-    tab.append(name);
-
-    // Il pallino del non salvato: è l'unica cosa che dica, guardando una tab
-    // che non è quella davanti, che lì dentro c'è del lavoro in coda. Una view
-    // non ha un buffer, quindi non si sporca.
-    if (t0.k === "doc" && documentSessions.isDirty(t0.doc)) tab.classList.add("dirty");
-    if (t0.k === "view") tab.classList.add("tab-view");
-
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "tab-close";
-    close.dataset.tabId = tab.id;
-    close.textContent = "×";
-    close.setAttribute("aria-label", t("app.close"));
-    setTooltip(close, t("app.close"));
-
-    // Un gesto del mouse viene gestito già su `mousedown`, così la tab non
-    // si attiva per un istante prima di essere tolta. Il `click` resta la via
-    // per tastiera/assistive technology; il flag evita di chiudere due tab
-    // quando il browser invia il click dopo il mousedown.
-    let consumedBeforeClick = false;
-    const closeThisTab = (): void => {
-      closeTab(r.id, i);
-      const nextActive = paneState(r.id)?.active ?? -1;
-      void synchronize().then(() => {
-        const pane = panes.get(r.id);
-        if (!pane) return;
-        if (nextActive >= 0) focusPaneTab(pane, nextActive);
-        else pane.root.focus();
-      });
-      void releaseTab(r.id, t0);
-    };
-
-    close.addEventListener("mousedown", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      consumedBeforeClick = true;
-      closeThisTab();
-    });
-
-    close.addEventListener("click", (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      if (consumedBeforeClick) {
-        consumedBeforeClick = false;
-        return;
-      }
-      closeThisTab();
-    });
-
-    // Il close è un bottone nativo, ma fermare questi tasti dal propagarsi
-    // resta necessario: altrimenti Invio/Spazio attiverebbero anche la tab.
-    // Gestiamo l'attivazione esplicitamente così il comportamento resta
-    // testabile anche nei DOM senza sintesi nativa dei tasti.
-    close.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === " ") {
-        e.stopPropagation();
-        e.preventDefault();
-        consumedBeforeClick = true;
-        closeThisTab();
-        return;
-      }
-      if (
-        e.key === "ArrowLeft" ||
-        e.key === "ArrowRight" ||
-        e.key === "Home" ||
-        e.key === "End"
-      ) {
-        e.stopPropagation();
-      }
-    });
-
-    tab.addEventListener("keydown", (e) => {
-      const next = movePaneTab(i, e.key, tabs.length);
-      if (next !== null) {
-        e.preventDefault();
-        switchPaneTab(r, next);
-        return;
-      }
-      // Un `[role=tab]` non ha l'attivazione nativa di un button. Conserva
-      // la convenzione Invio/Spazio che avevano le tab precedenti.
-      if (e.key === "Enter" || e.key === " ") {
-        e.preventDefault();
-        switchPaneTab(r, i);
-      }
-    });
-    tab.addEventListener("click", () => switchPaneTab(r, i));
-
-    children.push(tab, close);
+    // nel flusso visivo (`.tab-entry` li tiene in una fila).
+    if (tabIds.length > 0) r.tabsEl.setAttribute("aria-owns", tabIds.join(" "));
+    else r.tabsEl.removeAttribute("aria-owns");
   }
-
-  if (tabIds.length > 0) r.tabsEl.setAttribute("aria-owns", tabIds.join(" "));
-  else r.tabsEl.removeAttribute("aria-owns");
-  r.tabsShell.replaceChildren(r.tabsEl, ...children);
+  const buttons = [...r.tabsShell.querySelectorAll<HTMLElement>(".tab")];
+  const retained = focusedKey === undefined
+    ? -1
+    : buttons.findIndex((tab) => tab.dataset.key === focusedKey);
+  const roving = retained >= 0
+    ? retained
+    : focusedIndex >= 0 ? Math.min(focusedIndex, tabs.length - 1) : active;
+  tabs.forEach((tab, index) => paintTab(buttons[index]!, tab, index === active, index === roving));
   r.tabsShell.hidden = tabs.length === 0;
   r.contentEl.hidden = tabs.length === 0;
   const selected =
     active >= 0
-      ? r.tabsShell.querySelector<HTMLElement>(`[role="tab"][data-tab-index="${active}"]`)
+      ? r.tabsShell.querySelector<HTMLElement>(`[role="tab"][data-index="${active}"]`)
       : null;
   if (selected) r.contentEl.setAttribute("aria-labelledby", selected.id);
   else r.contentEl.removeAttribute("aria-labelledby");
-  const open = active >= 0 ? nameTab(tabs[active]) : null;
+  r.tabsEl.setAttribute("aria-label", t("document.tab.list"));
+  const activeName = tabs[active] ? nameTab(tabs[active]!) : "";
   r.root.setAttribute(
     "aria-label",
-    open
-      ? `${t("pane.named", { name: open })} (${r.id})`
+    activeName
+      ? `${t("pane.named", { name: activeName })} (${r.id})`
       : `${t("pane.empty")} (${r.id})`,
   );
+  if (focusedTab && focused && !focused.isConnected) {
+    const replacement = buttons[roving];
+    const control = onClose
+      ? replacement?.parentElement?.querySelector<HTMLElement>(".tab-close")
+      : replacement;
+    (control ?? r.toolbarEl.querySelector<HTMLElement>('button[aria-haspopup="menu"]'))
+      ?.focus({ preventScroll: true });
+  }
+  drawTabOverflow(r, tabs, active);
+}
+
+/// Costruisce una tab accessibile (U21): nome breve + dirty testuale oltre
+/// colore (`aria-label` "nome · Non salvato"), close "Chiudi nome" come
+/// bottone vero (non span), attiva distinguibile via aria-selected, view con
+/// titolo dichiarato senza fingere file.
+function buildTab(r: Pane, target: Tab, index: number): HTMLElement {
+  const item = document.createElement("div");
+  item.className = "tab-entry";
+  const tab = document.createElement("button");
+  tab.className = "tab";
+  tab.type = "button";
+  tab.id = paneTabId(r.id, index);
+  tab.dataset.key = JSON.stringify(target);
+  tab.dataset.index = String(index);
+  tab.setAttribute("role", "tab");
+  tab.setAttribute("aria-controls", panePanelId(r.id));
+  tab.setAttribute("aria-keyshortcuts", "Delete");
+  const name = document.createElement("span");
+  name.className = "tab-name";
+  tab.append(name);
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "tab-close";
+  close.dataset.tabId = tab.id;
+  const remove = (): void => {
+    if (!tab.isConnected) return;
+    closeTab(r.id, index);
+    void releaseTab(r.id, target);
+  };
+  close.addEventListener("mousedown", (event) => {
+    // Chiudere una tab in secondo piano non deve prima attivarla, né
+    // attivare quella che si sta chiudendo un istante prima di toglierla.
+    event.stopPropagation();
+    event.preventDefault();
+    remove();
+  });
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    event.preventDefault();
+    remove();
+  });
+  // Invio/Spazio sul Chiudi non devono anche attivare la tab: l'attivazione
+  // resta esplicita e resta testabile senza sintesi nativa dei tasti.
+  close.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.stopPropagation();
+      event.preventDefault();
+      close.click();
+      return;
+    }
+    if (
+      event.key === "ArrowLeft" ||
+      event.key === "ArrowRight" ||
+      event.key === "Home" ||
+      event.key === "End"
+    ) {
+      event.stopPropagation();
+    }
+  });
+  tab.addEventListener("click", () => activateTab(r.id, index));
+  tab.addEventListener("keydown", (event) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.key === "Delete") {
+      event.preventDefault();
+      remove();
+      return;
+    }
+    const next = movePaneTab(index, event.key, r.tabsShell.querySelectorAll(".tab").length);
+    if (next !== null) {
+      event.preventDefault();
+      focusPaneTab(r, next);
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      tab.click();
+    }
+  });
+  item.append(tab, close);
+  return item;
+}
+
+/// Ridipinge etichette e selezione senza ricreare i controlli. Il nome
+/// accessibile porta anche lo stato non salvato, non soltanto il colore.
+function paintTab(tab: HTMLElement, target: Tab, selected: boolean, tabStop: boolean): void {
+  const described = describeTab(target);
+  tab.classList.toggle("dirty", described.dirty);
+  tab.classList.toggle("tab-view", described.kind === "view");
+  tab.setAttribute("aria-selected", String(selected));
+  tab.tabIndex = tabStop ? 0 : -1;
+  tab.querySelector<HTMLElement>(".tab-name")!.textContent = described.label;
+  setTooltip(tab, target.k === "doc" ? target.doc : described.label);
+  tab.setAttribute(
+    "aria-label",
+    described.dirty ? `${described.label} · ${t("save.unsaved")}` : described.label,
+  );
+  const close = tab.parentElement!.querySelector<HTMLElement>(".tab-close")!;
+  close.tabIndex = tab.tabIndex;
+  const closeLabel = t("document.tab.close", { doc: described.label });
+  close.setAttribute("aria-label", closeLabel);
+  setTooltip(close, closeLabel);
+}
+
+/// L'elenco resta fuori dalla tablist e non viene ricreato a ogni ridisegno.
+function drawTabOverflow(r: Pane, tabs: Tab[], active: number): void {
+  r.tabMenuEl.hidden = tabs.length <= 1;
+  r.tabMenuEl.setAttribute("aria-label", t("document.tab.list"));
+  setTooltip(r.tabMenuEl, t("document.tab.list"));
+  const focused = document.activeElement;
+  const selected = focused instanceof HTMLElement && r.tabsShell.contains(focused)
+    ? focused
+    : r.tabsShell.querySelectorAll<HTMLElement>(".tab")[active];
+  selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
 }
 
 function redrawTabs(doc: string): void {
@@ -792,11 +864,13 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     setReadOnlyForDocument(event.id, event.pending);
     drawSave();
     redrawTabs(event.id);
+    drawPaneConflict(event.id);
     return;
   }
   if (event.kind === "changed") {
     drawSave();
     redrawTabs(event.id);
+    drawPaneConflict(event.id);
     return;
   }
   if (event.kind === "draft-blind") {
@@ -811,11 +885,22 @@ function handleSessionEvent(event: DocumentSessionEvent): void | Promise<void> {
     }
     drawSave();
     redrawTabs(event.id);
+    drawPaneConflict(event.id);
     return;
   }
   drawSave();
   redrawTabs(event.id);
+  drawPaneConflict(event.id);
   return publishContext().then(() => redrawReading(event.id));
+}
+
+/// Ridisegna il banner conflitto dei riquadri che mostrano questo documento.
+/// Solo ridisegno + comandi esistenti; mai semantica sessione (R01-R04 intatti).
+function drawPaneConflict(doc: string): void {
+  for (const paneId of panesWithDoc(doc)) {
+    const r = panes.get(paneId);
+    if (r && activeDoc(paneId) === doc) drawConflict(r, doc);
+  }
 }
 
 function setReadOnlyForDocument(doc: string, readOnly: boolean): void {
@@ -914,6 +999,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
   if (mode.presentation === "rendered") await updatePreview(r.previewEl, tab.doc);
+  markReadingVersion(r.previewEl, documentSessions.isDirty(tab.doc));
 }
 
 /// La sottoscrizione di un riquadro alla sessione del documento mostrato.
@@ -936,6 +1022,7 @@ function detachSurface(r: Pane): void {
 }
 
 function destroySurface(r: Pane): void {
+  clearPreview(r.previewEl);
   r.surface?.destroy();
   r.surface = null;
   r.editorEl.replaceChildren();
@@ -965,6 +1052,8 @@ async function readBuffer(doc: string): Promise<DocumentSurfaceSource> {
 }
 
 /// Ridisegna ogni presentazione resa che mostra questo documento.
+/// Dopo il render: dichiara la versione col dirty di sessione (U32),
+/// mai seconda verità locale.
 async function redrawReading(doc: string): Promise<void> {
   await Promise.all(
     panesWithDoc(doc).map(async (id) => {
@@ -975,6 +1064,7 @@ async function redrawReading(doc: string): Promise<void> {
         activeDoc(id) !== doc
       ) return;
       await updatePreview(r.previewEl, doc);
+      markReadingVersion(r.previewEl, documentSessions.isDirty(doc));
     }),
   );
 }
@@ -992,45 +1082,150 @@ function supportsMode(id: string): boolean {
   return panes.get(layout.focus)?.surface?.modes.some((mode) => mode.id === id) ?? false;
 }
 
-/// Il commutatore deriva interamente dalla superficie del riquadro col fuoco.
-function updateToggle(): void {
-  const switcher = $("#mode-switch");
-  const r = panes.get(layout.focus);
-  const active = selectedMode(r);
-  if (!r?.surface || !active) {
-    switcher.replaceChildren();
-    switcher.hidden = true;
-    return;
+/// Toolbar per-riquadro (U23-U26): percorso contestuale + modi dichiarati
+/// dalla superficie + menu con azioni esistenti. Usa percorso focus/mode
+/// esistente, mai seconda verità; una sola modalità = nessun segmentato (U24);
+/// mai ricreare EditorView (solo chrome, superficie intatta).
+function drawToolbar(r: Pane): void {
+  const bar = r.toolbarEl;
+  if (!bar.firstElementChild) {
+    const crumbs = document.createElement("span");
+    crumbs.className = "muted";
+    const group = document.createElement("span");
+    group.className = "segmented";
+    group.setAttribute("role", "group");
+    const menu = document.createElement("button");
+    menu.type = "button";
+    menu.textContent = "…";
+    menu.setAttribute("aria-haspopup", "menu");
+    menu.addEventListener("click", (event) => openPaneMenu(r, event));
+    const version = document.createElement("span");
+    version.className = "muted";
+    bar.append(crumbs, group, menu, version);
   }
-  const commandIds: Readonly<Record<string, string>> = {
-    live_preview: "shell.mode.live",
-    reading: "shell.mode.reading",
-  };
-  const commands = allCommands();
-  const children: HTMLElement[] = [];
-  for (const mode of r.surface.modes) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "segmented-option";
+  const crumbs = bar.children[0] as HTMLElement;
+  const group = bar.children[1] as HTMLElement;
+  const menu = bar.children[2] as HTMLElement;
+  const version = bar.children[3] as HTMLElement;
+  const tab = activeTab(r.id);
+  const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
+  crumbs.textContent = path;
+  setTooltip(crumbs, path);
+  group.setAttribute("aria-label", t("document.toolbar.modes"));
+  menu.setAttribute("aria-label", t("document.pane.menu"));
+  const modes = r.surface && r.surface.modes.length > 1 ? r.surface.modes : [];
+  const active = selectedMode(r);
+  group.hidden = modes.length <= 1;
+  while (group.children.length > modes.length) group.lastElementChild!.remove();
+  modes.forEach((mode, index) => {
+    let button = group.children[index] as HTMLButtonElement | undefined;
+    if (!button) {
+      const control = document.createElement("button");
+      control.type = "button";
+      control.className = "segmented-option";
+      control.addEventListener("click", () => {
+        focusPane(r.id);
+        void setMode(control.dataset.mode!);
+      });
+      group.append(control);
+      button = control;
+    }
     button.dataset.mode = mode.id;
     button.textContent = mode.label();
-    button.setAttribute("aria-pressed", String(mode.id === active.id));
-    children.push(button);
+    button.setAttribute("aria-pressed", String(active?.id === mode.id));
+  });
+  const dirty = tab?.k === "doc" && documentSessions.isDirty(tab.doc);
+  const rendered = tab?.k === "doc" && active?.presentation === "rendered";
+  version.textContent = rendered
+    ? dirty ? t("document.reading.stale") : t("document.reading.current")
+    : "";
+  if (rendered && dirty) version.dataset.readingDirty = "true";
+  else delete version.dataset.readingDirty;
+}
 
-    const commandId = commandIds[mode.id];
-    const binding = commandId
-      ? commands.find((entry) => entry.id === commandId)?.binding ?? null
-      : null;
-    if (binding) {
-      const key = document.createElement("kbd");
-      key.className = "titlebar-shortcut";
-      key.ariaHidden = "true";
-      key.textContent = binding;
-      children.push(key);
-    }
+/// Menu riquadro con sole azioni esistenti (U25): split/close via comandi
+/// registrati, focus/mode dal percorso esistente.
+function openPaneMenu(r: Pane, event: MouseEvent): void {
+  const entries = allCommands().filter((entry) =>
+    ["shell.pane.split.right", "shell.pane.split.down", "shell.pane.close", "shell.tab.close"].includes(entry.id),
+  );
+  showContextMenu(event, entries.map((entry) => ({
+    label: entry.title,
+    run: () => {
+      focusPane(r.id);
+      void entry.run?.();
+    },
+  })));
+}
+
+/// Presidio locale: nessun mode con id ignoto persiste oltre il riquadro (U24).
+/// Ritorna true se il mode persistito era sconosciuto (conservato, non cancellato).
+export function hasUnknownPersistedMode(paneId: string): boolean {
+  const r = panes.get(paneId);
+  const modes = r?.surface?.modes ?? [];
+  if (modes.length === 0) return false;
+  const requested = paneState(paneId)?.mode;
+  return requested !== undefined && !modes.some((mode) => mode.id === requested);
+}
+
+/// Banner conflitto persistente nel riquadro coinvolto (U59-U60): documento,
+/// spiegazione, Mantieni mio / Usa disco, conferma esplicita con conseguenza,
+/// comandi shell.doc.conflict.* esistenti. Mai merge finto, mai risoluzione
+/// automatica; buffer recuperabile finché irrisolto (solo ridisegno + comandi).
+function drawConflict(r: Pane, doc: string | null): void {
+  const box = r.conflictEl;
+  box.replaceChildren();
+  if (!doc || documentSessions.saveState(doc) !== "conflitto") {
+    box.hidden = true;
+    box.removeAttribute("role");
+    return;
   }
-  switcher.replaceChildren(...children);
-  switcher.hidden = false;
+  box.hidden = false;
+  box.setAttribute("role", "alert");
+  box.setAttribute("data-banner", "document.conflict.body");
+  const title = document.createElement("strong");
+  title.textContent = t("document.conflict.title", { doc });
+  const body = document.createElement("p");
+  body.textContent = t("document.conflict.body");
+  body.setAttribute("data-doc", doc);
+  const actions = document.createElement("div");
+  const mine = document.createElement("button");
+  mine.type = "button";
+  mine.className = "primary";
+  mine.textContent = t("document.conflict.keep_mine");
+  const theirs = document.createElement("button");
+  theirs.type = "button";
+  theirs.textContent = t("document.conflict.use_disk");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.textContent = t("document.conflict.cancel");
+  const current = doc;
+  const ask = async (choice: "mine" | "theirs"): Promise<void> => {
+    const detail = choice === "mine"
+      ? t("commands.doc.conflict.mine.desc")
+      : t("commands.doc.conflict.theirs.desc");
+    const ok = await confirm(
+      `${t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs")}\n${current}\n${detail}`,
+      {
+        title: t("document.conflict.title", { doc: current }),
+        okLabel: t(choice === "mine" ? "commands.doc.conflict.mine" : "commands.doc.conflict.theirs"),
+        danger: choice === "theirs",
+      },
+    );
+    if (!ok) {
+      notify(t("document.conflict.cancel"), "info");
+      return;
+    }
+    if (choice === "mine") await resolveKeepingMine();
+    else await resolveDiscardingMine();
+  };
+  mine.addEventListener("click", () => void ask("mine"));
+  theirs.addEventListener("click", () => void ask("theirs"));
+  cancel.addEventListener("click", () => {
+    notify(t("document.conflict.cancel"), "info");
+  });
+  actions.append(mine, theirs, cancel);
+  box.append(title, body, actions);
 }
 
 /// **Ritrova ciò che era rimasto non salvato** (§15.2), all'apertura del vault.
@@ -1384,10 +1579,13 @@ export async function setMode(next: string): Promise<void> {
   r.surface.setMode(mode.id);
   if (mode.presentation === "rendered") {
     if (doc) await updatePreview(r.previewEl, doc);
+    if (doc) markReadingVersion(r.previewEl, documentSessions.isDirty(doc));
   } else {
+    clearPreview(r.previewEl);
     r.surface.focus?.();
   }
-  updateToggle();
+  drawToolbar(r);
+  drawConflict(r, doc);
   await publishContext();
 }
 
@@ -1415,5 +1613,7 @@ export function focusEditor(): void {
 /// giusta, non correggersi al prossimo.
 export function setEditorTheme(t: Theme): void {
   theme = t;
+  // U26: solo `setTheme` sulla superficie viva, mai `setDoc`/rimonto:
+  // selezione, scroll e history restano dove sono.
   for (const r of panes.values()) r.surface?.setTheme?.(t);
 }

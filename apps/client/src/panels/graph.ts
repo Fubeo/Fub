@@ -35,9 +35,12 @@ import { registerShellCommand } from "../ui/commands";
 import { $ } from "../ui/dom";
 import { on } from "../state/store";
 import { onLanguage, t } from "../i18n/strings";
+import { notify } from "../ui/notify";
+import { errorText } from "../host/errors";
 import { loadConfig, saveConfig } from "../graph/config";
-import { createChart } from "../graph/chart";
-import { createPhysicsPanel, type PanelCopy } from "../graph/physics-panel";
+import type { Chart } from "../graph/chart";
+import type { PanelCopy, PhysicsPanel } from "../graph/physics-panel";
+type GraphEngine = typeof import("../graph/lazy");
 
 /// Il namespace con cui il grafo arriva dal provider. È `fub_features::graph::GRAPH_NS`,
 /// e la costanza dei due nomi è il contratto fra le due metà del componente.
@@ -137,6 +140,38 @@ function readData(payload: unknown): GraphData {
 /// Costruisce i testi del pannello nella lingua corrente. Le chiavi dei campi
 /// e dei preset sono letterali, così il compilatore verifica che ogni
 /// `t(key)` sia una chiave vera del catalogo — niente cast.
+type ChiaveP8 =
+  | "graph.conf.fisica"
+  | "graph.conf.vista"
+  | "graph.empty"
+  | "graph.list.label"
+  | "graph.list.open"
+  | "graph.list.more"
+  | "graph.list.empty"
+  | "graph.status.selected"
+  | "graph.status.none";
+function testoP8(chiave: ChiaveP8, doc = "", n = 0): string {
+  switch (chiave) {
+    case "graph.conf.fisica":
+      return t("graph.conf.fisica");
+    case "graph.conf.vista":
+      return t("graph.conf.vista");
+    case "graph.empty":
+      return t("graph.empty");
+    case "graph.list.label":
+      return t("graph.list.label");
+    case "graph.list.open":
+      return t("graph.list.open", { doc });
+    case "graph.list.more":
+      return t("graph.list.more", { n });
+    case "graph.list.empty":
+      return t("graph.list.empty");
+    case "graph.status.selected":
+      return t("graph.status.selected", { doc });
+    case "graph.status.none":
+      return t("graph.status.none");
+  }
+}
 function panelCopy(): PanelCopy {
   const presets: Record<string, string> = {
     "organica": t("graph.preset.organica"),
@@ -174,6 +209,8 @@ function panelCopy(): PanelCopy {
     reset: t("graph.conf.reimposta"),
     open: t("graph.conf.apri"),
     close: t("graph.conf.chiudi"),
+    physicsSection: testoP8("graph.conf.fisica"),
+    viewSection: testoP8("graph.conf.vista"),
     presets,
     fields,
   };
@@ -186,55 +223,251 @@ function panelCopy(): PanelCopy {
 function renderGraph(host: HTMLElement, payload: unknown, onAction: OnAction): () => void {
   const data = readData(payload);
   const config = loadConfig();
-  const chart = createChart({ config, data });
-  const panel = createPhysicsPanel({
-    config,
-    onChange: (c) => {
-      saveConfig(c);
-      chart.setConfig(c);
-    },
-    onWarm: () => chart.warm(1),
-    onUnpinAll: () => chart.unpinNodes(),
-    copy: panelCopy,
-    restoreFocus: () => {
-      const c = host.querySelector<HTMLCanvasElement>("canvas.graph-main");
-      if (c) c.focus();
-    },
-  });
-  // L'apertura nota: il grafico non conosce `onAction`, lo riceve qui.
-  chart.open = (id: string) => onAction({ action: OPEN, payload: { [DOC]: id } }, []);
-
-  // Il conto di nodi e archi: sopra il canvas, annotazione non testata.
+  // La superficie locale del grafo: l'host è il riquadro della view, e i
+  // canvas del pittore sono absolute inset-0 sul loro contenitore — se quel
+  // contenitore fosse l'host, coprirebbero anche stato ed elenco (il click
+  // sul summary arrivava al canvas; Invio funzionava perché è tastiera). La
+  // superficie di disegno è quindi un'area dedicata: il grafico si monta lì
+  // dentro, gli overlay strettamente grafici (conto, pannello fisica) stanno
+  // con lui, e lo stato testuale con l'elenco restano fuori dal suo hit
+  // testing. Geometria inline e non in pelle: il vocabolario degli hook è
+  // chiuso (`theme/serie/anatomia.ts`) e questa è geometria della superficie,
+  // come gli stili inline con cui il pittore sovrappone i suoi canvas.
+  host.style.display = "flex";
+  host.style.flexDirection = "column";
+  host.style.minHeight = "0";
+  const viewport = document.createElement("div");
+  viewport.className = "graph-viewport";
+  viewport.style.position = "relative";
+  viewport.style.flex = "1 1 auto";
+  viewport.style.minWidth = "0";
+  viewport.style.minHeight = "0";
+  viewport.style.overflow = "hidden";
+  // Il motore (chart + pannello fisica + sim/render/interaction) arriva lazy
+  // da `graph/lazy.ts`: resta fuori dal bundle iniziale e si carica solo al
+  // primo mount. Fino all'arrivo, il chrome testuale vive già — conto, stato
+  // vuoto, selezione, elenco — e il viewport mostra il caricamento con
+  // `aria-busy`, mai un canvas nero. La registrazione del renderer resta
+  // sincrona: chi apre il grafo vede subito la superficie, non un'attesa.
+  viewport.setAttribute("aria-busy", "true");
+  let chart: Chart | null = null;
+  let panel: PhysicsPanel | null = null;
+  let disposed = false;
+  const settleEngine = (engine: GraphEngine): void => {
+    if (disposed) return;
+    const next = engine.createChart({ config, data });
+    chart = next;
+    const created = engine.createPhysicsPanel({
+      config,
+      onChange: (c) => {
+        saveConfig(c);
+        next.setConfig(c);
+      },
+      onWarm: () => next.warm(1),
+      onUnpinAll: () => next.unpinNodes(),
+      copy: panelCopy,
+      restoreFocus: () => {
+        const c = viewport.querySelector<HTMLCanvasElement>("canvas.graph-main");
+        if (c) c.focus();
+      },
+    });
+    panel = created;
+    // L'apertura nota: il grafico non conosce `onAction`, lo riceve qui.
+    next.open = (id: string) => onAction({ action: OPEN, payload: { [DOC]: id } }, []);
+    next.onFocusChange = showSelection;
+    next.mount(viewport);
+    viewport.append(count, created.element);
+    refreshLive();
+    viewport.removeAttribute("aria-busy");
+  };
+  const failEngine = (error: unknown): void => {
+    if (disposed) return;
+    chart?.unmount();
+    chart = null;
+    panel?.destroy();
+    panel = null;
+    viewport.removeAttribute("aria-busy");
+    status.textContent = errorText(error);
+    notify(errorText(error), "guasto");
+  };
+  // Renderer scelto dal registro a runtime: l'import statico avvierebbe
+  // il caricamento del motore anche senza alcuna superficie grafo.
+  void import("../graph/lazy").then(settleEngine).catch(failEngine);
+  // U45: il conto di nodi e archi resta leggibile sopra il canvas — i ruoli
+  // `--muted`/`--text-sm` sono già corretti nella skin (A06 chiusa), qui il
+  // testo si rilegge a ogni cambio lingua come prima.
   const count = document.createElement("div");
   count.className = "graph-count";
   count.textContent = t("graph.count", { note: data.nodes.length, edges: data.edges.length });
-
-  chart.mount(host);
-  host.append(count, panel.element);
-  chart.setOpenDocuments(openDocuments());
-  chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
-
-  let disposed = false;
-
+  viewport.append(count);
+  // U47: un canvas con zero note non è un canvas nero — resta montato (serve
+  // al focus tastiera e al resize) ma lo stato vuoto è testuale e distinto,
+  // con `role="status"` come i `pending` del protocollo (vedi `ui/node.ts`).
+  // Nessun retry qui: il grafo non ha un meccanismo di ricarica proprio, e
+  // aggiungerne uno sarebbe il retry loop vietato da U47.
+  const empty = document.createElement("div");
+  empty.className = "graph-empty";
+  empty.setAttribute("role", "status");
+  empty.hidden = data.nodes.length > 0;
+  empty.textContent = testoP8("graph.empty");
+  // U46: il nodo selezionato oltre il canvas — nome testuale con `aria-live`
+  // discreto (`polite`: annuncia le transizioni senza martellare a ogni frame;
+  // gli stati del canvas restano muti). Vuoto = nessun annuncio, mai una
+  // chiave nuda.
+  const status = document.createElement("div");
+  status.className = "graph-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  status.textContent = testoP8("graph.status.none");
+  // U46/U48: equivalente accessibile agli stessi dati della simulazione —
+  // `<details>` chiuso di default, lista paginata da 50 (stessa finestra di
+  // `search.ts`, mai l'intero vault in DOM: nessun elemento per nodo). Ogni
+  // riga apre la stessa azione del click (`OPEN`+`DOC`), senza duplicare la
+  // simulazione: legge `chart.nodeId(i)` e seleziona con `chart.focusNode(i)`.
+  // I08: ogni listener della lista è registrato qui — `drawList` li ricrea a
+  // ogni pagina, quindi il disposer li scioglie prima di svuotare la lista.
+  const listDisposers: Array<() => void> = [];
+  const PAGE = 50;
+  let page = 0;
+  const list = document.createElement("details");
+  list.className = "graph-list";
+  const summary = document.createElement("summary");
+  summary.className = "graph-list-summary";
+  summary.textContent = testoP8("graph.list.label");
+  const listBox = document.createElement("ul");
+  listBox.className = "graph-list-items";
+  listBox.setAttribute("role", "list");
+  listBox.setAttribute("aria-label", testoP8("graph.list.label"));
+  list.append(summary, listBox);
+  function trackListButton(open: HTMLButtonElement, run: () => void): void {
+    open.addEventListener("click", run);
+    listDisposers.push(() => open.removeEventListener("click", run));
+  }
+  function drawList(): void {
+    // Prima del mount del motore non c'è simulazione: la lista vive sui dati
+    // del provider, mai un lancio.
+    const live = chart;
+    const total = live && typeof live.nodeCount === "function" ? live.nodeCount() : data.nodes.length;
+    const pages = Math.max(1, Math.ceil(total / PAGE));
+    if (page > pages - 1) page = pages - 1;
+    if (page < 0) page = 0;
+    const start = page * PAGE;
+    const end = Math.min(total, start + PAGE);
+    for (const release of listDisposers.splice(0)) release();
+    listBox.replaceChildren();
+    const selected = live && typeof live.focusedNode === "function" ? live.focusedNode() : -1;
+    for (let i = start; i < end; i++) {
+      const id = live && typeof live.nodeId === "function" ? live.nodeId(i) : (data.nodes[i] ?? null);
+      if (id === null) continue;
+      const li = document.createElement("li");
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "graph-list-open";
+      open.textContent = testoP8("graph.list.open", id);
+      open.setAttribute("aria-label", testoP8("graph.list.open", id));
+      if (i === selected) open.setAttribute("aria-current", "true");
+      const at = i;
+      trackListButton(open, () => {
+        chart?.focusNode(at);
+        void (chart ? chart.open(id) : onAction({ action: OPEN, payload: { [DOC]: id } }, []));
+      });
+      li.append(open);
+      listBox.append(li);
+    }
+    if (total === 0) {
+      const li = document.createElement("li");
+      li.className = "graph-list-empty";
+      li.textContent = testoP8("graph.list.empty");
+      listBox.append(li);
+    }
+    if (pages > 1) {
+      const li = document.createElement("li");
+      li.className = "graph-list-page";
+      const prev = document.createElement("button");
+      prev.type = "button";
+      prev.disabled = page === 0;
+      prev.textContent = "‹";
+      trackListButton(prev, () => {
+        page = Math.max(0, page - 1);
+        drawList();
+      });
+      const info = document.createElement("span");
+      info.className = "graph-list-info";
+      info.textContent = `${page + 1}/${pages}`;
+      const next = document.createElement("button");
+      next.type = "button";
+      next.disabled = page >= pages - 1;
+      next.textContent = "›";
+      next.setAttribute("aria-label", "›");
+      trackListButton(next, () => {
+        page = Math.min(pages - 1, page + 1);
+        drawList();
+      });
+      li.append(prev, info, next);
+      listBox.append(li);
+    }
+    // Riga "altre": quante restano fuori dalla pagina (U12: mai tacere il
+    // totale oltre la finestra), con azione che avanza di una pagina —
+    // stesso meccanismo della lista, mai un retry loop nuovo.
+    if (end < total) {
+      const li = document.createElement("li");
+      li.className = "graph-list-more";
+      const more = document.createElement("button");
+      more.type = "button";
+      more.textContent = testoP8("graph.list.more", "", total - end);
+      trackListButton(more, () => {
+        page = Math.min(pages - 1, page + 1);
+        drawList();
+      });
+      li.append(more);
+      listBox.append(li);
+    }
+  }
+  // La selezione cambia da tastiera (frecce/Invio/Esc), da click o dalla
+  // lista stessa: un punto solo aggiorna stato testuale ed evidenziazione.
+  // Prima del mount c'è solo il testo; dopo, anche il canvas.
+  function showSelection(index: number): void {
+    const live = chart;
+    const id = live && typeof live.nodeId === "function" ? live.nodeId(index) : (data.nodes[index] ?? null);
+    status.textContent = id === null ? testoP8("graph.status.none") : testoP8("graph.status.selected", id);
+    drawList();
+  }
+  // Il motore appena montato rilegge ciò che il chrome testuale sa già:
+  // note aperte, etichetta tastiera, selezione corrente.
+  function refreshLive(): void {
+    const live = chart;
+    if (!live) return;
+    live.setOpenDocuments(openDocuments());
+    live.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
+  }
+  host.append(viewport, empty, status, list);
+  drawList();
   // `on` restituisce il disposer della registrazione: il renderer deve
   // rimuovere il listener quando il grafo viene smontato, non solo ignorare
-  // gli eventi con una guard.
+  // gli eventi con una guard. Fino al mount il layout non ha un canvas da
+  // aggiornare; dopo, il live.
   const unsubscribeLayout = on("layout", () => {
-    chart.setOpenDocuments(openDocuments());
+    chart?.setOpenDocuments(openDocuments());
   });
-
   const unsubscribeLanguage = onLanguage(() => {
     if (disposed) return;
     count.textContent = t("graph.count", { note: data.nodes.length, edges: data.edges.length });
-    chart.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
-    panel.updateLanguage();
+    empty.textContent = testoP8("graph.empty");
+    summary.textContent = testoP8("graph.list.label");
+    listBox.setAttribute("aria-label", testoP8("graph.list.label"));
+    // La selezione va ridetta nella nuova lingua; la pagina resta dov'è.
+    showSelection(chart && typeof chart.focusedNode === "function" ? chart.focusedNode() : -1);
+    chart?.setA11yLabel(t("graph.a11y.superficie", { note: data.nodes.length, edges: data.edges.length }));
+    panel?.updateLanguage();
   });
-
   return () => {
     disposed = true;
     unsubscribeLayout();
     unsubscribeLanguage();
-    chart.unmount();
-    panel.destroy();
+    for (const release of listDisposers.splice(0)) release();
+    chart?.unmount();
+    chart = null;
+    panel?.destroy();
+    panel = null;
   };
 }

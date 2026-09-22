@@ -14,7 +14,11 @@
   cursor: pointer;
   font-weight: var(--weight-medium);
   font-size: var(--text-sm);
-  padding: var(--space-1) 0;
+  padding: var(--space-2) 0;
+  border-radius: var(--radius-sm);
+}
+.ui-section > summary:hover {
+  background: var(--bg-hover);
 }
 
 .ui-table {
@@ -45,7 +49,8 @@
   padding-left: var(--space-3);
 }
 .ui-tree-label {
-  padding: var(--space-1) var(--space-2);
+  position: relative;
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-4);
   border-radius: var(--radius-sm);
   white-space: nowrap;
   overflow: hidden;
@@ -64,13 +69,26 @@
    `aria-current`, per la ragione scritta in `ui/node.ts`. */
 .ui-tree-item[aria-selected="true"] > .ui-tree-label,
 .ui-list-item[aria-current="true"] {
-  outline: 1px solid var(--accent);
   /* Era un riempimento d'accento, e una riga non è un bottone: dentro ci
      stanno un titolo (`--text`) e un sottotitolo (`--muted`), che sopra
-     l'accento stanno a 2,6:1 e a 1,5:1. Chi è selezionato lo dice il
-     contorno — che è un segno non testuale e gli basta il 3:1 — e il fondo
-     torna a essere quello che il token nomina. */
+     l'accento stanno a 2,6:1 e a 1,5:1. Chi è selezionato lo dice il fondo
+     che il token nomina più il filetto d'accento — un segno non testuale a
+     cui basta il 3:1 — e il testo resta quello della riga. */
   background: var(--bg-active);
+  color: var(--text);
+}
+.ui-tree-item[aria-selected="true"] > .ui-tree-label::before {
+  content: "";
+  position: absolute;
+  left: var(--space-1);
+  top: var(--space-1);
+  bottom: var(--space-1);
+  width: 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.ui-list-item[aria-current="true"] {
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .ui-tab-bar {
@@ -82,6 +100,7 @@
 .ui-tab-button {
   border: none;
   background: transparent;
+  min-height: max(var(--space-9, 32px), 28px);
   padding: var(--space-2) var(--space-4);
   font-size: var(--text-sm);
   cursor: pointer;
@@ -93,10 +112,10 @@
   color: var(--text);
 }
 .ui-tab-button[aria-selected="true"] {
-  background: transparent;
+  background: var(--bg-active);
   color: var(--text);
   border-bottom: 2px solid var(--accent);
-  border-radius: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .ui-badge {

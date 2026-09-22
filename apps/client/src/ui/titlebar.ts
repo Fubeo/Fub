@@ -45,6 +45,12 @@ export function mountTitlebar(lifetime: Lifetime): void {
     if (controls && left) left.prepend(controls);
   }
 
+  // Riduzione progressiva (L08): sotto 1100px la menubar estesa diventa un
+  // pulsante "Menu applicazione" con le stesse azioni. Il menu resta quello
+  // di `ui/app-menu.ts` (registro unico): qui solo la presentazione.
+  // Mai comprimere i controlli finestra; drag solo nelle zone libere (HTML).
+  // L'ordine Darwin resta quello montato qui sopra.
+  mountCompactMenu(lifetime);
   // Le icone: i tre controlli e i due bottoni a destra nascono vuoti
   // (l'HTML non porta SVG, così `mountStrings` non li sovrascrive).
   min.innerHTML = icon("minus");
@@ -94,6 +100,56 @@ export function mountTitlebar(lifetime: Lifetime): void {
   // testi si rinfrescano quando la lingua cambia e non a ogni ridisegno.
   applyControlLabels(min, max, close);
   lifetime.add(onLanguage(() => applyControlLabels(min, max, close)));
+}
+
+/// Sotto 1100px la menubar si compatta in un pulsante Menu con le stesse
+/// azioni: apre/chiude `#app-menu` come menu verticale, con Escape e ritorno
+/// focus al toggle. Fuori soglia torna la menubar estesa.
+function mountCompactMenu(lifetime: Lifetime): void {
+  const topbar = $("#topbar");
+  const toggle = document.getElementById("app-menu-toggle") as HTMLButtonElement | null;
+  const menu = document.getElementById("app-menu");
+  if (!toggle || !menu) return;
+  const query = globalThis.matchMedia("(max-width: 1100px)");
+  const apply = (): void => {
+    const compact = query.matches;
+    topbar.classList.toggle("topbar-compact-menu", compact);
+    topbar.classList.toggle("topbar-compact-hint", compact);
+    topbar.classList.toggle(
+      "topbar-compact-search",
+      typeof globalThis.window !== "undefined" && globalThis.window.innerWidth < 900,
+    );
+    toggle.hidden = !compact;
+    if (!compact) {
+      menu.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+    }
+  };
+  const onToggle = (e: Event): void => {
+    e.stopPropagation();
+    const open = menu.classList.toggle("open");
+    toggle.setAttribute("aria-expanded", String(open));
+    if (open) menu.querySelector<HTMLElement>("button")?.focus();
+    else toggle.focus();
+  };
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === "Escape" && menu.classList.contains("open")) {
+      e.preventDefault();
+      menu.classList.remove("open");
+      toggle.setAttribute("aria-expanded", "false");
+      toggle.focus();
+    }
+  };
+  const onResize = (): void => apply();
+  apply();
+  lifetime.listen(toggle, "click", onToggle);
+  lifetime.listen(menu, "keydown", onKey);
+  lifetime.listen(globalThis.window, "resize", onResize);
+  if (typeof query.addEventListener === "function") {
+    const onChange = (): void => apply();
+    query.addEventListener("change", onChange);
+    lifetime.add(() => query.removeEventListener("change", onChange));
+  }
 }
 
 /// Disegna l'icona del bottone max in base allo stato della finestra.

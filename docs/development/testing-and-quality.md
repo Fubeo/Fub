@@ -128,43 +128,57 @@ Aree importanti:
 
 `npm run typecheck`, `npm test` e `npm run build` sono tre controlli distinti.
 
+### Bundle e dipendenze
+
+La [configurazione Vite](../../apps/client/vite.config.ts) separa i runtime
+riusabili e mantiene grafo, Mermaid e linguaggi opzionali su richiesta.
+Ogni chunk, cioè un blocco JavaScript emesso dalla build, ha un limite di
+500.000 byte minificati, prima della compressione di trasporto.
+Il solo parser precompilato di Mermaid ha un limite di 700.000 byte e non
+può appartenere alle dipendenze statiche degli ingressi applicativi.
+Il controllo misura il codice finale, dopo la riscrittura degli import di
+Vite, e interrompe la build in caso di superamento.
+
+Il [guard delle copie npm](../../.github/scripts/check-npm-copies.mjs)
+mantiene uniche le dipendenze che condividono identità applicativa.
+Le eccezioni per i motori privati di Mermaid e gli strumenti Node sono
+limitate alle versioni verificate: una versione diversa o una copia
+aggiuntiva richiede una nuova valutazione, non un override fra major.
+
 ## Visuale e accessibilità
 
 Il banco visuale usa scene deterministiche e baseline del runner Linux. In caso
 di differenza, la CI conserva immagini attuali, diff e foglio di contatto.
 
-Le 42 baseline canoniche discendono dal commit
-[`7463f725`](https://github.com/Fubeo/Fub/commit/7463f72587291a61459b8815c1357b584eb166c0):
-furono rigenerate su `ubuntu-latest` con Chromium installato dalla revisione
-Playwright del lockfile, dopo l'allineamento delle fixture host e la
-neutralizzazione del puntatore fra le scene. Il foglio di contatto affianca
-sempre luce scura e chiara; la revisione ha confermato contenuto, geometria,
-stati, contrasto e assenza di tooltip residui in tutte le 21 scene.
+Le baseline coprono le scene in
+[`bench/scene.mjs`](../../apps/client/bench/scene.mjs), in luce scura e chiara.
+L'ambiente di riferimento usa Ubuntu, Node 22, Chromium della revisione
+Playwright fissata dal lockfile e i font del runner, inclusi DejaVu Sans Mono.
+Prima di usare un ambiente Ubuntu ricostruito, eseguire il banco sul commit
+di riferimento con le baseline invariate: tutte le scene devono passare.
+Questa prova separa una differenza dell'ambiente da una modifica della UI.
 
 La soglia colore resta `0.01` e una foto passa soltanto con al massimo lo
-`0.1%` di pixel diversi. Il campione che ha introdotto tali valori misurava,
-nella scena peggiore di due corse uguali, `0.008%` a soglia colore zero e
-`0.003%` a `0.01`; un cambio di tavolozza produceva invece `99.3%` a `0.01`.
-Il commit canonico ha ripetuto il banco 42/42. Sul candidato
-`08fe214b44273a1c6a620cf90f8ef4c457f92c88`, le run
-[`34966343591`](https://github.com/Fubeo/Fub/actions/runs/34966343591) e
-[`34966348108`](https://github.com/Fubeo/Fub/actions/runs/34966348108) hanno
-poi eseguito consecutivamente nello stesso job `ubuntu-latest` banco visuale e
-accessibilità, entrambi verdi.
+`0.1%` di pixel diversi. Una diversa rasterizzazione del sistema non è
+una motivazione per alzare questi limiti.
 
-Un confronto locale fuori dal runner canonico può superare il limite per
+Un confronto locale fuori da questo ambiente può superare il limite per
 rasterizzazione di testo o canvas pur senza una regressione applicativa. Va
 esaminato il diff; non va promosso a baseline. Un cambiamento intenzionale
 richiede invece revisione del foglio, spiegazione delle scene coinvolte e
-rigenerazione su `ubuntu-latest`.
+rigenerazione nell'ambiente Ubuntu validato.
 
 L'accessibilità verifica la pagina resa, non soltanto una tabella teorica di
 colori.
+Il catalogo contiene i campioni posizionati dentro i rispettivi riquadri;
+le regioni che scorrono hanno nome accessibile e ingresso da tastiera.
+Il controllo del focus distingue i discendenti di un `details` chiuso
+dagli elementi realmente visibili e raggiungibili.
 
 Regole:
 
 - controllare luce chiara e scura;
-- non aggiornare baseline da un sistema diverso;
+- non aggiornare baseline da un ambiente non validato sul riferimento;
 - spiegare ogni cambiamento intenzionale;
 - usare moto ridotto nelle scene pertinenti;
 - non mascherare una regressione alzando la soglia.

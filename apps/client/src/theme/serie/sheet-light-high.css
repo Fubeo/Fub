@@ -49,13 +49,13 @@
 
   /* --- i raggi ----------------------------------------------------------- */
 
-  /* Erano sette valori distinti fra 2px e 10px per quattro intenzioni: il segno
-     appena smussato, il controllo, la superficie che galleggia, la pastiglia. */
+  /* Quattro raggi per quattro intenzioni: il segno appena smussato,
+     il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda. */
 
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
 
   /* --- la tipografia ----------------------------------------------------- */

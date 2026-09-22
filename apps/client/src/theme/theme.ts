@@ -5,6 +5,7 @@ import type { SettingEntry, ThemeInfo, ThemePayload } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import { on } from "../state/store";
 import type { Lifetime } from "../ui/lifetime";
+import { reportThemeTrouble } from "../ui/notify";
 import sheetDarkHigh from "./serie/sheet-dark-high.css?raw";
 import sheetDark from "./serie/sheet-dark.css?raw";
 import sheetLightHigh from "./serie/sheet-light-high.css?raw";
@@ -19,7 +20,6 @@ import {
   type ThemeBundleManifest,
   type ThemeMountResult,
 } from "./loader";
-import { reportThemeTrouble } from "../ui/notify";
 import { accentPalette, type ContrastLevel } from "./serie/recipe";
 
 export type Theme = "light" | "dark";
@@ -46,7 +46,6 @@ export const SERIES_THEME_ID = "fub.serie";
 const PREFERENCES_CACHE = "fub.appearance.preferences";
 const DARK_QUERY = "(prefers-color-scheme: dark)";
 const CONTRAST_QUERY = "(prefers-contrast: more)";
-
 const SERIES_MANIFEST: ThemeBundleManifest = {
   id: SERIES_THEME_ID,
   name: "Fub di serie",
@@ -94,6 +93,8 @@ let previewSelection: ThemePreviewSelection | null = null;
 let installedThemes: ThemeInfo[] = [];
 let catalogLoaded = false;
 let catalogRequest: Promise<ThemeInfo[]> | null = null;
+let catalogEpoch = 0;
+let catalogPayloads = new Map<string, ThemePayload>();
 let mountedVariant = "";
 let mountedPreferenceText = "";
 let mountedLight: Theme | null = null;
@@ -104,6 +105,10 @@ let warn: (theme: Theme) => void = () => {};
 export function effectiveTheme(choice: unknown, systemDark: boolean): Theme {
   if (choice === "light" || choice === "dark") return choice;
   return systemDark ? "dark" : "light";
+}
+
+function normalizedThemeChoice(value: unknown): Theme | "" {
+  return value === "light" || value === "dark" ? value : "";
 }
 
 export function effectiveContrast(choice: unknown, systemHigh: boolean): ContrastLevel {
@@ -230,7 +235,8 @@ async function apply(): Promise<void> {
       reportLoadFailure(requestedId, `luce ${light} non offerta`);
     } else {
       try {
-        const payload = await api.readTheme(requestedId, light);
+        const cached = catalogPayloads.get(`${requestedId}:${light}`);
+        const payload = cached ?? (await api.readTheme(requestedId, light));
         if (generation !== applyGeneration) return;
         if (payload.manifest.id !== requestedId || payload.light !== light) {
           reportLoadFailure(requestedId, "risposta del canale non coerente");
@@ -279,16 +285,16 @@ function valueOf(entries: Awaited<ReturnType<typeof settings>>, key: string): un
 }
 
 async function reread(): Promise<void> {
-  const generation = applyGeneration;
+  const epoch = catalogEpoch;
   let entries: SettingEntry[];
   try {
     [entries] = await Promise.all([settings(), readCatalog()]);
   } catch {
-    if (generation !== applyGeneration) return;
+    if (epoch !== catalogEpoch) return;
     await apply();
     return;
   }
-  if (generation !== applyGeneration) return;
+  if (epoch !== catalogEpoch) return;
   const theme = valueOf(entries, THEME_KEY);
   const contrast = valueOf(entries, CONTRAST_KEY);
   const previousChoice = themeChoice;
@@ -321,12 +327,10 @@ async function reread(): Promise<void> {
   } catch {
     // Il valore vivo è già in memoria; la cache serve solo al primo fotogramma.
   }
+  if (epoch !== catalogEpoch) return;
   await apply();
 }
 
-function normalizedThemeChoice(value: unknown): Theme | "" {
-  return value === "light" || value === "dark" ? value : "";
-}
 async function readCatalog(): Promise<ThemeInfo[]> {
   if (catalogLoaded) return installedThemes;
   if (!catalogRequest) {
@@ -335,17 +339,23 @@ async function readCatalog(): Promise<ThemeInfo[]> {
       .then(async (themes) => {
         const verified = await Promise.all(
           themes.map(async (info) => {
-            for (const light of info.manifest.lights) {
-              const payload = await api.readTheme(info.manifest.id, light);
-              if (
-                payload.manifest.id !== info.manifest.id ||
-                payload.light !== light ||
-                validateThemeBundle(themeBundle(payload), light).length > 0
-              ) {
-                return null;
+            try {
+              for (const light of info.manifest.lights) {
+                const payload = await api.readTheme(info.manifest.id, light);
+                if (
+                  payload.manifest.id !== info.manifest.id ||
+                  payload.light !== light ||
+                  validateThemeBundle(themeBundle(payload), light).length > 0
+                ) {
+                  return null;
+                }
+                catalogPayloads.set(`${info.manifest.id}:${light}`, payload);
               }
+              return info;
+            } catch (error) {
+              reportLoadFailure(info.manifest.id, errorDetail(error));
+              return null;
             }
-            return info;
           }),
         );
         installedThemes = verified.filter((info): info is ThemeInfo => info !== null);
@@ -400,13 +410,6 @@ export async function previewTheme(id: string, light: Theme): Promise<void> {
   }
 }
 
-/** Annulla l'anteprima e rimonta la selezione autorevole precedente. */
-export async function cancelThemePreview(): Promise<void> {
-  if (!previewSelection) return;
-  ++selectionGeneration;
-  previewSelection = null;
-  await apply();
-}
 
 /** Seleziona un tema e persiste insieme il suo id e la luce esplicita. */
 export async function selectTheme(id: string, light: Theme | ""): Promise<void> {
@@ -423,6 +426,9 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
   selectedThemeId = id;
   themeChoice = light;
   try {
+    // Aggiorna lo stato vivo prima del comando: il backend emette
+    // `setting_changed` durante la scrittura e il reread concorrente deve
+    // osservare questa selezione esplicita, non quella appena precedente.
     await api.setSetting(THEME_KEY, light);
     if (generation !== selectionGeneration) return;
     persistSelection();
@@ -436,8 +442,17 @@ export async function selectTheme(id: string, light: Theme | ""): Promise<void> 
     }
     throw error;
   }
-
 }
+
+
+/** Annulla l'anteprima e rimonta la selezione autorevole precedente. */
+export async function cancelThemePreview(): Promise<void> {
+  if (!previewSelection) return;
+  ++selectionGeneration;
+  previewSelection = null;
+  await apply();
+}
+
 function loadCache(): void {
   themeChoice = "";
   selectedThemeId = SERIES_THEME_ID;
@@ -486,9 +501,11 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   });
   selectionGeneration++;
   loadCache();
+  catalogEpoch += 1;
   catalogLoaded = false;
   catalogRequest = null;
   installedThemes = [];
+  catalogPayloads = new Map<string, ThemePayload>();
   mountedVariant = "";
   mountedPreferenceText = "";
   mountedLight = hadMountedTheme ? mountedLight : null;
@@ -496,7 +513,6 @@ export function mountTheme(lifetime: Lifetime, onChange: (theme: Theme) => void)
   warn = onChange;
   mount(fonts, "caratteri");
   void apply();
-
   for (const query of [DARK_QUERY, CONTRAST_QUERY]) {
     const media = window.matchMedia?.(query);
     if (media) lifetime.listen(media, "change", () => void apply());

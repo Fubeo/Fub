@@ -185,12 +185,16 @@ fn a_job_that_not_touches_the_host_remains_a_calculation_pure() {
 ///
 /// Col rendez-vous la seconda incognita **non esiste**. Quando `fatto` consegna
 /// un numero, chi cammina è tornato a `via.recv()`: non ha in mano nessun
-/// prestito e non ne può prendere uno finché non gli si dà il via. Quello che
+/// prestito e non ne può prendere uno finché non gli si dà il via. Il protocollo
+/// distingue la conferma di inizio del passo dalla conferma della lettura:
+/// `step()` aspetta entrambe prima di restituire il controllo al test.
 struct Walk {
     /// «Ho letto la n-esima nota, e adesso sono fermo.»
     done: Receiver<usize>,
     /// «Vai avanti.» Chiuderlo fa finire la camminata.
     prosegui: SyncSender<()>,
+    /// Conferma che il thread di camminata ha ricevuto il via.
+    via_ricevuto: Receiver<()>,
     thread: JoinHandle<()>,
 }
 
@@ -200,31 +204,35 @@ impl Walk {
     /// test. `None` quando la camminata è finita.
     fn step(&self) -> Option<usize> {
         self.prosegui.send(()).ok()?;
+        self.via_ricevuto.recv().ok()?;
         self.done.recv().ok()
     }
 
     fn finish(self) {
         drop(self.prosegui);
         drop(self.done);
+        drop(self.via_ricevuto);
         self.thread
             .join()
             .expect("il thread of camminata non pania");
     }
 }
 
-/// Avvia una camminata passo-passo. Il corpo riceve i due capi del rendez-vous e
-/// deve rispettarne il protocollo: `via.recv()` prima di ogni lettura,
+/// Avvia una camminata passo-passo. Il corpo riceve i tre capi del rendez-vous:
+/// `via.recv()` e `via_confermato.send(())` prima di ogni lettura,
 /// `fatto.send(n)` dopo.
-fn step_step(body: impl FnOnce(&Receiver<()>, &SyncSender<usize>) + Send + 'static) -> Walk {
-    // Capacità **zero** in tutti e due i versi: una `send` che tornasse senza che
-    // l'altro l'abbia presa rimetterebbe dentro l'incertezza che questo banco
-    // esiste per togliere.
+fn step_step(
+    body: impl FnOnce(&Receiver<()>, &SyncSender<()>, &SyncSender<usize>) + Send + 'static,
+) -> Walk {
+    // Capacità zero: ciascuna consegna aspetta il proprio destinatario.
     let (prosegui, via) = sync_channel::<()>(0);
+    let (via_confermato, via_ricevuto) = sync_channel::<()>(0);
     let (step_done, done) = sync_channel::<usize>(0);
-    let thread = std::thread::spawn(move || body(&via, &step_done));
+    let thread = std::thread::spawn(move || body(&via, &via_confermato, &step_done));
     Walk {
         done,
         prosegui,
+        via_ricevuto,
         thread,
     }
 }
@@ -279,11 +287,14 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     // --- la colonna del job: il prestito è **per chiamata** -----------------
     let job = {
         let ws_job = ws.clone();
-        step_step(move |via, done| {
+        step_step(move |via, via_confermato, done| {
             let job_host = JobHost::new(ws_job, INVENTORY);
             let documents = job_host.list_documents(None).unwrap().items;
             for (read, id) in documents.iter().enumerate() {
                 if via.recv().is_err() {
+                    return;
+                }
+                if via_confermato.send(()).is_err() {
                     return;
                 }
                 let _ = job_host.read_model(id);
@@ -335,11 +346,14 @@ fn while_a_job_walks_the_vault_who_saves_does_not_wait() {
     // È la strada di prima, ed era l'unica che avesse il chiamante di un job.
     let synchronous = {
         let ws_loan = ws.clone();
-        step_step(move |via, done| {
+        step_step(move |via, via_confermato, done| {
             let w = ws_loan.read().unwrap();
             let documents = w.documents();
             for (read, id) in documents.iter().enumerate() {
                 if via.recv().is_err() {
+                    return;
+                }
+                if via_confermato.send(()).is_err() {
                     return;
                 }
                 let _ = w.read_model(id);

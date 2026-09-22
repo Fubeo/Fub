@@ -238,6 +238,9 @@ const NOT_HOSTED: Record<string, string> = {
 /// smontano e rimontano tutto due volte, e senza un padrone la prima
 /// finirebbe di montare dentro un mondo che la seconda ha appena svuotato.
 const mountRun = new Race();
+/// Vita della shell per l'inspector: il tablist vive quanto la finestra, e il
+/// resize che misura le etichette non ha un altro proprietario (I08).
+const shellLifetime = openLifetime();
 
 /// Svuota ogni stato posseduto dalle view dichiarate.
 ///
@@ -307,10 +310,23 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   // che si sta smontando.
   if (!specs || parent?.closed) return;
 
-  for (const [id, mountedView] of mounted) {
-    unmountMounted(id, mountedView);
+  // R08 lato view: `synchronize()` di `panels/document.ts` rimonta le view dei
+  // riquadri con `mountViewInPane` (idempotente: stesso contenitore = solo
+  // ridisegno). Qui restano vive le istanze di riquadro: smontare il loro
+  // contenitore — che non è nostro — lascerebbe un pannello registrato senza
+  // superficie e, al giro dopo, un canvas orfano. Si smonta solo ciò che questa
+  // funzione ha montato (le superfici della shell); i riquadri seguono al
+  // `synchronize()` che l'apertura chiama dopo. Le istanze di riquadro la cui
+  // view non è più dichiarata (U42) si smontano invece qui: senza, resterebbero
+  // pannelli che chiedono al kernel una view che non c'è.
+  const freshIds = new Set(specs.filter((s) => s.surface === "main").map((s) => s.id));
+  for (const [id, mountedView] of [...mounted]) {
+    if (id.includes("@") && !freshIds.has(mountedView.view)) {
+      unmountMounted(id, mountedView);
+    } else if (!id.includes("@")) {
+      unmountMounted(id, mountedView);
+    }
   }
-  mounted.clear();
   primarySpecs.clear();
   for (const el of [
     viewsLeftEl,
@@ -366,7 +382,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   viewsModalEl.hidden = viewsModalEl.childElementCount === 0;
   // L'inspector a tab: per le view `right_sidebar` costruisce un tablist in
   // cima. Va dopo il montaggio, perché legge i pannelli già nati.
-  buildInspector();
+  buildInspector(shellLifetime);
   modalTrap(parent);
   await Promise.all([...mounted.keys()].map((id) => refreshPanel(id)));
 }
@@ -620,12 +636,34 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
 /// La scelta si persiste con `api.setViewState("inspector.tab", id)` e si
 /// ripristina al rimontaggio: chi aveva aperto Backlink ritrova Backlink.
 /// Il default è la prima view `open_by_default`, o la prima in assoluto.
-function buildInspector(): void {
+function buildInspector(lifetime: Lifetime): void {
   const panels = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
-  // Rimuove il tablist del giro precedente, se c'è.
+  // I08: observer/resize/font del giro precedente vivono nella lifetime della
+  // shell e si sciolgono al suo dispose; qui si stacca solo il DOM vecchio.
+  // Rimuove tablist e titolo del giro precedente, se ci sono.
   viewsRightEl.querySelector(".inspector-tabs")?.remove();
-  if (panels.length === 0) return;
-
+  viewsRightEl.querySelector(".inspector-title")?.remove();
+  // U42: senza viste (nessun provider, tutto rimosso) l'ispettore lo dice in
+  // chiaro invece di restare una colonna vuota: il titolo resta e nomina lo
+  // stato vuoto, con ruolo di stato come i `pending` del protocollo.
+  // Il titolo sta sopra la tablist — fuori da `role=tablist`, che ammette solo
+  // tab — così resta dov'è a ogni scelta e il DOM dei tab non si riordina.
+  const header = document.createElement("div");
+  header.className = "inspector-title";
+  viewsRightEl.prepend(header);
+  if (panels.length === 0) {
+    header.setAttribute("role", "status");
+    header.textContent = t("inspector.empty");
+    return;
+  }
+  header.setAttribute("role", "presentation");
+  const headerText = document.createElement("span");
+  header.appendChild(headerText);
+  // Il tablist: un bottone per view, con ruolo `tab`. L'aria-selected segue
+  // quale è attivo, e le frecce lo spostano — la navigazione da tastiera
+  // che un tablist ARIA richiede.
+  // U38: il nome della vista in corso, come titolo testuale preso dal registro
+  // (mai un elenco scritto qui).
   const tablist = document.createElement("div");
   tablist.className = "inspector-tabs";
   tablist.setAttribute("role", "tablist");
@@ -664,6 +702,14 @@ function buildInspector(): void {
     // L'icona: se la view ne dichiara una la si usa, altrimenti il fallback.
     const svg = iconEl(icon) ?? iconEl("outline");
     if (svg) tab.append(svg);
+    // U38: il nome visibile segue lo spazio — etichetta accanto all'icona
+    // quando la barra la contiene, sola icona con nome accessibile + tooltip
+    // quando non la contiene. La misura la decide la pelle (classe su tablist),
+    // qui solo il contenuto: stesso bottone, due vesti.
+    const label = document.createElement("span");
+    label.className = "inspector-tab-label";
+    label.textContent = name;
+    tab.append(label);
     // Il nome come tooltip e aria-label; il testo visibile è l'icona sola,
     // per tenere l'inspector compatto come una barra laterale deve essere.
     tab.setAttribute("aria-label", name);
@@ -683,24 +729,63 @@ function buildInspector(): void {
   // Mostra solo il pannello attivo, nasconde gli altri. `aria-selected`,
   // `tabIndex` e `hidden` seguono la stessa scelta, ed è ciò che li tiene
   // coerenti per mouse, tastiera e lettore di schermo.
+  // U42: scheda sparita (provider rimosso) => vista valida + fuoco prevedibile:
+  // se il fuoco stava sul tab sparito, va sul tab attivo — non nel vuoto.
   function activateTab(index: number, focus: boolean): void {
     if (panels.length === 0) return;
-    active = Math.min(Math.max(index, 0), panels.length - 1);
+    const safe = Math.min(Math.max(index, 0), panels.length - 1);
+    const focusedView = tablist.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement).dataset.viewId
+      : null;
+    active = safe;
     for (let i = 0; i < panels.length; i++) {
       const panel = panels[i]!;
       const tab = tabs[i]!;
-      const selected = i === active;
+      const selected = i === safe;
       panel.hidden = !selected;
+      panel.setAttribute("aria-hidden", String(!selected));
       tab.tabIndex = selected ? 0 : -1;
       tab.setAttribute("aria-selected", String(selected));
     }
-    if (focus) tabs[active]?.focus();
-    const viewId = panels[active]?.dataset.viewId;
+    const current = panels[safe];
+    const titleEl = current?.querySelector<HTMLElement>(".panel-title");
+    // Il titolo testuale è quello dichiarato dalla view: il registro, non un
+    // elenco scritto qui. Sparito il pannello, resta l'id onesto — brutto e
+    // cercabile, come la scala della 0040 chiede ai ripieghi.
+    headerText.textContent = titleEl?.textContent ?? current?.dataset.viewId ?? "";
+    const viewId = current?.dataset.viewId;
+    if (focus) tabs[safe]?.focus();
     if (viewId) void api.setViewState("inspector.tab", viewId);
+    if (focusedView !== null && !panels.some((p) => p.dataset.viewId === focusedView)) {
+      (tablist.children[safe] as HTMLElement)?.focus();
+    }
+    fitLabels();
+  }
+  // U38: etichette quando entrano, sola icona quando non entrano. La misura la
+  // decide il contenitore stretto (attributo sulla tablist, vestito in
+  // chrome.css); qui solo lo scroll reale, riletto a ogni scelta, al resize e a
+  // font pronti — con disposer, perché ogni `buildInspector` butta la tablist
+  // precedente (I08: nessun observer orfano sul nodo staccato).
+  function fitLabels(): void {
+    tablist.dataset.compact = String(tablist.scrollWidth > tablist.clientWidth + 1);
+  }
+  const fitObserver = new ResizeObserver(() => fitLabels());
+  fitObserver.observe(tablist);
+  lifetime.add(() => fitObserver.disconnect());
+  lifetime.listen(window, "resize", fitLabels);
+  if (typeof document.fonts?.ready?.then === "function") {
+    let fontsAlive = true;
+    lifetime.add(() => {
+      fontsAlive = false;
+    });
+    void document.fonts.ready.then(() => {
+      if (fontsAlive && tablist.isConnected) fitLabels();
+    });
   }
 
-  // Il tablist va in cima, prima dei pannelli.
-  viewsRightEl.prepend(tablist);
+  // Il tablist va in cima, prima dei pannelli — e il titolo sopra di lui.
+  header.after(tablist);
+  fitLabels();
 
   // «Quella che nasce aperta» si legge dal contenuto che non è nascosto: era
   // una classe `collapsed` sul pannello, ed era la stessa cosa scritta due

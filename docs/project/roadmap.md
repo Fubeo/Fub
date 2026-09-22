@@ -1,6 +1,6 @@
 # Roadmap
 
-> **Stato aggiornato per `main@8797bb1e183e6e0d292e782f06e309600bd62bfd`, 21 settembre 2026.**
+> **Stato aggiornato al 22 settembre 2026.**
 
 La roadmap descrive direzione e ordine. Le GitHub Issues restano il tracker
 operativo; una capacità già consegnata non torna incompleta soltanto perché un
@@ -8,8 +8,8 @@ follow-up è aperto.
 
 ```mermaid
 flowchart LR
-    NOW["Ora<br/>release candidate pubblicato"]
-    RC["Prossimo<br/>feedback e finalizzazione"]
+    NOW["Ora<br/>consolidamento e verifica"]
+    RC["Prossimo<br/>primo release candidate"]
     LATER["Dopo<br/>evoluzione ecosistema"]
     NOW --> RC --> LATER
 ```
@@ -39,14 +39,14 @@ operativo è stato rimosso dopo il trasferimento delle invarianti.
 generati, visuali e accessibilità sono consegnati. La Graph View ha moduli
 separati, determinismo, lifecycle, benchmark 2k/10k e gate hard sull'heap.
 
-## Ora — release candidate pubblicato
+## Ora — preparazione del primo release candidate
 
-`v0.1.0-rc.1` è in draft su `main@8797bb1e` (tag annotato non firmato,
-CI `35551966290` + NPM `35551966276` verdi, artefatto Linux amd64 con checksum).
-#5 è chiusa e integrata dalla PR #65. Il lavoro residuo è feedback sul
-candidato, finalizzazione e pulizia post-release.
+Il precedente candidato `v0.1.0-rc.1` è stato ritirato insieme al tag remoto.
+#5 è chiusa e integrata dalla PR #65. Le capacità consegnate restano in
+`main`; la preparazione del rilascio deve riferirsi al nuovo candidato,
+senza riutilizzare certificazioni di uno SHA precedente.
 
-Requisiti del candidato, tutti soddisfatti su `main@8797bb1e`:
+Requisiti da verificare sul candidato:
 
 - versione, changelog e compatibilità degli schemi coerenti;
 - WIT frozen e compatibilità ABI verificate;

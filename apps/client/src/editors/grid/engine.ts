@@ -575,6 +575,16 @@ export class GridEngine {
   }
 
   getDoc(): string { return this.#source; }
+  selection(): GridSelection {
+    return {
+      anchor: { ...this.#selection.anchor },
+      focus: { ...this.#selection.focus },
+    };
+  }
+
+  renderedCellCount(): number {
+    return this.#viewport.querySelectorAll(".grid-cell").length;
+  }
 
   focus(): void {
     if (!this.#destroyed) this.#viewport.focus();
@@ -616,11 +626,6 @@ export class GridEngine {
     return true;
   }
 
-  renderedCellCount(): number {
-    return this.#viewport.querySelectorAll(".grid-cell").length;
-  }
-
-  selection(): GridSelection { return this.#selection; }
 
   destroy(): void {
     if (this.#destroyed) return;
@@ -930,17 +935,19 @@ export class GridEngine {
     }, extend);
   }
 
-  #tab(step: -1 | 1): void {
+  #tab(step: -1 | 1): boolean {
     const focus = this.#selection.focus;
     const column = this.#nextVisible("column", focus.column, step);
     if (column !== focus.column) {
       this.#select({ row: focus.row, column }, false);
-      return;
+      return true;
     }
     const row = this.#nextVisible("row", focus.row, step);
     if (row !== focus.row) {
       this.#select({ row, column: this.#edgeVisible("column", step < 0) }, false);
+      return true;
     }
+    return false;
   }
 
   #keydown(event: KeyboardEvent): void {
@@ -978,7 +985,7 @@ export class GridEngine {
       case "ArrowDown": this.#move(1, 0, extend); break;
       case "ArrowLeft": this.#move(0, -1, extend); break;
       case "ArrowRight": this.#move(0, 1, extend); break;
-      case "Tab": this.#tab(extend ? -1 : 1); break;
+      case "Tab": if (!this.#tab(extend ? -1 : 1)) return; break;
       case "Enter":
       case "F2": this.#beginEditing("cell", this.#selection.focus); break;
       case "Home": this.#select({

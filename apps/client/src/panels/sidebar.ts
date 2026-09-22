@@ -26,6 +26,11 @@ const NATIVE_PANELS: Record<"files" | "search", HTMLElement> = {
   files: $("#files-panel"),
   search: $("#search-panel"),
 };
+/// L'ultimo pannello chiesto a `showPanel`, anche se il DOM delle view è stato
+/// nel frattempo smontato (`mountDeclaredViews` riparte da zero a ogni vault).
+/// Serve a `syncRail` per non azzerare arbitrariamente una view ancora valida
+/// (R07): il DOM dice cosa si vede *adesso*, questo dice cosa si voleva.
+let lastPanel: SidebarPanel = "files";
 
 /// Mostra un pannello della sidebar, nascondendo tutti gli altri.
 ///
@@ -36,16 +41,33 @@ const NATIVE_PANELS: Record<"files" | "search", HTMLElement> = {
 /// a una view montata, si torna ai file — è il pannello che c'è sempre.
 export function showPanel(panel: SidebarPanel): void {
   const viewsLeft = $("#views-left");
+  const isNative = panel === "files" || panel === "search";
+  let matched = isNative;
+  if (!isNative) {
+    for (const viewPanel of viewsLeft.querySelectorAll<HTMLElement>(
+      ".declared-view-panel",
+    )) {
+      if (viewPanel.dataset.viewId === panel) {
+        matched = true;
+        break;
+      }
+    }
+  }
+  // Id sconosciuto o view non più montata: si torna ai file, il pannello che
+  // c'è sempre. Senza questo ramo la sidebar restava vuota (entrambi i nativi
+  // nascosti, nessuna view accesa).
+  const effective: SidebarPanel = matched ? panel : "files";
+  lastPanel = effective;
   // I due nativi si escludono a vicenda e con le view.
-  NATIVE_PANELS.files.hidden = panel !== "files";
-  NATIVE_PANELS.search.hidden = panel !== "search";
+  NATIVE_PANELS.files.hidden = effective !== "files";
+  NATIVE_PANELS.search.hidden = effective !== "search";
   // Le view dichiarate: una sola visibile, le altre `hidden` (non
   // `collapsed`: quello nasconde il corpo e lascia il titolo, e in una
   // sidebar a rail i titoli impilati sono rumore).
   for (const viewPanel of viewsLeft.querySelectorAll<HTMLElement>(
     ".declared-view-panel",
   )) {
-    const on = viewPanel.dataset.viewId === panel;
+    const on = viewPanel.dataset.viewId === effective;
     viewPanel.hidden = !on;
     // Aprire un pannello dalla rail vuol dire mostrarne il contenuto **e**
     // dirlo: finché erano due scritture — una classe per la pelle, un
@@ -68,9 +90,15 @@ export function showPanel(panel: SidebarPanel): void {
       // Il grafo è un linguetta nell'area principale, non un pannello della
       // sidebar: `showPanel` non lo spegne e non lo accende.
       if (btn.id === "show-graph") continue;
-      btn.setAttribute("aria-pressed", String(btn.dataset.panel === panel));
+      btn.setAttribute("aria-pressed", String(btn.dataset.panel === effective));
     }
   }
+}
+/// L'ultimo pannello chiesto, per chi deve ricostruire senza azzerare (R07).
+/// Non è ciò che si vede adesso (il DOM potrebbe essere in ricostruzione): è
+/// ciò che si rivuole se esiste ancora.
+export function lastShownPanel(): SidebarPanel {
+  return lastPanel;
 }
 
 /// Il pannello nativo è visibile? Le view dichiarate non si chiedono qui.

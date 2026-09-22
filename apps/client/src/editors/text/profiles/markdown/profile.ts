@@ -1,9 +1,11 @@
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { languages } from "@codemirror/language-data";
 import type { Extension } from "@codemirror/state";
 import type { SyntaxForm } from "../../../../host/contract";
 import { markdownEditingExtensions } from "./commands";
 import { markdownCompletions, type CompletionSources } from "./completions";
 import { livePreview, type LivePreviewCallbacks } from "./livepreview";
+import { mermaidPreview } from "./mermaid";
 
 export interface MarkdownProfileOptions {
   readonly callbacks: LivePreviewCallbacks;
@@ -30,8 +32,8 @@ export function createMarkdownProfile(options: MarkdownProfileOptions): Markdown
     extensions() {
       return [
         markdownEditingExtensions(),
-        markdown({ base: markdownLanguage }),
-        previewOn ? livePreview(options.callbacks, syntaxForms) : [],
+        markdown({ base: markdownLanguage, codeLanguages: languages }),
+        previewOn ? [livePreview(options.callbacks, syntaxForms), mermaidPreview()] : [],
         markdownCompletions(options.completions),
       ];
     },

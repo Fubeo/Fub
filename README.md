@@ -41,8 +41,8 @@ Tauri, Wasmtime o Markdown; `fub-host` non conosce Tauri; soltanto
 - cestino, bozze, versioning, organizzazione e indici persistenti;
 - comandi, view e query instradati tramite registri generici;
 - feature ufficiali come provider nativi indipendenti;
-- contratto WIT `fub:abi@0.1.2`, congelato e verificato per additività, con
-  famiglia Grid v1 e consumatori nativo/WASM;
+- contratto WIT `fub:abi@0.1.2`, verificato per additività rispetto agli snapshot
+  congelati, con famiglia Grid v1 e consumatori nativo/WASM;
 - runtime WASM funzionante per `Plugin`, `CommandProvider` e provider Grid;
 
 M5 è consegnata in `main`: installazione, consenso, lifecycle, UI non fidata e

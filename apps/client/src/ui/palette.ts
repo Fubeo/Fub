@@ -345,6 +345,11 @@ function openOverlay(): HTMLElement {
 /// Passo 1: l'elenco filtrabile.
 function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost) {
   box.innerHTML = "";
+  // Etichetta di scope esplicita (U13): "Comandi" — non un generico "Cerca…":
+  // qui si eseguono azioni, con disponibilità e consenso del comando (U19).
+  const scope = document.createElement("p");
+  scope.className = "palette-desc";
+  scope.textContent = t("palette.title");
   const input = document.createElement("input");
   input.className = "palette-input";
   input.placeholder = t("palette.placeholder");
@@ -364,7 +369,7 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
   // La selezione resta sull'input; il popup non è una fermata del tab.
   list.tabIndex = -1;
   input.setAttribute("aria-controls", list.id);
-  box.append(input, list);
+  box.append(scope, input, list);
 
   let visibleItems = specs;
   let selected = 0;
@@ -432,7 +437,7 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
     selected = 0;
     render();
   });
-  input.addEventListener("keydown", (e) => {
+  const handleKey = (e: KeyboardEvent) => {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (visibleItems.length === 0) return;
@@ -447,7 +452,9 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
     } else if (e.key === "Escape") {
       closeCommandPalette();
     }
-  });
+  };
+  input.addEventListener("keydown", handleKey);
+  list.addEventListener("keydown", handleKey);
 
   render();
   input.focus();
@@ -486,6 +493,11 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
   // I documenti del vault come suggerimenti dei campi che ne chiedono: la lista
   // ce l'ha già la shell, e un campo `document` senza di essa costringerebbe a
   // ricordarsi un path a memoria.
+  //
+  // R06: la finestra da 200 non si allarga — resta un suggerimento, e il limite
+  // è esplicito. Chi cerca un documento fuori finestra lo scrive per intero o
+  // lo trova con "Vai alla nota" (query per nome esistente, nessuna anagrafe
+  // intera in memoria).
   const datalist = document.createElement("datalist");
   datalist.id = "palette-docs";
   if (spec.params.some((p) => p.kind.kind === "document" || p.kind.kind === "documents")) {
@@ -495,6 +507,10 @@ function renderForm(spec: CommandSpec, box: HTMLElement, host: PaletteHost) {
         opt.value = doc;
         datalist.appendChild(opt);
       }
+      const hint = document.createElement("p");
+      hint.className = "palette-desc";
+      hint.textContent = t("palette.docs_limited", { count: docs.length });
+      form.appendChild(hint);
     });
     form.appendChild(datalist);
   }

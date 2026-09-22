@@ -5,6 +5,7 @@
 //! `render_view`/`view_action`.
 
 mod common;
+use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::traits::ViewInstance;
@@ -13,7 +14,6 @@ use fub_abi::PluginError;
 use fub_host::Host;
 use fub_kernel::Trust;
 use fub_wasm_host::WasmBundle;
-use std::sync::Arc;
 
 const PLUGIN: &str = "example.view";
 const VIEW: &str = "example.view:panel";

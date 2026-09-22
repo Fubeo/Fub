@@ -192,7 +192,7 @@ export const SCENE = [
     query: "",
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click('#mode-switch button[data-mode="reading"]');
+      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
       await page.waitForSelector(".pane-preview h1, .markdown-preview h1");
     },
   },
@@ -202,7 +202,7 @@ export const SCENE = [
     query: "",
     prepare: async (page) => {
       await openNote(page, "Guida/Frammenti di codice.md");
-      await page.click('#mode-switch button[data-mode="source"]');
+      await page.click('.pane.focus .pane-toolbar button[data-mode="source"]');
       await page.waitForSelector(".cm-content");
     },
   },
@@ -222,6 +222,11 @@ export const SCENE = [
     prepare: async (page) => {
       await page.click('#views-ribbon button[aria-label="Il grafo dei collegamenti"]');
       await page.waitForSelector("canvas.graph-main");
+      await waitForGraphToSettle(page);
+      await page.click("summary.graph-list-summary");
+      await page.waitForFunction(() => document.querySelector("details.graph-list")?.open === true);
+      await page.click("summary.graph-list-summary");
+      await page.waitForFunction(() => document.querySelector("details.graph-list")?.open === false);
       await waitForGraphToSettle(page);
     },
   },
@@ -267,11 +272,11 @@ export const SCENE = [
     query: "",
     prepare: async (page) => {
       await openNote(page, "Guida/Sintassi di Fub.md");
-      await page.click('#mode-switch button[data-mode="source"]');
+      await page.click('.pane.focus .pane-toolbar button[data-mode="source"]');
       await runCommand(page, "Dividi il riquadro a destra");
-      await page.click('#mode-switch button[data-mode="live_preview"]');
+      await page.click('.pane.focus .pane-toolbar button[data-mode="live_preview"]');
       await runCommand(page, "Dividi il riquadro a destra");
-      await page.click('#mode-switch button[data-mode="reading"]');
+      await page.click('.pane.focus .pane-toolbar button[data-mode="reading"]');
       await page.waitForSelector('.pane[data-mode="source"] .cm-content');
       await page.waitForSelector('.pane[data-mode="live_preview"] .cm-content');
       await page.waitForSelector('.pane[data-mode="reading"] .pane-preview');

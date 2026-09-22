@@ -5,6 +5,29 @@ html, body, .app {
   color: var(--text);
 }
 
+.onboarding {
+  color: var(--text);
+}
+
+.onboarding h2 {
+  margin: 0;
+  font-size: var(--text-3xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.5px;
+}
+
+.onboarding > p {
+  margin: 0;
+  max-width: var(--content-width);
+  color: var(--muted);
+  line-height: var(--leading-relaxed);
+}
+
+.onboarding-actions {
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+}
+
 
 /* Il salto al contenuto, nella sua superficie: il meccanismo (fisso, fuori
    dallo schermo, rivelato dal fuoco) è della struttura; gli offset sono la
@@ -25,9 +48,15 @@ html, body, .app {
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--space-9);
+  min-height: var(--space-9);
+  font-size: var(--text-xl);
   font-weight: var(--weight-bold);
   color: var(--accent-soft);
-  letter-spacing: 0.5px;
+  letter-spacing: -0.5px;
 }
 
 .muted {
@@ -43,7 +72,7 @@ button {
   color: var(--text);
   border: none;
   border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
   cursor: pointer;
   font: inherit;
   font-size: var(--text-base);
@@ -69,6 +98,7 @@ button.primary,
 .ui-button.intent-primary {
   background: var(--accent);
   color: var(--accent-contrast);
+  font-weight: var(--weight-medium);
   transition:
     transform var(--duration-fast) var(--ease-in),
     background var(--duration-fast) var(--ease),

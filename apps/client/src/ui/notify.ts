@@ -41,6 +41,8 @@ import { onLanguage, t, type Key } from "../i18n/strings";
 import type { Gate, KernelEvent } from "../host/contract";
 import { onEvent } from "../state/kernel";
 import type { Lifetime } from "./lifetime";
+import { focusableElements } from "./a11y";
+import { setTooltip } from "./tooltip";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -109,6 +111,25 @@ let history: Notice[] = [];
 /// centro è un fatto che vale la pena registrare.
 let unreadCount = 0;
 let open = false;
+/// `true` = l'host ha segnalato assenza di rilevamento modifiche esterne
+/// (U66): indicazione persistente nel centro, mai un finto «sincronizzato».
+/// Resta finché un segnale contrario non la abbassa — nessun timeout che la
+/// faccia sparire da sola.
+let watcherOff = false;
+/// Chi ha aperto per ultimo il centro, per riportargli il fuoco (C04).
+let opener: HTMLElement | null = null;
+
+/// Testi del centro con chiavi dedicate (U65-U66): `notices.open_problems`
+/// {count} per i non letti, `notices.watcher_off` per il rilevamento assente.
+type P8Key = "notices.open_problems" | "notices.watcher_off";
+function notifyText(key: P8Key, args: Record<string, string | number> = {}): string {
+  switch (key) {
+    case "notices.open_problems":
+      return t("notices.open_problems", { count: typeof args["count"] === "number" ? args["count"] : 0 });
+    case "notices.watcher_off":
+      return t("notices.watcher_off", args);
+  }
+}
 
 /// Dice un messaggio all'utente. È la porta di tutta la shell, e resta una
 /// riga: chi chiama non sa che esistono uno storico e un raggruppamento.
@@ -211,15 +232,51 @@ export function recentNotices(): Notice[] {
 /// Il pannello dello storico si apre e si chiude da qui: è anche il momento in
 /// cui il contatore dei non letti torna a zero.
 export function openHistory(isOpen = !open): void {
+  if (isOpen && !open && typeof document !== "undefined") {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) opener = active;
+  }
   open = isOpen;
-  if (open) unreadCount = 0;
+  if (open) {
+    unreadCount = 0;
+    redraw();
+    panelFirstFocusable()?.focus();
+  } else {
+    redraw();
+    if (opener?.isConnected) opener.focus();
+    opener = null;
+  }
+}
+
+/// Segnala che il vault non ha il rilevamento delle modifiche esterne (U66).
+///
+/// Indicazione **persistente** nel centro finché il segnale resta: nessun
+/// timeout che la cancelli, mai un finto «sincronizzato». Resta un'indicazione
+/// di contesto — non un avviso raggruppato — così rileggerla non la duplica.
+/// Cambio vault la azzera: è del vault di prima, e il nuovo la ridice col suo
+/// segnale (I04/R07-R08). Nota: nessun iscritto automatico qui — il segnale
+/// `watching` arriva da `vaultStatus()` in desktop-shell, che resta l'unico a
+/// chiamarla (ownership sua, nessun secondo writer).
+export function setWatcherOff(off: boolean): void {
+  watcherOff = off;
   redraw();
+}
+
+export function isWatcherOff(): boolean {
+  return watcherOff;
 }
 
 export function clearHistory(): void {
   history = [];
   unreadCount = 0;
   redraw();
+}
+
+function panelFirstFocusable(): HTMLElement | null {
+  if (!hasDom()) return null;
+  const panel = document.getElementById("notify-panel");
+  if (!(panel instanceof HTMLElement)) return null;
+  return focusableElements(panel)[0] ?? panel;
 }
 
 /// C'è un documento su cui disegnare?
@@ -269,17 +326,21 @@ function show(notice: Notice): void {
     if (document.getElementById("toast") === toast) toast.remove();
   }, TOAST_DURATION_MS);
 }
-
-/// Il pulsante nella barra di stato e il pannello dello storico. Se la shell
-/// non li ha (un test, un host che monta solo un pezzo) non succede niente:
-/// `notify` continua a funzionare, perché il canale non dipende dal suo
-/// disegno.
 function redraw(): void {
   if (!hasDom()) return;
   const button = document.getElementById("notify-button");
   if (button) {
-    button.textContent =
-      unreadCount > 0 ? t("notices.count", { count: unreadCount }) : t("notices.title");
+    // U65: il pulsante resta conteggio reale dei non letti — lo «stato
+    // pertinente per problemi aperti» è il centro stesso, che resta finché i
+    // problemi restano (storia + watcher), non un badge inventato. C05: il nome
+    // resta nel controllo — `aria-label` ridice il conteggio, mai meno. A zero
+    // resta il titolo nudo: «Avvisi 0» inventerebbe un conteggio che non c'è.
+    const label =
+      unreadCount > 0
+        ? notifyText("notices.open_problems", { count: unreadCount })
+        : t("notices.title");
+    button.textContent = label;
+    button.setAttribute("aria-label", label);
     button.classList.toggle("ha-novita", unreadCount > 0);
     button.setAttribute("aria-expanded", String(open));
   }
@@ -292,7 +353,11 @@ function redraw(): void {
   const list = panel.querySelector("#notify-list");
   if (!(list instanceof HTMLElement)) return;
   list.replaceChildren();
-  if (history.length === 0) {
+  // U66: watcher assente = indicazione persistente in testa al centro, finché
+  // il segnale resta. Non è un avviso raggruppato: rileggerla non la duplica,
+  // chiuderla non si può — sparisce solo quando il rilevamento torna.
+  if (watcherOff) list.appendChild(watcherNote());
+  if (history.length === 0 && !watcherOff) {
     const empty = document.createElement("li");
     empty.className = "muted";
     empty.textContent = t("notices.none");
@@ -300,17 +365,36 @@ function redraw(): void {
     return;
   }
   for (const notice of history) {
-    const row = document.createElement("li");
-    row.dataset.tone = notice.tone;
-    const text = document.createElement("span");
-    text.className = "notify-testo";
-    text.textContent = lineOf(notice);
-    const time = document.createElement("span");
-    time.className = "muted notify-ora";
-    time.textContent = new Date(notice.when).toLocaleTimeString();
-    row.append(text, time);
-    list.appendChild(row);
+    list.appendChild(noticeRow(notice));
   }
+}
+
+/// La riga watcher: testo esistente, tooltip sullo stesso fatto (C05: il nome
+/// resta nel controllo). Solo hook esistenti (`muted`): nessuna nuova classe.
+function watcherNote(): HTMLLIElement {
+  const note = document.createElement("li");
+  note.className = "muted";
+  const text = document.createElement("span");
+  text.textContent = notifyText("notices.watcher_off");
+  note.appendChild(text);
+  return note;
+}
+/// Una riga dello storico con dettagli senza console (U65): testo, ora, e i
+/// dettagli già nella riga — `title` ridice il testo integrale quando è
+/// ellissato, mai la console. Solo hook esistenti.
+function noticeRow(notice: Notice): HTMLLIElement {
+  const row = document.createElement("li");
+  row.dataset.tone = notice.tone;
+  const text = document.createElement("span");
+  text.className = "notify-testo";
+  text.textContent = lineOf(notice);
+  setTooltip(text, lineOf(notice));
+  const time = document.createElement("span");
+  time.className = "muted notify-ora";
+  time.textContent = new Date(notice.when).toLocaleTimeString();
+  setTooltip(time, new Date(notice.when).toLocaleString());
+  row.append(text, time);
+  return row;
 }
 
 /// Accende il centro notifiche: il pulsante nella barra di stato e il pannello.
@@ -322,6 +406,16 @@ export function mountNotifications(lifetime: Lifetime): void {
   if (clear) lifetime.listen(clear, "click", () => clearHistory());
   const close = document.getElementById("notify-close");
   if (close) lifetime.listen(close, "click", () => openHistory(false));
+  const panel = document.getElementById("notify-panel");
+  if (panel)
+    lifetime.listen(panel, "keydown", (e: KeyboardEvent) => {
+      // C03/C04 come il centro attività: Escape chiude e riporta al trigger,
+      // nessun trap parallelo — il centro è un drawer non modale.
+      if (e.key === "Escape") {
+        e.preventDefault();
+        openHistory(false);
+      }
+    });
   // Come per il centro attività: il pulsante porta un conteggio, quindi non lo
   // può scrivere `applicaStringhe` — e il testo **degli avvisi** resta com'era,
   // perché un avviso è già stato detto e ridirlo in un'altra lingua vorrebbe

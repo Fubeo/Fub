@@ -19,6 +19,8 @@ function copy(): PanelCopy {
     reset: "Reimposta",
     open: "Apri impostazioni",
     close: "Chiudi impostazioni",
+    physicsSection: "Parametri di simulazione",
+    viewSection: "Comandi di vista",
     presets: {
       "organica": "Organica",
       "costellazione": "Costellazione",
@@ -227,6 +229,38 @@ describe("createPhysicsPanel", () => {
     expect(options).toContain("Personalizzata");
     p.destroy();
   });
+  it("le etichette distinguono parametri con lo stesso minimo anche dopo cambio lingua", () => {
+    let current = copy();
+    const p = createPhysicsPanel({
+      config,
+      onChange: (c) => changes.push(c),
+      onWarm: () => {},
+      onUnpinAll: () => {},
+      copy: () => current,
+    });
+    const sliderFor = (name: string): HTMLInputElement => {
+      const input = Array.from(p.element.querySelectorAll<HTMLInputElement>('input[type="range"]')).find(
+        (element) => element.labels?.[0]?.textContent?.startsWith(name),
+      );
+      expect(input).toBeDefined();
+      return input!;
+    };
+    const before = { ...config.physics };
+    const gravity = sliderFor(current.fields.gravity);
+    gravity.value = "0.1";
+    gravity.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(changes[changes.length - 1]?.physics).toEqual({ ...before, gravity: 0.1 });
+
+    current = { ...current, fields: { ...current.fields, gravity: "Gravity", friction: "Friction" } };
+    p.updateLanguage();
+    expect(sliderFor("Gravity").value).toBe("0.1");
+    const friction = sliderFor("Friction");
+    friction.value = "0.8";
+    friction.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(changes[changes.length - 1]?.physics).toEqual({ ...before, gravity: 0.1, friction: 0.8 });
+    expect(sliderFor("Gravity").value).toBe("0.1");
+    p.destroy();
+  });
 
   it("distruggi: rimuove l'elemento dal DOM", () => {
     const p = create();
@@ -282,6 +316,20 @@ describe("createPhysicsPanel", () => {
     const p = create();
     const select = p.element.querySelector<HTMLSelectElement>("select.graph-panel-select")!;
     expect(select.value).toBe("rigido");
+    p.destroy();
+  });
+
+  it("U45: due gruppi dichiarati con titoli distinti (simulazione e vista)", () => {
+    const p = create();
+    const groups = p.element.querySelectorAll<HTMLElement>(".graph-panel-sezione[role='group']");
+    expect(groups).toHaveLength(2);
+    expect(groups[0]!.getAttribute("aria-label")).toBe("Parametri di simulazione");
+    expect(groups[1]!.getAttribute("aria-label")).toBe("Comandi di vista");
+    expect(groups[0]!.querySelector(".graph-panel-sezione-titolo")!.textContent).toBe("Parametri di simulazione");
+    expect(groups[1]!.querySelector(".graph-panel-sezione-titolo")!.textContent).toBe("Comandi di vista");
+    // Nessun filtro o algoritmo inventato: solo gli slider/toggle esistenti.
+    expect(p.element.querySelectorAll('input[type="range"]').length).toBeGreaterThan(0);
+    expect(p.element.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThan(0);
     p.destroy();
   });
 });

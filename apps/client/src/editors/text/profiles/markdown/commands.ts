@@ -8,9 +8,9 @@ import {
   type StateCommand,
 } from "@codemirror/state";
 import { EditorView, keymap, type KeyBinding } from "@codemirror/view";
-import { indentUnit } from "@codemirror/language";
+import { indentUnit, syntaxTree } from "@codemirror/language";
 import { taskChecked } from "../../../../rules/mirrored";
-import { nextMarker, listItem } from "../../../../rules/syntax";
+import { nextMarker, listItem, type ListEntry } from "../../../../rules/syntax";
 import { isStrictlyInsideCode } from "./parser";
 import { textKeymap } from "../../commands";
 
@@ -66,9 +66,13 @@ function wrappedInside(sel: string, open: string, close: string): boolean {
 /// parola dentro i marcatori: nei due casi si tolgono, altrimenti si avvolge.
 function toggleWrap(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
     dispatch(
       state.update(
         state.changeByRange((range) => {
+          const backward = range.anchor > range.head;
+          const orient = (from: number, to: number) =>
+            backward ? EditorSelection.range(to, from) : EditorSelection.range(from, to);
           let { from, to } = range;
           let hadWord = from !== to;
           if (from === to) {
@@ -121,7 +125,7 @@ function toggleWrap(open: string, close: string = open): StateCommand {
                 { from, to: from + open.length },
                 { from: to - close.length, to },
               ],
-              range: EditorSelection.range(from, to - open.length - close.length),
+              range: orient(from, to - open.length - close.length),
             };
           }
           if (wrappedOutside(state, from, to, open, close)) {
@@ -130,7 +134,7 @@ function toggleWrap(open: string, close: string = open): StateCommand {
                 { from: from - open.length, to: from },
                 { from: to, to: to + close.length },
               ],
-              range: EditorSelection.range(from - open.length, to - open.length),
+              range: orient(from - open.length, to - open.length),
             };
           }
           return {
@@ -138,7 +142,7 @@ function toggleWrap(open: string, close: string = open): StateCommand {
               { from, insert: open },
               { from: to, insert: close },
             ],
-            range: EditorSelection.range(from + open.length, to + open.length),
+            range: orient(from + open.length, to + open.length),
           };
         }),
         { scrollIntoView: true, userEvent: "input" },
@@ -151,7 +155,63 @@ function toggleWrap(open: string, close: string = open): StateCommand {
 export const toggleBold = toggleWrap("**");
 export const toggleItalic = toggleWrap("*");
 export const toggleStrikethrough = toggleWrap("~~");
-export const toggleInlineCode = toggleWrap("`");
+/// I delimitatori devono essere più lunghi di ogni corsa di backtick nel
+/// contenuto. Il padding CommonMark separa i backtick ai bordi e preserva gli
+/// spazi significativi; il parser individua il tratto da liberare al toggle.
+export const toggleInlineCode: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
+  dispatch(
+    state.update(
+      state.changeByRange((range) => {
+        const orient = (from: number, to: number) =>
+          range.anchor > range.head ? EditorSelection.range(to, from) : EditorSelection.range(from, to);
+        let node = syntaxTree(state).resolveInner(range.from, 1);
+        while (node.name !== "InlineCode" && node.parent) node = node.parent;
+        if (node.name === "InlineCode" && range.to <= node.to) {
+          const marks = node.getChildren("CodeMark");
+          if (marks.length === 2) {
+            let contentFrom = marks[0].to;
+            let contentTo = marks[1].from;
+            const content = state.sliceDoc(contentFrom, contentTo);
+            if (content.startsWith(" ") && content.endsWith(" ") && /\S/.test(content)) {
+              contentFrom++;
+              contentTo--;
+            }
+            return {
+              changes: [{ from: node.from, to: contentFrom }, { from: contentTo, to: node.to }],
+              range: orient(node.from, node.from + contentTo - contentFrom),
+            };
+          }
+        }
+        let { from, to } = range;
+        if (range.empty) {
+          if (from > 0 && state.sliceDoc(from - 1, from + 1) === "``") {
+            return {
+              changes: { from: from - 1, to: from + 1 },
+              range: EditorSelection.cursor(from - 1),
+            };
+          }
+          const word = state.wordAt(from);
+          if (word) ({ from, to } = word);
+        }
+        const content = state.sliceDoc(from, to);
+        let width = 1;
+        for (const match of content.matchAll(/`+/g)) width = Math.max(width, match[0].length + 1);
+        const fence = "`".repeat(width);
+        const padded = content.startsWith("`") || content.endsWith("`") ||
+          (content.startsWith(" ") && content.endsWith(" ") && /\S/.test(content));
+        const open = fence + (padded ? " " : "");
+        const close = (padded ? " " : "") + fence;
+        return {
+          changes: [{ from, insert: open }, { from: to, insert: close }],
+          range: orient(from + open.length, to + open.length),
+        };
+      }),
+      { scrollIntoView: true, userEvent: "input" },
+    ),
+  );
+  return true;
+};
 export const toggleWikilink = toggleWrap("[[", "]]");
 
 // ── Liste ────────────────────────────────────────────────────────────────────
@@ -170,62 +230,77 @@ export const toggleWikilink = toggleWrap("[[", "]]");
 /// o col cursore ancora dentro il marcatore — restituisce `false`: lì l'Enter
 /// di default fa già la cosa giusta.
 export const smartListEnter: StateCommand = ({ state, dispatch }) => {
-  const contexts = state.selection.ranges.map((range) => {
-    if (!range.empty) return null;
+  if (state.readOnly) return false;
+  const owned: { line: Line; item: ListEntry }[] = [];
+  const splits = new Map<number, number>();
+  const emptied = new Set<number>();
+  for (const range of state.selection.ranges) {
+    if (!range.empty || isStrictlyInsideCode(state, range.head)) return false;
     const line = state.doc.lineAt(range.head);
     const item = listItem(line.text);
-    if (!item || range.head < line.from + item.markerEnd) return null;
-    return { line, item };
-  });
-  if (contexts.some((context) => context === null)) return false;
+    if (!item || range.head < line.from + item.markerEnd) return false;
+    owned.push({ line, item });
+    if (item.content.trim() === "") emptied.add(line.number);
+    else if (item.kind === "ordered") splits.set(line.number, (splits.get(line.number) ?? 0) + 1);
+  }
 
-  let rangeIndex = 0;
-  dispatch(
-    state.update(
-      state.changeByRange((range) => {
-        const { line, item } = contexts[rangeIndex++]!;
-        if (item.content.trim() === "") {
-          const start = line.from + item.quote.length;
-          return {
-            changes: { from: start, to: line.to },
-            range: EditorSelection.cursor(start),
-          };
-        }
+  // Ogni tratta numerata ha un solo piano, compresi più cursori sulla stessa
+  // voce. Una riga svuotata interrompe la tratta prima della rinumerazione.
+  const numbered = new Map<number, { line: Line; item: ListEntry; number: number }>();
+  for (const { line, item } of owned) {
+    if (item.kind !== "ordered" || emptied.has(line.number) || numbered.has(line.number)) continue;
+    let expected = item.number!;
+    for (let n = line.number; n <= state.doc.lines; n++) {
+      const row = n === line.number ? line : state.doc.line(n);
+      const entry = n === line.number ? item : listItem(row.text);
+      if (!entry || entry.quote !== item.quote || emptied.has(n)) break;
+      if (entry.indent.length > item.indent.length) continue;
+      if (entry.indent.length < item.indent.length || entry.kind !== "ordered") break;
+      numbered.set(n, { line: row, item: entry, number: expected });
+      expected += 1 + (splits.get(n) ?? 0);
+    }
+  }
 
-        const insert = `${state.lineBreak}${nextMarker(item)}`;
-        const changes: ChangeSpec[] = [{ from: range.head, insert }];
-        if (item.kind === "ordered") {
-          // Le voci a valle dello stesso livello scalano di uno. Le sottoliste (più
-          // indentate) si scavalcano senza toccarle; qualsiasi altra cosa — riga
-          // vuota, testo, un livello più esterno, un puntato — chiude la lista.
-          let expected = item.number! + 2;
-          for (let n = line.number + 1; n <= state.doc.lines; n++) {
-            const l = state.doc.line(n);
-            const it = listItem(l.text);
-            if (!it) break;
-            if (it.quote !== item.quote) break;
-            if (it.indent.length > item.indent.length) continue;
-            if (it.indent.length < item.indent.length || it.kind !== "ordered") break;
-            if (it.number !== expected) {
-              const numberFrom = l.from + it.quote.length + it.indent.length;
-              changes.push({
-                from: numberFrom,
-                to: numberFrom + String(it.number).length,
-                insert: String(expected),
-              });
-            }
-            expected += 1;
-          }
-        }
-        return {
-          changes,
-          range: EditorSelection.cursor(range.head + insert.length),
-        };
-      }),
-      { scrollIntoView: true, userEvent: "input" },
+  const edits: { from: number; to?: number; insert?: string }[] = [];
+  for (const { line, item, number } of numbered.values()) {
+    if (item.number === number) continue;
+    const start = item.quote.length + item.indent.length;
+    edits.push({
+      from: line.from + start,
+      to: line.from + line.text.indexOf(item.bullet, start),
+      insert: String(number),
+    });
+  }
+  const inserted = new Map<number, number>();
+  const removed = new Set<number>();
+  for (let index = 0; index < owned.length; index++) {
+    const { line, item } = owned[index];
+    if (emptied.has(line.number)) {
+      if (!removed.has(line.number)) {
+        edits.push({ from: line.from + item.quote.length, to: line.to });
+        removed.add(line.number);
+      }
+      continue;
+    }
+    const count = inserted.get(line.number) ?? 0;
+    const entry = item.kind === "ordered"
+      ? { ...item, number: numbered.get(line.number)!.number + count }
+      : item;
+    edits.push({ from: state.selection.ranges[index].head, insert: state.lineBreak + nextMarker(entry) });
+    inserted.set(line.number, count + 1);
+  }
+  edits.sort((a, b) => a.from - b.from);
+  const changes = state.changes(edits);
+  dispatch(state.update({
+    changes,
+    selection: EditorSelection.create(
+      state.selection.ranges.map((range) => EditorSelection.cursor(changes.mapPos(range.head, 1))),
+      state.selection.mainIndex,
     ),
-  );
-  return contexts.length > 0;
+    scrollIntoView: true,
+    userEvent: "input",
+  }));
+  return true;
 };
 
 /// Le righe toccate dalla selezione, una volta sola ciascuna. Un capolinea
@@ -251,9 +326,10 @@ function selectedLines(state: EditorState): Line[] {
 /// una voce. Fuori dalle liste → `false`, e il Tab cade sul binding di default
 /// (l'`indentWithTab` già montato nell'engine).
 export const indentListItem: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
   const lines = selectedLines(state)
     .map((l) => ({ line: l, item: listItem(l.text) }))
-    .filter((entry): entry is { line: Line; item: NonNullable<ReturnType<typeof listItem>> } => entry.item !== null);
+    .filter((entry): entry is { line: Line; item: ListEntry } => entry.item !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   dispatch(
@@ -278,11 +354,11 @@ function dedentWidth(text: string, unit: string): number {
 
 /// `Shift-Tab`, speculare a `indentListItem`. Una voce già a filo del margine
 /// resta com'è ma la battuta conta come gestita: de-indentare una lista non
-/// deve mai degradare nel comando di indentazione generico.
 export const dedentListItem: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
   const lines = selectedLines(state)
     .map((l) => ({ line: l, item: listItem(l.text) }))
-    .filter((entry): entry is { line: Line; item: NonNullable<ReturnType<typeof listItem>> } => entry.item !== null);
+    .filter((entry): entry is { line: Line; item: ListEntry } => entry.item !== null);
   if (lines.length === 0) return false;
   const unit = state.facet(indentUnit);
   const changes: ChangeSpec[] = [];
@@ -296,8 +372,8 @@ export const dedentListItem: StateCommand = ({ state, dispatch }) => {
 
 /// `Mod-Enter`: spunta/s-spunta le todo delle righe selezionate; una voce di
 /// lista senza checkbox la guadagna, non spuntata. Righe che non sono voci
-/// (citazioni comprese) non c'entrano: se non c'è nulla da fare → `false`.
 export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
+  if (state.readOnly) return false;
   const changes: ChangeSpec[] = [];
   for (const l of selectedLines(state)) {
     const item = listItem(l.text);
@@ -323,6 +399,7 @@ export const toggleCheckbox: StateCommand = ({ state, dispatch }) => {
 /// (una todo resta una todo); le righe vuote in mezzo si saltano.
 function setListKind(kind: "bullet" | "ordered"): StateCommand {
   return ({ state, dispatch }) => {
+    if (state.readOnly) return false;
     const lines = selectedLines(state).filter((l) => l.text.trim() !== "");
     if (lines.length === 0) return false;
     const items = lines.map((l) => listItem(l.text));

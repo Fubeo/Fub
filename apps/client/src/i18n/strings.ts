@@ -63,6 +63,14 @@ const IT = {
   // tre scorciatoie in sospeso» manda a cercare quali.
   "app.vault_keys_pending":
     "Questo vault propone {count} scorciatoie che non sono ancora attive ({commands}). Guardale nelle impostazioni, sezione Scorciatoie.",
+  // --- la schermata senza vault (A01): titolo, spiegazione, recenti ------
+  "onboarding.title": "Apri il tuo spazio di lavoro",
+  "onboarding.detail": "Un vault è una cartella di file sul tuo dispositivo",
+  "onboarding.recent": "Vault recenti",
+  "onboarding.opening": "Apertura di {path}…",
+  "app.menu": "Menu",
+  "layout.divider.sidebar": "Ridimensiona la barra laterale",
+  "layout.divider.inspector": "Ridimensiona l'ispettore",
 
   // --- le regioni, che si leggono solo navigando -------------------------
   "region.menu": "Menu applicazione",
@@ -104,6 +112,7 @@ const IT = {
 
   // --- l'inspector: i linguetta a destra --------------------------------------
   "inspector.region": "Ispettore",
+  "inspector.empty": "Nessuna vista da mostrare.",
 
   "command-search.placeholder": "Cerca nel vault…",
   "command-search.hint": "Cerca nel vault. Palette: Mod-Shift-P",
@@ -119,8 +128,10 @@ const IT = {
   "editor.task.completed": "Attività completata",
   "editor.task.pending": "Attività da completare",
   "grid.surface": "Foglio di calcolo",
+  "grid.a11y.superficie": "Foglio di calcolo",
   "preview.code_block": "Blocco di codice",
   "viewer.unavailable": "Anteprima binaria non disponibile",
+  "viewer.bytes_unavailable": "Anteprima binaria non disponibile",
   "surface.unavailable": "Nessuna superficie disponibile",
 
   // --- la ricerca --------------------------------------------------------
@@ -137,6 +148,9 @@ const IT = {
   "search.indexing": "Indicizzazione in corso…",
   "search.count": "Risultati: {count}",
   "search.unavailable": "Ricerca non disponibile",
+  "search.loading": "Ricerca in corso…",
+  "search.count_limited": "Risultati: {shown} di {total}",
+  "search.more": "Mostra altri ({shown} di {total})",
   "search.occurrence": "Occorrenza {n}",
 
   // --- la ricerca dentro la nota aperta (§21.4) --------------------------
@@ -187,6 +201,8 @@ const IT = {
   "explorer.to_folder": "Converti in cartella",
   "explorer.delete": "Elimina",
   "explorer.as_space": "Usa come spazio",
+  "explorer.move": "Sposta in…",
+  "explorer.move.hint": "Scegli la cartella di destinazione",
   "explorer.not_a_space": "Togli dagli spazi",
   "explorer.whole_vault": "Tutto il vault",
   "explorer.new_space": "Nuovo spazio da una cartella",
@@ -246,11 +262,19 @@ const IT = {
   // --- il cestino --------------------------------------------------------
   "trash.confirm_delete": "Spostare «{doc}» nel cestino?",
   "trash.delete_title": "Elimina nota",
-
   // --- il grafo e la cronologia ------------------------------------------
   "graph.count": "Grafo — Note: {note} · Collegamenti: {edges}",
   "graph.a11y.superficie": "Grafo del vault: {note} note, {edges} collegamenti",
   "graph.conf.titolo": "Fisica del grafo",
+  "graph.conf.fisica": "Simulazione",
+  "graph.conf.vista": "Vista",
+  "graph.empty": "Nessuna nota da collegare.",
+  "graph.list.label": "Note del grafo",
+  "graph.list.open": "Apri {doc}",
+  "graph.list.more": "…e altre {n} note",
+  "graph.list.empty": "Nessun nodo in questa pagina.",
+  "graph.status.selected": "Selezionato: {doc}",
+  "graph.status.none": "Nessun nodo selezionato.",
   "graph.conf.preset": "Personalità",
   "graph.conf.repulsione": "Repulsione",
   "graph.conf.lunghezzaBase": "Lunghezza molle",
@@ -281,12 +305,14 @@ const IT = {
   "graph.preset.nebulosa": "Nebulosa",
   "graph.preset.rigido": "Rigido",
   "graph.preset.custom": "Personalizzata",
-
-  // --- il centro attività e quello degli avvisi --------------------------
   "activity.title": "Attività",
   "activity.hint": "I lavori in corso",
   "activity.count": "Attività {count}",
   "activity.none": "Nessun lavoro in corso.",
+  "activity.stale": "Elenco non aggiornato: {reason}",
+  "activity.retry": "Riprova",
+  "activity.status": "In corso",
+  "activity.progress": "{done} di {total}",
   "activity.stop": "Ferma questo lavoro",
   "activity.stop_failed": "Non sono riuscito a fermare «{job}»: {reason}",
   "activity.finished": "«{job}» è finito.",
@@ -298,6 +324,8 @@ const IT = {
   "notices.clear.hint": "Dimentica gli avvisi",
   "notices.count": "Avvisi {count}",
   "notices.none": "Nessun avviso.",
+  "notices.open_problems": "Avvisi aperti: {count}",
+  "notices.watcher_off": "Rilevamento modifiche esterne assente: chiudi e riapri il vault per rileggere",
 
   // --- le impostazioni ---------------------------------------------------
   "settings.title": "Impostazioni",
@@ -500,6 +528,18 @@ const IT = {
   "commands.pane.close.desc": "Toglie questo riquadro; l'ultimo non si chiude.",
   "commands.tab.close": "Chiudi la scheda",
   "commands.tab.close.desc": "Toglie la nota da questo riquadro, salvandola se serve.",
+  "document.tab.close": "Chiudi {doc}",
+  "document.tab.list": "Elenco delle schede",
+  "document.toolbar.modes": "Modalità del riquadro",
+  "document.pane.menu": "Azioni del riquadro",
+  "document.reading.stale": "Lettura non aggiornata: ci sono modifiche non salvate",
+  "document.reading.current": "Lettura aggiornata",
+  "document.conflict.title": "Conflitto su {doc}",
+  "document.conflict.body": "Il file è cambiato su disco. Scegli quale testo tenere: nessuna scelta è automatica.",
+  "document.conflict.keep_mine": "Mantieni il mio testo",
+  "document.conflict.use_disk": "Usa la versione su disco",
+  "document.conflict.cancel": "Decidi dopo",
+  "pane.named": "Riquadro: {name}",
   // Le due vie d'uscita da un conflitto (§18.1). I titoli nominano **cosa si
   // perde** e non «risolvi»: chi legge una riga in una palette sta scegliendo
   // fra due testi, e «risolvi il conflitto» non dice quale dei due resta.
@@ -510,7 +550,6 @@ const IT = {
   "commands.doc.conflict.theirs.desc":
     "Butta le modifiche non salvate e ricarica il file come sta sul disco.",
   "panes.redraw_failed": "I riquadri non si sono ridisegnati: {reason}",
-  "pane.named": "Riquadro: {name}",
   "pane.empty": "Riquadro vuoto",
   "commands.panel.files": "Mostra i file",
   "commands.panel.files.desc": "Porta l'albero del vault nella barra laterale.",
@@ -542,7 +581,7 @@ const IT = {
   "palette.writes": "scrive · {dove}",
   "palette.irreversible": "{cosa} · non reversibile",
   "palette.plan_edits": "{doc} — Modifiche: {count}",
-
+  "palette.docs_limited": "Suggerimenti limitati ai primi {count}: scrivi il nome per intero o usa Vai alla nota",
   // --- ciò che si dice quando un pezzo non risponde ----------------------
   "panel.render_failed": "Il pannello «{panel}» non si è ridisegnato: {reason}",
   "document.overwritten":
@@ -569,6 +608,13 @@ const IT = {
     "{doc} è cambiato su disco da quando l'hai aperto: non è stato scritto niente, e le tue modifiche sono ancora qui. Scegli quale testo tenere dalla palette dei comandi.",
   "document.conflict_none": "Nessun conflitto da risolvere su questo documento.",
   "preview.open_failed": "Non riesco ad aprire «{page}»: {reason}",
+  "mermaid.diagram": "Diagramma Mermaid",
+  "mermaid.source": "Sorgente del diagramma",
+  "mermaid.edit": "Apri sorgente",
+  "mermaid.loading": "Rendering del diagramma…",
+  "mermaid.error": "Diagramma non disponibile: {reason}",
+  "mermaid.too_large": "Il diagramma supera il limite di {limit} caratteri.",
+  "mermaid.image_failed": "Impossibile visualizzare l’immagine del diagramma.",
   "kernel.listener_failed": "Un ascoltatore di eventi del kernel ha lanciato: {reason}",
   "store.listener_failed": "Un ascoltatore di «{signal}» ha lanciato: {reason}",
   // Senza la chiave, e non per pigrizia: il nome dello stato cambierebbe la
@@ -641,6 +687,13 @@ const EN: Record<Key, string> = {
     "Changes made by other apps will not be detected: close and reopen the vault to read it again.",
   "app.vault_keys_pending":
     "This vault proposes {count} shortcuts that are not active yet ({commands}). Look at them in the settings, Shortcuts section.",
+  "onboarding.title": "Open your workspace",
+  "onboarding.detail": "A vault is a folder of files on your device",
+  "onboarding.recent": "Recent vaults",
+  "onboarding.opening": "Opening {path}…",
+  "app.menu": "Menu",
+  "layout.divider.sidebar": "Resize the sidebar",
+  "layout.divider.inspector": "Resize the inspector",
 
   "region.menu": "Application menu",
   "region.window_controls": "Window controls",
@@ -681,6 +734,7 @@ const EN: Record<Key, string> = {
 
   // --- the inspector: the right tabs ------------------------------------
   "inspector.region": "Inspector",
+  "inspector.empty": "No views to show.",
 
   // --- the search trigger in the titlebar -------------------------------
   "command-search.placeholder": "Search the vault…",
@@ -696,18 +750,23 @@ const EN: Record<Key, string> = {
   "editor.task.completed": "Completed task",
   "editor.task.pending": "Incomplete task",
   "grid.surface": "Spreadsheet",
+  "grid.a11y.superficie": "Spreadsheet",
   "preview.code_block": "Code block",
   "viewer.unavailable": "Binary preview unavailable",
+  "viewer.bytes_unavailable": "Binary preview unavailable",
   "surface.unavailable": "No surface available",
 
   "search.placeholder": "Search the vault…",
   "search.hint": "Search the vault",
   "search.results": "Results",
-  "search.empty": "No results",
-  "search.create": "Create this note",
   "search.indexing": "Indexing…",
   "search.count": "Results: {count}",
   "search.unavailable": "Search unavailable",
+  "search.loading": "Searching…",
+  "search.count_limited": "Results: {shown} of {total}",
+  "search.more": "Show more ({shown} of {total})",
+  "search.empty": "No results",
+  "search.create": "Create this note",
   "search.occurrence": "Occurrence {n}",
 
   "docsearch.title": "Search in note",
@@ -741,6 +800,8 @@ const EN: Record<Key, string> = {
   "explorer.to_folder": "Turn into a folder",
   "explorer.delete": "Delete",
   "explorer.as_space": "Use as a space",
+  "explorer.move": "Move to…",
+  "explorer.move.hint": "Choose the destination folder",
   "explorer.not_a_space": "Remove from the spaces",
   "explorer.whole_vault": "The whole vault",
   "explorer.new_space": "New space from a folder",
@@ -758,6 +819,15 @@ const EN: Record<Key, string> = {
   "graph.count": "Graph — Notes: {note} · Links: {edges}",
   "graph.a11y.superficie": "Vault graph: {note} notes, {edges} links",
   "graph.conf.titolo": "Graph physics",
+  "graph.conf.fisica": "Simulation",
+  "graph.conf.vista": "View",
+  "graph.empty": "No notes to link.",
+  "graph.list.label": "Graph notes",
+  "graph.list.open": "Open {doc}",
+  "graph.list.more": "…and {n} more notes",
+  "graph.list.empty": "No nodes on this page.",
+  "graph.status.selected": "Selected: {doc}",
+  "graph.status.none": "No node selected.",
   "graph.conf.preset": "Personality",
   "graph.conf.repulsione": "Repulsion",
   "graph.conf.lunghezzaBase": "Spring length",
@@ -824,6 +894,10 @@ const EN: Record<Key, string> = {
   "activity.hint": "The jobs in progress",
   "activity.count": "Activity {count}",
   "activity.none": "No job in progress.",
+  "activity.stale": "List not updated: {reason}",
+  "activity.retry": "Retry",
+  "activity.status": "In progress",
+  "activity.progress": "{done} of {total}",
   "activity.stop": "Stop this job",
   "activity.stop_failed": "I could not stop «{job}»: {reason}",
   "activity.finished": "«{job}» is done.",
@@ -835,6 +909,8 @@ const EN: Record<Key, string> = {
   "notices.clear.hint": "Forget the notices",
   "notices.count": "Notices {count}",
   "notices.none": "No notice.",
+  "notices.open_problems": "Open problems: {count}",
+  "notices.watcher_off": "External change detection off: close and reopen the vault to reread",
 
   "settings.title": "Settings",
   "settings.tabs": "Settings sections",
@@ -994,6 +1070,17 @@ const EN: Record<Key, string> = {
   "commands.pane.close.desc": "Removes this pane; the last one does not close.",
   "commands.tab.close": "Close the tab",
   "commands.tab.close.desc": "Removes the note from this pane, saving it if needed.",
+  "document.tab.close": "Close {doc}",
+  "document.tab.list": "Tab list",
+  "document.toolbar.modes": "Pane modes",
+  "document.pane.menu": "Pane actions",
+  "document.reading.stale": "Stale reading: there are unsaved changes",
+  "document.reading.current": "Reading up to date",
+  "document.conflict.title": "Conflict on {doc}",
+  "document.conflict.body": "The file changed on disk. Choose which text to keep: nothing is automatic.",
+  "document.conflict.keep_mine": "Keep my text",
+  "document.conflict.use_disk": "Use the version on disk",
+  "document.conflict.cancel": "Decide later",
   "commands.doc.conflict.mine": "Conflict: keep my text",
   "commands.doc.conflict.mine.desc":
     "Rewrites the file with the buffer text, covering the change that arrived from outside.",
@@ -1030,7 +1117,7 @@ const EN: Record<Key, string> = {
   "palette.writes": "writes · {dove}",
   "palette.irreversible": "{cosa} · not reversible",
   "palette.plan_edits": "{doc} — Edits: {count}",
-
+  "palette.docs_limited": "Suggestions limited to the first {count}: type the full name or use Go to note",
   "panel.render_failed": "The panel «{panel}» did not redraw: {reason}",
   "document.overwritten":
     "{doc} was changed by another application while the buffer is dirty: the buffer wins and that change will be lost at the next save.",
@@ -1043,9 +1130,16 @@ const EN: Record<Key, string> = {
   "document.unsaved_blocks":
     "{doc} is not on disk: the operation stops here, because moving the file would leave the unsaved text behind.",
   "document.save_conflict":
-    "{doc} changed on disk since you opened it: nothing was written, and your changes are still here. Choose which text to keep from the command palette.",
-  "document.conflict_none": "No conflict to resolve on this document.",
-  "preview.open_failed": "Cannot open «{page}»: {reason}",
+    "{doc} changed on disk since you opened it: nothing was written, and your edits are still here. Choose which text to keep from the command palette.",
+  "document.conflict_none": "No conflict to resolve for this document.",
+  "preview.open_failed": "Cannot open “{page}”: {reason}",
+  "mermaid.diagram": "Mermaid diagram",
+  "mermaid.source": "Diagram source",
+  "mermaid.edit": "Open source",
+  "mermaid.loading": "Rendering diagram…",
+  "mermaid.error": "Diagram unavailable: {reason}",
+  "mermaid.too_large": "The diagram exceeds the limit of {limit} characters.",
+  "mermaid.image_failed": "The diagram image could not be displayed.",
   "kernel.listener_failed": "A kernel event listener threw: {reason}",
   "store.listener_failed": "A listener of «{signal}» threw: {reason}",
   "state.not_remembered": "Could not remember how you left the panels.",
@@ -1244,10 +1338,11 @@ export function applyStrings(root: ParentNode = document): void {
 ///
 /// La scocca la rifà `applicaStringhe`, e i pannelli li rifà l'host dei
 /// pannelli; restano le superfici che disegnano testo e non sono né l'una né
-/// gli altri — il pulsante degli avvisi, quello delle attività. Si iscrivono
-/// qui invece di essere chiamate da `main.ts`: chi disegna del testo sa di
-/// disegnarlo, e il punto di montaggio non deve tenere un elenco di chi lo fa
-/// — un elenco che si scopre incompleto solo cambiando lingua e guardando bene.
+/// gli altri — il pulsante degli avvisi, quello delle attività e le superfici
+/// degli editor. Si iscrivono qui invece di essere chiamate da `main.ts`: chi
+/// disegna del testo sa di disegnarlo, e il punto di montaggio non deve tenere
+/// un elenco di chi lo fa — un elenco che si scopre incompleto solo cambiando
+/// lingua e guardando bene.
 ///
 /// Torna **come smettere**, come `onKernelEvent` in `host/ipc.ts` e come
 /// `trapFocus`. Chi si iscrive deve affidare il disposer a una `Lifetime`:

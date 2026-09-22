@@ -34,6 +34,7 @@ mod common;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, CommandReach, InvokeMode, ParamKind, UndoStep};
+
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
 use fub_host::Host;
@@ -69,13 +70,13 @@ impl Vault {
 /// Un host headless col vault aperto e il ping montato.
 fn bench(v: &Vault) -> Host {
     let wasm = common::ping("");
-    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
+    let bundle =
+        Arc::new(WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica"));
 
     let host = Host::without_watcher().with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    host.mount_bundle(None, Arc::new(bundle))
-        .expect("il bundle si monta");
+    host.mount_bundle(None, bundle).expect("il bundle si monta");
     let key = fub_abi::settings::permission_key(ID, fub_abi::options::permission::READ_VAULT);
     host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
         .expect("il permesso di lettura è concesso esplicitamente");

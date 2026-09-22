@@ -66,11 +66,13 @@
 //!
 //! Il §11.1 ha dato all'host due cose che non aveva: il **livello macchina**
 //! delle impostazioni (`config`, `MachineSettings` del kernel) e il **registro
-//! dei vault** ([`VaultRegistry`]). Sono la stessa mancanza vista da due lati —
+//! dei vault** (`VaultRegistry`). Sono la stessa mancanza vista da due lati —
 //! *un elenco di vault non sta in nessun vault* — e stanno qui perché *dove* si
 //! scrive è una decisione dell'installazione, non del kernel: chi non ne ha una
 //! (un test, un e2e headless) lavora in memoria, e non tocca la cartella di
-//! configurazione di chi lo esegue.
+//! configurazione di chi lo esegue. L'host possiede il registro e distribuisce
+//! soltanto il suo [`VaultRegistryHandle`], una porta cloneable che non dipende
+//! dal lock di alcun workspace.
 //!
 //! ## Cosa NON è ancora qui
 //!
@@ -122,4 +124,4 @@ pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, SnapshotHostError, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
 pub use theme::{ThemeInfo, ThemePayload};
-pub use vaults::{VaultEntry, VaultRegistry};
+pub use vaults::{VaultEntry, VaultRegistry, VaultRegistryHandle};

@@ -60,7 +60,7 @@ un percorso obsoleto o un numero divergente fanno fallire la CI.
 
 | Schema | Dove | Versione | Contenuto |
 |---|---|---:|---|
-| registro dei vault | [`crates/fub-host/src/vaults.rs:44`](../../crates/fub-host/src/vaults.rs) | 1 | vault conosciuti dalla macchina |
+| registro dei vault | [`crates/fub-host/src/vaults.rs:49`](../../crates/fub-host/src/vaults.rs) | 1 | vault conosciuti dalla macchina |
 | organizzazione | [`crates/fub-kernel/src/organization.rs:78`](../../crates/fub-kernel/src/organization.rs) | 1 | albero, icone, spazi e voci appuntate |
 | stato di vista | [`crates/fub-kernel/src/viewstate.rs:57`](../../crates/fub-kernel/src/viewstate.rs) | 1 | posizione e stato per esemplare di vista |
 | anagrafe | [`crates/fub-kernel/src/entries.rs:147`](../../crates/fub-kernel/src/entries.rs) | 5 | metadati indicizzati delle voci |

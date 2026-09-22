@@ -18,12 +18,12 @@ import { vaultStatus, vaultEntries } from "./host/query";
 import { forwardNotice, startKernelRouter } from "./state/kernel";
 import { mountLocale } from "./state/locale";
 import { loadOrganization } from "./state/organization";
-import { emit, loadActiveSpace, loadExpanded, state } from "./state/store";
+import { emit, loadActiveSpace, loadExpanded, on, state } from "./state/store";
 import { loadLayout, activeDoc } from "./state/layout";
 import { loadCommandSpecs, beforeNote } from "./state/vault";
 import { $ } from "./ui/dom";
 import { applyIntent } from "./ui/intents";
-import { listenForFailures, mountNotifications, notify } from "./ui/notify";
+import { listenForFailures, mountNotifications, notify, setWatcherOff } from "./ui/notify";
 import { openCommandPalette, startCommand } from "./ui/palette";
 import {
   allCommands,
@@ -40,6 +40,7 @@ import { mountPanelHost, refreshAllPanels } from "./ui/panel-host";
 import { mountDeclaredViews, mountViewInvalidation } from "./ui/views";
 import { mountTitlebar } from "./ui/titlebar";
 import { mountAppMenu } from "./ui/app-menu";
+import { mountWebviewFocusMonitor } from "./ui/node";
 import { mountRail, syncRail } from "./panels/rail";
 import { mountStrings, t } from "./i18n/strings";
 import { mountActivity } from "./panels/activity";
@@ -62,6 +63,299 @@ import { mountQuickSwitcher } from "./panels/quick-switcher";
 import { configurePreview } from "./panels/preview";
 import { clearSearch, mountSearch, searchFor } from "./panels/search";
 import { errorText } from "./host/errors";
+/// Schermata senza vault + layout adattivo (P2/A01/sezione 5): composizione
+/// sola, nessuna logica di dominio. Stato vault da `state.vaultRoot`; recenti
+/// reali da `api.knownVaults`; apertura con stato/errore e Riprova/Scegli
+/// cartella; picker annullato = stato invariato. Drawer singoli con titolo
+/// (landmark esistenti), chiusura, Esc, focus restore; preferenza vs
+/// adattamento separati; divisori separator con tastiera. Ordine
+/// mountDeclaredViews/synchronize/syncRail riprodotto, mai rimosso.
+function mountAdaptiveShell(): void {
+  const layout = document.getElementById("layout");
+  const sidebar = document.getElementById("sidebar");
+  const inspector = document.getElementById("right-pane");
+  const onboarding = document.getElementById("onboarding");
+  if (!layout || !sidebar || !inspector || !onboarding) return;
+  const openBtn = document.getElementById("onboarding-open");
+  const settingsBtn = document.getElementById("onboarding-settings");
+  const status = document.getElementById("onboarding-status");
+  const errorBox = document.getElementById("onboarding-error");
+  const errorTextEl = document.getElementById("onboarding-error-text");
+  const retryBtn = document.getElementById("onboarding-retry");
+  const chooseBtn = document.getElementById("onboarding-choose");
+  const recentWrap = document.getElementById("onboarding-recent-wrap");
+  const recentList = document.getElementById("onboarding-recent");
+  const sidebarScrim = document.getElementById("sidebar-scrim");
+  const inspectorScrim = document.getElementById("inspector-scrim");
+  const divSidebar = document.getElementById("divider-sidebar");
+  const divInspector = document.getElementById("divider-inspector");
+  let opening = false;
+  let lastDir: string | null = null;
+  let lastTrigger: HTMLElement | null = null;
+  // Preferenze esplicite (L01): mai sovrascritte dall'adattamento.
+  let sidebarPref: boolean | null = null;
+  let inspectorPref: boolean | null = null;
+  try {
+    const rawSidebar = localStorage.getItem("fub.layout.sidebar");
+    sidebarPref = rawSidebar === "1" ? true : rawSidebar === "0" ? false : null;
+    const rawInspector = localStorage.getItem("fub.layout.inspector");
+    inspectorPref = rawInspector === "1" ? true : rawInspector === "0" ? false : null;
+  } catch {
+    sidebarPref = null;
+    inspectorPref = null;
+  }
+  const hasVault = (): boolean => state.vaultRoot !== "";
+  const closeDrawers = (restore = true): void => {
+    layout.classList.remove("drawer-sidebar-open", "drawer-inspector-open");
+    if (sidebarScrim) sidebarScrim.hidden = true;
+    if (inspectorScrim) inspectorScrim.hidden = true;
+    if (restore && lastTrigger?.isConnected) lastTrigger.focus();
+    lastTrigger = null;
+  };
+  // Un solo drawer laterale aperto per volta in modalità compatta (L02).
+  // La chiusura ripristina il focus al trigger (C04); Esc chiude (C03).
+  // I trigger espliciti restano ai comandi/pulsanti esistenti; qui solo
+  // chiusura singola, Esc, scrim e restore.
+  const applyAdaptive = (): void => {
+    const width = globalThis.window.innerWidth;
+    layout.classList.toggle("layout-inspector-overlay", width >= 960 && width < 1200);
+    layout.classList.toggle("layout-compact", width < 960);
+    const inspectorOpen = inspectorPref ?? width >= 1200;
+    const sidebarOpen = sidebarPref ?? width >= 960;
+    sidebar.hidden = !sidebarOpen && !layout.classList.contains("drawer-sidebar-open");
+    inspector.hidden = !inspectorOpen && !layout.classList.contains("drawer-inspector-open");
+    if (divSidebar) divSidebar.hidden = sidebar.hidden;
+    if (divInspector) divInspector.hidden = inspector.hidden;
+    if (width >= 1200) closeDrawers(false);
+  };
+  const mountDivider = (
+    divider: HTMLElement | null,
+    target: HTMLElement,
+    direction: 1 | -1,
+    min: number,
+    max: number,
+  ): void => {
+    if (!divider) return;
+    let width = target.offsetWidth || min;
+    let drag: { pointer: number; x: number; width: number; scale: number } | null = null;
+    divider.setAttribute("aria-controls", target.id);
+    divider.setAttribute("aria-valuemin", String(min));
+    divider.setAttribute("aria-valuemax", String(max));
+    const publish = (value: number): void => {
+      width = value;
+      divider.setAttribute("aria-valuenow", String(Math.round(value)));
+      divider.setAttribute("aria-valuetext", `${Math.round(value)} px`);
+    };
+    const resize = (value: number): void => {
+      const next = Math.min(max, Math.max(min, Math.round(value)));
+      target.style.flexBasis = `${next}px`;
+      target.style.width = `${next}px`;
+      publish(next);
+    };
+    const endDrag = (): void => {
+      const pointer = drag?.pointer;
+      drag = null;
+      if (pointer !== undefined && divider.hasPointerCapture(pointer)) {
+        divider.releasePointerCapture(pointer);
+      }
+    };
+    const endPointer = (e: PointerEvent): void => {
+      if (drag?.pointer === e.pointerId) endDrag();
+    };
+    const observer = new ResizeObserver(() => {
+      const actual = target.offsetWidth;
+      if (actual > 0) publish(actual);
+    });
+    observer.observe(target);
+    publish(width);
+    pageWindowLifetime.listen(divider, "keydown", (e) => {
+      const next =
+        e.key === "ArrowLeft" ? width - direction * 16 :
+        e.key === "ArrowRight" ? width + direction * 16 :
+        e.key === "Home" ? min :
+        e.key === "End" ? max : null;
+      if (next === null) return;
+      e.preventDefault();
+      resize(next);
+    });
+    pageWindowLifetime.listen(divider, "pointerdown", (e) => {
+      if (e.button !== 0 || drag) return;
+      e.preventDefault();
+      divider.focus({ preventScroll: true });
+      const scale = target.getBoundingClientRect().width / width || 1;
+      drag = { pointer: e.pointerId, x: e.clientX, width, scale };
+      divider.setPointerCapture(e.pointerId);
+    });
+    pageWindowLifetime.listen(divider, "pointermove", (e) => {
+      if (drag?.pointer === e.pointerId) {
+        resize(drag.width + direction * (e.clientX - drag.x) / drag.scale);
+      }
+    });
+    pageWindowLifetime.listen(divider, "pointerup", endPointer);
+    pageWindowLifetime.listen(divider, "pointercancel", endPointer);
+    pageWindowLifetime.listen(divider, "lostpointercapture", endPointer);
+    pageWindowLifetime.listen(globalThis.window, "blur", endDrag);
+    pageWindowLifetime.add(() => {
+      endDrag();
+      observer.disconnect();
+    });
+  };
+  const setOpening = (dir: string | null): void => {
+    if (!status) return;
+    if (dir) {
+      status.hidden = false;
+      status.textContent = t("onboarding.opening", { path: dir });
+    } else {
+      status.hidden = true;
+      status.textContent = "";
+    }
+  };
+  const setError = (reason: string | null): void => {
+    if (!errorBox || !errorTextEl) return;
+    if (!reason) {
+      errorBox.hidden = true;
+      errorTextEl.textContent = "";
+      return;
+    }
+    errorBox.hidden = false;
+    errorTextEl.textContent = reason;
+  };
+  const syncOnboarding = (): void => {
+    const empty = !hasVault();
+    onboarding.hidden = !empty;
+    document.getElementById("panes")?.classList.toggle("onboarding-visible", empty);
+    void refreshRecents();
+    syncContextAvailability();
+  };
+  const refreshRecents = async (): Promise<void> => {
+    if (!recentWrap || !recentList) return;
+    let vaults: Array<{ root: string; name: string; icon?: string | null }> = [];
+    try {
+      vaults = await api.knownVaults();
+    } catch {
+      vaults = [];
+    }
+    // Solo se reali da host: mai lista finta (U02).
+    recentList.replaceChildren();
+    if (vaults.length === 0 || hasVault()) {
+      recentWrap.hidden = true;
+      return;
+    }
+    recentWrap.hidden = false;
+    for (const vault of vaults.slice(0, 8)) {
+      const item = document.createElement("li");
+      const name = vault.name || vault.root.split(/[\\/]/).filter(Boolean).pop() || vault.root;
+      const open = document.createElement("button");
+      open.type = "button";
+      open.className = "link-button";
+      open.textContent = `${vault.icon ?? ""} ${name}`.trim();
+      open.setAttribute("aria-label", `${name} — ${vault.root}`);
+      open.addEventListener("click", () => void openVaultFlow(vault.root));
+      const path = document.createElement("div");
+      path.className = "muted";
+      path.textContent = vault.root;
+      item.append(open, path);
+      recentList.append(item);
+    }
+  };
+  const syncContextAvailability = (): void => {
+    // U03: senza contesto vault, Nuova nota/ricerca/grafo non devono sembrare
+    // funzionanti; apertura/impostazioni/aiuto sempre disponibili. Solo DOM
+    // (aria-disabled + intercetto), mai edit dei pannelli altrui.
+    const empty = !hasVault();
+    const searchInput = document.getElementById("search-input") as HTMLInputElement | null;
+    if (searchInput) {
+      searchInput.disabled = empty;
+      searchInput.setAttribute("aria-disabled", String(empty));
+    }
+    const newNote = document.getElementById("new-note");
+    if (newNote) {
+      newNote.setAttribute("aria-disabled", String(empty));
+      (newNote as HTMLButtonElement).disabled = empty;
+    }
+    const graph = document.getElementById("show-graph") as HTMLButtonElement | null;
+    if (graph) {
+      graph.disabled = empty;
+      graph.setAttribute("aria-disabled", String(empty));
+    }
+    const trigger = document.getElementById("command-search");
+    if (trigger) {
+      trigger.setAttribute("aria-disabled", String(empty));
+      (trigger as HTMLButtonElement).disabled = empty;
+    }
+  };
+  const guardContext = (e: Event): void => {
+    if (!hasVault()) {
+      e.preventDefault();
+      e.stopPropagation();
+      syncOnboarding();
+    }
+  };
+  const openVaultFlow = async (dir: string): Promise<void> => {
+    if (opening) return;
+    opening = true;
+    lastDir = dir;
+    setError(null);
+    setOpening(dir);
+    try {
+      await openVaultPath(dir);
+      setOpening(null);
+      syncOnboarding();
+      applyAdaptive();
+    } catch (e) {
+      setOpening(null);
+      setError(errorText(e));
+    } finally {
+      opening = false;
+    }
+  };
+  const onPick = async (): Promise<void> => {
+    if (opening) return;
+    // Picker annullato = stato invariato (U04): pickFolder null non tocca nulla.
+    const dir = await pickFolder();
+    if (!dir) return;
+    await openVaultFlow(dir);
+  };
+  pageWindowLifetime.listen(globalThis.window, "resize", applyAdaptive);
+  pageWindowLifetime.listen(document, "keydown", (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      if (
+        layout.classList.contains("drawer-sidebar-open") ||
+        layout.classList.contains("drawer-inspector-open")
+      ) {
+        e.preventDefault();
+        closeDrawers(true);
+      }
+    }
+  });
+  if (sidebarScrim) pageWindowLifetime.listen(sidebarScrim, "click", () => closeDrawers(true));
+  if (inspectorScrim) pageWindowLifetime.listen(inspectorScrim, "click", () => closeDrawers(true));
+  mountDivider(divSidebar, sidebar, 1, 200, 360);
+  mountDivider(divInspector, inspector, -1, 240, 400);
+  if (openBtn) pageWindowLifetime.listen(openBtn, "click", () => void onPick());
+  if (chooseBtn) pageWindowLifetime.listen(chooseBtn, "click", () => void onPick());
+  if (retryBtn)
+    pageWindowLifetime.listen(retryBtn, "click", () => {
+      if (lastDir) void openVaultFlow(lastDir);
+      else void onPick();
+    });
+  if (settingsBtn)
+    pageWindowLifetime.listen(settingsBtn, "click", () =>
+      document.getElementById("open-settings")?.click(),
+    );
+  const graphBtn = document.getElementById("show-graph");
+  if (graphBtn) pageWindowLifetime.listen(graphBtn, "click", guardContext, { capture: true });
+  const searchInput = document.getElementById("search-input");
+  if (searchInput) pageWindowLifetime.listen(searchInput, "click", guardContext, { capture: true });
+  // R07/R08 lato shell: non ereditare query/selezione tra vault è di
+  // search.ts/sidebar.ts (clearSearch/showPanel); qui solo l'ordine invariato
+  // mountDeclaredViews → synchronize → syncRail, già in openVaultPath.
+  applyAdaptive();
+  syncOnboarding();
+  pageWindowLifetime.add(on("vault", () => syncOnboarding()));
+  pageWindowLifetime.add(on("vault", () => applyAdaptive()));
+  void refreshRecents();
+}
 
 const vaultPathEl = $("#vault-path");
 
@@ -110,8 +404,6 @@ function refreshTitlebarShortcuts(): void {
   const targets: Array<[string, string]> = [
     ["shell.palette", "open-palette-key"],
     ["shell.panel.search", "command-search-key"],
-    ["shell.mode.live", "mode-live-key"],
-    ["shell.mode.reading", "mode-reading-key"],
   ];
   for (const [id, elementId] of targets) {
     const key = document.getElementById(elementId);
@@ -154,7 +446,7 @@ async function init(): Promise<Teardown> {
   // prima dei pannelli perché è il chrome — la cornice che c'è prima del
   // contenuto.
   mountTitlebar(pageWindowLifetime);
-
+  mountWebviewFocusMonitor(pageWindowLifetime);
   // I tre collegamenti iniettati, e la ragione per cui lo sono: il pannello del
   // documento mostra l'anteprima (in Lettura) e l'anteprima apre i documenti;
   // il pannello del documento manda a cercare un tag e la ricerca apre i
@@ -342,6 +634,10 @@ async function init(): Promise<Teardown> {
   // che si sa quale fosse. Senza vault iniziale si disegna comunque il layout di
   // default, perché la finestra vuota deve essere in uno stato coerente — un
   // riquadro, vuoto, col fuoco — e non in nessuno stato.
+  // La shell adattiva (P2) si monta prima di sapere se un vault c'è: mostra
+  // l'onboarding a vault vuoto e applica i breakpoint, senza toccare l'ordine
+  // di apertura qui sotto.
+  mountAdaptiveShell();
   if (initial) await openVaultPath(initial, alive);
   else await synchronize();
   if (!alive()) return teardownPageWindow;
@@ -361,6 +657,9 @@ async function openVaultPath(
   if (!alive()) return;
   const info = await api.openVault(dir);
   if (!alive()) return;
+  // Il segnale watcher è del vault che si sta aprendo: azzerarlo subito, poi
+  // `warnIfUnwatched` lo rialza col suo stato (I04, mai verità del vault prima).
+  setWatcherOff(false);
   vaultPathEl.textContent = info.root;
   // «Questo vault si è aperto a metà» (§15.7): la riga che il contratto teneva
   // in serbo per una superficie che non c'era. Ogni voce esce anche come evento
@@ -528,6 +827,7 @@ async function warnIfVaultProvidesKeys(): Promise<void> {
 async function warnIfUnwatched(): Promise<void> {
   try {
     const state = await vaultStatus();
+    setWatcherOff(!state.watching);
     if (!state.watching) {
       notify(t("app.external_changes"));
     }

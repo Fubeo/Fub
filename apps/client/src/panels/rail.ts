@@ -21,7 +21,7 @@
 // riempito `#views-left`: la rail legge cosa c'è e aggiunge i bottoni.
 import { $ } from "../ui/dom";
 import { iconEl } from "../ui/icons";
-import { showPanel } from "./sidebar";
+import { lastShownPanel, showPanel } from "./sidebar";
 import { t, onLanguage } from "../i18n/strings";
 import type { Teardown } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
@@ -105,9 +105,11 @@ export function syncRail(): void {
     btn.addEventListener("click", () => showPanel(viewId));
     ribbon.append(btn);
   }
-  // Una sola superficie a sinistra: i file. Le view dichiarate restano
-  // raggiungibili dalla rail, nascoste finché non le si chiede.
-  showPanel("files");
+  // R07: una view ancora valida sopravvive a refresh/cambio vault — si
+  // rimostra l'ultimo pannello chiesto se esiste ancora, i file altrimenti.
+  // Mai un azzeramento arbitrario: se l'utente stava su una view dichiarata
+  // rimossa, `showPanel` ricade sui file da sé.
+  showPanel(lastShownPanel());
 }
 
 /// Crea un bottone rail: icona + aria-label + title, classe `.rail-btn`.

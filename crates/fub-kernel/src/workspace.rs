@@ -2895,7 +2895,7 @@ impl PreparedTimerCursors {
             .collect())
     }
 
-    /// Atomically update one persisted cursor.
+    /// Atomically advance one persisted cursor without accepting stale updates.
     pub fn write(self, timer: &str, cursor: CivilTime) -> std::result::Result<(), PluginError> {
         let path = self.path;
         self.storage
@@ -2905,6 +2905,12 @@ impl PreparedTimerCursors {
                     .transpose()
                     .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
                     .unwrap_or_default();
+                if stored
+                    .get(timer)
+                    .is_some_and(|current| cursor <= CivilTime::from(*current))
+                {
+                    return Ok(None);
+                }
                 stored.insert(timer.to_owned(), cursor.into());
                 serde_json::to_vec_pretty(&stored)
                     .map(Some)
@@ -11858,6 +11864,12 @@ impl Workspace {
     }
 
     /// Aggiorna atomicamente il cursore di un timer.
+    ///
+    /// Il valore durevole è un cursore cronologico: due worker possono avere
+    /// preso fotografie in ordine diverso da quello in cui arrivano alla
+    /// scrittura, ma una fotografia più vecchia non può riportare indietro
+    /// quella già persistita. Il confronto avviene dentro l'update atomico,
+    /// dopo la rilettura sotto il lock dello storage.
     pub fn set_timer_cursor(
         &self,
         owner: &str,

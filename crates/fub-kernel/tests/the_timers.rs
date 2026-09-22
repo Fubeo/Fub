@@ -395,6 +395,24 @@ fn a_timer_cursor_survives_workspace_reopen() {
             .copied(),
         Some(cursor)
     );
+    let stale = CivilTime {
+        year: 2026,
+        month: 1,
+        day: 14,
+        hour: 9,
+        minute: 0,
+        second: 0,
+    };
+    ws.set_timer_cursor(ACME, "digest", stale)
+        .expect("stale cursor write is harmless");
+    assert_eq!(
+        ws.timer_cursors(ACME)
+            .expect("cursor read after stale update")
+            .get("digest")
+            .copied(),
+        Some(cursor),
+        "a stale cursor update must not regress the durable cursor"
+    );
     drop(ws);
 
     let root = Utf8PathBuf::from_path_buf(dir.path().to_path_buf()).expect("utf8");

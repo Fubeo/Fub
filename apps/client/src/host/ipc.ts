@@ -198,15 +198,15 @@ export const api = {
   // Azzerare non è scrivere il default: la chiave **ricade** al livello sotto,
   // che è il default solo se non c'era niente in mezzo.
   resetSetting: (key: string) => invoke<void>("reset_setting", { key }),
+  // L'inventario dei temi installati è già filtrato dal backend ai bundle
+  // caricabili; il path resta un dettaglio dell'host. Il fascio CSS arriva
+  // soltanto per la luce che la shell sta per montare.
+  listThemes: () => invoke<ThemeInfo[]>("list_themes"),
+  readTheme: (id: string, light: ThemeLight) =>
+    invoke<ThemePayload>("read_theme", { id, light }),
   // Chi questo host sa montare, e chi è acceso: non è `VaultInfo.plugins`, che
   // elenca chi è dichiarato nel kernel — un componente spento non lo è.
   listBundles: () => invoke<BundleInfo[]>("list_bundles"),
-  // Elenca soltanto i temi installati i cui file dichiarati sono leggibili.
-  listThemes: () => invoke<ThemeInfo[]>("list_themes"),
-  // La shell nomina id e luce tipizzati; il backend risolve il payload dal
-  // proprio inventario, quindi nessun path attraversa il confine.
-  readTheme: (id: string, light: ThemeLight) =>
-    invoke<ThemePayload>("read_theme", { id, light }),
   // Ciò che torna sono gli errori dello **spegnimento**, interi: la specie e
   // non solo la frase (decisione 0041), che è l'unica cosa su cui questa shell
   // può ramificare.

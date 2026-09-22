@@ -160,6 +160,22 @@ describe("FormulaProfile", () => {
     engine.destroy();
   });
 
+  it("non riscrive il buffer autorevole durante il sync del profilo single-line", () => {
+    const { engine, view } = mounted(createFormulaProfile());
+    try {
+      engine.setDoc("=A1");
+      view().dispatch({ changes: { from: 3, insert: "+B2" }, userEvent: "input.type" });
+      engine.syncDoc("=A1+B2\n+C3");
+      expect(engine.getDoc()).toBe("=A1+B2\n+C3");
+      expect(engine.undo()).toBe(true);
+      expect(engine.getDoc()).toBe("=A1\n+C3");
+      expect(engine.redo()).toBe(true);
+      expect(engine.getDoc()).toBe("=A1+B2\n+C3");
+    } finally {
+      engine.destroy();
+    }
+  });
+
   it("può disabilitare la politica single-line senza cambiare il completamento o le decisioni", () => {
     const commit = vi.fn();
     const profile = createFormulaProfile({ singleLine: false, onCommit: commit });

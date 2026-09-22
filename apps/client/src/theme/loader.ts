@@ -75,6 +75,7 @@ export interface ThemeBundle {
   readonly manifest: ThemeBundleManifest;
   readonly sheet: string;
   readonly skin?: string;
+  /** Asset names are validated before mount; their bytes stay behind the host boundary. */
   readonly assets: Readonly<Record<string, unknown>>;
 }
 

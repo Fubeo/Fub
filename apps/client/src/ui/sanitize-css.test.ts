@@ -37,9 +37,10 @@ describe("sanitizeThemeCss", () => {
       b\\6f dy { color: red; }
     `;
     const violations = themeCssViolations(css, POLICY);
-    expect(violations.map(({ code }) => code)).toEqual(["remote-url", "selector-token"]);
-    expect(violations[0]?.detail).toContain("https://evil.test/x");
-    expect(violations[1]?.detail).toContain("body");
+    expect(violations.map(({ code }) => code)).toEqual(["disallowed-property", "remote-url", "selector-token"]);
+    expect(violations[0]?.detail).toContain("custom property");
+    expect(violations[1]?.detail).toContain("https://evil.test/x");
+    expect(violations[2]?.detail).toContain("body");
   });
 
   it("un CSS sintatticamente rotto è un rifiuto strutturato", () => {
@@ -131,6 +132,48 @@ describe("image-set URL guarding", () => {
       content: "image-set(https://evil.test/not-a-resource 1x)";
     }`;
     expect(themeCssViolations(content, POLICY)).toEqual([]);
+  });
+});
+
+describe("allowlist CSS", () => {
+  it("applica il default-deny anche a funzioni annidate", () => {
+    const css = `:root { --text: #fff; --bg: #000; } .brand {
+      color: var(--text, color-mix(in srgb, red, blue));
+    }`;
+    expect(themeCssViolations(css, POLICY).map(({ code }) => code)).toEqual(["disallowed-value"]);
+    expect(themeCssViolations(css, POLICY)[0]?.detail).toContain("color-mix");
+  });
+
+  it("ammette custom property canoniche ma non alias ottenuti con casing o escape", () => {
+    const valid = `:root { --text: rgb(255, 255, 255); --bg: #000; color: var( --text ); }`;
+    expect(themeCssViolations(valid, POLICY)).toEqual([]);
+
+    const invalid = `:root { --Text: #fff; --t\\65 xt: #fff; --bg: #000; }`;
+    expect(themeCssViolations(invalid, POLICY).map(({ code }) => code)).toEqual([
+      "disallowed-property",
+      "disallowed-property",
+    ]);
+  });
+
+  it("normalizza casing e whitespace solo per proprietà CSS, non per token", () => {
+    const css = `:root { --text: #fff; --bg: #000; }
+      .brand {  CoLoR :  var ( --text ) ; }`;
+    expect(sanitizeThemeCss(css, POLICY)).toBe(css);
+  });
+
+  it("applica la matrice at-rule distinta tra foglio e pelle", () => {
+    const sheet = `:root { --text: #fff; --bg: #000; }
+      @media (prefers-reduced-motion: reduce) { .brand { color: var(--text); } }
+      @supports (display: grid) { .brand { color: var(--text); } }
+      @keyframes pulse { from { opacity: 0; } to { opacity: 1; } }`;
+    expect(themeCssViolations(sheet, POLICY).map(({ code }) => code)).toEqual(["at-rule", "at-rule"]);
+
+    const skin = `@media (prefers-reduced-motion: reduce) { .brand { color: var(--text); } }
+      @keyframes pulse { from { opacity: 0; } to { opacity: 1; } }
+      @layer theme { .brand { color: var(--text); } }`;
+    expect(themeCssViolations(skin, { ...POLICY, kind: "skin", requiredRoles: [] }).map(({ code }) => code)).toEqual([
+      "at-rule",
+    ]);
   });
 });
 

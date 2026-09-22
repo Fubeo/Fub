@@ -103,7 +103,7 @@ export function focusableElements(root: HTMLElement): HTMLElement[] {
   const selector =
     'a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])';
   return Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
-    (el) => !el.hasAttribute("disabled") && el.offsetParent !== null,
+    (el) => el.tabIndex >= 0 && !el.hasAttribute("disabled") && el.offsetParent !== null,
   );
 }
 

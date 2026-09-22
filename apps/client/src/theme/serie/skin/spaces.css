@@ -7,8 +7,8 @@
   margin: var(--space-4) var(--space-1) var(--space-1);
 }
 .space-chip {
-  width: 30px;
-  height: 30px;
+  width: var(--space-9);
+  height: var(--space-9);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -22,8 +22,8 @@
 }
 /* Quale spazio è acceso lo diceva solo il contorno, e a nessun altro. */
 .space-chip[aria-pressed="true"] {
-  background: var(--bg-hover);
-  outline: 2px solid var(--accent);
+  background: var(--bg-active);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .space-chip.add {
   color: var(--muted);

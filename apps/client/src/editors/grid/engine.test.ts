@@ -447,6 +447,24 @@ describe("GridEngine", () => {
     expect(engine.selection().focus).toEqual({ row: 1, column: 2 });
     engine.destroy();
   });
+  it("lascia uscire Tab ai bordi senza intrappolare il fuoco", () => {
+    const { engine, viewport } = mounted(undefined, workbook(1, 2));
+    expect(engine.selection().focus).toEqual({ row: 0, column: 0 });
+    const backward = new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true, cancelable: true });
+    viewport.dispatchEvent(backward);
+    expect(backward.defaultPrevented).toBe(false);
+    expect(engine.selection().focus).toEqual({ row: 0, column: 0 });
+    const forward = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    viewport.dispatchEvent(forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(engine.selection().focus).toEqual({ row: 0, column: 1 });
+    const exit = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    viewport.dispatchEvent(exit);
+    expect(exit.defaultPrevented).toBe(false);
+    expect(engine.selection().focus).toEqual({ row: 0, column: 1 });
+    engine.destroy();
+  });
+
 
   it("non espone un discendente attivo quando ogni asse è nascosto", () => {
     const { engine, host, viewport, changes } = mounted();

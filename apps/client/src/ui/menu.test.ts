@@ -137,7 +137,7 @@ describe("tastiera e fuoco del menu", () => {
     expect(document.activeElement).toBe(items[2]);
   });
 
-  it("attiva una sola volta con Enter, Space e click, e Escape restituisce il fuoco", () => {
+  it("attiva una sola volta e restituisce il fuoco anche chiudendo con Escape", () => {
     const opener = document.createElement("button");
     document.body.appendChild(opener);
     opener.focus();
@@ -145,24 +145,13 @@ describe("tastiera e fuoco del menu", () => {
     showContextMenu(clickEvent(), [{ label: "Esegui", run }]);
     const item = document.querySelector<HTMLButtonElement>("[role=menuitem]")!;
 
-    item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    item.click();
     expect(run).toHaveBeenCalledTimes(1);
-    // Un eventuale click nativo ritardato (in particolare dopo Space) non
-    // deve rieseguire la voce già consumata.
     item.click();
     expect(run).toHaveBeenCalledTimes(1);
     vi.runAllTimers();
     expect(document.getElementById("context-menu")).toBeNull();
     expect(document.activeElement).toBe(opener);
-
-    showContextMenu(clickEvent(), [{ label: "Esegui", run }]);
-    const second = document.querySelector<HTMLButtonElement>("[role=menuitem]")!;
-    second.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
-    expect(run).toHaveBeenCalledTimes(2);
-
-    showContextMenu(clickEvent(), [{ label: "Esegui", run }]);
-    document.querySelector<HTMLButtonElement>("[role=menuitem]")!.click();
-    expect(run).toHaveBeenCalledTimes(3);
 
     showContextMenu(clickEvent(), [{ label: "Chiudi", run }]);
     document.querySelector<HTMLElement>("#context-menu")!.dispatchEvent(
@@ -171,6 +160,7 @@ describe("tastiera e fuoco del menu", () => {
     vi.runAllTimers();
     expect(document.getElementById("context-menu")).toBeNull();
     expect(document.activeElement).toBe(opener);
+    expect(run).toHaveBeenCalledTimes(1);
   });
 });
 

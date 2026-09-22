@@ -1,0 +1,17 @@
+# Fixture minimale: espone una porta EventHandler inbound che il runtime WASM
+# corrente non risolve né registra.
+[package]
+name = "event-handler-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"

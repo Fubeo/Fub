@@ -176,7 +176,6 @@ const READ_OPS: [(ReadOp, &str); 6] = [
     (ReadOp::Search, "query_index text"),
     (ReadOp::Preview, "render_preview"),
 ];
-
 impl ReadOp {
     fn execute(self, host: &Host, the: u64) -> Result<(), PluginError> {
         match self {
@@ -250,7 +249,6 @@ fn measure(
     if mix.is_empty() {
         return Err(io::Error::other("read measurement mix must not be empty").into());
     }
-
     let stop = Arc::new(AtomicBool::new(false));
     let gate = Arc::new(mode.gate());
     let start = Instant::now();
@@ -472,7 +470,6 @@ fn main() -> BenchmarkResult<()> {
     writeln!(output, "index ready: wait_indexed completed")?;
 
     let mut read_failures = 0u64;
-
     // --- 1. per tipo di lettura -------------------------------------------
     writeln!(
         output,

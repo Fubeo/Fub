@@ -26,7 +26,7 @@ import type { Quadtree } from "./sim/quadtree";
 import { QuadtreePool, build } from "./sim/quadtree";
 import { DT_MAX, calculateTier, step, type EngineState } from "./sim/engine";
 import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
-import { createCameraState } from "./render/camera";
+import { createCameraState, fit } from "./render/camera";
 import type { Painter, DrawState } from "./render/painter";
 import { createPainter } from "./render/painter";
 import type { Interaction, InteractionOptions } from "./interaction";
@@ -90,6 +90,10 @@ export interface Chart {
   /// creazione, perché il grafico non conosce `onAction`. Al click su un nodo,
   /// l'interazione lo chiama.
   open: (id: string) => void;
+  /// Osservatore del nodo selezionato da tastiera/click (U46): l'orchestratore
+  /// shell lo assegna dopo la creazione — il grafico non conosce il DOM che
+  /// lo mostra. `-1` = nessuna selezione. Default no-op.
+  onFocusChange: (index: number) => void;
   /// Sostituisce l'insieme delle note aperte (per il quartiere acceso). Un
   /// cambio reale ridisegna una volta; un no-change non fa nulla.
   setOpenDocuments(openDocuments: ReadonlySet<string>): void;
@@ -104,6 +108,15 @@ export interface Chart {
   unpinNodes(): void;
   /// L'aria del canvas (role/aria-label) per la tastiera.
   setA11yLabel(text: string): void;
+  /// Seleziona il nodo i-esimo dagli stessi dati della simulazione (U46):
+  /// delega all'interazione e notifica `onFocusChange`. Fuori indice = no-op.
+  focusNode(index: number): void;
+  /// L'indice selezionato adesso, −1 se nessuno. Lettura per l'elenco paginato.
+  focusedNode(): number;
+  /// L'id all'indice i, o null se fuori indice. Lettura per l'elenco paginato.
+  nodeId(index: number): string | null;
+  /// Quanti nodi ha la struttura (0 prima del mount). Lettura per l'elenco paginato.
+  nodeCount(): number;
 }
 
 export function createChart(options: ChartOptions = {}): Chart {
@@ -178,6 +191,13 @@ export function createChart(options: ChartOptions = {}): Chart {
   /// L'apertura nota: assegnabile dall'esterno. Default no-op, così `mount`
   /// prima dell'assegnamento non esplode.
   let openExternal: (id: string) => void = () => {};
+  /// Osservatore della selezione (U46): lo assegna l'orchestratore shell dopo
+  /// la creazione. Default no-op.
+  let focusExternal: (index: number) => void = () => {};
+  /// Ultimo indice notificato a `focusExternal`: l'interazione può cambiare
+  /// la selezione da sola (click, frecce, Esc) e il frame la inoltra qui —
+  /// il confronto evita di notificare a ogni frame lo stesso indice.
+  let lastNotifiedFocus = -2;
 
   /// Richiede un frame se non ne è già in volo uno. È il battito del loop:
   /// ogni gesto (drag, hover, cambio conf, resize) lo chiama, e il frame si
@@ -254,6 +274,7 @@ export function createChart(options: ChartOptions = {}): Chart {
       lastTime = t;
     }
     const dtS = Math.min(Math.max(0, (t - lastTime) / 1000), DT_MAX);
+    const dtMs = dtS * 1000;
     lastTime = t;
     const elapsedMs = t - firstTime;
 
@@ -265,8 +286,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     // Fit iniziale differito: solo quando c'è una superficie vera. Il salta
     // evita che il primo frame insegua una camera che parte da (1,0,0).
     if (v && !initialFitDone && v.w >= MIN_VIEW_SIZE && v.h >= MIN_VIEW_SIZE) {
-      cameraState.fit(bound(), v);
-      cameraState.set(cameraState.state(), true);
+      cameraState.set(fit(bound(), v), true);
       initialFitDone = true;
     }
 
@@ -288,8 +308,8 @@ export function createChart(options: ChartOptions = {}): Chart {
       }
     }
 
-    const cam: Camera = cameraState.step(dtS);
-    emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + dtS * 1000 * EMA_ALPHA;
+    const cam: Camera = cameraState.step(dtMs);
+    emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + dtMs * EMA_ALPHA;
 
     const state: DrawState = {
       s,
@@ -304,6 +324,14 @@ export function createChart(options: ChartOptions = {}): Chart {
       reducedMotion: reduced,
     };
     painter.redraw(state);
+    // U46: la selezione può cambiare dentro l'interazione (click, frecce,
+    // Esc) senza passare dall'orchestratore — il frame inoltra il cambio
+    // all'osservatore shell. Il confronto copre anche il caso in cui
+    // l'interazione è iniettata nei test senza focus reale.
+    if (state.focused !== lastNotifiedFocus) {
+      lastNotifiedFocus = state.focused;
+      focusExternal(state.focused);
+    }
 
     if (active()) requestRedraw();
   }
@@ -425,6 +453,35 @@ export function createChart(options: ChartOptions = {}): Chart {
     if (interaction) interaction.setA11yLabel(text);
   }
 
+  /// U46: selezione dagli stessi dati della simulazione, senza duplicarla.
+  /// Fuori indice (o prima del mount) = no-op: la selezione è un indice nella
+  /// struttura, e un indice che non c'è non seleziona niente.
+  function focusNode(index: number): void {
+    if (!s || !interaction) return;
+    if (!Number.isInteger(index) || index < 0 || index >= s.n) return;
+    interaction.focusedNode(index);
+    // La notifica all'elenco è immediata: l'interazione ha già ridisegnato
+    // e il frame la ripeterebbe al prossimo giro — il confronto là sopra
+    // (`lastNotifiedFocus`) evita il doppio annuncio senza ritardi.
+    lastNotifiedFocus = index;
+    focusExternal(index);
+  }
+
+  function focusedNode(): number {
+    if (!interaction) return -1;
+    return interaction.getFocusedNode();
+  }
+
+  function nodeId(index: number): string | null {
+    if (!s) return null;
+    if (!Number.isInteger(index) || index < 0 || index >= s.n) return null;
+    return s.id[index] ?? null;
+  }
+
+  function nodeCount(): number {
+    return s ? s.n : 0;
+  }
+
   return {
     mount,
     unmount,
@@ -436,10 +493,20 @@ export function createChart(options: ChartOptions = {}): Chart {
     set open(fn: (id: string) => void) {
       openExternal = fn;
     },
+    get onFocusChange() {
+      return focusExternal;
+    },
+    set onFocusChange(fn: (index: number) => void) {
+      focusExternal = fn;
+    },
     setOpenDocuments,
     setConfig,
     warm,
     unpinNodes,
     setA11yLabel,
+    focusNode,
+    focusedNode,
+    nodeId,
+    nodeCount,
   };
 }
