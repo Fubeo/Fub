@@ -168,8 +168,8 @@ chiamante.
 
 Su Windows il backend ancorato usa `NtSetInformationFile` con il directory
 handle e un nome UTF-16, senza riaprire il path ambientale della root. Il lock
-sibling precede l'apertura della sorgente: due writer Fub concorrenti non
-possono dichiarare entrambi lo stesso spostamento. Il rifiuto di una
+sibling della sorgente precede la sua apertura: due writer Fub concorrenti non
+possono dichiarare entrambi lo spostamento, anche verso destinazioni diverse. Il rifiuto di una
 destinazione occupata resta atomico nella syscall.
 
 ## Sidecar

@@ -571,9 +571,9 @@ impl VaultStorage for RootedFsStorage {
 
         #[cfg(windows)]
         {
-            self.with_lock(to, || {
-                // Due handle già aperti sullo stesso file possono rinominarlo
-                // entrambi con successo. Il lock precede l'apertura della sorgente.
+            self.with_lock(from, || {
+                // Serializzare la sorgente prima di aprirla evita due successi
+                // sullo stesso file, anche verso destinazioni differenti.
                 let from_rel = self.rel(from)?;
                 let (to_parent, to_name) = self.parent_dir_and_name(to)?;
                 match rename_no_replace_windows(&self.dir, from_rel, &to_parent, &to_name) {

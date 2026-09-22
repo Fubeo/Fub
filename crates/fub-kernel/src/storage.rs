@@ -1727,9 +1727,9 @@ impl VaultStorage for FsStorage {
 
         #[cfg(windows)]
         {
-            // MoveFileExW può aprire la sorgente in entrambe le chiamate prima
-            // di rinominarla: la seconda diventerebbe un no-op riuscito.
-            let _lock = exclusive_lock_required(to)?;
+            // Serializzare la sorgente prima che MoveFileExW la apra evita
+            // due successi, anche quando le destinazioni sono differenti.
+            let _lock = exclusive_lock_required(from)?;
             match rename_no_replace_move_file(from, to) {
                 Ok(()) => {
                     for dir in folders_to_sync(from, Some(to)) {
@@ -2722,6 +2722,46 @@ mod tests {
         assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
         assert_eq!(storage.read(&to).unwrap(), b"source");
         assert!(!storage.exists(&from));
+    }
+
+    #[test]
+    fn concurrent_moves_of_one_source_to_different_destinations_have_one_winner() {
+        for rooted in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = Utf8Path::from_path(temp.path()).unwrap();
+            let storage: Arc<dyn VaultStorage> = if rooted {
+                Arc::new(rooted::RootedFsStorage::open(root).unwrap())
+            } else {
+                Arc::new(FsStorage)
+            };
+            let from = root.join("source.txt");
+            storage.write(&from, b"source").unwrap();
+            let barrier = Arc::new(Barrier::new(3));
+            let workers = [root.join("left.txt"), root.join("right.txt")].map(|to| {
+                let storage = Arc::clone(&storage);
+                let barrier = Arc::clone(&barrier);
+                let from = from.clone();
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    (storage.rename_no_replace(&from, &to), to)
+                })
+            });
+            barrier.wait();
+            let outcomes = workers.map(|worker| worker.join().unwrap());
+            assert_eq!(
+                outcomes.iter().filter(|(result, _)| result.is_ok()).count(),
+                1,
+                "rooted={rooted}: {outcomes:?}"
+            );
+            for (result, path) in outcomes {
+                if result.is_ok() {
+                    assert_eq!(storage.read(&path).unwrap(), b"source");
+                } else {
+                    assert!(!storage.exists(&path));
+                }
+            }
+            assert!(!storage.exists(&from));
+        }
     }
 
     #[test]
