@@ -24,11 +24,11 @@
 
 mod common;
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fub_abi::event::Event;
-use fub_abi::traits::JobSpec;
 use fub_abi::PluginError;
 use fub_host::{Host, NoWatcher};
 use fub_kernel::{Subscription, Trust};
@@ -113,36 +113,18 @@ fn bench(v: &Vault) -> (Host, Subscription) {
         .with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    let events = host
-        .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
-        .expect("aperto");
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut ws)
-            .expect("il bundle si monta");
-        let key = fub_abi::settings::permission_key(ID, fub_abi::options::permission::READ_VAULT);
-        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))
-            .expect("il permesso di lettura è concesso esplicitamente");
-    })
-    .expect("aperto");
+    let events = host.subscribe(None).expect("aperto");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("il bundle si monta");
+    let key = fub_abi::settings::permission_key(ID, fub_abi::options::permission::READ_VAULT);
+    host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
+        .expect("il permesso di lettura è concesso esplicitamente");
     (host, events)
 }
 
 fn ask(host: &Host, job: &str) -> fub_abi::traits::JobId {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        ws.with_host(ID, |h| {
-            h.spawn_job(JobSpec {
-                job: job.to_string(),
-                payload: serde_json::json!(null),
-            })
-        })
+    host.spawn_job(None, ID, job, serde_json::json!(null))
         .expect("accodato")
-    })
-    .expect("aperto")
 }
 
 fn next_result(events: &Subscription) -> (String, Result<serde_json::Value, PluginError>) {

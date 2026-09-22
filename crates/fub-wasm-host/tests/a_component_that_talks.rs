@@ -34,11 +34,11 @@ use std::time::Duration;
 
 use camino::Utf8PathBuf;
 use fub_abi::event::{Event, Severity};
-use fub_abi::traits::JobSpec;
 use fub_abi::PluginError;
 use fub_host::{Host, NoWatcher};
 use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::WasmBundle;
+use std::sync::Arc;
 
 const ID: &str = "demo.eventi";
 
@@ -75,33 +75,20 @@ fn bench(v: &Vault) -> (Host, Subscription) {
         .with_job_threads(2);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    let events = host
-        .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
-        .expect("aperto");
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut ws)
-            .expect("il bundle si monta");
-    })
-    .expect("aperto");
+    let events = host.subscribe(None).expect("aperto");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("il bundle si monta");
     (host, events)
 }
 
 fn ask(host: &Host, job: &str) -> fub_abi::traits::JobId {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        ws.with_host(ID, |h| {
-            h.spawn_job(JobSpec {
-                job: job.to_string(),
-                payload: serde_json::json!({ "da": "il banco" }),
-            })
-        })
-        .expect("accodato")
-    })
-    .expect("aperto")
+    host.spawn_job(
+        None,
+        ID,
+        job.to_string(),
+        serde_json::json!({ "da": "il banco" }),
+    )
+    .expect("accodato")
 }
 
 /// Ascolta finché **quel** job non è tornato, e rende tutto ciò che ha sentito

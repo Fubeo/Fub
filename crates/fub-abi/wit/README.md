@@ -11,7 +11,7 @@ and the two tests that verify it —
 While it was at the root those tests had to travel two levels up out of their
 own crate to read a file that was theirs anyway.
 
-- The live contract: [`fub/abi.wit`](fub/abi.wit) — package `fub:abi@0.1.1`.
+- The live contract: [`fub/abi.wit`](fub/abi.wit) — package `fub:abi@0.1.2`.
 - The contract **as it was**, version by version: [`frozen/`](frozen/).
 
 **The documentation lives in `docs/`**, not here:

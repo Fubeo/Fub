@@ -9,10 +9,15 @@ use std::sync::{Arc, Mutex};
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{Choice, CommandOutcome, CommandSpec, InvokeMode, ParamKind, ParamSpec};
+use fub_abi::edit::Revision;
 use fub_abi::error::FormatError;
 use fub_abi::format::{
     DocumentSource, FormatCapabilities, FormatDescriptor, FormatProvider, ParseContext,
     RenderOptions,
+};
+use fub_abi::grid::{
+    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSurfaceSpec, GridWindow,
+    GridWindowRequest,
 };
 use fub_abi::model::{DocId, DocumentModel};
 use fub_abi::traits::{
@@ -21,11 +26,6 @@ use fub_abi::traits::{
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::PluginError;
-use fub_abi::edit::Revision;
-use fub_abi::grid::{
-    GridApplyRequest, GridCommit, GridProvider, GridSession, GridSurfaceSpec, GridWindow,
-    GridWindowRequest,
-};
 use fub_kernel::{FormatRegistry, Workspace};
 
 // --- un provider che conta quante volte gli si chiede cosa offre ------------
@@ -37,7 +37,6 @@ struct Counter {
     /// La seconda view compare solo dopo che qualcuno l'ha annunciata.
     second: Arc<Mutex<bool>>,
 }
-
 
 #[derive(Clone)]
 struct IncompatibleGrid {
@@ -429,12 +428,11 @@ fn incompatible_grid_surface_falls_back_without_invoking_provider() {
     let (_g, mut ws) = workspace(&[]);
     let calls = Arc::new(Mutex::new(0));
     let permit = ws.registration_permit("prova").expect("declared");
-    let mut prepared = fub_kernel::workspace::PreparedRegistration::grid(Box::new(
-        IncompatibleGrid {
+    let mut prepared =
+        fub_kernel::workspace::PreparedRegistration::grid(Box::new(IncompatibleGrid {
             calls: Arc::clone(&calls),
-        },
-    ))
-    .expect("surface declaration is structurally valid");
+        }))
+        .expect("surface declaration is structurally valid");
     ws.commit_registration(&permit, &mut prepared)
         .expect("grid provider registered");
 

@@ -5,6 +5,7 @@
 //! `render_view`/`view_action`.
 
 mod common;
+use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::traits::ViewInstance;
@@ -40,20 +41,15 @@ fn bench(vault: &Vault, feature: &str) -> Host {
         .with_job_threads(1);
     host.open(&vault.root).expect("vault opens");
     host.wait_indexed(None).expect("indexing completes");
-    host.with_session(None, |session| {
-        let mut workspace = session.workspace().write().unwrap();
-        session
-            .bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut workspace)
-            .expect("community view mounts through Bundle/Registrar");
-        assert!(
-            workspace.plugins().iter().any(|plugin| plugin.id == PLUGIN),
-            "the mounted component is declared in the workspace"
-        );
-    })
-    .expect("open session");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("community view mounts through Bundle/Registrar");
+    assert!(
+        host.plugin_ids(None)
+            .expect("plugin inventory")
+            .iter()
+            .any(|plugin| plugin == PLUGIN),
+        "the mounted component is declared in the workspace"
+    );
     host
 }
 
@@ -68,7 +64,7 @@ fn instance() -> ViewInstance {
 fn close_and_assert_session_is_gone(host: &Host) -> Vec<PluginError> {
     let errors = host.close();
     assert!(
-        host.with_session(None, |_| ()).is_err(),
+        host.bundles(None).is_err(),
         "close removes the session and every live registration"
     );
     errors
@@ -85,11 +81,7 @@ fn community_view_interests_trap_is_contained_and_recovery_stays_usable() {
     );
 
     let error = host
-        .with_session(None, |session| {
-            let workspace = session.workspace().read().expect("workspace");
-            workspace.view_interests(&trapped)
-        })
-        .expect("session")
+        .view_interests(None, &trapped)
         .expect_err("the fixture intentionally traps while computing interests");
     assert!(
         matches!(error, PluginError::Internal(_)),

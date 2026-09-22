@@ -171,24 +171,29 @@ pub(crate) fn verdict(
         between: None,
     };
 
-    if let Some(pass) = timer.latest_upto(civil) {
-        // `is_none_or`: al primo giro non c'è niente di già considerato, e
-        // l'occorrenza di stamattina non è «persa» — è successa prima che questa
-        // sveglia esistesse per lo scheduler. Farla suonare all'avvio dell'app
-        // per il solo fatto che sono le dieci e lei era delle nove sarebbe un
-        // recupero di qualcosa che nessuno aveva mancato.
-        if position.last.is_none_or(|u| pass > u) {
+    let pass = timer.latest_upto(civil);
+    let pass_occurrence = pass.and_then(|p| zone.instant(p));
+    let pass_is_new = pass.is_some_and(|p| position.last.is_none_or(|u| p > u));
+    let pass_is_future = pass_occurrence.is_some_and(|q| q > time);
+
+    if pass_is_new && !pass_is_future {
+        if let Some(pass) = pass {
+            // `is_none_or`: al primo giro non c'è niente di già considerato, e
+            // l'occorrenza di stamattina non è «persa» — è successa prima che
+            // questa sveglia esistesse per lo scheduler. Farla suonare all'avvio
+            // dell'app per il solo fatto che sono le dieci e lei era delle nove
+            // sarebbe un recupero di qualcosa che nessuno aveva mancato.
             outcome.position.last = Some(pass);
             // Due modi di meritare una suonata, e il primo non passa dalla
             // finestra: era l'occorrenza in calendario.
             let wait_for = position.wait_for == Some(pass);
-            let occurrence = zone.instant(pass);
-            let on_time = occurrence.is_some_and(|q| q == time);
+            let on_time = pass_occurrence.is_some_and(|q| q == time);
             let recovery = position.last.is_some()
                 && timer.catch_up_seconds > 0
-                && occurrence.is_some_and(|q| {
-                    let delay = time.as_second() - q.as_second();
-                    delay >= 0 && delay as u64 <= timer.catch_up_seconds
+                && pass_occurrence.is_some_and(|q| {
+                    let delay = time.duration_since(q);
+                    !delay.is_negative()
+                        && delay.unsigned_abs() <= Duration::from_secs(timer.catch_up_seconds)
                 });
             // Dopo un riavvio `wait_for` non è disponibile: l'istante esatto
             // resta comunque una suonata in calendario, anche con finestra zero.
@@ -196,17 +201,26 @@ pub(crate) fn verdict(
         }
     }
 
-    // Quando torna a suonare. Si riscrive a ogni giro e non si tiene: la
-    // prossima di un orario di parete non è una funzione di quante volte ha
-    // suonato, è una funzione di che giorno è.
-    let next = timer.next_after(civil);
+    // Quando torna a suonare. Se l'ultima ora civile è già trascorsa ma il fuso
+    // ha spostato la sua occorrenza in avanti (per esempio le 2:30 cancellate
+    // dall'ora legale), quella stessa occorrenza resta la prossima reale.
+    let next = if pass_is_new && pass_is_future {
+        pass
+    } else {
+        timer.next_after(civil)
+    };
     outcome.position.wait_for = next;
-    outcome.between = next
-        .and_then(|p| zone.instant(p))
-        .map(|q| Duration::from_secs((q.as_second() - time.as_second()).max(0) as u64));
+    outcome.between = next.and_then(|p| zone.instant(p)).map(|q| {
+        let remaining = q.duration_since(time);
+        if remaining.is_negative() {
+            Duration::ZERO
+        } else {
+            std::time::Duration::try_from(remaining)
+                .expect("wall-clock occurrence must fit in std::time::Duration")
+        }
+    });
     outcome
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,6 +292,49 @@ mod tests {
             Duration::from_secs(90 * 60),
             "2:30 that does not exist must become 3:30, not disappear"
         );
+    }
+
+    #[test]
+    fn shifted_future_occurrence_is_not_consumed_before_it_happens() {
+        let timer = WallClock::daily(2, 30)
+            .anchored("Europe/Rome")
+            .catching_up(3600);
+        let zone = Zone::of(&timer, "").expect("zone");
+        let previous = CivilTime {
+            year: 2026,
+            month: 3,
+            day: 28,
+            hour: 2,
+            minute: 30,
+            second: 0,
+        };
+        let v = verdict(
+            &timer,
+            &zone,
+            ts("2026-03-29T01:00:00Z"),
+            Position {
+                last: Some(previous),
+                wait_for: None,
+            },
+        );
+        assert!(!v.ring, "the shifted 2:30 is still in the future");
+        assert_eq!(
+            v.position.last,
+            Some(previous),
+            "the shifted future occurrence must not be consumed"
+        );
+        assert_eq!(
+            v.position.wait_for,
+            Some(CivilTime {
+                year: 2026,
+                month: 3,
+                day: 29,
+                hour: 2,
+                minute: 30,
+                second: 0,
+            })
+        );
+        assert_eq!(v.between, Some(Duration::from_secs(30 * 60)));
     }
 
     /// **Il giorno in cui l'ora legale esce, le 2:30 esistono due volte, e la
@@ -421,6 +478,94 @@ mod tests {
         assert_eq!(v.between, None);
         assert!(!v.ring);
         assert_eq!(v.position.last, None);
+    }
+
+    #[test]
+    fn subsecond_before_scheduled_instant_keeps_future_occurrence() {
+        let timer = WallClock::daily(9, 0).anchored("UTC");
+        let zone = Zone::of(&timer, "").expect("zone");
+        let previous = CivilTime {
+            year: 2026,
+            month: 1,
+            day: 14,
+            hour: 9,
+            minute: 0,
+            second: 0,
+        };
+        let today = CivilTime {
+            year: 2026,
+            month: 1,
+            day: 15,
+            hour: 9,
+            minute: 0,
+            second: 0,
+        };
+        let v = verdict(
+            &timer,
+            &zone,
+            ts("2026-01-15T08:59:59.900Z"),
+            Position {
+                last: Some(previous),
+                wait_for: Some(today),
+            },
+        );
+        assert!(!v.ring, "a future occurrence must not ring early");
+        assert_eq!(
+            v.position.last,
+            Some(previous),
+            "a future occurrence must not be consumed early"
+        );
+        assert_eq!(v.position.wait_for, Some(today));
+        assert_eq!(v.between, Some(Duration::from_millis(100)));
+    }
+
+    #[test]
+    fn recovery_window_keeps_subsecond_precision_after_restart() {
+        let timer = WallClock::daily(9, 0).anchored("UTC").catching_up(1);
+        let zone = Zone::of(&timer, "").expect("zone");
+        let previous = CivilTime {
+            year: 2026,
+            month: 1,
+            day: 14,
+            hour: 9,
+            minute: 0,
+            second: 0,
+        };
+        let late = verdict(
+            &timer,
+            &zone,
+            ts("2026-01-15T09:00:01.001Z"),
+            Position {
+                last: Some(previous),
+                wait_for: None,
+            },
+        );
+        assert!(
+            !late.ring,
+            "a restart 1.001 seconds late is outside a one-second window"
+        );
+        assert_eq!(
+            late.position.last,
+            Some(CivilTime {
+                year: 2026,
+                month: 1,
+                day: 15,
+                hour: 9,
+                minute: 0,
+                second: 0,
+            })
+        );
+
+        let boundary = verdict(
+            &timer,
+            &zone,
+            ts("2026-01-15T09:00:00.999Z"),
+            Position {
+                last: Some(previous),
+                wait_for: None,
+            },
+        );
+        assert!(boundary.ring, "the recovery boundary is inclusive");
     }
 
     #[test]

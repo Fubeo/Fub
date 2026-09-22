@@ -71,8 +71,8 @@ use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::command::{
     CommandEffect, CommandOutcome, CommandSpec, Failure, InvokeMode, Partial, UndoStep, Undone,
 };
-use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::custom::{CustomRenderer, SyntaxForm, SyntaxRule};
+use fub_abi::edit::{EditReport, EditRequest, Revision, TextEdit, WriteBase};
 use fub_abi::event::DocChanges;
 use fub_abi::format::{DocumentFormat, DocumentSource, RenderOptions, SourceKind};
 use fub_abi::locale::Locale;
@@ -11730,6 +11730,12 @@ impl Workspace {
     }
 
     /// Aggiorna atomicamente il cursore di un timer.
+    ///
+    /// Il valore durevole è un cursore cronologico: due worker possono avere
+    /// preso fotografie in ordine diverso da quello in cui arrivano alla
+    /// scrittura, ma una fotografia più vecchia non può riportare indietro
+    /// quella già persistita. Il confronto avviene dentro l'update atomico,
+    /// dopo la rilettura sotto il lock dello storage.
     pub fn set_timer_cursor(
         &self,
         owner: &str,
@@ -11744,6 +11750,12 @@ impl Workspace {
                     .transpose()
                     .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?
                     .unwrap_or_default();
+                if stored
+                    .get(timer)
+                    .is_some_and(|current| CivilTime::from(*current) >= cursor)
+                {
+                    return Ok(None);
+                }
                 stored.insert(timer.to_owned(), cursor.into());
                 serde_json::to_vec_pretty(&stored)
                     .map(Some)

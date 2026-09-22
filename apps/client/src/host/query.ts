@@ -6,19 +6,22 @@
 // chiamante è il moltiplicatore che il §16.6 conta: tre righe qui, invece di
 // tre `match` con tre messaggi d'errore diversi là.
 //
-// Non è un livello di astrazione sul canale — un pannello che volesse una query
-// che qui non c'è la manda con `api.queryIndex` e basta, come farebbe un
-// plugin. È solo il posto dove la risposta si apre.
+// È il solo punto in cui la shell attraversa il canale dati: i pannelli
+// importano le funzioni tipizzate qui sotto e non ricevono l'accesso grezzo.
+// Anche le domande di rendering passano da questo modulo, così la risposta
+// viene aperta e gli errori di variante hanno una sola forma.
 import { api } from "./ipc";
 import type {
   DraftInfo,
   Organization,
   DocumentMatch,
+  EmbedContent,
   EntryKind,
   Excerpts,
   FolderScope,
   IndexQuery,
   JobStatus,
+  RenderedDocument,
   SettingEntry,
   SyntaxForm,
   IndexResult,
@@ -76,6 +79,13 @@ function pageOf(f: PageWindow): Page | null {
   return f === WITHOUT_PAGE ? null : f;
 }
 
+type QueryKind = IndexQuery["kind"];
+
+type PayloadForQuery<K extends QueryKind> =
+  K extends "resolve" ? PayloadOf["resolved"] :
+  K extends keyof PayloadOf ? PayloadOf[K] :
+  never;
+
 function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadOf[K] {
   if (result.kind !== kind) {
     throw new Error(`il canale dati ha risposto ${result.kind}, atteso ${kind}`);
@@ -83,7 +93,18 @@ function open<K extends keyof PayloadOf>(result: IndexResult, kind: K): PayloadO
   // Il `kind` combacia, quindi il payload è quello del suo caso: TypeScript non
   // sa restringere un generico su un discriminante, e il cast è l'unico punto
   // in cui glielo si dice.
-  return (result as { value: unknown }).value as PayloadOf[K];
+  const value: unknown = result.value;
+  return value as PayloadOf[K];
+}
+
+type QueryOf<K extends QueryKind> = Extract<IndexQuery, { kind: K }>;
+
+async function runQuery<K extends QueryKind>(
+  request: QueryOf<K>,
+): Promise<PayloadForQuery<K>> {
+  const result = await api.queryIndex(request);
+  const expected = (request.kind === "resolve" ? "resolved" : request.kind) as keyof PayloadOf;
+  return open(result, expected) as PayloadForQuery<K>;
 }
 
 /// I documenti che combaciano.
@@ -99,7 +120,7 @@ export async function matchingDocuments(
   window: PageWindow,
   excerpts?: Excerpts,
 ): Promise<Paged<DocumentMatch>> {
-  const query: IndexQuery = {
+  const query: Extract<IndexQuery, { kind: "documents" }> = {
     kind: "documents",
     matching,
     sort: null,
@@ -107,7 +128,7 @@ export async function matchingDocuments(
     page: pageOf(window),
     excerpts,
   };
-  return open(await api.queryIndex(query), "documents");
+  return runQuery(query);
 }
 
 /// Quante note propone chi propone dei nomi.
@@ -164,12 +185,12 @@ export async function existingDocuments(docs: string[]): Promise<Set<string>> {
 
 /// I tag del vault con la loro frequenza.
 export async function vaultTags(window: PageWindow): Promise<TagCount[]> {
-  const query: IndexQuery = {
+  const query: Extract<IndexQuery, { kind: "tags" }> = {
     kind: "tags",
     matching: EVERY_DOCUMENT,
     page: pageOf(window),
   };
-  return open(await api.queryIndex(query), "tags").items;
+  return runQuery(query).then((page) => page.items);
 }
 
 // `archiDelVault` stava qui: gli archi del grafo in una domanda sola, senza
@@ -188,7 +209,7 @@ export async function vaultTags(window: PageWindow): Promise<TagCount[]> {
 /// questa domanda serve quando quel filo si è interrotto — all'apertura del
 /// pannello, e dopo un `overflow`, che vuol dire esattamente *richiedi*.
 export async function activeJobs(): Promise<JobStatus[]> {
-  return open(await api.queryIndex({ kind: "jobs" }), "jobs");
+  return runQuery({ kind: "jobs" });
 }
 
 /// **Cosa è rimasto non salvato** (§15.2): le bozze che il buffer di crash ha
@@ -199,7 +220,7 @@ export async function activeJobs(): Promise<JobStatus[]> {
 /// perché quella è una capacità che non esiste e non deve esistere — il testo
 /// non salvato è il dato più privato di un vault.
 export async function unsavedDrafts(): Promise<DraftInfo[]> {
-  return open(await api.queryIndex({ kind: "drafts" }), "drafts").items;
+  return runQuery({ kind: "drafts" }).then((page) => page.items);
 }
 
 /// Com'è configurato questo vault (§11.1): schema, valore che vale adesso, e
@@ -209,12 +230,26 @@ export async function unsavedDrafts(): Promise<DraftInfo[]> {
 /// pannello delle impostazioni non ha un comando privilegiato che una feature
 /// non avrebbe.
 export async function settings(plugin?: string): Promise<SettingEntry[]> {
-  return open(await api.queryIndex({ kind: "settings", plugin: plugin ?? null }), "settings");
+  return runQuery({ kind: "settings", plugin: plugin ?? null });
 }
 
 /// Le forme sintattiche effettive di un documento, lette dal montaggio runtime.
 export async function syntaxForms(doc: string): Promise<SyntaxForm[]> {
-  return open(await api.queryIndex({ kind: "syntax_forms", doc }), "syntax_forms");
+  return runQuery({ kind: "syntax_forms", doc });
+}
+
+/// Il documento completo reso per la modalità Lettura.
+export async function renderedDocument(doc: string): Promise<RenderedDocument> {
+  return runQuery({ kind: "render_preview", doc });
+}
+
+/// Il contenuto reso di un embed, con l'identità del documento sorgente.
+export async function renderedEmbed(
+  page: string,
+  heading?: string | null,
+  block?: string | null,
+): Promise<EmbedContent> {
+  return runQuery({ kind: "render_embed", page, heading: heading ?? null, block: block ?? null });
 }
 
 /// Com'è organizzato questo vault (§11.3): icone, note appuntate, ordinamenti
@@ -224,7 +259,7 @@ export async function syntaxForms(doc: string): Promise<SyntaxForm[]> {
 /// prima era un comando IPC che restituiva il blob intero, cioè una cosa che la
 /// shell sapeva chiedere e un provider no.
 export async function organizationQuery(): Promise<Organization> {
-  return open(await api.queryIndex({ kind: "organization" }), "organization");
+  return runQuery({ kind: "organization" });
 }
 
 /// Cosa nomina questo riferimento, adesso (§13.1): il documento del vault e —
@@ -247,10 +282,7 @@ export async function resolvedReference(
   target: LinkTarget,
   from?: string,
 ): Promise<ResolvedRef | null> {
-  return open(
-    await api.queryIndex({ kind: "resolve", target, from: from ?? null }),
-    "resolved",
-  );
+  return runQuery({ kind: "resolve", target, from: from ?? null });
 }
 
 /// Cosa c'è nel vault (§14.1, §14.2): l'anagrafe, in ordine di path.
@@ -270,13 +302,13 @@ export async function vaultEntries(
   of_kind?: EntryKind,
   within?: FolderScope,
 ): Promise<Paged<VaultEntry>> {
-  const query: IndexQuery = {
+  const query: Extract<IndexQuery, { kind: "entries" }> = {
     kind: "entries",
     of_kind: of_kind ?? null,
     within: within ?? null,
     page: pageOf(window),
   };
-  return open(await api.queryIndex(query), "entries");
+  return runQuery(query);
 }
 
 /// Le cartelle (§14.3), in ordine di path.
@@ -292,12 +324,12 @@ export async function vaultFolders(
   window: PageWindow,
   under?: FolderScope,
 ): Promise<Paged<VaultFolder>> {
-  const query: IndexQuery = {
+  const query: Extract<IndexQuery, { kind: "folders" }> = {
     kind: "folders",
     under: under ?? null,
     page: pageOf(window),
   };
-  return open(await api.queryIndex(query), "folders");
+  return runQuery(query);
 }
 
 /// I figli diretti di una cartella: le sottocartelle e le note, in **una sola
@@ -342,5 +374,5 @@ export async function folderContent(
 /// Passa dal canale dati e non da un comando suo perché la stessa risposta
 /// dev'essere visibile a una feature, che di comandi IPC non ne ha nessuno.
 export async function vaultStatus(): Promise<VaultStatus> {
-  return open(await api.queryIndex({ kind: "vault_status" }), "vault_status");
+  return runQuery({ kind: "vault_status" });
 }

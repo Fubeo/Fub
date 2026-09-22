@@ -10,8 +10,7 @@ use fub_abi::traits::{Plugin, PluginManifest};
 use fub_abi::PluginError;
 use fub_host::registry::Registrar;
 use fub_host::{
-    Bundle, BundleRegistry, Host, NoWatcher, OnlyProviders, StartupSnapshot, StartupSource,
-    StartupValidity,
+    Bundle, Host, NoWatcher, OnlyProviders, StartupSnapshot, StartupSource, StartupValidity,
 };
 use fub_kernel::Trust;
 use fub_wasm_host::installed::Consent;
@@ -278,11 +277,8 @@ fn an_installed_collision_never_replaces_or_routes_the_official_identity() {
     let host = managed_host(Arc::clone(&manager));
     host.open(&vault.root).expect("vault opens");
     host.wait_indexed(None).expect("opening finishes");
-    host.with_session(Some(vault.root.as_str()), |session| {
-        BundleRegistry::remember_guarded(session.bundles(), Arc::new(OfficialCollision))
-    })
-    .expect("vault remains open")
-    .expect("official identity is remembered");
+    host.remember_unclaimed_bundle(Some(vault.root.as_str()), Arc::new(OfficialCollision))
+        .expect("vault remains open");
 
     assert!(manager
         .set_enabled(&host, installed.installation, true)

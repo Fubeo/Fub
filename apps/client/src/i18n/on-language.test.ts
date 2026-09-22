@@ -34,7 +34,7 @@ vi.mock("../state/kernel", () => ({
 }));
 vi.mock("../state/store", () => ({ on: () => {} }));
 
-const { mountStrings, onLanguage } = await import("./strings");
+const { mountStrings, onLanguage, t } = await import("./strings");
 
 describe("onLanguage", () => {
   beforeEach(() => {
@@ -59,6 +59,11 @@ describe("onLanguage", () => {
     onLanguage(() => notices++);
     await changeLanguageIn("en");
     expect(notices).toBe(1);
+  });
+  it("rilegge anche le label dei temi quando cambia lingua", async () => {
+    expect(t("settings.themes.title")).toBe("Temi installati");
+    await changeLanguageIn("en");
+    expect(t("settings.themes.title")).toBe("Installed themes");
   });
 
   it("e smette di avvisarlo quando lo smontaggio è stato chiamato", async () => {

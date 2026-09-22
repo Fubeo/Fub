@@ -1,4 +1,5 @@
 mod common;
+use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{Choice, ParamKind, ParamSpec};
@@ -89,29 +90,13 @@ fn action(action: &str) -> UiAction {
         }])
 }
 
-fn mount(host: &Host, bundle: &dyn Bundle) {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().expect("workspace");
-        s.bundles()
-            .write()
-            .expect("bundles")
-            .mount(bundle, &mut ws)
-            .expect("bundle mounts");
-    })
-    .expect("session");
+fn mount(host: &Host, bundle: Arc<dyn Bundle>) {
+    host.mount_bundle(None, bundle).expect("bundle mounts");
 }
 
 fn unmount(host: &Host) {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().expect("workspace");
-        let errors = s
-            .bundles()
-            .write()
-            .expect("bundles")
-            .unmount(&mut ws, PLUGIN_ID);
-        assert!(errors.is_empty(), "unmount errors: {errors:?}");
-    })
-    .expect("session");
+    let errors = host.unmount_bundle(None, PLUGIN_ID).expect("session");
+    assert!(errors.is_empty(), "unmount errors: {errors:?}");
 }
 
 fn host(vault: &Vault) -> Host {
@@ -375,7 +360,7 @@ fn wasm_view_mounts_specs_renders_and_actions_match_native() {
     let native = NativeBundle;
     let host = host(&vault);
 
-    mount(&host, &wasm);
+    mount(&host, Arc::new(wasm));
     let wasm_spec = host
         .views(None)
         .expect("wasm specs")
@@ -388,11 +373,8 @@ fn wasm_view_mounts_specs_renders_and_actions_match_native() {
     assert_eq!(wasm_spec.params[1].name, "density");
     assert!(!wasm_spec.params[1].required);
     let wasm_interests = host
-        .with_session(None, |s| {
-            let ws = s.workspace().read().expect("workspace");
-            ws.view_interests(&instance()).expect("wasm interests")
-        })
-        .expect("session");
+        .view_interests(None, &instance())
+        .expect("wasm interests");
     assert_eq!(
         wasm_interests.follows,
         ContextMask(vec![ContextKind::Document])
@@ -418,7 +400,7 @@ fn wasm_view_mounts_specs_renders_and_actions_match_native() {
         Err(PluginError::UnknownView(_))
     ));
 
-    mount(&host, &native);
+    mount(&host, Arc::new(native));
     let native_spec = host
         .views(None)
         .expect("native specs")
@@ -427,11 +409,8 @@ fn wasm_view_mounts_specs_renders_and_actions_match_native() {
         .expect("native view");
     assert_eq!(native_spec, wasm_spec);
     let native_interests = host
-        .with_session(None, |s| {
-            let ws = s.workspace().read().expect("workspace");
-            ws.view_interests(&instance()).expect("native interests")
-        })
-        .expect("session");
+        .view_interests(None, &instance())
+        .expect("native interests");
     assert_eq!(native_interests, wasm_interests);
     let native_render = host.render_view(None, &instance()).expect("native render");
     assert!(matches!(&native_render.kind, UiKind::Stack { .. }));

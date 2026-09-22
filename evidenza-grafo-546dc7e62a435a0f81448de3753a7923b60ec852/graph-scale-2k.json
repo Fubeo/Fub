@@ -1,0 +1,279 @@
+{
+  "config": {
+    "nodes": 2000,
+    "seed": 6,
+    "cycles": 3,
+    "soakWindows": 1
+  },
+  "fixture": {
+    "nodes": 2000,
+    "edges": 4000,
+    "seed": 6,
+    "digest": "eeeacc27"
+  },
+  "environment": {
+    "node": {
+      "version": "v22.12.0",
+      "platform": "linux",
+      "arch": "x64",
+      "kernelRelease": "6.17.0-1022-azure"
+    },
+    "cpu": {
+      "model": "AMD EPYC 7763 64-Core Processor",
+      "logicalCount": 4
+    },
+    "memory": {
+      "totalBytes": 16766414848
+    },
+    "browser": {
+      "chromiumVersion": "149.0.7827.55"
+    },
+    "page": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+      "hardwareConcurrency": 4,
+      "deviceMemory": 16
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1
+    },
+    "media": {
+      "reducedMotion": true,
+      "colorScheme": "dark"
+    }
+  },
+  "timings": {
+    "mount1Ms": 99.0015840000001,
+    "interactionFrames": {
+      "count": 119,
+      "p50": 16,
+      "p95": 17,
+      "max": 32
+    },
+    "longTasks": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "max": null,
+      "over50ms": 0
+    },
+    "mount2Ms": 104.23767199999929,
+    "mount3Ms": 50.28817499999968,
+    "totalMs": 8870
+  },
+  "resources": {
+    "scope": "DOM listeners are tracked only on window/document and elements within canvas.graph-main, canvas.graph-bg, or .graph-panel; timers, rAF, and observers are tracked only when their creation stack contains /src/graph/ or /src/panels/graph.ts while the probe is active.",
+    "baseline": 0,
+    "baselineByKind": {},
+    "interaction": 35,
+    "cycles": [
+      {
+        "mounted": 35,
+        "mountedByKind": {
+          "listener": 32,
+          "mutationObserver": 1,
+          "resizeObserver": 1,
+          "raf": 1
+        },
+        "postClose": 0,
+        "postCloseByKind": {},
+        "delta": 0,
+        "deltaByKind": {}
+      },
+      {
+        "mounted": 35,
+        "mountedByKind": {
+          "listener": 32,
+          "mutationObserver": 1,
+          "resizeObserver": 1,
+          "raf": 1
+        },
+        "postClose": 0,
+        "postCloseByKind": {},
+        "delta": 0,
+        "deltaByKind": {}
+      },
+      {
+        "mounted": 35,
+        "mountedByKind": {
+          "listener": 32,
+          "mutationObserver": 1,
+          "resizeObserver": 1,
+          "raf": 1
+        },
+        "postClose": 0,
+        "postCloseByKind": {},
+        "delta": 0,
+        "deltaByKind": {}
+      }
+    ]
+  },
+  "memory": {
+    "before": 14321604,
+    "afterCleanup": 13718856
+  },
+  "pass": true,
+  "soak": {
+    "requestedWindows": 1,
+    "heapSamplesPerWindow": 3,
+    "heapSelection": "median",
+    "windows": [
+      {
+        "window": 1,
+        "wallMs": 4468.535825,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 16,
+            "p95": 17,
+            "max": 17
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          11351948,
+          11351948,
+          11352688
+        ],
+        "heapUsed": 11351948
+      }
+    ],
+    "totalActiveFrames": 120,
+    "heapAvailability": {
+      "status": "complete",
+      "reasons": []
+    },
+    "heapDeltasFromFirst": [
+      0
+    ],
+    "monotonicIncreaseCount": 0,
+    "linearRegressionSlopeBytesPerWindow": null,
+    "stability": {
+      "required": false,
+      "pass": null,
+      "reason": "only the 10k/seed-6 fixture has a hard heap oracle",
+      "policy": {
+        "nodes": 10000,
+        "seed": 6,
+        "minWindows": 16,
+        "warmupWindows": 8,
+        "measurementWindows": 8,
+        "maxSlopeBytesPerWindow": 65536,
+        "maxMonotonicIncreases": 6
+      }
+    },
+    "heapSeries": [
+      11351948
+    ]
+  },
+  "sample": {
+    "target": 120,
+    "deadlineMs": 30000,
+    "deadlineKind": "safety-timeout"
+  },
+  "frames": {
+    "count": 120,
+    "intervals": {
+      "count": 119,
+      "p50": 16,
+      "p95": 17,
+      "max": 32
+    }
+  },
+  "interaction": {
+    "signals": {
+      "wheelDelivered": true,
+      "wheelPrevented": true,
+      "pointerDelivered": true,
+      "pointerCapture": true,
+      "eventTypes": [
+        "pointermove",
+        "wheel",
+        "pointerdown",
+        "pointerup"
+      ]
+    },
+    "events": [
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "wheel",
+        "target": "canvas",
+        "defaultPrevented": true
+      },
+      {
+        "type": "pointerdown",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointerdown",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointerup",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointerup",
+        "target": "canvas",
+        "defaultPrevented": false
+      }
+    ],
+    "pointerCaptures": [
+      {
+        "pointerId": 1
+      }
+    ]
+  },
+  "cleanup": {
+    "cdp": {
+      "acquired": true,
+      "success": true
+    },
+    "page": {
+      "acquired": true,
+      "success": true
+    },
+    "context": {
+      "acquired": true,
+      "success": true
+    },
+    "browser": {
+      "acquired": true,
+      "success": true
+    },
+    "server": {
+      "acquired": true,
+      "success": true
+    }
+  }
+}

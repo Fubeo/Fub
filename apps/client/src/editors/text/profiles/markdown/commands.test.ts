@@ -59,6 +59,18 @@ function run(cmd: StateCommand, spec: string): { handled: boolean; out: string }
   return { handled, out };
 }
 
+function runReadOnly(cmd: StateCommand, spec: string): { handled: boolean; out: string } {
+  const initial = mk(spec);
+  const state = EditorState.create({
+    doc: initial.doc,
+    selection: initial.selection,
+    extensions: [markdown({ base: markdownLanguage }), EditorState.readOnly.of(true)],
+  });
+  let out = show(state);
+  const handled = cmd({ state, dispatch: (tr) => { out = show(tr.state); } });
+  return { handled, out };
+}
+
 describe("formattazione inline", () => {
   it("avvolge la selezione", () => {
     expect(run(toggleBold, "ciao ‹mondo›").out).toBe("ciao **‹mondo›**");
@@ -109,6 +121,36 @@ describe("formattazione inline", () => {
   it("gli accenti fanno parte della parola e le emoji non spostano gli offset", () => {
     expect(run(toggleBold, "🎯 per|ò!").out).toBe("🎯 **‹però›**!");
     expect(run(toggleItalic, "città 🎯 è|à").out).toBe("città 🎯 *‹èà›*");
+  });
+
+  it("codice inline con backtick dentro: usa il fence doppio", () => {
+    expect(run(toggleInlineCode, "‹a`b›").out).toBe("``‹a`b›``");
+    expect(run(toggleInlineCode, "``‹a`b›``").out).toBe("‹a`b›");
+  });
+
+  it("il codice conserva corse lunghe di backtick e torna alla sorgente", () => {
+    expect(run(toggleInlineCode, "‹a``b›").out).toBe("```‹a``b›```");
+    expect(run(toggleInlineCode, "```‹a``b›```").out).toBe("‹a``b›");
+    expect(run(toggleInlineCode, "‹`a›").out).toBe("`` ‹`a› ``");
+    expect(run(toggleInlineCode, "`` ‹`a› ``").out).toBe("‹`a›");
+  });
+
+  it("la selezione inversa resta inversa dopo il toggle", () => {
+    const state = EditorState.create({
+      doc: "mondo",
+      selection: EditorSelection.single(5, 0),
+      extensions: [markdown({ base: markdownLanguage })],
+    });
+    let after = state;
+    toggleBold({ state, dispatch: (tr) => { after = tr.state; } });
+    expect(after.sliceDoc()).toBe("**mondo**");
+    expect(after.selection.main.anchor).toBe(7);
+    expect(after.selection.main.head).toBe(2);
+  });
+
+  it("in sola lettura non scrive", () => {
+    expect(runReadOnly(toggleBold, "‹mondo›")).toEqual({ handled: false, out: "‹mondo›" });
+    expect(runReadOnly(toggleInlineCode, "‹a`b›")).toEqual({ handled: false, out: "‹a`b›" });
   });
 });
 
@@ -164,6 +206,65 @@ describe("smartListEnter", () => {
 
   it("gli offset reggono accenti ed emoji nel contenuto", () => {
     expect(run(smartListEnter, "- però 🎯|").out).toBe("- però 🎯\n- |");
+  });
+
+  it("dentro fence non tratta la riga come lista (anche Mermaid)", () => {
+    expect(run(smartListEnter, "```mermaid\n- a|b\n```").handled).toBe(false);
+    expect(run(smartListEnter, "```\n1. a|b\n```").handled).toBe(false);
+  });
+
+  it("multi-cursore su numerata: nessun numero duplicato", () => {
+    const doc = "1. a\n2. b\n3. c";
+    const at = (needle: string) => doc.indexOf(needle) + needle.length;
+    const state = EditorState.create({
+      doc,
+      selection: EditorSelection.create([EditorSelection.cursor(at("1. a")), EditorSelection.cursor(at("2. b"))]),
+      extensions: [markdown({ base: markdownLanguage }), EditorState.allowMultipleSelections.of(true)],
+    });
+    let out = doc;
+    smartListEnter({
+      state,
+      dispatch: (tr) => {
+        out = tr.state.doc.toString();
+      },
+    });
+    expect(out).toBe("1. a\n2. \n3. b\n4. \n5. c");
+  });
+
+  it("due cursori nella stessa voce rinumerano tutti gli inserimenti", () => {
+    let state = EditorState.create({
+      doc: "1. abc\n2. fine",
+      selection: EditorSelection.create([EditorSelection.cursor(4), EditorSelection.cursor(6)]),
+      extensions: [markdown({ base: markdownLanguage }), EditorState.allowMultipleSelections.of(true)],
+    });
+    smartListEnter({ state, dispatch: (tr) => { state = tr.state; } });
+    expect(state.sliceDoc()).toBe("1. a\n2. bc\n3. \n4. fine");
+    expect(state.selection.ranges.map((range) => range.head)).toEqual([8, 14]);
+  });
+
+  it("Enter conserva CRLF e posiziona il cursore dopo il nuovo marcatore", () => {
+    let state = EditorState.create({
+      doc: "- uno\r\nfine",
+      selection: { anchor: 5 },
+      extensions: [markdown({ base: markdownLanguage }), EditorState.lineSeparator.of("\r\n")],
+    });
+    smartListEnter({ state, dispatch: (tr) => { state = tr.state; } });
+    expect(state.sliceDoc()).toBe("- uno\r\n- \r\nfine");
+    expect(state.selection.main.head).toBe(state.doc.line(2).to);
+  });
+
+  it("una voce vuota rimossa non riceve una rinumerazione sovrapposta", () => {
+    let state = EditorState.create({
+      doc: "1. a\n2. \n3. b",
+      selection: EditorSelection.create([EditorSelection.cursor(4), EditorSelection.cursor(8)]),
+      extensions: [markdown({ base: markdownLanguage }), EditorState.allowMultipleSelections.of(true)],
+    });
+    smartListEnter({ state, dispatch: (tr) => { state = tr.state; } });
+    expect(state.sliceDoc()).toBe("1. a\n2. \n\n3. b");
+  });
+
+  it("in sola lettura lascia il default", () => {
+    expect(runReadOnly(smartListEnter, "- a|")).toEqual({ handled: false, out: "- a|" });
   });
 });
 

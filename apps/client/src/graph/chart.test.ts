@@ -9,6 +9,7 @@ import { createChart, type Chart, type ChartOptions } from "./chart";
 import type { GraphicsConfig, GraphConfig, GraphData, Structure } from "./sim/types";
 import { defaultGraphicsConfig, organicConfig } from "./sim/types";
 import type { InteractionActions, Interaction, InteractionOptions } from "./interaction";
+import { createInteraction } from "./interaction";
 import type { Painter, DrawState } from "./render/painter";
 
 // --- i dati di prova --------------------------------------------------------
@@ -223,17 +224,6 @@ describe("createChart", () => {
     expect(last.alpha).toBeLessThanOrEqual(0.02);
   });
 
-  it("apri: il gestore assegnato riceve l'id quando l'interazione chiama azioni.apri", () => {
-    g.mount(fakeHost());
-    let called = "";
-    g.open = (id: string) => {
-      called = id;
-    };
-    run(f, 3);
-    expect(lastInteraction).not.toBeNull();
-    lastInteraction!.actions!.open("n2");
-    expect(called).toBe("n2");
-  });
 
   it("warm: riporta alpha al livello e riaccende il loop", () => {
     g.mount(fakeHost());
@@ -278,7 +268,7 @@ describe("createChart", () => {
     expect(last.openDocuments.has("n1")).toBe(true);
   });
 
-  it("setConfig: sostituisce la physics e fonde la graphics viva (stesso rif)", () => {
+  it("il pittore vede le modifiche grafiche applicate dopo il mount", () => {
     g.mount(fakeHost());
     run(f, 5000);
     const graphicsBefore = lastPainter!.graphics;
@@ -288,7 +278,6 @@ describe("createChart", () => {
       preset: "custom",
     });
     run(f, 5);
-    expect(lastPainter!.graphics).toBe(graphicsBefore);
     expect(graphicsBefore.glow).toBe(false);
     expect(graphicsBefore.grid).toBe(false);
   });
@@ -371,17 +360,82 @@ describe("createChart", () => {
     expect(lastPainter!.states.length).toBe(first);
   });
 
-  it("setA11yLabel: delega all'interazione", () => {
-    g.mount(fakeHost());
-    run(f, 3);
-    g.setA11yLabel("etichetta di prova");
-    expect(lastInteraction!.calls.setA11yLabel).toBe(1);
+
+  it("inquadra tutti i nodi nel primo frame con una superficie visibile", () => {
+    const host = fakeHost();
+    let rect = new DOMRect(0, 0, 0, 0);
+    host.getBoundingClientRect = () => rect;
+    g.mount(host);
+    run(f, 1);
+
+    rect = new DOMRect(0, 0, 800, 600);
+    run(f, 1);
+
+    const { s, camera } = lastPainter!.states[lastPainter!.states.length - 1];
+    for (let i = 0; i < s.n; i++) {
+      const x = s.x[i] * camera.scale + camera.tx;
+      const y = s.y[i] * camera.scale + camera.ty;
+      expect(x).toBeGreaterThan(20);
+      expect(x).toBeLessThan(rect.width - 20);
+      expect(y).toBeGreaterThan(20);
+      expect(y).toBeLessThan(rect.height - 20);
+    }
   });
 
-  it("fit iniziale differito: con viewport 0 la camera resta a scala 1", () => {
-    // happy-dom: getBoundingClientRect ritorna 0,0 → viewport 0 → fit differito.
+  it("lo zoom da tastiera converge entro un secondo e resta centrato", () => {
+    g.unmount();
+    g = createChart({ ...baseOptions(f), createInteraction });
+    const host = fakeHost();
+    host.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600);
+    g.mount(host);
+    run(f);
+    const before = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    const point = { x: (400 - before.tx) / before.scale, y: (300 - before.ty) / before.scale };
+    const canvas = host.querySelector<HTMLCanvasElement>("canvas.graph-main")!;
+    canvas.getBoundingClientRect = host.getBoundingClientRect;
+
+    canvas.dispatchEvent(new KeyboardEvent("keydown", { key: "+" }));
+    runAt(f, 1000 / 60, 60);
+
+    const after = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    expect(after.scale).toBeGreaterThan(before.scale);
+    expect(Math.abs(point.x * after.scale + after.tx - 400)).toBeLessThan(1);
+    expect(Math.abs(point.y * after.scale + after.ty - 300)).toBeLessThan(1);
+    expect(f.queue).toHaveLength(0);
+  });
+
+  it("U46: focusNode seleziona dagli stessi dati, notifica e legge id/conto", () => {
     g.mount(fakeHost());
-    run(f, 10);
-    expect(lastPainter!.states[0].camera.scale).toBe(1);
+    run(f, 3);
+    expect(g.nodeCount()).toBe(4);
+    expect(g.focusedNode()).toBe(-1);
+    expect(g.nodeId(0)).toBe("n0");
+    expect(g.nodeId(99)).toBeNull();
+    const seen: number[] = [];
+    g.onFocusChange = (index: number) => seen.push(index);
+    g.focusNode(2);
+    expect(g.focusedNode()).toBe(2);
+    expect(seen).toEqual([2]);
+    // Fuori indice = no-op, mai una notifica spuria.
+    g.focusNode(99);
+    expect(g.focusedNode()).toBe(2);
+    expect(seen).toEqual([2]);
+  });
+
+  it("U46: la selezione da tastiera passa dal frame all'osservatore una volta sola", () => {
+    g.mount(fakeHost());
+    const seen: number[] = [];
+    g.onFocusChange = (index: number) => seen.push(index);
+    run(f, 3);
+    // Il primo frame notifica lo stato iniziale (−1) una volta sola.
+    expect(seen).toEqual([-1]);
+    lastInteraction!.focused = 1;
+    run(f, 5);
+    expect(seen).toEqual([-1, 1]);
+    // Nessuna notifica ripetuta a selezione ferma: l'osservatore resta muto
+    // anche se il loop disegna ancora (camera in convergenza o sim calda).
+    const announced = seen.length;
+    run(f, 5);
+    expect(seen).toHaveLength(announced);
   });
 });

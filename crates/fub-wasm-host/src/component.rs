@@ -53,8 +53,8 @@ use fub_abi::format::{
 };
 use fub_abi::model::DocumentModel;
 use fub_abi::traits::{
-    CommandProvider, HostApi, Plugin, PluginManifest, ReadApi, ViewInstance, ViewInterests,
-    ViewProvider, ViewSpec,
+    abi_compatible, CommandProvider, HostApi, Plugin, PluginManifest, ReadApi, ViewInstance,
+    ViewInterests, ViewProvider, ViewSpec,
 };
 use fub_abi::ui::{UiAction, UiNode, ViewUpdate};
 use fub_abi::{FormatError, PluginError};
@@ -84,22 +84,52 @@ const FORMAT_INTERFACE: &str = "fub:abi/format";
 const FORMAT_EXPORT: &str = "fub:abi/format@0.1.1";
 const VIEW_INTERFACE: &str = "fub:abi/view";
 const VIEW_EXPORT: &str = "fub:abi/view@0.1.1";
-fn is_supported_view_export(name: &str) -> bool {
-    name == VIEW_INTERFACE
-        || name == VIEW_EXPORT
-        || name
-            .strip_prefix(VIEW_INTERFACE)
-            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+fn compatible_export_version(name: &str, interface: &str) -> bool {
+    let Some(version) = name
+        .strip_prefix(interface)
+        .and_then(|v| v.strip_prefix('@'))
+    else {
+        return false;
+    };
+    // Export names carry a complete, numeric semver. The compatibility
+    // decision itself remains in fub-abi, so this host has one ABI policy.
+    let complete = version.split('.').count() == 3
+        && version
+            .split('.')
+            .all(|part| !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()));
+    complete && abi_compatible(version)
 }
 
+fn select_supported_export<'a, I>(names: I, interface: &str, canonical: &str) -> Option<&'a str>
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    let names = names.into_iter().collect::<Vec<_>>();
+    if let Some(name) = names.iter().copied().find(|name| *name == canonical) {
+        return Some(name);
+    }
+    if let Some(name) = names.iter().copied().find(|name| *name == interface) {
+        return Some(name);
+    }
+    let mut compatible = names
+        .into_iter()
+        .filter(|name| compatible_export_version(name, interface))
+        .collect::<Vec<_>>();
+    // Sorting only validated names makes fallback deterministic.
+    compatible.sort_unstable();
+    compatible.pop()
+}
+
+#[cfg(test)]
 fn is_supported_format_export(name: &str) -> bool {
-    name == FORMAT_INTERFACE
-        || name == FORMAT_EXPORT
-        || name
-            .strip_prefix(FORMAT_INTERFACE)
-            .is_some_and(|version| version.starts_with('@') && version.len() > 1)
+    select_supported_export([name], FORMAT_INTERFACE, FORMAT_EXPORT).is_some()
 }
 
+fn unsupported_versioned_export(name: &str, interface: &str) -> bool {
+    name.starts_with(interface)
+        && name.as_bytes().get(interface.len()) == Some(&b'@')
+        && !compatible_export_version(name, interface)
+}
 fn resolve_format_indices<T, E>(
     export_present: bool,
     resolve: impl FnOnce() -> Result<T, E>,
@@ -125,6 +155,9 @@ pub enum LoadError {
     /// compilarlo/linkarlo.
     #[error("il componente non si compila: {0}")]
     Compilation(String),
+    /// L'export di un'interfaccia ABI usa una versione non canonica o non compatibile.
+    #[error("export ABI non supportato: {0}")]
+    UnsupportedExport(String),
     /// Il componente importa una famiglia `host-*` del contratto che questo
     /// host non implementa.
     #[error("il componente importa famiglie che questo host non serve: {0}")]
@@ -181,17 +214,38 @@ impl Component {
         }
         cap_the_rest(&mut linker, &engine, &component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
-        let format_export_present = component
+        if let Some(name) = component
             .component_type()
             .exports(&engine)
-            .any(|(name, _)| is_supported_format_export(name));
-        let view_export_present = component
-            .component_type()
-            .exports(&engine)
-            .any(|(name, _)| is_supported_view_export(name));
+            .map(|(name, _)| name)
+            .find(|name| {
+                unsupported_versioned_export(name, FORMAT_INTERFACE)
+                    || unsupported_versioned_export(name, VIEW_INTERFACE)
+            })
+        {
+            return Err(LoadError::UnsupportedExport(name.to_owned()));
+        }
         let pre = linker
             .instantiate_pre(&component)
             .map_err(|error| LoadError::Compilation(format!("{error:#}")))?;
+        let format_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            FORMAT_INTERFACE,
+            FORMAT_EXPORT,
+        )
+        .is_some();
+        let view_export_present = select_supported_export(
+            component
+                .component_type()
+                .exports(&engine)
+                .map(|(name, _)| name),
+            VIEW_INTERFACE,
+            VIEW_EXPORT,
+        )
+        .is_some();
         let indices = w_plugin::GuestIndices::new(&pre)
             .map_err(|error| LoadError::NotAPlugin(format!("{error:#}")))?;
         let command_indices = w_command::GuestIndices::new(&pre).ok();
@@ -903,10 +957,10 @@ impl Plugin for FailedPlugin {
 #[cfg(test)]
 mod tests {
     use super::{
-        enter_instance, is_supported_format_export, resolve_format_indices, FORMAT_EXPORT,
+        enter_instance, is_supported_format_export, resolve_format_indices,
+        select_supported_export, unsupported_versioned_export, FORMAT_EXPORT, FORMAT_INTERFACE,
     };
     use std::sync::Mutex;
-
     #[test]
     fn instance_guard_rejects_reentry_and_cleans_up_nested_instances() {
         let first = Mutex::new(());
@@ -922,17 +976,60 @@ mod tests {
         drop(first_guard);
         assert!(enter_instance(first_id).is_ok());
     }
-
     #[test]
-    fn format_export_matches_identity_across_versions() {
+    fn format_export_accepts_only_canonical_compatible_versions() {
         assert!(is_supported_format_export(FORMAT_EXPORT));
         assert!(is_supported_format_export("fub:abi/format"));
+        assert!(is_supported_format_export("fub:abi/format@0.1.0"));
         assert!(is_supported_format_export("fub:abi/format@0.1.2"));
-        assert!(is_supported_format_export("fub:abi/format@9.9.9"));
+        assert!(!is_supported_format_export("fub:abi/format@0.2.0"));
+        assert!(!is_supported_format_export("fub:abi/format@1.1.1"));
+        assert!(!is_supported_format_export("fub:abi/format@9.9.9"));
         assert!(!is_supported_format_export("fub:abi/format@"));
+        assert!(!is_supported_format_export("fub:abi/format@0.1"));
+        assert!(!is_supported_format_export("fub:abi/format@0.1.x"));
+        assert!(!is_supported_format_export("fub:abi/format@0.1.1.extra"));
         assert!(!is_supported_format_export("fub:abi/formatting@0.1.1"));
         assert!(!is_supported_format_export("fub:abi/format-extra@0.1.1"));
+        assert!(unsupported_versioned_export(
+            "fub:abi/format@9.9.9",
+            FORMAT_INTERFACE
+        ));
+        assert!(!unsupported_versioned_export(
+            "fub:abi/format@0.1.2",
+            FORMAT_INTERFACE
+        ));
         assert!(!is_supported_format_export("foreign:fub/abi/format@0.1.1"));
+    }
+
+    #[test]
+    fn export_fallback_is_deterministic_and_prefers_canonical() {
+        let names = [
+            "fub:abi/format@0.1.0",
+            "fub:abi/format@0.1.2",
+            "fub:abi/format@9.9.9",
+            "fub:abi/format@0.2.0",
+        ];
+        assert_eq!(
+            select_supported_export(names, FORMAT_INTERFACE, FORMAT_EXPORT),
+            Some("fub:abi/format@0.1.2")
+        );
+        assert_eq!(
+            select_supported_export(
+                ["fub:abi/format@0.1.0", "fub:abi/format@0.1.1"],
+                FORMAT_INTERFACE,
+                FORMAT_EXPORT
+            ),
+            Some("fub:abi/format@0.1.1")
+        );
+        assert_eq!(
+            select_supported_export(
+                ["fub:abi/format@9.9.9", "fub:abi/format@0.2.0"],
+                FORMAT_INTERFACE,
+                FORMAT_EXPORT
+            ),
+            None
+        );
     }
 
     #[test]

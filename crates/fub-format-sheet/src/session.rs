@@ -222,7 +222,6 @@ impl<R: Eq + Serialize> SheetSession<R> {
         &self.workbook.sheets
     }
 
-
     /// Compare-and-reload: un errore lascia revisione, assi e valori precedenti.
     pub fn reload(
         &mut self,

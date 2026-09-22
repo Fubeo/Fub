@@ -1,12 +1,26 @@
 //! Il banco di misura del §8.3: quanto costa la contesa sul workspace.
 //!
 //! La voce diceva «misurare prima», e questo è il *prima* reso ripetibile
-//! invece che citato. Il trucco è che i due mondi si misurano nello stesso
-//! binario: sotto un `RwLock`, eseguire una **lettura** prendendo `write()` è
-//! esattamente il comportamento del `Mutex` che c'era: un solo lettore alla
-//! volta. Quindi non serve un ramo git per il termine di paragone —
-//! [`Mode::Exclusive`] *è* il termine di paragone, e resta verificabile anche
-//! fra un anno.
+//! La misura passa dalle porte pubbliche di `Host`: `Exclusive` aggiunge un
+//! serializzatore `Mutex` attorno a ogni lettura e scrittura, cioè il modello
+//! comparabile con il vecchio mutex; `Shared` lascia lavorare le letture
+//! concorrenti sotto il `RwLock` interno dell'host.
+//! Non si confonde quindi la contesa artificiale del confronto con la policy
+//! che l'API pubblica applica davvero.
+//!
+//! Il numero dei writer è il numero di chiamate completate a
+//! [`Host::write_document`]. La durata registrata parte prima dell'attesa
+//! del serializzatore (quando il modo è `Exclusive`) e termina dopo la
+//! scrittura: include sempre attesa e scrittura.
+//! Quindi `Shared` misura la latenza end-to-end della scrittura mentre letture
+//! concorrenti attraversano l'host; `Exclusive` misura la stessa latenza con
+//! letture e scritture messe in fila dal mutex del banco.
+//!
+//! Il trucco è che i due mondi si misurano nello stesso binario: sotto il
+//! `Mutex` esplicito, eseguire una **lettura** è esattamente il comportamento
+//! seriale del confronto che c'era. Quindi non serve un ramo git per il termine
+//! di paragone — [`Mode::Exclusive`] *è* il termine di paragone, e resta
+//! verificabile anche fra un anno.
 //!
 //! ```text
 //! cargo run --release -p fub-host --example contesa
@@ -24,9 +38,13 @@
 //!    travestito da meglio.
 //!
 //! Il vault sintetico è volutamente più grande di quelli di prova (2000 note
+//! Le proprietà del lock che il banco osserva sono presidiate anche dai probe
+//! [`concurrency`](../src/legacy_tests/concurrency.rs) e
+//! [`query_index_lock`](../src/legacy_tests/query_index_lock.rs): qui si
+//! riportano numeri, non soglie dipendenti dalla macchina.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -35,8 +53,7 @@ use fub_abi::model::DocId;
 use fub_abi::query::{QueryExpr, QueryPredicate, TextQuery};
 use fub_abi::traits::{Excerpts, IndexQuery, Page, PropertySelect, ViewInstance};
 use fub_features::{BACKLINKS_VIEW, OUTLINE_VIEW, STATS_VIEW, TAGS_VIEW};
-use fub_host::{Custody, Host, NoWatcher};
-use fub_kernel::Workspace;
+use fub_host::{Host, NoWatcher};
 
 const NOTES: usize = 2000;
 /// Abbastanza per uscire dal rumore, abbastanza poco da poterlo rilanciare.
@@ -60,12 +77,19 @@ impl Mode {
         }
     }
 
-    /// Esegue `f` sotto il prestito che questo modo prevede.
-    fn read_with<R>(self, ws: &Custody<Workspace>, f: impl FnOnce(&Workspace) -> R) -> R {
-        match self {
-            Mode::Exclusive => f(&ws.write().unwrap()),
-            Mode::Shared => f(&ws.read().unwrap()),
-        }
+    /// Esegue la lettura con il limite di contesa scelto.
+    fn read_with(
+        self,
+        host: &Host,
+        serial: &Mutex<()>,
+        op: ReadOp,
+        n: u64,
+    ) -> Result<(), fub_abi::PluginError> {
+        let _guard = match self {
+            Mode::Exclusive => Some(serial.lock().unwrap()),
+            Mode::Shared => None,
+        };
+        op.execute(host, n)
     }
 }
 
@@ -92,69 +116,103 @@ const READ_OPS: [(ReadOp, &str); 6] = [
     (ReadOp::Search, "query_index text"),
     (ReadOp::Preview, "render_preview"),
 ];
-
 impl ReadOp {
-    fn execute(self, ws: &Workspace, the: u64) {
+    fn execute(self, host: &Host, the: u64) -> Result<(), fub_abi::PluginError> {
         match self {
-            ReadOp::Backlinks => drop(ws.render_view(&ViewInstance::only(BACKLINKS_VIEW))),
-            ReadOp::Outline => drop(ws.render_view(&ViewInstance::only(OUTLINE_VIEW))),
-            ReadOp::Tags => drop(ws.render_view(&ViewInstance::only(TAGS_VIEW))),
-            ReadOp::Stats => drop(ws.render_view(&ViewInstance::only(STATS_VIEW))),
-            ReadOp::Search => drop(ws.query_index(IndexQuery::Documents {
-                matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms("concorrenza"))),
-                sort: None,
-                select: PropertySelect::None,
-                page: Some(Page::first(20)),
-                excerpts: Excerpts::Attach,
-            })),
-            ReadOp::Preview => {
-                drop(ws.render_preview(&DocId::new(format!("Nota {}.md", the as usize % NOTES))))
-            }
+            ReadOp::Backlinks => host
+                .render_view(None, &ViewInstance::only(BACKLINKS_VIEW))
+                .map(|_| ()),
+            ReadOp::Outline => host
+                .render_view(None, &ViewInstance::only(OUTLINE_VIEW))
+                .map(|_| ()),
+            ReadOp::Tags => host
+                .render_view(None, &ViewInstance::only(TAGS_VIEW))
+                .map(|_| ()),
+            ReadOp::Stats => host
+                .render_view(None, &ViewInstance::only(STATS_VIEW))
+                .map(|_| ()),
+            ReadOp::Search => host
+                .query_index(
+                    None,
+                    IndexQuery::Documents {
+                        matching: QueryExpr::of(QueryPredicate::Text(TextQuery::terms(
+                            "concorrenza",
+                        ))),
+                        sort: None,
+                        select: PropertySelect::None,
+                        page: Some(Page::first(20)),
+                        excerpts: Excerpts::Attach,
+                    },
+                )
+                .map(|_| ()),
+            ReadOp::Preview => host
+                .render_preview(
+                    None,
+                    &DocId::new(format!("Nota {}.md", the as usize % NOTES)),
+                )
+                .map(|_| ()),
         }
     }
 }
 
-/// Gira `mix` su `threads` thread per [`DUR`], e rende le operazioni al secondo.
-fn measure(ws: &Custody<Workspace>, mode: Mode, threads: usize, mix: &[ReadOp]) -> f64 {
+/// Gira `mix` su `threads` thread per [`DUR`], e rende operazioni e risultati.
+fn measure(host: &Arc<Host>, mode: Mode, threads: usize, mix: &[ReadOp]) -> (f64, u64, u64) {
     let stop = Arc::new(AtomicBool::new(false));
-    let ops = Arc::new(AtomicU64::new(0));
+    let successes = Arc::new(AtomicU64::new(0));
+    let failures = Arc::new(AtomicU64::new(0));
+    let serial = Arc::new(Mutex::new(()));
     let start = Instant::now();
     let handles: Vec<_> = (0..threads)
         .map(|t| {
-            let (ws, stop, ops) = (ws.clone(), stop.clone(), ops.clone());
+            let (host, stop, successes, failures, serial) = (
+                Arc::clone(host),
+                stop.clone(),
+                successes.clone(),
+                failures.clone(),
+                serial.clone(),
+            );
             let mix = mix.to_vec();
             std::thread::spawn(move || {
-                let mut made = 0u64;
                 let mut the = t as u64;
                 while !stop.load(Ordering::Relaxed) {
                     let operation = mix[the as usize % mix.len()];
-                    mode.read_with(&ws, |w| operation.execute(w, the));
-                    made += 1;
+                    match mode.read_with(&host, &serial, operation, the) {
+                        Ok(()) => {
+                            successes.fetch_add(1, Ordering::Relaxed);
+                        }
+                        Err(_) => {
+                            failures.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
                     the += 1;
                 }
-                ops.fetch_add(made, Ordering::Relaxed);
             })
         })
         .collect();
     std::thread::sleep(DUR);
     stop.store(true, Ordering::Relaxed);
-    for h in handles {
-        h.join().unwrap();
+    for handle in handles {
+        handle.join().unwrap();
     }
-    ops.load(Ordering::Relaxed) as f64 / start.elapsed().as_secs_f64()
+    (
+        successes.load(Ordering::Relaxed) as f64 / start.elapsed().as_secs_f64(),
+        successes.load(Ordering::Relaxed),
+        failures.load(Ordering::Relaxed),
+    )
 }
 
 /// La contropartita: quanto aspetta chi **scrive** mentre `threads` lettori
-/// tengono il workspace. Rende (mediana, massimo) in millisecondi.
-fn write_latency(ws: &Custody<Workspace>, mode: Mode, threads: usize) -> (f64, f64, usize) {
+/// tengono il workspace. Rende attese, scritture riuscite e guasti.
+fn write_latency(host: &Arc<Host>, mode: Mode, threads: usize) -> (f64, f64, u64, u64) {
     let stop = Arc::new(AtomicBool::new(false));
+    let serial = Arc::new(Mutex::new(()));
     let readers: Vec<_> = (0..threads)
         .map(|t| {
-            let (ws, stop) = (ws.clone(), stop.clone());
+            let (host, stop, serial) = (Arc::clone(host), stop.clone(), serial.clone());
             std::thread::spawn(move || {
                 let mut the = t as u64;
                 while !stop.load(Ordering::Relaxed) {
-                    mode.read_with(&ws, |w| ReadOp::Preview.execute(w, the));
+                    let _ = mode.read_with(&host, &serial, ReadOp::Preview, the);
                     the += 1;
                 }
             })
@@ -166,33 +224,40 @@ fn write_latency(ws: &Custody<Workspace>, mode: Mode, threads: usize) -> (f64, f
 
     let mut waits = Vec::new();
     let end = Instant::now() + Duration::from_millis(2000);
-    let mut n = 0;
+    let mut writes = 0u64;
+    let mut failures = 0u64;
     while Instant::now() < end {
-        let t = Instant::now();
-        let mut w = ws.write().unwrap();
-        let expected = t.elapsed();
-        w.write_document(
-            &DocId::new("Scrittore.md"),
-            &format!("# Scrittore\n\ngiro {n}\n"),
-            WriteBase::Dictated,
-        )
-        .unwrap();
-        drop(w);
-        waits.push(expected.as_secs_f64() * 1000.0);
-        n += 1;
+        let started = Instant::now();
+        let result = {
+            let _guard = match mode {
+                Mode::Exclusive => Some(serial.lock().unwrap()),
+                Mode::Shared => None,
+            };
+            host.write_document(
+                None,
+                &DocId::new("Scrittore.md"),
+                &format!("# Scrittore\n\ngiro {writes}\n"),
+                WriteBase::Dictated,
+            )
+        };
+        waits.push(started.elapsed().as_secs_f64() * 1000.0);
+        match result {
+            Ok(_) => writes += 1,
+            Err(_) => failures += 1,
+        }
         // Un salvataggio ogni tanto, non un ciclo stretto: è il ritmo di chi
         // scrive a mano, che è il caso che conta.
         std::thread::sleep(Duration::from_millis(5));
     }
     stop.store(true, Ordering::Relaxed);
-    for h in readers {
-        h.join().unwrap();
+    for handle in readers {
+        handle.join().unwrap();
     }
 
     waits.sort_by(f64::total_cmp);
     let median = waits[waits.len() / 2];
     let max = *waits.last().unwrap();
-    (median, max, n)
+    (median, max, writes, failures)
 }
 
 fn seed(root: &Utf8Path) {
@@ -224,14 +289,10 @@ fn main() {
     eprintln!("seeding {NOTES} notes in {root} ...");
     seed(&root);
 
-    let host = Host::new().with_watcher(Box::new(NoWatcher));
+    let host = Arc::new(Host::new().with_watcher(Box::new(NoWatcher)));
     let t = Instant::now();
     host.open(&root).unwrap();
-    // Il numero che il §8.3 chiama «lavoro lungo»: `reindex` è `&mut self`, e
-    // per tutta la sua durata nessuno legge. Qui non blocca nessuno solo perché
-    // `Host::open` lo fa **prima** di condividere il workspace — l'unica delle
-    // cinque operazioni lunghe della voce che stia già fuori dal lock.
-    // cinque operazioni lunghe della voce che stia già fuori dal lock.
+    host.wait_indexed(None).unwrap();
     eprintln!(
         "opening + scan (exclusive by construction): {:?}",
         t.elapsed()
@@ -241,44 +302,66 @@ fn main() {
         std::thread::available_parallelism().map_or(0, |n| n.get())
     );
 
-    let ws = host.debug_workspace(None).unwrap();
-    ws.write()
-        .unwrap()
-        .set_active_document(Some(DocId::new("Nota 7.md")));
-
     // --- 1. per tipo di lettura -------------------------------------------
     println!("== 1. which reads actually scale (8 threads) ==");
     println!(
-        "{:<24} {:>12} {:>12} {:>8}",
-        "read", "exclusive", "shared", "×"
+        "{:<24} {:>12} {:>12} {:>8} {}",
+        "read", "exclusive", "shared", "×", "ok/errors (exclusive/shared)"
     );
     for (operation, name) in READ_OPS {
-        let and = measure(&ws, Mode::Exclusive, 8, &[operation]);
-        let c = measure(&ws, Mode::Shared, 8, &[operation]);
-        println!("{name:<24} {and:>12.0} {c:>12.0} {:>7.1}×", c / and);
+        let (exclusive, exclusive_ok, exclusive_errors) =
+            measure(&host, Mode::Exclusive, 8, &[operation]);
+        let (shared, shared_ok, shared_errors) = measure(&host, Mode::Shared, 8, &[operation]);
+        assert_eq!(
+            exclusive_errors, 0,
+            "{name}: exclusive read errors ({exclusive_errors})"
+        );
+        assert_eq!(
+            shared_errors, 0,
+            "{name}: shared read errors ({shared_errors})"
+        );
+        println!(
+            "{name:<24} {exclusive:>12.0} {shared:>12.0} {:>7.1}× ok={exclusive_ok}/{shared_ok} errors={exclusive_errors}/{shared_errors}",
+            shared / exclusive
+        );
     }
 
     // --- 2. carico misto ---------------------------------------------------
     let mix: Vec<ReadOp> = READ_OPS.iter().map(|(the, _)| *the).collect();
     println!("\n== 2. mixed load: ops/s ==");
     println!(
-        "{:<8} {:>12} {:>12} {:>8}",
-        "thread", "exclusive", "shared", "×"
+        "{:<8} {:>12} {:>12} {:>8} {}",
+        "thread", "exclusive", "shared", "×", "ok/errors (exclusive/shared)"
     );
     for threads in [1usize, 2, 4, 8, 16] {
-        let and = measure(&ws, Mode::Exclusive, threads, &mix);
-        let c = measure(&ws, Mode::Shared, threads, &mix);
-        println!("{threads:<8} {and:>12.0} {c:>12.0} {:>7.1}×", c / and);
+        let (exclusive, exclusive_ok, exclusive_errors) =
+            measure(&host, Mode::Exclusive, threads, &mix);
+        let (shared, shared_ok, shared_errors) = measure(&host, Mode::Shared, threads, &mix);
+        assert_eq!(
+            exclusive_errors, 0,
+            "mixed exclusive read errors ({exclusive_errors})"
+        );
+        assert_eq!(
+            shared_errors, 0,
+            "mixed shared read errors ({shared_errors})"
+        );
+        println!(
+            "{threads:<8} {exclusive:>12.0} {shared:>12.0} {:>7.1}× ok={exclusive_ok}/{shared_ok} errors={exclusive_errors}/{shared_errors}",
+            shared / exclusive
+        );
     }
-
     // --- 3. la contropartita ----------------------------------------------
     println!("\n== 3. how long the writer waits, with 8 readers (ms) ==");
     println!(
-        "{:<32} {:>10} {:>10} {:>10}",
-        "mode", "median", "max", "writes"
+        "{:<32} {:>10} {:>10} {:>10} {:>10}",
+        "mode", "median", "max", "writes", "errors"
     );
     for mode in [Mode::Exclusive, Mode::Shared] {
-        let (med, max, n) = write_latency(&ws, mode, 8);
-        println!("{:<32} {med:>10.2} {max:>10.2} {n:>10}", mode.name());
+        let (med, max, writes, errors) = write_latency(&host, mode, 8);
+        assert_eq!(errors, 0, "{} writer errors ({errors})", mode.name());
+        println!(
+            "{:<32} {med:>10.2} {max:>10.2} {writes:>10} {errors:>10}",
+            mode.name()
+        );
     }
 }

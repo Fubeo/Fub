@@ -50,6 +50,8 @@ const verify = process.argv.includes("--verify");
 const vite = await createServer({
   root: join(HERE, ".."),
   server: { middlewareMode: true },
+  // Solo moduli SSR: nessuna pagina client da pre-bundlare durante la generazione.
+  optimizeDeps: { noDiscovery: true, include: [] },
   appType: "custom",
   logLevel: "warn",
 });

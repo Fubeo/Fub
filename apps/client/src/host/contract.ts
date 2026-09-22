@@ -58,6 +58,20 @@ export interface ThemeManifest {
   asset_namespace: string;
 }
 
+/** Un tema installato che il backend può consegnare alla shell. */
+export interface ThemeInfo {
+  manifest: ThemeManifest;
+}
+
+/** Una luce di un tema installato, già letta dal backend. */
+export interface ThemePayload {
+  manifest: ThemeManifest;
+  light: ThemeLight;
+  sheet: string;
+  skin: string | null;
+  assets: Record<string, unknown>;
+}
+
 export interface VaultInfo {
   root: string;
   // `documents` NON C'È PIÙ (§14.4): l'apertura portava l'elenco intero delle

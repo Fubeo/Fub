@@ -12,7 +12,7 @@ vi.mock("./notify", () => ({
   },
 }));
 import type { ActionRef, FieldValue, UiNode } from "../host/contract";
-import { pair, activeFields, mountTree, patchTree } from "./node";
+import { pair, activeFields, mountTree, patchTree, unmountTree } from "./node";
 import { registerCustomRenderer, type OnAction } from "./custom";
 
 // La regola su cui poggia il §2.8, provata dove **può** essere sbagliata.
@@ -262,6 +262,17 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
       "prima",
     ]);
   });
+  it("una chiave senza bersagli non applica il patch né altera l'albero", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    mountTree(host, field("cambia"), async () => {});
+    const input = host.querySelector("input")!;
+
+    expect(patchTree(host, "assente", field("nuovo"))).toBe(false);
+    expect(host.querySelector("input")).toBe(input);
+    expect(input.value).toBe("");
+  });
+
 
   it("un renderer custom che sopravvive alla riconciliazione instrada al montaggio di adesso", () => {
     const NS = "prova.porta";
@@ -292,6 +303,22 @@ describe("chi instrada un albero riusato è il montaggio di adesso (§2.8)", () 
     expect(newItem).toEqual(["tocca"]);
     expect(old).toEqual([]);
   });
+  it("montare, smontare e rimontare conserva un solo instradamento", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const actions: string[] = [];
+    const handler = (action: ActionRef) => {
+      actions.push(action.action);
+    };
+
+    mountTree(host, field("prima"), handler);
+    unmountTree(host);
+    mountTree(host, field("seconda"), handler);
+
+    host.querySelector("input")!.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(actions).toEqual(["seconda"]);
+  });
+
 });
 
 // La 0118 sui **valori** invece che sulle azioni, e la sua metà mancante.
@@ -719,6 +746,13 @@ describe("controlli statici e righe valide", () => {
   ] as const)("un campo senza azione è disabilitato: %s", (node, selector) => {
     const host = mount(node as UiNode);
     expect((host.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).disabled).toBe(true);
+  });
+  it("una checkbox porta l'etichetta accessibile del campo", () => {
+    const host = mount({
+      node: "checkbox", field: "completed", label: "Completata", value: true, action: null,
+    } as UiNode);
+    const input = host.querySelector<HTMLInputElement>("input[type=checkbox]")!;
+    expect(input.labels?.[0]?.textContent).toContain("Completata");
   });
 
   it("un campo con azione resta attivo", () => {

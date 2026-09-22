@@ -15,11 +15,25 @@ use fub_abi::PluginError;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GridCall {
-    Open { surface: String, revision: Revision },
-    Window { instance: String, request: GridWindowRequest },
-    Apply { instance: String, request: GridApplyRequest },
-    Reload { instance: String, revision: Revision },
-    Close { instance: String },
+    Open {
+        surface: String,
+        revision: Revision,
+    },
+    Window {
+        instance: String,
+        request: GridWindowRequest,
+    },
+    Apply {
+        instance: String,
+        request: GridApplyRequest,
+    },
+    Reload {
+        instance: String,
+        revision: Revision,
+    },
+    Close {
+        instance: String,
+    },
     Shutdown,
 }
 
@@ -121,7 +135,9 @@ impl GridProvider for GridHarness {
             .get(instance)
             .ok_or_else(|| Self::missing("grid session is not open"))?;
         if session.revision != request.revision {
-            return Err(PluginError::Conflict("grid session revision changed".into()));
+            return Err(PluginError::Conflict(
+                "grid session revision changed".into(),
+            ));
         }
         self.calls.push(GridCall::Window {
             instance: instance.to_owned(),
@@ -150,7 +166,9 @@ impl GridProvider for GridHarness {
             .get(instance)
             .ok_or_else(|| Self::missing("grid session is not open"))?;
         if session.revision != request.revision {
-            return Err(PluginError::Conflict("grid session revision changed".into()));
+            return Err(PluginError::Conflict(
+                "grid session revision changed".into(),
+            ));
         }
         self.calls.push(GridCall::Apply {
             instance: instance.to_owned(),
@@ -187,7 +205,9 @@ impl GridProvider for GridHarness {
             .get_mut(instance)
             .ok_or_else(|| Self::missing("grid session is not open"))?;
         if session.revision != expected {
-            return Err(PluginError::Conflict("grid session revision changed".into()));
+            return Err(PluginError::Conflict(
+                "grid session revision changed".into(),
+            ));
         }
         session.revision = revision.clone();
         self.calls.push(GridCall::Reload {
@@ -252,7 +272,10 @@ mod tests {
             harness.open("missing.grid", "{}", Revision::of("{}")),
             Err(PluginError::Unserved(_))
         ));
-        assert!(harness.calls().iter().any(|call| matches!(call, GridCall::Open { .. })));
+        assert!(harness
+            .calls()
+            .iter()
+            .any(|call| matches!(call, GridCall::Open { .. })));
     }
 
     #[test]

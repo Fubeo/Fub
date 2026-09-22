@@ -23,9 +23,8 @@ use std::time::Duration;
 use camino::Utf8PathBuf;
 use fub_abi::event::Event;
 use fub_abi::options::permission;
-use fub_abi::traits::JobSpec;
 use fub_abi::PluginError;
-use fub_host::registry::Bundle;
+use fub_host::Bundle;
 use fub_host::{Host, NoWatcher};
 use fub_kernel::{Subscription, Trust};
 use fub_wasm_host::WasmBundle;
@@ -62,33 +61,15 @@ fn bench_component(v: &Vault, variant: &str) -> (Host, Subscription) {
         .with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    let events = host
-        .with_session(None, |s| s.workspace().read().unwrap().bus().subscribe())
-        .expect("aperto");
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut ws)
-            .expect("il bundle si monta");
-    })
-    .expect("aperto");
+    let events = host.subscribe(None).expect("aperto");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("il bundle si monta");
     (host, events)
 }
 
 fn ask(host: &Host, job: &str) -> fub_abi::traits::JobId {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        ws.with_host(ID, |h| {
-            h.spawn_job(JobSpec {
-                job: job.to_string(),
-                payload: serde_json::json!(null),
-            })
-        })
+    host.spawn_job(None, ID, job, serde_json::json!(null))
         .expect("accodato")
-    })
-    .expect("aperto")
 }
 
 fn next_result(events: &Subscription) -> (String, Result<serde_json::Value, PluginError>) {
@@ -111,35 +92,26 @@ fn next_result(events: &Subscription) -> (String, Result<serde_json::Value, Plug
 fn a_component_wasm_is_mounts_lives_and_is_unmounts() {
     let v = Vault::new();
     let (host, events) = bench(&v, true);
-    host.with_session(None, |s| {
-        let key = fub_abi::settings::permission_key(ID, permission::READ_VAULT);
-        s.workspace()
-            .write()
-            .unwrap()
-            .set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))
-            .expect("il permesso di lettura è concesso esplicitamente");
-    })
-    .expect("aperto");
+    let key = fub_abi::settings::permission_key(ID, permission::READ_VAULT);
+    host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
+        .expect("il permesso di lettura è concesso esplicitamente");
 
     // Montato: il plugin è nell'inventario del §7.6 con ciò che il **manifest
     // del componente** ha dichiarato, non ciò che un file accanto diceva di lui.
-    host.with_session(None, |s| {
-        let ws = s.workspace().read().unwrap();
-        let info = ws
-            .plugins()
-            .into_iter()
-            .find(|p| p.id == ID)
-            .expect("il componente è nell'inventario del §7.6");
-        assert!(
-            info.permissions.enabled(permission::READ_VAULT),
-            "il manifest del `.wasm` dichiara `read-vault` e l'inventario lo mostra"
-        );
-        assert!(
-            s.bundles().read().unwrap().ids().contains(&ID),
-            "il registry possiede il bundle"
-        );
-    })
-    .expect("aperto");
+    let info = host
+        .plugin_ids(None)
+        .expect("il componente è nell'inventario del §7.6")
+        .into_iter()
+        .find(|id| id == ID)
+        .expect("il componente è nell'inventario del §7.6");
+    assert_eq!(info, ID);
+    assert!(
+        host.bundles(None)
+            .expect("bundle inventory")
+            .iter()
+            .any(|bundle| bundle.id == ID),
+        "il registry possiede il bundle"
+    );
 
     // Il job gira sul pool vero, dentro l'istanza WASM, e torna con l'esito:
     // ha letto la nota **attraverso il confine**.
@@ -171,16 +143,16 @@ fn a_component_wasm_is_mounts_lives_and_is_unmounts() {
     );
 
     // Smontato: `deactivate` è passato dal confine e il registry non lo ha più.
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        let errors = s.bundles().write().unwrap().unmount(&mut ws, ID);
-        assert!(errors.is_empty(), "niente è andato storto: {errors:?}");
-        assert!(
-            !s.bundles().read().unwrap().ids().contains(&ID),
-            "il registry non possiede più il bundle"
-        );
-    })
-    .expect("aperto");
+    let errors = host.unmount_bundle(None, ID).expect("aperto");
+    assert!(errors.is_empty(), "niente è andato storto: {errors:?}");
+    assert!(
+        !host
+            .bundles(None)
+            .expect("bundle inventory")
+            .iter()
+            .any(|bundle| bundle.id == ID),
+        "il registry non possiede più il bundle"
+    );
 
     host.close();
 }
@@ -274,15 +246,8 @@ fn the_bundle_mounts_from_the_exact_received_bytes() {
         .with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut ws)
-            .expect("il bundle conserva gli stessi byte compilati");
-    })
-    .expect("aperto");
+    host.mount_bundle(None, Arc::new(bundle))
+        .expect("il bundle conserva gli stessi byte compilati");
     host.close();
 }
 

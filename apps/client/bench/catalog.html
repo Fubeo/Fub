@@ -81,12 +81,18 @@
         color: var(--muted);
       }
       .provino {
+        /* Ogni provino possiede anche i discendenti fixed/absolute: una
+           modale di esempio non deve oscurare gli altri campioni. */
+        contain: layout paint;
         border: 1px dashed var(--border);
         border-radius: var(--radius-sm);
         padding: var(--space-3);
         background: var(--bg-elev);
         min-width: 0;
         overflow-x: auto;
+      }
+      .provino-anatomia {
+        min-height: 8rem;
       }
       /* La tavolozza. */
       .token {
@@ -123,8 +129,13 @@
       .conto b {
         font-weight: var(--weight-bold);
       }
-      .conto[data-esito="sotto"] {
+      .conto[data-result="sotto"] {
         color: var(--danger);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+        border: 1px solid var(--danger);
+        border-radius: var(--radius-xs);
+        padding-inline: var(--space-1);
       }
       /* Il campionario tipografico. */
       .riga-scala {
@@ -138,10 +149,23 @@
       .misura {
         max-width: 34em;
       }
+      .ui-webview-frame {
+        display: inline-block;
+        line-height: 0;
+        vertical-align: top;
+      }
+      .ui-webview-frame > .ui-webview {
+        display: block;
+      }
+      .ui-webview-frame:focus-within,
+      .ui-webview-frame--keyboard {
+        outline: var(--focus-ring-width) solid var(--focus-ring);
+        outline-offset: var(--focus-ring-offset);
+      }
     </style>
   </head>
   <body>
-    <div id="catalogo" class="catalogo"></div>
+    <main id="catalogo" class="catalogo"></main>
     <script type="module" src="./catalog.ts"></script>
   </body>
 </html>

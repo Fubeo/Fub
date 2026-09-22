@@ -67,11 +67,13 @@
 //!
 //! Il §11.1 ha dato all'host due cose che non aveva: il **livello macchina**
 //! delle impostazioni (`config`, `MachineSettings` del kernel) e il **registro
-//! dei vault** ([`VaultRegistry`]). Sono la stessa mancanza vista da due lati —
+//! dei vault** (`VaultRegistry`). Sono la stessa mancanza vista da due lati —
 //! *un elenco di vault non sta in nessun vault* — e stanno qui perché *dove* si
 //! scrive è una decisione dell'installazione, non del kernel: chi non ne ha una
 //! (un test, un e2e headless) lavora in memoria, e non tocca la cartella di
-//! configurazione di chi lo esegue.
+//! configurazione di chi lo esegue. L'host possiede il registro e distribuisce
+//! soltanto il suo [`VaultRegistryHandle`], una porta cloneable che non dipende
+//! dal lock di alcun workspace.
 //!
 //! ## Cosa NON è ancora qui
 //!
@@ -80,7 +82,7 @@
 mod bridge;
 pub mod config;
 /// **La porta unica dei lucchetti** e la politica del veleno (decisione 0120).
-pub mod custody;
+mod custody;
 pub mod format_source;
 pub mod jobs;
 pub mod mount;
@@ -103,6 +105,10 @@ pub mod vaults;
 /// Il tempo di **parete** dello scheduler (§22.4, decisione 0091).
 mod wall;
 pub mod watcher;
+#[cfg(test)]
+extern crate self as fub_host;
+#[cfg(test)]
+mod legacy_tests;
 
 pub use config::{config_dir, install_logging, log_path};
 pub use custody::Custody;
@@ -117,7 +123,7 @@ pub use registry::{
 pub use runner::{InProgress, JobRunner, ShutDown, DEFAULT_JOB_THREADS};
 pub use session::{doc_id, Delivery, EventSink, Host, VaultSession};
 pub use settings::{initial_vault, versioning_enabled, CORE_ID};
-pub use vaults::{VaultEntry, VaultRegistry};
+pub use vaults::{VaultEntry, VaultRegistry, VaultRegistryHandle};
 pub use watcher::{ExternalChange, ExternalSync, NoWatcher, VaultWatcher, WatcherFactory};
 
 #[cfg(feature = "notify-watcher")]

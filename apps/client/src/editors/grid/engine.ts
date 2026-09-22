@@ -1,5 +1,6 @@
 import type { Theme } from "../../theme/theme";
 import type { SheetCellValue, SheetEvaluation } from "../../host/contract";
+import { onLanguage, t } from "../../i18n/strings";
 import { createTextEngine, type EditorChangeOrigin, type TextEngine } from "../text/engine";
 import { createFormulaProfile } from "../text/profiles/formula";
 import {
@@ -144,6 +145,8 @@ export class GridEngine {
   readonly #formulaEditor: TextEngine;
   readonly #cellEditor: TextEngine;
   readonly #options: GridEngineOptions;
+  readonly #stopLanguage: () => void;
+
   readonly #abort = new AbortController();
   #workbook: GridWorkbook | null = null;
   #sheetIndex = 0;
@@ -178,7 +181,11 @@ export class GridEngine {
     this.#viewport.className = "grid-viewport";
     this.#viewport.tabIndex = 0;
     this.#viewport.setAttribute("role", "grid");
-    this.#viewport.setAttribute("aria-label", "Foglio di calcolo");
+    this.#viewport.setAttribute("aria-label", t("grid.a11y.superficie"));
+    this.#stopLanguage = onLanguage(() => {
+      if (!this.#destroyed) this.#viewport.setAttribute("aria-label", t("grid.a11y.superficie"));
+    });
+
     this.#canvas = document.createElement("div");
     this.#canvas.className = "grid-canvas";
     this.#cells = document.createElement("div");
@@ -294,6 +301,16 @@ export class GridEngine {
   }
 
   getDoc(): string { return this.#source; }
+  selection(): GridSelection {
+    return {
+      anchor: { ...this.#selection.anchor },
+      focus: { ...this.#selection.focus },
+    };
+  }
+
+  renderedCellCount(): number {
+    return this.#cells.childElementCount;
+  }
 
   focus(): void {
     if (!this.#destroyed) this.#viewport.focus();
@@ -335,15 +352,10 @@ export class GridEngine {
     return true;
   }
 
-  renderedCellCount(): number {
-    return this.#cells.childElementCount;
-  }
-
-  selection(): GridSelection { return this.#selection; }
-
   destroy(): void {
     if (this.#destroyed) return;
     this.#destroyed = true;
+    this.#stopLanguage();
     this.#abort.abort();
     this.#formulaEditor.destroy();
     this.#cellEditor.destroy();

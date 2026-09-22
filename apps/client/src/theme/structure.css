@@ -31,8 +31,8 @@
      layout devono dire lo stesso numero. Un tema non li ridefinisce: chi
      scrive una pelle li consuma (`height: var(--titlebar-h)`), chi scrive un
      foglio non li vede. */
-  --titlebar-h: 38px;
-  --rail-w: 44px;
+  --titlebar-h: 44px;
+  --rail-w: 52px;
 
   /* I piani. Erano sei numeri sparsi fra 50 e 90, e l'ordine fra loro era
      leggibile solo confrontandoli a mano in file diversi. Qui l'ordine è la
@@ -150,6 +150,24 @@
   outline-offset: var(--focus-ring-offset);
 }
 
+/* Un frame riceve il fuoco nel documento figlio: il browser non applica
+   `:focus-visible` al suo elemento ospite. L'involucro resta non interattivo e
+   osserva quel fuoco con `:focus-within`, così l'anello è visibile senza
+   aggiungere una fermata o cambiare l'interazione del contenuto incorporato. */
+.ui-webview-frame {
+  display: inline-block;
+  line-height: 0;
+  vertical-align: top;
+}
+.ui-webview-frame > .ui-webview {
+  display: block;
+}
+.ui-webview-frame:focus-within,
+.ui-webview-frame--keyboard {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
 /* Il salto al contenuto (§12.4), nel suo meccanismo: fuori dallo schermo
    finché non prende il fuoco. Non `display: none` e non `visibility: hidden`
    — entrambi lo toglierebbero anche al tab, che è l'unico che lo deve
@@ -161,6 +179,20 @@
 }
 .skip-link:focus {
   transform: translateY(0);
+}
+
+/* Intestazioni strutturali per lettori di schermo, senza cambiare la scena: il
+   contenuto resta nel flusso semantico ma non occupa pixel né prende il fuoco. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* --- lo scheletro: dalla finestra ai riquadri -----------------------------
@@ -199,6 +231,9 @@ html, body, #app {
 .titlebar {
   height: var(--titlebar-h);
   min-height: var(--titlebar-h);
+  max-height: var(--titlebar-h);
+  overflow: hidden;
+  white-space: nowrap;
   user-select: none;
   -webkit-app-region: drag;
 }
@@ -207,7 +242,6 @@ html, body, #app {
 .titlebar a,
 .titlebar input,
 .titlebar select,
-.titlebar #mode-switch,
 .titlebar #window-controls,
 .titlebar [data-tauri-drag-region="false"] {
   -webkit-app-region: no-drag;
@@ -224,14 +258,17 @@ html, body, #app {
   display: flex;
   align-items: center;
   flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
 }
-
 #titlebar-center {
   display: flex;
   align-items: center;
   flex: 1 1 auto;
   justify-content: center;
   min-width: 0;
+  overflow: hidden;
 }
 
 /* La menubar applicativa: bottoni di menu in fila, ognuno con la sua etichetta
@@ -293,21 +330,33 @@ html, body, #app {
 }
 
 /* Il layout: sidebar, riquadri, inspector — e la striscia delle view in
-   basso, alta quanto il suo contenuto (senza `auto`, la griglia dividerebbe
-   lo spazio avanzato fra le due righe e la striscia di stato si mangerebbe
-   un quarto della finestra). */
+   basso, alta quanto il suo contenuto. Flex e non grid: le colonne laterali
+   hanno larghezze proprie (248px/280px con i loro min/max) e collassano in
+   drawer per breakpoint, senza ridisegnare il modello dei riquadri. */
 #layout {
   flex: 1;
-  display: grid;
-  /* La colonna di destra ospita solo le view dichiarative (e la cronologia):
-     da quando l'anteprima è una modalità e non un pannello, lo spazio va a chi
-     scrive. */
-  grid-template-columns: 240px 2fr 1fr;
-  grid-template-rows: 1fr auto;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
   min-height: 0;
   min-width: 0;
+  position: relative;
 }
-
+#sidebar {
+  flex: 0 0 248px;
+  width: 248px;
+  min-width: 200px;
+  max-width: 360px;
+  min-height: 0;
+}
+#right-pane {
+  flex: 0 0 280px;
+  width: 280px;
+  min-width: 240px;
+  max-width: 400px;
+  min-height: 0;
+  overflow-y: auto;
+}
 #sidebar,
 #right-pane {
   overflow-y: auto;
@@ -432,6 +481,21 @@ html, body, #app {
   display: flex;
   flex-shrink: 0;
   overflow-x: auto;
+}
+.pane-tabs > [role="tablist"] {
+  display: contents;
+}
+.tab-entry {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.tab-entry > .tab {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.tab-entry > .tab-close {
+  flex: 0 0 auto;
 }
 
 .pane-editor {
@@ -569,4 +633,171 @@ html, body, #app {
 .grid-cell-editor {
   z-index: 5;
   overflow: hidden;
+}
+
+/* --- la shell adattiva (P2/L01-L08) ---------------------------------------
+ *
+ * Solo geometria: breakpoint, drawer, toolbar del riquadro, onboarding.
+ * Niente colori, niente tipografia, niente token del foglio: qui si usano
+ * solo i token di struttura (`--titlebar-h`, `--rail-w`, `--z-*`) e letterali
+ * px. La titlebar e la rail usano le metriche di :root; sidebar 248px
+ * (200-360), ispettore 280px (240-400), tabstrip e toolbar 36px,
+ * statusbar 32px. */
+#topbar .brand,
+#topbar #app-menu button,
+#topbar .titlebar-btn {
+  white-space: nowrap;
+}
+#window-controls {
+  flex: 0 0 auto;
+}
+#vault-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+#panes {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+/* L'avvio senza vault occupa l'intera area: il layout vuoto resta montato,
+   ma non sottrae metà dello spazio né espone una toolbar senza documento. */
+#panes:has(> .onboarding:not([hidden])) > .pane,
+#panes:has(> .onboarding:not([hidden])) > .pane-split {
+  display: none;
+}
+#views-bottom {
+  flex: 0 0 auto;
+  width: 100%;
+  overflow: auto;
+  max-height: 30vh;
+}
+#statusbar {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+/* Toolbar del riquadro (L07): una riga da 36px, overflow in menu. I bottoni
+   modalità li monta il worker documento; qui solo il contenitore. */
+.pane-toolbar {
+  display: flex;
+  align-items: center;
+  flex: 0 0 36px;
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  overflow: hidden;
+  white-space: nowrap;
+  min-width: 0;
+}
+.pane-tabs {
+  min-height: 36px;
+  max-height: 36px;
+}
+/* Divisori con semantica separator: hit area 8px via padding invisibile,
+   alternativa tastiera via focus + frecce (desktop-shell.ts). */
+.layout-divider {
+  flex: 0 0 8px;
+  width: 8px;
+  min-width: 8px;
+  align-self: stretch;
+  cursor: col-resize;
+  touch-action: none;
+}
+/* Schermata senza vault (A01): centrata, una colonna, CTA in fila. */
+.onboarding {
+  margin: auto;
+  max-width: 560px;
+  min-width: 0;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  overflow-y: auto;
+  max-height: 100%;
+}
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.onboarding-recent {
+  width: 100%;
+  min-width: 0;
+}
+/* Drawer: veli sopra il layout, mai distruzione degli split. */
+.drawer-scrim {
+  position: absolute;
+  inset: 0;
+}
+/* Breakpoint sezione 5: >=1200 affiancati; 960-1199 ispettore overlay;
+   800-959 drawer alternativi; <800 stessa strategia compatta. */
+@media (max-width: 1199px) {
+  #layout.layout-inspector-overlay #right-pane {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: var(--z-dialog);
+  }
+  #layout.layout-inspector-overlay #divider-inspector {
+    display: none;
+  }
+}
+@media (max-width: 959px) {
+  #layout.layout-compact #sidebar,
+  #layout.layout-compact #right-pane {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: var(--z-dialog);
+    max-width: min(320px, 85vw);
+  }
+  #layout.layout-compact #sidebar {
+    left: 0;
+  }
+  #layout.layout-compact #right-pane {
+    right: 0;
+  }
+  #layout.layout-compact #divider-sidebar,
+  #layout.layout-compact #divider-inspector {
+    display: none;
+  }
+}
+/* Titlebar progressiva (L08): <1100px menubar in Menu app; poi percorso/hint;
+   poi trigger a icona. Mai comprimere i controlli finestra. */
+@media (max-width: 1100px) {
+  #topbar.topbar-compact-menu #app-menu {
+    display: none;
+  }
+  #topbar.topbar-compact-menu #app-menu-toggle {
+    display: inline-flex;
+  }
+  #topbar.topbar-compact-menu #app-menu.open {
+    display: flex;
+    position: absolute;
+    top: var(--titlebar-h);
+    left: 8px;
+    z-index: var(--z-menu);
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+@media (max-width: 1100px) {
+  #topbar.topbar-compact-hint .titlebar-shortcut {
+    display: none;
+  }
+  #topbar.topbar-compact-hint #vault-path {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  #topbar.topbar-compact-search #command-search {
+    min-width: 0;
+  }
 }

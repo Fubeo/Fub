@@ -318,6 +318,32 @@ describe("vita della finestra", () => {
   });
 });
 
+describe("navigazione accessibile dell'esploratore", () => {
+  it("espande e richiude senza aprire la folder note né perdere il focus", async () => {
+    await start({ ...VAULT, "note/note.md": "La folder note.\n" });
+    const original = textToVideo();
+    const chevron = () => document.querySelector<HTMLButtonElement>(
+      '#file-list li[data-path="note"] > .tree-row > .chevron',
+    )!;
+    for (const [key, expanded] of [["Enter", "true"], [" ", "false"]]) {
+      const control = chevron();
+      control.focus();
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      control.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(false);
+      // Happy DOM non esegue l'attivazione nativa predefinita del tasto.
+      control.click();
+      await settle();
+      expect(chevron().getAttribute("aria-expanded")).toBe(expanded);
+      expect(document.activeElement).toBe(chevron());
+      expect(textToVideo()).toBe(original);
+    }
+    const tab = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+    chevron().dispatchEvent(tab);
+    expect(tab.defaultPrevented).toBe(false);
+  });
+});
+
 describe("apri un vault", () => {
   it("la finestra parte sul vault iniziale, con l'albero e la prima nota aperta", async () => {
     // **Le domande che nessun dato lega partono insieme.** Aprire un vault
@@ -391,7 +417,7 @@ describe("apri un vault", () => {
     const stop = await mounted.startup;
     await settle();
     const modes = () =>
-      [...document.querySelectorAll<HTMLElement>("#mode-switch button")].map(
+      [...document.querySelectorAll<HTMLElement>(".pane.focus .pane-toolbar button[data-mode]")].map(
         (button) => button.dataset.mode,
       );
 
@@ -401,7 +427,7 @@ describe("apri un vault", () => {
     const { openDocument } = await import("./panels/document");
     await openDocument("Plain.txt");
     await settle();
-    expect(modes()).toEqual(["source"]);
+    expect(modes()).toEqual([]);
     expect(document.querySelector<HTMLElement>(".pane.focus")?.dataset.mode).toBe("source");
 
     document.dispatchEvent(
@@ -419,7 +445,7 @@ describe("apri un vault", () => {
     await settle();
     expect(modes()).toEqual(["source", "live_preview", "reading"]);
     expect(
-      document.querySelector<HTMLElement>("#mode-switch button[aria-pressed='true']")
+      document.querySelector<HTMLElement>(".pane.focus .pane-toolbar button[aria-pressed='true']")
         ?.dataset.mode,
     ).toBe("live_preview");
     stop();
@@ -880,6 +906,44 @@ describe("chiudere la finestra col ritardo che corre", () => {
 });
 
 describe("chiudere linguette e superfici", () => {
+  it("mantiene il focus al ridisegno e permette frecce, attivazione e chiusura", async () => {
+    await start(VAULT);
+    const { openDocument, synchronize } = await import("./panels/document");
+    await openDocument("note/Riunione.md");
+    await settle();
+    const tabs = () => [...document.querySelectorAll<HTMLButtonElement>(".pane .tab")];
+    tabs()[1]!.focus();
+    await synchronize();
+    await synchronize();
+    expect(document.activeElement).toBe(tabs()[1]);
+    expect(document.querySelectorAll("[data-tab-menu]")).toHaveLength(1);
+
+    tabs()[1]!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "ArrowLeft", bubbles: true, cancelable: true,
+    }));
+    expect(document.activeElement).toBe(tabs()[0]);
+    expect(textToVideo()).toContain("Appunti della riunione");
+    tabs()[0]!.click();
+    await settle();
+    expect(textToVideo()).toContain("Il primo documento");
+    expect(document.activeElement).toBe(tabs()[0]);
+
+    tabs()[0]!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Delete", bubbles: true, cancelable: true,
+    }));
+    await settle();
+    expect(tabs().map((tab) => tab.textContent)).toEqual(["Riunione"]);
+    expect(document.activeElement).toBe(tabs()[0]);
+    expect(textToVideo()).toContain("Appunti della riunione");
+    tabs()[0]!.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "Delete", bubbles: true, cancelable: true,
+    }));
+    await settle();
+    expect(document.activeElement).toBe(
+      document.querySelector('.pane-toolbar button[aria-haspopup="menu"]'),
+    );
+  });
+
   it("chiude una linguetta senza chiudere le altre", async () => {
     const host = await start(VAULT);
     const folder = document.querySelector<HTMLElement>("#file-list .tree-row.folder");
@@ -893,8 +957,8 @@ describe("chiudere linguette e superfici", () => {
     const tabs = [...document.querySelectorAll<HTMLElement>(".pane .tab")];
     expect(tabs).toHaveLength(2);
 
-    const close = tabs[1]?.querySelector<HTMLElement>(".tab-close");
-    close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    const close = tabs[1]?.parentElement?.querySelector<HTMLButtonElement>(".tab-close");
+    close?.click();
     await waitFor(
       "resta la linguetta iniziale",
       () => document.querySelectorAll(".pane .tab").length === 1,
@@ -908,7 +972,7 @@ describe("chiudere linguette e superfici", () => {
     typeInEditor("testo prima di chiudere la linguetta");
 
     const close = document.querySelector<HTMLElement>(".pane .tab-close");
-    close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    close?.click();
     await waitFor(
       "l'ultima linguetta si chiude",
       () => document.querySelectorAll(".pane .tab").length === 0,
@@ -936,7 +1000,7 @@ describe("chiudere linguette e superfici", () => {
     await waitFor("la prima scrittura parte", () => host.atGate("writeDocument").length === 1);
 
     const close = document.querySelector<HTMLElement>(".pane .tab-close");
-    close?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
+    close?.click();
     await waitFor(
       "la linguetta si chiude",
       () => document.querySelectorAll(".pane .tab").length === 0,
@@ -1340,7 +1404,9 @@ describe("cerca", () => {
     expect(results.map((r) => r.textContent)).toHaveLength(1);
     expect(results[0].textContent).toContain("Spesa");
 
-    results[0].click();
+    const resultButton = results[0].querySelector("button");
+    if (!resultButton) throw new Error("il risultato non ha un controllo attivabile");
+    resultButton.click();
     await waitFor("il documento cercato si apre", () =>
       host.atGate("readDocument").some((c) => c.args[0] === "note/Spesa.md"),
     );

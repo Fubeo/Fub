@@ -58,6 +58,11 @@ Questo confine deve restare stabile:
 - il frontend non legge strutture interne del kernel;
 - refresh e lifecycle seguono il registro delle view.
 
+Il Canvas occupa una superficie separata dallo stato testuale e dall'elenco
+delle note. L'elenco si apre con mouse o tastiera, mostra 50 note per pagina e
+scorre nel proprio spazio, senza intercettare i gesti del grafo. L'inquadratura
+iniziale attende che la superficie abbia dimensioni valide.
+
 La modularizzazione del renderer è tracciata nell'issue
 [#12](https://github.com/Fubeo/Fub/issues/12). La prova di scala e durata è
 nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
@@ -90,6 +95,4 @@ nell'issue [#6](https://github.com/Fubeo/Fub/issues/6).
   [criteri di acceptance](acceptance.md);
 - il benchmark misura una fixture deterministica, non ogni grafo possibile:
   quadtree con nodi clustered o coincidenti può avvicinarsi al caso peggiore
-  O(n²), quindi il risultato a 10k non è una garanzia universale;
-- le issue [#6](https://github.com/Fubeo/Fub/issues/6) e
-  [#12](https://github.com/Fubeo/Fub/issues/12) restano aperte.
+  O(n²), quindi il risultato a 10k non è una garanzia universale.

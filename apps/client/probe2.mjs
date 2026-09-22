@@ -1,0 +1,12 @@
+import { wikilink, spans, inlineDelimiters, scanTags, listItem } from "./src/rules/syntax.ts";
+console.log(JSON.stringify(wikilink("[[]]")));
+console.log(JSON.stringify(wikilink("[[ ]]")));
+console.log(JSON.stringify(wikilink("[[x]]")));
+console.log(JSON.stringify(wikilink("a [[b|c|d]] e")));
+console.log(JSON.stringify(spans("testo \\==non== qui")));
+console.log(JSON.stringify(spans("==a== e ==b== qui")));
+console.log(JSON.stringify(spans("====testo==== qui")));
+console.log(JSON.stringify(scanTags("`#a` #b")));
+console.log(JSON.stringify(listItem("- [ ]")));
+console.log(JSON.stringify(listItem("- [ ] cosa")));
+console.log(JSON.stringify(listItem("> - [ ] citata")));

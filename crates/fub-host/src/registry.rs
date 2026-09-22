@@ -20,7 +20,8 @@ use fub_kernel::{RegistryError, Trust, Workspace};
 #[cfg(feature = "search")]
 use fub_features::SEARCH_ID;
 
-use crate::{Custody, JobHost};
+use crate::custody::Custody;
+use crate::JobHost;
 
 /// Di che famiglia è un bundle nell'inventario.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]

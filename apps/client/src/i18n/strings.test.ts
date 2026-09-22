@@ -152,6 +152,15 @@ describe("i due cataloghi", () => {
       expect(EN[key]!.trim(), `«${key}» è vuota in inglese`).not.toBe("");
     }
   });
+  it("traducono le superfici di editing e i loro fallback", () => {
+    expect(IT["grid.a11y.superficie"]).toBe("Foglio di calcolo");
+    expect(EN["grid.a11y.superficie"]).toBe("Spreadsheet");
+    expect(IT["viewer.bytes_unavailable"]).toBe("Anteprima binaria non disponibile");
+    expect(EN["viewer.bytes_unavailable"]).toBe("Binary preview unavailable");
+    expect(IT["surface.unavailable"]).toBe("Nessuna superficie disponibile");
+    expect(EN["surface.unavailable"]).toBe("No surface available");
+  });
+
 });
 
 describe("la scala di ripiego, che è quella del contratto", () => {

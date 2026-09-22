@@ -2,11 +2,14 @@ import {
   Annotation,
   Compartment,
   EditorState,
+  Prec,
   Transaction,
   type Extension,
 } from "@codemirror/state";
 import {
+  Decoration,
   EditorView,
+  ViewPlugin,
   crosshairCursor,
   drawSelection,
   dropCursor,
@@ -16,6 +19,7 @@ import {
   keymap,
   lineNumbers,
   rectangularSelection,
+  type DecorationSet,
   type ViewUpdate,
 } from "@codemirror/view";
 import {
@@ -46,6 +50,8 @@ import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { lintKeymap } from "@codemirror/lint";
 import { currentTheme as getCurrentTheme, type Theme } from "../../theme/theme";
 import { byteToCharIndex, charToByteIndices } from "../../rules/offsets";
+import { onLanguage, t } from "../../i18n/strings";
+import type { Teardown } from "../../ui/lifetime";
 import { editorTheme } from "./theme";
 import { HistoryFootprints } from "./history-footprints";
 import {
@@ -101,6 +107,7 @@ export class TextEngine {
   private readonly footprints = new HistoryFootprints();
   private readonly options: TextEngineOptions;
   private readonly listener: Extension;
+  private readonly stopLanguage: Teardown;
   private applyOrigin: ApplyOrigin = "user";
   private readOnlyEnabled = false;
   private disposed = false;
@@ -115,8 +122,14 @@ export class TextEngine {
       parent,
       state: EditorState.create({ extensions: this.extensions() }),
     });
+    // Il solo controllo da raggiungere con Tab è lo scroller, mentre il
+    // contenteditable interno resta la destinazione per il fuoco dell'editor.
+    this.view.contentDOM.tabIndex = -1;
+    this.view.scrollDOM.tabIndex = 0;
+    this.view.scrollDOM.setAttribute("role", "document");
+    this.stopLanguage = onLanguage(() => this.updateAccessibleLabels());
+    this.updateAccessibleLabels();
   }
-
   public setDoc(text: string): void {
     if (this.disposed) return;
     this.applyOrigin = "replace";
@@ -160,6 +173,8 @@ export class TextEngine {
         Transaction.remote.of(true),
       ],
       userEvent: "sync",
+      // Profile filters shape local input, not the session's authoritative text.
+      filter: false,
     };
     let transaction: Transaction;
     try {
@@ -168,8 +183,8 @@ export class TextEngine {
       this.footprints.markUnknown();
       return;
     }
-    if (!transaction.docChanged) {
-      this.clearFootprintsWithoutHistory();
+    if (!this.isAuthoritativeSync(transaction, normalizedText)) {
+      this.footprints.markUnknown();
       return;
     }
 
@@ -182,8 +197,8 @@ export class TextEngine {
         this.footprints.markUnknown();
         return;
       }
-      if (!transaction.docChanged) {
-        this.clearFootprintsWithoutHistory();
+      if (!this.isAuthoritativeSync(transaction, normalizedText)) {
+        this.footprints.markUnknown();
         return;
       }
     }
@@ -255,6 +270,7 @@ export class TextEngine {
   public destroy(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.stopLanguage();
     this.footprints.reset();
     this.view.destroy();
   }
@@ -280,6 +296,13 @@ export class TextEngine {
 
   private profileExtensions(): Extension {
     return this.options.extensions?.() ?? [];
+  }
+
+  private updateAccessibleLabels(): void {
+    for (const element of [this.view.contentDOM, this.view.scrollDOM]) {
+      element.dataset.i18nLabel = "editor.document";
+      element.setAttribute("aria-label", t("editor.document"));
+    }
   }
 
   private rendered(state: EditorState = this.view.state): string {
@@ -331,6 +354,15 @@ export class TextEngine {
         transaction.annotation(Transaction.addToHistory) !== false &&
         transaction.annotation(Transaction.remote) !== true,
     );
+  }
+
+  private isAuthoritativeSync(transaction: Transaction, expectedText: string): boolean {
+    return transaction.docChanged &&
+      transaction.newDoc.toString() === expectedText &&
+      transaction.annotation(this.originAnnotation) === "sync" &&
+      transaction.isUserEvent("sync") &&
+      transaction.annotation(Transaction.remote) === true &&
+      transaction.annotation(Transaction.addToHistory) === false;
   }
 
   private clearFootprintsWithoutHistory(): void {
@@ -421,6 +453,23 @@ export class TextEngine {
       crosshairCursor(),
       highlightActiveLine(),
       highlightSelectionMatches(),
+      // La riga attiva è una `lineDecoration`: sta sopra il layer di
+      // selezione in paint order e copre il rettangolo quando la selezione
+      // è sulla stessa riga del cursore (1.3:1 fra `#222` e riga attiva).
+      // Questo plugin spegne la riga attiva solo sulle righe che hanno una
+      // selezione non vuota: altrove resta `--doc-active-line` del tema.
+      // `Prec.highest` perché deve vincere sul tema dell'editor.
+      Prec.highest(
+        ViewPlugin.fromClass(
+          class {
+            decorations = Decoration.none;
+            update(update: ViewUpdate): void {
+              this.decorations = selectionHidesActiveLine(update.view);
+            }
+          },
+          { decorations: (v) => v.decorations },
+        ),
+      ),
       keymap.of([
         ...closeBracketsKeymap,
         ...defaultKeymap,
@@ -436,6 +485,25 @@ export class TextEngine {
       this.listener,
     ];
   }
+}
+
+/// Le righe con una selezione non vuota perdono la classe `cm-activeLine`:
+/// la riga attiva è una `lineDecoration` e in paint order copre il rettangolo
+/// di selezione, che sta su un layer a z-index negativo. Senza selezione la
+/// riga del cursore resta evidenziata come prima.
+function selectionHidesActiveLine(view: EditorView): DecorationSet {
+  const lines = new Set<number>();
+  for (const range of view.state.selection.ranges) {
+    if (range.empty) continue;
+    lines.add(view.state.doc.lineAt(range.from).number);
+    lines.add(view.state.doc.lineAt(range.to).number);
+  }
+  if (lines.size === 0) return Decoration.none;
+  const hide = Decoration.line({ class: "cm-fub-no-active-line" });
+  return Decoration.set(
+    [...lines].map((n) => hide.range(view.state.doc.line(n).from)),
+    true,
+  );
 }
 
 export function createTextEngine(parent: HTMLElement, options: TextEngineOptions): TextEngine {

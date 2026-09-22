@@ -25,6 +25,10 @@ export interface PanelCopy {
   reset: string;
   open: string;
   close: string;
+  /// Titolo della sezione parametri di simulazione (U45: raggruppare senza inventare).
+  physicsSection: string;
+  /// Titolo della sezione comandi di vista (U45).
+  viewSection: string;
   /// Nome preset → etichetta (include "custom").
   presets: Record<string, string>;
   /// Chiave campo → etichetta.
@@ -145,8 +149,12 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
   const physicsToggles: Record<string, HTMLInputElement> = {};
   const graphicsToggles: Record<string, HTMLInputElement> = {};
 
+  // U45: due gruppi dichiarati — parametri di simulazione e comandi di vista —
+  // senza inventare filtri o algoritmi: i campi restano gli slider/toggle
+  // esistenti, cambia solo il raggruppamento con `role="group"` e nome.
   const physicsSection = document.createElement("div");
   physicsSection.className = "graph-panel-sezione";
+  physicsSection.setAttribute("role", "group");
   const physicsLabel = document.createElement("div");
   physicsLabel.className = "graph-panel-sezione-titolo";
   physicsSection.append(physicsLabel);
@@ -196,6 +204,7 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
   const graphicsSection = document.createElement("div");
   graphicsSection.className = "graph-panel-sezione";
+  graphicsSection.setAttribute("role", "group");
   const graphicsLabel = document.createElement("div");
   graphicsLabel.className = "graph-panel-sezione-titolo";
   graphicsSection.append(graphicsLabel);
@@ -384,8 +393,12 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
     const copy = o.copy();
     title.textContent = copy.title;
     presetLabel.textContent = copy.preset;
-    physicsLabel.textContent = copy.title;
-    graphicsLabel.textContent = copy.title;
+    // U45: due gruppi dichiarati con i titoli P8 della copy (mai campi
+    // inventati, mai un solo titolo per entrambi).
+    physicsLabel.textContent = copy.physicsSection;
+    physicsSection.setAttribute("aria-label", copy.physicsSection);
+    graphicsLabel.textContent = copy.viewSection;
+    graphicsSection.setAttribute("aria-label", copy.viewSection);
     warmButton.textContent = copy.warm;
     unpinButton.textContent = copy.unpin;
     resetButton.textContent = copy.reset;
@@ -405,9 +418,9 @@ export function createPhysicsPanel(o: PanelOptions): PhysicsPanel {
 
     // Le etichette dei campi: ogni nome span riceve la sua chiave.
     for (const c of PHYSICS_SLIDERS) {
-      const label = physicsSection.querySelector<HTMLElement>(`input[type="range"][min="${c.min}"]`);
-      if (label) {
-        const name = label.parentElement?.querySelector<HTMLElement>(".graph-panel-nome");
+      const input = physicsInputs[c.key];
+      if (input) {
+        const name = input.parentElement?.querySelector<HTMLElement>(".graph-panel-nome");
         if (name) name.textContent = copy.fields[c.key] ?? c.key;
       }
     }

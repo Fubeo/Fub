@@ -1,7 +1,7 @@
 //! **Il secondo backend** (§16.1, [M5](../../../docs/project/m5-wasm-runtime.md)):
 //! un componente WASM che il kernel vede come qualunque altro provider.
 //!
-//! Il contratto è congelato dal 2026-08-14 (`fub:abi@0.1.1`), e questo crate è
+//! Il contratto è congelato dal 2026-08-14 (`fub:abi@0.1.2`), e questo crate è
 //! il primo consumatore che lo attraversa **in esecuzione**. Fino a qui il
 //! confine era stato provato in due modi, tutt'e due statici:
 //! `wit_conformance.rs` legge il WIT e dice che è valido,

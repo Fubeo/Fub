@@ -285,7 +285,8 @@ const ALLOWLIST: &[(&str, Why)] = &[
     // Chi questo host sa montare, e chi è acceso: «spento» e «non c'è» sono due
     // stati diversi, e il secondo è l'unico che il kernel sappia dire (0031).
     ("list_bundles", Why::AppSurface),
-    ("set_plugin_enabled", Why::AppSurface),
+    ("list_themes", Why::AppSurface),
+    ("read_theme", Why::AppSurface),
     // Inventario macchina e decisioni persistenti non appartengono al registro
     // di un vault. Queste porte restano sottili e delegano al manager installato.
     ("list_installed_plugins", Why::AppSurface),

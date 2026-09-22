@@ -1,0 +1,686 @@
+{
+  "config": {
+    "nodes": 10000,
+    "seed": 6,
+    "cycles": 1,
+    "soakWindows": 16
+  },
+  "fixture": {
+    "nodes": 10000,
+    "edges": 20000,
+    "seed": 6,
+    "digest": "abcf614b"
+  },
+  "environment": {
+    "node": {
+      "version": "v22.12.0",
+      "platform": "linux",
+      "arch": "x64",
+      "kernelRelease": "6.17.0-1022-azure"
+    },
+    "cpu": {
+      "model": "AMD EPYC 7763 64-Core Processor",
+      "logicalCount": 4
+    },
+    "memory": {
+      "totalBytes": 16766414848
+    },
+    "browser": {
+      "chromiumVersion": "149.0.7827.55"
+    },
+    "page": {
+      "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/149.0.7827.55 Safari/537.36",
+      "hardwareConcurrency": 4,
+      "deviceMemory": 16
+    },
+    "viewport": {
+      "width": 1280,
+      "height": 800,
+      "deviceScaleFactor": 1
+    },
+    "media": {
+      "reducedMotion": true,
+      "colorScheme": "dark"
+    }
+  },
+  "timings": {
+    "mount1Ms": 235.92153199999984,
+    "interactionFrames": {
+      "count": 119,
+      "p50": 19,
+      "p95": 20,
+      "max": 21
+    },
+    "longTasks": {
+      "count": 0,
+      "p50": null,
+      "p95": null,
+      "max": null,
+      "over50ms": 0
+    },
+    "totalMs": 109457
+  },
+  "resources": {
+    "scope": "DOM listeners are tracked only on window/document and elements within canvas.graph-main, canvas.graph-bg, or .graph-panel; timers, rAF, and observers are tracked only when their creation stack contains /src/graph/ or /src/panels/graph.ts while the probe is active.",
+    "baseline": 0,
+    "baselineByKind": {},
+    "interaction": 35,
+    "cycles": [
+      {
+        "mounted": 35,
+        "mountedByKind": {
+          "listener": 32,
+          "mutationObserver": 1,
+          "resizeObserver": 1,
+          "raf": 1
+        },
+        "postClose": 0,
+        "postCloseByKind": {},
+        "delta": 0,
+        "deltaByKind": {}
+      }
+    ]
+  },
+  "memory": {
+    "before": 19678892,
+    "afterCleanup": 12797252
+  },
+  "pass": true,
+  "soak": {
+    "requestedWindows": 16,
+    "heapSamplesPerWindow": 3,
+    "heapSelection": "median",
+    "windows": [
+      {
+        "window": 1,
+        "wallMs": 4491.254538000001,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 19,
+            "p95": 20,
+            "max": 21
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12250004,
+          12250004,
+          12250004
+        ],
+        "heapUsed": 12250004
+      },
+      {
+        "window": 2,
+        "wallMs": 4454.563684000001,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 20,
+            "p95": 21,
+            "max": 29
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12366300,
+          12366300,
+          12366300
+        ],
+        "heapUsed": 12366300
+      },
+      {
+        "window": 3,
+        "wallMs": 4441.996973999998,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 21,
+            "p95": 22,
+            "max": 30
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12393056,
+          12393056,
+          12393056
+        ],
+        "heapUsed": 12393056
+      },
+      {
+        "window": 4,
+        "wallMs": 4451.673664999998,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 22,
+            "p95": 23,
+            "max": 25
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12429780,
+          12429780,
+          12429780
+        ],
+        "heapUsed": 12429780
+      },
+      {
+        "window": 5,
+        "wallMs": 4458.425499000001,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 24,
+            "p95": 26,
+            "max": 27
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12438548,
+          12438548,
+          12438548
+        ],
+        "heapUsed": 12438548
+      },
+      {
+        "window": 6,
+        "wallMs": 4480.039778999999,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 27,
+            "p95": 30,
+            "max": 35
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12449196,
+          12449196,
+          12449196
+        ],
+        "heapUsed": 12449196
+      },
+      {
+        "window": 7,
+        "wallMs": 4475.0585040000005,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 31,
+            "p95": 33,
+            "max": 39
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12456232,
+          12456232,
+          12456232
+        ],
+        "heapUsed": 12456232
+      },
+      {
+        "window": 8,
+        "wallMs": 4903.557728,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 36,
+            "p95": 39,
+            "max": 41
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12483864,
+          12483864,
+          12483864
+        ],
+        "heapUsed": 12483864
+      },
+      {
+        "window": 9,
+        "wallMs": 5593.798929999997,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 42,
+            "p95": 44,
+            "max": 46
+          }
+        },
+        "longTasks": {
+          "count": 0,
+          "p50": null,
+          "p95": null,
+          "max": null,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12509048,
+          12509048,
+          12510528
+        ],
+        "heapUsed": 12509048
+      },
+      {
+        "window": 10,
+        "wallMs": 6430.779148000001,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 48,
+            "p95": 51,
+            "max": 53
+          }
+        },
+        "longTasks": {
+          "count": 6,
+          "p50": 50,
+          "p95": 50,
+          "max": 50,
+          "over50ms": 0
+        },
+        "heapSamples": [
+          12515672,
+          12515672,
+          12515672
+        ],
+        "heapUsed": 12515672
+      },
+      {
+        "window": 11,
+        "wallMs": 7194.718076000005,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 54,
+            "p95": 57,
+            "max": 58
+          }
+        },
+        "longTasks": {
+          "count": 54,
+          "p50": 53,
+          "p95": 56,
+          "max": 56,
+          "over50ms": 53
+        },
+        "heapSamples": [
+          12543332,
+          12543332,
+          12558656
+        ],
+        "heapUsed": 12543332
+      },
+      {
+        "window": 12,
+        "wallMs": 8145.8893360000075,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 61,
+            "p95": 65,
+            "max": 67
+          }
+        },
+        "longTasks": {
+          "count": 44,
+          "p50": 60,
+          "p95": 63,
+          "max": 63,
+          "over50ms": 44
+        },
+        "heapSamples": [
+          12561228,
+          12561228,
+          12561228
+        ],
+        "heapUsed": 12561228
+      },
+      {
+        "window": 13,
+        "wallMs": 9157.93676099999,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 69,
+            "p95": 73,
+            "max": 75
+          }
+        },
+        "longTasks": {
+          "count": 61,
+          "p50": 67,
+          "p95": 71,
+          "max": 76,
+          "over50ms": 60
+        },
+        "heapSamples": [
+          12608860,
+          12608860,
+          12608860
+        ],
+        "heapUsed": 12608860
+      },
+      {
+        "window": 14,
+        "wallMs": 9967.321954999992,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 75,
+            "p95": 78,
+            "max": 81
+          }
+        },
+        "longTasks": {
+          "count": 66,
+          "p50": 73,
+          "p95": 77,
+          "max": 79,
+          "over50ms": 66
+        },
+        "heapSamples": [
+          12258044,
+          12258044,
+          12258044
+        ],
+        "heapUsed": 12258044
+      },
+      {
+        "window": 15,
+        "wallMs": 10489.594081999996,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 80,
+            "p95": 82,
+            "max": 86
+          }
+        },
+        "longTasks": {
+          "count": 56,
+          "p50": 78,
+          "p95": 81,
+          "max": 83,
+          "over50ms": 56
+        },
+        "heapSamples": [
+          12276612,
+          12276612,
+          12276612
+        ],
+        "heapUsed": 12276612
+      },
+      {
+        "window": 16,
+        "wallMs": 11108.087583,
+        "frames": {
+          "count": 120,
+          "intervals": {
+            "count": 119,
+            "p50": 84,
+            "p95": 86,
+            "max": 90
+          }
+        },
+        "longTasks": {
+          "count": 70,
+          "p50": 83,
+          "p95": 85,
+          "max": 146,
+          "over50ms": 70
+        },
+        "heapSamples": [
+          12290000,
+          12290000,
+          12291468
+        ],
+        "heapUsed": 12290000
+      }
+    ],
+    "totalActiveFrames": 1920,
+    "heapAvailability": {
+      "status": "complete",
+      "reasons": []
+    },
+    "heapDeltasFromFirst": [
+      0,
+      116296,
+      143052,
+      179776,
+      188544,
+      199192,
+      206228,
+      233860,
+      259044,
+      265668,
+      293328,
+      311224,
+      358856,
+      8040,
+      26608,
+      39996
+    ],
+    "monotonicIncreaseCount": 14,
+    "linearRegressionSlopeBytesPerWindow": 1608.129411764706,
+    "stability": {
+      "required": true,
+      "pass": true,
+      "reason": null,
+      "policy": {
+        "nodes": 10000,
+        "seed": 6,
+        "minWindows": 16,
+        "warmupWindows": 8,
+        "measurementWindows": 8,
+        "maxSlopeBytesPerWindow": 65536,
+        "maxMonotonicIncreases": 6
+      },
+      "measured": {
+        "windows": 8,
+        "series": [
+          12509048,
+          12515672,
+          12543332,
+          12561228,
+          12608860,
+          12258044,
+          12276612,
+          12290000
+        ],
+        "slopeBytesPerWindow": -42105.57142857143,
+        "monotonicIncreaseCount": 6
+      }
+    },
+    "heapSeries": [
+      12250004,
+      12366300,
+      12393056,
+      12429780,
+      12438548,
+      12449196,
+      12456232,
+      12483864,
+      12509048,
+      12515672,
+      12543332,
+      12561228,
+      12608860,
+      12258044,
+      12276612,
+      12290000
+    ]
+  },
+  "sample": {
+    "target": 120,
+    "deadlineMs": 30000,
+    "deadlineKind": "safety-timeout"
+  },
+  "frames": {
+    "count": 120,
+    "intervals": {
+      "count": 119,
+      "p50": 19,
+      "p95": 20,
+      "max": 21
+    }
+  },
+  "interaction": {
+    "signals": {
+      "wheelDelivered": true,
+      "wheelPrevented": true,
+      "pointerDelivered": true,
+      "pointerCapture": true,
+      "eventTypes": [
+        "pointermove",
+        "wheel",
+        "pointerdown",
+        "pointerup"
+      ]
+    },
+    "events": [
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "wheel",
+        "target": "canvas",
+        "defaultPrevented": true
+      },
+      {
+        "type": "pointerdown",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointerdown",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointermove",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointerup",
+        "target": "canvas",
+        "defaultPrevented": false
+      },
+      {
+        "type": "pointerup",
+        "target": "canvas",
+        "defaultPrevented": false
+      }
+    ],
+    "pointerCaptures": [
+      {
+        "pointerId": 1
+      }
+    ]
+  },
+  "cleanup": {
+    "cdp": {
+      "acquired": true,
+      "success": true
+    },
+    "page": {
+      "acquired": true,
+      "success": true
+    },
+    "context": {
+      "acquired": true,
+      "success": true
+    },
+    "browser": {
+      "acquired": true,
+      "success": true
+    },
+    "server": {
+      "acquired": true,
+      "success": true
+    }
+  }
+}

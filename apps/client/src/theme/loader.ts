@@ -32,7 +32,12 @@
 
 import { THEME_ENGINE, type ThemeManifest, type ThemeLight } from "../host/contract";
 import { reportThemeTrouble, type ThemeTrouble } from "../ui/notify";
-import { themeAssetUrls, themeCssViolations } from "../ui/sanitize-css";
+import {
+  themeAssetReferences,
+  themeAssetUrls,
+  themeCssViolations,
+  type ThemeAssetReference,
+} from "../ui/sanitize-css";
 import { contrast } from "./contrast";
 import { REQUIRED_THEME_ROLES, THEME_CONTRAST_PAIRS } from "./contrast-fixture";
 import { HOOKS } from "./serie/anatomia";
@@ -77,6 +82,7 @@ export interface ThemeBundle {
   readonly manifest: ThemeBundleManifest;
   readonly sheet: string;
   readonly skin?: string;
+  /** Asset names are validated before mount; their bytes stay behind the host boundary. */
   readonly assets: Readonly<Record<string, unknown>>;
 }
 
@@ -116,6 +122,147 @@ function style(text: string, layer: "foglio" | "pelle"): HTMLStyleElement {
   element.dataset.fub = layer;
   element.textContent = text;
   return element;
+}
+export class ThemeAssetMaterializationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ThemeAssetMaterializationError";
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function base64(bytes: Uint8Array): string {
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  }
+  if (typeof globalThis.btoa === "function") return globalThis.btoa(binary);
+
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let encoded = "";
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index]!;
+    const second = bytes[index + 1];
+    const third = bytes[index + 2];
+    encoded += alphabet[first >> 2];
+    encoded += alphabet[((first & 3) << 4) | ((second ?? 0) >> 4)];
+    encoded += second === undefined ? "=" : alphabet[((second & 15) << 2) | ((third ?? 0) >> 6)];
+    encoded += third === undefined ? "=" : alphabet[third & 63];
+  }
+  return encoded;
+}
+
+function bytesOf(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) return value;
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  if (Array.isArray(value) && value.every((item) => typeof item === "number")) {
+    return new Uint8Array(value);
+  }
+  return null;
+}
+
+function assetMime(name: string): string {
+  const path = name.split(/[?#]/, 1)[0]!.toLowerCase();
+  const extension = path.slice(path.lastIndexOf(".") + 1);
+  const known: Readonly<Record<string, string>> = {
+    avif: "image/avif",
+    bmp: "image/bmp",
+    css: "text/css",
+    gif: "image/gif",
+    ico: "image/x-icon",
+    jpeg: "image/jpeg",
+    jpg: "image/jpeg",
+    otf: "font/otf",
+    svg: "image/svg+xml",
+    ttf: "font/ttf",
+    webp: "image/webp",
+    woff: "font/woff",
+    woff2: "font/woff2",
+  };
+  return known[extension] ?? "application/octet-stream";
+}
+
+function dataUrl(name: string, value: unknown): string | null {
+  if (typeof value === "string") {
+    if (/^data:/i.test(value)) return value;
+    const bytes = new TextEncoder().encode(value);
+    return `data:${assetMime(name)};base64,${base64(bytes)}`;
+  }
+
+  const directBytes = bytesOf(value);
+  if (directBytes) return `data:${assetMime(name)};base64,${base64(directBytes)}`;
+  if (!isRecord(value)) return null;
+
+  for (const key of ["url", "dataUrl", "data_url"]) {
+    if (typeof value[key] === "string" && /^data:/i.test(value[key] as string)) {
+      return value[key] as string;
+    }
+  }
+
+  const mime =
+    (typeof value.mime === "string" && value.mime) ||
+    (typeof value.mediaType === "string" && value.mediaType) ||
+    (typeof value.media_type === "string" && value.media_type) ||
+    (typeof value.contentType === "string" && value.contentType) ||
+    (typeof value.content_type === "string" && value.content_type) ||
+    assetMime(name);
+  const encoded = value.encoding === "base64" || value.base64 === true;
+
+  if (typeof value.base64 === "string") return `data:${mime};base64,${value.base64}`;
+  if (typeof value.data === "string") {
+    if (/^data:/i.test(value.data)) return value.data;
+    return encoded
+      ? `data:${mime};base64,${value.data}`
+      : `data:${mime};base64,${base64(new TextEncoder().encode(value.data))}`;
+  }
+
+  const bytes = bytesOf(value.bytes ?? value.content ?? value.value);
+  return bytes ? `data:${mime};base64,${base64(bytes)}` : null;
+}
+
+function materializationRange(reference: ThemeAssetReference, css: string): [number, number] {
+  const start = Math.max(0, Math.min(css.length, reference.start));
+  const end = Math.max(start, Math.min(css.length, reference.end));
+  return [start, end];
+}
+
+/** Replaces only URL payload ranges already accepted by the sanitizer. */
+export function materializeThemeCss(
+  css: string,
+  assets: Readonly<Record<string, unknown>>,
+  assetNamespace?: string,
+): string {
+  const replacements: Array<{ start: number; end: number; value: string }> = [];
+  for (const reference of themeAssetReferences(css)) {
+    if (reference.value.startsWith("#")) continue;
+    if (assetNamespace && !reference.value.startsWith(assetNamespace)) continue;
+    if (!Object.prototype.hasOwnProperty.call(assets, reference.value)) {
+      throw new ThemeAssetMaterializationError(`asset ${reference.value} non presente nel fascio`);
+    }
+    const materialized = dataUrl(reference.value, assets[reference.value]);
+    if (!materialized) {
+      throw new ThemeAssetMaterializationError(`asset ${reference.value} non materializzabile`);
+    }
+    const [start, end] = materializationRange(reference, css);
+    replacements.push({ start, end, value: materialized });
+  }
+  if (replacements.length === 0) return css;
+
+  replacements.sort((left, right) => right.start - left.start || right.end - left.end);
+  let output = css;
+  let lowerBound = css.length + 1;
+  for (const replacement of replacements) {
+    if (replacement.end > lowerBound) continue;
+    output = `${output.slice(0, replacement.start)}${replacement.value}${output.slice(replacement.end)}`;
+    lowerBound = replacement.start;
+  }
+  return output;
 }
 
 /** Sostituisce foglio e pelle in una sola commit, dopo che ogni cancello è verde. */
@@ -238,9 +385,13 @@ export function validateThemeBundle(bundle: ThemeBundle, light: ThemeLight): str
   }
   const referenced = themeAssetUrls(`${bundle.sheet}\n${bundle.skin ?? ""}`);
   for (const asset of referenced) {
-    if (asset.startsWith(bundle.manifest.asset_namespace) &&
-        !Object.prototype.hasOwnProperty.call(assets, asset)) {
+    if (!asset.startsWith(bundle.manifest.asset_namespace)) continue;
+    if (!Object.prototype.hasOwnProperty.call(assets, asset)) {
       reasons.push(`asset: ${asset} nominato dal CSS ma assente dal fascio`);
+      continue;
+    }
+    if (!dataUrl(asset, assets[asset])) {
+      reasons.push(`asset: ${asset} non materializzabile`);
     }
   }
   return reasons;
@@ -256,7 +407,7 @@ function rejectTheme(
   return { mounted: false, trouble };
 }
 
-/** Valida l'intero fascio e solo allora sostituisce i due strati del tema. */
+/** Valida l'intero fascio, materializza gli asset e solo allora sostituisce i due strati. */
 export function mountThemeBundle(
   bundle: ThemeBundle,
   light: ThemeLight,
@@ -265,7 +416,11 @@ export function mountThemeBundle(
   const reasons = validateThemeBundle(bundle, light);
   if (reasons.length > 0) return rejectTheme(bundle.manifest.name, reasons, report);
   try {
-    replaceTheme(bundle.sheet, bundle.skin);
+    const sheet = materializeThemeCss(bundle.sheet, bundle.assets, bundle.manifest.asset_namespace);
+    const skin = bundle.skin === undefined
+      ? undefined
+      : materializeThemeCss(bundle.skin, bundle.assets, bundle.manifest.asset_namespace);
+    replaceTheme(sheet, skin);
     return { mounted: true };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);

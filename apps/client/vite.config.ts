@@ -1,8 +1,49 @@
 import { defineConfig } from "vitest/config";
 
+const CHUNK_BUDGET = 500_000;
+// Il parser upstream arriva già precompilato: resta separato e solo lazy.
+const MERMAID_PARSER_BUDGET = 700_000;
+
 // Config allineata a Tauri: porta fissa 1420, niente clear screen.
 export default defineConfig({
   clearScreen: false,
+  plugins: [{
+    name: "bundle-size-budgets",
+    apply: "build",
+    generateBundle: {
+      // Dopo la riscrittura degli import e dei preload di Vite: byte finali.
+      order: "post",
+      handler(_options, bundle) {
+        const eager = new Set<string>();
+        const visit = (name: string): void => {
+          const chunk = bundle[name];
+          if (eager.has(name) || chunk?.type !== "chunk") return;
+          eager.add(name);
+          for (const dependency of chunk.imports) visit(dependency);
+        };
+        for (const chunk of Object.values(bundle)) {
+          if (chunk.type === "chunk" && chunk.isEntry) visit(chunk.fileName);
+        }
+        for (const chunk of Object.values(bundle)) {
+          if (chunk.type !== "chunk") continue;
+          const modules = Object.keys(chunk.modules);
+          let parserModules = 0;
+          for (const id of modules) {
+            if (id.includes("/node_modules/@mermaid-js/parser/")) parserModules++;
+          }
+          const parser = parserModules > 0 && parserModules === modules.length;
+          if (parserModules > 0 && eager.has(chunk.fileName)) {
+            this.error(`${chunk.fileName}: il parser Mermaid deve restare fuori dal caricamento iniziale`);
+          }
+          const limit = parser ? MERMAID_PARSER_BUDGET : CHUNK_BUDGET;
+          const bytes = Buffer.byteLength(chunk.code, "utf8");
+          if (bytes > limit) {
+            this.error(`${chunk.fileName}: ${bytes} byte superano il budget di ${limit} byte`);
+          }
+        }
+      },
+    },
+  }],
   server: {
     port: 1420,
     strictPort: true,
@@ -11,6 +52,33 @@ export default defineConfig({
     target: "es2021",
     outDir: "dist",
     emptyOutDir: true,
+    // L'avviso generico copre il tetto massimo; il plugin applica anche
+    // il limite ordinario più stretto e vieta il parser nel percorso eager.
+    chunkSizeWarningLimit: MERMAID_PARSER_BUDGET / 1000,
+    rollupOptions: {
+      output: {
+        // Confini riusabili, non fasce di byte. I linguaggi e i diagrammi
+        // opzionali restano separati: non finiscono nel runtime iniziale.
+        onlyExplicitManualChunks: true,
+        manualChunks(id) {
+          if (/\/node_modules\/@codemirror\/(state|view|language|commands|autocomplete|search|lint)\//.test(id)) {
+            return "editor-runtime";
+          }
+          if (/\/node_modules\/@lezer\/(common|lr|highlight)\//.test(id)) return "parser-runtime";
+          if (/\/node_modules\/(@codemirror\/lang-|@lezer\/)(markdown|html|css|javascript)\//.test(id)) {
+            return "markdown-grammar";
+          }
+          if (/\/src\/theme\/(serie\/|contrast(?:-fixture)?\.ts$|oklch\.ts$)/.test(id)) {
+            return "theme-series";
+          }
+          if (/\/node_modules\/postcss\//.test(id)) return "theme-parser";
+          if (/\/node_modules\/@tauri-apps\//.test(id)) return "host-bridge";
+          if (/\/node_modules\/(d3-(selection|transition|shape|color|dispatch|ease|interpolate|timer|array|path)|dagre-d3-es|roughjs|dompurify|lodash-es|es-toolkit|marked|khroma)\//.test(id)) {
+            return "diagram-runtime";
+          }
+        },
+      },
+    },
   },
   test: {
     // Vitest, per difetto, **non** processa i CSS: ogni `import` di un foglio

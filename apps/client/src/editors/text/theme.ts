@@ -73,8 +73,10 @@ const syntaxStyle = HighlightStyle.define([
   { tag: t.strikethrough, textDecoration: "line-through" },
   { tag: t.link, color: "var(--doc-link)", textDecoration: "underline" },
   // Il titolo ha un colore anche mentre lo si scrive: è la riga per cui esiste
-  // `--doc-heading`, ed è la differenza più visibile fra Sorgente e Lettura se
-  // una delle due la perde.
+  // `--syn-heading`, ed è la differenza più visibile fra Sorgente e Lettura se
+  // una delle due la perde. In Sorgente resta sintassi; in Live l'editoriale
+  // lo mette la regola `.cm-fub-h*` più sotto, che vince per specificità
+  // dentro il contenuto.
   { tag: t.heading, fontWeight: "bold", color: "var(--syn-heading)" },
   { tag: [t.atom, t.bool, t.special(t.variableName)], color: "var(--syn-literal)" },
   { tag: [t.processingInstruction, t.string, t.inserted], color: "var(--syn-string)" },
@@ -101,13 +103,51 @@ const surfaces = EditorView.theme({
   ".cm-cursor, .cm-dropCursor": {
     borderLeftColor: "var(--doc-caret)",
   },
-  // Le tre forme in cui una selezione si disegna: quella di CodeMirror quando
-  // ha il fuoco, quella che resta quando lo perde, e quella del browser sul
-  // testo. Servono tutte e tre — CodeMirror sceglie da sé quale usare a
-  // seconda di come è configurato, e dichiararne una sola lascia un caso in cui
-  // la selezione è invisibile.
-  "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+  // Live: i titoli resi seguono la gerarchia della Lettura — misura che cala
+  // col livello, peso che si attenua, h5/h6 maiuscoletti muti — ma senza il
+  // rosso della sintassi: dentro `.cm-content` questa regola è più specifica
+  // di `t.heading`. In Sorgente (senza classi `cm-fub-h*`) resta il colore
+  // sintattico qui sopra. Le preferenze di lettura (famiglia, corpo,
+  // larghezza) le mette la pelle sul contenitore, non il tema.
+  ".cm-content .cm-fub-h1, .cm-content .cm-fub-h2, .cm-content .cm-fub-h3, .cm-content .cm-fub-h4, .cm-content .cm-fub-h5, .cm-content .cm-fub-h6": {
+    color: "var(--doc-fg)",
+    fontFamily: "var(--font-reading)",
+    lineHeight: "var(--leading-tight)",
+    fontWeight: "bold",
+  },
+  // Le decorazioni Live avvolgono gli span della sintassi: il colore deve
+  // raggiungere anche quei figli, non soltanto il contenitore del titolo.
+  ".cm-content .cm-fub-h1 span, .cm-content .cm-fub-h2 span, .cm-content .cm-fub-h3 span, .cm-content .cm-fub-h4 span, .cm-content .cm-fub-h5 span, .cm-content .cm-fub-h6 span": {
+    color: "inherit",
+  },
+  ".cm-content .cm-fub-h3": {
+    fontSize: "1.25em",
+  },
+  ".cm-content .cm-fub-h4": {
+    fontSize: "1.1em",
+  },
+  ".cm-content .cm-fub-h5, .cm-content .cm-fub-h6": {
+    fontSize: "0.85em",
+    letterSpacing: "var(--tracking-caps)",
+    textTransform: "uppercase",
+  },
+  // La selezione la disegna CodeMirror (`drawSelection`) come rettangolo
+  // dietro il testo (layer a z-index negativo di serie) e sotto la riga
+  // attiva opaca in paint order (verificato con `elementsFromPoint`): né il
+  // fondo del rettangolo né un suo bordo emergono sopra `--doc-active-line`.
+  // La selezione nativa è spenta da `hideNativeSelection`: `::selection` qui
+  // perde contro `transparent !important` e resta lettera morta. La regola di
+  // CodeMirror colora già il caso con focus (`#233` al buio, `#d7d4f0` in
+  // luce) con specificità maggiore: qui si alza solo il caso senza focus.
+  ".cm-selectionBackground": {
     backgroundColor: "var(--doc-selection)",
+  },
+  // La riga attiva si spegne dove c'è una selezione (`engine.ts` aggiunge
+  // `cm-fub-no-active-line` sulle righe selezionate): la `lineDecoration`
+  // coprirebbe il rettangolo di selezione in paint order. Specificità sopra
+  // il tema via `Prec.highest` dal motore, non da qui.
+  ".cm-line.cm-fub-no-active-line.cm-activeLine": {
+    backgroundColor: "transparent",
   },
   ".cm-activeLine": {
     backgroundColor: "var(--doc-active-line)",

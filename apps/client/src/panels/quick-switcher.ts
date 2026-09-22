@@ -55,7 +55,7 @@ import {
   rememberSearch,
 } from "../state/recent";
 import { createNote } from "../state/vault";
-import { activatable, trapFocus } from "../ui/a11y";
+import { trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
@@ -139,13 +139,20 @@ export function openQuickSwitcher(): void {
   input.className = "palette-input";
   input.placeholder = t("switcher.placeholder");
   input.setAttribute("aria-label", t("switcher.title"));
+  // Etichetta di scope esplicita (U13): non un generico "Cerca…", ma il nome
+  // della superficie con i suoi effetti (aprire, non cercare nel testo).
+  const scope = document.createElement("p");
+  scope.className = "palette-desc";
+  scope.textContent = t("switcher.title");
   const list = document.createElement("ul");
   list.className = "plain-list palette-list";
   // Come la palette dei comandi: una riga è «quella scelta» e le frecce la
   // spostano, quindi è una listbox — e dirlo è ciò che permette di sapere su
   // cosa si sta per premere Invio senza guardare lo sfondo.
   list.setAttribute("role", "listbox");
-  box.append(input, list);
+  list.setAttribute("aria-label", t("switcher.title"));
+  list.tabIndex = 0;
+  box.append(scope, input, list);
 
   let visibleItems: Entry[] = [];
   let selected = 0;
@@ -162,6 +169,12 @@ export function openQuickSwitcher(): void {
       const li = document.createElement("li");
       li.setAttribute("role", "option");
       li.setAttribute("aria-selected", String(i === selected));
+      // Riga nativa (C01): bottone vero invece di `li` attivo — omonimi con
+      // titolo + percorso disambiguante (U14), shortcut reale assente qui
+      // perché l'azione è aprire (nessuna stringa duplicata).
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "search-result";
       const title = document.createElement("span");
       title.className = "palette-title";
       const where = document.createElement("span");
@@ -172,6 +185,7 @@ export function openQuickSwitcher(): void {
         // è anche il caso in cui questa superficie serve di più.
         title.textContent = pageName(entry.doc);
         where.textContent = entry.doc;
+        setTooltip(button, entry.doc);
       } else if (entry.k === "query") {
         title.textContent = entry.q;
         where.textContent = t("switcher.recent_search");
@@ -179,9 +193,9 @@ export function openQuickSwitcher(): void {
         title.textContent = entry.name;
         where.textContent = t("switcher.create");
       }
-      li.append(title, where);
-      li.addEventListener("click", () => active(entry));
-      activatable(li);
+      button.append(title, where);
+      button.addEventListener("click", () => active(entry));
+      li.append(button);
       newItems.appendChild(li);
     }
     if (visibleItems.length === 0) {
@@ -312,6 +326,10 @@ export function openQuickSwitcher(): void {
     } else if (e.key === "Enter") {
       const entry = visibleItems[selected];
       if (entry) active(entry);
+    } else if (e.key === "Escape") {
+      // U16: Escape chiude la superficie appropriata, il focus resta dov'era
+      // prima dell'apertura (lo rimette `trapFocus` sciogliendosi).
+      closeQuickSwitcher();
     }
   });
 

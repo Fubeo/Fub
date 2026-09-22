@@ -32,19 +32,20 @@ use fub_abi::format::SourceKind;
 use fub_abi::locale::Locale;
 use fub_abi::session::ViewContext;
 use fub_abi::settings::SettingValue;
+use fub_abi::theme::ThemeLight;
 use fub_abi::traits::{IndexQuery, IndexResult, JobId, ViewInstance, ViewSpec};
 use fub_abi::ui::{ActionId, FieldValue, UiAction, UiNode, ViewUpdate};
 use fub_abi::{Notice, PluginError};
 use fub_host::{doc_id, Delivery, EventSink, Host};
 use fub_wasm_host::installed::Consent;
 use fub_wasm_host::managed::{InstalledOperation, InstalledPluginManager, InstalledShutdown};
-
 use tauri::{AppHandle, Emitter, Manager, State};
 
 // I tre record che attraversano l'IPC vivono nell'host — un'API locale
 // risponderebbe con gli stessi — e l'app li ri-esporta, perché è lei a farli
 // attraversare il confine: il mirror TS e la sua fixture
 // (`tests/ts_mirror_app.rs`) restano legati al lato che li serializza.
+pub use fub_host::theme::{ThemeInfo, ThemePayload};
 pub use fub_host::{BundleInfo, EmbedContent, UnreadDoc, VaultEntry, VaultInfo};
 pub use fub_wasm_host::managed::InstalledPluginInfo;
 
@@ -758,6 +759,22 @@ fn list_bundles(host: State<Host>, vault: Option<String>) -> Result<Vec<BundleIn
     host.bundles(vault.as_deref())
 }
 
+/// Elenca i temi installati che l'host ha verificato caricabili.
+#[tauri::command]
+fn list_themes(host: State<Host>) -> Result<Vec<ThemeInfo>, PluginError> {
+    host.themes()
+}
+
+/// Legge una sola luce del tema richiesto; il filesystem non attraversa l'IPC.
+#[tauri::command]
+fn read_theme(
+    host: State<Host>,
+    id: String,
+    light: ThemeLight,
+) -> Result<ThemePayload, PluginError> {
+    host.read_theme(&id, light)
+}
+
 fn parse_installation(installation: &str) -> Result<u64, PluginError> {
     if installation.is_empty() || !installation.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err(PluginError::BadArgs(
@@ -982,15 +999,19 @@ pub fn run() {
             open_vault,
             close_vault,
             list_vaults,
+            discard_draft,
+            set_active_context,
+            set_system_locale,
             set_current_vault,
             initial_vault,
             session_notice,
             read_document,
             write_document,
             save_draft,
-            discard_draft,
-            set_active_context,
-            set_system_locale,
+            list_bundles,
+            list_themes,
+            read_theme,
+            list_installed_plugins,
             list_views,
             render_view,
             view_action,
@@ -1006,8 +1027,6 @@ pub fn run() {
             reset_setting,
             view_state,
             set_view_state,
-            list_bundles,
-            list_installed_plugins,
             install_plugin,
             set_installed_plugin_enabled,
             set_installed_plugin_consent,

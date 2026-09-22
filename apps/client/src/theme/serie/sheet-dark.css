@@ -49,13 +49,13 @@
 
   /* --- i raggi ----------------------------------------------------------- */
 
-  /* Erano sette valori distinti fra 2px e 10px per quattro intenzioni: il segno
-     appena smussato, il controllo, la superficie che galleggia, la pastiglia. */
+  /* Quattro raggi per quattro intenzioni: il segno appena smussato,
+     il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda. */
 
-  --radius-xs: 2px;
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
   --radius-pill: 999px;
 
   /* --- la tipografia ----------------------------------------------------- */
@@ -136,17 +136,17 @@
   --elevation-paper-surface: #000000;
   --elevation-paper-border: #000000;
   --elevation-paper-shadow: none;
-  --elevation-base-surface: #060607;
-  --elevation-base-border: #0c0c0e;
+  --elevation-base-surface: #111112;
+  --elevation-base-border: #171718;
   --elevation-base-shadow: none;
-  --elevation-chrome-surface: #0c0c0e;
-  --elevation-chrome-border: #1a1b1d;
+  --elevation-chrome-surface: #171718;
+  --elevation-chrome-border: #222224;
   --elevation-chrome-shadow: none;
-  --elevation-floating-surface: #131315;
-  --elevation-floating-border: #2a2a2e;
+  --elevation-floating-surface: #1c1c1e;
+  --elevation-floating-border: #2d2d31;
   --elevation-floating-shadow: none;
-  --elevation-dialog-surface: #1a1b1d;
-  --elevation-dialog-border: #424247;
+  --elevation-dialog-surface: #222224;
+  --elevation-dialog-border: #404044;
   --elevation-dialog-shadow: none;
 
   /* --- le superfici: la scala, dalla carta in su ------------------------- */
@@ -171,22 +171,22 @@
      resta tale quando il puntatore se n'è andato. */
 
   /* Il corpo dell'app: ciò che sta dietro tutto. */
-  --bg: #060607;
+  --bg: #111112;
   /* Titlebar, rail, statusbar. La scocca sta **sopra** la carta, non accanto. */
-  --bg-chrome: #0c0c0e;
+  --bg-chrome: #171718;
   /* Ciò che galleggia: pannelli, menu, popover, modali, toast. */
-  --bg-elev: #131315;
+  --bg-elev: #1c1c1e;
   /* Un riquadro **dentro** un pannello: la traccia di un controllo
      segmentato, un banner, una pastiglia, la riga di una lista. */
-  --bg-panel: #1a1b1d;
+  --bg-panel: #222224;
   /* Il campo: dove si scrive. E basta. */
-  --bg-input: #222225;
+  --bg-input: #27272b;
   /* La riga sotto il puntatore. È uno stato, e sta un passo sopra il campo. */
-  --bg-hover: #2a2a2e;
+  --bg-hover: #2d2d31;
   /* La riga **selezionata**, il segmento premuto. Prima non c'era e si
      riusava l'hover, cioè si diceva «il puntatore è qui» per dire «questa è
      quella scelta»: due cose che devono poter valere insieme. */
-  --bg-active: #313236;
+  --bg-active: #333338;
   /* Il velo del bottone fantasma: un velo sul testo, non un secondo grigio.
      In alpha perché deve restare un velo sopra qualunque superficie, e le
      superfici adesso sono sette. */
@@ -196,7 +196,7 @@
      due, e la scala sa già dov'è. Non gli si chiede 3:1 — un filetto non è un
      controllo e pretenderglielo trasformerebbe l'interfaccia in un
      wireframe — ma nemmeno lo si sceglie a mano. */
-  --border: #424247;
+  --border: #404044;
 
   /* --- gli inchiostri della shell ---------------------------------------- */
 
@@ -211,10 +211,10 @@
      foglio scritto a mano già dava, misurato. Al buio è più bassa di un punto
      e non per scelta — con sette superfici la più alta è chiara abbastanza da
      abbassare il soffitto: sopra `--bg-active` nessun colore arriva a 12,8:1. */
-  --text: #edeef1;
+  --text: #eff0f3;
   /* I sottotitoli, le didascalie, i secondi. Restano testo, quindi la mira
      sta sopra la soglia del testo con un margine e non sul filo. */
-  --muted: #a1a1ad;
+  --muted: #a2a3af;
 
   /* --- l'accento --------------------------------------------------------- */
 
@@ -230,8 +230,8 @@
      un pieno che porta il proprio testo sopra, e spingerlo oltre lo farebbe
      diventare un'oliva scura — cioè non più un accento. */
 
-  --accent: #a7ed4c;
-  --accent-soft: #c6ff87;
+  --accent: #a9ef4e;
+  --accent-soft: #ceff9a;
   /* Il testo **sopra** l'accento. Era `white` cablato in due regole, ed è la
      riga che un tema chiaro non poteva ereditare: su un accento chiaro il
      bianco sparisce. Adesso non è più una scelta né in una luce né
@@ -256,17 +256,17 @@
      apposta, perché un verde uguale all'accento direbbe «primario» dove voleva
      dire «fatto». */
 
-  --danger: #fc7b73;
-  --danger-wash: rgb(252 123 115 / 18%);
+  --danger: #ff7c75;
+  --danger-wash: rgb(255 124 117 / 18%);
   --danger-contrast: #000000;
-  --warning: #d49700;
-  --warning-wash: rgb(212 151 0 / 18%);
+  --warning: #d69900;
+  --warning-wash: rgb(214 153 0 / 18%);
   --warning-contrast: #000000;
-  --success: #34b77e;
-  --success-wash: rgb(52 183 126 / 18%);
+  --success: #37b980;
+  --success-wash: rgb(55 185 128 / 18%);
   --success-contrast: #000000;
-  --info: #56a7f5;
-  --info-wash: rgb(86 167 245 / 18%);
+  --info: #58a8f7;
+  --info-wash: rgb(88 168 247 / 18%);
   --info-contrast: #000000;
 
   /* --- l'anello del fuoco (§12.4) ---------------------------------------- */
@@ -287,7 +287,7 @@
      bottone primario sarebbe lime su lime. Sono parte della forma dell'anello,
      e la regola che le consuma sta nella struttura. */
 
-  --focus-ring: #c6f19b;
+  --focus-ring: #c8f39d;
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
 
@@ -311,11 +311,11 @@
      superficie, non essendo raggiungibile dal foglio di stile, è quella che si
      dimentica per prima quando si cambia tema. */
 
-  --graph-node: #a0a1ae;
+  --graph-node: #a2a3b0;
   /* Il nodo della nota aperta è l'accento, e lo dice ripetendone il valore. */
-  --graph-node-active: #a7ed4c;
+  --graph-node-active: #a9ef4e;
   /* Il nodo sotto il puntatore: la tinta del riuscito, che qui vuol dire «questo». */
-  --graph-node-hover: #6ed3a0;
+  --graph-node-hover: #70d5a2;
 
   /* --- la superficie del documento --------------------------------------- */
 
@@ -332,14 +332,14 @@
      ne hanno una. */
   --doc-bg: #000000;
   /* La riga sotto il cursore: un gradino della carta, non un colore a parte. */
-  --doc-active-line: #0c0c0e;
+  --doc-active-line: #171718;
   /* Il testo selezionato. È il fondo **più lontano** su cui una specie di
      sintassi possa finire, quindi è lui a decidere quanto scure possono
      essere le dieci: portarlo un gradino più in là abbassa il soffitto di
      tutta la tavolozza, e si vede subito perché la generazione si rifiuta. */
-  --doc-selection: #2a2a2e;
+  --doc-selection: #2d2d31;
   /* Il suggerimento dell'editor: galleggia sulla carta come un pannello sul corpo. */
-  --doc-tooltip-bg: #131315;
+  --doc-tooltip-bg: #1c1c1e;
   /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
      il motivo per cui valgono identici nelle due luci. Sono la sola famiglia
      di colori che i due fogli dichiarano con lo stesso valore, e
@@ -352,14 +352,14 @@
   --doc-rule-soft: rgb(135 135 135 / 28%);
   --doc-highlight: rgb(255 205 0 / 28%);
   /* Il corpo della nota. Sopra tutti e tre i fondi della carta, non solo la pagina. */
-  --doc-fg: #cccdd5;
+  --doc-fg: #d0d1d9;
   /* Un wikilink. Il quarto fondo è la pagina **sotto un velo**: `--doc-fill`
      è `rgb(135 135 135 / 16%)`, cioè un velo e non un colore, e un link dentro
      un riempimento ci finisce sopra. La tabella dei token quella coppia non
      poteva vederla — si rifiuta, giustamente, di misurare ciò che ha un alfa,
      perché non sa cosa c'è sotto. Qui sotto ci sta la carta, e si sa: il velo
      si compone e il conto si fa. */
-  --doc-link: #68abfe;
+  --doc-link: #6fafff;
   /* I titoli, resi e in scrittura. Sono della **famiglia della sintassi**
      perché è il parser a marcarli, e `--syn-heading` li ripete: tenerli fuori
      vorrebbe dire un titolo che, dentro un blocco di codice, si vede più
@@ -370,14 +370,14 @@
      uno dei cinque debiti che il banco della 0166 ha trovato misurando la
      pagina vera, ed è un'assunzione che si può fare solo **prima** di
      rendere. */
-  --doc-heading: #f77d80;
+  --doc-heading: #fb8083;
   /* Il rosso **del documento**: un wikilink rotto. Non è `--danger`, che è il
      rosso della shell: stessa tinta, fondi diversi, e per questo due valori. */
-  --doc-danger: #fb7a72;
+  --doc-danger: #ff7d75;
   /* I numeri di riga sono testo che qualcuno legge, non decorazione. */
-  --doc-gutter-fg: #9898a2;
+  --doc-gutter-fg: #9b9ca6;
   /* Il cursore di scrittura: non è testo, ma è la cosa che si cerca con gli occhi. */
-  --doc-caret: #5c8cff;
+  --doc-caret: #6190ff;
 
   /* --- i colori della sintassi ------------------------------------------- */
 
@@ -407,30 +407,30 @@
      si chiede alla famiglia un rapporto, e la famiglia trova **una** chiarezza.
      Era esattamente l'operazione che prenderle in coppia serviva a evitare. */
 
-  --syn-keyword: #db7cea;
-  --syn-name: #fc7979;
-  --syn-function: #66aaff;
-  --syn-literal: #d7994b;
-  --syn-type: #cda036;
-  --syn-operator: #46b7d7;
+  --syn-keyword: #df80ed;
+  --syn-name: #ff7e7d;
+  --syn-function: #6daeff;
+  --syn-literal: #db9d4f;
+  --syn-type: #d0a43b;
+  --syn-operator: #4abbdb;
   /* Il commento è la sola specie che resta **fuori dalla famiglia**, e per la
      ragione per cui la famiglia esiste: le altre nove devono vedersi come una
      tavolozza, e il commento deve vedersi **indietro**. Prendere la chiarezza
      delle altre lo porterebbe avanti, cioè gli toglierebbe il suo lavoro. La
      sua mira è sopra la soglia del testo e non un dito più su. */
-  --syn-comment: #9191a2;
-  --syn-string: #7dbb68;
+  --syn-comment: #9494a6;
+  --syn-string: #81be6c;
   /* Un titolo ha lo stesso colore reso e in scrittura, e restano due nomi
      perché sono due domande diverse: «di che colore è un `<h1>` reso» e «di
      che colore è il testo che il parser ha marcato come titolo». Prima erano
      lo stesso valore ricopiato, e ricopiare è come si diverge. */
-  --syn-heading: #f77d80;
+  --syn-heading: #fb8083;
   /* Ciò che il parser non riesce a leggere. Fuori dalla famiglia anche lui, e
      per il verso opposto al commento: deve saltare all'occhio, quindi sta un
      gradino **avanti** alle altre. Al buio era `#ffffff`, che non è un colore
      scelto — è l'assenza di una scelta; adesso porta la tinta del guasto, che
      è ciò che vuol dire. */
-  --syn-invalid: #ff9a92;
+  --syn-invalid: #ffa098;
 
   /* --- ciò che vale per tutta la pagina ---------------------------------- */
 

@@ -429,7 +429,9 @@ impl InstalledPluginManager {
         for vault in host.vaults() {
             let vault = Some(vault.as_str());
             if let Some(bundle) = &bundle {
-                if let Err(error) = host.remember_bundle(vault, Arc::clone(bundle), &state.claim) {
+                if let Err(error) =
+                    host.remember_claimed_bundle(vault, Arc::clone(bundle), &state.claim)
+                {
                     errors.push(error);
                     continue;
                 }
@@ -547,7 +549,7 @@ impl InstalledOperation {
 impl StartupSource for InstalledPluginManager {
     fn prepare(&self) -> Result<StartupSnapshot, PluginError> {
         let _operation = self.operations.enter()?;
-        let validity = Arc::clone(&self.state.read()?.validity);
+        let validity: Arc<StartupValidity> = Arc::clone(&self.state.read()?.validity);
         let lease = validity.acquire()?;
         let snapshot = self.store.snapshot().map_err(plugin_error)?;
         let mut bundles = Vec::new();
@@ -677,7 +679,9 @@ fn plugin_error(error: InstallError) -> PluginError {
 fn load_error(error: LoadError) -> PluginError {
     match error {
         LoadError::Read(error) => io_error(error),
-        LoadError::Compilation(message) => PluginError::BadArgs(message.into()),
+        LoadError::Compilation(message) | LoadError::UnsupportedExport(message) => {
+            PluginError::BadArgs(message.into())
+        }
         LoadError::UnservedFamilies(message) => PluginError::BadArgs(message.into()),
         LoadError::NotAPlugin(message) => PluginError::BadArgs(message.into()),
         LoadError::Instantiation(message) => PluginError::BadArgs(message.into()),

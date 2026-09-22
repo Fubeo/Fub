@@ -88,11 +88,10 @@ const HIGH_CONTRAST = { text: 7, ui: 4.5 } as const;
 /// gradino percettivo — e infatti in luce si cammina benissimo. Non è un difetto
 /// di OKLab: è la densità della codifica, e la ricetta la deve sapere.
 ///
-/// Quindi: lo **stacco** è il primo gradino, quello che si fa per uscire dalla
-/// carta, e il **passo** è ogni gradino dopo. Al buio lo stacco è quattro volte
-/// il passo perché deve attraversare la zona in cui i codici non ci sono; in
-/// luce sono lo stesso numero, e dirlo due volte è il modo di dire che lì la
-/// differenza non serve.
+/// Lo **stacco** separa la carta nera dalla scocca antracite; il **passo**
+/// mantiene raccolte le superfici successive. La pagina resta nera, ma
+/// navigazione e controlli non si confondono con il documento. In luce
+/// chiara basta lo stesso passo per la carta e per le superfici successive.
 const LIGHT: Record<
   Light,
   {
@@ -102,7 +101,7 @@ const LIGHT: Record<
     readonly schema: string;
   }
 > = {
-  dark: { paper: 0, gap: 0.125, step: 0.032, schema: "dark" },
+  dark: { paper: 0, gap: 0.18, step: 0.024, schema: "dark" },
   light: { paper: 1, gap: 0.014, step: 0.014, schema: "light" },
 };
 
@@ -256,13 +255,13 @@ const SCALE: readonly Group[] = [
   {
     title: "i raggi",
     prose:
-      "Erano sette valori distinti fra 2px e 10px per quattro intenzioni: il segno\n" +
-      "appena smussato, il controllo, la superficie che galleggia, la pastiglia.",
+      "Quattro raggi per quattro intenzioni: il segno appena smussato,\n" +
+      "il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda.",
     entries: [
-      { name: "radius-xs", type: "letterale", value: "2px" },
-      { name: "radius-sm", type: "letterale", value: "4px" },
-      { name: "radius-md", type: "letterale", value: "6px" },
-      { name: "radius-lg", type: "letterale", value: "8px" },
+      { name: "radius-xs", type: "letterale", value: "3px" },
+      { name: "radius-sm", type: "letterale", value: "6px" },
+      { name: "radius-md", type: "letterale", value: "8px" },
+      { name: "radius-lg", type: "letterale", value: "12px" },
       { name: "radius-pill", type: "letterale", value: "999px" },
     ],
   },

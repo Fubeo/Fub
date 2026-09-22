@@ -225,36 +225,26 @@ describe("syncDoc", () => {
     expect(ed.getDoc()).toBe("abcB");
   });
 
-  it("controlla le modifiche effettive dopo un transactionFilter", () => {
-    let seen = 0;
+  it("preserva il buffer autorevole e l’undo locale anche con filtri del profilo", () => {
     const filter = EditorState.transactionFilter.of((transaction) => {
       if (!transaction.isUserEvent("sync")) return transaction;
-      seen += 1;
       return {
-        changes: {
-          from: 0,
-          to: transaction.startState.doc.length,
-          insert: transaction.newDoc.toString(),
-        },
-        annotations: [
-          Transaction.userEvent.of("sync"),
-          Transaction.addToHistory.of(false),
-          Transaction.remote.of(true),
-        ],
-        filter: false,
+        changes: { from: 0, to: transaction.startState.doc.length, insert: "testo contaminato dal profilo" },
       };
     });
-    const { ed, view } = editor(() => {}, () => filter);
-    ed.setDoc("abc");
-    const initialView = view();
-    view().dispatch({ changes: { from: 1, insert: "L" }, userEvent: "input.type" });
-    ed.syncDoc("aLbc?");
-
-    expect(seen).toBe(2);
-    expect(ed.getDoc()).toBe("aLbc?");
-    expect(view()).toBe(initialView);
-    expect(undoDepth(view().state)).toBe(0);
-    expect(ed.undo()).toBe(false);
+    const changes: string[] = [];
+    const { ed, view } = editor((change) => changes.push(change.text), () => filter);
+    try {
+      ed.setDoc("base");
+      view().dispatch({ changes: { from: 0, insert: "X" }, userEvent: "input.type" });
+      ed.syncDoc("Xbase?\ncontenuto remoto");
+      expect(ed.getDoc()).toBe("Xbase?\ncontenuto remoto");
+      expect(changes).toEqual(["Xbase"]);
+      expect(ed.undo()).toBe(true);
+      expect(ed.getDoc()).toBe("base?\ncontenuto remoto");
+    } finally {
+      ed.destroy();
+    }
   });
 });
 
@@ -1139,6 +1129,30 @@ describe("selections", () => {
       [1, 2],
       [4, 5],
     ]);
+  });
+});
+
+describe("riga attiva e selezione", () => {
+  it("spegne la riga attiva solo dove la selezione non è vuota", () => {
+    const { view } = editor();
+    view().dispatch({ changes: { from: 0, to: 0, insert: "riga attiva" } });
+    view().dispatch({ selection: EditorSelection.range(0, 0) });
+    expect(
+      view().dom.querySelector(".cm-line.cm-fub-no-active-line"),
+      "a cursore semplice nessuna riga perde la riga attiva",
+    ).toBeNull();
+
+    view().dispatch({ selection: EditorSelection.range(0, 2) });
+    expect(
+      view().dom.querySelector(".cm-line.cm-fub-no-active-line"),
+      "la riga selezionata perde la riga attiva che coprirebbe la selezione",
+    ).not.toBeNull();
+
+    view().dispatch({ selection: EditorSelection.single(0) });
+    expect(
+      view().dom.querySelector(".cm-line.cm-fub-no-active-line"),
+      "tornato il cursore semplice la riga attiva torna visibile",
+    ).toBeNull();
   });
 });
 

@@ -12,12 +12,26 @@
 input:where(:not([type="checkbox"], [type="radio"], [type="range"], [type="file"])),
 textarea,
 select {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--bg-input);
   color: var(--text);
   font: inherit;
+  line-height: var(--leading-normal);
+  transition:
+    background var(--duration-fast) var(--ease),
+    border-color var(--duration-fast) var(--ease);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+input:where([type="checkbox"], [type="radio"], [type="range"]) {
+  accent-color: var(--accent);
 }
 
 /* La `<progress>` resta un widget del **sistema operativo** finché qualcuno non

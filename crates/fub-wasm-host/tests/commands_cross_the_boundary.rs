@@ -34,7 +34,8 @@ mod common;
 
 use camino::Utf8PathBuf;
 use fub_abi::command::{CommandEffect, CommandReach, InvokeMode, ParamKind, UndoStep};
-use fub_abi::event::Actor;
+use std::sync::Arc;
+
 use fub_abi::model::DocId;
 use fub_abi::PluginError;
 use fub_host::{Host, NoWatcher};
@@ -69,25 +70,18 @@ impl Vault {
 /// Un host headless col vault aperto e il ping montato.
 fn bench(v: &Vault) -> Host {
     let wasm = common::ping("");
-    let bundle = WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica");
+    let bundle =
+        Arc::new(WasmBundle::from_file(&wasm, Trust::Community).expect("il componente si carica"));
 
     let host = Host::new()
         .with_watcher(Box::new(NoWatcher))
         .with_job_threads(1);
     host.open(&v.root).expect("il vault si apre");
     host.wait_indexed(None).expect("l'apertura ha finito");
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        s.bundles()
-            .write()
-            .unwrap()
-            .mount(&bundle, &mut ws)
-            .expect("il bundle si monta");
-        let key = fub_abi::settings::permission_key(ID, fub_abi::options::permission::READ_VAULT);
-        ws.set_setting(&key, fub_abi::settings::SettingValue::Toggle(true))
-            .expect("il permesso di lettura è concesso esplicitamente");
-    })
-    .expect("aperto");
+    host.mount_bundle(None, bundle).expect("il bundle si monta");
+    let key = fub_abi::settings::permission_key(ID, fub_abi::options::permission::READ_VAULT);
+    host.set_setting_for_user(None, &key, fub_abi::settings::SettingValue::Toggle(true))
+        .expect("il permesso di lettura è concesso esplicitamente");
     host
 }
 
@@ -98,11 +92,7 @@ fn invoke_cmd(
     args: serde_json::Value,
     mode: InvokeMode,
 ) -> Result<fub_abi::command::CommandOutcome, PluginError> {
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        ws.invoke_command(command, args, mode, Actor::User)
-    })
-    .expect("aperto")
+    host.invoke_user_command(None, command, args, mode)
 }
 
 // --- le prove ---------------------------------------------------------------
@@ -118,55 +108,51 @@ fn the_spec_of_a_component_are_in_the_record() {
     let v = Vault::new();
     let host = bench(&v);
 
-    host.with_session(None, |s| {
-        let ws = s.workspace().read().unwrap();
-        let commands = ws.commands();
+    let commands = host.commands(None).expect("aperto");
 
-        let count = commands
-            .iter()
-            .find(|c| c.id == COUNT)
-            .expect("il comando del componente è nel registro");
-        assert!(
-            count
-                .title
-                .as_literal()
-                .is_some_and(|t| t.contains("Conta")),
-            "il titolo è quello scritto di là: {:?}",
-            count.title
-        );
-        assert!(!count.scope.writes, "si è dichiarato di sola lettura");
-        assert_eq!(count.scope.reach, CommandReach::Document);
-        assert!(count.params.is_empty(), "non chiede niente");
+    let count = commands
+        .iter()
+        .find(|c| c.id == COUNT)
+        .expect("il comando del componente è nel registro");
+    assert!(
+        count
+            .title
+            .as_literal()
+            .is_some_and(|t| t.contains("Conta")),
+        "il titolo è quello scritto di là: {:?}",
+        count.title
+    );
+    assert!(!count.scope.writes, "si è dichiarato di sola lettura");
+    assert_eq!(count.scope.reach, CommandReach::Document);
+    assert!(count.params.is_empty(), "non chiede niente");
 
-        let rich = commands
-            .iter()
-            .find(|c| c.id == RICH)
-            .expect("anche il secondo comando c'è");
-        assert_eq!(rich.params.len(), 2, "due parametri: {:?}", rich.params);
+    let rich = commands
+        .iter()
+        .find(|c| c.id == RICH)
+        .expect("anche il secondo comando c'è");
+    assert_eq!(rich.params.len(), 2, "due parametri: {:?}", rich.params);
 
-        let count = &rich.params[0];
-        assert_eq!(count.name, "quante");
-        assert_eq!(count.kind, ParamKind::Number);
-        assert!(count.required, "è obbligatorio, e il kernel lo farà valere");
+    let count = &rich.params[0];
+    assert_eq!(count.name, "quante");
+    assert_eq!(count.kind, ParamKind::Number);
+    assert!(count.required, "è obbligatorio, e il kernel lo farà valere");
 
-        let style = &rich.params[1];
-        assert_eq!(style.name, "stile");
-        assert!(!style.required);
-        let ParamKind::Choice(choices) = &style.kind else {
-            panic!("`stile` è una scelta: {:?}", style.kind);
-        };
-        assert_eq!(
-            choices.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
-            ["corto", "lungo"],
-            "le due scelte attraversano intere, valore e ordine"
-        );
-        assert!(
-            choices[1].title.as_literal() == Some("Lungo"),
-            "col loro titolo: {:?}",
-            choices[1].title
-        );
-    })
-    .expect("aperto");
+    let style = &rich.params[1];
+    assert_eq!(style.name, "stile");
+    assert!(!style.required);
+    let ParamKind::Choice(choices) = &style.kind else {
+        panic!("`stile` è una scelta: {:?}", style.kind);
+    };
+    assert_eq!(
+        choices.iter().map(|c| c.value.as_str()).collect::<Vec<_>>(),
+        ["corto", "lungo"],
+        "le due scelte attraversano intere, valore e ordine"
+    );
+    assert!(
+        choices[1].title.as_literal() == Some("Lungo"),
+        "col loro titolo: {:?}",
+        choices[1].title
+    );
 
     host.close();
 }
@@ -333,23 +319,23 @@ fn unmounted_the_component_the_its_commands_not_there_are_more() {
     let v = Vault::new();
     let host = bench(&v);
 
-    host.with_session(None, |s| {
-        let mut ws = s.workspace().write().unwrap();
-        let errors = s.bundles().write().unwrap().unmount(&mut ws, ID);
-        assert!(errors.is_empty(), "niente è andato storto: {errors:?}");
-        assert!(
-            !ws.commands().iter().any(|c| c.id == COUNT),
-            "il comando non è più nel registro"
-        );
-        let error = ws
-            .invoke_command(COUNT, serde_json::json!({}), InvokeMode::Apply, Actor::User)
-            .expect_err("il comando non esiste più");
-        assert!(
-            matches!(error, PluginError::UnknownCommand(_)),
-            "è un comando sconosciuto: {error}"
-        );
-    })
-    .expect("aperto");
+    let errors = host.unmount_bundle(None, ID).expect("il bundle era aperto");
+    assert!(errors.is_empty(), "niente è andato storto: {errors:?}");
+    assert!(
+        !host
+            .commands(None)
+            .expect("registro comandi")
+            .iter()
+            .any(|c| c.id == COUNT),
+        "il comando non è più nel registro"
+    );
+    let error = host
+        .invoke_user_command(None, COUNT, serde_json::json!({}), InvokeMode::Apply)
+        .expect_err("il comando non esiste più");
+    assert!(
+        matches!(error, PluginError::UnknownCommand(_)),
+        "è un comando sconosciuto: {error}"
+    );
 
     host.close();
 }

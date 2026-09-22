@@ -27,13 +27,18 @@ import skin from "../src/theme/serie/skin.css?raw";
 import fonts from "../src/theme/serie/fonts.css?raw";
 import { mount as mount } from "../src/theme/loader";
 import { contrast } from "../src/theme/contrast";
-import { mountTree } from "../src/ui/node";
+import { mountTree, mountWebviewFocusMonitor } from "../src/ui/node";
+import { openLifetime } from "../src/ui/lifetime";
 import { COMPONENTS } from "../src/theme/serie/anatomia";
 import { SAMPLES } from "./samples";
 
 const params = new URLSearchParams(window.location.search);
 const LIGHT = params.get("light") === "light" ? "light" : "dark";
 const WHICH = params.get("catalog") ?? "components";
+
+const lifetime = openLifetime();
+mountWebviewFocusMonitor(lifetime);
+lifetime.listen(window, "pagehide", () => lifetime.close(), { once: true });
 
 // I quattro strati, nell'ordine del §29 e del §31.3: la struttura arriva
 // dall'`import` qui sopra, i caratteri, il foglio e la pelle dal caricatore —
@@ -100,13 +105,22 @@ function anatomy(): void {
         const proof = el("div", hook);
         proof.dataset.component = component.name;
         proof.dataset.state = state.name;
+        if (hook === "grid-viewport") {
+          proof.tabIndex = 0;
+          proof.setAttribute("role", "document");
+          proof.setAttribute("aria-label", "Foglio di calcolo");
+          proof.style.minHeight = "var(--space-8)";
+        }
         // Le superfici di copertura (`.modale`, `.views-modal`) sono un velo
         // a pagina intera: il loro testo vero sta dentro il pannello che
         // ospitano — che qui arriva per conto suo, come hook a sé. Mettere
         // della prosa **sul velo** fotograferebbe uno stato che la pelle non
         // produce: il velo si fotografa nudo.
         if (!SUPERFICI.has(hook)) proof.textContent = `${component.name} · ${hook}`;
-        cell.append(proof);
+        const frame = el("div", "provino provino-anatomia");
+        frame.dataset.label = `${component.name} · ${state.label} · ${hook}`;
+        frame.append(proof);
+        cell.append(frame);
       }
       grid.append(cell);
     }
@@ -130,6 +144,31 @@ function components(): void {
       grid.append(cell);
     }
   }
+  // Il ritaglio conserva la geometria dei campioni posizionati. Quando
+  // serve scorrere, anche la tastiera deve poter raggiungere il provino.
+  const observer = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const frame = entry.target as HTMLElement;
+      const style = getComputedStyle(frame);
+      const scrolls = ((style.overflowY === "auto" || style.overflowY === "scroll")
+        && frame.scrollHeight > frame.clientHeight)
+        || ((style.overflowX === "auto" || style.overflowX === "scroll")
+          && frame.scrollWidth > frame.clientWidth);
+      if (scrolls) {
+        frame.tabIndex = 0;
+        frame.setAttribute("role", "region");
+        frame.setAttribute("aria-label", frame.closest<HTMLElement>(".provino-anatomia")!.dataset.label!);
+      } else {
+        frame.removeAttribute("tabindex");
+        frame.removeAttribute("role");
+        frame.removeAttribute("aria-label");
+      }
+    }
+  });
+  for (const frame of root.querySelectorAll(".provino-anatomia, .provino-anatomia > :not([tabindex])")) {
+    observer.observe(frame);
+  }
+  lifetime.add(() => observer.disconnect());
 }
 
 // ---------------------------------------------------------------------------

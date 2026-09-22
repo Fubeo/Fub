@@ -247,6 +247,17 @@ async function installProbe(page) {
   });
 }
 
+async function warmFrameSample(page, sample) {
+  return page.evaluate(({ target, deadlineMs }) => {
+    const warm = document.querySelector(".graph-panel-azioni button");
+    if (!warm) throw new Error("graph physics warm action is absent");
+    // Arma il campione prima del riscaldo: nessun frame attivo perso tra due chiamate.
+    const frames = window.__graphScaleProbe.startFrames(target, deadlineMs);
+    warm.click();
+    return frames;
+  }, sample);
+}
+
 const stats = (values) => { const a = values.filter(Number.isFinite).sort((x, y) => x - y); if (!a.length) return { count: 0, p50: null, p95: null, max: null }; const q = (p) => a[Math.min(a.length - 1, Math.floor(a.length * p))]; return { count: a.length, p50: q(.5), p95: q(.95), max: a[a.length - 1] }; };
 const heap = async (session) => {
   try {
@@ -275,9 +286,9 @@ const collectHeap = async (session) => {
 async function closeGraph(page) {
   const tab = page.locator('.pane .tab.tab-view[aria-selected="true"]');
   if (!(await tab.count())) throw new Error("active Graph tab is absent");
-  const close = tab.locator(".tab-close");
+  const close = tab.locator("..").locator(".tab-close");
   if (!(await close.count())) throw new Error("active Graph tab close control is absent");
-  await close.dispatchEvent("mousedown");
+  await close.click();
   await page.waitForSelector("canvas.graph-main", { state: "detached" });
 }
 
@@ -392,7 +403,7 @@ async function main() {
         const beforeCanvas = await canvas.evaluate((c) => c.toDataURL());
 
         await page.evaluate(() => window.__graphScaleProbe.discard());
-        const interactionFramesPromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
+        const interactionFramesPromise = warmFrameSample(page, sample);
         await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
         await page.mouse.wheel(0, 180);
         await page.mouse.down();
@@ -421,11 +432,7 @@ async function main() {
         for (let windowIndex = 1; windowIndex <= config.soakWindows; windowIndex++) {
           await page.evaluate(() => window.__graphScaleProbe.discard());
           const windowStarted = performance.now();
-          const warm = page.locator(".graph-panel-azioni button").first();
-          if (!(await warm.count())) throw new Error("graph physics warm action is absent");
-          await warm.dispatchEvent("click");
-          const framePromise = page.evaluate(({ target, deadlineMs }) => window.__graphScaleProbe.startFrames(target, deadlineMs), sample);
-          const frameTimes = await framePromise;
+          const frameTimes = await warmFrameSample(page, sample);
           await page.evaluate(() => window.__graphScaleProbe.stopFrames());
           const observed = await page.evaluate(() => window.__graphScaleProbe.snapshot());
           if (frameTimes.length !== sample.target) throw new Error(`frame sample incomplete: ${frameTimes.length}`);

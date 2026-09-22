@@ -133,16 +133,16 @@ impl<T> std::ops::IndexMut<usize> for ProviderTable<T> {
 
 use std::sync::Arc;
 
+use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
+use crate::poison::SharedShelter;
+use crate::workspace::Trust;
 use fub_abi::command::CommandSpec;
+use fub_abi::grid::{GridProvider, GridSurfaceSpec};
 use fub_abi::traits::{
     CommandProvider, EventHandler, ServiceProvider, ViewInstance, ViewProvider, ViewSpec,
 };
 use fub_abi::transfer::{ExportProvider, ExportTarget, ImportProvider};
-use fub_abi::grid::{GridProvider, GridSurfaceSpec};
 use fub_abi::PluginError;
-use crate::plugins::{PluginInfo, PluginRegistry, RegistrationKind, RegistryError};
-use crate::poison::SharedShelter;
-use crate::workspace::Trust;
 
 /// Un provider registrato, con **ciò che ha dichiarato al momento della
 /// registrazione**.
@@ -213,7 +213,6 @@ pub(crate) struct RegisteredGrid {
     pub(crate) provider: Arc<SharedShelter<Box<dyn GridProvider>>>,
     pub(crate) specs: Vec<GridSurfaceSpec>,
 }
-
 
 /// **Chi è registrato, cosa ha dichiarato, e chi possiede quale nome.**
 ///

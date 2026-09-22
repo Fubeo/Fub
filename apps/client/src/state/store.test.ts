@@ -113,6 +113,20 @@ describe("il bus sincrono non perde gli errori asincroni", () => {
     expect(notify).toHaveBeenCalledTimes(1);
     expect(String(notify.mock.calls[0]?.[0])).toContain("ridisegno fallito");
   });
+  it("un errore sincrono non impedisce al listener successivo di ricevere il segnale", () => {
+    const later = vi.fn();
+    on("vault", () => {
+      throw new Error("listener sincrono fallito");
+    });
+    on("vault", later);
+
+    emit("vault", "/tmp/vault");
+
+    expect(later).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(String(notify.mock.calls[0]?.[0])).toContain("listener sincrono fallito");
+  });
+
 
   it("riconosce anche un thenable che non è una Promise", async () => {
     on("organization", () => ({

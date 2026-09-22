@@ -187,3 +187,89 @@ describe("le cartelle escluse nel pannello", () => {
     expect(document.querySelectorAll("button[type=submit]")).toHaveLength(1);
   });
 });
+
+describe("l'esito vicino al campo", () => {
+  it("su errore conserva il valore autorevole e mostra l'input provato vicino alla riga", async () => {
+    await openPanel([listEntry(EXCLUDED, ["node_modules"])]);
+    fake.setSetting.mockRejectedValueOnce(new Error("disco non scrivibile"));
+
+    submitFolder("Build");
+
+    await vi.waitFor(() => {
+      expect(fake.setSetting).toHaveBeenCalledWith(EXCLUDED, ["node_modules", "Build"]);
+    });
+    await vi.waitFor(() => {
+      const row = document.querySelector('[data-setting-key="files.excluded-folders"] .setting-error');
+      expect(row).not.toBeNull();
+      expect(row!.textContent).toContain("Impostazione non cambiata");
+      expect(row!.textContent).toContain("Build");
+      expect(row!.getAttribute("role")).toBe("alert");
+    });
+    // Il valore autorevole resta: la lista non mostra la voce non scritta.
+    expect(document.querySelector("#settings-body")!.textContent).not.toContain("Rimuovi Build");
+    // Lo scope resta visibile accanto all'esito.
+    expect(document.querySelector("#settings-body")!.textContent).toContain("valore predefinito");
+  });
+
+  it("il giro di pending non blocca le altre righe", async () => {
+    await openPanel([
+      listEntry(EXCLUDED, ["node_modules"]),
+      listEntry("files.other-folders", ["a"]),
+    ]);
+    let release!: () => void;
+    fake.setSetting.mockImplementationOnce(
+      () => new Promise<string[]>((resolve) => { release = () => resolve(["node_modules"]); }),
+    );
+
+    submitFolder("Build");
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-setting-key="files.excluded-folders"]')?.getAttribute("aria-busy")).toBe("true");
+    });
+    // La riga in volo è disabilitata, l'altra no: il blocco è minimo.
+    const row = document.querySelector('[data-setting-key="files.excluded-folders"]')!;
+    for (const control of row.querySelectorAll("input, select, button")) {
+      expect((control as HTMLButtonElement).disabled).toBe(true);
+    }
+    const other = document.querySelector('[data-setting-key="files.other-folders"]')!;
+    expect(other.getAttribute("aria-busy")).toBeNull();
+    release();
+    await vi.waitFor(() => {
+      expect(document.querySelector('[data-setting-key="files.excluded-folders"]')?.getAttribute("aria-busy")).toBeNull();
+    });
+  });
+});
+
+describe("il focus resta sulla riga (A03)", () => {
+  function toggleEntry(key: string, value: boolean): SettingEntry {
+    return {
+      spec: {
+        key,
+        label: key,
+        description: "",
+        group: "File",
+        scope: "vault",
+        kind: { kind: "toggle", default: false },
+        program_writable: false,
+      },
+      value,
+      source: "default",
+    };
+  }
+
+  it("checkbox: resta dopo la scrittura", async () => {
+    fake.setSetting.mockImplementation(async (key: string, value: boolean) => {
+      const entry = fake.entries.find((candidate) => candidate.spec.key === key)!;
+      (entry as unknown as SettingEntry).value = value;
+    });
+    await openPanel([toggleEntry("a.first", false), toggleEntry("b.second", false)]);
+
+    const first = document.getElementById("setting-a.first") as HTMLInputElement;
+    first.focus();
+    first.checked = true;
+    first.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.waitFor(() => {
+      expect(document.activeElement?.id).toBe("setting-a.first");
+    });
+    expect(document.activeElement).not.toBe(document.body);
+  });
+});

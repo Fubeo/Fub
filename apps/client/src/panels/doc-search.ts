@@ -37,7 +37,7 @@ import { errorText } from "../host/errors";
 import { matchingDocuments } from "../host/query";
 import { t } from "../i18n/strings";
 import { rowsToShow } from "../rules/results";
-import { activatable, trapFocus } from "../ui/a11y";
+import { trapFocus } from "../ui/a11y";
 import { registerShellCommand } from "../ui/commands";
 import { Race } from "../ui/race";
 import { setTooltip } from "../ui/tooltip";
@@ -87,6 +87,11 @@ export function openInDocumentSearch(): void {
   input.className = "palette-input";
   input.placeholder = t("docsearch.placeholder");
   input.setAttribute("aria-label", t("docsearch.title"));
+  // Etichetta di scope esplicita (U13): "Cerca nella nota" — raggio un solo
+  // documento, non il vault. Hook esistente `palette-desc`, nessun CSS nuovo.
+  const scope = document.createElement("p");
+  scope.className = "palette-desc";
+  scope.textContent = t("docsearch.title");
   const summary = document.createElement("p");
   summary.className = "docsearch-summary";
   const list = document.createElement("ul");
@@ -94,7 +99,7 @@ export function openInDocumentSearch(): void {
   // clicca. Un ruolo di selezione senza selezione prometterebbe una freccia
   // che non c'è.
   list.className = "plain-list palette-list";
-  box.append(input, summary, list);
+  box.append(scope, input, summary, list);
 
   if (doc === null) {
     // Niente nota, niente ricerca — e lo si dice qui invece di non aprire
@@ -162,22 +167,29 @@ export function openInDocumentSearch(): void {
     const newItems = document.createDocumentFragment();
     for (const row of rows) {
       const li = document.createElement("li");
+      // Riga nativa cliccabile (C01): stesso contratto della ricerca nel vault
+      // — titolo implicito dallo snippet, bottone vero invece di `li` attivo.
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "search-result";
       if (row.occurrence === undefined) {
-        li.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
+        button.appendChild(highlighted(row.snippet ?? "", row.highlights ?? []));
       } else {
-        li.className = "hit-occurrence";
-        li.textContent = t("search.occurrence", { n: row.occurrence });
+        button.classList.add("hit-occurrence");
+        button.textContent = t("search.occurrence", { n: row.occurrence });
       }
       if (row.byteOffset !== undefined) {
         const where = row.byteOffset;
         // Il documento è già aperto: qui non si apre niente, ci si porta il
         // cursore — e il modale si chiude, perché il gesto è finito.
-        li.addEventListener("click", () => {
+        button.addEventListener("click", () => {
           closeInDocumentSearch();
           revealByteOffset(where);
         });
-        activatable(li);
+      } else {
+        button.disabled = true;
       }
+      li.appendChild(button);
       newItems.appendChild(li);
     }
     list.appendChild(newItems);
@@ -186,6 +198,23 @@ export function openInDocumentSearch(): void {
   input.addEventListener("input", () => {
     window.clearTimeout(timer);
     timer = window.setTimeout(() => void search(), 180);
+  });
+  // U16: Frecce/Enter/Esc senza rubare il focus — il focus resta nel campo,
+  // le frecce spostano la selezione fra i bottoni della lista.
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const items = [...list.querySelectorAll<HTMLButtonElement>(".search-result:not([disabled])")];
+      if (items.length === 0) return;
+      const at = items.indexOf(document.activeElement as HTMLButtonElement);
+      const next = e.key === "ArrowDown" ? (at + 1) % items.length : (at - 1 + items.length) % items.length;
+      items[next]?.focus();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      list.querySelector<HTMLButtonElement>(".search-result:not([disabled])")?.click();
+    } else if (e.key === "Escape") {
+      closeInDocumentSearch();
+    }
   });
 }
 

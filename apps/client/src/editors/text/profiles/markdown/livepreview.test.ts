@@ -288,6 +288,7 @@ describe("invarianti dell'output", () => {
     const doc = [
       "# Però 🎯 titolo",
       "testo **grasso** con [[Città|C]] e ==giallo== e #tag",
+      "[[x]](https://example.test) e [==testo==](nota.md)",
       "- [x] còsa fatta",
       "",
       "---",
@@ -302,5 +303,31 @@ describe("invarianti dell'output", () => {
     for (let i = 1; i < replaces.length; i++) {
       expect(replaces[i].from).toBeGreaterThanOrEqual(replaces[i - 1].to);
     }
+  });
+});
+
+describe("link markdown: la destinazione segue il parser", () => {
+  it("la destinazione fra `<…>` arriva senza parentesi, come la vede Lettura", () => {
+    const ds = decorate("vedi [t](<nota(1).md>) qui");
+    expect(ofKind(ds, "link")).toEqual([{ from: 6, to: 7, kind: "link", data: "nota(1).md" }]);
+  });
+});
+
+describe("il markup letterale non è sintassi Obsidian", () => {
+  it("`[[ ]]` non nomina niente e non si decora", () => {
+    expect(ofKind(decorate("[[ ]]"), "wikilink")).toEqual([]);
+    expect(ofKind(decorate("[[ ]]"), "hide")).toEqual([]);
+    expect(ofKind(decorate("[[]]"), "wikilink")).toEqual([]);
+  });
+
+  it("dentro un commento HTML non ci sono tag né wikilink né highlight", () => {
+    const ds = decorate("<!-- #tag [[x]] ==y== -->");
+    expect(ofKind(ds, "tag")).toEqual([]);
+    expect(ofKind(ds, "wikilink")).toEqual([]);
+    expect(ofKind(ds, "highlight")).toEqual([]);
+  });
+
+  it("un `#` dentro un tag HTML non è un tag", () => {
+    expect(ofKind(decorate('un <a href="#frag">t</a> qui'), "tag")).toEqual([]);
   });
 });

@@ -1113,6 +1113,32 @@ impl FsStorage {
         }
         Ok((how, stat))
     }
+
+    #[cfg(not(windows))]
+    /// Fallback esplicito per i sistemi che non offrono una syscall
+    /// no-replace. Il lock è obbligatorio: senza di esso `exists` e `rename`
+    /// avrebbero di nuovo la finestra che questa API deve chiudere.
+    fn rename_no_replace_with_lock(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        let _lock = exclusive_lock_required(to)?;
+        match std::fs::symlink_metadata(to) {
+            Ok(_) => {
+                if same_parent_resolution_name(from, to) && self.same_file(from, to) {
+                    return self.rename(from, to);
+                }
+                return Err(io::Error::new(
+                    io::ErrorKind::AlreadyExists,
+                    format!("{to}: esiste già"),
+                ));
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+        std::fs::rename(from, to)?;
+        for dir in folders_to_sync(from, Some(to)) {
+            sync_folder(&dir);
+        }
+        Ok(())
+    }
 }
 
 fn not_utf8(path: &std::path::Path) -> io::Error {
@@ -1172,6 +1198,173 @@ fn same_parent_resolution_name(from: &Utf8Path, to: &Utf8Path) -> bool {
                 if fub_abi::rules::path::resolution_key(a)
                     == fub_abi::rules::path::resolution_key(b)
         )
+}
+
+/// Esegue una mossa no-replace usando la primitiva del sistema quando
+/// disponibile. `Ok(false)` è deliberato: significa che il kernel in esecuzione
+/// non ha quella primitiva o il filesystem non la implementa, e autorizza solo
+/// il fallback sotto lock — mai `hard_link` seguito da `unlink`.
+#[cfg(unix)]
+fn rename_no_replace_at(
+    from_dir: std::os::unix::io::RawFd,
+    from: &std::path::Path,
+    to_dir: std::os::unix::io::RawFd,
+    to: &std::path::Path,
+) -> io::Result<bool> {
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    {
+        let _ = (from_dir, from, to_dir, to);
+        return Ok(false);
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let from = CString::new(from.as_os_str().as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "un path non può contenere NUL")
+        })?;
+        let to = CString::new(to.as_os_str().as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "un path non può contenere NUL")
+        })?;
+
+        #[cfg(any(target_os = "linux", target_os = "android"))]
+        let result = unsafe {
+            libc::renameat2(
+                from_dir,
+                from.as_ptr(),
+                to_dir,
+                to.as_ptr(),
+                libc::RENAME_NOREPLACE as libc::c_uint,
+            )
+        };
+        #[cfg(target_vendor = "apple")]
+        let result = unsafe {
+            libc::renameatx_np(
+                from_dir,
+                from.as_ptr(),
+                to_dir,
+                to.as_ptr(),
+                libc::RENAME_EXCL,
+            )
+        };
+
+        if result == 0 {
+            return Ok(true);
+        }
+        let error = io::Error::last_os_error();
+        if rename_no_replace_unsupported(&error) {
+            Ok(false)
+        } else {
+            Err(error)
+        }
+    }
+}
+/// Variante per path ambienti già validati (`FsStorage`). Su Apple si usa
+/// `renamex_np` direttamente; la variante `at` sopra resta quella necessaria
+/// per `RootedFsStorage`, che passa directory handle invece di riaprire la root.
+#[cfg(unix)]
+fn rename_no_replace_paths(from: &std::path::Path, to: &std::path::Path) -> io::Result<bool> {
+    #[cfg(target_vendor = "apple")]
+    {
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
+
+        let from = CString::new(from.as_os_str().as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "un path non può contenere NUL")
+        })?;
+        let to = CString::new(to.as_os_str().as_bytes()).map_err(|_| {
+            io::Error::new(io::ErrorKind::InvalidInput, "un path non può contenere NUL")
+        })?;
+        let result = unsafe { libc::renamex_np(from.as_ptr(), to.as_ptr(), libc::RENAME_EXCL) };
+        if result == 0 {
+            Ok(true)
+        } else {
+            let error = io::Error::last_os_error();
+            if rename_no_replace_unsupported(&error) {
+                Ok(false)
+            } else {
+                Err(error)
+            }
+        }
+    }
+    #[cfg(not(target_vendor = "apple"))]
+    {
+        rename_no_replace_at(libc::AT_FDCWD, from, libc::AT_FDCWD, to)
+    }
+}
+
+#[cfg(unix)]
+fn rename_no_replace_unsupported(error: &io::Error) -> bool {
+    error.kind() == io::ErrorKind::Unsupported
+        || matches!(
+            error.raw_os_error(),
+            Some(code)
+                if code == libc::ENOSYS
+                    || code == libc::EINVAL
+                    || code == libc::ENOTSUP
+                    || code == libc::EOPNOTSUPP
+        )
+}
+
+#[cfg(windows)]
+fn rename_no_replace_move_file(from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{MoveFileExW, MOVEFILE_WRITE_THROUGH};
+
+    let from: Vec<u16> = from
+        .as_std_path()
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    let to: Vec<u16> = to
+        .as_std_path()
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // Omission of MOVEFILE_REPLACE_EXISTING is the no-replace contract:
+    // MoveFileExW fails with ERROR_ALREADY_EXISTS instead of touching `to`.
+    let result = unsafe { MoveFileExW(from.as_ptr(), to.as_ptr(), MOVEFILE_WRITE_THROUGH) };
+    if result == 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+/// Acquisisce il lock del protocollo senza il fallback best-effort usato dalle
+/// scritture storiche. Serve solo quando il sistema non offre una syscall
+/// no-replace: se il lock non è disponibile, l'operazione fallisce invece di
+/// eseguire una coppia `exists` + `rename` non atomica.
+fn exclusive_lock_required(path: &Utf8Path) -> io::Result<std::fs::File> {
+    let dir = path.parent().unwrap_or(Utf8Path::new(""));
+    let lock_path = lock_path(path);
+    std::fs::create_dir_all(dir)?;
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&lock_path)?;
+    let expiration = std::time::Instant::now() + LOCK_RETRY_INTERVAL;
+    loop {
+        match file.try_lock() {
+            Ok(()) => return Ok(file),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                if std::time::Instant::now() >= expiration {
+                    return Err(io::Error::new(
+                        io::ErrorKind::WouldBlock,
+                        format!("lock occupato per {path}"),
+                    ));
+                }
+            }
+            Err(std::fs::TryLockError::Error(error)) => return Err(error),
+        }
+        std::thread::sleep(RETRY_LOCK);
+    }
 }
 
 /// Le cartelle la cui **voce** cambia quando qualcosa si sposta o si toglie, e
@@ -1388,32 +1581,55 @@ impl VaultStorage for FsStorage {
         }
         Ok(())
     }
-
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         if let Some(parent) = to.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        if let Err(error) = std::fs::hard_link(from, to) {
-            // Su APFS/NTFS un rename che cambia solo il caso nomina la stessa
-            // voce: `hard_link` la vede già occupata, anche se non c'è un
-            // secondo file da proteggere: il primitive nativo sa aggiornare il
-            // nome della stessa voce senza creare un secondo inode.
-            if error.kind() == io::ErrorKind::AlreadyExists
-                && same_parent_resolution_name(from, to)
-                && self.same_file(from, to)
-            {
-                return self.rename(from, to);
+
+        #[cfg(unix)]
+        {
+            let native = rename_no_replace_paths(from.as_std_path(), to.as_std_path());
+            match native {
+                Ok(true) => {
+                    for dir in folders_to_sync(from, Some(to)) {
+                        sync_folder(&dir);
+                    }
+                    Ok(())
+                }
+                Ok(false) => self.rename_no_replace_with_lock(from, to),
+                Err(error)
+                    if error.kind() == io::ErrorKind::AlreadyExists
+                        && same_parent_resolution_name(from, to)
+                        && self.same_file(from, to) =>
+                {
+                    self.rename(from, to)
+                }
+                Err(error) => Err(error),
             }
-            return Err(error);
         }
-        // Se togliere la sorgente fallisce restano due nomi dello stesso inode:
-        // è un errore, ma non si prova a cancellare `to`, perché un concorrente
-        // potrebbe averlo già sostituito e il ripiego cancellerebbe i suoi byte.
-        std::fs::remove_file(from)?;
-        for dir in folders_to_sync(from, Some(to)) {
-            sync_folder(&dir);
+
+        #[cfg(windows)]
+        {
+            match rename_no_replace_move_file(from, to) {
+                Ok(()) => {
+                    for dir in folders_to_sync(from, Some(to)) {
+                        sync_folder(&dir);
+                    }
+                    Ok(())
+                }
+                Err(error)
+                    if error.kind() == io::ErrorKind::AlreadyExists
+                        && same_parent_resolution_name(from, to)
+                        && self.same_file(from, to) =>
+                {
+                    self.rename(from, to)
+                }
+                Err(error) => Err(error),
+            }
         }
-        Ok(())
+
+        #[cfg(not(any(unix, windows)))]
+        self.rename_no_replace_with_lock(from, to)
     }
 
     /// Togliere è una mossa come le altre: la voce che sparisce sta in una
@@ -2297,6 +2513,7 @@ impl VaultStorage for MemStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Barrier};
 
     /// Sta qui e non nel banco appaiato di `tests/il_supporto.rs` per la
     /// ragione che rende utile un contatore: di là c'è un orologio vero, e due
@@ -2360,6 +2577,31 @@ mod tests {
         let root = Utf8Path::from_path(dir.path()).unwrap();
         a_rename_without_overwrite(&FsStorage, root);
         a_rename_without_overwrite(&MemStorage::new(), Utf8Path::new("/vault"));
+    }
+    #[test]
+    fn concurrent_filesystem_no_replace_moves_have_one_winner() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        let from = root.join("source.txt");
+        let to = root.join("destination.txt");
+        let storage = Arc::new(FsStorage);
+        storage.write(&from, b"source").unwrap();
+        let barrier = Arc::new(Barrier::new(3));
+        let run = |storage: Arc<FsStorage>, barrier: Arc<Barrier>| {
+            let from = from.clone();
+            let to = to.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                storage.rename_no_replace(&from, &to)
+            })
+        };
+        let left = run(Arc::clone(&storage), Arc::clone(&barrier));
+        let right = run(Arc::clone(&storage), Arc::clone(&barrier));
+        barrier.wait();
+        let outcomes = [left.join().unwrap(), right.join().unwrap()];
+        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+        assert_eq!(storage.read(&to).unwrap(), b"source");
+        assert!(!storage.exists(&from));
     }
 
     #[test]

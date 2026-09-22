@@ -78,6 +78,7 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
   { title: "menu.go", entries: [{ label: "menu.go.switcher", command: "shell.switcher" }] },
   { title: "menu.tools", entries: [{ label: "menu.tools.settings", click: "#open-settings" }] },
 ];
+const mountedMenus = new WeakMap<HTMLElement, Teardown>();
 
 /// Monta la menubar. Torna gli smontaggi, perché gli ascoltatori che attacca
 /// sul `document` (chiusura con click/Escape) vivono quanto la menubar, non
@@ -91,82 +92,180 @@ const MENU: { title: string; entries: MenuEntry[] }[] = [
 /// `check-ascoltatori.mjs` esiste perché è già successo (0133).
 export function mountAppMenu(host: MenuHost): Teardown {
   const menubar = $("#app-menu");
-  const teardowns: Teardown[] = [];
-  // La vita degli ascoltatori globali di questa menubar: si chiude nello
-  // smontaggio qui sotto, ed è l'unica cosa che li tiene.
+  mountedMenus.get(menubar)?.();
   const lifetime = openLifetime();
+  const buttons: HTMLButtonElement[] = [];
   let menuOpen: number | null = null;
+  let menuGeneration = 0;
+  let disposed = false;
+
+  menubar.setAttribute("role", "menubar");
+  menubar.setAttribute("aria-orientation", "horizontal");
+
+  function setExpanded(index: number, open: boolean): void {
+    buttons[index]?.setAttribute("aria-expanded", String(open));
+  }
+
+  function setTabStop(index: number): void {
+    buttons.forEach((button, i) => {
+      button.tabIndex = i === index ? 0 : -1;
+    });
+  }
+
+  // La chiusura è la stessa qualunque sia il gesto che la provoca. Azzerare lo
+  // stato prima della superficie evita che il callback di chiusura rientri qui.
+  function close(): void {
+    const index = menuOpen;
+    if (index === null) {
+      buttons.forEach((button) => {
+        if (button.getAttribute("aria-expanded") === "true") {
+          button.setAttribute("aria-expanded", "false");
+        }
+      });
+      return;
+    }
+    menuOpen = null;
+    menuGeneration += 1;
+    setExpanded(index, false);
+    closeContextMenu();
+  }
+
+  function focusTopLevel(index: number): void {
+    const button = buttons[index];
+    if (!button) return;
+    const keepMenuOpen = menuOpen !== null;
+    if (keepMenuOpen) close();
+    setTabStop(index);
+    button.focus();
+    if (keepMenuOpen) openMenu(index, button);
+  }
+
+  function moveTopLevel(index: number, delta: number): void {
+    const next = (index + delta + buttons.length) % buttons.length;
+    focusTopLevel(next);
+  }
+
+  function onDocClick(e: MouseEvent): void {
+    if (!menubar.contains(e.target as Node)) close();
+  }
+
+  function onKey(e: KeyboardEvent): void {
+    if (e.key === "Escape") {
+      if (menuOpen !== null) {
+        e.preventDefault();
+        close();
+      }
+      return;
+    }
+    // Mentre una voce del sottomenu è focalizzata, Left/Right cambia il
+    // sottomenu aperto; le frecce verticali sono gestite da menu.ts.
+    if (menuOpen === null) return;
+    const context = document.getElementById("context-menu");
+    if (!context?.contains(e.target as Node)) return;
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const current = menuOpen;
+    const next = (current + (e.key === "ArrowRight" ? 1 : -1) + buttons.length) % buttons.length;
+    const button = buttons[next];
+    if (!button) return;
+    close();
+    setTabStop(next);
+    button.focus();
+    openMenu(next, button);
+  }
+
+  lifetime.listen(document, "click", onDocClick);
+  lifetime.listen(document, "keydown", onKey);
 
   MENU.forEach((menu, i) => {
     const button = document.createElement("button");
+    button.id = `app-menu-${i}`;
     button.setAttribute("role", "menuitem");
     button.setAttribute("aria-haspopup", "menu");
     button.setAttribute("aria-expanded", "false");
     button.type = "button";
+    button.tabIndex = i === 0 ? 0 : -1;
     button.dataset.i18n = menu.title;
     button.textContent = t(menu.title as never);
 
-    button.addEventListener("click", (e) => {
+    lifetime.listen(button, "focus", () => setTabStop(i));
+    lifetime.listen(button, "click", (e) => {
       e.stopPropagation();
-      toggleMenu(i, button, host);
+      button.focus();
+      toggleMenu(i, button);
     });
     // Hover su un'altra voce mentre un menu è aperto: passa a quella, come
     // ogni menubar che l'utente abbia mai usato. È il gesto che chi cerca
     // «Vista» fa dopo aver aperto «File» senza chiuderlo.
-    button.addEventListener("mouseenter", () => {
-      if (menuOpen !== null && menuOpen !== i) toggleMenu(i, button, host);
+    lifetime.listen(button, "mouseenter", () => {
+      if (menuOpen !== null && menuOpen !== i) toggleMenu(i, button);
+    });
+    lifetime.listen(button, "keydown", (e) => {
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          moveTopLevel(i, -1);
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          moveTopLevel(i, 1);
+          break;
+        case "Home":
+          e.preventDefault();
+          focusTopLevel(0);
+          break;
+        case "End":
+          e.preventDefault();
+          focusTopLevel(buttons.length - 1);
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          openMenu(i, button);
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          openMenu(i, button, true);
+          break;
+      }
     });
 
+    buttons.push(button);
     menubar.append(button);
   });
 
-  // Click fuori o Escape chiude il menu aperto. Sono sul `document` e non
-  // sulla menubar perché il menu è un overlay che vive fuori dalla menubar
-  // (`showContextMenu` lo appende a `body`), e chiude chi ci clicca dentro.
-  const close = () => {
-    if (menuOpen !== null) {
-      setExpanded(menuOpen, false);
-      closeContextMenu();
-      menuOpen = null;
-    }
-  };
-  const onDocClick = (e: MouseEvent) => {
-    if (!menubar.contains(e.target as Node)) close();
-  };
-  const onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape") close();
-  };
-  lifetime.listen(document, "click", onDocClick);
-  lifetime.listen(document, "keydown", onKey);
-  teardowns.push(() => lifetime.close());
-
-  function setExpanded(index: number, open: boolean): void {
-    const btn = menubar.children[index] as HTMLElement | undefined;
-    if (btn) {
-      // Aperto lo dice `aria-expanded`, e lo legge anche la pelle: la classe
-      // `menu-open` era la stessa cosa scritto una seconda volta.
-      btn.setAttribute("aria-expanded", String(open));
-    }
-  }
-
-  function toggleMenu(
-    index: number,
-    button: HTMLButtonElement,
-    host: MenuHost,
-  ): void {
-    if (menuOpen === index) {
+  function toggleMenu(index: number, button: HTMLButtonElement): void {
+    button.focus();
+    setTabStop(index);
+    if (menuOpen === index && document.getElementById("context-menu")) {
       close();
       return;
     }
-    if (menuOpen !== null) setExpanded(menuOpen, false);
-    closeContextMenu();
+    if (menuOpen !== null) close();
+    openMenu(index, button);
+  }
+
+  function openMenu(index: number, button: HTMLButtonElement, last = false): void {
+    const existing = document.getElementById("context-menu");
+    if (menuOpen === index && existing) {
+      const entries = existing.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+      (last ? entries[entries.length - 1] : entries[0])?.focus();
+      return;
+    }
+    if (menuOpen !== null) close();
+    setTabStop(index);
+    button.focus();
     menuOpen = index;
     setExpanded(index, true);
+    const generation = ++menuGeneration;
 
     const entries = MENU[index]!.entries;
     const items: MenuItem[] = entries.map((v) => ({
       label: t(v.label as never),
       run: () => {
+        // Il runner può essere raggiunto dopo un click nativo o da un test che
+        // lo richiami direttamente: chiudere qui è quindi deliberatamente
+        // idempotente e non dipende dal listener del bottone.
+        close();
         if ("click" in v) {
           document.querySelector<HTMLElement>(v.click)?.click();
           return;
@@ -176,15 +275,42 @@ export function mountAppMenu(host: MenuHost): Teardown {
     }));
     // Il menu si apre sotto la voce, e non nel punto del click: una menubar
     // ha i menu allineati ai bottoni, e aprirli dove capita sarebbe un menu
-    // che salza. `showContextMenu` usa `clientX/clientY`, quindi costruiamo
+    // che salta. `showContextMenu` usa `clientX/clientY`, quindi costruiamo
     // un evento finto dalla posizione del bottone.
     const rect = button.getBoundingClientRect();
     const fake = new MouseEvent("click", {
       clientX: rect.left,
       clientY: rect.bottom,
     });
-    showContextMenu(fake, items);
+    showContextMenu(fake, items, {
+      labelledBy: button.id,
+      onClose: () => {
+        // Escape, click fuori e una seconda superficie chiudono il menu senza
+        // passare da `close`: il callback impedisce che aria-expanded resti
+        // appesa a true e che il click successivo richieda due tentativi.
+        if (menuOpen !== index || menuGeneration !== generation) return;
+        menuOpen = null;
+        menuGeneration += 1;
+        setExpanded(index, false);
+      },
+    });
+    const opened = document.getElementById("context-menu");
+    if (last) {
+      const menuItems = opened?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]');
+      (menuItems?.[menuItems.length - 1])?.focus();
+    }
   }
 
-  return () => teardowns.forEach((s) => s());
+  let teardown: Teardown;
+  teardown = () => {
+    if (disposed) return;
+    disposed = true;
+    close();
+    lifetime.close();
+    buttons.forEach((button) => button.setAttribute("aria-expanded", "false"));
+    buttons.forEach((button) => button.remove());
+    if (mountedMenus.get(menubar) === teardown) mountedMenus.delete(menubar);
+  };
+  mountedMenus.set(menubar, teardown);
+  return teardown;
 }

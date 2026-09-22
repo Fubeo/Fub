@@ -2,6 +2,8 @@ use std::io::{self, Write as _};
 use std::path::Path;
 
 use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(windows)]
+use cap_std::fs::OpenOptionsExt;
 use cap_std::fs::{Dir, Metadata, OpenOptions};
 use cap_std::{ambient_authority, AmbientAuthority};
 
@@ -27,6 +29,86 @@ impl std::fmt::Debug for RootedFsStorage {
             .field("root", &self.root)
             .finish_non_exhaustive()
     }
+}
+#[cfg(windows)]
+fn rename_no_replace_windows(
+    source_dir: &Dir,
+    from: &Path,
+    destination_dir: &Dir,
+    destination_name: &Path,
+) -> io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{
+        FileRenameInfo, SetFileInformationByHandle, FILE_GENERIC_READ, FILE_RENAME_INFO,
+        FILE_RENAME_INFO_0, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    };
+
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .access_mode(FILE_GENERIC_READ | windows_sys::Win32::Storage::FileSystem::DELETE)
+        .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
+    let source = source_dir.open_with(from, &options)?;
+    let name: Vec<u16> = destination_name.as_os_str().encode_wide().collect();
+    let name_bytes = name
+        .len()
+        .checked_mul(std::mem::size_of::<u16>())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "nome di destinazione troppo lungo",
+            )
+        })?;
+    let name_bytes = u32::try_from(name_bytes).map_err(|_| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "nome di destinazione troppo lungo",
+        )
+    })?;
+    let header = std::mem::size_of::<FILE_RENAME_INFO>() - std::mem::size_of::<u16>();
+    let total = header
+        .checked_add(name.len() * std::mem::size_of::<u16>())
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "nome di destinazione troppo lungo",
+            )
+        })?;
+    let words = total.div_ceil(std::mem::size_of::<u64>());
+    let mut buffer = vec![0_u64; words];
+    let info = buffer.as_mut_ptr().cast::<FILE_RENAME_INFO>();
+    // `FILE_RENAME_INFO` is a variable-sized structure. The u64 backing store
+    // gives the cast the alignment required by its handle field.
+    unsafe {
+        std::ptr::write(
+            info,
+            FILE_RENAME_INFO {
+                Anonymous: FILE_RENAME_INFO_0 {
+                    ReplaceIfExists: false,
+                },
+                RootDirectory: destination_dir.as_raw_handle() as _,
+                FileNameLength: name_bytes,
+                FileName: [0],
+            },
+        );
+        std::ptr::copy_nonoverlapping(name.as_ptr(), (*info).FileName.as_mut_ptr(), name.len());
+        if SetFileInformationByHandle(
+            source.as_raw_handle() as _,
+            FileRenameInfo,
+            info.cast(),
+            u32::try_from(total).map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    "nome di destinazione troppo lungo",
+                )
+            })?,
+        ) == 0
+        {
+            return Err(io::Error::last_os_error());
+        }
+    }
+    Ok(())
 }
 
 impl RootedFsStorage {
@@ -98,6 +180,22 @@ impl RootedFsStorage {
 
     fn rel_buf(&self, path: &Utf8Path) -> io::Result<std::path::PathBuf> {
         Ok(self.rel(path)?.to_owned())
+    }
+    fn parent_dir_and_name(&self, path: &Utf8Path) -> io::Result<(Dir, std::path::PathBuf)> {
+        let relative = self.rel(path)?;
+        let name = relative.file_name().ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("{path} non è un file rinominabile"),
+            )
+        })?;
+        let parent = relative.parent().unwrap_or_else(|| Path::new("."));
+        let dir = if parent == Path::new(".") || parent.as_os_str().is_empty() {
+            self.dir.try_clone()?
+        } else {
+            self.dir.open_dir(parent)?
+        };
+        Ok((dir, std::path::PathBuf::from(name)))
     }
 
     fn identity(&self, path: &Utf8Path) -> io::Result<FileIdentity> {
@@ -364,6 +462,25 @@ impl RootedFsStorage {
             Err(error) => Err(error),
         }
     }
+    #[cfg(not(windows))]
+    fn rename_no_replace_with_lock(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
+        self.with_lock(to, || {
+            match self.dir.symlink_metadata(self.rel(to)?) {
+                Ok(_) => {
+                    if same_parent_resolution_name(from, to) && self.same_file(from, to) {
+                        return self.rename(from, to);
+                    }
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!("{to}: esiste già"),
+                    ));
+                }
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error),
+            }
+            self.rename(from, to)
+        })
+    }
 }
 
 impl VaultStorage for RootedFsStorage {
@@ -431,20 +548,60 @@ impl VaultStorage for RootedFsStorage {
 
     fn rename_no_replace(&self, from: &Utf8Path, to: &Utf8Path) -> io::Result<()> {
         self.create_parent(to)?;
-        let from_rel = self.rel_buf(from)?;
-        let to_rel = self.rel_buf(to)?;
-        if let Err(error) = self.dir.hard_link(&from_rel, &self.dir, &to_rel) {
-            if error.kind() == io::ErrorKind::AlreadyExists
-                && same_parent_resolution_name(from, to)
-                && self.same_file(from, to)
-            {
-                return self.rename(from, to);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+
+            // Aprire i due genitori tramite `Dir` prima della syscall mantiene
+            // la risoluzione dentro la capability anche se un processo cambia
+            // nel frattempo il nome ambientale di una cartella.
+            let (from_parent, from_name) = self.parent_dir_and_name(from)?;
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            match super::rename_no_replace_at(
+                from_parent.as_raw_fd(),
+                &from_name,
+                to_parent.as_raw_fd(),
+                &to_name,
+            ) {
+                Ok(true) => {
+                    self.sync_parents(from, Some(to));
+                    Ok(())
+                }
+                Ok(false) => self.rename_no_replace_with_lock(from, to),
+                Err(error)
+                    if error.kind() == io::ErrorKind::AlreadyExists
+                        && same_parent_resolution_name(from, to)
+                        && self.same_file(from, to) =>
+                {
+                    self.rename(from, to)
+                }
+                Err(error) => Err(error),
             }
-            return Err(error);
         }
-        self.dir.remove_file(&from_rel)?;
-        self.sync_parents(from, Some(to));
-        Ok(())
+
+        #[cfg(windows)]
+        {
+            let from_rel = self.rel(from)?;
+            let (to_parent, to_name) = self.parent_dir_and_name(to)?;
+            match rename_no_replace_windows(&self.dir, from_rel, &to_parent, &to_name) {
+                Ok(()) => {
+                    self.sync_parents(from, Some(to));
+                    Ok(())
+                }
+                Err(error)
+                    if error.kind() == io::ErrorKind::AlreadyExists
+                        && same_parent_resolution_name(from, to)
+                        && self.same_file(from, to) =>
+                {
+                    self.rename(from, to)
+                }
+                Err(error) => Err(error),
+            }
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        self.rename_no_replace_with_lock(from, to)
     }
 
     fn remove(&self, path: &Utf8Path) -> io::Result<()> {
@@ -609,6 +766,51 @@ mod tests {
         );
         let final_bytes = a.read(&path).unwrap();
         assert!(final_bytes == b"left" || final_bytes == b"right");
+    }
+
+    #[test]
+    fn no_replace_keeps_source_and_destination_when_destination_exists() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let storage = RootedFsStorage::open(&root).unwrap();
+        let from = root.join("source.txt");
+        let to = root.join("destination.txt");
+        storage.write(&from, b"source").unwrap();
+        storage.write(&to, b"destination").unwrap();
+
+        let error = storage
+            .rename_no_replace(&from, &to)
+            .expect_err("an occupied destination must reject the move");
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert_eq!(storage.read(&from).unwrap(), b"source");
+        assert_eq!(storage.read(&to).unwrap(), b"destination");
+    }
+
+    #[test]
+    fn concurrent_no_replace_moves_have_one_winner() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8PathBuf::from_path_buf(temp.path().to_owned()).unwrap();
+        let a = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let b = Arc::new(RootedFsStorage::open(&root).unwrap());
+        let from = root.join("source.txt");
+        let to = root.join("destination.txt");
+        a.write(&from, b"source").unwrap();
+        let barrier = Arc::new(Barrier::new(3));
+        let run = |storage: Arc<RootedFsStorage>, barrier: Arc<Barrier>| {
+            let from = from.clone();
+            let to = to.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                storage.rename_no_replace(&from, &to)
+            })
+        };
+        let left = run(Arc::clone(&a), Arc::clone(&barrier));
+        let right = run(Arc::clone(&b), Arc::clone(&barrier));
+        barrier.wait();
+        let outcomes = [left.join().unwrap(), right.join().unwrap()];
+        assert_eq!(outcomes.iter().filter(|outcome| outcome.is_ok()).count(), 1);
+        assert_eq!(a.read(&to).unwrap(), b"source");
+        assert!(!a.exists(&from));
     }
 
     #[cfg(unix)]

@@ -53,7 +53,7 @@ aggiuntivi e validazione della UI non fidata restano tracciati nelle issue e in
 Prerequisiti supportati dal repository:
 
 - Rust **1.89**;
-- Node.js **22** e npm;
+- Node.js **>=22.12.0** e npm;
 - dipendenze native richieste da Tauri v2 sul sistema operativo.
 
 ```bash

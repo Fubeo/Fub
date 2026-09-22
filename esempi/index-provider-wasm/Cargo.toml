@@ -1,0 +1,17 @@
+# Fixture minimale: espone una porta IndexProvider che il runtime WASM
+# corrente non risolve né registra.
+[package]
+name = "index-provider-wasm"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.60"
+
+[profile.release]
+strip = true
+opt-level = "s"

@@ -13,9 +13,41 @@ Ogni superficie dichiara le modalità che supporta. Il documento Markdown offre:
 - **lettura**, che mostra la resa senza cursore di testo.
 
 La superficie plain text offre soltanto **sorgente**: non simula capacità
-Markdown. Il commutatore della shell legge la dichiarazione della superficie
-attiva; cambiando tab cambia anche l'insieme dei pulsanti e delle scorciatoie
-disponibili.
+Markdown. Il commutatore nella barra di ciascun riquadro legge la dichiarazione
+della propria superficie; con una sola modalità non mostra un selettore.
+Le scorciatoie seguono il riquadro attivo.
+
+Il tema di serie mantiene il lime per indicatori, focus e azioni primarie.
+La selezione usa un fondo neutro e un segno laterale; i titoli in Live e
+Lettura usano l'inchiostro del documento, mentre Sorgente conserva i colori
+della sintassi. Font, corpo, interlinea e misura rispettano le preferenze di
+lettura.
+
+## Codice e diagrammi Mermaid
+
+I blocchi di codice dichiarano il linguaggio dopo i backtick di apertura.
+Sorgente e Live caricano la colorazione del linguaggio quando serve, senza
+caricare tutti i parser all'avvio.
+
+Un blocco con linguaggio `mermaid` mostra un diagramma in Live e Lettura,
+anche dentro una nota trasclusa. In Live, portare il cursore nel blocco o usare
+**Apri sorgente** rende nuovamente modificabile il testo. Selezioni e
+multi-cursori mantengono visibili i blocchi che toccano; un blocco ancora privo
+della chiusura resta sorgente durante l'editing.
+
+La resa usa Mermaid incluso nell'app, senza un servizio esterno. Segue la luce
+chiara o scura e conserva la sorgente in una sezione espandibile. Un errore di
+sintassi o di caricamento mostra il motivo e apre la sorgente: non modifica il
+documento e non impedisce di rendere i diagrammi successivi.
+
+La configurazione usa la modalità di sicurezza `strict`, protegge i limiti di
+Mermaid e non consente alla nota di sostituire la policy o il CSS della shell.
+La vista finale è un'immagine SVG inerte, senza callback del diagramma.
+Restano i vincoli della CSP della webview, compreso il blocco delle immagini
+remote. Il rendering accetta fino a 50.000 caratteri di sorgente per diagramma;
+il limite Mermaid degli archi è 500. Il cambio di superficie rilascia gli
+osservatori e gli URL delle immagini; una risposta vecchia non rimonta il
+diagramma.
 
 ## Flusso
 
@@ -94,6 +126,11 @@ invece tocca in modo ambiguo il contenuto che una superficie potrebbe ancora
 annullare, l'editor mantiene il testo esterno e scarta in sicurezza i rami undo
 e redo di quella superficie. Questa perdita conservativa impedisce a un undo
 stale di riportare contenuto già sovrascritto.
+
+I filtri dei profili regolano l'input locale, non il testo ricevuto dalla
+sessione. La sincronizzazione li esclude e verifica testo e origine della
+transazione prima di applicarla: un profilo non può riscrivere il buffer
+autorevole o trasformare un cambio remoto in un undo locale.
 
 ## Salvataggio e conflitti
 

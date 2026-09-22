@@ -31,12 +31,14 @@ dei rami e history della selezione. `undo()` e `redo()` dell'engine sono soltant
 adapter dei comandi pubblici; non leggono `historyField`, JSON o altre strutture
 private.
 
-Ogni sincronizzazione costruisce la transazione effettiva dopo i filtri del
-profilo e usa insieme `Transaction.addToHistory.of(false)` e
-`Transaction.remote.of(true)`. Il cambio esterno viene quindi applicato e
-mappato sui rami senza diventare un evento della history locale. Il seam
-`TextOperation` resta invece il tipo interno che valida preimmagine, dimensioni
-e testo obiettivo contro il `Buffer` autorevole.
+Ogni sincronizzazione costruisce la transazione effettiva con `filter: false`
+e usa insieme `Transaction.addToHistory.of(false)` e
+`Transaction.remote.of(true)`. I filtri del profilo regolano l'input locale:
+applicarli al sync permetterebbe di alterare il testo autorevole o perdere
+l'origine remota. Il motore verifica testo e annotazioni prima del dispatch.
+Il cambio esterno viene applicato e mappato sui rami senza diventare un evento
+della history locale. Il seam `TextOperation` resta il tipo interno che valida
+preimmagine, dimensioni e testo obiettivo contro il `Buffer` autorevole.
 
 La shell conserva una sola metadata di sicurezza, `HistoryFootprints`. Essa
 trattiene al massimo 512 intervalli non vuoti e anchor di cancellazione in

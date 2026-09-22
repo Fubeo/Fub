@@ -47,6 +47,7 @@ import { t } from "../i18n/strings";
 import { errorText } from "../host/errors";
 import { notify } from "./notify";
 import { setTooltip } from "./tooltip";
+import type { Lifetime } from "./lifetime";
 
 /// Cosa fa la shell quando un'azione scatta: la manda al provider con le due
 /// metà — il payload che il provider aveva attaccato al nodo, e i campi che
@@ -92,6 +93,34 @@ interface Mount {
 }
 
 const mounted = new WeakMap<HTMLElement, Mount>();
+
+/// Un frame sposta il fuoco nel suo documento figlio: Chromium non emette un
+/// evento di fuoco sul documento ospite quando ci si entra col Tab, né gli
+/// applica `:focus-visible`. Il monitor marca l'involucro solo per quella
+/// navigazione, così la pelle può disegnare l'indicatore senza rendere il
+/// frame meno interattivo. Vita della finestra (I08): montato una volta dal
+export function mountWebviewFocusMonitor(lifetime: Lifetime): void {
+  let keyboardTab = false;
+  lifetime.listen(window, "keydown", (event) => {
+    keyboardTab = event.key === "Tab";
+  }, { capture: true });
+  lifetime.listen(window, "blur", () => {
+    const active = document.activeElement;
+    if (
+      keyboardTab &&
+      active instanceof HTMLIFrameElement &&
+      active.classList.contains("ui-webview")
+    ) {
+      active.parentElement?.classList.add("ui-webview-frame--keyboard");
+    }
+  }, { capture: true });
+  lifetime.listen(window, "focus", () => {
+    document
+      .querySelectorAll(".ui-webview-frame--keyboard")
+      .forEach((el) => el.classList.remove("ui-webview-frame--keyboard"));
+    keyboardTab = false;
+  }, { capture: true });
+}
 
 /// Dichiara chi instrada le azioni di questo contenitore **da adesso**.
 ///
@@ -302,9 +331,23 @@ function update(
     }
     case "tree_item": {
       if (prev.node !== "tree_item") return false;
+      // Lo span interno nasce col disegno (A04: vedi `draw`): un riuso da prima
+      // dell'altezza minima non lo ha, e lo crea invece di riscrivere la riga.
       const row = el.querySelector<HTMLElement>(":scope > .ui-tree-label");
       if (row) {
-        row.textContent = next.label;
+        row.style.minHeight = "max(var(--space-9, 32px), 28px)";
+        row.style.display = "flex";
+        row.style.alignItems = "center";
+        let text = row.querySelector<HTMLElement>(":scope > span");
+        if (!text) {
+          text = document.createElement("span");
+          text.style.minWidth = "0";
+          text.style.overflow = "hidden";
+          text.style.textOverflow = "ellipsis";
+          text.style.whiteSpace = "nowrap";
+          row.replaceChildren(text);
+        }
+        text.textContent = next.label;
         connect(row, next.action, onAction);
       }
       // Gli stati ARIA seguono il nodo anche quando l'elemento è reuseto: una
@@ -549,6 +592,13 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
     }
     case "list_item": {
       const el = div("ui-list-item");
+      // Stessa regola dell'albero (A04): il bersaglio è la voce intera, che può
+      // ricevere il fuoco via `activatable`. Multilinea consentita: `min` e non
+      // altezza fissa.
+      el.style.minHeight = "max(var(--space-9, 32px), 28px)";
+      el.style.display = "flex";
+      el.style.flexDirection = "column";
+      el.style.justifyContent = "center";
       el.setAttribute("role", "listitem");
       // `selected` è uno stato del nodo (§2.1), e va detto anche a chi non
       // vede lo sfondo cambiato. `aria-current` e non `aria-selected`: il
@@ -589,20 +639,30 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       return el;
     }
     case "web_view": {
-      const el = document.createElement("iframe");
-      el.className = "ui-webview";
-      el.src = node.url;
-      el.style.height = `${node.height}px`;
-      el.setAttribute("sandbox", "allow-scripts");
-      // Un `<iframe>` senza `title` è, per chi lo incontra navigando, «frame»
+      // Monitor montato una volta dal punto di montaggio (I08): qui solo il frame.
+      const frame = document.createElement("iframe");
+      frame.className = "ui-webview";
+      frame.src = node.url;
+      frame.style.height = `${node.height}px`;
+      frame.setAttribute("sandbox", "allow-scripts");
+      // Un `<iframe>` senza titolo è, per chi lo incontra navigando, «frame»
       // e basta — e non c'è modo di sapere se valga la pena entrarci. Per un
       // frame il nome accessibile è il `title`, e solo lui: un `aria-label`
       // l'audit non lo legge. Il contratto non porta un titolo per questo nodo,
       // quindi il meglio che si possa dire è l'indirizzo: è poco, ed è comunque
       // l'unica cosa vera che la shell sappia. Un titolo vero è roba del
       // contratto, non di qui.
-      el.title = node.url;
-      return el;
+      frame.title = node.url;
+      frame.setAttribute("role", "document");
+      // Chromium porta il fuoco di un frame nel documento figlio: l'elemento
+      // iframe non entra quindi in `:focus-visible`, e un anello applicato a
+      // lui non può essere dipinto. Un involucro non interattivo osserva il
+      // fuoco con `:focus-within`, senza togliere al frame il suo Tab o il suo
+      // documento interattivo.
+      const shell = document.createElement("div");
+      shell.className = "ui-webview-frame";
+      shell.appendChild(frame);
+      return shell;
     }
     case "section": {
       const el = document.createElement("details");
@@ -656,7 +716,23 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
     case "tree_item": {
       const el = div("ui-tree-item");
       const row = div("ui-tree-label");
-      row.textContent = node.label;
+      // A04 sul bersaglio vero, non sul contenitore: il fuoco va alla riga
+      // (attivabile qui sotto), quindi è la riga a dover valere 32px a densità
+      // normale e almeno 24px ovunque. `space-9` è 24/32/36px nelle tre
+      // densità: il pavimento a 28px è la V13 per la compatta, e per G04
+      // l'accessibilità prevale sulla scala quando la scala scende sotto.
+      row.style.minHeight = "max(var(--space-9, 32px), 28px)";
+      row.style.display = "flex";
+      row.style.alignItems = "center";
+      // Il testo in un elemento anonimo non si restringe e l'ellissi della
+      // pelle morirebbe: sta in uno `span` che può farlo, senza classi nuove.
+      const text = document.createElement("span");
+      text.style.minWidth = "0";
+      text.style.overflow = "hidden";
+      text.style.textOverflow = "ellipsis";
+      text.style.whiteSpace = "nowrap";
+      text.textContent = node.label;
+      row.appendChild(text);
       connect(row, node.action, onAction);
       // Il ruolo sta sul **contenitore** e non sull'etichetta, perché è il
       // contenitore ad avere i figli: un `treeitem` che non contiene il proprio
@@ -756,7 +832,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       if (node.action) {
         const button = document.createElement("button");
         button.className = "ui-button intent-primary";
-        button.textContent = node.detail ?? node.title;
+        // U43: il bottone dice ciò che fa, non ripete il testo del pannello.
+        // L'azione è ciò che il provider ha dichiarato: nome leggibile, non id.
+        button.textContent = node.title;
         connect(button, node.action, onAction);
         el.appendChild(button);
       }
@@ -856,6 +934,9 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
         const button = document.createElement("button");
         button.className = "ui-button";
         button.textContent = t("app.retry");
+        // U43: bersaglio reale >=24px anche nel fallback d'errore; il bottone
+        // nativo ha già nome accessibile dal suo testo (V15: niente aria extra).
+        button.style.minHeight = "max(var(--space-8, 24px), 24px)";
         connect(button, node.retry, onAction);
         el.appendChild(button);
       }

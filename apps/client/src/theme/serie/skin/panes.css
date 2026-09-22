@@ -20,33 +20,52 @@
 .pane-tabs {
   border-bottom: 1px solid var(--border);
   background: var(--bg-soft, var(--bg));
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+.tab-entry {
+  max-width: 16rem;
+  color: var(--muted);
 }
 .tab {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
-  max-width: 16rem;
+  max-width: 100%;
   border: none;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   white-space: nowrap;
   transition:
     background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease),
-    box-shadow var(--duration-fast) var(--ease);
+    color var(--duration-fast) var(--ease);
 }
 .tab:hover {
   background: var(--overlay-hover);
   color: var(--text);
 }
 .tab[aria-selected="true"] {
-  background: transparent;
+  background: var(--bg-active);
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  box-shadow: none;
+}
+/* Il marcatore è corto e sta sotto l'etichetta, non un filetto a tutta
+   larghezza: l'attiva si legge dal fondo, il lime è solo l'accento. */
+.tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 14px;
+  height: 2px;
+  border-radius: var(--radius-xs);
+  transform: translateX(-50%);
+  background: var(--muted);
+  pointer-events: none;
 }
 .tab-name {
   overflow: hidden;
@@ -59,11 +78,14 @@
   color: var(--accent);
 }
 .tab-close {
+  border: none;
+  background: transparent;
+  cursor: pointer;
   /* Il pallino è secondario, ma resta testo: attenuato a 0.45 scendeva sotto
      AA (2,8:1 nel chiaro). Il minimo per il peggior fondo è 0,63; 0,7 ci
      lascia il margine. Al passaggio torna pieno. */
   opacity: 0.7;
-  padding: 0 var(--space-1);
+  padding: 0 var(--space-2);
   border-radius: var(--radius-xs);
   color: inherit;
 }
@@ -73,11 +95,43 @@
   color: inherit;
 }
 
-/* Quale riquadro ha il fuoco si deve **vedere**, o dividere lo schermo è un
-   gesto che rende la finestra ambigua: due editor identici e nessun indizio su
-   dove finirà la prossima nota che si apre. */
-.pane.focus > .pane-tabs {
-  border-bottom-color: var(--accent);
+/* Quale riquadro ha il fuoco si legge dalla tab davanti: il marcatore è lime
+   solo nel riquadro a fuoco, muto negli altri. Il filetto resta il filetto. */
+.pane.focus .tab[aria-selected="true"]::after {
+  background: var(--accent);
+}
+/* La riga sotto le tab: briciole a sinistra, modalità e menu a destra. La
+   struttura dà solo il contenitore; qui il ritmo: briciole che si accorciano,
+   versione che non ruba spazio, bottone del menu come gli altri fantasmi. */
+.pane-toolbar {
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-soft, var(--bg));
+  font-size: var(--text-sm);
+}
+.pane-toolbar .muted {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pane-toolbar > .muted:first-child {
+  flex: 1;
+}
+.pane-toolbar > button {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border: none;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 1;
+}
+.pane-toolbar > button:hover {
+  background: var(--overlay-hover);
+  color: var(--text);
 }
 
 /* Qui c'erano due regole che davano all'editor il fondo e l'inchiostro della
@@ -93,7 +147,7 @@
    documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
    fare sulla nota, non di che colore è. */
 .pane-preview {
-  padding: var(--space-5) var(--space-7);
+  padding: var(--space-6) var(--space-7) var(--space-10);
   background: var(--doc-bg);
   color: var(--doc-fg);
 }
@@ -117,7 +171,7 @@
   outline: none;
 }
 .grid-viewport:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--focus);
+  box-shadow: inset 0 0 0 2px var(--focus-ring);
 }
 .grid-cell,
 .grid-header,

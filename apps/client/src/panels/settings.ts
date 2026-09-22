@@ -35,6 +35,7 @@ import type {
   PluginError,
   SettingEntry,
   SettingValue,
+  ThemeInfo,
   KnownVault,
 } from "../host/contract";
 import { onEvent } from "../state/kernel";
@@ -46,7 +47,14 @@ import { allCommands, keybindingKey } from "../ui/commands";
 import { TRUST_LABELS, isPermissionKey, rows, type PermissionRow } from "../ui/permissions";
 import { errorText } from "../host/errors";
 import { t, type Key } from "../i18n/strings";
-import { CONTRAST_KEY, THEME_KEY } from "../theme/theme";
+import {
+  CONTRAST_KEY,
+  SERIES_THEME_ID,
+  THEME_KEY,
+  currentThemeId,
+  selectTheme,
+  themeCatalog,
+} from "../theme/theme";
 import { setTooltip } from "../ui/tooltip";
 import { enterSurface, exitSurface } from "../ui/motion";
 
@@ -157,7 +165,11 @@ export function mountSettings(nextHooks: Hooks): void {
   // Un'impostazione può cambiare **da fuori di qui**: un comando
   // (`settings.set`), un plugin, un'altra finestra. L'evento non porta il valore
   // nuovo apposta — si rilegge, che è l'unica cosa che non può invecchiare.
-  onEvent("setting_changed", () => {
+  // L'errore per-campo della chiave che è cambiata decade con esso: il valore
+  // autorevole è appena stato riletto, e un esito vecchio contraddirrebbe la
+  // riga. Gli errori delle altre chiavi restano, perché il loro valore no.
+  onEvent("setting_changed", (event) => {
+    rowErrors.delete(event.key);
     if (!panelEl.hidden) void render();
   });
   // Chiudere il vault mentre il pannello è aperto lascerebbe un form che parla
@@ -189,6 +201,8 @@ function close(): void {
   release?.();
   race.cancel();
   componentsGeneration++;
+  pendingRows.clear();
+  rowErrors.clear();
   release = null;
   exitSurface(panelEl, () => {
     panelEl.hidden = true;
@@ -229,7 +243,11 @@ async function render(): Promise<void> {
         row("muted", t("settings.read_failed", { reason: errorText(e) })),
       ]),
     );
+    // Anche un update non chiesto da qui (`setting_changed` esterno) non deve
+    // far cadere il focus su BODY: si rimette dov'era, stessa riga.
+    const snapshot = focusSnapshot();
     bodyEl.replaceChildren(...nodes);
+    restoreFocus(snapshot);
   });
 }
 
@@ -249,17 +267,9 @@ function tabContent(): Promise<HTMLElement[]> {
 /// perché la regola è una sola e sta scritto in `keybindingKey` (§18.2). È la
 /// stessa mossa con cui questa shell riconosce qualunque altra cosa attraversi
 /// il confine: rifà il conto invece di leggere una convenzione.
-///
 /// **Tutti i comandi**, e non più i soli comandi del kernel: da quando anche
-/// quelli della shell hanno una chiave (§16.3), un filtro su `c.spec` lascerebbe
-/// le sedici `keys.shell.*` in fondo alla scheda della configurazione, senza
-/// gruppo e con l'id per etichetta.
-function shortcutKeys(): Set<string> {
-  return new Set(allCommands().map((c) => keybindingKey(c.id)));
-}
-
 async function renderForm(): Promise<HTMLElement[]> {
-  const shortcuts = shortcutKeys();
+  const shortcuts = new Set(allCommands().map((command) => keybindingKey(command.id)));
   // Le scorciatoie **non stanno qui**: sono impostazioni come le altre, e
   // proprio per questo sarebbero venti righe senza gruppo in fondo alla scheda
   // della configurazione. Hanno una scheda loro, ed è la stessa forma — un
@@ -283,7 +293,61 @@ async function renderForm(): Promise<HTMLElement[]> {
     nodes.push(title);
     for (const entry of group.rows) nodes.push(renderRow(entry));
   }
+  const themes = await themeCatalog().catch(() => []);
+  if (themes.length > 0 && entries.some((entry) => entry.spec.key === THEME_KEY)) {
+    nodes.push(renderThemeCatalog(themes));
+  }
   return nodes;
+}
+
+function renderThemeCatalog(themes: ThemeInfo[]): HTMLElement {
+  const panel = document.createElement("div");
+  panel.className = "setting-row setting-row--theme";
+  const text = document.createElement("div");
+  text.className = "setting-text";
+  const title = document.createElement("div");
+  title.setAttribute("role", "heading");
+  title.setAttribute("aria-level", "3");
+  title.textContent = t("settings.themes.title");
+  text.append(title);
+  const control = document.createElement("div");
+  control.className = "segmented segmented--wide theme-switch";
+  control.setAttribute("role", "radiogroup");
+  control.setAttribute("aria-label", t("settings.themes.title"));
+  for (const theme of themes) {
+    for (const light of theme.manifest.lights) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "segmented-option";
+      button.textContent = t("settings.themes.option", {
+        name: theme.manifest.name,
+        light: t(
+          light === "dark" ? "settings.themes.light.dark" : "settings.themes.light.light",
+        ),
+      });
+      button.dataset.themeId = theme.manifest.id;
+      button.dataset.themeLight = light;
+      button.setAttribute("role", "radio");
+      const selected =
+        currentThemeId() === theme.manifest.id &&
+        document.documentElement.dataset.theme === light;
+      button.setAttribute("aria-checked", String(selected));
+      button.addEventListener("click", () => {
+        void write(() => selectTheme(theme.manifest.id, light));
+      });
+      control.append(button);
+    }
+  }
+  text.append(
+    row(
+      "setting-source",
+      t("settings.themes.source", {
+        ids: themes.map((theme) => theme.manifest.id).join(", "),
+      }),
+    ),
+  );
+  panel.append(text, control);
+  return panel;
 }
 
 /// Una riga di impostazione.
@@ -299,6 +363,9 @@ async function renderForm(): Promise<HTMLElement[]> {
 function renderRow(entry: SettingEntry, name?: string, description?: string): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row";
+  // Identità stabile della riga: dopo un re-render il focus torna sullo
+  // stesso controllo (A03) invece di cadere su BODY.
+  el.dataset.settingKey = entry.spec.key;
   // Il tema è la riga più guardata del gruppo Appearance: la si alza di
   // un gradino visivo, così l'occhio la trova prima delle altre impostazioni
   // di aspetto che le stanno attorno.
@@ -317,9 +384,14 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
     text.append(row("muted", below));
   }
   text.append(row("setting-source", sourceLabel(entry)));
+  const pending = pendingRows.has(entry.spec.key);
+  const failure = rowErrors.get(entry.spec.key);
+  if (pending) el.setAttribute("aria-busy", "true");
 
   const control = field(entry);
   el.append(text, control);
+  if (pending) text.append(rowPending());
+  else if (failure) text.append(rowErrorNode(failure));
 
   // «Azzera» compare **solo dove c'è qualcosa da azzerare**: su una riga al
   // valore predefinito sarebbe un pulsante che non fa niente, cioè un pulsante
@@ -330,9 +402,16 @@ function renderRow(entry: SettingEntry, name?: string, description?: string): HT
     resetButton.textContent = t("settings.reset");
     setTooltip(resetButton, t("settings.reset.hint"));
     resetButton.addEventListener("click", () => {
-      void write(() => api.resetSetting(entry.spec.key));
+      void writeRow(entry.spec.key, null, () => api.resetSetting(entry.spec.key));
     });
     el.append(resetButton);
+  }
+  // Disabilitare solo la riga in volo, «azzera» compreso: le altre righe
+  // restano scrivibili.
+  if (pending) {
+    for (const node of el.querySelectorAll("input, select, button")) {
+      (node as HTMLInputElement | HTMLSelectElement | HTMLButtonElement).disabled = true;
+    }
   }
   return el;
 }
@@ -407,7 +486,7 @@ function listField(entry: SettingEntry, id: string): HTMLElement {
       remove.textContent = t("settings.list.remove");
       remove.setAttribute("aria-label", t("settings.list.remove.hint", { folder }));
       remove.addEventListener("click", () => {
-        void write(() =>
+        void writeRow(entry.spec.key, folder, () =>
           api.setSetting(
             entry.spec.key,
             values.filter((_, candidate) => candidate !== index),
@@ -449,9 +528,8 @@ function listField(entry: SettingEntry, id: string): HTMLElement {
     }
     error.hidden = true;
     input.removeAttribute("aria-invalid");
-    void write(async () => {
+    void writeRow(entry.spec.key, checked.value, async () => {
       await api.setSetting(entry.spec.key, [...values, checked.value]);
-      input.value = "";
     });
   });
   editor.append(form);
@@ -473,7 +551,9 @@ function field(entry: SettingEntry): HTMLElement {
       input.id = id;
       input.checked = entry.value === true;
       input.addEventListener("change", () => {
-        void write(() => api.setSetting(entry.spec.key, input.checked));
+        void writeRow(entry.spec.key, show(input.checked), () =>
+          api.setSetting(entry.spec.key, input.checked),
+        );
       });
       return input;
     }
@@ -504,7 +584,7 @@ function field(entry: SettingEntry): HTMLElement {
         if (input.value.trim() === "") return;
         const n = Number(input.value);
         if (Number.isNaN(n)) return;
-        void write(() => api.setSetting(entry.spec.key, n));
+        void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, n));
       });
       return input;
     }
@@ -514,7 +594,7 @@ function field(entry: SettingEntry): HTMLElement {
       input.id = id;
       input.value = String(entry.value);
       input.addEventListener("change", () => {
-        void write(() => api.setSetting(entry.spec.key, input.value));
+        void writeRow(entry.spec.key, input.value, () => api.setSetting(entry.spec.key, input.value));
       });
       return input;
     }
@@ -550,7 +630,7 @@ function field(entry: SettingEntry): HTMLElement {
         select.append(el);
       }
       select.addEventListener("change", () => {
-        void write(() => api.setSetting(entry.spec.key, select.value));
+        void writeRow(entry.spec.key, select.value, () => api.setSetting(entry.spec.key, select.value));
       });
       return select;
     }
@@ -576,6 +656,7 @@ function appearanceToggle(
   kind: Extract<SettingEntry["spec"]["kind"], { kind: "choice" }>,
 ): HTMLElement {
   const current = String(entry.value);
+  const customThemeActive = entry.spec.key === THEME_KEY && currentThemeId() !== SERIES_THEME_ID;
   const group = document.createElement("div");
   group.className = "segmented segmented--wide theme-switch";
   group.id = `setting-${entry.spec.key}`;
@@ -588,28 +669,112 @@ function appearanceToggle(
     btn.className = "segmented-option";
     btn.setAttribute("role", "radio");
     btn.textContent = op.label || value || "system";
-    const selected = value === current;
+    const selected = !customThemeActive && value === current;
     // `aria-checked` e basta: era accompagnato da una classe modificatrice, e
     // la pelle finiva per elencare quattro selettori diversi per lo stesso
     // acceso, perché nessuno sapeva quale dei quattro il markup usasse.
     btn.setAttribute("aria-checked", String(selected));
     // La scrittura è la stessa della `<select>`: `api.setSetting` con il
-    // valore dell'opzione, e `write` che ridisegna. Il reset «azzera»
-    // continua a funzionare perché è fuori dal campo, sulla riga.
+    // valore dell'opzione, e `writeRow` che ridisegna con l'esito vicino alla
+    // riga. Il reset «azzera» continua a funzionare perché è fuori dal campo.
     btn.addEventListener("click", () => {
-      void write(() => api.setSetting(entry.spec.key, value));
+      void writeRow(entry.spec.key, op.label || value, () =>
+        entry.spec.key === THEME_KEY
+          ? selectTheme(SERIES_THEME_ID, value as "" | "light" | "dark")
+          : api.setSetting(entry.spec.key, value),
+      );
     });
     group.append(btn);
   }
   return group;
 }
 
-/// Scrive, e ridisegna: la sourceLabel di una riga cambia insieme al valore, e
+/// Scritture in volo e fallite, per chiave: è ciò che disegna l'esito vicino
+/// al controllo (U53) invece di dirlo solo in un toast lontano dalla riga.
+///
+/// Non sono un bus né uno store: due contenitori di questo pannello, letti da
+/// `renderRow`/`renderPermission` e scritti da `writeRow` e dal watcher
+/// `setting_changed`. La chiusura le svuota, così una riapertura non ritrova
+/// esiti di un vault che non c'è più.
+const pendingRows = new Set<string>();
+
+interface RowError {
+  message: string;
+  input: string;
+}
+
+const rowErrors = new Map<string, RowError>();
+
+/// L'esito di una scrittura in volo, vicino al controllo che l'ha chiesta.
+///
+/// Il testo riusa una chiave esistente via `t()` (nessuna attesa P8): la riga
+/// è marcata `aria-busy` e i suoi controlli sono disabilitati, quindi un
+/// secondo invio dalla stessa riga non parte con valori catturati vecchi.
+/// Le altre righe restano abilitate (blocco minimo).
+function rowPending(): HTMLElement {
+  const el = row("setting-pending", t("save.saving"));
+  el.setAttribute("role", "status");
+  return el;
+}
+
+/// L'esito di una scrittura fallita, vicino al controllo che l'ha chiesta.
+///
+/// Il controllo mostra il valore autorevole appena riletto, e qui sotto resta
+/// l'input che l'utente aveva provato: nessuno dei due sparisce in un toast.
+/// `role="alert"` lo annuncia a chi non guarda lo schermo.
+function rowErrorNode(err: RowError): HTMLElement {
+  const box = document.createElement("div");
+  box.className = "setting-error";
+  box.setAttribute("role", "alert");
+  box.append(row("setting-error-message", err.message));
+  if (err.input !== "") box.append(row("setting-attempted", err.input));
+  return box;
+}
+
+/// Scrive una riga, e ridisegna: la sourceLabel cambia insieme al valore, e
 /// un form che non si ridisegnasse mostrerebbe «valore predefinito» sotto un
 /// valore appena scelto.
-/// `failure` è la frase da dire se non è andata: un permesso non cambiato e
-/// un'impostazione non cambiata sono due cose diverse per chi legge, e dirle
-/// uguali manderebbe a cercare il difetto nella scheda sbagliata.
+///
+/// `attempted` è l'input che l'utente aveva provato, come lo scriverebbe un
+/// umano (`null` dove non c'è un input: azzera): su errore resta sotto la riga
+/// mentre il controllo torna al valore autorevole. `failure` è la frase da
+/// dire se non è andata: un permesso non cambiato e un'impostazione non
+/// cambiata sono due cose diverse per chi legge, e dirle uguali manderebbe a
+/// cercare il difetto nella scheda sbagliata.
+async function writeRow(
+  key: string,
+  attempted: string | null,
+  action: () => Promise<void>,
+  failure: Key = "settings.not_changed",
+): Promise<void> {
+  // Dove stava guardando l'utente **prima** di disabilitare la riga: il giro
+  // di pending toglie il focus dal controllo disabilitato, e senza questa
+  // istantanea il giro finale — fotografato a focus già caduto su BODY —
+  // non saprebbe dove rimetterlo (A03).
+  const snapshot = focusSnapshot();
+  pendingRows.add(key);
+  rowErrors.delete(key);
+  await render();
+  try {
+    await action();
+    rowErrors.delete(key);
+  } catch (e) {
+    rowErrors.set(key, {
+      message: t(failure, { reason: errorText(e) }),
+      input: attempted ?? "",
+    });
+  }
+  pendingRows.delete(key);
+  await render();
+  // Ripara solo ciò che il pending ha rotto: se nel frattempo l'utente si è
+  // spostato (o il watcher ha ridisegnato per un'altra chiave), il focus
+  // attuale non si tocca.
+  if (document.activeElement === document.body) restoreFocus(snapshot);
+}
+
+/// Scrive senza una riga (banner dei tasti proposti, catalogo dei temi,
+/// registro dei vault): qui non c'è un controllo a cui legare l'esito, e
+/// l'errore resta nel toast come prima.
 async function write(
   action: () => Promise<void>,
   failure: Key = "settings.not_changed",
@@ -619,7 +784,63 @@ async function write(
   } catch (e) {
     notify(t(failure, { reason: errorText(e) }), "guasto");
   }
+  // `render` rimette il focus sullo stesso controllo della stessa riga (A03):
+  // qui non si tocca né focus né valori, così l'input successivo resta quello
+  // digitato dall'utente.
   await render();
+}
+
+/// Dove stava guardando l'utente prima che `write` ricostruisca il corpo.
+interface FocusSnapshot {
+  controlId: string;
+  rowKey: string | null;
+  selectionStart: number | null;
+  selectionEnd: number | null;
+  scrollTop: number;
+}
+
+function focusSnapshot(): FocusSnapshot {
+  const focused = document.activeElement;
+  return {
+    controlId: focused instanceof HTMLElement ? focused.id : "",
+    rowKey:
+      focused instanceof HTMLElement
+        ? focused.closest("[data-setting-key]")?.getAttribute("data-setting-key") ?? null
+        : null,
+    selectionStart:
+      focused instanceof HTMLInputElement && focused.type === "text" ? focused.selectionStart : null,
+    selectionEnd:
+      focused instanceof HTMLInputElement && focused.type === "text" ? focused.selectionEnd : null,
+    scrollTop: bodyEl.scrollTop,
+  };
+}
+
+/// Rimette il focus sullo stesso controllo della stessa riga dopo il rebuild.
+function restoreFocus(snapshot: FocusSnapshot): void {
+  bodyEl.scrollTop = snapshot.scrollTop;
+  if (snapshot.rowKey === null || snapshot.rowKey === "") return;
+  const selector = `[data-setting-key="${snapshot.rowKey}"]`;
+  const scope = bodyEl.querySelector(selector);
+  // Niente `CSS.escape`: gli id contengono punti (`setting-editor.line_numbers`)
+  // che in un selettore `#` varrebbero come classi; la ricerca per attributo
+  // quotato li tratta come testo.
+  const next =
+    (snapshot.controlId ? scope?.querySelector<HTMLElement>(`[id="${snapshot.controlId}"]`) : null) ??
+    scope?.querySelector<HTMLElement>("input, select, button") ??
+    null;
+  if (next && document.activeElement !== next) next.focus({ preventScroll: true });
+  if (
+    next instanceof HTMLInputElement &&
+    next.type === "text" &&
+    snapshot.selectionStart !== null &&
+    snapshot.selectionEnd !== null
+  ) {
+    try {
+      next.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+    } catch {
+      // Un tipo di input che non ammette selezione: il focus basta.
+    }
+  }
 }
 
 // --- la scheda delle scorciatoie (§18.2) ------------------------------------
@@ -1095,6 +1316,9 @@ function setPending(nodes: HTMLElement[], pending: boolean): void {
 function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HTMLElement {
   const el = document.createElement("div");
   el.className = "setting-row setting-sub";
+  // Stessa identità delle righe di configurazione: il watcher `setting_changed`
+  // cancella l'errore per chiave, e il focus torna qui (A03).
+  el.dataset.settingKey = p.key;
   const text = document.createElement("div");
   text.className = "setting-text";
   const interactive = entry !== undefined && p.known;
@@ -1106,6 +1330,9 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   el.append(text);
 
   if (!p.known || !entry) return el;
+  const pending = pendingRows.has(p.key);
+  const failure = rowErrors.get(p.key);
+  if (pending) el.setAttribute("aria-busy", "true");
 
   const granted = entry.value !== false;
   const input = document.createElement("input");
@@ -1114,9 +1341,13 @@ function renderPermission(p: PermissionRow, entry: SettingEntry | undefined): HT
   input.checked = granted;
   input.setAttribute("aria-label", t("settings.permission.grant", { cosa: p.message }));
   input.addEventListener("change", () => {
-    void write(() => api.setSetting(p.key, input.checked), "settings.permission_not_changed");
+    void writeRow(p.key, show(input.checked), () => api.setSetting(p.key, input.checked), "settings.permission_not_changed");
   });
   el.append(input);
+  if (pending) {
+    text.append(rowPending());
+    input.disabled = true;
+  } else if (failure) text.append(rowErrorNode(failure));
   if (!granted) text.append(row("setting-source", t("settings.permission.denied")));
   return el;
 }

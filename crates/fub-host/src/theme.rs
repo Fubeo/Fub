@@ -247,6 +247,30 @@ impl ThemeBundle {
         })
     }
 }
+/// Metadati di un tema installato che la shell può davvero caricare.
+///
+/// L'inventario non espone il path della macchina e non include temi il cui
+/// manifest è valido ma ha un foglio mancante o illeggibile. I cancelli CSS
+/// restano della shell: qui si verifica solo che il trasporto possa fornire i
+/// file dichiarati.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ThemeInfo {
+    pub manifest: ThemeManifest,
+}
+
+/// Il fascio trasferito alla shell per una luce già scelta.
+///
+/// `assets` è un inventario di nomi, non un accesso al filesystem: il loader
+/// della shell controlla che ogni URL resti nel namespace del manifest prima
+/// di montare il CSS.
+#[derive(Clone, Debug, serde::Serialize)]
+pub struct ThemePayload {
+    pub manifest: ThemeManifest,
+    pub light: ThemeLight,
+    pub sheet: String,
+    pub skin: Option<String>,
+    pub assets: std::collections::BTreeMap<String, bool>,
+}
 
 impl crate::registry::Bundle for ThemeBundle {
     fn manifest(&self) -> PluginManifest {
@@ -315,6 +339,128 @@ pub fn discover_themes(config_dir: &Utf8Path) -> (Vec<ThemeBundle>, Vec<ThemeErr
         }
     }
     (ok, errors)
+}
+/// Elenca soltanto i temi installati per cui ogni luce dichiarata ha un foglio
+/// leggibile. Un manifest corretto ma incompleto non può diventare un toggle
+/// attivo nella shell.
+pub fn list_themes(config_dir: &Utf8Path) -> Vec<ThemeInfo> {
+    let (themes, _) = discover_themes(config_dir);
+    themes
+        .into_iter()
+        .filter_map(|theme| {
+            let manifest = theme.manifest.clone();
+            let loadable = manifest
+                .lights
+                .iter()
+                .all(|light| read_theme(config_dir, &manifest.id, *light).is_ok());
+            loadable.then_some(ThemeInfo { manifest })
+        })
+        .collect()
+}
+
+/// Legge una luce di un tema installato senza accettare path dal chiamante.
+///
+/// Il tema di serie non attraversa questa porta: resta imbarcato nella shell.
+/// Un errore di lettura è intenzionalmente strutturato come `ThemeError`, così
+/// la shell può eseguire il fallback atomico invece di montare metà fascio.
+pub fn read_theme(
+    config_dir: &Utf8Path,
+    id: &str,
+    light: ThemeLight,
+) -> Result<ThemePayload, ThemeError> {
+    check_id(id)?;
+    if id == SERIES_ID {
+        return Err(ThemeError::InvalidId(id.to_string()));
+    }
+    let dir = crate::config::themes_dir(config_dir).join(id);
+    let theme = ThemeBundle::load(&dir)?;
+    if theme.manifest.id != id {
+        return Err(ThemeError::Malformed(format!(
+            "theme folder `{id}` contains manifest `{}`",
+            theme.manifest.id
+        )));
+    }
+    if !theme.manifest.lights.contains(&light) {
+        return Err(ThemeError::Malformed(format!(
+            "theme `{id}` does not offer requested light"
+        )));
+    }
+    let sheet = std::fs::read_to_string(sheet_path(&dir, light))
+        .map_err(|error| ThemeError::Io(format!("{}: {error}", sheet_path(&dir, light))))?;
+    let skin_path = dir.join("skin.css");
+    let skin = if skin_path.is_file() {
+        Some(
+            std::fs::read_to_string(&skin_path)
+                .map_err(|error| ThemeError::Io(format!("{}: {error}", skin_path)))?,
+        )
+    } else {
+        None
+    };
+    let assets = asset_inventory(&dir, &theme.manifest.asset_namespace)?;
+    Ok(ThemePayload {
+        manifest: theme.manifest,
+        light,
+        sheet,
+        skin,
+        assets,
+    })
+}
+
+fn sheet_path(dir: &Utf8Path, light: ThemeLight) -> Utf8PathBuf {
+    let name = match light {
+        ThemeLight::Dark => "sheet-dark.css",
+        ThemeLight::Light => "sheet-light.css",
+    };
+    dir.join(name)
+}
+
+fn asset_inventory(
+    root: &Utf8Path,
+    namespace: &str,
+) -> Result<std::collections::BTreeMap<String, bool>, ThemeError> {
+    let mut assets = std::collections::BTreeMap::new();
+    collect_assets(root, root, namespace, &mut assets)?;
+    Ok(assets)
+}
+
+fn collect_assets(
+    root: &Utf8Path,
+    dir: &Utf8Path,
+    namespace: &str,
+    assets: &mut std::collections::BTreeMap<String, bool>,
+) -> Result<(), ThemeError> {
+    let entries =
+        std::fs::read_dir(dir).map_err(|error| ThemeError::Io(format!("{}: {error}", dir)))?;
+    for entry in entries {
+        let entry = entry.map_err(|error| ThemeError::Io(format!("{}: {error}", dir)))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| ThemeError::Io(format!("{}: {error}", dir)))?;
+        if file_type.is_symlink() {
+            return Err(ThemeError::Traversal {
+                id: root.file_name().unwrap_or_default().to_string(),
+                path: entry.path().to_string_lossy().into_owned(),
+            });
+        }
+        let path = Utf8PathBuf::from_path_buf(entry.path())
+            .map_err(|path| ThemeError::Io(format!("non-UTF-8 path: {}", path.display())))?;
+        if file_type.is_dir() {
+            collect_assets(root, &path, namespace, assets)?;
+            continue;
+        }
+        let relative = path
+            .strip_prefix(root)
+            .expect("asset path stays below its theme root");
+        let relative = relative.to_string().replace('\\', "/");
+        if matches!(
+            relative.as_str(),
+            "manifest.json" | "skin.css" | "sheet-dark.css" | "sheet-light.css"
+        ) {
+            continue;
+        }
+        assets.insert(format!("{namespace}{relative}"), true);
+    }
+    Ok(())
 }
 
 /// Un id di tema è sicuro come **componente di cartella**: un solo pezzo, non

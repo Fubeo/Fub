@@ -23,7 +23,7 @@ export const PAIRS = [
   ["muted", "bg-hover", AA, "il sottotitolo di una riga selezionata"],
   ["accent-contrast", "accent", AA, "il testo di un bottone pieno"],
   ["danger-contrast", "danger", AA, "il testo di un bottone distruttivo"],
-  ["bg", "accent-soft", AA, "button:hover, #mode-switch attivo, .hit-snippet mark"],
+  ["bg", "accent-soft", AA, "button.primary:hover, .hit-snippet mark"],
   ["accent-soft", "bg", AA, ".brand, i link-button al passaggio"],
   ["accent-soft", "bg-elev", AA, "il titolo di uno spazio, il chevron"],
   ["accent-soft", "bg-input", AA, ".ui-badge.intent-primary"],

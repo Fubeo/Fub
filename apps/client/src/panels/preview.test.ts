@@ -9,20 +9,17 @@
 // `[[#Sezione]]` arriva dal renderer come `data-wikilink-page=""` più
 // l'ancora, ed è un riferimento **dentro** la nota che si sta leggendo.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RenderedDocument } from "../host/contract";
+import type { EmbedContent, RenderedDocument } from "../host/contract";
 
 const rendered = vi.hoisted(() => ({ value: null as RenderedDocument | null }));
-
-vi.mock("../host/ipc", () => ({
-  api: {
-    queryIndex: async (q: { kind: string; doc?: string }) => {
-      if (q.kind === "render_preview") return { kind: "render_preview", value: rendered.value };
-      throw new Error(`query inattesa: ${q.kind}`);
-    },
-  },
+const query = vi.hoisted(() => ({
+  renderedDocument: vi.fn(),
+  renderedEmbed: vi.fn(),
 }));
 
-import { configurePreview, sourceBlockAt, updatePreview } from "./preview";
+vi.mock("../host/query", () => query);
+
+import { configurePreview, describeReadingVersion, markReadingVersion, sourceBlockAt, updatePreview } from "./preview";
 
 describe("un wikilink cliccato in Lettura", () => {
   const calls: [string, string | undefined, string | undefined][] = [];
@@ -30,6 +27,10 @@ describe("un wikilink cliccato in Lettura", () => {
   beforeEach(() => {
     calls.length = 0;
     document.body.innerHTML = "";
+    query.renderedDocument.mockReset().mockImplementation(async () => rendered.value);
+    query.renderedEmbed.mockReset().mockImplementation(
+      async (page: string): Promise<EmbedContent> => ({ doc_id: page, html: "", parts: [] }),
+    );
     configurePreview({
       openPage: async (page, heading, block) => {
         calls.push([page, heading, block]);
@@ -62,6 +63,31 @@ describe("un wikilink cliccato in Lettura", () => {
     );
     el.querySelector<HTMLElement>("a.wikilink")!.click();
     expect(calls).toEqual([["", undefined, "blocco"]]);
+  });
+
+  it("passa il documento al helper tipizzato", async () => {
+    await renderPreview("<p>contenuto</p>");
+    expect(query.renderedDocument).toHaveBeenCalledWith("Nota.md");
+  });
+
+  it("propaga l'errore del helper che rende il documento", async () => {
+    const failure = new Error("render fallito");
+    query.renderedDocument.mockRejectedValueOnce(failure);
+    const element = document.createElement("div");
+    document.body.appendChild(element);
+
+    await expect(updatePreview(element, "Rotta.md")).rejects.toBe(failure);
+    expect(element.innerHTML).toBe("");
+  });
+
+  it("segna come irrisolto un embed quando il helper restituisce un errore", async () => {
+    query.renderedEmbed.mockRejectedValueOnce(new Error("embed fallito"));
+    const element = await renderPreview(
+      '<div class="embed" data-embed-page="Altra"></div>',
+    );
+
+    expect(query.renderedEmbed).toHaveBeenCalledWith("Altra", null, null);
+    expect(element.querySelector(".embed.unresolved")).not.toBeNull();
   });
 });
 
@@ -107,3 +133,18 @@ describe("mappatura dagli offset sorgente ai blocchi dell'anteprima", () => {
     expect(sourceBlockAt(element, 99)?.id).toBe("secondo");
   });
 });
+
+describe("versione dichiarata della Lettura (U32)", () => {
+  it("annuncia buffer sporco col testo esistente, mai chiave nuda", () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    markReadingVersion(el, true);
+    expect(el.getAttribute("aria-label")).toBe(describeReadingVersion(true));
+    expect(el.getAttribute("data-reading-dirty")).toBe("true");
+    expect(describeReadingVersion(true)).not.toContain("document.reading");
+    markReadingVersion(el, false);
+    expect(el.hasAttribute("data-reading-dirty")).toBe(false);
+    expect(describeReadingVersion(false)).not.toContain("document.reading");
+  });
+});
+

@@ -1,7 +1,7 @@
 import { createEditor, type Editor } from "../../editor/editor";
 import type { CompletionSources } from "../../editor/completions";
 import type { SheetEvaluation, SyntaxForm } from "../../host/contract";
-import { t } from "../../i18n/strings";
+import { onLanguage, t, type Key } from "../../i18n/strings";
 import { currentTheme } from "../../theme/theme";
 import { GridEngine } from "../grid/engine";
 import { createTextEngine } from "../text/engine";
@@ -99,13 +99,18 @@ function staticSurface(
   family: Extract<SurfaceFamily, "viewer" | "error">,
   profile: string,
   context: SurfaceMountContext,
-  message: string,
+  messageKey: Key,
 ): EditorSurface {
   const element = document.createElement("div");
   element.className = `document-surface document-surface-${family}`;
   element.tabIndex = 0;
   element.setAttribute("role", family === "error" ? "alert" : "document");
-  element.textContent = message;
+  let destroyed = false;
+  const updateMessage = () => {
+    if (!destroyed) element.textContent = t(messageKey);
+  };
+  updateMessage();
+  const stopLanguage = onLanguage(updateMessage);
   context.parent.replaceChildren(element);
   let source = "";
   return {
@@ -133,6 +138,9 @@ function staticSurface(
       element.dataset.theme = theme;
     },
     destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      stopLanguage();
       element.remove();
     },
   };
@@ -238,7 +246,7 @@ export function createDocumentSurfaceRegistry(
     sources: { bytes: "bytes-read-only" },
     factory: {
       mount(profile, context) {
-        return staticSurface("viewer", profile, context, "Anteprima binaria non disponibile");
+        return staticSurface("viewer", profile, context, "viewer.bytes_unavailable");
       },
     },
   });
@@ -248,7 +256,7 @@ export function createDocumentSurfaceRegistry(
     defaultProfile: "unsupported",
     factory: {
       mount(profile, context) {
-        return staticSurface("error", profile, context, "Nessuna superficie disponibile");
+        return staticSurface("error", profile, context, "surface.unavailable");
       },
     },
   });

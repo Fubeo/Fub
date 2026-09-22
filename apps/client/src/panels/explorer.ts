@@ -31,7 +31,6 @@ import {
   type FolderContent,
 } from "../rules/organizer";
 import { $ } from "../ui/dom";
-import { activatable } from "../ui/a11y";
 import { pickIcon, showContextMenu } from "../ui/menu";
 import { refreshOn, registerPanel } from "../ui/panel-host";
 import { focusEditor, openDocument } from "./document";
@@ -236,14 +235,22 @@ function renderFileList(): void {
   // navigazione da tastiera si romperebbe proprio nel momento in cui la si sta
   // usando.
   const active = document.activeElement;
-  const toRestore =
-    active instanceof HTMLElement && fileListEl.contains(active) ? active.dataset.path : undefined;
+  const focused =
+    active instanceof HTMLElement && fileListEl.contains(active) ? active : null;
+  const toRestore = focused?.closest<HTMLElement>('li[role="treeitem"]')?.dataset.path;
+  const onChevron = focused?.matches("button.chevron");
 
   fileListEl.innerHTML = "";
   renderChildren(state.activeSpace ?? "", fileListEl);
 
   roving(toRestore);
-  if (toRestore !== undefined) entry(toRestore)?.focus();
+  if (toRestore !== undefined) {
+    const row = entry(toRestore);
+    const control = onChevron
+      ? row?.querySelector<HTMLElement>(":scope > .tree-row > .chevron:not(:disabled)")
+      : null;
+    (control ?? row)?.focus();
+  }
 }
 
 /// Le voci dell'albero, nell'ordine in cui si vedono.
@@ -317,8 +324,19 @@ function treeArrows(): void {
     const target = e.target;
     if (!(target instanceof HTMLElement)) return;
     if (target.closest("input, textarea, select, [contenteditable]")) return;
+    if ((e.key === "Enter" || e.key === " ") && target.closest("button, a[href]")) return;
     const current = target.closest<HTMLElement>('li[role="treeitem"]');
     if (!current) return;
+    // I binding rimappabili prevalgono: un accordo con modificatori (anche su
+    // Invio, Spazio o frecce) è della tastiera globale, non dell'albero.
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // Tasto Menu / Shift+F10: il contestuale della voce a fuoco, per la stessa
+    // strada del click destro — stesse voci, stessa disponibilità.
+    if (e.key === "ContextMenu" || (e.shiftKey && e.key === "F10")) {
+      e.preventDefault();
+      openRowMenu(current);
+      return;
+    }
 
     const entries = treeEntries();
     const i = entries.indexOf(current);
@@ -369,7 +387,7 @@ function treeArrows(): void {
       case "Enter":
       case " ":
         e.preventDefault();
-        current.querySelector<HTMLElement>(":scope > .row")?.click();
+        current.querySelector<HTMLElement>(":scope > .tree-row")?.click();
         return;
       default:
     }
@@ -486,20 +504,72 @@ function noteRow(id: string, opts: { draggable: boolean }): HTMLElement {
   row.addEventListener("click", () => void openDocument(id));
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    const pinned = state.meta.pinned.includes(id);
-    showContextMenu(e, [
-      { label: t("explorer.rename"), run: () => startRename(row, id) },
-      { label: t("explorer.icon"), run: () => chooseIcon(e, id) },
-      {
-        label: pinned ? t("explorer.unpin") : t("explorer.pin"),
-        run: () => togglePin(id),
-      },
-      { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
-      { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
-    ]);
+    noteMenu(e, row, id);
   });
   if (opts.draggable) wireDrag(row, id, "note");
   return row;
+}
+
+/// Le voci del contestuale di una **nota**, dalla stessa strada del click
+/// destro e del tasto Menu/Shift+F10: un punto solo, o le due strade
+/// divergono alla prima voce aggiunta.
+function noteMenu(at: MouseEvent, row: HTMLElement, id: string): void {
+  const pinned = state.meta.pinned.includes(id);
+  const move = voceSpostamento(id);
+  showContextMenu(at, [
+    { label: t("explorer.rename"), run: () => startRename(row, id) },
+    { label: t("explorer.icon"), run: () => chooseIcon(at, id) },
+    {
+      label: pinned ? t("explorer.unpin") : t("explorer.pin"),
+      run: () => togglePin(id),
+    },
+    { label: t("explorer.to_folder"), run: () => void convertToFolder(id) },
+    ...(move ? [move] : []),
+    { label: t("explorer.delete"), danger: true, run: () => void trashWithConfirm(id) },
+  ]);
+}
+
+/// Voce "Sposta in…" senza drag (U10): apre il selettore di destinazione.
+function voceSpostamento(id: string): { label: string; run: () => void } | null {
+  return { label: t("explorer.move"), run: () => void pickMoveFolder(id) };
+}
+
+/// Destinazione dello spostamento senza drag (U10): le cartelle del vault in
+/// una finestra (stesso limite dell'albero), più la radice e il conto di ciò
+/// che resta fuori.
+async function pickMoveFolder(id: string): Promise<void> {
+  const at = new MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+  const folders = await vaultFolders(LEVEL_PAGE);
+  const here = parentOf(id);
+  const other = Math.max(0, folders.total - folders.items.length);
+  showContextMenu(at, [
+    // La radice (del vault) come prima destinazione: è dove il drag porta
+    // trascinando sul titolo "Note".
+    { label: t("explorer.root"), run: () => void moveIntoFolder(id, "") },
+    ...folders.items
+      .filter((f) => f.path !== here)
+      .map((f) => ({ label: f.path, run: () => void moveIntoFolder(id, f.path) })),
+    ...(other > 0
+      ? [{ label: t("explorer.altre_cartelle", { n: other }), run: () => {} }]
+      : []),
+  ]);
+}
+
+/// Il contestuale della voce dell'albero a fuoco, per tastiera: apre il menu
+/// della nota o della cartella sotto il `treeitem`, alla sua posizione.
+function openRowMenu(li: HTMLElement): void {
+  const row = li.querySelector<HTMLElement>(":scope > .tree-row");
+  const path = li.dataset.path;
+  if (!row || !path) return;
+  const box = row.getBoundingClientRect();
+  const at = new MouseEvent("contextmenu", {
+    clientX: box.left + 24,
+    clientY: box.top + box.height / 2,
+    bubbles: true,
+    cancelable: true,
+  });
+  if (row.classList.contains("folder")) folderMenu(at, path);
+  else noteMenu(at, row, path);
 }
 
 /// Una cartella senza niente dentro: né sottocartelle né file, di nessuna
@@ -516,12 +586,23 @@ function folderRow(folder: VaultFolder): HTMLElement {
   row.className = "tree-row folder";
   setTooltip(row, folder.path);
 
-  const chevron = document.createElement("span");
+  // Espansore separato dall'apertura (U09): un bottone nativo, quindi tabbabile
+  // e attivabile da tastiera senza passare dall'albero. La riga resta
+  // cliccabile intera: chi apre la folder note non deve centrare la freccia.
+  const chevron = document.createElement("button");
+  chevron.type = "button";
   chevron.className = "chevron";
   // Niente freccia su una cartella vuota: lo spazio resta (l'allineamento dei
-  // fratelli è lo stesso), ma non si promette un contenuto che non c'è.
-  if (!empty(folder)) {
-    chevron.textContent = state.expanded.has(folder.path) ? "▾" : "▸";
+  // fratelli è lo stesso), ma non si promette un contenuto che non c'è —
+  // e il bottone disabilitato resta fuori dal tab.
+  if (empty(folder)) {
+    chevron.disabled = true;
+    chevron.setAttribute("aria-label", childName(folder.path));
+  } else {
+    const open = state.expanded.has(folder.path);
+    chevron.textContent = open ? "▾" : "▸";
+    chevron.setAttribute("aria-label", childName(folder.path));
+    chevron.setAttribute("aria-expanded", String(open));
     chevron.addEventListener("click", (e) => {
       e.stopPropagation();
       toggleFolder(folder.path);
@@ -550,13 +631,19 @@ function folderRow(folder: VaultFolder): HTMLElement {
   });
   row.addEventListener("contextmenu", (e) => {
     e.preventDefault();
-    showContextMenu(e, [
-      { label: t("explorer.icon"), run: () => chooseIcon(e, folder.path) },
-      { label: t("explorer.as_space"), run: () => addSpace(folder.path) },
-    ]);
+    folderMenu(e, folder.path);
   });
   wireDrag(row, folder.path, "folder");
   return row;
+}
+
+/// Le voci del contestuale di una **cartella**: stesse voci del click destro e
+/// del tasto Menu, un punto solo.
+function folderMenu(at: MouseEvent, path: string): void {
+  showContextMenu(at, [
+    { label: t("explorer.icon"), run: () => chooseIcon(at, path) },
+    { label: t("explorer.as_space"), run: () => addSpace(path) },
+  ]);
 }
 
 function rowIcon(icon: string): HTMLElement {
@@ -620,6 +707,7 @@ function markActive(): void {
 /// chiedere diecimila righe.
 function renderPinned(): void {
   const pinned = state.meta.pinned.filter((id) => view.existing.has(id));
+  // U08: la sezione Appuntate si vede soltanto se contiene elementi.
   pinnedTitleEl.hidden = pinned.length === 0;
   pinnedListEl.hidden = pinned.length === 0;
   pinnedListEl.innerHTML = "";
@@ -627,11 +715,6 @@ function renderPinned(): void {
     const li = document.createElement("li");
     const row = noteRow(id, { draggable: false });
     if (id === state.currentDoc) row.setAttribute("aria-current", "true");
-    // Le appuntate sono una lista piatta e non un albero: qui il bersaglio del
-    // tab è la riga stessa, che è anche ciò che si clicca. Sono poche per
-    // costruzione — le appunta l'utente — quindi non serve il `roving` che
-    // l'albero usa per non diventare duecento fermate.
-    activatable(row);
     li.appendChild(row);
     pinnedListEl.appendChild(li);
   }
@@ -653,11 +736,17 @@ function chooseIcon(at: MouseEvent, path: string): void {
 
 function renderSpaceStrip(): void {
   spaceStripEl.innerHTML = "";
+  // U07: striscia col nome, non solo emoji — lo spazio attivo si legge, gli
+  // altri hanno nome accessibile + tooltip col percorso completo. Overflow con
+  // scroll locale del contenitore (mai hit-area ridotta sotto misura).
+  spaceStripEl.setAttribute("role", "toolbar");
+  spaceStripEl.setAttribute("aria-label", t("explorer.notes"));
 
   const home = document.createElement("button");
   home.className = "space-chip";
   home.setAttribute("aria-pressed", String(state.activeSpace === null));
   home.textContent = "🏠";
+  home.setAttribute("aria-label", t("explorer.whole_vault"));
   setTooltip(home, t("explorer.whole_vault"));
   home.addEventListener("click", () => selectSpace(null));
   spaceStripEl.appendChild(home);
@@ -667,7 +756,9 @@ function renderSpaceStrip(): void {
     chip.className = "space-chip";
     chip.setAttribute("aria-pressed", String(state.activeSpace === path));
     chip.textContent = state.meta.icons[path] ?? "🗂️";
-    setTooltip(chip, childName(path));
+    // Nome annunciato (V15): emoji + nome spazio, non solo il simbolo.
+    chip.setAttribute("aria-label", `${state.meta.icons[path] ?? "🗂️"} ${childName(path)}`);
+    setTooltip(chip, path);
     chip.addEventListener("click", () => selectSpace(path));
     chip.addEventListener("contextmenu", (e) => {
       e.preventDefault();
@@ -685,6 +776,7 @@ function renderSpaceStrip(): void {
   // `aria-pressed` non entra nel gruppo di quelli che si escludono a vicenda —
   // che è ciò che è, e ciò che va detto.
   add.textContent = "+";
+  add.setAttribute("aria-label", t("explorer.new_space"));
   setTooltip(add, t("explorer.new_space"));
   add.addEventListener("click", (e) => void pickNewSpace(e));
   spaceStripEl.appendChild(add);
@@ -773,29 +865,49 @@ async function newNote(): Promise<void> {
 /// Si rinomina il **nome pagina**, non il path: cartella ed estensione restano
 /// quelle di prima, perché è ciò che l'utente si aspetta scrivendo sopra un
 /// titolo. Spostare una nota altrove è un'altra operazione.
-function startRename(li: HTMLElement, id: string): void {
+function startRename(row: HTMLElement, id: string, preset?: string): void {
+  // Il campo vive **dentro la riga**, non al posto del `li`: il `treeitem`
+  // resta dov'è (stesso `data-path`, stesso `aria-selected`), quindi un
+  // ridisegno concorrente non sposta il fuoco fuori dall'albero e la riga
+  // può mostrare il progresso con `aria-busy`.
+  const name = row.querySelector<HTMLElement>(".row-name");
   const input = document.createElement("input");
-  input.value = pageName(id);
-  li.textContent = "";
-  li.appendChild(input);
+  input.value = preset ?? pageName(id);
+  input.setAttribute("aria-label", pageName(id));
+  if (name) {
+    name.replaceWith(input);
+  } else {
+    row.appendChild(input);
+  }
   input.focus();
   input.select();
 
+  // Un invio in corso per questo campo: il secondo Invio è un no-op (U11),
+  // ma resta il campo — chi preme due volte non perde il nome digitato.
+  let busy = false;
   let closed = false;
   const cancel = () => {
-    if (closed) return;
+    if (closed || busy) return;
     closed = true;
     renderFileList();
+    entry(id)?.focus();
   };
   const confirm = async () => {
-    if (closed) return;
-    closed = true;
+    if (closed || busy) return;
     const newItem = input.value.trim();
     if (!newItem || newItem === pageName(id)) {
+      closed = true;
       renderFileList();
+      entry(id)?.focus();
       return;
     }
-    await renameDoc(id, newItem);
+    // Conferma ottimista chiusa subito: il campo sparisce, la riga mostra il
+    // progresso (U11) e un altro giro non può partire dallo stesso campo.
+    busy = true;
+    closed = true;
+    input.disabled = true;
+    row.setAttribute("aria-busy", "true");
+    await renameDoc(id, newItem, input.value);
   };
 
   input.addEventListener("keydown", (e) => {
@@ -834,7 +946,7 @@ function reportRenameCollision(outcome: RenameResult): boolean {
   renderFileList();
   return true;
 }
-async function renameDoc(from: string, newPageName: string): Promise<void> {
+async function renameDoc(from: string, newPageName: string, typed?: string): Promise<void> {
   const slash = from.lastIndexOf("/");
   const dir = slash === -1 ? "" : from.slice(0, slash + 1);
   const dot = from.lastIndexOf(".");
@@ -855,7 +967,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   const failure = nameFault(to, "new");
   if (failure !== null) {
     notify(t("explorer.bad_name", { name: newPageName, reason: t(FAILURE_REASON[failure]) }), "info");
-    renderFileList();
+    reopenRename(from, typed ?? newPageName);
     return;
   }
 
@@ -863,7 +975,7 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
   // può esserci il documento aperto. Il buffer va messo in salvo prima, o la
   // riscrittura del kernel finirebbe sotto una copia più vecchia.
   if (await ensureSaved()) {
-    renderFileList();
+    reopenRename(from, typed ?? newPageName);
     return;
   }
   try {
@@ -871,10 +983,22 @@ async function renameDoc(from: string, newPageName: string): Promise<void> {
     if (reportRenameCollision(outcome)) return;
   } catch (e) {
     notify(t("explorer.rename_failed", { doc: from, to, reason: errorText(e) }), "guasto");
-    renderFileList();
+    // Su errore il nome precedente resta e l'input si recupera (U11): il campo
+    // si riapre col testo digitato, non con un albero già ridisegnato.
+    reopenRename(from, typed ?? newPageName);
+    return;
   }
   // `currentDoc` lo aggiorna l'evento `document_renamed`: l'identità è il path,
   // e chi la migra è un solo punto.
+}
+
+/// Riapre il campo di rinomina sullo stesso `treeitem` col testo digitato:
+/// su errore il nome precedente resta nel vault e l'input non si perde.
+function reopenRename(id: string, typed: string): void {
+  renderFileList();
+  const li = entry(id);
+  if (!li) return;
+  startRename(li, id, typed);
 }
 
 /// **Il testo non salvato esce prima**, e se non ce la fa l'operazione non parte.
@@ -1011,9 +1135,17 @@ function applyReorder(parent: string, dragged: string, target: string, before: b
   names.splice(before ? at : at + 1, 0, dragged);
   void setOrder(parent, names);
 }
+/// Sposta una nota dentro un'altra cartella (drag "into", voce di menu o
+/// tastiera): stesso rename del kernel, quindi stesso flush preventivo — un
+/// buffer sporco coprirebbe la riscrittura dei wikilink — e progresso sulla
+/// riga (U11) con no-op sul secondo invio.
+const moving = new Set<string>();
 async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
   const to = folderPath ? `${folderPath}/${childName(id)}` : childName(id);
-  if (to === id) return;
+  if (to === id || moving.has(id)) return;
+  if (await ensureSaved()) return;
+  moving.add(id);
+  markMoving(id, true);
   try {
     const outcome = await renameKeepingBuffer(id, to);
     if (outcome.kind === "collision") {
@@ -1037,10 +1169,27 @@ async function moveIntoFolder(id: string, folderPath: string): Promise<void> {
       "guasto",
     );
     return;
+  } finally {
+    moving.delete(id);
+    markMoving(id, false);
   }
   if (folderPath) state.expanded.add(folderPath);
   saveExpanded();
   await refreshDocuments();
+}
+
+/// Progresso dello spostamento sulla riga (U11): `aria-busy` finché il rename
+/// è in volo, tolto alla fine anche su errore.
+function markMoving(id: string, busy: boolean): void {
+  const li = entry(id);
+  const row = li?.querySelector<HTMLElement>(":scope > .tree-row");
+  if (busy) row?.setAttribute("aria-busy", "true");
+  else {
+    for (const stale of fileListEl.querySelectorAll<HTMLElement>('[aria-busy="true"]')) {
+      const owner = stale.closest("li");
+      if (owner instanceof HTMLElement && owner.dataset.path === id) stale.removeAttribute("aria-busy");
+    }
+  }
 }
 
 /// Il titolo "Note" accoglie le note trascinate fuori da ogni cartella: è la

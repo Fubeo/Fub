@@ -20,9 +20,9 @@
 //
 // Il modulo è diviso in due strati, e la divisione è ciò che lo rende
 // testabile: `computeDecorations` è una funzione pura (stato → lista di
-// intervalli), verificabile in node senza DOM; il `ViewPlugin` che la applica
-// è un guscio sottile e non ha test. Il tema vive qui dentro come `baseTheme`
-// (classi `cm-fub-*`): nessun CSS globale da tenere allineato.
+/// intervalli), verificabile senza DOM; il `ViewPlugin` applica le decorazioni
+/// e possiede i gesti sui widget, verificati anche nel DOM. Il tema vive qui
+/// dentro come `baseTheme` (classi `cm-fub-*`).
 //
 // NB: barrato (`~~`) e nodi GFM esistono solo se l'editor monta
 // `markdown({ base: markdownLanguage })`; con il default commonmark quelle
@@ -40,6 +40,8 @@ import { syntaxTree } from "@codemirror/language";
 // La lettura binaria di una casella è una regola del contratto, non del
 // disegno: `[/]`, `[-]`, `[>]` sono stati che esistono e non sono "fatto".
 import { taskChecked } from "../../../../rules/mirrored";
+import { t } from "../../../../i18n/strings";
+import { isAllowedLink } from "../../../../ui/sanitize";
 import type { SyntaxForm } from "../../../../host/contract";
 import {
   inlineDelimiters,
@@ -137,8 +139,8 @@ const ATTR_HREF = "data-fub-href";
 ///
 /// Invarianti che il plugin dà per acquisiti: i replace ("hide", "hr",
 /// "checkbox") non attraversano mai un fine riga e non si sovrappongono tra
-/// loro; dentro codice (inline, fence, indentato) e URL la sintassi Obsidian
-/// non viene riconosciuta; l'output è ordinato per `from`.
+/// loro; dentro codice (inline, fence, indentato), URL e markup HTML la
+/// sintassi Obsidian non viene riconosciuta; l'output è ordinato per `from`.
 export function computeDecorations(
   state: EditorState,
   activeLines: Set<number>,
@@ -151,9 +153,10 @@ export function computeDecorations(
   const doc = state.doc;
   const active = (pos: number) => activeLines.has(doc.lineAt(pos).number);
 
-  // Terreno vietato al livello regex: codice inline e URL (un `==` da base64
-  // o un `#frammento` non sono sintassi Obsidian). I blocchi di codice
-  // escludono righe intere, quindi viaggiano come numeri di riga.
+  // Terreno vietato al livello regex: codice inline, URL e markup HTML (un
+  // `==` da base64, un `#frammento` o un `#id` in un attributo non sono
+  // sintassi Obsidian). I blocchi di codice escludono righe intere, quindi
+  // viaggiano come numeri di riga.
   const exclusions: { from: number; to: number }[] = [];
   const codeRows = new Set<number>();
   const isFree = (a: number, b: number) =>
@@ -291,6 +294,17 @@ export function computeDecorations(
         case "URL":
           exclusions.push({ from: node.from, to: node.to });
           return;
+        // HTML grezzo e commenti: il testo letterale del markup non è sintassi
+        // Obsidian (un `#frag` in un attributo non è un tag). Il testo FRA i
+        // tag resta decorabile: di là lo si legge come prosa.
+        case "HTMLTag":
+        case "Comment":
+          exclusions.push({ from: node.from, to: node.to });
+          return;
+        case "HTMLBlock":
+        case "CommentBlock":
+          exclusions.push({ from: node.from, to: node.to });
+          return false;
 
         case "Link": {
           // Fuori dalla riga attiva resta solo il testo: `[` e `](url…)`
@@ -305,7 +319,14 @@ export function computeDecorations(
           const textFrom = marks[0].to;
           const textEnd = marks[1].from;
           const url = node.node.getChildren("URL")[0];
-          const href = url ? doc.sliceString(url.from, url.to) : "";
+          const rawHref = url ? doc.sliceString(url.from, url.to) : "";
+          // La destinazione può stare fra parentesi angolari (`[t](<a b>)`):
+          // il parser le toglie prima di classificare, qui si fa lo stesso —
+          // senza toccare la policy, che resta di `isAllowedLink`.
+          const href =
+            rawHref.length >= 2 && rawHref.startsWith("<") && rawHref.endsWith(">")
+              ? rawHref.slice(1, -1)
+              : rawHref;
           if (textFrom < textEnd) out.push({ from: textFrom, to: textEnd, kind: "link", data: href });
           const singleRow = doc.lineAt(node.from).number === doc.lineAt(node.to).number;
           if (singleRow && !active(node.from)) {
@@ -331,6 +352,12 @@ export function computeDecorations(
     // Wikilink ed embed. Il match diventa a sua volta un'esclusione: un
     // `#heading` o un `|` dentro `[[…]]` non sono un tag né altro.
     for (const w of wikilink(text)) {
+      // Senza pagina e senza punto (`[[]]`, `[[ ]]`) non c'è niente da
+      // nominare (cfr. `names_host` nel contratto): niente hide, niente mark,
+      // niente click. `[[#Sezione]]` nomina questa nota e resta.
+      if (w.page.trim() === "" && (w.heading ?? "") === "" && (w.block ?? "").trim() === "") {
+        continue;
+      }
       const rangeStart = row.from + w.from;
       const rangeEnd = row.from + w.to;
       if (!isFree(rangeStart, rangeEnd)) continue;
@@ -407,8 +434,7 @@ export function computeDecorations(
 }
 
 // ---------------------------------------------------------------------------
-// Da qui in giù: il guscio CM6 (widget, tema, plugin). Niente test — la
-// logica sta tutta sopra.
+// Da qui in giù: widget, gesti DOM, tema e lifecycle del plugin CM6.
 
 /// La linea resa al posto di `---`/`***` fuori dalla riga attiva.
 class RulerWidget extends WidgetType {
@@ -438,6 +464,9 @@ class CheckboxWidget extends WidgetType {
     box.checked = this.checked;
     box.className = "cm-fub-checkbox";
     box.tabIndex = -1; // il focus resta all'editor
+    const labelKey = this.checked ? "editor.task.completed" : "editor.task.pending";
+    box.dataset.i18nLabel = labelKey;
+    box.setAttribute("aria-label", t(labelKey));
     return box;
   }
   ignoreEvent() {
@@ -505,17 +534,29 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
   // Checkbox: si modifica il testo, non il widget — la decorazione nuova
   // arriva da sola col docChanged.
   if (target instanceof HTMLInputElement && target.classList.contains("cm-fub-checkbox")) {
+    // Il mousedown conserva la selezione; il click è l'unico gesto che
+    // modifica il testo. Annullare anche il click in sola lettura impedisce
+    // al controllo HTML di mostrare uno stato diverso dalla sorgente.
+    if (e.type === "mousedown" || view.state.readOnly) {
+      e.preventDefault();
+      return true;
+    }
     const pos = view.posAtDOM(target);
     const threeChars = view.state.doc.sliceString(pos, pos + 3);
     if (/^\[[^\]\n]\]$/.test(threeChars)) {
       view.dispatch({
         changes: { from: pos + 1, to: pos + 2, insert: taskChecked(threeChars[1]) ? " " : "x" },
+        // Come ogni battuta di contenuto: senza, la modifica cade fuori dalla
+        // history nativa dell'editor.
+        userEvent: "input",
       });
       e.preventDefault();
       return true;
     }
     return false;
   }
+
+  if (e.type === "click") return false;
 
   const wikilink = target.closest<HTMLElement>(".cm-fub-wikilink");
   if (wikilink && (e.ctrlKey || e.metaKey)) {
@@ -530,11 +571,14 @@ function handleClick(e: MouseEvent, view: EditorView, cb: LivePreviewCallbacks):
   const link = target.closest<HTMLElement>(".cm-fub-link");
   if (link && (e.ctrlKey || e.metaKey)) {
     const href = link.getAttribute(ATTR_HREF);
-    if (href) {
+    // Naviga solo ciò che il sanitizzatore lascia passare (stessa policy di
+    // Lettura): `javascript:…`, `data:…` e i protocol-relative restano fermi.
+    if (href && isAllowedLink(href)) {
       window.open(href, "_blank", "noopener,noreferrer");
       e.preventDefault();
       return true;
     }
+    return false;
   }
 
   const tag = target.closest<HTMLElement>(".cm-fub-tag");
@@ -653,8 +697,17 @@ export function livePreview(
         [this.decorations, this.atomicRanges] = build(view);
       }
       update(u: ViewUpdate) {
-        // selectionSet: la riga attiva è cambiata anche a documento fermo.
-        if (u.docChanged || u.selectionSet || u.viewportChanged) {
+        // selectionSet: la riga attiva è cambiata anche a documento fermo. Il
+        // confronto fra alberi copre il completamento asincrono del parser: a
+        // documento fermo Lezer può sostituire l'albero (stessa forma di
+        // `mermaid.ts`), e senza ricalcolo la resa resterebbe quella
+        // dell'albero parziale.
+        if (
+          u.docChanged ||
+          u.selectionSet ||
+          u.viewportChanged ||
+          syntaxTree(u.startState) !== syntaxTree(u.state)
+        ) {
           [this.decorations, this.atomicRanges] = build(u.view);
         }
       }
@@ -665,6 +718,9 @@ export function livePreview(
         EditorView.atomicRanges.of((view) => view.plugin(p)?.atomicRanges ?? Decoration.none),
       eventHandlers: {
         mousedown(e, view) {
+          return handleClick(e, view, callbacks);
+        },
+        click(e, view) {
           return handleClick(e, view, callbacks);
         },
       },

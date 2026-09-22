@@ -31,9 +31,14 @@
 //! l'insieme dei vault aperti tre settimane fa: chiede **un** path, l'ultimo
 //! `last_opened` ancora sul disco, e il registro è la memoria di recency che le
 //! lo dà.
-
+///
+/// `VaultRegistry` è l'owner del servizio; i caller che devono condividere
+/// l'accesso usano [`VaultRegistry::handle`]. Il handle conserva soltanto lo
+/// stato del registro e non porta mai con sé un workspace.
 use crate::custody::Custody;
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use fub_abi::schema::SchemaVersion;
@@ -115,21 +120,34 @@ struct RegistryFileWrite<'a> {
     vaults: &'a [VaultEntry],
 }
 
-/// Il registro, con il file su cui vive.
+/// Il proprietario del registro di macchina.
 ///
-/// `path: None` è il registro **in memoria**, che è ciò che ha un host senza
-/// installazione — un e2e headless, una CLI di prova — e non un caso
-/// degenere: ricorda finché dura il processo, e non scrive nella cartella di
-/// configurazione di chi sta eseguendo dei test.
+/// Il proprietario vive nell'host e il suo [`VaultRegistryHandle`] è l'unica
+/// superficie che può essere condivisa con altri percorsi. Il servizio non
+/// conserva un riferimento al workspace: le operazioni sul suo archivio sono
+/// quindi indipendenti da qualunque prestito del vault aperto.
 pub struct VaultRegistry {
+    inner: Arc<RegistryInner>,
+}
+
+/// Handle cloneable del registro dei vault della macchina.
+///
+/// È una porta intenzionalmente stretta: espone soltanto le operazioni sui
+/// record del registro e non presta né il workspace né la sua [`Custody`].
+/// L'owner ([`VaultRegistry`]) controlla il lifetime e chiude il servizio nel
+/// proprio `Drop`; gli handle già clonati osservano la chiusura e non avviano
+/// lavoro nuovo.
+#[derive(Clone)]
+pub struct VaultRegistryHandle {
+    inner: Arc<RegistryInner>,
+}
+
+struct RegistryInner {
     path: Option<Utf8PathBuf>,
-    /// Il file si è letto? Se no **non lo si riscrive**. Ripartire da vuoto è
-    /// giusto per *leggere* — un elenco di scorciatoie non vale un'app che non
-    /// parte — e sarebbe distruttivo per *scrivere*: il primo vault aperto dopo
-    /// riscriverebbe il file intero da un elenco vuoto, e i preferiti di chi ha
-    /// sbagliato una virgola sparirebbero senza che nessuno glielo dica.
+    /// Il file si è letto? Se no non lo si riscrive.
     readable: bool,
     entries: Custody<Vec<VaultEntry>>,
+    closed: AtomicBool,
 }
 
 impl VaultRegistry {
@@ -143,9 +161,12 @@ impl VaultRegistry {
         };
         (
             VaultRegistry {
-                path: Some(path.to_owned()),
-                readable: warning.is_none(),
-                entries: Custody::new("il registro dei vault", entries),
+                inner: Arc::new(RegistryInner {
+                    path: Some(path.to_owned()),
+                    readable: warning.is_none(),
+                    entries: Custody::new("il registro dei vault", entries),
+                    closed: AtomicBool::new(false),
+                }),
             },
             warning,
         )
@@ -154,19 +175,51 @@ impl VaultRegistry {
     /// Un registro che non tocca il disco.
     pub fn in_memory() -> Self {
         VaultRegistry {
-            path: None,
-            readable: true,
-            entries: Custody::empty("il registro dei vault"),
+            inner: Arc::new(RegistryInner {
+                path: None,
+                readable: true,
+                entries: Custody::empty("il registro dei vault"),
+                closed: AtomicBool::new(false),
+            }),
         }
     }
 
+    /// Crea un handle condivisibile del servizio posseduto dall'host.
+    pub fn handle(&self) -> VaultRegistryHandle {
+        VaultRegistryHandle {
+            inner: Arc::clone(&self.inner),
+        }
+    }
+
+    /// Chiude esplicitamente il servizio. Gli handle già clonati restano sicuri
+    /// da distruggere, ma dopo questo punto non accettano nuove mutazioni.
+    pub fn shutdown(&self) {
+        self.inner.closed.store(true, Ordering::Release);
+    }
+
+    /// Indica se l'owner ha già chiuso il servizio.
+    pub fn is_shutdown(&self) -> bool {
+        self.inner.closed.load(Ordering::Acquire)
+    }
+}
+
+impl Drop for VaultRegistry {
+    fn drop(&mut self) {
+        self.shutdown();
+    }
+}
+
+impl RegistryInner {
     /// I vault conosciuti: prima i preferiti, poi i recenti, ognuno dal più
     /// recente. L'ordine è **del registro** e non di chi disegna: due elenchi
     /// ordinati in due posti sarebbero due idee di cosa vuol dire "recente".
-    pub fn list(&self) -> Vec<VaultEntry> {
+    fn list(&self) -> Vec<VaultEntry> {
         // Nessun canale d'errore in questa firma (decisione 0120): un registro
         // avvelenato risponde «non ne conosco», e la porta ha già scritto la
         // riga che dice perché. È un elenco di comodità, non un dato del vault.
+        if self.closed.load(Ordering::Acquire) {
+            return Vec::new();
+        }
         let Ok(guard) = self.entries.read() else {
             return Vec::new();
         };
@@ -188,7 +241,10 @@ impl VaultRegistry {
     /// il dialogo di scelta, questa ordina solo per `last_opened` (a parità per
     /// `root`, come là): la domanda è «quale è stato usato per ultimo», e un
     /// appunto non è un uso.
-    pub fn in_recency_order(&self) -> Vec<VaultEntry> {
+    fn in_recency_order(&self) -> Vec<VaultEntry> {
+        if self.closed.load(Ordering::Acquire) {
+            return Vec::new();
+        }
         let Ok(guard) = self.entries.read() else {
             return Vec::new();
         };
@@ -205,7 +261,10 @@ impl VaultRegistry {
     /// La voce c'è anche se la cartella non esiste più: chi la guarda —
     /// [`Host::ultimo_vault`](crate::Host::ultimo_vault) — scorre i candidati e
     /// salta chi non è più sul disco.
-    pub fn last_opened(&self) -> Option<VaultEntry> {
+    fn last_opened(&self) -> Option<VaultEntry> {
+        if self.closed.load(Ordering::Acquire) {
+            return None;
+        }
         let Ok(entries) = self.entries.read() else {
             return None;
         };
@@ -228,18 +287,21 @@ impl VaultRegistry {
     /// La domanda è deliberatamente letterale e non «sono la stessa cartella»:
     /// per rispondere a quella servirebbe il disco, cioè la cosa che qui non
     /// c'è.
-    pub fn knows(&self, root: &Utf8Path) -> bool {
+    fn knows(&self, root: &Utf8Path) -> bool {
+        if self.closed.load(Ordering::Acquire) {
+            return false;
+        }
         self.entries
             .read()
             .is_ok_and(|entries| entries.iter().any(|and| and.root == root.as_str()))
     }
 
     /// Un vault è stato aperto: entra nell'elenco, o risale in cima.
-    pub fn notes_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
+    fn notes_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
         self.update(root, |entry| entry.last_opened = now)
     }
 
-    pub fn set_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
+    fn set_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
         self.update(root, |entry| entry.favorite = favorite)
     }
 
@@ -247,7 +309,10 @@ impl VaultRegistry {
     /// Vuoto per un vault mai visto, e anche per uno visto mille volte che non
     /// ne ha mai portata nessuna: sono lo stesso caso, ed è giusto — in
     /// entrambi non c'è niente che qualcuno debba adottare.
-    pub fn seen_keys(&self, root: &Utf8Path) -> BTreeMap<String, String> {
+    fn seen_keys(&self, root: &Utf8Path) -> BTreeMap<String, String> {
+        if self.closed.load(Ordering::Acquire) {
+            return BTreeMap::new();
+        }
         let Ok(entries) = self.entries.read() else {
             return BTreeMap::new();
         };
@@ -264,7 +329,7 @@ impl VaultRegistry {
     /// conta: una scorciatoia tolta dal file del vault deve uscire anche da qui,
     /// o il giorno che qualcuno ne rimette una uguale la troverebbe già
     /// approvata da una decisione presa su un altro valore.
-    pub fn notes_keys_seen(
+    fn notes_keys_seen(
         &self,
         root: &Utf8Path,
         keys: BTreeMap<String, String>,
@@ -289,7 +354,7 @@ impl VaultRegistry {
     /// rimanda l'icona che ha letto. Il verso opposto — due parametri che
     /// dicono «lascia com'era» — vorrebbe un `Option<Option<String>>` per
     /// l'icona, cioè tre stati per rispondere a una domanda che ne ha due.
-    pub fn set_look(
+    fn set_look(
         &self,
         root: &Utf8Path,
         icon: Option<String>,
@@ -315,7 +380,7 @@ impl VaultRegistry {
     ///
     /// Chi passa una forma sola non paga niente: `retain` guarda una stringa in
     /// più per voce.
-    pub fn forget(&self, forms: &[Utf8PathBuf]) -> Result<(), PluginError> {
+    fn forget(&self, forms: &[Utf8PathBuf]) -> Result<(), PluginError> {
         self.mutate(|next| next.retain(|and| !forms.iter().any(|f| f.as_str() == and.root)))
     }
 
@@ -385,7 +450,17 @@ impl VaultRegistry {
     /// [0066](../../../docs/decisions/0195-versioni-indipendenti.md)),
     /// e il tetto si applica dopo la fusione: se l'altra installazione ha
     /// aperto dei vault, quelli sono nell'elenco e il tetto li conta.
+    fn ensure_open(&self) -> Result<(), PluginError> {
+        if self.closed.load(Ordering::Acquire) {
+            return Err(PluginError::Cancelled(
+                "il registro dei vault è stato chiuso".into(),
+            ));
+        }
+        Ok(())
+    }
+
     fn mutate(&self, f: impl FnOnce(&mut Vec<VaultEntry>)) -> Result<(), PluginError> {
+        self.ensure_open()?;
         let mut entries = self.entries.write()?;
         let Some(path) = &self.path else {
             f(&mut entries);
@@ -431,6 +506,72 @@ impl VaultRegistry {
     }
 }
 
+impl VaultRegistryHandle {
+    /// I vault conosciuti, ordinati per la presentazione all'utente.
+    pub fn list(&self) -> Vec<VaultEntry> {
+        self.inner.list()
+    }
+
+    /// I vault conosciuti in ordine di recenza, senza precedenza ai preferiti.
+    pub fn in_recency_order(&self) -> Vec<VaultEntry> {
+        self.inner.in_recency_order()
+    }
+
+    /// L'ultimo vault aperto, anche se la cartella non esiste più.
+    pub fn last_opened(&self) -> Option<VaultEntry> {
+        self.inner.last_opened()
+    }
+
+    /// Indica se il registro conosce già questa radice nella forma data.
+    pub fn knows(&self, root: &Utf8Path) -> bool {
+        self.inner.knows(root)
+    }
+
+    /// Registra un'apertura.
+    pub fn notes_opened(&self, root: &Utf8Path, now: u64) -> Result<(), PluginError> {
+        self.inner.notes_opened(root, now)
+    }
+
+    /// Appunta o rimuove un vault dai preferiti.
+    pub fn set_favorite(&self, root: &Utf8Path, favorite: bool) -> Result<(), PluginError> {
+        self.inner.set_favorite(root, favorite)
+    }
+
+    /// Restituisce le scorciatoie già viste per una radice.
+    pub fn seen_keys(&self, root: &Utf8Path) -> BTreeMap<String, String> {
+        self.inner.seen_keys(root)
+    }
+
+    /// Sostituisce le scorciatoie già viste per una radice.
+    pub fn notes_keys_seen(
+        &self,
+        root: &Utf8Path,
+        keys: BTreeMap<String, String>,
+    ) -> Result<(), PluginError> {
+        self.inner.notes_keys_seen(root, keys)
+    }
+
+    /// Sostituisce icona e nome visualizzati per una radice.
+    pub fn set_look(
+        &self,
+        root: &Utf8Path,
+        icon: Option<String>,
+        name: String,
+    ) -> Result<(), PluginError> {
+        self.inner.set_look(root, icon, name)
+    }
+
+    /// Dimentica le forme conosciute di una radice.
+    pub fn forget(&self, forms: &[Utf8PathBuf]) -> Result<(), PluginError> {
+        self.inner.forget(forms)
+    }
+
+    /// Indica se l'owner ha chiuso il servizio.
+    pub fn is_shutdown(&self) -> bool {
+        self.inner.closed.load(Ordering::Acquire)
+    }
+}
+
 /// L'elenco com'è sul disco. **Assente = nessun vault conosciuto**, che è ciò
 /// che ha una installazione nuova e non un errore.
 fn load(path: &Utf8Path) -> Result<Vec<VaultEntry>, String> {
@@ -463,7 +604,8 @@ mod tests {
 
     #[test]
     fn a_vault_reopened_goes_back_in_top_without_duplicates() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/a"), 100).unwrap();
         reg.notes_opened(Utf8Path::new("/b"), 200).unwrap();
         reg.notes_opened(Utf8Path::new("/a"), 300).unwrap();
@@ -474,7 +616,8 @@ mod tests {
 
     #[test]
     fn last_opened_ignores_favorites_and_breaks_ties_by_root() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/z"), 300).unwrap();
         reg.notes_opened(Utf8Path::new("/a"), 300).unwrap();
         reg.notes_opened(Utf8Path::new("/favorite"), 1).unwrap();
@@ -489,7 +632,8 @@ mod tests {
 
     #[test]
     fn the_favorites_are_in_top_and_not_expire() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/vecchio"), 1).unwrap();
         reg.set_favorite(Utf8Path::new("/vecchio"), true).unwrap();
         for the in 0..(RECENT + 5) {
@@ -522,7 +666,8 @@ mod tests {
     /// l'ultima volta un anno fa.
     #[test]
     fn a_entry_born_from_a_gesture_not_and_already_the_more_old() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         for the in 0..RECENT {
             reg.notes_opened(Utf8Path::new(&format!("/v{the}")), 100 + the as u64)
                 .unwrap();
@@ -561,7 +706,8 @@ mod tests {
 
     #[test]
     fn forget_removes_from_the_list_and_enough() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
         reg.forget(&[Utf8PathBuf::from("/a")]).unwrap();
         assert!(reg.list().is_empty());
@@ -572,7 +718,8 @@ mod tests {
     /// scritta, e nessuna delle due deve poter mancare il bersaglio.
     #[test]
     fn forget_takes_the_root_in_every_form_in_which_and_written() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/private/a"), 1).unwrap();
         reg.notes_opened(Utf8Path::new("/b"), 2).unwrap();
         reg.forget(&[Utf8PathBuf::from("/a"), Utf8PathBuf::from("/private/a")])
@@ -585,13 +732,14 @@ mod tests {
     fn the_record_survives_a_a_round_on_disk() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
-        let (reg, warning) = VaultRegistry::open(&path);
-        assert!(warning.is_none(), "un file che non c'è non è un errore");
+        let (owner, _warning) = VaultRegistry::open(&path);
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/a"), 42).unwrap();
         reg.set_look(Utf8Path::new("/a"), Some("📓".into()), "Diario".into())
             .unwrap();
 
-        let (reopened, warning) = VaultRegistry::open(&path);
+        let (reopened_owner, warning) = VaultRegistry::open(&path);
+        let reopened = reopened_owner.handle();
         assert!(warning.is_none());
         let list = reopened.list();
         assert_eq!(list.len(), 1);
@@ -614,14 +762,17 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
 
-        let (before, _) = VaultRegistry::open(&path);
-        let (second, _) = VaultRegistry::open(&path);
+        let (before_owner, _) = VaultRegistry::open(&path);
+        let before = before_owner.handle();
+        let (second_owner, _) = VaultRegistry::open(&path);
+        let second = second_owner.handle();
 
         before.notes_opened(Utf8Path::new("/diario"), 1).unwrap();
         before.set_favorite(Utf8Path::new("/diario"), true).unwrap();
         second.notes_opened(Utf8Path::new("/lavoro"), 2).unwrap();
 
-        let (third, warning) = VaultRegistry::open(&path);
+        let (third_owner, warning) = VaultRegistry::open(&path);
+        let third = third_owner.handle();
         assert!(warning.is_none(), "{warning:?}");
         let roots: Vec<String> = third.list().into_iter().map(|and| and.root).collect();
         assert_eq!(roots, vec!["/diario".to_string(), "/lavoro".to_string()]);
@@ -652,8 +803,10 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
 
-        let (before, _) = VaultRegistry::open(&path);
-        let (second, _) = VaultRegistry::open(&path);
+        let (before_owner, _) = VaultRegistry::open(&path);
+        let before = before_owner.handle();
+        let (second_owner, _) = VaultRegistry::open(&path);
+        let second = second_owner.handle();
 
         let seen =
             |key: &str, command: &str| BTreeMap::from([(key.to_string(), command.to_string())]);
@@ -664,7 +817,8 @@ mod tests {
             .notes_keys_seen(Utf8Path::new("/lavoro"), seen("mod+j", "shell.switcher"))
             .unwrap();
 
-        let (third, warning) = VaultRegistry::open(&path);
+        let (owner, warning) = VaultRegistry::open(&path);
+        let third = owner.handle();
         assert!(warning.is_none(), "{warning:?}");
         let mut seen: Vec<(String, Vec<String>)> = third
             .list()
@@ -698,7 +852,8 @@ mod tests {
     /// «lasciarlo com'era».
     #[test]
     fn remove_the_name_selected_returns_to_the_name_of_the_folder() {
-        let reg = VaultRegistry::in_memory();
+        let owner = VaultRegistry::in_memory();
+        let reg = owner.handle();
         reg.notes_opened(Utf8Path::new("/a"), 1).unwrap();
         reg.set_look(Utf8Path::new("/a"), Some("📓".into()), "Diario".into())
             .unwrap();
@@ -716,7 +871,8 @@ mod tests {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
         std::fs::write(&path, "{ questo non è json").unwrap();
-        let (reg, warning) = VaultRegistry::open(&path);
+        let (owner, warning) = VaultRegistry::open(&path);
+        let reg = owner.handle();
         assert!(warning.is_some(), "e lo dice");
         assert!(reg.list().is_empty());
     }
@@ -731,7 +887,8 @@ mod tests {
         let path = Utf8PathBuf::from_path_buf(dir.path().join("vaults.json")).unwrap();
         let broken = "{ questo non è json";
         std::fs::write(&path, broken).unwrap();
-        let (reg, _) = VaultRegistry::open(&path);
+        let (owner, _) = VaultRegistry::open(&path);
+        let reg = owner.handle();
 
         let and = reg
             .notes_opened(Utf8Path::new("/vault"), 1)
@@ -740,7 +897,30 @@ mod tests {
             matches!(and, PluginError::Io(_)),
             "un registro che non si è letto è il mondo, non un bug: {and}"
         );
+
         assert!(and.to_string().contains("non lo sovrascrive"), "{and}");
         assert_eq!(std::fs::read_to_string(&path).unwrap(), broken);
+    }
+
+    #[test]
+    fn shutdown_stops_new_handle_mutations_without_detaching_the_owner() {
+        let owner = VaultRegistry::in_memory();
+        let handle = owner.handle();
+        handle
+            .notes_opened(Utf8Path::new("/before"), 1)
+            .expect("the live service accepts a mutation");
+
+        owner.shutdown();
+
+        assert!(owner.is_shutdown());
+        assert!(handle.is_shutdown());
+        assert!(
+            handle.list().is_empty(),
+            "a closed handle exposes no stale data"
+        );
+        assert!(matches!(
+            handle.notes_opened(Utf8Path::new("/after"), 2),
+            Err(PluginError::Cancelled(_))
+        ));
     }
 }

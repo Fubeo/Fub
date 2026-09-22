@@ -14,8 +14,8 @@ use std::collections::HashMap;
 
 use fub_abi::grid::{
     validate_grid_source, GridApplyRequest, GridCell, GridCellKey, GridCellStyle, GridCellValue,
-    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation,
-    GridRow, GridSession as AbiGridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
+    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridSession as AbiGridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow,
     GridWindowRequest as AbiGridWindowRequest,
 };
 use fub_abi::{PluginError, Revision};
@@ -98,15 +98,15 @@ impl SheetGridProvider {
     }
 
     fn instance(&self, instance: &str) -> Result<&SheetSession, PluginError> {
-        self.instances.get(instance).ok_or_else(|| {
-            PluginError::NotFound(format!("grid instance `{instance}`").into())
-        })
+        self.instances
+            .get(instance)
+            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
     }
 
     fn instance_mut(&mut self, instance: &str) -> Result<&mut SheetSession, PluginError> {
-        self.instances.get_mut(instance).ok_or_else(|| {
-            PluginError::NotFound(format!("grid instance `{instance}`").into())
-        })
+        self.instances
+            .get_mut(instance)
+            .ok_or_else(|| PluginError::NotFound(format!("grid instance `{instance}`").into()))
     }
 }
 
@@ -327,9 +327,9 @@ fn grid_commit(commit: SheetCommit) -> Result<GridCommit, PluginError> {
     };
     let invalidation = match commit.invalidation {
         SheetInvalidation::All => GridInvalidation::All,
-        SheetInvalidation::Cells(cells) => GridInvalidation::Cells(
-            cells.into_iter().map(|cell| grid_key(&cell)).collect(),
-        ),
+        SheetInvalidation::Cells(cells) => {
+            GridInvalidation::Cells(cells.into_iter().map(|cell| grid_key(&cell)).collect())
+        }
     };
     Ok(GridCommit {
         revision: commit.revision,

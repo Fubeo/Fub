@@ -6,25 +6,61 @@
 .search-input {
   width: 100%;
   box-sizing: border-box;
+  min-height: max(var(--space-9, 32px), 28px);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--bg-input);
   color: inherit;
   font: inherit;
+  font-size: var(--text-base);
 }
 
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
 .search-results li {
-  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: max(var(--space-9, 32px), 28px);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
-.search-results li:hover {
+.search-results li:hover,
+.search-results li:focus-within {
   background: var(--bg-hover);
+}
+.search-result {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 .hit-title {
   display: block;
+  font-size: var(--text-base);
   font-weight: var(--weight-medium);
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Il percorso sotto il titolo: secondario per ruolo, senza un hook suo —
+   la voce che lo porta è il secondo `span` della riga, quello che non è né
+   titolo né snippet. */
+.search-result > span:not(.hit-title):not(.hit-snippet) {
+  display: block;
+  font-size: var(--text-sm);
+  color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -45,7 +81,7 @@
   border-left: 2px solid var(--accent);
 }
 .hit-create .hit-snippet {
-  color: var(--accent);
+  color: var(--accent-soft);
 }
 .hit-snippet {
   display: block;

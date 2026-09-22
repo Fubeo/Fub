@@ -24,11 +24,6 @@
 //! (`tests/ts_mirror_app.rs`), che scrive la sua fixture accanto a questa:
 //! questo crate non può dipendere da `fub-app`.
 
-use fub_abi::grid::{
-    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue,
-    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridRow,
-    GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow, GridWindowRequest,
-};
 use fub_abi::command::{
     Choice, CommandEffect, CommandOutcome, CommandPlan, CommandReach, CommandScope, CommandSpec,
     Failure, ParamKind, ParamSpec, Partial, PlannedEdit, Undo, UndoStep,
@@ -40,6 +35,11 @@ use fub_abi::event::{
     Actor, BatchId, DocChange, Event, EventKind, EventMask, Notice, Origin, Severity, Subject,
 };
 use fub_abi::gate::Gate;
+use fub_abi::grid::{
+    GridApplyRequest, GridCell, GridCellKey, GridCellPatch, GridCellStyle, GridCellValue,
+    GridColumn, GridCommit, GridFormulaError, GridHorizontalAlign, GridInvalidation, GridRow,
+    GridSession, GridSheet, GridSourceEdit, GridSurfaceSpec, GridWindow, GridWindowRequest,
+};
 use fub_abi::locale::{HourCycle, Locale, Weekday};
 use fub_abi::model::{DocId, LinkTarget, Span};
 use fub_abi::query::{QueryClause, QueryExpr, QueryLiteral, QueryPredicate, TextQuery};

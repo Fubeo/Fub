@@ -17,10 +17,12 @@
    Si chiamava `.row` sotto `#files-panel`, cioè aveva bisogno dell'id per non
    collidere con `.pane-split.row`, dove `row` vuol dire una direzione. */
 .tree-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-4);
+  min-height: max(var(--space-9, 32px), 28px);
+  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-5);
   border-radius: var(--radius-sm);
   cursor: pointer;
   white-space: nowrap;
@@ -36,8 +38,19 @@
    corrente», che in una lista piatta si dice `aria-current`. */
 [role="treeitem"][aria-selected="true"] > .tree-row,
 .tree-row[aria-current="true"] {
+  background: var(--bg-active);
+  color: var(--text);
+}
+[role="treeitem"][aria-selected="true"] > .tree-row::before,
+.tree-row[aria-current="true"]::before {
+  content: "";
+  position: absolute;
+  left: var(--space-2);
+  top: var(--space-2);
+  bottom: var(--space-2);
+  width: 3px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
-  color: var(--accent-contrast);
 }
 .row-name {
   flex: 1;
@@ -58,22 +71,29 @@
 }
 .chevron {
   flex: none;
-  width: 12px;
+  width: var(--space-7);
+  height: var(--space-7);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: var(--text-xs);
 }
 .chevron:hover {
-  color: var(--accent-soft);
+  color: var(--text);
+  background: var(--overlay-hover);
 }
 
 /* Bersagli del drag & drop: riga d'inserimento sopra/sotto, o cartella accesa. */
 .tree-row.drop-before {
-  box-shadow: inset 0 2px 0 var(--accent-soft);
+  box-shadow: inset 0 2px 0 var(--accent);
 }
 .tree-row.drop-after {
-  box-shadow: inset 0 -2px 0 var(--accent-soft);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .drop-into {
-  outline: 1px solid var(--accent-soft);
+  outline: 2px solid var(--accent);
   border-radius: var(--radius-sm);
 }

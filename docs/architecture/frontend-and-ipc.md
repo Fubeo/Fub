@@ -87,6 +87,10 @@ sequenceDiagram
 
 I renderer custom sono namespaced e posseduti da un bundle. Lo smontaggio
 rimuove renderer, listener e stato.
+Il renderer del grafo si registra in modo sincrono, ma carica il motore
+soltanto quando monta una superficie. Uno smontaggio durante il caricamento
+impedisce il mount tardivo; canvas, pannello fisico e sottoscrizioni restano
+posseduti dalla stessa superficie.
 
 ## Stato della shell
 
@@ -113,6 +117,17 @@ Il core possiede:
 La `DocumentSession` è l'autorità della shell per il testo in memoria e per la
 scrittura del documento aperto; il core resta l'autorità del file persistente e
 della revisione verificata dalla scrittura.
+
+Le linguette sono pulsanti nativi, posseduti dal `tablist` tramite `aria-owns`;
+il pulsante di chiusura è un controllo fratello, non un elemento interattivo
+annidato. Frecce, Home ed End spostano il focus, Invio e Spazio attivano la
+linguetta, Delete la chiude. Gli aggiornamenti di stato preservano il nodo a
+fuoco; una chiusura trasferisce il focus a una linguetta vicina o al menu del
+riquadro rimasto vuoto.
+
+I divisori espongono ruolo, limiti e dimensione corrente. Tastiera e
+trascinamento modificano la stessa misura in pixel CSS; lo zoom della shell
+non altera il rapporto fra movimento del puntatore e larghezza risultante.
 
 ## Superfici di editing
 
@@ -165,9 +180,11 @@ di CodeMirror.
 
 Una modifica locale diventa un evento della history nativa della superficie.
 `TextEngine.syncDoc()` costruisce la transazione dal risultato effettivo di
-`EditorState.update()`, dopo i filtri del profilo, con
-`Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`. Il cambio
-esterno viene così applicato e mappato sui due rami senza aggiungere un evento
+`EditorState.update()`, con `filter: false`,
+`Transaction.addToHistory.of(false)` e `Transaction.remote.of(true)`. I filtri
+del profilo regolano l'input locale e non possono riscrivere il testo
+autorevole della sessione. Prima del dispatch il motore verifica testo e
+annotazioni. Il cambio esterno aggiorna i due rami senza aggiungere un evento
 locale.
 
 Prima di inviare un cambio esterno, `HistoryFootprints` conserva al massimo 512
