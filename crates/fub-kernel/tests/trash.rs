@@ -893,6 +893,58 @@ fn emptying_the_trash_says_how_much_it_destroyed() {
     assert!(!fx.exists(".trash/One.txt"));
 }
 
+#[test]
+fn storage_locks_stay_out_of_trash_without_hiding_foreign_files() {
+    let fx = Fixture::new();
+    fx.put("Note.txt", "body");
+    let mut ws = fx.workspace();
+    let trashed = ws.delete_document(&DocId::new("Note.txt")).unwrap();
+    let path = fx.root.join(trashed.as_str());
+    // Crea il vero compagno persistente del protocollo anche su Unix, dove
+    // rename_no_replace non ha bisogno di acquisire il lock della sorgente.
+    FsStorage.update(&path, &mut |_| Ok(None)).unwrap();
+    let lock = path.with_file_name(format!(".{}.lock", path.file_name().unwrap()));
+    fx.put(".trash/Cargo.lock", "foreign lockfile");
+    fx.put(".trash/.folder.lock/foreign.bin", "foreign directory");
+
+    let mut listed: Vec<_> = ws
+        .list_trash()
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.id.to_string())
+        .collect();
+    listed.sort();
+    assert_eq!(
+        listed,
+        [
+            ".trash/.folder.lock/foreign.bin",
+            ".trash/Cargo.lock",
+            trashed.as_str()
+        ]
+    );
+
+    restore_document(&mut ws, &trashed, None).unwrap();
+    assert_eq!(fx.read("Note.txt"), "body");
+    let mut remaining: Vec<_> = ws
+        .list_trash()
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.id.to_string())
+        .collect();
+    remaining.sort();
+    assert_eq!(
+        remaining,
+        [".trash/.folder.lock/foreign.bin", ".trash/Cargo.lock"]
+    );
+    assert_eq!(ws.empty_trash().unwrap(), 0);
+    assert!(lock.is_file(), "il lock stabile non viene rimosso");
+    assert_eq!(fx.read(".trash/Cargo.lock"), "foreign lockfile");
+    assert_eq!(
+        fx.read(".trash/.folder.lock/foreign.bin"),
+        "foreign directory"
+    );
+}
+
 /// `trash` rinomina prima il file e scrive il sidecar dopo. Questa banca prova
 /// ferma un'altra finestra esattamente fra le due operazioni: la vecchia
 /// `rename` dell'intero cestino la includeva e la distruggeva.

@@ -1161,11 +1161,13 @@ impl Vault {
 
     /// Il contenuto del cestino, dal più recente al più vecchio.
     ///
-    /// Elenca **tutti** i file, anche quelli che nessun provider saprebbe
+    /// Elenca **tutti** i file utente, anche quelli che nessun provider saprebbe
     /// riaprire e anche quelli dentro sottocartelle (Obsidian cestina cartelle
     /// intere): nascondere righe da una lista che l'utente sta per svuotare
     /// sarebbe il modo peggiore di essere discreti. Un ripristino impossibile
     /// lo dice quando glielo si chiede.
+    /// I compagni di lock dello storage non sono voci utente e restano sul
+    /// filesystem per conservare l'identità del protocollo.
     pub fn list_trash(&self) -> Result<Vec<TrashEntry>> {
         let dir = self.root.join(TRASH_DIR);
         if !self.storage.exists(&dir) {
@@ -1192,6 +1194,9 @@ impl Vault {
             let path = entry.path;
             if entry.stat.is_dir() {
                 self.walk_trash(&path, out)?;
+                continue;
+            }
+            if path.file_name().is_some_and(crate::storage::is_write_lock) {
                 continue;
             }
             let id = self.doc_id_for_path(&path)?;
@@ -1316,6 +1321,13 @@ impl Vault {
         for entry in entries {
             if entry.stat.is_dir() {
                 self.trash_entries_with_sidecars(&entry.path, out)?;
+                continue;
+            }
+            if entry
+                .path
+                .file_name()
+                .is_some_and(crate::storage::is_write_lock)
+            {
                 continue;
             }
             let id = self.doc_id_for_path(&entry.path)?;

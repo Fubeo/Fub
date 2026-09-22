@@ -84,6 +84,12 @@ riconcilia i vault aperti. La decisione persistente è nell'
 Un file sconosciuto esiste anche se nessun provider lo riconosce. Non viene
 eliminato né escluso da un backup senza una scelta esplicita.
 
+I file `.<nome>.lock` sono compagni persistenti del protocollo di coordinamento
+dello storage, anche quando si trovano nella radice o nel cestino. Non sono
+contenuto utente né voci da svuotare e non vengono rimossi al rilascio del lock.
+La forma riservata riguarda i file: `Cargo.lock` e i contenuti di directory con
+nomi simili restano dati dell'utente.
+
 ## Stato del vault
 
 | Percorso | Classe | Schema | Proprietario |

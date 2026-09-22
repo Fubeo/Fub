@@ -128,8 +128,10 @@ jobs:
           cargo check -p fub-format-sheet --target wasm32-wasip2 --all-targets --locked
       - name: CAS del backend reale, con diagnostica isolata
         run: cargo test -p fub-kernel --test rooted_cas -- --nocapture
-      - name: regressione unitaria della CAS cooperativa
-        run: cargo test -p fub-kernel --lib storage::rooted::tests::cooperative_cas_has_exactly_one_winner -- --exact --nocapture
+      - name: regressioni unitarie dei backend storage
+        run: "cargo test -p fub-kernel --lib storage:: -- --nocapture"
+      - name: cestino e ripristino attraverso il contratto
+        run: cargo test -p fub-kernel --test trash --test structural_host -- --nocapture
       - run: cargo test --workspace --no-fail-fast
 
   docs:

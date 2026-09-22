@@ -807,6 +807,24 @@ mod tests {
     }
 
     #[test]
+    fn no_replace_moves_unicode_names_between_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = Utf8Path::from_path(temp.path()).unwrap();
+        let storage = RootedFsStorage::open(root).unwrap();
+        let from = root.join("origine/source.txt");
+        let to = root.join("destinazione/caffè-𐐀.txt");
+        storage.write(&from, b"source").unwrap();
+
+        storage.rename_no_replace(&from, &to).unwrap();
+
+        assert_eq!(storage.read(&to).unwrap(), b"source");
+        assert!(!storage.exists(&from));
+    }
+
+    // Su Windows cap_std nega FILE_SHARE_DELETE alle directory aperte:
+    // la sostituzione del namespace è già impedita dall'handle del mount.
+    #[cfg(unix)]
+    #[test]
     fn no_replace_keeps_the_root_capability_and_unicode_destination() {
         let temp = tempfile::tempdir().unwrap();
         let parent = Utf8Path::from_path(temp.path()).unwrap();

@@ -80,6 +80,8 @@ la sezione seguente raccoglie le modifiche per la prima versione.
   nel percorso di scrittura esterno al lock del workspace;
 - corretti su Windows gli spostamenti senza sovrascrittura, conservando
   l'ancoraggio alla directory aperta e un solo successo fra writer concorrenti;
+- esclusi dal censimento del cestino i lock persistenti dello storage,
+  preservandoli sul disco e mantenendo visibili i file utente sconosciuti;
 - isolati i temi illeggibili senza nascondere gli altri temi installati.
 
 ### In corso

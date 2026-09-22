@@ -87,6 +87,11 @@ watcher conserva l'attore del proprio lotto e drena una volta alla fine. Il
 cestino elimina anche la bozza, registra la mossa nel journal e restituisce il
 nuovo `DocId` della voce cestinata.
 
+I compagni persistenti `.<nome>.lock`, riconosciuti dal protocollo dello storage,
+non sono voci cestinate: il catalogo e lo svuotamento li escludono senza
+rimuoverli. File utente come `Cargo.lock` e contenuti di directory con nomi
+simili restano invece visibili e conservano le normali regole del cestino.
+
 ### CAS cooperativa
 
 `RootedFsStorage` coordina i writer Fub tramite un file stabile
@@ -169,8 +174,10 @@ chiamante.
 Su Windows il backend ancorato usa `NtSetInformationFile` con il directory
 handle e un nome UTF-16, senza riaprire il path ambientale della root. Il lock
 sibling della sorgente precede la sua apertura: due writer Fub concorrenti non
-possono dichiarare entrambi lo spostamento, anche verso destinazioni diverse. Il rifiuto di una
-destinazione occupata resta atomico nella syscall.
+possono dichiarare entrambi lo spostamento, anche verso destinazioni diverse.
+La syscall rifiuta atomicamente una destinazione occupata. Inoltre `cap_std`
+nega la condivisione della cancellazione sulle directory Windows aperte: la
+root non può essere rinominata o cancellata durante il mount.
 
 ## Sidecar
 
