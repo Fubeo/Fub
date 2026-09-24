@@ -97,6 +97,7 @@ impl ViewProvider for OutlineView {
                 Text::key(FOOTNOTES_TITLE),
                 ViewSurface::RightSidebar,
             )
+            .with_icon("footnote")
             .ordered(2),
         ]
     }

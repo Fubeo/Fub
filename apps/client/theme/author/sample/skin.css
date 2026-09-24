@@ -799,7 +799,7 @@ progress::-moz-progress-bar {
   white-space: nowrap;
 }
 .pane-toolbar > .muted:first-child {
-  flex: 1;
+  flex: 0 1 auto;
 }
 .pane-toolbar > button {
   flex-shrink: 0;
@@ -2122,11 +2122,12 @@ progress::-moz-progress-bar {
 /* ── skin/notices.css ───────────────────────────────────────────────────── */
 
 /* --------------------------------------------------------------------------
-   La barra di stato della shell, il centro attività, il centro notifiche (§10.3)
+   Lo stato del documento, il centro attività, il centro notifiche (§10.3)
    --------------------------------------------------------------------------
-   Tre pezzi di una cosa sola: il posto in cui l'utente guarda quando vuole
-   sapere cosa sta succedendo, senza essere interrotto. Il toast interrompe (ed
-   è il solo che lo fa); i due pannelli si aprono da un pulsante e si chiudono. */
+   Il posto in cui l'utente guarda quando vuole sapere cosa sta succedendo,
+   senza essere interrotto. Lo stato del documento sta nella toolbar del
+   riquadro; avvisi e attività si aprono dai loro bottoni nella titlebar e
+   scendono da lì. Il toast interrompe, ed è il solo che lo fa. */
 
 /* Il messaggio che non chiede niente: l'esito di un comando, un lavoro finito,
    un errore che non blocca. Testo semplice, e via da solo — ciò che ha detto
@@ -2134,7 +2135,7 @@ progress::-moz-progress-bar {
 .toast {
   position: fixed;
   right: 16px;
-  bottom: 40px;
+  bottom: 16px;
   z-index: var(--z-toast);
   max-width: 420px;
   padding: var(--space-4) var(--space-6);
@@ -2153,66 +2154,61 @@ progress::-moz-progress-bar {
   border-color: var(--doc-danger);
 }
 
-.statusbar {
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-6);
-  border-top: 1px solid var(--elevation-chrome-border);
-  background: var(--bg-chrome);
+/* Lo stato del documento a fuoco, nella toolbar del riquadro: il salvataggio
+   e le view della superficie di stato, in una riga sommessa. */
+.pane-status {
+  gap: var(--space-5);
   font-size: var(--text-sm);
   color: var(--muted);
 }
 
-/* Lo stato del salvataggio (§20.4). Sta col colore della barra finché non c'è
-   niente da dire: «Salvato» è la parola che si legge il 99% del tempo, e
-   accendere quella vorrebbe dire spegnere l'unica che deve farsi notare. */
-.save-state[data-stato="non_salvato"],
-.save-state[data-stato="in_corso"] {
+/* Lo stato del salvataggio (§20.4). Un pallino e una parola, col colore della
+   toolbar finché non c'è niente da dire: «Salvato» è la parola che si legge il
+   99% del tempo, e accendere quella vorrebbe dire spegnere l'unica che deve
+   farsi notare. */
+.save-state:not(:empty)::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+.save-state[data-state="non_salvato"],
+.save-state[data-state="in_corso"] {
   color: var(--text);
 }
 
-/* L'attesa del secondo tasto di una sequenza (§18.2). Accesa, al contrario di
-   `.save-state`: qui non c'è nessuno stato che si legge il 99% del tempo — o
-   l'app sta aspettando, e allora è l'unica cosa che conta in quella barra, o la
-   riga non c'è proprio. */
-.key-pending {
-  color: var(--text);
-  font-weight: var(--weight-medium);
-}
-
-.save-state[data-stato="fallito"] {
+.save-state[data-state="fallito"],
+.save-state[data-state="conflitto"] {
   color: var(--doc-danger);
   font-weight: var(--weight-medium);
 }
 
-.statusbar button {
-  background: transparent;
-  border: none;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
+/* L'attesa del secondo tasto di una sequenza (§18.2): una pastiglia che
+   galleggia in basso al centro finché l'app aspetta, e sparisce subito dopo. */
+.key-pending {
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
   font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.statusbar button:hover {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-
-.statusbar button.ha-novita,
-.statusbar button.in-corso {
-  color: var(--text);
   font-weight: var(--weight-medium);
 }
 
-/* I due pannelli stanno **affiancati** e non sovrapposti: sono due toggle
-   indipendenti, e chi ne apre uno mentre l'altro è aperto non deve trovarsi un
-   rettangolo sopra l'altro. Il toast tiene l'angolo (`right: 16px`) e per
-   questo non compare mentre gli avvisi sono aperti — sotto ci sarebbe la loro
-   lista. */
+/* I due pannelli scendono dalla titlebar, dove stanno i loro bottoni, e
+   stanno **affiancati** e non sovrapposti: sono due toggle indipendenti, e chi
+   ne apre uno mentre l'altro è aperto non deve trovarsi un rettangolo sopra
+   l'altro. */
 .dock-panel {
   position: fixed;
-  bottom: 40px;
+  top: calc(var(--titlebar-h) + var(--space-2));
   z-index: var(--z-popover);
   width: 340px;
   max-height: 50vh;
@@ -2294,13 +2290,11 @@ progress::-moz-progress-bar {
    Ciò che una view dichiara è dove si attacca e cosa disegna; il tema resta
    interamente qui — un provider sceglie intenti semantici, mai colori. */
 
-/* La barra di stato: ciò che informa senza interrompere. Una striscia, non un
-   pannello: titolo e contenuto sulla stessa riga. */
+/* La superficie di stato: ciò che informa senza interrompere. Sta nella
+   toolbar del riquadro col fuoco, accanto al salvataggio: una riga sommessa,
+   senza titoli — il contenuto (parole, caratteri) si dice da sé. */
 .views-status {
-  gap: var(--space-7);
-  padding: var(--space-2) var(--space-6);
-  border-top: 1px solid var(--border);
-  background: var(--bg-chrome);
+  gap: var(--space-5);
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -2310,13 +2304,10 @@ progress::-moz-progress-bar {
   gap: var(--space-3);
 }
 .views-status .panel-title {
-  margin: 0;
-  font-size: var(--text-xs);
-  text-transform: none;
-  letter-spacing: 0.02em;
+  display: none;
 }
 .views-status .declared-view .ui-stack {
-  gap: var(--space-6);
+  gap: var(--space-5);
 }
 
 /* La ribbon: i pulsanti che aprono qualcosa. La colonna e la larghezza le
@@ -2805,10 +2796,10 @@ progress::-moz-progress-bar {
 /* I tab dell'inspector: la tablist compatta in cima a `#right-pane`
    (la colonna è della struttura). U38: il nome della vista in corso sta nel
    titolo testuale (`.inspector-title`, montato da `ui/views.ts`); le schede
-   mostrano etichetta + icona quando entrano, sola icona quando non entrano.
-   A04: il bersaglio è il bottone, che vale 32px a densità normale e almeno
-   24px ovunque (niente padding che sparisce a bottone vuoto). U42: senza viste
-   il titolo resta e dice lo stato vuoto (stessa voce degli `empty_state`). */
+   sono sempre la sola icona, e vanno a capo invece di scorrere: con dieci
+   view nessuna resta fuori vista. A04: il bersaglio è il bottone, 32px a
+   densità normale e almeno 24px ovunque. U42: senza viste il titolo resta e
+   dice lo stato vuoto (stessa voce degli `empty_state`). */
 .inspector-title {
   display: flex;
   align-items: center;
@@ -2828,12 +2819,12 @@ progress::-moz-progress-bar {
 }
 .inspector-tabs {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2);
-  background: var(--bg);
+  padding: 0 var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--elevation-chrome-border);
   flex-shrink: 0;
-  overflow-x: auto;
 }
 
 .inspector-tab {
@@ -2845,11 +2836,9 @@ progress::-moz-progress-bar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-width: max(var(--space-8, 24px), 24px);
-  min-height: max(var(--space-9, 32px), 28px);
-  font-size: var(--text-sm);
-  white-space: nowrap;
+  width: max(var(--space-9, 32px), 28px);
+  height: max(var(--space-9, 32px), 28px);
+  flex-shrink: 0;
   border-radius: var(--radius-sm);
   transition:
     background var(--duration-fast) var(--ease),
@@ -2866,17 +2855,6 @@ progress::-moz-progress-bar {
   background: var(--bg-active);
 }
 
-/* L'etichetta segue lo spazio: quando la barra è stretta resta la sola icona
-   (nome accessibile + tooltip invariati, da `ui/views.ts`). Niente classi nuove:
-   il selettore legge l'attributo che `views.ts` imposta, e gli hook restano i
-   tre nomi singoli. */
-.inspector-tabs[data-compact="true"] .inspector-tab-label {
-  display: none;
-}
-.inspector-tabs[data-compact="true"] .inspector-tab {
-  padding-left: var(--space-2);
-  padding-right: var(--space-2);
-}
 /* La riga del tema è di primo piano nel gruppo Appearance: un gradino di
  * bordo e sfondo in più, così l'occhio la trova prima delle altre impostazioni
  * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
@@ -2967,6 +2945,38 @@ progress::-moz-progress-bar {
   justify-content: flex-start;
 }
 
+/* Il testo del campo prende lo spazio, l'accordo sta in fondo a destra. */
+.titlebar-btn-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Il contatore di avvisi e lavori: una pastiglia sull'angolo dell'icona. Il
+   numero è decorativo, il nome del bottone lo dice per intero. */
+.titlebar-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 9px;
+  font-weight: var(--weight-bold);
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.titlebar-btn.ha-novita,
+.titlebar-btn.in-corso {
+  color: var(--text);
+}
+
 /* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
    Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`.
    La colonna è della struttura; qui è il respiro e il filetto. */
@@ -3035,6 +3045,7 @@ progress::-moz-progress-bar {
 }
 
 .titlebar-btn--icon {
+  position: relative;
   width: calc(var(--titlebar-h) - var(--space-6));
   padding: 0;
   justify-content: center;
@@ -3159,15 +3170,14 @@ progress::-moz-progress-bar {
 }
 
 .titlebar-shortcut {
-  margin-left: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid transparent;
-  background: var(--bg-panel);
-  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  line-height: 1.4;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  line-height: 1.6;
 }
 
 @media (prefers-reduced-motion: reduce) {

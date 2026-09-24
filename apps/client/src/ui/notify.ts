@@ -43,6 +43,7 @@ import { onEvent } from "../state/kernel";
 import type { Lifetime } from "./lifetime";
 import { focusableElements } from "./a11y";
 import { setTooltip } from "./tooltip";
+import { drawCountButton } from "./icons";
 /// Quanto **tono** ha un avviso. Due e non cinque: chi disegna deve poterli
 /// distinguere a colpo d'occhio, e una scala di severità che nessuno sa dove
 /// tagliare finisce con tutto sullo stesso gradino.
@@ -339,8 +340,8 @@ function redraw(): void {
       unreadCount > 0
         ? notifyText("notices.open_problems", { count: unreadCount })
         : t("notices.title");
-    button.textContent = label;
-    button.setAttribute("aria-label", label);
+    drawCountButton(button, "bell", label, unreadCount);
+    setTooltip(button, label);
     button.classList.toggle("ha-novita", unreadCount > 0);
     button.setAttribute("aria-expanded", String(open));
   }

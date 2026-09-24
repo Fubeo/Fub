@@ -437,6 +437,31 @@ function write(a: Chord): string {
   return [...mods, a.key.length === 1 ? a.key.toUpperCase() : a.key].join("-");
 }
 
+/// Una scorciatoia **come si preme**: `Mod-Shift-f` diventa `Ctrl+Shift+F`, o
+/// `⌘⇧F` su macOS. È la forma da mostrare a chi legge, mai da confrontare; con
+/// più alternative si mostra la prima, e una scorciatoia che non si sa
+/// leggere resta com'è scritta invece di sparire.
+export function displayBinding(
+  binding: string | null | undefined,
+  platform: KeyboardPlatform = keyboardPlatform(globalThis.navigator?.platform ?? ""),
+): string {
+  const first = splitAlternatives(binding)[0];
+  if (!first) return "";
+  const chords = parseChords(first);
+  if (!chords) return first;
+  const mac = platform === "mac";
+  return chords
+    .map((chord) => {
+      const parts: string[] = [];
+      if (chord.mod) parts.push(mac ? "⌘" : "Ctrl");
+      if (chord.alt) parts.push(mac ? "⌥" : "Alt");
+      if (chord.shift) parts.push(mac ? "⇧" : "Shift");
+      parts.push(chord.key.length === 1 ? chord.key.toUpperCase() : chord.key);
+      return parts.join(mac ? "" : "+");
+    })
+    .join(" ");
+}
+
 /// Questa combinazione è l'accordo scritto?
 ///
 /// Vale per una scorciatoia di **un accordo solo**: una sequenza non corrisponde

@@ -156,6 +156,7 @@ function view(
   surface: ViewSpec["surface"],
   icon: string | null,
   order: number,
+  openByDefault = true,
 ): ViewSpec {
   return {
     id,
@@ -166,16 +167,19 @@ function view(
     params: [],
     icon,
     order,
-    open_by_default: true,
+    open_by_default: openByDefault,
     preferred_size: null,
     closable: false,
   };
 }
 
 const VIEWS: ViewSpec[] = [
-  view("outline", "Struttura", "right_sidebar", "list", 0),
-  view("backlinks", "Backlink", "right_sidebar", "link", 1),
-  view("properties", "Proprietà", "right_sidebar", "tag", 2),
+  view("outline", "Struttura", "right_sidebar", "struttura", 0),
+  view("backlinks", "Collegamenti", "right_sidebar", "backlink", 1),
+  view("properties", "Proprietà", "right_sidebar", "properties", 2),
+  // Nasce chiusa come quella vera: la scheda la deve aprire lo stesso.
+  view("history", "Cronologia", "right_sidebar", "history", 3, false),
+  view("stats", "Statistiche", "status_bar", null, 0),
   view("tags", "Tag", "left_sidebar", "tag", 0),
   view("graph", "Grafo", "main", "graph", 0),
   view("trash", "Cestino", "left_sidebar", "trash", 1),
@@ -630,6 +634,31 @@ const TREES: Record<string, UiNode> = {
       { label: "Collegamenti", value: "6" },
       { label: "Tag", value: "sintassi" },
       { label: "Modificata", value: "19 agosto 2026" },
+    ],
+  },
+  history: {
+    node: "stack",
+    dir: "column",
+    gap: 8,
+    children: [
+      { node: "text", content: "3 versioni" },
+      {
+        node: "list",
+        items: [
+          { node: "list_item", title: "19 agosto 2026, 09:12", subtitle: "412 parole", action: { action: "preview", payload: 3 }, selected: false },
+          { node: "list_item", title: "18 agosto 2026, 17:40", subtitle: "398 parole", action: { action: "preview", payload: 2 }, selected: false },
+          { node: "list_item", title: "12 agosto 2026, 11:05", subtitle: "251 parole", action: { action: "preview", payload: 1 }, selected: false },
+        ],
+      },
+    ],
+  },
+  stats: {
+    node: "stack",
+    dir: "row",
+    gap: 12,
+    children: [
+      { node: "text", content: "412 parole" },
+      { node: "text", content: "2 min di lettura" },
     ],
   },
   tags: {

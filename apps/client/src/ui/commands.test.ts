@@ -9,6 +9,7 @@ import {
   findByChord,
   conflictMessage,
   commandOfKeybindingKey,
+  displayBinding,
   keybindingKey,
   parseChords,
   chordMap,
@@ -560,5 +561,17 @@ describe("alternative keyboard gestures", () => {
     expect(validateKeybinding("Mod-x || ")).toEqual({ valid: false, reason: "empty-alternative" });
     expect(validateKeybinding(Array.from({ length: 9 }, (_, i) => `Mod-${i}`).join(" || ")))
       .toEqual({ valid: false, reason: "too-many" });
+  });
+});
+
+describe("una scorciatoia come si preme", () => {
+  it("si legge coi nomi dei tasti, e su macOS coi simboli", () => {
+    expect(displayBinding("Mod-Shift-f", "other")).toBe("Ctrl+Shift+F");
+    expect(displayBinding("Mod-Shift-f", "mac")).toBe("⌘⇧F");
+    expect(displayBinding("Mod-k d", "other")).toBe("Ctrl+K D");
+    expect(displayBinding("Mod-o || Mod-k o", "other")).toBe("Ctrl+O");
+    expect(displayBinding(null, "other")).toBe("");
+    // Ciò che non si sa leggere resta scritto, non sparisce.
+    expect(displayBinding("Hyper-x", "other")).toBe("Hyper-x");
   });
 });

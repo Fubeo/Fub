@@ -351,7 +351,7 @@ impl ViewProvider for PropertiesView {
                 Text::key(GLOBAL_TITLE),
                 ViewSurface::RightSidebar,
             )
-            .with_icon("properties")
+            .with_icon("vault")
             .ordered(4),
         ]
     }

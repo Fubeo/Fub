@@ -135,8 +135,6 @@ interface Pane {
   /// Vuoto quasi sempre: è la seconda superficie di un riquadro, accanto
   /// all'editor, e come lui c'è anche quando non si vede.
   viewEl: HTMLElement;
-  linksEl: HTMLElement;
-  inlineView: string | null;
   disposeAttachments: (() => void) | null;
   disposeRecorder: (() => void) | null;
   disposeSlides: (() => void) | null;
@@ -166,6 +164,10 @@ let sessionEventsStop: (() => void) | undefined;
 let deps: DocumentDeps;
 let surfaceRegistry: DocumentSurfaceRegistry;
 let theme: Theme | null = null;
+/// Il gruppo dello stato del documento, trovato una volta: quando il riquadro
+/// che lo ospita viene smontato esce dal documento, e `getElementById` non lo
+/// ritroverebbe più.
+let paneStatusEl: HTMLElement | null = null;
 let closeDraining = false;
 
 /// La firma dell'albero disegnato adesso. Ricostruire la struttura del DOM a
@@ -882,10 +884,9 @@ function renderPane(id: string): Pane {
   const conflictEl = document.createElement("div");
   conflictEl.hidden = true;
 
-  const linksEl = document.createElement("section");
-  linksEl.className = "pane-document-links";
-  linksEl.hidden = true;
-  contentEl.append(editorEl, viewEl, linksEl);
+  // I collegamenti entranti e uscenti non stanno sotto il testo: li mostra
+  // la scheda Collegamenti dell'ispettore, che segue il documento a fuoco.
+  contentEl.append(editorEl, viewEl);
   root.append(tabsShell, toolbarEl, conflictEl, contentEl);
   // Toccare un riquadro gli dà il fuoco. `mousedown` e non `click` perché il
   // fuoco deve essere già di questo riquadro quando l'editor riceve l'evento:
@@ -905,13 +906,11 @@ function renderPane(id: string): Pane {
     conflictEl,
     editorEl,
     viewEl,
-    linksEl,
     disposeAttachments: null,
     disposeRecorder: null,
     disposeSlides: null,
     disposePrint: null,
     noteClassGeneration: 0,
-    inlineView: null,
     surface: null,
     shown: null,
     loadGeneration: 0,
@@ -1375,10 +1374,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     await mountViewInPane(tab.view, r.id, r.viewEl);
     return;
   }
-  if (!changed) {
-    if (tab && isMarkdownSurface(r.surface) && !r.inlineView) void mountInlineLinks(r, tab.doc);
-    return;
-  }
+  if (!changed) return;
   if (!tab) {
     return;
   }
@@ -1467,10 +1463,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   // riquadro come superficie, finché non mostra altro.
   attachSurface(r, tab.doc);
   refreshNoteClasses(r, tab.doc);
-  if (isMarkdownSurface(surface)) {
-    mountDocumentAttachments(r, tab.doc);
-    void mountInlineLinks(r, tab.doc);
-  }
+  if (isMarkdownSurface(surface)) mountDocumentAttachments(r, tab.doc);
 }
 
 /// Un montaggio fallito non lascia la tab «mostrata»: senza superficie, la
@@ -1478,19 +1471,6 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
 /// posto. Vale solo per il caricamento ancora corrente.
 function forgetFailedShow(r: Pane, tab: Tab, generation: number): void {
   if (generation === r.loadGeneration && r.shown === tab && !r.surface) r.shown = null;
-}
-
-async function mountInlineLinks(r: Pane, doc: string): Promise<void> {
-  if (!primaryView("document_links")) return;
-  const instance = `${r.id}:inline:${doc}`;
-  r.inlineView = instance;
-  r.linksEl.hidden = false;
-  try {
-    await mountViewInPane("document_links", instance, r.linksEl, { doc });
-  } catch (error) {
-    if (r.inlineView !== instance) return;
-    notify(t("document.links_unavailable", { reason: errorText(error) }), "guasto");
-  }
 }
 
 function showCanvasError(r: Pane, doc: string, error: unknown): void {
@@ -1534,9 +1514,6 @@ function destroySurface(r: Pane): void {
   r.disposeSlides = null;
   r.disposePrint?.();
   r.disposePrint = null;
-  if (r.inlineView) unmountViewFromPane("document_links", r.inlineView);
-  r.inlineView = null;
-  r.linksEl.hidden = true;
   r.surface?.destroy();
   r.surface = null;
   r.editorEl.replaceChildren();
@@ -1601,6 +1578,10 @@ function drawToolbar(r: Pane): void {
   if (!bar.firstElementChild) {
     const crumbs = document.createElement("span");
     crumbs.className = "muted";
+    // Il posto dello stato del documento (salvataggio, statistiche): lo
+    // occupa soltanto il riquadro col fuoco, vedi `hostPaneStatus`.
+    const status = document.createElement("span");
+    status.className = "pane-status-slot";
     const group = document.createElement("span");
     group.className = "segmented";
     group.setAttribute("role", "group");
@@ -1609,11 +1590,13 @@ function drawToolbar(r: Pane): void {
     menu.textContent = "…";
     menu.setAttribute("aria-haspopup", "menu");
     menu.addEventListener("click", (event) => openPaneMenu(r, event));
-    bar.append(crumbs, group, menu);
+    bar.append(crumbs, status, group, menu);
   }
   const crumbs = bar.children[0] as HTMLElement;
-  const group = bar.children[1] as HTMLElement;
-  const menu = bar.children[2] as HTMLElement;
+  const status = bar.children[1] as HTMLElement;
+  const group = bar.children[2] as HTMLElement;
+  const menu = bar.children[3] as HTMLElement;
+  if (r.id === layout.focus) hostPaneStatus(status);
   const tab = activeTab(r.id);
   const path = tab?.k === "doc" ? tab.doc : tab?.k === "view" ? nameTab(tab) : "";
   crumbs.textContent = path;
@@ -1641,6 +1624,17 @@ function drawToolbar(r: Pane): void {
     button.textContent = mode.label();
     button.setAttribute("aria-pressed", String(active?.id === mode.id));
   });
+}
+
+/// Porta lo stato del documento a fuoco — `#pane-status`: il salvataggio e
+/// le view della superficie di stato — nella toolbar del riquadro col fuoco.
+/// È un gruppo solo e si sposta, non si copia: i suoi proprietari
+/// (`drawSave`, `ui/views.ts`) continuano a scrivere sugli stessi nodi.
+function hostPaneStatus(slot: HTMLElement): void {
+  const group = paneStatusEl ??= document.getElementById("pane-status");
+  if (!group) return;
+  if (group.parentElement !== slot) slot.append(group);
+  group.hidden = false;
 }
 
 async function toggleRecorder(r: Pane, doc: string): Promise<void> {
@@ -1978,19 +1972,18 @@ function written(paneId: string, change: EditorChange): void {
 }
 
 
-/// Lo stato del salvataggio **del documento che si sta guardando**, nella barra
-/// di stato.
+/// Lo stato del salvataggio **del documento che si sta guardando**, nella
+/// toolbar del riquadro col fuoco, accanto al suo percorso.
 ///
 /// Lì e non sulla tab, perché la tab ha già il pallino del non salvato e ha
 /// spazio per una parola sola: il pallino dice *quale* nota ha qualcosa da
 /// scrivere, questa riga dice *cosa le è successo*. E lì e non in un pannello,
-/// perché è l'unica superficie della shell che c'è sempre e che non chiede di
-/// essere aperta.
+/// perché è una superficie che c'è sempre e che non chiede di essere aperta.
 ///
 /// Se la shell non ha quell'elemento — un test, un host che monta un pezzo solo
 /// — non succede niente: come per `notify`, il fatto non dipende dal suo disegno.
 function drawSave(): void {
-  const el = document.getElementById("save-state");
+  const el = paneStatusEl?.querySelector<HTMLElement>("#save-state") ?? document.getElementById("save-state");
   if (!el) return;
   const doc = activeDoc();
   const state = doc ? documentSessions.saveState(doc) : null;

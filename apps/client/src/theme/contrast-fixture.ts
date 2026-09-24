@@ -17,7 +17,7 @@ export const PAIRS = [
   ["text", "bg-input", AA, "campi, pastiglie"],
   ["text", "bg-hover", AA, "una riga sotto il puntatore, o selezionata"],
   ["muted", "bg", AA, ".muted, i sottotitoli"],
-  ["muted", "bg-chrome", AA, "#statusbar e #views-status, che sono tutte muted"],
+  ["muted", "bg-chrome", AA, "#pane-status e #views-status, che sono tutte muted"],
   ["muted", "bg-elev", AA, "i sottotitoli dentro un pannello"],
   ["muted", "bg-input", AA, "i sottotitoli dentro una pastiglia"],
   ["muted", "bg-hover", AA, "il sottotitolo di una riga selezionata"],

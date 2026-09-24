@@ -188,7 +188,7 @@ impl ViewProvider for QueriesView {
                 Text::key(VIEW_TITLE),
                 ViewSurface::RightSidebar,
             )
-            .with_icon("search")
+            .with_icon("query")
             .ordered(5),
             ViewSpec::new(
                 COLLECTIONS_VIEW,

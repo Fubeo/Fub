@@ -238,6 +238,28 @@ describe("l'inspector a tab", () => {
     tabs[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
     expect(document.activeElement).toBe(tabs[0]);
   });
+
+  it("la scheda di una view nata chiusa ne mostra il contenuto", async () => {
+    // `open_by_default: false` sceglie solo la scheda di partenza: era la
+    // Cronologia, che si selezionava e restava vuota.
+    listViews.mockResolvedValueOnce([
+      spec("outline", "right_sidebar"),
+      { ...spec("history", "right_sidebar"), open_by_default: false },
+    ]);
+    const views = await loadViews();
+    await views.mountDeclaredViews();
+
+    const right = document.getElementById("views-right")!;
+    const tabs = [...right.querySelectorAll<HTMLButtonElement>(".inspector-tab")];
+    const content = right.querySelector<HTMLElement>('.declared-view[data-view-id="history"]')!;
+    tabs[1]!.click();
+
+    expect(content.closest<HTMLElement>(".declared-view-panel")!.hidden).toBe(false);
+    expect(content.hidden).toBe(false);
+    // Le schede sono la sola icona: il nome sta in aria-label e nel titolo.
+    expect(tabs.every((tab) => tab.textContent === "" && tab.getAttribute("aria-label"))).toBe(true);
+    expect(right.querySelector(".inspector-title")?.textContent).toBe("history");
+  });
 });
 
 /// Ogni superficie che il contratto nomina è **classificata** da questa shell:

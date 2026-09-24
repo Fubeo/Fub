@@ -287,7 +287,6 @@
     "rail",
     "inspector-tabs",
     "inspector-tab",
-    "inspector-tab-label",
     "inspector-title",
     "setting-row--theme",
     "titlebar-side",
@@ -302,6 +301,8 @@
     "window-controls",
     "titlebar-side--left",
     "titlebar-btn--icon",
+    "titlebar-btn-text",
+    "titlebar-badge",
     "context-menu",
     "modale",
     "palette-box",
@@ -322,7 +323,7 @@
     "palette-actions",
     "palette-error",
     "toast",
-    "statusbar",
+    "pane-status",
     "save-state",
     "ha-novita",
     "in-corso",
@@ -527,7 +528,9 @@
       "hooks": [
         "titlebar-btn",
         "titlebar-btn--wide",
-        "titlebar-btn--icon"
+        "titlebar-btn--icon",
+        "titlebar-btn-text",
+        "titlebar-badge"
       ],
       "states": [
         "rest",
@@ -554,7 +557,6 @@
       "hooks": [
         "inspector-tabs",
         "inspector-tab",
-        "inspector-tab-label",
         "inspector-title"
       ],
       "states": [
@@ -976,7 +978,7 @@
       "name": "notices",
       "hooks": [
         "toast",
-        "statusbar",
+        "pane-status",
         "save-state",
         "ha-novita",
         "in-corso",
@@ -1112,7 +1114,7 @@
       "muted",
       "bg-chrome",
       4.5,
-      "#statusbar e #views-status, che sono tutte muted"
+      "#pane-status e #views-status, che sono tutte muted"
     ],
     [
       "muted",
@@ -1459,7 +1461,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 258,
+    "hooks": 259,
     "state_names": 7,
     "assigned_states": 129,
     "components": 42,

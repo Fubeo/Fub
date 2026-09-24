@@ -20,15 +20,14 @@
 }
 
 .titlebar-shortcut {
-  margin-left: var(--space-1);
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid transparent;
-  background: var(--bg-panel);
-  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
   color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  line-height: 1.4;
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  line-height: 1.6;
 }
 
 @media (prefers-reduced-motion: reduce) {

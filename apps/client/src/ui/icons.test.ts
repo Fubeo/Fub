@@ -36,8 +36,8 @@ const sources = import.meta.glob("../**/*.{ts,tsx,js,mjs,html,css}", {
 describe("il costrutto delle icone", () => {
   it("tutte le icone rispettano griglia e tratto dichiarati", () => {
     const names = iconNames();
-    // La roadmap conta ventuno icone nel set (§31.4, misurabile con questo test).
-    expect(names).toHaveLength(21);
+    // Il set conta ventisette icone nel set (§31.4, misurabile con questo test).
+    expect(names).toHaveLength(27);
     expect(new Set(names).size).toBe(names.length);
 
     for (const name of names) {

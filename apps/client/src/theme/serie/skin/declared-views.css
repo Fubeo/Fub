@@ -4,13 +4,11 @@
    Ciò che una view dichiara è dove si attacca e cosa disegna; il tema resta
    interamente qui — un provider sceglie intenti semantici, mai colori. */
 
-/* La barra di stato: ciò che informa senza interrompere. Una striscia, non un
-   pannello: titolo e contenuto sulla stessa riga. */
+/* La superficie di stato: ciò che informa senza interrompere. Sta nella
+   toolbar del riquadro col fuoco, accanto al salvataggio: una riga sommessa,
+   senza titoli — il contenuto (parole, caratteri) si dice da sé. */
 .views-status {
-  gap: var(--space-7);
-  padding: var(--space-2) var(--space-6);
-  border-top: 1px solid var(--border);
-  background: var(--bg-chrome);
+  gap: var(--space-5);
   font-size: var(--text-sm);
   color: var(--muted);
 }
@@ -20,13 +18,10 @@
   gap: var(--space-3);
 }
 .views-status .panel-title {
-  margin: 0;
-  font-size: var(--text-xs);
-  text-transform: none;
-  letter-spacing: 0.02em;
+  display: none;
 }
 .views-status .declared-view .ui-stack {
-  gap: var(--space-6);
+  gap: var(--space-5);
 }
 
 /* La ribbon: i pulsanti che aprono qualcosa. La colonna e la larghezza le

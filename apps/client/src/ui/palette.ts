@@ -29,7 +29,7 @@ import { errorText } from "../host/errors";
 import { stableIdentifier, trapFocus } from "./a11y";
 import type { Tone } from "./notify";
 import { type Key, t } from "../i18n/strings";
-import { allCommands, loadKeyOverrides, type CommandEntry } from "./commands";
+import { allCommands, displayBinding, loadKeyOverrides, type CommandEntry } from "./commands";
 import { enterSurface, exitSurface } from "./motion";
 import { readState, state, writeState } from "../state/store";
 import { invokeSlash, slashArgs, slashCandidates, slashContextDoc } from "../state/slash";
@@ -774,7 +774,7 @@ function chooseSpecs(specs: CommandEntry[], box: HTMLElement, host: PaletteHost)
       // cambiato, la palette è il posto in cui lo scopre.
       if (spec.binding) {
         const kb = document.createElement("kbd");
-        kb.textContent = spec.binding;
+        kb.textContent = displayBinding(spec.binding);
         row.appendChild(kb);
       }
       // Il preferito si vede e si toglie da qui: una stella che resta

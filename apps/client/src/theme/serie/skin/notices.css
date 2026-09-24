@@ -1,9 +1,10 @@
 /* --------------------------------------------------------------------------
-   La barra di stato della shell, il centro attività, il centro notifiche (§10.3)
+   Lo stato del documento, il centro attività, il centro notifiche (§10.3)
    --------------------------------------------------------------------------
-   Tre pezzi di una cosa sola: il posto in cui l'utente guarda quando vuole
-   sapere cosa sta succedendo, senza essere interrotto. Il toast interrompe (ed
-   è il solo che lo fa); i due pannelli si aprono da un pulsante e si chiudono. */
+   Il posto in cui l'utente guarda quando vuole sapere cosa sta succedendo,
+   senza essere interrotto. Lo stato del documento sta nella toolbar del
+   riquadro; avvisi e attività si aprono dai loro bottoni nella titlebar e
+   scendono da lì. Il toast interrompe, ed è il solo che lo fa. */
 
 /* Il messaggio che non chiede niente: l'esito di un comando, un lavoro finito,
    un errore che non blocca. Testo semplice, e via da solo — ciò che ha detto
@@ -11,7 +12,7 @@
 .toast {
   position: fixed;
   right: 16px;
-  bottom: 40px;
+  bottom: 16px;
   z-index: var(--z-toast);
   max-width: 420px;
   padding: var(--space-4) var(--space-6);
@@ -30,66 +31,61 @@
   border-color: var(--doc-danger);
 }
 
-.statusbar {
-  gap: var(--space-4);
-  padding: var(--space-2) var(--space-6);
-  border-top: 1px solid var(--elevation-chrome-border);
-  background: var(--bg-chrome);
+/* Lo stato del documento a fuoco, nella toolbar del riquadro: il salvataggio
+   e le view della superficie di stato, in una riga sommessa. */
+.pane-status {
+  gap: var(--space-5);
   font-size: var(--text-sm);
   color: var(--muted);
 }
 
-/* Lo stato del salvataggio (§20.4). Sta col colore della barra finché non c'è
-   niente da dire: «Salvato» è la parola che si legge il 99% del tempo, e
-   accendere quella vorrebbe dire spegnere l'unica che deve farsi notare. */
-.save-state[data-stato="non_salvato"],
-.save-state[data-stato="in_corso"] {
+/* Lo stato del salvataggio (§20.4). Un pallino e una parola, col colore della
+   toolbar finché non c'è niente da dire: «Salvato» è la parola che si legge il
+   99% del tempo, e accendere quella vorrebbe dire spegnere l'unica che deve
+   farsi notare. */
+.save-state:not(:empty)::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  vertical-align: middle;
+  opacity: 0.7;
+}
+
+.save-state[data-state="non_salvato"],
+.save-state[data-state="in_corso"] {
   color: var(--text);
 }
 
-/* L'attesa del secondo tasto di una sequenza (§18.2). Accesa, al contrario di
-   `.save-state`: qui non c'è nessuno stato che si legge il 99% del tempo — o
-   l'app sta aspettando, e allora è l'unica cosa che conta in quella barra, o la
-   riga non c'è proprio. */
-.key-pending {
-  color: var(--text);
-  font-weight: var(--weight-medium);
-}
-
-.save-state[data-stato="fallito"] {
+.save-state[data-state="fallito"],
+.save-state[data-state="conflitto"] {
   color: var(--doc-danger);
   font-weight: var(--weight-medium);
 }
 
-.statusbar button {
-  background: transparent;
-  border: none;
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
+/* L'attesa del secondo tasto di una sequenza (§18.2): una pastiglia che
+   galleggia in basso al centro finché l'app aspetta, e sparisce subito dopo. */
+.key-pending {
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--bg-elev);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
   font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.statusbar button:hover {
-  background: var(--overlay-hover);
-  color: var(--text);
-}
-
-.statusbar button.ha-novita,
-.statusbar button.in-corso {
-  color: var(--text);
   font-weight: var(--weight-medium);
 }
 
-/* I due pannelli stanno **affiancati** e non sovrapposti: sono due toggle
-   indipendenti, e chi ne apre uno mentre l'altro è aperto non deve trovarsi un
-   rettangolo sopra l'altro. Il toast tiene l'angolo (`right: 16px`) e per
-   questo non compare mentre gli avvisi sono aperti — sotto ci sarebbe la loro
-   lista. */
+/* I due pannelli scendono dalla titlebar, dove stanno i loro bottoni, e
+   stanno **affiancati** e non sovrapposti: sono due toggle indipendenti, e chi
+   ne apre uno mentre l'altro è aperto non deve trovarsi un rettangolo sopra
+   l'altro. */
 .dock-panel {
   position: fixed;
-  bottom: 40px;
+  top: calc(var(--titlebar-h) + var(--space-2));
   z-index: var(--z-popover);
   width: 340px;
   max-height: 50vh;

@@ -36,6 +36,7 @@ import { asPluginError, errorText } from "../host/errors";
 import { onLanguage, t } from "../i18n/strings";
 import type { Lifetime } from "../ui/lifetime";
 import { setTooltip } from "../ui/tooltip";
+import { drawCountButton } from "../ui/icons";
 import { focusableElements } from "../ui/a11y";
 
 /// Una riga del centro attività. È `JobStatus` senza i campi che una riga non
@@ -376,10 +377,11 @@ function redraw(): void {
   if (button) {
     // U64: titolo/stato reale — il conteggio quando c'è, mai uno stato inventato
     // quando la lista è non aggiornata: quello lo dice il banner nel pannello.
-    button.textContent = activityText("activity.status", { state: jobs.length });
+    const label = activityText("activity.status", { state: jobs.length });
+    drawCountButton(button, "activity", label, jobs.length);
     button.classList.toggle("in-corso", jobs.length > 0);
     button.setAttribute("aria-expanded", String(open));
-    setTooltip(button, activityText("activity.status", { state: jobs.length }));
+    setTooltip(button, label);
   }
 
   const panel = document.getElementById("activity-panel");

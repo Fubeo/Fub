@@ -54,10 +54,10 @@
 /* I tab dell'inspector: la tablist compatta in cima a `#right-pane`
    (la colonna è della struttura). U38: il nome della vista in corso sta nel
    titolo testuale (`.inspector-title`, montato da `ui/views.ts`); le schede
-   mostrano etichetta + icona quando entrano, sola icona quando non entrano.
-   A04: il bersaglio è il bottone, che vale 32px a densità normale e almeno
-   24px ovunque (niente padding che sparisce a bottone vuoto). U42: senza viste
-   il titolo resta e dice lo stato vuoto (stessa voce degli `empty_state`). */
+   sono sempre la sola icona, e vanno a capo invece di scorrere: con dieci
+   view nessuna resta fuori vista. A04: il bersaglio è il bottone, 32px a
+   densità normale e almeno 24px ovunque. U42: senza viste il titolo resta e
+   dice lo stato vuoto (stessa voce degli `empty_state`). */
 .inspector-title {
   display: flex;
   align-items: center;
@@ -77,12 +77,12 @@
 }
 .inspector-tabs {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-2);
-  background: var(--bg);
+  padding: 0 var(--space-4) var(--space-3);
+  border-bottom: 1px solid var(--elevation-chrome-border);
   flex-shrink: 0;
-  overflow-x: auto;
 }
 
 .inspector-tab {
@@ -94,11 +94,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-width: max(var(--space-8, 24px), 24px);
-  min-height: max(var(--space-9, 32px), 28px);
-  font-size: var(--text-sm);
-  white-space: nowrap;
+  width: max(var(--space-9, 32px), 28px);
+  height: max(var(--space-9, 32px), 28px);
+  flex-shrink: 0;
   border-radius: var(--radius-sm);
   transition:
     background var(--duration-fast) var(--ease),
@@ -115,17 +113,6 @@
   background: var(--bg-active);
 }
 
-/* L'etichetta segue lo spazio: quando la barra è stretta resta la sola icona
-   (nome accessibile + tooltip invariati, da `ui/views.ts`). Niente classi nuove:
-   il selettore legge l'attributo che `views.ts` imposta, e gli hook restano i
-   tre nomi singoli. */
-.inspector-tabs[data-compact="true"] .inspector-tab-label {
-  display: none;
-}
-.inspector-tabs[data-compact="true"] .inspector-tab {
-  padding-left: var(--space-2);
-  padding-right: var(--space-2);
-}
 /* La riga del tema è di primo piano nel gruppo Appearance: un gradino di
  * bordo e sfondo in più, così l'occhio la trova prima delle altre impostazioni
  * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
@@ -216,6 +203,38 @@
   justify-content: flex-start;
 }
 
+/* Il testo del campo prende lo spazio, l'accordo sta in fondo a destra. */
+.titlebar-btn-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Il contatore di avvisi e lavori: una pastiglia sull'angolo dell'icona. Il
+   numero è decorativo, il nome del bottone lo dice per intero. */
+.titlebar-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: 9px;
+  font-weight: var(--weight-bold);
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.titlebar-btn.ha-novita,
+.titlebar-btn.in-corso {
+  color: var(--text);
+}
+
 /* `#rail-shell` è la parte fissa della rail: le icone shell (Note, Cerca,
    Grafo). Le view dichiarate si appendono dopo, sempre in `#views-ribbon`.
    La colonna è della struttura; qui è il respiro e il filetto. */
@@ -284,6 +303,7 @@
 }
 
 .titlebar-btn--icon {
+  position: relative;
   width: calc(var(--titlebar-h) - var(--space-6));
   padding: 0;
   justify-content: center;

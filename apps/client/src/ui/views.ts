@@ -243,9 +243,6 @@ const NOT_HOSTED: Record<string, string> = {
 /// smontano e rimontano tutto due volte, e senza un padrone la prima
 /// finirebbe di montare dentro un mondo che la seconda ha appena svuotato.
 const mountRun = new Race();
-/// Vita della shell per l'inspector: il tablist vive quanto la finestra, e il
-/// resize che misura le etichette non ha un altro proprietario (I08).
-const shellLifetime = openLifetime();
 
 /// Svuota ogni stato posseduto dalle view dichiarate.
 ///
@@ -387,7 +384,7 @@ export async function mountDeclaredViews(parent?: Lifetime): Promise<void> {
   viewsModalEl.hidden = viewsModalEl.childElementCount === 0;
   // L'inspector a tab: per le view `right_sidebar` costruisce un tablist in
   // cima. Va dopo il montaggio, perché legge i pannelli già nati.
-  buildInspector(shellLifetime);
+  buildInspector();
   modalTrap(parent);
   await Promise.all([...mounted.keys()].map((id) => refreshPanel(id)));
 }
@@ -641,10 +638,8 @@ function draw(id: string, mountedView: Mounted, tree: UiNode): void {
 /// La scelta si persiste con `api.setViewState("inspector.tab", id)` e si
 /// ripristina al rimontaggio: chi aveva aperto Backlink ritrova Backlink.
 /// Il default è la prima view `open_by_default`, o la prima in assoluto.
-function buildInspector(lifetime: Lifetime): void {
+function buildInspector(): void {
   const panels = [...viewsRightEl.querySelectorAll<HTMLElement>(".declared-view-panel")];
-  // I08: observer/resize/font del giro precedente vivono nella lifetime della
-  // shell e si sciolgono al suo dispose; qui si stacca solo il DOM vecchio.
   // Rimuove tablist e titolo del giro precedente, se ci sono.
   viewsRightEl.querySelector(".inspector-tabs")?.remove();
   viewsRightEl.querySelector(".inspector-title")?.remove();
@@ -705,18 +700,12 @@ function buildInspector(lifetime: Lifetime): void {
     tab.setAttribute("aria-controls", panelId);
     setTooltip(tab, name);
     // L'icona: se la view ne dichiara una la si usa, altrimenti il fallback.
-    const svg = iconEl(icon) ?? iconEl("outline");
+    const svg = iconEl(icon) ?? iconEl("view");
     if (svg) tab.append(svg);
-    // U38: il nome visibile segue lo spazio — etichetta accanto all'icona
-    // quando la barra la contiene, sola icona con nome accessibile + tooltip
-    // quando non la contiene. La misura la decide la pelle (classe su tablist),
-    // qui solo il contenuto: stesso bottone, due vesti.
-    const label = document.createElement("span");
-    label.className = "inspector-tab-label";
-    label.textContent = name;
-    tab.append(label);
-    // Il nome come tooltip e aria-label; il testo visibile è l'icona sola,
-    // per tenere l'inspector compatto come una barra laterale deve essere.
+    // Sempre la sola icona, con il nome come tooltip e aria-label: il nome
+    // della vista aperta lo dice il titolo sopra. Un'etichetta che compare e
+    // sparisce secondo lo spazio misurato faceva cambiare veste alla barra a
+    // ogni scelta, perché la misura cambiava con la veste stessa.
     tab.setAttribute("aria-label", name);
 
     tab.addEventListener("click", () => activateTab(i, false));
@@ -748,6 +737,11 @@ function buildInspector(lifetime: Lifetime): void {
       const tab = tabs[i]!;
       const selected = i === safe;
       panel.hidden = !selected;
+      // Nell'ispettore `open_by_default` sceglie solo la scheda di partenza:
+      // la scheda scelta mostra sempre il suo contenuto, anche quello di una
+      // view nata chiusa (la Cronologia, per esempio).
+      const content = panel.querySelector<HTMLElement>(":scope > .declared-view");
+      if (selected && content) content.hidden = false;
       panel.setAttribute("aria-hidden", String(!selected));
       tab.tabIndex = selected ? 0 : -1;
       tab.setAttribute("aria-selected", String(selected));
@@ -764,33 +758,10 @@ function buildInspector(lifetime: Lifetime): void {
     if (focusedView !== null && !panels.some((p) => p.dataset.viewId === focusedView)) {
       (tablist.children[safe] as HTMLElement)?.focus();
     }
-    fitLabels();
-  }
-  // U38: etichette quando entrano, sola icona quando non entrano. La misura la
-  // decide il contenitore stretto (attributo sulla tablist, vestito in
-  // chrome.css); qui solo lo scroll reale, riletto a ogni scelta, al resize e a
-  // font pronti — con disposer, perché ogni `buildInspector` butta la tablist
-  // precedente (I08: nessun observer orfano sul nodo staccato).
-  function fitLabels(): void {
-    tablist.dataset.compact = String(tablist.scrollWidth > tablist.clientWidth + 1);
-  }
-  const fitObserver = new ResizeObserver(() => fitLabels());
-  fitObserver.observe(tablist);
-  lifetime.add(() => fitObserver.disconnect());
-  lifetime.listen(window, "resize", fitLabels);
-  if (typeof document.fonts?.ready?.then === "function") {
-    let fontsAlive = true;
-    lifetime.add(() => {
-      fontsAlive = false;
-    });
-    void document.fonts.ready.then(() => {
-      if (fontsAlive && tablist.isConnected) fitLabels();
-    });
   }
 
   // Il tablist va in cima, prima dei pannelli — e il titolo sopra di lui.
   header.after(tablist);
-  fitLabels();
 
   // «Quella che nasce aperta» si legge dal contenuto che non è nascosto: era
   // una classe `collapsed` sul pannello, ed era la stessa cosa scritta due

@@ -111,7 +111,7 @@
   white-space: nowrap;
 }
 .pane-toolbar > .muted:first-child {
-  flex: 1;
+  flex: 0 1 auto;
 }
 .pane-toolbar > button {
   flex-shrink: 0;

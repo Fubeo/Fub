@@ -40,8 +40,18 @@ const SVG: Record<string, string> = {
   trash: '<path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/>',
   backup: '<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><path d="M7 12l2.5-2.5L12 12M9.5 9.5v6"/>',
   history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 5"/><path d="M3 3v2.5h2.5"/><path d="M12 8v4l3 2"/>',
-  settings: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  palette: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8" cy="8" r="1.2"/><circle cx="16" cy="8" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="8" cy="16" r="1.2"/><circle cx="16" cy="16" r="1.2"/>',
+  footnote: '<path d="M4 7h9M4 12h9M4 17h6"/><path d="M17 5l2-1v6"/>',
+  collection: '<rect x="4" y="9" width="16" height="11" rx="2"/><path d="M6 6h12M8 3h8"/>',
+  stats: '<path d="M4 20h16"/><path d="M7 16v-5M12 16V7M17 16v-8"/>',
+  // Il ripiego di una view che non dichiara un'icona conosciuta: un
+  // pannello generico, distinto da ogni icona con un significato.
+  view: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16"/>',
+
+  // --- la titlebar ---------------------------------------------------------
+  settings: '<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/>',
+  palette: '<path d="M5 8l4 4-4 4"/><path d="M12 17h7"/>',
+  bell: '<path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+  activity: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
 
   // --- i controlli finestra -----------------------------------------------
   minus: '<path d="M5 12h14"/>',
@@ -61,8 +71,18 @@ const SVG: Record<string, string> = {
 /// Un nome sconosciuto restituisce stringa vuota e non lancia: un'icona che
 /// manca è un buco che si vede, non un errore che ferma la shell, e chi la
 /// chiede può `?? fallback` senza un `try`.
+/// I nomi con cui le feature dichiarano un'icona che il set chiama in un
+/// altro modo. Senza, `backlink` o `struttura` cadevano sul ripiego e più
+/// schede dell'ispettore mostravano la stessa figura.
+const ALIASES: Record<string, string> = {
+  backlink: "backlinks",
+  struttura: "outline",
+  collections: "collection",
+  footnotes: "footnote",
+};
+
 export function icon(name: string): string {
-  const body = SVG[name];
+  const body = SVG[ALIASES[name] ?? name];
   if (!body) return "";
   return `<svg viewBox="0 0 ${ICON_GRID} ${ICON_GRID}" width="${ICON_SIZE}" height="${ICON_SIZE}" fill="${ICON_FILL}" stroke="${ICON_STROKE}" stroke-width="${ICON_STROKE_WIDTH}" stroke-linecap="${ICON_LINECAP}" stroke-linejoin="${ICON_LINEJOIN}" aria-hidden="true" focusable="false">${body}</svg>`;
 }
@@ -81,4 +101,20 @@ export function iconEl(name: string): SVGElement | null {
 /// (la rail, l'inspector) e vuole sapere cosa c'è senza indovinare.
 export function iconNames(): string[] {
   return Object.keys(SVG);
+}
+/// Un bottone a icona con un contatore: la figura, il numero quando ce n'è
+/// uno, e il nome intero come nome accessibile e suggerimento. Il numero è
+/// decorativo (`aria-hidden`): il nome lo dice già per intero.
+export function drawCountButton(button: HTMLElement, name: string, label: string, count: number): void {
+  button.replaceChildren();
+  const svg = iconEl(name);
+  if (svg) button.append(svg);
+  if (count > 0) {
+    const badge = document.createElement("span");
+    badge.className = "titlebar-badge";
+    badge.setAttribute("aria-hidden", "true");
+    badge.textContent = count > 99 ? "99+" : String(count);
+    button.append(badge);
+  }
+  button.setAttribute("aria-label", label);
 }

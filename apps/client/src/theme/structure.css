@@ -412,21 +412,41 @@ html, body, #app {
   display: inline-flex;
 }
 
-/* La barra di stato della shell (§10.3): una riga, il riempitivo al centro. */
-#statusbar {
+/* Lo stato del documento a fuoco (§10.3, §2.2): salvataggio e view della
+   superficie di stato, su una riga nella toolbar del riquadro col fuoco. Lo
+   spegne l'impostazione `chrome.status.visible`. */
+.pane-status-slot {
   display: flex;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 
-#statusbar-fill {
-  flex: 1;
+#pane-status {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  white-space: nowrap;
 }
 
-/* La barra di stato delle view dichiarate (§2.2): stessa riga, altra
-   superficie. */
+#app[data-status-off] #pane-status {
+  display: none;
+}
+
 #views-status {
   display: flex;
   align-items: center;
+  min-width: 0;
+}
+
+/* L'attesa del secondo tasto galleggia in basso al centro, sopra tutto. */
+#key-pending {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
 }
 
 /* --- l'albero dei riquadri ------------------------------------------------
@@ -655,8 +675,7 @@ html, body, #app {
  * Niente colori, niente tipografia, niente token del foglio: qui si usano
  * solo i token di struttura (`--titlebar-h`, `--rail-w`, `--z-*`) e letterali
  * px. La titlebar e la rail usano le metriche di :root; sidebar 248px
- * (200-360), ispettore 280px (240-400), tabstrip e toolbar 36px,
- * statusbar 32px. */
+ * (200-360), ispettore 280px (240-400), tabstrip e toolbar 36px. */
 #topbar .brand,
 #topbar #app-menu button,
 #topbar .titlebar-btn {
@@ -687,13 +706,6 @@ html, body, #app {
   width: 100%;
   overflow: auto;
   max-height: 30vh;
-}
-#statusbar {
-  height: 32px;
-  min-height: 32px;
-  max-height: 32px;
-  overflow: hidden;
-  white-space: nowrap;
 }
 /* Toolbar del riquadro (L07): una riga da 36px, overflow in menu. I bottoni
    modalità li monta il worker documento; qui solo il contenitore. */

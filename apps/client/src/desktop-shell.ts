@@ -29,6 +29,7 @@ import { closeCommandPalette, openCommandPalette, startCommand } from "./ui/pale
 import {
   allCommands,
   conflictMessage,
+  displayBinding,
   keybindingKey,
   loadKeyOverrides,
   mountKeyOverrides,
@@ -46,7 +47,7 @@ import { registerMermaidRenderer } from "./ui/mermaid";
 import { mountOnboarding } from "./ui/onboarding";
 import { registerBaseRenderer } from "./editors/base/surface";
 import { applyRailMachineSettings, mountRail, syncRail } from "./panels/rail";
-import { mountStrings, t } from "./i18n/strings";
+import { mountStrings, onLanguage, t } from "./i18n/strings";
 import { mountActivity } from "./panels/activity";
 import { mountSettings } from "./panels/settings";
 import { mountTheme } from "./theme/theme";
@@ -74,6 +75,7 @@ import { mountWorkspacesPanel } from "./state/workspaces-ui";
 import { mountShellOwnerCommands } from "./state/shell-commands";
 import { hidePreview } from "./state/preview";
 import { closeContextMenu } from "./ui/menu";
+import { setTooltip } from "./ui/tooltip";
 import type { SettingEntry } from "./host/contract";
 
 /** Apply machine chrome at boot and after external profile/setting changes.
@@ -98,7 +100,9 @@ async function mountMachineChrome(lifetime: Lifetime): Promise<void> {
     const values = new Map(entries.map((entry) => [entry.spec.key, entry.value]));
     const valid = values.get("chrome.schema") === 1;
     applyRailMachineSettings(entries);
-    document.getElementById("statusbar")?.toggleAttribute("hidden", valid && values.get("chrome.status.visible") === false);
+    // Non c'è più una barra in fondo: l'impostazione accende e spegne lo stato
+    // del documento nella toolbar del riquadro (`#pane-status`).
+    document.getElementById("app")?.toggleAttribute("data-status-off", valid && values.get("chrome.status.visible") === false);
     toolbarVisible = !valid || values.get("chrome.toolbar.visible") !== false;
     applyToolbar();
     if (frameAtBoot === null) {
@@ -505,18 +509,20 @@ let pageWindowLifetime = openLifetime();
 let pageEpoch = 0;
 let mounted: Promise<Teardown> | null = null;
 
-/// Porta accanto ai bottoni della titlebar l'accordo efficace del comando.
+/// Porta sui bottoni della titlebar l'accordo efficace del comando, scritto
+/// come si preme: dentro il campo di ricerca, e nel tooltip della palette.
 function refreshTitlebarShortcuts(): void {
-  const targets: Array<[string, string]> = [
-    ["shell.palette", "open-palette-key"],
-    ["shell.panel.search", "command-search-key"],
-  ];
-  for (const [id, elementId] of targets) {
-    const key = document.getElementById(elementId);
-    if (!(key instanceof HTMLElement)) continue;
-    const binding = allCommands().find((entry) => entry.id === id)?.binding ?? null;
-    key.textContent = binding ?? "";
-    key.hidden = binding === null;
+  const binding = (id: string): string =>
+    displayBinding(allCommands().find((entry) => entry.id === id)?.binding ?? null);
+  const key = document.getElementById("command-search-key");
+  if (key instanceof HTMLElement) {
+    key.textContent = binding("shell.panel.search");
+    key.hidden = key.textContent === "";
+  }
+  const palette = document.getElementById("open-palette");
+  if (palette instanceof HTMLElement) {
+    const chord = binding("shell.palette");
+    setTooltip(palette, chord === "" ? t("commands.palette") : `${t("commands.palette")} (${chord})`);
   }
 }
 
@@ -722,6 +728,7 @@ async function init(): Promise<Teardown> {
     },
   }));
   refreshTitlebarShortcuts();
+  pageWindowLifetime.add(onLanguage(refreshTitlebarShortcuts));
 
   // Il trigger di ricerca nella titlebar: fa focus su `#search-input`, che è
   // la ricerca onesta — già lì, già cablata — e non una palette travestita.
