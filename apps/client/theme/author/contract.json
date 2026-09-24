@@ -132,6 +132,7 @@
     "ui-button",
     "intent-primary",
     "intent-danger",
+    "intent-neutral",
     "onboarding",
     "onboarding-actions",
     "views-bottom",
@@ -372,6 +373,7 @@
     "declared-view-panel",
     "declared-view",
     "ui-stack",
+    "ui-text",
     "views-ribbon",
     "views-modal",
     "cm-editor",
@@ -471,7 +473,8 @@
         "primary",
         "ui-button",
         "intent-primary",
-        "intent-danger"
+        "intent-danger",
+        "intent-neutral"
       ],
       "states": [
         "rest",
@@ -1040,6 +1043,7 @@
         "declared-view-panel",
         "declared-view",
         "ui-stack",
+        "ui-text",
         "views-ribbon",
         "views-modal"
       ],
@@ -1461,7 +1465,7 @@
   ],
   "counts": {
     "required_roles": 116,
-    "hooks": 259,
+    "hooks": 261,
     "state_names": 7,
     "assigned_states": 129,
     "components": 42,

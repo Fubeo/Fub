@@ -129,6 +129,10 @@ const EMPTY: &str = "empty";
 const COUNT: &str = "count";
 const CURRENT: &str = "current";
 const SIZE: &str = "size";
+const FIRST_VERSION: &str = "first_version";
+const GREW: &str = "grew";
+const SHRANK: &str = "shrank";
+const SAME_SIZE: &str = "same_size";
 const RESTORE_LABEL: &str = "restore";
 const CLOSE_PREVIEW: &str = "close_preview";
 const BINARY_PREVIEW: &str = "binary_preview";
@@ -201,8 +205,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(NO_ACTIVE_DOC, "Nessuna nota aperta.")
             .with(EMPTY, "Nessuna versione.")
             .with(COUNT, "Versioni: {count}")
-            .with(CURRENT, "adesso")
+            .with(CURRENT, "Versione attuale")
             .with(SIZE, "{size} byte")
+            .with(FIRST_VERSION, "Prima versione · {size} byte")
+            .with(GREW, "+{size} byte")
+            .with(SHRANK, "−{size} byte")
+            .with(SAME_SIZE, "Stessa dimensione")
+            .with(WHEN, "{when}")
             .with(RESTORE_LABEL, "Ripristina")
             .with(CLOSE_PREVIEW, "Chiudi l'anteprima")
             .with(
@@ -276,8 +285,13 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(NO_ACTIVE_DOC, "No note open.")
             .with(EMPTY, "No versions.")
             .with(COUNT, "Versions: {count}")
-            .with(CURRENT, "now")
+            .with(CURRENT, "Current version")
             .with(SIZE, "{size} bytes")
+            .with(FIRST_VERSION, "First version · {size} bytes")
+            .with(GREW, "+{size} bytes")
+            .with(SHRANK, "−{size} bytes")
+            .with(SAME_SIZE, "Same size")
+            .with(WHEN, "{when}")
             .with(RESTORE_LABEL, "Restore")
             .with(CLOSE_PREVIEW, "Close the preview")
             .with(
@@ -1708,6 +1722,9 @@ const A_CLOSE_PREVIEW: &str = "close_preview";
 const A_RESTORE: &str = "restore";
 /// Confronta con la nota attuale la versione il cui istante sta nel payload.
 const A_COMPARE: &str = "compare";
+/// Il testo intero della versione scelta, invece del confronto che è la vista
+/// di partenza.
+const A_SHOW_TEXT: &str = "show_text";
 /// Mette negli appunti il testo della versione il cui istante sta nel payload.
 const A_COPY: &str = "copy";
 /// La chiave del payload, e quella sotto cui l'anteprima aperta resta scritta
@@ -1817,7 +1834,7 @@ impl ViewProvider for HistoryView {
             }
             // Il confronto è la stessa anteprima vista in un altro modo: resta
             // nello stato di vista per la stessa ragione, e si chiude con lei.
-            A_COMPARE => {
+            A_COMPARE | A_SHOW_TEXT => {
                 let (Some(_), Some(ts)) = (
                     same_notes(&action, host),
                     action.payload.get(TS).and_then(|v| v.as_u64()),
@@ -1825,7 +1842,10 @@ impl ViewProvider for HistoryView {
                     return Ok(ViewUpdate::None);
                 };
                 host.set_view_state(PREVIEW_STATE, Some(serde_json::Value::from(ts)))?;
-                host.set_view_state(COMPARE_STATE, Some(serde_json::Value::Bool(true)))?;
+                host.set_view_state(
+                    COMPARE_STATE,
+                    Some(serde_json::Value::Bool(action.action.0 == A_COMPARE)),
+                )?;
                 Ok(ViewUpdate::Replace { root: tree(host)? })
             }
             // Copiare non scrive niente nel vault: il testo va alla shell, che
@@ -1924,6 +1944,10 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
     // `versions` non vuota implica una voce: l'anteprima la riusa.
     let entry = entry.expect("versioni non vuote implicano una voce dell'indice");
 
+    let previewed = host
+        .view_state(PREVIEW_STATE)?
+        .and_then(|v| v.as_u64())
+        .filter(|ts| versions.iter().any(|v| v.ts == *ts));
     let mut children = vec![UiNode::text(Text::message(
         COUNT,
         vec![Arg::int("count", versions.len() as i64)],
@@ -1932,82 +1956,86 @@ fn tree(host: &dyn ReadApi) -> Result<UiNode, PluginError> {
         versions
             .iter()
             .enumerate()
-            .map(|(the, v)| row(v, the == 0, doc.as_str()))
+            .map(|(the, v)| {
+                row(
+                    v,
+                    the == 0,
+                    versions.get(the + 1),
+                    previewed == Some(v.ts),
+                    doc.as_str(),
+                )
+            })
             .collect(),
     ));
 
     // L'anteprima testuale resta testo, mai HTML. Un contenuto non UTF-8
     // mostra la dimensione e resta ripristinabile come byte.
-    if let Some(ts) = host
-        .view_state(PREVIEW_STATE)?
-        .and_then(|v| v.as_u64())
-        .filter(|ts| versions.iter().any(|v| v.ts == *ts))
-    {
+    if let Some(ts) = previewed {
         let bytes = version_source_doc(entry, &doc, ts, host)?;
+        let current = versions.first().is_some_and(|v| v.ts == ts);
+        // Di una versione passata si vuole sapere prima di tutto *cosa è
+        // cambiato*: il confronto è la vista di partenza, e il testo intero è
+        // a un clic. La versione attuale, identica alla nota, si mostra come
+        // testo.
         let comparing = host
             .view_state(COMPARE_STATE)?
             .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+            .unwrap_or(!current);
         let payload = serde_json::json!({ DOC: doc.as_str(), TS: ts });
-        let (body, toggle) = if comparing {
-            let current = host.read_document_bytes(&doc)?;
-            (
-                comparison(&bytes, &current),
-                UiNode::button(
-                    Text::key(SHOW_TEXT),
-                    Intent::Neutral,
-                    ActionRef::with(A_PREVIEW, payload),
-                ),
+        let text = std::str::from_utf8(&bytes).is_ok();
+        let body = if comparing {
+            comparison(&bytes, &host.read_document_bytes(&doc)?)
+        } else {
+            match String::from_utf8(bytes) {
+                Ok(text) => UiNode::text(text),
+                Err(error) => UiNode::text(Text::message(
+                    BINARY_PREVIEW,
+                    vec![Arg::int("size", error.as_bytes().len() as i64)],
+                )),
+            }
+        };
+        // I gesti stanno sopra il testo, dove li si trova senza scorrerlo. Il
+        // ripristino è l'unico primario, e c'è solo per le versioni passate:
+        // ripristinare l'attuale riscriverebbe il file con ciò che contiene.
+        let mut actions = Vec::new();
+        if !current {
+            actions.push(UiNode::button(
+                Text::key(RESTORE_LABEL),
+                Intent::Primary,
+                ActionRef::with(A_RESTORE, payload.clone()),
+            ));
+        }
+        actions.push(if comparing {
+            UiNode::button(
+                Text::key(SHOW_TEXT),
+                Intent::Neutral,
+                ActionRef::with(A_SHOW_TEXT, payload.clone()),
             )
         } else {
-            let compare = UiNode::button(
+            UiNode::button(
                 Text::key(COMPARE_LABEL),
                 Intent::Neutral,
                 ActionRef::with(A_COMPARE, payload.clone()),
-            );
-            match String::from_utf8(bytes) {
-                Ok(text) => (
-                    UiNode::text(text),
-                    UiNode::row(
-                        1,
-                        vec![
-                            compare,
-                            UiNode::button(
-                                Text::key(COPY_LABEL),
-                                Intent::Neutral,
-                                ActionRef::with(A_COPY, payload),
-                            ),
-                        ],
-                    ),
-                ),
-                Err(error) => (
-                    UiNode::text(Text::message(
-                        BINARY_PREVIEW,
-                        vec![Arg::int("size", error.as_bytes().len() as i64)],
-                    )),
-                    compare,
-                ),
-            }
-        };
+            )
+        });
+        if text {
+            actions.push(UiNode::button(
+                Text::key(COPY_LABEL),
+                Intent::Neutral,
+                ActionRef::with(A_COPY, payload),
+            ));
+        }
+        actions.push(UiNode::button(
+            Text::key(CLOSE_PREVIEW),
+            Intent::Neutral,
+            ActionRef::new(A_CLOSE_PREVIEW),
+        ));
         children.push(UiNode::keyed(
             format!("preview:{ts}"),
             UiKind::Section {
                 title: Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, ts)]),
                 collapsed: false,
-                children: vec![
-                    body,
-                    UiNode::row(
-                        1,
-                        vec![
-                            toggle,
-                            UiNode::button(
-                                Text::key(CLOSE_PREVIEW),
-                                Intent::Neutral,
-                                ActionRef::new(A_CLOSE_PREVIEW),
-                            ),
-                        ],
-                    ),
-                ],
+                children: vec![UiNode::row(4, actions), body],
             },
         ));
     }
@@ -2188,44 +2216,52 @@ fn comparison(version: &[u8], current: &[u8]) -> UiNode {
     UiNode::column(0, children)
 }
 
-/// Una versione: quando, quanto grande, e i due gesti che la riguardano.
+/// Una versione: quando e quanto è cambiata rispetto alla precedente.
 ///
-/// La più recente porta scritto *«adesso»* invece della dimensione, ed è ciò che
-/// il pannello nativo già faceva: ripristinare la versione più recente è
-/// riscrivere il file con quello che c'è già dentro.
+/// La riga è leggera — l'ora e una variazione — e si sceglie col click: i gesti
+/// (ripristina, confronta, copia) stanno nell'anteprima della versione scelta.
+/// Con un bottone «Ripristina» per riga il pannello era una colonna di azioni
+/// distruttive uguali, e il gesto più pericoloso era il più facile da fare.
+/// La più recente è la versione attuale.
+///
 /// La nota viaggia nel payload accanto all'istante, e non perché serva a chi
 /// agisce — `version.restore` la vuole, ma la si potrebbe rileggere —: serve a
 /// dire **su quale nota questa riga è stata disegnata**, che è l'unico modo di
 /// accorgersi che nel frattempo è cambiata. Vedi [`same_notes`].
-fn row(v: &VersionRef, current: bool, doc: &str) -> UiNode {
-    let when = Text::message(WHEN_TITLE, vec![Arg::timestamp(WHEN, v.ts)]);
-    let amount = if current {
+fn row(
+    v: &VersionRef,
+    current: bool,
+    older: Option<&VersionRef>,
+    selected: bool,
+    doc: &str,
+) -> UiNode {
+    let when = Text::message(WHEN, vec![Arg::timestamp(WHEN, v.ts)]);
+    let change = if current {
         Text::key(CURRENT)
     } else {
-        Text::message(SIZE, vec![Arg::int("size", v.size as i64)])
+        match older {
+            None => Text::message(FIRST_VERSION, vec![Arg::int("size", v.size as i64)]),
+            Some(older) if v.size > older.size => {
+                Text::message(GREW, vec![Arg::int("size", (v.size - older.size) as i64)])
+            }
+            Some(older) if v.size < older.size => {
+                Text::message(SHRANK, vec![Arg::int("size", (older.size - v.size) as i64)])
+            }
+            Some(_) => Text::key(SAME_SIZE),
+        }
     };
-    UiNode::keyed(
-        v.ts.to_string(),
-        UiKind::Stack {
-            dir: fub_abi::ui::Axis::Row,
-            gap: 1,
-            children: vec![
-                UiNode::list_item(
-                    when,
-                    Some(amount),
-                    Some(ActionRef::with(
-                        A_PREVIEW,
-                        serde_json::json!({ DOC: doc, TS: v.ts }),
-                    )),
-                ),
-                UiNode::button(
-                    Text::key(RESTORE_LABEL),
-                    Intent::Primary,
-                    ActionRef::with(A_RESTORE, serde_json::json!({ DOC: doc, TS: v.ts })),
-                ),
-            ],
-        },
-    )
+    let mut item = UiNode::list_item(
+        when,
+        Some(change),
+        Some(ActionRef::with(
+            A_PREVIEW,
+            serde_json::json!({ DOC: doc, TS: v.ts }),
+        )),
+    );
+    if let UiKind::ListItem { selected: at, .. } = &mut item.kind {
+        *at = selected;
+    }
+    item.with_key(v.ts.to_string())
 }
 
 /// Il comando del registro che riporta una nota a una sua versione.

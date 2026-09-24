@@ -95,6 +95,18 @@ link che non si risolve non apre niente.
 Un backlink parte dal documento sorgente e conserva un contesto leggibile. Le
 query per vicini e direzione usano gli stessi dati di identità del grafo.
 
+Il pannello Collegamenti mostra una sezione per parte (entranti, uscenti,
+menzioni non collegate nei due versi) con il numero nel titolo; una parte vuota
+resta chiusa su una riga. Il contesto si legge come testo: un wikilink compare
+col suo alias o col nome della nota, non con la sua sintassi. Il filtro per
+espressione di query sta in fondo, in una sezione chiusa finché non è attivo.
+
+Il pannello Cronologia elenca le versioni della nota con l'istante e la
+variazione di dimensione rispetto alla precedente. Una versione si sceglie col
+click: la sua anteprima parte dal confronto con la nota attuale e porta i
+gesti — ripristino, testo intero, copia —; la versione attuale non offre il
+ripristino.
+
 Un file non letto o non parsato non può produrre link affidabili; l'apertura lo
 dichiara invece di inventare un grafo completo.
 

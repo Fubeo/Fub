@@ -71,7 +71,9 @@ fn backlink_titles(tree: &UiNode) -> Vec<String> {
                     _ => None,
                 })
                 .collect(),
-            UiKind::Stack { children, .. } => children.iter().flat_map(list_items).collect(),
+            UiKind::Stack { children, .. } | UiKind::Section { children, .. } => {
+                children.iter().flat_map(list_items).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -86,7 +88,9 @@ fn first_action(tree: &UiNode) -> ActionRef {
             UiKind::ListItem {
                 action: Some(a), ..
             } => Some(a.clone()),
-            UiKind::Stack { children, .. } => children.iter().find_map(find),
+            UiKind::Stack { children, .. } | UiKind::Section { children, .. } => {
+                children.iter().find_map(find)
+            }
             UiKind::List { items } => items.iter().find_map(find),
             _ => None,
         }

@@ -812,3 +812,41 @@ describe("controlli statici e righe valide", () => {
     expect(host.querySelectorAll("tr > td")).toHaveLength(1);
   });
 });
+
+describe("le voci di una lista", () => {
+  const item = (title: string): UiNode => ({ node: "list_item", title, subtitle: null, action: null, selected: false });
+
+  it("una riga con un bottone è lei la voce, e la voce che contiene non si ripete", () => {
+    // Le menzioni da collegare: voce + «Collega». Il bottone risultava figlio
+    // diretto della lista, che ammette solo voci.
+    const host = document.createElement("div");
+    mountTree(host, {
+      node: "list",
+      items: [
+        item("semplice"),
+        { node: "stack", dir: "row", gap: 6, children: [
+          item("con un gesto"),
+          { node: "button", label: "Collega", intent: "neutral", action: { action: "convert", payload: null } },
+        ] },
+      ],
+    } as UiNode, vi.fn());
+    const list = host.querySelector<HTMLElement>('[role="list"]')!;
+    const voices = [...list.children].map((child) => child.getAttribute("role"));
+    expect(voices).toEqual(["listitem", "listitem"]);
+    const inner = list.children[1]!.querySelector(".ui-list-item")!;
+    expect(inner.hasAttribute("role")).toBe(false);
+  });
+
+  it("la voce annidata che si attiva resta raggiungibile come bottone", () => {
+    const host = document.createElement("div");
+    mountTree(host, {
+      node: "list",
+      items: [{ node: "stack", dir: "row", gap: 6, children: [
+        { node: "list_item", title: "apri", subtitle: null, action: { action: "open", payload: null }, selected: false },
+        { node: "button", label: "Collega", intent: "neutral", action: { action: "convert", payload: null } },
+      ] }],
+    } as UiNode, vi.fn());
+    const inner = host.querySelector<HTMLElement>(".ui-list-item")!;
+    expect(inner.getAttribute("role")).toBe("button");
+  });
+});

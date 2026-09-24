@@ -197,29 +197,26 @@ fn entries(tree: &UiNode) -> Vec<(String, Option<String>)> {
     out
 }
 
-/// L'azione dell'**ultimo** bottone «Ripristina», cioè quello della versione
-/// più vecchia disegnata — la sola che ripristinata cambi qualcosa.
+/// L'azione «Ripristina» della versione più vecchia disegnata — la sola che
+/// ripristinata cambi qualcosa —, con l'albero da cui è stata presa.
 ///
-/// Era il *primo*, ed era un mezzo banco: il primo bottone è quello della
-/// versione più recente, che porta scritto «adesso» e ripristinarla è riscrivere
-/// il file con ciò che c'è già. Finché il payload se lo scriveva il test — il
-/// primo bottone con l'istante dell'ultima versione — non si vedeva; prendendo
-/// il payload che il pannello disegna, le due metà tornano a essere della stessa
-/// riga e il banco misura un ripristino vero.
-fn restores(tree: &UiNode) -> Option<ActionRef> {
-    fn walk(node: &UiNode, out: &mut Vec<ActionRef>) {
-        if let UiKind::Button { label, action, .. } = &node.kind {
-            if label == "Ripristina" {
-                out.push(action.clone());
-            }
-        }
-        for child in node.children() {
-            walk(child, out);
-        }
-    }
-    let mut out = Vec::new();
-    walk(tree, &mut out);
-    out.pop()
+/// Il bottone sta nell'anteprima della versione scelta, non su ogni riga:
+/// qui si sceglie la riga come la sceglierebbe un click, e si prende il bottone
+/// col payload che il pannello gli ha disegnato addosso. Le due metà restano
+/// della stessa riga, e il banco misura un ripristino vero.
+fn restores(ws: &mut Workspace) -> (UiNode, Option<ActionRef>) {
+    let tree = ws.render_view(&instance()).expect("storia");
+    let pick = last_action(&tree);
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(pick.action.0).with_payload(pick.payload),
+        )
+        .expect("anteprima")
+    else {
+        panic!("l'anteprima si disegna")
+    };
+    (tree, button(&root, "Ripristina"))
 }
 
 /// Ogni testo dell'albero, per chiedere *cosa dice* senza legarsi alla forma.
@@ -266,9 +263,31 @@ fn the_view_lists_the_versions_without_receive_the_store() {
         entries.len() >= 2,
         "due scritture, almeno due versioni: {entries:?}"
     );
-    // La più recente porta «adesso» invece della dimensione: ripristinarla è
-    // riscrivere il file con ciò che c'è già.
-    assert_eq!(entries[0].1.as_deref(), Some("adesso"));
+    // La più recente è la versione attuale: ripristinarla sarebbe riscrivere
+    // il file con ciò che c'è già, e infatti la sua anteprima non lo offre.
+    assert_eq!(entries[0].1.as_deref(), Some("Versione attuale"));
+    let pick = {
+        fn first(node: &UiNode) -> Option<ActionRef> {
+            if let UiKind::ListItem {
+                action: Some(a), ..
+            } = &node.kind
+            {
+                return Some(a.clone());
+            }
+            node.children().into_iter().find_map(first)
+        }
+        first(&tree).expect("la versione attuale")
+    };
+    let ViewUpdate::Replace { root } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(pick.action.0).with_payload(pick.payload),
+        )
+        .expect("anteprima")
+    else {
+        panic!("l'anteprima si disegna")
+    };
+    assert!(button(&root, "Ripristina").is_none());
 }
 
 #[test]
@@ -408,8 +427,8 @@ fn restore_passes_from_the_record_and_is_cancels() {
         "`{VERSION_RESTORE}` non è nel registro"
     );
 
-    let tree = ws.render_view(&instance()).unwrap();
-    let action = restores(&tree).expect("il bottone c'è");
+    let (_, action) = restores(&mut ws);
+    let action = action.expect("il bottone c'è");
     ws.view_action(
         &instance(),
         UiAction::new(action.action.0).with_payload(action.payload),
@@ -450,7 +469,7 @@ fn a_restore_drawn_on_another_notes_not_writes_on_this() {
 
     // 1. Il pannello si disegna su `Uno.md`, e il bottone si porta dietro la
     //    nota su cui è stato disegnato.
-    let action = restores(&ws.render_view(&instance()).unwrap()).expect("il bottone c'è");
+    let action = restores(&mut ws).1.expect("il bottone c'è");
     // 2. La nota attiva cambia. Il ridisegno arriverà, ma non è ancora arrivato.
     watches(&mut ws, "Due.md");
     // 3. Il click parte dal pannello vecchio.
@@ -545,8 +564,8 @@ fn restore_conflicts_if_document_changes_while_snapshot_is_read() {
     ws.write_document(&doc, "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
 
-    let tree = ws.render_view(&instance()).expect("storia");
-    let action = restores(&tree).expect("il bottone c'è");
+    let (tree, action) = restores(&mut ws);
+    let action = action.expect("il bottone c'è");
     let count_before = entries(&tree).len();
     let store = vault.root.join(".fub").join("plugins").join(VERSIONING_ID);
     let index = store.join("versions.json");
@@ -628,8 +647,8 @@ fn restore_reports_io_and_changes_nothing_if_document_write_fails() {
     ws.write_document(&doc, "com'è\n", WriteBase::Dictated)
         .expect("riscritta");
 
-    let tree = ws.render_view(&instance()).expect("storia");
-    let action = restores(&tree).expect("il bottone c'è");
+    let (tree, action) = restores(&mut ws);
+    let action = action.expect("il bottone c'è");
     let entries_before = entries(&tree);
     let index = vault
         .root
@@ -715,20 +734,31 @@ fn the_comparison_shows_what_changed_since_that_version_and_survives_a_redraw() 
     else {
         panic!("l'anteprima si disegna")
     };
-    let compare = button(&root, "Confronta con l'attuale").expect("il confronto si offre");
-    let ViewUpdate::Replace { root } = ws
-        .view_action(
-            &instance(),
-            UiAction::new(compare.action.0).with_payload(compare.payload),
-        )
-        .expect("confronto")
-    else {
-        panic!("il confronto si disegna")
-    };
+    // Di una versione passata il confronto è la vista di partenza.
     let text = said(&root);
     assert!(text.contains("1 righe in più e 1 in meno"), "{text}");
     assert!(text.contains("com'era") && text.contains("com'è"), "{text}");
-    assert!(button(&root, "Mostra il testo").is_some());
+    let show = button(&root, "Mostra il testo").expect("il testo intero è a un clic");
+    let ViewUpdate::Replace { root: shown } = ws
+        .view_action(
+            &instance(),
+            UiAction::new(show.action.0).with_payload(show.payload.clone()),
+        )
+        .expect("testo")
+    else {
+        panic!("il testo si disegna")
+    };
+    assert!(
+        said(&shown).contains("titolo\ncom'era\nfine"),
+        "{}",
+        said(&shown)
+    );
+    let compare = button(&shown, "Confronta con l'attuale").expect("e il confronto torna");
+    ws.view_action(
+        &instance(),
+        UiAction::new(compare.action.0).with_payload(compare.payload),
+    )
+    .expect("confronto");
 
     // Come l'anteprima, il confronto sta nello stato di vista: una scrittura
     // ridisegna il pannello e il confronto segue il contenuto attuale.

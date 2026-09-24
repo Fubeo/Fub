@@ -50,7 +50,7 @@ const selectable = [...interactive, S("selected")];
 /** Classi che una pelle può nominare: estratte dai selettori dei 18 pezzi. */
 export const HOOKS = [
   "app", "elevation-paper", "elevation-base", "elevation-chrome", "elevation-floating", "elevation-dialog",
-  "skip-link", "brand", "muted", "primary", "ui-button", "intent-primary", "intent-danger",
+  "skip-link", "brand", "muted", "primary", "ui-button", "intent-primary", "intent-danger", "intent-neutral",
   "onboarding", "onboarding-actions",
   "views-bottom", "sidebar", "inspector-pane", "panel-title", "link-button", "danger",
   "plain-list", "tree-children", "tree-row", "row-name", "row-icon", "folder", "has-note", "chevron",
@@ -97,7 +97,7 @@ export const HOOKS = [
   "graph-list-open", "graph-list-empty", "graph-list-page", "graph-list-info", "graph-list-more",
   "settings-panel", "settings-tabs", "setting-row", "setting-text", "setting-source", "setting-sub",
   "settings-banner", "settings-banner-actions",
-  "views-status", "declared-view-panel", "declared-view", "ui-stack", "views-ribbon", "views-modal",
+  "views-status", "declared-view-panel", "declared-view", "ui-stack", "ui-text", "views-ribbon", "views-modal",
   "cm-editor", "pane-editor", "shell-tooltip", "titlebar-shortcut",
 ] as const;
 
@@ -116,7 +116,7 @@ export const COMPONENTS: readonly ShellComponent[] = [
   { name: "elevation-dialog", parts: ["modals"], states: rest, hooks: ["elevation-dialog"] },
   { name: "skip-link", parts: ["foundation"], states: [S("rest"), S("focused")], hooks: ["skip-link"] },
   { name: "brand-and-muted-copy", parts: ["foundation"], states: rest, hooks: ["brand", "muted"] },
-  { name: "button-intent", parts: ["foundation"], states: interactive, hooks: ["primary", "ui-button", "intent-primary", "intent-danger"] },
+  { name: "button-intent", parts: ["foundation"], states: interactive, hooks: ["primary", "ui-button", "intent-primary", "intent-danger", "intent-neutral"] },
   { name: "titlebar", parts: ["chrome"], states: rest, hooks: ["titlebar", "titlebar-side", "titlebar-side--left", "titlebar-center", "titlebar--darwin", "window-controls"] },
   { name: "window-control", parts: ["chrome"], states: interactive, hooks: ["win-ctrl", "win-ctrl--close"] },
   { name: "app-menu", parts: ["chrome"], states: selectable, hooks: ["app-menu"] },
@@ -147,7 +147,7 @@ export const COMPONENTS: readonly ShellComponent[] = [
   { name: "settings", parts: ["settings"], states: [S("rest"), S("selected"), S("focused")], hooks: ["settings-panel", "settings-tabs", "setting-row", "setting-text", "setting-source", "setting-sub", "setting-row--theme", "settings-banner", "settings-banner-actions"] },
   { name: "notices", parts: ["notices"], states: [S("rest"), S("selected"), S("disabled")], hooks: ["toast", "pane-status", "save-state", "ha-novita", "in-corso", "key-pending", "dock-panel", "dock-panel--notify", "dock-panel--activity", "notify-list", "notify-testo", "notify-ora", "activity-row", "activity-label"] },
   { name: "graph-panel", parts: ["graph"], states: [S("rest"), S("hover"), S("pressed"), S("selected"), S("focused")], hooks: ["graph-count", "graph-panel", "graph-panel-toggle", "graph-panel-popover", "graph-panel-titolo", "graph-panel-sezione", "graph-panel-sezione-titolo", "graph-panel-preset", "graph-panel-select", "graph-panel-campo", "graph-panel-nome", "graph-panel-valore", "graph-panel-azioni", "graph-empty", "graph-status", "graph-list", "graph-list-summary", "graph-list-items", "graph-list-open", "graph-list-empty", "graph-list-page", "graph-list-info", "graph-list-more"] },
-  { name: "declared-view", parts: ["declared-views"], states: [S("rest"), S("selected"), S("focused")], hooks: ["views-status", "declared-view-panel", "declared-view", "ui-stack", "views-ribbon", "views-modal"] },
+  { name: "declared-view", parts: ["declared-views"], states: [S("rest"), S("selected"), S("focused")], hooks: ["views-status", "declared-view-panel", "declared-view", "ui-stack", "ui-text", "views-ribbon", "views-modal"] },
   { name: "editor-motion-surface", parts: ["motion"], states: [S("rest"), S("focused")], hooks: ["cm-editor", "cm-content", "pane-editor"] },
   { name: "tooltip", parts: ["tooltip"], states: [S("rest"), S("disabled")], hooks: ["shell-tooltip", "titlebar-shortcut"] },
 ];

@@ -190,32 +190,40 @@
   font-weight: var(--weight-bold);
 }
 
-/* UI dichiarativa (backlink) */
+/* UI dichiarativa: le voci delle liste delle view (collegamenti, cronologia,
+   tag…). Righe leggere e non tessere piene: in una barra laterale dieci
+   tessere una sotto l'altra erano un muro, e il fondo si guadagna al
+   passaggio. */
 .ui-heading {
   margin: var(--space-2) 0;
   font-size: var(--text-base);
 }
 .ui-list-item {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
-  background: var(--bg-panel);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-1);
 }
 .ui-list-item.clickable {
   cursor: pointer;
 }
 .ui-list-item.clickable:hover {
-  outline: 1px solid var(--accent);
+  background: var(--bg-hover);
 }
 .ui-list-item-title {
   font-weight: var(--weight-medium);
-}
-.ui-list-item-subtitle {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-list-item-subtitle {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  /* Due righe al massimo: il contesto di un link si legge, ma non si
+     prende il pannello. */
+  max-height: calc(2em * var(--leading-tight));
+  overflow: hidden;
 }
 
 /* Ciò che il core non conosce (decisione 0017).

@@ -307,6 +307,7 @@ function update(
     case "stack": {
       if (prev.node !== "stack") return false;
       el.style.flexDirection = next.dir === "row" ? "row" : "column";
+      el.dataset.dir = next.dir === "row" ? "row" : "column";
       el.style.gap = `${next.gap}px`;
       children(el, next.children, onAction);
       return true;
@@ -314,6 +315,7 @@ function update(
     case "list":
       if (prev.node !== "list") return false;
       children(el, next.items, onAction);
+      markListItems(el);
       return true;
     case "tree":
       if (prev.node !== "tree") return false;
@@ -563,12 +565,35 @@ function ensureRowCell(row: HTMLTableRowElement): void {
   row.appendChild(td);
 }
 
+/// Ogni figlio di una lista è una sua voce, anche quando il provider non ci
+/// mette un `list_item` ma una riga — una voce con un bottone accanto, come le
+/// menzioni da collegare. Senza, il bottone risultava figlio diretto della
+/// lista, che ammette solo voci, e le voci annidate nella riga si
+/// annunciavano come voci della lista esterna. La riga diventa la voce, e le
+/// voci che contiene smettono di dichiararsi tali (non quelle di una lista
+/// annidata, che sono sue): una voce che si attiva diventa il bottone che è,
+/// come l'etichetta di un albero, le altre restano testo.
+function markListItems(list: HTMLElement): void {
+  for (const child of list.children) {
+    if (!(child instanceof HTMLElement) || child.classList.contains("ui-list-item")) continue;
+    child.setAttribute("role", "listitem");
+    for (const inner of child.querySelectorAll<HTMLElement>('.ui-list-item[role="listitem"]')) {
+      if (inner.parentElement?.closest('[role="list"]') !== list) continue;
+      if (inner.hasAttribute("tabindex")) inner.setAttribute("role", "button");
+      else inner.removeAttribute("role");
+    }
+  }
+}
+
 function draw(node: UiNode, onAction: Port): HTMLElement {
   switch (node.node) {
     case "stack": {
       const el = div("ui-stack");
       el.style.display = "flex";
       el.style.flexDirection = node.dir === "row" ? "row" : "column";
+      // La direzione anche come attributo: la pelle veste le righe (vanno a
+      // capo, la voce si stringe, i bottoni no) senza leggere uno stile inline.
+      el.dataset.dir = node.dir === "row" ? "row" : "column";
       el.style.gap = `${node.gap}px`;
       for (const child of node.children) el.appendChild(renderUiNode(child, onAction));
       return el;
@@ -591,6 +616,7 @@ function draw(node: UiNode, onAction: Port): HTMLElement {
       // «lista, sei elementi» e di saltarla, invece di leggerla tutta.
       el.setAttribute("role", "list");
       for (const item of node.items) el.appendChild(renderUiNode(item, onAction));
+      markListItems(el);
       return el;
     }
     case "list_item": {

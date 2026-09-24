@@ -620,11 +620,53 @@ const TREES: Record<string, UiNode> = {
       },
     ],
   },
+  // Le forme sono quelle del provider `backlinks` (fub-features): una sezione
+  // per parte, col numero nel titolo, chiusa quando è vuota; il filtro in
+  // fondo, chiuso.
   backlinks: {
-    node: "list",
-    items: [
-      { node: "list_item", title: "Benvenuto", subtitle: "…sta in [[Sintassi di Fub]], i colori…", action: { action: "open", payload: "Benvenuto.md" }, selected: false },
-      { node: "list_item", title: "Il banco che vede", subtitle: "…Vedi anche [[Sintassi di Fub]] e una…", action: { action: "open", payload: "Progetti/Il banco che vede.md" }, selected: false },
+    node: "stack",
+    dir: "column",
+    gap: 4,
+    children: [
+      {
+        node: "section", title: "Entranti · 2", collapsed: false, key: "incoming", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Benvenuto", subtitle: "…sta in Sintassi di Fub, i colori della nota e i link…", action: { action: "open", payload: "Benvenuto.md" }, selected: false },
+            { node: "list_item", title: "Il banco che vede", subtitle: "Vedi anche Sintassi di Fub e una delle scene del banco.", action: { action: "open", payload: "Progetti/Il banco che vede.md" }, selected: false },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Uscenti · 2", collapsed: false, key: "outgoing", children: [{
+          node: "list",
+          items: [
+            { node: "list_item", title: "Benvenuto", subtitle: "Un wikilink risolto: Benvenuto.", action: { action: "open", payload: "Benvenuto.md" }, selected: false },
+            { node: "list_item", title: "Frammenti di codice", subtitle: "Uno con alias: i frammenti.", action: { action: "open", payload: "Guida/Frammenti di codice.md" }, selected: false },
+          ],
+        }],
+      },
+      {
+        node: "section", title: "Menzioni non collegate · 1", collapsed: false, key: "unlinked", children: [{
+          node: "list",
+          items: [{
+            node: "stack", dir: "row", gap: 6, children: [
+              { node: "list_item", title: "Nota lunga", subtitle: "…la sintassi di fub resta la stessa in ogni nota…", action: { action: "open", payload: "Guida/Nota lunga.md" }, selected: false },
+              { node: "button", label: "Collega", intent: "neutral", action: { action: "convert", payload: null } },
+            ],
+          }],
+        }],
+      },
+      {
+        node: "section", title: "Menzioni uscenti non collegate · 0", collapsed: true, key: "outbound_unlinked", children: [
+          { node: "empty_state", title: "Nessuna menzione non collegata.", detail: null, action: null },
+        ],
+      },
+      {
+        node: "section", title: "Filtro avanzato", collapsed: true, key: "filter_section", children: [
+          { node: "text_input", field: "filter", label: "Filtro (QueryExpr JSON)", value: "", placeholder: null, action: { action: "filter", payload: null } },
+        ],
+      },
     ],
   },
   properties: {
@@ -636,18 +678,41 @@ const TREES: Record<string, UiNode> = {
       { label: "Modificata", value: "19 agosto 2026" },
     ],
   },
+  // Le forme sono quelle del provider `history` (fub-features): righe
+  // leggere, e i gesti nell'anteprima della versione scelta, che parte dal
+  // confronto con la nota attuale.
   history: {
     node: "stack",
     dir: "column",
-    gap: 8,
+    gap: 1,
     children: [
-      { node: "text", content: "3 versioni" },
+      { node: "text", content: "Versioni: 4" },
       {
         node: "list",
         items: [
-          { node: "list_item", title: "19 agosto 2026, 09:12", subtitle: "412 parole", action: { action: "preview", payload: 3 }, selected: false },
-          { node: "list_item", title: "18 agosto 2026, 17:40", subtitle: "398 parole", action: { action: "preview", payload: 2 }, selected: false },
-          { node: "list_item", title: "12 agosto 2026, 11:05", subtitle: "251 parole", action: { action: "preview", payload: 1 }, selected: false },
+          { node: "list_item", key: "0", title: "19 agosto 2026, 09:12", subtitle: "Versione attuale", action: { action: "preview", payload: 0 }, selected: false },
+          { node: "list_item", key: "1", title: "18 agosto 2026, 17:40", subtitle: "+22 byte", action: { action: "preview", payload: 1 }, selected: true },
+          { node: "list_item", key: "2", title: "18 agosto 2026, 11:02", subtitle: "+1.139 byte", action: { action: "preview", payload: 2 }, selected: false },
+          { node: "list_item", key: "3", title: "12 agosto 2026, 11:05", subtitle: "Prima versione · 2.251 byte", action: { action: "preview", payload: 3 }, selected: false },
+        ],
+      },
+      {
+        node: "section", title: "Versione del 18 agosto 2026, 17:40", collapsed: false, key: "preview:1", children: [
+          { node: "stack", dir: "row", gap: 4, children: [
+            { node: "button", label: "Ripristina", intent: "primary", action: { action: "restore", payload: 1 } },
+            { node: "button", label: "Mostra il testo", intent: "neutral", action: { action: "show_text", payload: 1 } },
+            { node: "button", label: "Copia il testo", intent: "neutral", action: { action: "copy", payload: 1 } },
+            { node: "button", label: "Chiudi l'anteprima", intent: "neutral", action: { action: "close_preview", payload: null } },
+          ] },
+          { node: "stack", dir: "column", gap: 0, children: [
+            { node: "text", content: "Rispetto a questa versione, la nota attuale ha 2 righe in più e 1 in meno." },
+            { node: "text", content: "… 4 righe uguali" },
+            { node: "text", content: "  ## Testo" },
+            { node: "stack", dir: "row", gap: 1, children: [{ node: "badge", label: "−", intent: "danger" }, { node: "text", content: "Prosa normale, con **grassetto** e *corsivo*." }] },
+            { node: "stack", dir: "row", gap: 1, children: [{ node: "badge", label: "+", intent: "primary" }, { node: "text", content: "Prosa normale, con **grassetto**, *corsivo*, ~~barrato~~." }] },
+            { node: "stack", dir: "row", gap: 1, children: [{ node: "badge", label: "+", intent: "primary" }, { node: "text", content: "Un apice^ e una nota a piè di pagina[^1]." }] },
+            { node: "text", content: "  " },
+          ] },
         ],
       },
     ],

@@ -129,17 +129,21 @@ impl ViewProvider for BacklinksView {
                 target: active.clone(),
                 page: None,
             })? {
-                IndexResult::Backlinks(refs) => build_backlinks_view(&refs.items),
+                IndexResult::Backlinks(refs) => {
+                    (refs.items.len(), build_backlinks_view(&refs.items))
+                }
                 other => return Err(unexpected("backlinks", &other)),
             };
             let (_, refs) = outgoing_refs(host, &active)?;
             return Ok(UiNode::column(
-                8,
+                4,
                 vec![
-                    UiNode::heading(2, Text::key(INCOMING)),
-                    incoming,
-                    UiNode::heading(2, Text::key(OUTGOING)),
-                    build_outgoing_view(&refs),
+                    part(INCOMING, INCOMING_COUNT, Ok(incoming)),
+                    part(
+                        OUTGOING,
+                        OUTGOING_COUNT,
+                        Ok((refs.len(), build_outgoing_view(&refs))),
+                    ),
                 ],
             ));
         }
@@ -148,60 +152,84 @@ impl ViewProvider for BacklinksView {
             page: None,
         });
         let outgoing_result = outgoing_refs(host, &active);
-        let incoming =
-            section(incoming_result.as_ref().map_err(Clone::clone).and_then(
-                |result| match result {
-                    IndexResult::Backlinks(refs) => Ok(build_backlinks_view(&refs.items)),
+        let incoming = part(
+            INCOMING,
+            INCOMING_COUNT,
+            incoming_result
+                .as_ref()
+                .map_err(Clone::clone)
+                .and_then(|result| match result {
+                    IndexResult::Backlinks(refs) => {
+                        Ok((refs.items.len(), build_backlinks_view(&refs.items)))
+                    }
                     other => Err(unexpected("backlinks", other)),
-                },
-            ));
-        let outgoing = section(
+                }),
+        );
+        let outgoing = part(
+            OUTGOING,
+            OUTGOING_COUNT,
             outgoing_result
                 .as_ref()
                 .map_err(Clone::clone)
-                .map(|(_, refs)| build_outgoing_view(refs)),
+                .map(|(_, refs)| (refs.len(), build_outgoing_view(refs))),
         );
-        let unlinked = section((|| {
-            let IndexResult::Backlinks(refs) = incoming_result? else {
-                return Err(PluginError::Internal(
-                    "query backlink: risposta fuori tema".into(),
-                ));
-            };
-            let (targets, _) = outgoing_result.clone()?;
-            let linked = refs
-                .items
-                .iter()
-                .map(|r| r.source.clone())
-                .chain(targets)
-                .collect::<BTreeSet<_>>();
-            unlinked_mentions(host, &active, &linked, &filter_query(host)?)
-                .map(|mentions| build_unlinked_view(&mentions))
-        })());
-        let outbound_unlinked = section((|| {
-            let (targets, _) = outgoing_result.clone()?;
-            let linked = targets.into_iter().collect::<BTreeSet<_>>();
-            outbound_unlinked_mentions(host, &active, &linked, &filter_query(host)?)
-                .map(|mentions| build_unlinked_view(&mentions))
-        })());
-        Ok(UiNode::column(
-            12,
-            vec![
-                UiNode::new(UiKind::TextInput {
+        let unlinked = part(
+            UNLINKED,
+            UNLINKED_COUNT,
+            (|| {
+                let IndexResult::Backlinks(refs) = incoming_result? else {
+                    return Err(PluginError::Internal(
+                        "query backlink: risposta fuori tema".into(),
+                    ));
+                };
+                let (targets, _) = outgoing_result.clone()?;
+                let linked = refs
+                    .items
+                    .iter()
+                    .map(|r| r.source.clone())
+                    .chain(targets)
+                    .collect::<BTreeSet<_>>();
+                unlinked_mentions(host, &active, &linked, &filter_query(host)?)
+                    .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
+            })(),
+        );
+        let outbound_unlinked = part(
+            OUTBOUND_UNLINKED,
+            OUTBOUND_UNLINKED_COUNT,
+            (|| {
+                let (targets, _) = outgoing_result.clone()?;
+                let linked = targets.into_iter().collect::<BTreeSet<_>>();
+                outbound_unlinked_mentions(host, &active, &linked, &filter_query(host)?)
+                    .map(|mentions| (mentions.len(), build_unlinked_view(&mentions)))
+            })(),
+        );
+        // Il filtro è un'espressione di query in JSON: uno strumento per chi
+        // la sa scrivere, non la prima cosa del pannello. Sta in fondo, chiuso
+        // finché non ce n'è uno attivo.
+        let filter = filter_text(host)?;
+        let filter_section = UiNode::keyed(
+            FILTER_SECTION,
+            UiKind::Section {
+                title: Text::key(FILTER_SECTION),
+                collapsed: filter.is_empty(),
+                children: vec![UiNode::new(UiKind::TextInput {
                     field: FILTER_STATE.to_string(),
                     label: Some(Text::key(FILTER_STATE)),
-                    value: filter_text(host)?,
+                    value: filter,
                     placeholder: None,
                     action: Some(ActionRef::new(FILTER_ACTION)),
                 })
-                .with_key(FILTER_STATE),
-                UiNode::heading(2, Text::key(INCOMING)),
+                .with_key(FILTER_STATE)],
+            },
+        );
+        Ok(UiNode::column(
+            4,
+            vec![
                 incoming,
-                UiNode::heading(2, Text::key(OUTGOING)),
                 outgoing,
-                UiNode::heading(2, Text::key(UNLINKED)),
                 unlinked,
-                UiNode::heading(2, Text::key(OUTBOUND_UNLINKED)),
                 outbound_unlinked,
+                filter_section,
             ],
         ))
     }
@@ -317,9 +345,14 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(EMPTY_UNLINKED, "Nessuna menzione non collegata.")
             .with(FAILED, "Impossibile caricare questa sezione.")
             .with(CONVERT_LABEL, "Collega")
-            .with(COUNT, "Backlink: {count}")
-            .with(OUTGOING_COUNT, "Collegamenti uscenti: {count}")
-            .with(UNLINKED_COUNT, "Menzioni non collegate: {count}"),
+            .with(INCOMING_COUNT, "Entranti · {count}")
+            .with(OUTGOING_COUNT, "Uscenti · {count}")
+            .with(UNLINKED_COUNT, "Menzioni non collegate · {count}")
+            .with(
+                OUTBOUND_UNLINKED_COUNT,
+                "Menzioni uscenti non collegate · {count}",
+            )
+            .with(FILTER_SECTION, "Filtro avanzato"),
         StringCatalog::new("en")
             .with(VIEW_TITLE, "Links")
             .with(NO_ACTIVE_DOC, "No note open.")
@@ -333,9 +366,14 @@ pub fn catalog() -> Vec<StringCatalog> {
             .with(EMPTY_UNLINKED, "No unlinked mentions.")
             .with(FAILED, "Could not load this section.")
             .with(CONVERT_LABEL, "Link")
-            .with(COUNT, "Backlinks: {count}")
-            .with(OUTGOING_COUNT, "Outgoing links: {count}")
-            .with(UNLINKED_COUNT, "Unlinked mentions: {count}"),
+            .with(INCOMING_COUNT, "Incoming · {count}")
+            .with(OUTGOING_COUNT, "Outgoing · {count}")
+            .with(UNLINKED_COUNT, "Unlinked mentions · {count}")
+            .with(
+                OUTBOUND_UNLINKED_COUNT,
+                "Outgoing unlinked mentions · {count}",
+            )
+            .with(FILTER_SECTION, "Advanced filter"),
     ]
 }
 
@@ -345,13 +383,15 @@ const VIEW_TITLE: &str = "view_title";
 const NO_ACTIVE_DOC: &str = "no_active_doc";
 /// La nota aperta non ha backlink.
 const EMPTY: &str = "empty";
-/// L'intestazione dell'elenco, col numero. Era un `format!` italiano — l'ultima
-/// riga di questo file a esserlo — e il numero attraversa adesso come numero.
-const COUNT: &str = "count_heading";
+/// I titoli delle parti, col numero. Il numero attraversa come numero: la
+/// frase la compone il catalogo.
 const A_COUNT: &str = "count";
 const INCOMING: &str = "incoming";
+const INCOMING_COUNT: &str = "incoming_count";
 const OUTGOING: &str = "outgoing";
 const UNLINKED: &str = "unlinked";
+const OUTBOUND_UNLINKED_COUNT: &str = "outbound_unlinked_count";
+const FILTER_SECTION: &str = "filter_section";
 const EMPTY_OUTGOING: &str = "empty_outgoing";
 const EMPTY_UNLINKED: &str = "empty_unlinked";
 const FAILED: &str = "failed";
@@ -393,7 +433,7 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
             *n += 1;
             UiNode::list_item(
                 r.source.page_name(),
-                r.context.clone().map(Text::from),
+                r.context.as_deref().map(readable).map(Text::from),
                 // l'azione porta il DocId sorgente nel payload, così il
                 // provider può navigare senza parsare il proprio id.
                 Some(ActionRef::with(
@@ -404,17 +444,7 @@ pub fn build_backlinks_view(refs: &[BacklinkRef]) -> UiNode {
             .with_key(key)
         })
         .collect();
-
-    UiNode::column(
-        6,
-        vec![
-            UiNode::heading(
-                3,
-                Text::message(COUNT, vec![Arg::int(A_COUNT, refs.len() as i64)]),
-            ),
-            UiNode::list(items),
-        ],
-    )
+    UiNode::list(items)
 }
 
 /// Costruisce l'albero `UiNode` dei link uscenti di un documento, una riga per
@@ -439,7 +469,7 @@ pub fn build_outgoing_view(targets: &[(DocId, Option<String>)]) -> UiNode {
             *n += 1;
             UiNode::list_item(
                 target.page_name(),
-                context.clone().map(Text::from),
+                context.as_deref().map(readable).map(Text::from),
                 Some(ActionRef::with(
                     OPEN,
                     serde_json::json!({ DOC: target.as_str() }),
@@ -448,22 +478,67 @@ pub fn build_outgoing_view(targets: &[(DocId, Option<String>)]) -> UiNode {
             .with_key(key)
         })
         .collect();
-    UiNode::column(
-        6,
-        vec![
-            UiNode::heading(
-                3,
-                Text::message(
-                    OUTGOING_COUNT,
-                    vec![Arg::int(A_COUNT, targets.len() as i64)],
-                ),
-            ),
-            UiNode::list(items),
-        ],
+    UiNode::list(items)
+}
+/// Una parte del pannello: una sezione col numero nel titolo, chiusa quando
+/// è vuota — «Uscenti · 0» dice già tutto in una riga, e un segnaposto sotto
+/// ogni titolo riempiva il pannello di niente. Se la parte non si carica il
+/// titolo resta senza numero e la sezione dice il guasto.
+fn part(name: &str, counted: &str, result: Result<(usize, UiNode), PluginError>) -> UiNode {
+    let (title, collapsed, body) = match result {
+        Ok((count, body)) => (
+            Text::message(counted, vec![Arg::int(A_COUNT, count as i64)]),
+            count == 0,
+            body,
+        ),
+        Err(_) => (
+            Text::key(name),
+            false,
+            UiNode::failed(Text::key(FAILED), None),
+        ),
+    };
+    UiNode::keyed(
+        name,
+        UiKind::Section {
+            title,
+            collapsed,
+            children: vec![body],
+        },
     )
 }
-fn section(result: Result<UiNode, PluginError>) -> UiNode {
-    result.unwrap_or_else(|_| UiNode::failed(Text::key(FAILED), None))
+
+/// Il contesto di un link come si legge, non come si scrive: `[[Nota|alias]]`
+/// diventa `alias`, `[[Nota#Titolo]]` diventa `Nota › Titolo`, e
+/// `[[Nota]]` diventa `Nota`. Il pannello mostra una frase, non la sintassi
+/// che l'ha prodotta.
+fn readable(context: &str) -> String {
+    let mut out = String::with_capacity(context.len());
+    let mut rest = context;
+    while let Some(open) = rest.find("[[") {
+        let Some(close) = rest[open + 2..].find("]]") else {
+            break;
+        };
+        out.push_str(&rest[..open]);
+        let inner = &rest[open + 2..open + 2 + close];
+        match inner.split_once('|') {
+            Some((_, alias)) => out.push_str(alias),
+            None => {
+                let (page, anchor) = inner.split_once('#').unwrap_or((inner, ""));
+                let page = page.rsplit('/').next().unwrap_or(page);
+                out.push_str(page);
+                let anchor = anchor.trim_start_matches('^');
+                if !anchor.is_empty() {
+                    if !page.is_empty() {
+                        out.push_str(" › ");
+                    }
+                    out.push_str(anchor);
+                }
+            }
+        }
+        rest = &rest[open + 2 + close + 2..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn unexpected(expected: &str, actual: &IndexResult) -> PluginError {
@@ -817,19 +892,7 @@ fn build_unlinked_view(mentions: &[UnlinkedMention]) -> UiNode {
             ))
         })
         .collect();
-    UiNode::column(
-        6,
-        vec![
-            UiNode::heading(
-                3,
-                Text::message(
-                    UNLINKED_COUNT,
-                    vec![Arg::int(A_COUNT, mentions.len() as i64)],
-                ),
-            ),
-            UiNode::list(rows),
-        ],
-    )
+    UiNode::list(rows)
 }
 
 /// Le menzioni non collegate di una nota: `Text` meno `Linked` meno self (P04),
@@ -933,11 +996,8 @@ mod tests {
                 context: None,
             },
         ];
-        let UiKind::Stack { children, .. } = build_backlinks_view(&refs).kind else {
-            panic!("the panel is a column");
-        };
-        let UiKind::List { items } = &children[1].kind else {
-            panic!("the second row of the column is the list");
+        let UiKind::List { items } = build_backlinks_view(&refs).kind else {
+            panic!("the part is the list");
         };
         assert_eq!(items.len(), 3, "one row per reference, not per note");
         let keys: std::collections::BTreeSet<&str> =
@@ -959,9 +1019,9 @@ mod tests {
 
         let tree = BacklinksView.render_view(&instance(), &host).unwrap();
         let json = serde_json::to_string(&tree).unwrap();
-        // La testata porta il **numero**, non la frase: la frase la compone il
-        // catalogo, e il numero è ciò che questo provider ha da dire.
-        assert!(json.contains(r#""key":"count_heading""#), "{json}");
+        // Il titolo della parte porta il **numero**, non la frase: la frase la
+        // compone il catalogo, e il numero è ciò che questo provider ha da dire.
+        assert!(json.contains(r#""key":"incoming_count""#), "{json}");
         assert!(json.contains(r#""value":2"#), "{json}");
         assert!(json.contains(r#""doc":"a/Uno.md""#));
         assert!(json.contains(r#""doc":"Due.md""#));
@@ -1059,18 +1119,15 @@ mod tests {
             (DocId::new("Nota.md"), Some("terzo".to_string())),
         ];
         let node = build_outgoing_view(&targets);
-        let UiKind::Stack { children, .. } = node.kind else {
-            panic!("the panel is a column");
-        };
-        let UiKind::List { items } = &children[1].kind else {
-            panic!("the second row of the column is the list");
+        let UiKind::List { items } = node.kind else {
+            panic!("the part is the list");
         };
         assert_eq!(items.len(), 3, "one row per reference, not per note");
         let keys: BTreeSet<&str> = items.iter().filter_map(|n| n.key.as_deref()).collect();
         assert_eq!(keys.len(), items.len(), "sibling keys are unique");
         assert!(keys.contains("Nota.md#0"));
         assert!(keys.contains("Nota.md#1"));
-        let json = serde_json::to_string(&children[1]).unwrap();
+        let json = serde_json::to_string(&items).unwrap();
         assert!(json.contains("primo"));
         assert!(json.contains(r#""doc":"Nota.md""#));
         assert!(matches!(
@@ -1175,5 +1232,38 @@ mod tests {
             host.read_document(&DocId::new("nota.md")).unwrap(),
             "niente da dire"
         );
+    }
+
+    #[test]
+    fn a_context_reads_as_prose_not_as_link_syntax() {
+        assert_eq!(readable("vedi [[Nota]] qui"), "vedi Nota qui");
+        assert_eq!(readable("con [[a/b/Nota|l'alias]]."), "con l'alias.");
+        assert_eq!(
+            readable("[[Nota#Titolo]] e [[#Sezione]]"),
+            "Nota › Titolo e Sezione"
+        );
+        assert_eq!(readable("[[Nota#^blocco]]"), "Nota › blocco");
+        assert_eq!(readable("aperto [[ma non chiuso"), "aperto [[ma non chiuso");
+    }
+
+    #[test]
+    fn an_empty_part_is_a_closed_section_with_its_count() {
+        let host = MemoryHost::new().with_backlink("target.md", &["Uno.md"]);
+        host.set_active(Some("target.md"));
+        let tree = BacklinksView.render_view(&instance(), &host).unwrap();
+        let UiKind::Stack { children, .. } = tree.kind else {
+            panic!("the panel is a column");
+        };
+        let sections: Vec<(Option<&str>, bool)> = children
+            .iter()
+            .map(|child| match &child.kind {
+                UiKind::Section { collapsed, .. } => (child.key.as_deref(), *collapsed),
+                other => panic!("every part is a section: {other:?}"),
+            })
+            .collect();
+        // Entranti ha una riga ed è aperta; il filtro, senza filtro attivo,
+        // sta chiuso in fondo.
+        assert_eq!(sections.first(), Some(&(Some(INCOMING), false)));
+        assert_eq!(sections.last(), Some(&(Some(FILTER_SECTION), true)));
     }
 }

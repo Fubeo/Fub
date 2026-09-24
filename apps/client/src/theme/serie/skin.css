@@ -1091,32 +1091,40 @@ progress::-moz-progress-bar {
   font-weight: var(--weight-bold);
 }
 
-/* UI dichiarativa (backlink) */
+/* UI dichiarativa: le voci delle liste delle view (collegamenti, cronologia,
+   tag…). Righe leggere e non tessere piene: in una barra laterale dieci
+   tessere una sotto l'altra erano un muro, e il fondo si guadagna al
+   passaggio. */
 .ui-heading {
   margin: var(--space-2) 0;
   font-size: var(--text-base);
 }
 .ui-list-item {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
-  background: var(--bg-panel);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-1);
 }
 .ui-list-item.clickable {
   cursor: pointer;
 }
 .ui-list-item.clickable:hover {
-  outline: 1px solid var(--accent);
+  background: var(--bg-hover);
 }
 .ui-list-item-title {
   font-weight: var(--weight-medium);
-}
-.ui-list-item-subtitle {
-  color: var(--muted);
-  font-size: var(--text-sm);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-list-item-subtitle {
+  margin-top: var(--space-1);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-tight);
+  /* Due righe al massimo: il contesto di un link si legge, ma non si
+     prende il pannello. */
+  max-height: calc(2em * var(--leading-tight));
+  overflow: hidden;
 }
 
 /* Ciò che il core non conosce (decisione 0017).
@@ -2368,17 +2376,58 @@ progress::-moz-progress-bar {
    provider se ne accorge. */
 
 .ui-section {
-  margin: var(--space-2) 0;
+  margin: var(--space-1) 0;
 }
 .ui-section > summary {
   cursor: pointer;
   font-weight: var(--weight-medium);
   font-size: var(--text-sm);
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-2);
   border-radius: var(--radius-sm);
 }
 .ui-section > summary:hover {
   background: var(--bg-hover);
+}
+.ui-section > .ui-children {
+  padding-top: var(--space-1);
+}
+/* Il vuoto dentro una sezione è una riga sommessa, non un riquadro. */
+.ui-section .ui-empty-state {
+  padding: var(--space-2) var(--space-4);
+}
+
+/* Un testo è testo semplice, a capo compresi: una versione di una nota o una
+   riga di confronto perdevano la forma, schiacciate su una riga sola. */
+.ui-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* I bottoni di una view stanno fra righe di testo: più compatti di quelli
+   della shell, e il neutro con un filetto, o si legge come una parola. */
+.ui-button {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}
+.ui-button.intent-neutral {
+  border: 1px solid var(--border);
+}
+
+/* Le pile in riga: vanno a capo quando non ci stanno, la voce e il testo si
+   stringono, i bottoni restano interi. Un «Collega» accanto a una menzione
+   finiva tagliato fuori dal pannello. */
+.ui-stack[data-dir="row"] {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.ui-stack[data-dir="row"] > .ui-list-item,
+.ui-stack[data-dir="row"] > .ui-text {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.ui-stack[data-dir="row"] > .ui-button,
+.ui-stack[data-dir="row"] > .ui-badge {
+  flex: 0 0 auto;
 }
 
 .ui-table {
