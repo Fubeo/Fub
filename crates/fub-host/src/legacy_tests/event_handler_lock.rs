@@ -163,12 +163,14 @@ struct LockProbe {
 impl LockProbe {
     fn observe(&self, callback: Callback) -> LockObservation {
         let workspace = self.workspace.custody();
-        let read = workspace.try_read();
-        let read_free = read.is_some();
-        drop(read);
-        let write = workspace.try_write();
-        let write_free = write.is_some();
-        drop(write);
+        // Il drain possiede il turno di scrittura: nessun altro thread può
+        // tenere il write, quindi un `try_read` fallito accusa solo questo.
+        let read_free = workspace.try_read().is_some();
+        // Un `try_write` istantaneo misurerebbe anche i lettori del pool, che
+        // sono leciti e passeggeri. Il write bloccante rientra nel turno di
+        // questo thread e aspetta solo loro; un guard trattenuto qui non si
+        // libererebbe mai, e il `TIMEOUT` di `run_detached` fa fallire il test.
+        let write_free = read_free && workspace.write().is_ok();
         LockObservation {
             callback,
             read: read_free,
