@@ -382,6 +382,51 @@ describe("createChart", () => {
     }
   });
 
+  it("dopo che l'utente ha mosso la vista, un riscaldo non la reinquadra da solo", () => {
+    // `warm` riarmava il fit alla quiete: dopo ogni nodo rilasciato, o dopo
+    // un pan durante l'assestamento, la vista saltava a inquadrare tutto
+    // appena il grafo si fermava.
+    g.unmount();
+    g = createChart({
+      ...baseOptions(f),
+      createInteraction,
+      config: { ...CONF, physics: organicConfig() },
+    });
+    const host = fakeHost();
+    host.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600);
+    g.mount(host);
+    run(f);
+    const canvas = host.querySelector<HTMLCanvasElement>("canvas.graph-main")!;
+    canvas.getBoundingClientRect = host.getBoundingClientRect;
+    canvas.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }));
+    run(f);
+    const moved = lastPainter!.states[lastPainter!.states.length - 1].camera;
+
+    g.warm(1);
+    run(f);
+
+    const after = lastPainter!.states[lastPainter!.states.length - 1].camera;
+    // Resta dov'era, a meno della coda dell'inseguimento (il reinquadramento
+    // spostava la scala di quasi un'unità).
+    expect(after.scale).toBeCloseTo(moved.scale, 3);
+    expect(Math.abs(after.tx - moved.tx)).toBeLessThan(1);
+    expect(Math.abs(after.ty - moved.ty)).toBeLessThan(1);
+  });
+
+  it("i risvegli del loop non contano come frame lenti: il livello resta quello del grafo", () => {
+    // Ogni risveglio misurava la pausa come un frame da 33 ms: dopo qualche
+    // hover o click la media superava 22 ms e un grafo di quattro note
+    // passava al livello lento, con le etichette minori spente.
+    g.mount(fakeHost());
+    run(f);
+    for (let k = 0; k < 20; k++) {
+      f.t += 5000;
+      g.setOpenDocuments(new Set(k % 2 === 0 ? ["n0"] : []));
+      run(f);
+    }
+    expect(lastPainter!.states[lastPainter!.states.length - 1].tier).toBe(1);
+  });
+
   it("lo zoom da tastiera converge entro un secondo e resta centrato", () => {
     g.unmount();
     g = createChart({ ...baseOptions(f), createInteraction });

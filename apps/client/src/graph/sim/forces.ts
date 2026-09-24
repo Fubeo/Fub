@@ -23,6 +23,32 @@ let forceStructure: Structure | null = null;
 let forceIndex = -1;
 let forceRepulsion = 0;
 
+/// La scala dei tempi della fisica. I coefficienti della conf (repulsione,
+/// rigidità, gravità) sono tarati «per passo», ma il motore integra in
+/// secondi: presi alla lettera davano a una molla un periodo di diciotto
+/// secondi, e il grafo si fermava a metà strada, ancora disteso e in moto.
+/// Moltiplicare tutte le accelerazioni per lo stesso fattore non cambia la
+/// forma d'equilibrio — dipende solo dai rapporti fra le forze — ma soltanto
+/// quanto in fretta ci si arriva: con questo valore un vault di qualche
+/// centinaio di note si assesta in due o tre secondi. La molla del puntatore
+/// non passa di qui: è un controllo, tarato sul dt.
+export const TIME_SCALE = 400;
+
+/// La distanza alla quale la repulsione vale quanto valeva con la legge
+/// 1/d² dei preset: lunghezza di riposo del preset organico. Sotto spinge
+/// meno (le sovrapposizioni le risolvono le collisioni), sopra di più.
+export const REPULSION_REFERENCE = 120;
+
+/// La repulsione cala come 1/d, non 1/d². In due dimensioni l'inverso del
+/// quadrato si spegne troppo presto: la gravità, lineare, schiacciava i vault
+/// grandi in un disco sempre più fitto, e le collisioni ci ribollivano dentro.
+/// Con 1/d la densità d'equilibrio non dipende dal numero di note, e un grafo
+/// da mille nodi è solo più grande di uno da cento. `d2` è il quadrato della
+/// distanza; il `+ 64` ammorbidisce la singolarità a 8 px, come prima.
+function repulsionMagnitude(strength: number, d2: number): number {
+  return strength / (REPULSION_REFERENCE * Math.sqrt(d2 + 64));
+}
+
 /// Il dt del passo corrente: la molla del puntatore ne ha bisogno per
 /// tarare i guadagni (deadbeat: k = 1/dt², c = 1/dt). Il motore la imposta
 /// prima di `accumulateForces`; il default 1/60 basta per i test che chiamano
@@ -46,7 +72,7 @@ function bhRepulsion(dx: number, dy: number, d2: number, mass: number): void {
   const s = forceStructure!;
   // dx,dy puntano dal nodo di query (i) al nodo j (x_j − x_i). La repulsione
   // spinge i LONTANO da j: lungo −(dx,dy), cioè verso (x_i − x_j).
-  const f = (forceRepulsion * mass) / (d2 + 64);
+  const f = repulsionMagnitude(forceRepulsion * mass, d2);
   const inv = 1 / Math.sqrt(d2);
   s.fx[forceIndex] -= f * dx * inv;
   s.fy[forceIndex] -= f * dy * inv;
@@ -73,7 +99,7 @@ export function accumulateForces(
   // ── Repulsione ────────────────────────────────────────────────────────
   if (q !== null && tier >= 2) {
     forceStructure = s;
-    forceRepulsion = config.repulsion;
+    forceRepulsion = config.repulsion * TIME_SCALE;
     for (let i = 0; i < n; i++) {
       forceIndex = i;
       visit(q, config.theta, s.x[i], s.y[i], bhRepulsion);
@@ -81,6 +107,7 @@ export function accumulateForces(
   } else {
     // O(n²) esatta. Loop j > i con contributo a entrambi: metà del costo,
     // simmetria esatta (le masse uguali danno momento zero al bit).
+    const repulsion = config.repulsion * TIME_SCALE;
     for (let i = 0; i < n; i++) {
       const xi = s.x[i];
       const yi = s.y[i];
@@ -100,8 +127,8 @@ export function accumulateForces(
         // dx,dy = x_j − x_i (da i a j). Repulsione: i si allontana da j
         // (lungo −û), j si allontana da i (lungo +û). La massa del vicino
         // entra: un hub respinge di più.
-        const fi = (config.repulsion * s.mass[j]) / (d2 + 64);
-        const fj = (config.repulsion * s.mass[i]) / (d2 + 64);
+        const fi = repulsionMagnitude(repulsion * s.mass[j], d2);
+        const fj = repulsionMagnitude(repulsion * s.mass[i], d2);
         fx[i] -= fi * dx * inv;
         fy[i] -= fi * dy * inv;
         fx[j] += fj * dx * inv;
@@ -111,7 +138,7 @@ export function accumulateForces(
   }
 
   // ── Molle con dashpot ─────────────────────────────────────────────────
-  const k = config.springStiffness;
+  const k = config.springStiffness * TIME_SCALE;
   const L0 = config.baseLength;
   const damping = config.springDamping;
   for (let e = 0; e < s.m; e++) {
@@ -156,7 +183,7 @@ export function accumulateForces(
   // ── Gravità ───────────────────────────────────────────────────────────
   // Richiamo verso l'origine, per unità di massa. Il nodo trascinato è
   // esentato: la molla del puntatore lo governa.
-  const g = config.gravity;
+  const g = config.gravity * TIME_SCALE;
   if (g !== 0) {
     const t = s.dragged;
     for (let i = 0; i < n; i++) {
@@ -325,6 +352,26 @@ function resolvePair(
   const uy = dy / d;
   const mi = s.mass[i];
   const mj = s.mass[j];
+  // Urto anelastico lungo la normale: la correzione di posizione da sola
+  // lasciava intatta la velocità che li portava l'uno dentro l'altro, e al
+  // passo dopo si rientrava — il tremolio dei nodi a contatto. Si toglie solo
+  // la componente che avvicina, divisa come la spinta.
+  const approach = (s.vx[i] - s.vx[j]) * ux + (s.vy[i] - s.vy[j]) * uy;
+  if (approach < 0) {
+    if (movesI && movesJ) {
+      const tot = mi + mj > 0 ? mi + mj : 1;
+      s.vx[i] -= (approach * mj / tot) * ux;
+      s.vy[i] -= (approach * mj / tot) * uy;
+      s.vx[j] += (approach * mi / tot) * ux;
+      s.vy[j] += (approach * mi / tot) * uy;
+    } else if (movesI) {
+      s.vx[i] -= approach * ux;
+      s.vy[i] -= approach * uy;
+    } else {
+      s.vx[j] += approach * ux;
+      s.vy[j] += approach * uy;
+    }
+  }
   if (movesI && movesJ) {
     // Entrambi liberi: split a metà, inversamente proporzionale alla massa.
     const tot = mi + mj > 0 ? mi + mj : 1;

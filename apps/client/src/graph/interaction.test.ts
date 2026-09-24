@@ -185,43 +185,78 @@ describe("createInteraction (wiring su canvas finto)", () => {
     interaction.destroy();
   });
 
-  it("drag di un nodo: pin (fixed=2), bersaglio px/py, rilascio col fixed precedente", () => {
+  it("drag di un nodo: presa oltre la soglia, dal punto afferrato, rilascio col fixed precedente", () => {
     emit("pointerdown", { clientX: 5, clientY: 5, button: 0, pointerId: 7 });
-    expect(s.dragged).toBe(0);
-    expect(s.fixed[0]).toBe(2);
-    expect(s.px[0]).toBeCloseTo(5);
-    expect(s.py[0]).toBeCloseTo(5);
+    // Il pointerdown non afferra: potrebbe essere un click.
+    expect(s.dragged).toBe(-1);
+    expect(s.fixed[0]).toBe(0);
+    expect(actions.warm).not.toHaveBeenCalled();
     expect(canvas.setPointerCapture).toHaveBeenCalledWith(7);
-    expect(actions.warm).toHaveBeenCalled();
+
+    emit("pointermove", { clientX: 6, clientY: 6, button: 0, pointerId: 7 });
+    expect(s.dragged).toBe(-1); // sotto la soglia
 
     emit("pointermove", { clientX: 50, clientY: 40, button: 0, pointerId: 7 });
-    expect(s.px[0]).toBeCloseTo(50);
-    expect(s.py[0]).toBeCloseTo(40);
+    expect(s.dragged).toBe(0);
+    expect(s.fixed[0]).toBe(2);
+    expect(actions.warm).toHaveBeenCalled();
+    // Il nodo (0,0) era afferrato in (5,5): segue il puntatore con quello
+    // scarto, invece di saltare col centro sotto il cursore.
+    expect(s.px[0]).toBeCloseTo(45);
+    expect(s.py[0]).toBeCloseTo(35);
 
+    s.vx[0] = 600;
     emit("pointerup", { clientX: 50, clientY: 40, button: 0, pointerId: 7 });
     expect(s.dragged).toBe(-1);
     expect(s.fixed[0]).toBe(0); // torna com'era: il drag non lascia pin
+    expect(s.vx[0]).toBeCloseTo(120); // il rilascio non lancia il nodo
+  });
+
+  it("un click su un nodo non lo afferra e non scalda il grafo", () => {
+    emit("pointerdown", { clientX: 5, clientY: 5, button: 0 });
+    emit("pointerup", { clientX: 5, clientY: 5, button: 0 });
+    expect(s.dragged).toBe(-1);
+    expect(s.fixed[0]).toBe(0);
+    expect(s.px[0]).toBe(0);
+    expect(actions.warm).not.toHaveBeenCalled();
   });
 
   it("drag non cancella un pin esplicito: il fixed torna 1 al rilascio", () => {
     s.fixed[0] = 1; // pin fatto prima (doppio click)
     emit("pointerdown", { clientX: 5, clientY: 5, button: 0 });
-    expect(s.fixed[0]).toBe(2); // il drag vince durante la presa
     emit("pointermove", { clientX: 60, clientY: 30, button: 0 });
+    expect(s.fixed[0]).toBe(2); // il drag vince durante la presa
     emit("pointerup", { clientX: 60, clientY: 30, button: 0 });
     expect(s.fixed[0]).toBe(1); // il pin esplicito sopravvive al drag
   });
 
-  it("pan su vuoto con inerzia: la camera si sposta e poi si assesta", () => {
-    emit("pointerdown", { clientX: 300, clientY: 300, button: 0 });
-    emit("pointermove", { clientX: 320, clientY: 310, button: 0 });
-    emit("pointerup", { clientX: 320, clientY: 310, button: 0 });
+  it("pan su vuoto: la vista segue il puntatore, poi scorre con la velocità del gesto", () => {
+    emit("pointerdown", { clientX: 300, clientY: 300, button: 0, timeStamp: 1000 });
+    emit("pointermove", { clientX: 310, clientY: 305, button: 0, timeStamp: 1016 });
+    emit("pointermove", { clientX: 320, clientY: 310, button: 0, timeStamp: 1032 });
+    // Durante il gesto la vista è attaccata al puntatore, senza inerzia.
     expect(cs.state().tx).toBeCloseTo(20);
     expect(cs.state().ty).toBeCloseTo(10);
+    emit("pointerup", { clientX: 320, clientY: 310, button: 0, timeStamp: 1040 });
     expect(cs.ready()).toBe(false); // inerzia in corso
-    for (let i = 0; i < 300; i++) cs.step(16.7);
+    let last = cs.state().tx;
+    for (let i = 0; i < 300; i++) {
+      const tx = cs.step(16.7).tx;
+      // Scorre sempre in avanti: nessun ritorno elastico.
+      expect(tx).toBeGreaterThanOrEqual(last - 1e-9);
+      last = tx;
+    }
     expect(cs.ready()).toBe(true);
-    expect(cs.state().tx).toBeCloseTo(20, 4);
+    // 20 px in 32 ms → 0.625 px/ms, per τ = 300 ms: circa 190 px in più.
+    expect(cs.state().tx).toBeCloseTo(20 + 0.625 * 300, -1);
+  });
+
+  it("un pan rilasciato da fermo non ha inerzia", () => {
+    emit("pointerdown", { clientX: 300, clientY: 300, button: 0, timeStamp: 1000 });
+    emit("pointermove", { clientX: 320, clientY: 310, button: 0, timeStamp: 1016 });
+    emit("pointerup", { clientX: 320, clientY: 310, button: 0, timeStamp: 1400 });
+    expect(cs.ready()).toBe(true);
+    expect(cs.state().tx).toBeCloseTo(20);
   });
 
   it("click su nodo (senza trascinamento) apre la nota e focalizza", () => {
@@ -232,6 +267,31 @@ describe("createInteraction (wiring su canvas finto)", () => {
     vi.advanceTimersByTime(260);
     expect(actions.open).toHaveBeenCalledWith("a");
     expect(interaction.getFocusedNode()).toBe(0);
+  });
+
+  it("il click apre il nodo che stava sotto il puntatore, anche se poi si sposta", () => {
+    emit("pointerdown", { clientX: 5, clientY: 5, button: 0 });
+    emit("pointerup", { clientX: 5, clientY: 5, button: 0 });
+    emit("click", { clientX: 5, clientY: 5 });
+    // Nel quarto di secondo d'attesa la sim porta via il nodo.
+    s.x[0] = 400;
+    vi.advanceTimersByTime(260);
+    expect(actions.open).toHaveBeenCalledWith("a");
+  });
+
+  it("la rotella conta i pixel qualunque sia l'unità, e il pinch del trackpad pesa di più", () => {
+    emit("wheel", { deltaY: -3, deltaMode: 1, clientX: 400, clientY: 300, preventDefault: () => {} });
+    for (let i = 0; i < 300; i++) cs.step(16.7);
+    expect(cs.state().scale).toBeCloseTo(Math.exp(48 * 0.0015), 3); // 3 righe = 48 px
+    const before = cs.state().scale;
+    emit("wheel", { deltaY: -10, ctrlKey: true, clientX: 400, clientY: 300, preventDefault: () => {} });
+    for (let i = 0; i < 300; i++) cs.step(16.7);
+    expect(cs.state().scale / before).toBeCloseTo(Math.exp(0.1), 3);
+    // Un colpo enorme non catapulta: il passo è limitato.
+    const capped = cs.state().scale;
+    emit("wheel", { deltaY: -5000, clientX: 400, clientY: 300, preventDefault: () => {} });
+    for (let i = 0; i < 300; i++) cs.step(16.7);
+    expect(cs.state().scale / capped).toBeCloseTo(Math.exp(0.5), 3);
   });
 
   it("click dopo un drag con spostamento non apre (gesto, non click)", () => {
@@ -332,10 +392,11 @@ describe("createInteraction (wiring su canvas finto)", () => {
     expect(canvas.style.cursor).toBe("default");
     // il drag in corso non viene spezzato dal leave
     emit("pointerdown", { clientX: 5, clientY: 5, button: 0 });
+    emit("pointermove", { clientX: 40, clientY: 20, button: 0 });
     emit("pointerleave", {});
     expect(s.dragged).toBe(0);
     emit("pointermove", { clientX: 70, clientY: 20, button: 0 });
-    expect(s.px[0]).toBeCloseTo(70);
+    expect(s.px[0]).toBeCloseTo(65);
     emit("pointerup", { clientX: 70, clientY: 20, button: 0 });
     expect(s.dragged).toBe(-1);
   });

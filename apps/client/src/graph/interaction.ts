@@ -214,6 +214,25 @@ const CLICK_THRESHOLD_PX = 5;
 const CLICK_DELAY_MS = 250;
 const KEYBOARD_PAN_PX = 40;
 const KEYBOARD_ZOOM = 1.2;
+/// Un nodo si afferra solo dopo questo spostamento: sotto, il gesto è un
+/// click, e il nodo non deve sussultare né scaldare il grafo.
+const GRAB_THRESHOLD_PX = 3;
+/// Quanta velocità conserva un nodo lasciato andare. Il drag lo muove con la
+/// molla del puntatore (v = Δ/dt), e lasciargliela tutta lo lanciava
+/// attraverso il grafo a ogni rilascio.
+const RELEASE_KEEP = 0.2;
+/// La finestra su cui si misura la velocità del pan al rilascio, e la pausa
+/// oltre la quale il rilascio è da fermo (niente inerzia).
+const FLING_WINDOW_MS = 90;
+const FLING_IDLE_MS = 60;
+/// Sensibilità della rotella per pixel di scorrimento; il pinch del trackpad
+/// (rotella con Ctrl) dà delta piccoli e ne vuole di più. Il fattore di un
+/// singolo evento è limitato: un colpo di rotella «a scatti» non deve
+/// catapultare la vista.
+const WHEEL_ZOOM_PER_PX = 0.0015;
+const PINCH_ZOOM_PER_PX = 0.01;
+const WHEEL_STEP_MAX = 0.5;
+const WHEEL_LINE_PX = 16;
 
 export function createInteraction(options: InteractionOptions): Interaction {
   const { canvas, structureRef, cameraState, actions, isVisible = () => true } = options;
@@ -227,6 +246,22 @@ export function createInteraction(options: InteractionOptions): Interaction {
   const localPoint = (e: { clientX: number; clientY: number }): Point => {
     const r = canvas.getBoundingClientRect();
     return { x: e.clientX - r.left, y: e.clientY - r.top };
+  };
+  const timeOf = (e: { timeStamp?: number }): number =>
+    typeof e.timeStamp === "number" && e.timeStamp > 0 ? e.timeStamp : performance.now();
+  const samplePan = (t: number, p: Point): void => {
+    panSamples.push({ t, x: p.x, y: p.y });
+    while (panSamples.length > 2 && t - panSamples[0].t > FLING_WINDOW_MS) panSamples.shift();
+  };
+  /// La velocità del pan (px/ms) sugli ultimi campioni, zero se il puntatore
+  /// si era fermato prima di rilasciare.
+  const panVelocity = (t: number): Point => {
+    const first = panSamples[0];
+    const last = panSamples[panSamples.length - 1];
+    if (!first || !last || t - last.t > FLING_IDLE_MS) return { x: 0, y: 0 };
+    const span = last.t - first.t;
+    if (span < 8) return { x: 0, y: 0 };
+    return { x: (last.x - first.x) / span, y: (last.y - first.y) / span };
   };
 
   let state = initialDragState();
@@ -242,8 +277,17 @@ export function createInteraction(options: InteractionOptions): Interaction {
   let pinchBase: { distance: number; centerX: number; centerY: number } | null = null;
   let downX = 0;
   let downY = 0;
+  /// Il nodo sotto il puntatore è stato afferrato davvero (oltre la soglia)?
+  /// Fino ad allora il pointerdown su un nodo è solo un click possibile.
+  let grabbing = false;
+  /// Dove il nodo sta rispetto al punto afferrato, in coordinate mondo: il
+  /// nodo si trascina da lì, invece di saltare col centro sotto il cursore.
+  let grabOffsetX = 0;
+  let grabOffsetY = 0;
+  /// Gli ultimi punti del pan, per la velocità al rilascio.
+  const panSamples: Array<{ t: number; x: number; y: number }> = [];
   let clickTimeout: ReturnType<typeof setTimeout> | undefined;
-  let pendingClick: Point | null = null;
+  let pendingClick = -1;
   let a11yLabel = "";
 
   // Superficie tastierabile e annunciabile (bug 2-4 / S5-3): senza questi tre
@@ -257,19 +301,29 @@ export function createInteraction(options: InteractionOptions): Interaction {
   // prima del drag (pinMappa), riaccende la sim e pulisce il cursore. La
   // usa `onPointerUp` e il pinch, che smonta il drag del primo dito quando
   // arriva il secondo.
-  const releaseGrip = (): void => {
+  const releaseGrip = (at?: number): void => {
     const s = structureRef();
     if (state.dragged >= 0) {
       const i = state.dragged;
-      s.fixed[i] = pinMap.get(i) ?? 0;
+      if (grabbing) {
+        s.fixed[i] = pinMap.get(i) ?? 0;
+        s.dragged = -1;
+        // Il nodo resta dove è stato lasciato e con poca della velocità del
+        // gesto: si scalda la sim perché i vicini si riassestino attorno a lui.
+        s.vx[i] *= RELEASE_KEEP;
+        s.vy[i] *= RELEASE_KEEP;
+        actions.warm(0.3);
+      }
       pinMap.delete(i);
-      s.dragged = -1;
-      // Il rilascio lascia il nodo col suo carico di velocità: si scalda la
-      // sim perché lo smaltisca, e il drag finito non lascia un nodo
-      // appiccicato alla molla.
-      actions.warm(0.3);
+      grabbing = false;
+      canvas.style.cursor = state.hovered >= 0 ? "pointer" : "default";
     } else if (state.draggingEmpty) {
       canvas.style.cursor = "default";
+      if (at !== undefined) {
+        const v = panVelocity(at);
+        if (v.x !== 0 || v.y !== 0) cameraState.fling(v.x, v.y);
+      }
+      panSamples.length = 0;
     }
   };
 
@@ -299,20 +353,20 @@ export function createInteraction(options: InteractionOptions): Interaction {
     downX = p.x;
     downY = p.y;
     if (state.dragged >= 0) {
+      // Il nodo non si prende ancora: lo si prenderà al primo spostamento
+      // oltre la soglia (`grab`). Qui si ricorda soltanto da dove.
       const i = state.dragged;
-      pinMap.set(i, structureRef().fixed[i]);
       const s = structureRef();
-      s.dragged = i;
-      s.fixed[i] = 2;
+      pinMap.set(i, s.fixed[i]);
       const m = s2m(p.x, p.y);
-      s.px[i] = m.x;
-      s.py[i] = m.y;
-      // La molla del puntatore vive nel motore: se la sim è addormentata il
-      // nodo non la sentirebbe — la si risveglia.
-      actions.warm(0.3);
+      grabOffsetX = s.x[i] - m.x;
+      grabOffsetY = s.y[i] - m.y;
+      grabbing = false;
       if (typeof canvas.setPointerCapture === "function") canvas.setPointerCapture(e.pointerId);
     } else if (state.draggingEmpty) {
       canvas.style.cursor = "grabbing";
+      panSamples.length = 0;
+      samplePan(timeOf(e), p);
       if (typeof canvas.setPointerCapture === "function") canvas.setPointerCapture(e.pointerId);
     }
     actions.requestRedraw();
@@ -340,11 +394,23 @@ export function createInteraction(options: InteractionOptions): Interaction {
     state = result.state;
     if (state.dragged >= 0 && result.target) {
       const s = structureRef();
-      s.px[state.dragged] = result.target.x;
-      s.py[state.dragged] = result.target.y;
-      actions.warm(0.3);
+      const i = state.dragged;
+      if (!grabbing && Math.hypot(p.x - downX, p.y - downY) > GRAB_THRESHOLD_PX) {
+        // Presa: da qui la molla del puntatore guida il nodo, che il motore
+        // sente solo a sim sveglia — la si risveglia.
+        grabbing = true;
+        s.dragged = i;
+        s.fixed[i] = 2;
+        canvas.style.cursor = "grabbing";
+      }
+      if (grabbing) {
+        s.px[i] = result.target.x + grabOffsetX;
+        s.py[i] = result.target.y + grabOffsetY;
+        actions.warm(0.3);
+      }
     } else if (state.draggingEmpty) {
       if (result.panDx !== 0 || result.panDy !== 0) cameraState.pan(result.panDx, result.panDy);
+      samplePan(timeOf(e), p);
     } else if (state.hovered !== first.hovered) {
       canvas.style.cursor = state.hovered >= 0 ? "pointer" : "default";
     }
@@ -359,7 +425,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
     // con "up" azzera `dragged`/`draggingEmpty` nello stato, e
     // `rilasciaPresa` legge da lì l'indice del nodo da sbloccare.
     const activeGrip = state.dragged >= 0 || state.draggingEmpty;
-    if (activeGrip) releaseGrip();
+    if (activeGrip) releaseGrip(timeOf(e));
     const result = updateDrag(state, { type: "up", x: p.x, y: p.y, button: e.button }, hit, s2m);
     state = result.state;
     actions.requestRedraw();
@@ -378,22 +444,26 @@ export function createInteraction(options: InteractionOptions): Interaction {
   const onWheel = (e: WheelEvent): void => {
     e.preventDefault();
     const p = localPoint(e);
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    cameraState.zoom(factor, p.x, p.y);
+    // Il delta in pixel, qualunque unità abbia scelto il browser: Firefox
+    // conta righe, qualche mouse pagine.
+    const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : e.deltaMode === 2 ? viewport().h : 1;
+    const perPx = e.ctrlKey ? PINCH_ZOOM_PER_PX : WHEEL_ZOOM_PER_PX;
+    const step = Math.max(-WHEEL_STEP_MAX, Math.min(WHEEL_STEP_MAX, -e.deltaY * unit * perPx));
+    cameraState.zoom(Math.exp(step), p.x, p.y);
     actions.requestRedraw();
   };
 
   const onClick = (e: MouseEvent): void => {
     const p = localPoint(e);
     if (Math.hypot(p.x - downX, p.y - downY) > CLICK_THRESHOLD_PX) return;
-    pendingClick = p;
+    // Il nodo si decide adesso, sotto il puntatore: fra un quarto di secondo
+    // il grafo può essersi mosso, e il click aprirebbe il vicino.
+    pendingClick = hit(p.x, p.y);
     clearTimeout(clickTimeout);
     clickTimeout = setTimeout(() => {
-      const q = pendingClick;
-      pendingClick = null;
-      if (!q) return;
-      const i = hit(q.x, q.y);
-      if (i >= 0) {
+      const i = pendingClick;
+      pendingClick = -1;
+      if (i >= 0 && i < structureRef().n) {
         // Il click è anche un focus: chi arriva da tastiera dopo un click
         // trova il nodo già focalizzato e può riaprirlo con Invio.
         focused = i;
@@ -406,7 +476,7 @@ export function createInteraction(options: InteractionOptions): Interaction {
   const onDoubleClick = (e: MouseEvent): void => {
     clearTimeout(clickTimeout);
     clickTimeout = undefined;
-    pendingClick = null;
+    pendingClick = -1;
     const p = localPoint(e);
     const i = hit(p.x, p.y);
     if (i >= 0) {

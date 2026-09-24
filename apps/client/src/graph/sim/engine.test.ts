@@ -4,7 +4,7 @@
 // lenta e una coppia fuori banda non la rientra in 200 passi).
 
 import { describe, expect, it } from "vitest";
-import { accumulateForces } from "./forces";
+import { accumulateForces, collisions } from "./forces";
 import { DT, calculateTier, energy, step, type EngineState } from "./engine";
 import { build, QuadtreePool } from "./quadtree";
 import { organicConfig, createStructure, seedOf, type PhysicsConfig, type GraphData, type Structure } from "./types";
@@ -66,14 +66,18 @@ describe("forze — repulsion", () => {
     accumulateForces(s, config({ gravity: 0 }), null, 1);
     // Momento = Σ m·a, con m = 1: Σ fx, Σ fy. Le coppie sono simmetriche al
     // bit (stesso prodotto con segni opposti), quindi la somma è 0 esatto.
+    // Le accelerazioni stanno in Float32: la somma si confronta con la loro
+    // grandezza, non con uno zero assoluto.
     let sx = 0;
     let sy = 0;
+    let size = 0;
     for (let i = 0; i < 3; i++) {
       sx += s.fx[i];
       sy += s.fy[i];
+      size += Math.hypot(s.fx[i], s.fy[i]);
     }
-    expect(Math.abs(sx)).toBeLessThan(1e-5);
-    expect(Math.abs(sy)).toBeLessThan(1e-5);
+    expect(Math.abs(sx) / size).toBeLessThan(1e-6);
+    expect(Math.abs(sy) / size).toBeLessThan(1e-6);
   });
 
   it("allontana: due nodi vicini si respingono lungo l'asse", () => {
@@ -476,5 +480,52 @@ describe("motore — collisions", () => {
     expect(s.x[1]).toBe(x1fixed);
     // Il nodo libero (0) assorbe tutto l'overlap: si allontana da 1.
     expect(s.x[0]).toBeLessThan(0);
+  });
+});
+
+describe("motore — assestamento", () => {
+  /// Quanti passi a 60 Hz vive la sim da alpha 1 alla soglia d'arresto del
+  /// grafico (0.02): è il tempo che il grafo ha per distendersi.
+  const LIFETIME = Math.ceil(Math.log(0.02) / Math.log(organicConfig().cooling));
+
+  it("una coppia tesa torna vicino al riposo prima che il loop si fermi", () => {
+    // Coi coefficienti presi «per secondo» la molla aveva un periodo di
+    // diciotto secondi: il loop si spegneva a metà strada, col grafo ancora
+    // disteso e in moto.
+    const s = pair(600);
+    const st = newState();
+    for (let k = 0; k < LIFETIME; k++) step(s, config({ gravity: 0 }), st, null, DT);
+    const d = Math.hypot(s.x[1] - s.x[0], s.y[1] - s.y[0]);
+    expect(d).toBeLessThan(200);
+    expect(Math.hypot(s.vx[0], s.vy[0])).toBeLessThan(5);
+  });
+
+  it("l'attrito vale per secondo: un passo a 30 Hz frena quanto due a 60 Hz", () => {
+    // Era «per passo»: a 30 fps il grafo aveva metà dello smorzamento al
+    // secondo, e oscillava di più proprio sulle macchine già lente.
+    const cfg = config({ gravity: 0 });
+    const slow = structure(1, 0);
+    const fast = structure(1, 0);
+    slow.vx[0] = 100;
+    fast.vx[0] = 100;
+    step(slow, cfg, newState(), null, 1 / 30);
+    const st = newState();
+    step(fast, cfg, st, null, 1 / 60);
+    step(fast, cfg, st, null, 1 / 60);
+    expect(slow.vx[0]).toBeCloseTo(fast.vx[0], 1);
+    expect(slow.vx[0]).toBeCloseTo(100 * cfg.friction ** 2, 1);
+  });
+
+  it("due nodi che si urtano perdono la velocità d'avvicinamento", () => {
+    const s = structure(2, 0);
+    s.x[0] = -3;
+    s.x[1] = 3;
+    s.vx[0] = 50;
+    s.vx[1] = -50;
+    collisions(s, config());
+    // Separati, e non più diretti l'uno dentro l'altro: senza la correzione
+    // della velocità al passo dopo rientravano, e i nodi a contatto tremavano.
+    expect(s.x[1] - s.x[0]).toBeGreaterThan(6);
+    expect(s.vx[1] - s.vx[0]).toBeGreaterThanOrEqual(0);
   });
 });

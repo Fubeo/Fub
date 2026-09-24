@@ -283,18 +283,6 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
               ? 1
               : 0,
     );
-  const rng = mulberry32(seed);
-  // Semina a girasole (fibonacci sunflower): distribuzione uniforme sul
-  // disco, niente anelli concentrici, e col jitter deterministico nessun
-  // nodo parte esattamente sopra un altro.
-  const step = config.baseLength * 0.9;
-  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-  for (let i = 0; i < s.n; i++) {
-    const r = step * Math.sqrt(i + rng() * config.jitter);
-    const t = i * goldenAngle;
-    s.x[i] = r * Math.cos(t);
-    s.y[i] = r * Math.sin(t);
-  }
   for (const e of edges) {
     const fromIndex = index.get(e.from)!;
     const toIndex = index.get(e.to)!;
@@ -307,6 +295,24 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
     s.curvature[s.m] = (((fnv1a(e.from + "|" + e.to) % 1000) / 1000 - 0.5) * 0.44) * 1;
     s.m++;
   }
+  // Semina a girasole (fibonacci sunflower): distribuzione uniforme sul
+  // disco, niente anelli concentrici, e col jitter deterministico nessun
+  // nodo parte esattamente sopra un altro. Il disco ha già la misura del
+  // grafo disteso e le note collegate stanno su posti vicini: prima era largo
+  // due volte e mezzo la forma finale e le note ci stavano in ordine
+  // alfabetico, cioè a caso, e i primi secondi se ne andavano a richiuderlo e
+  // a sbrogliarlo.
+  const rng = mulberry32(seed);
+  const step = config.baseLength * SEED_SPACING;
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const order = seedOrder(s);
+  for (let k = 0; k < s.n; k++) {
+    const i = order[k];
+    const r = step * Math.sqrt(k + rng() * config.jitter);
+    const t = k * goldenAngle;
+    s.x[i] = r * Math.cos(t);
+    s.y[i] = r * Math.sin(t);
+  }
   for (let i = 0; i < s.n; i++) {
     s.mass[i] = 1 + Math.log1p(s.degree[i]) * config.degreeWeight;
     s.radius[i] = 4 + Math.min(9, Math.sqrt(s.degree[i]) * 1.7);
@@ -317,6 +323,76 @@ export function createStructure(data: GraphData, config: PhysicsConfig, seed: nu
 /// Il seme di un vault: hash degli id ordinati. Due aperture dello stesso
 /// grafo partono identiche; un documento nuovo cambia il disegno, ed è
 /// giusto che lo cambi.
+/// Il passo della spirale di semina, in lunghezze di riposo: con la
+/// repulsione 1/d il grafo disteso ha raggio ≈ 0.35·L0·√n, e la spirale di
+/// passo 0.35·L0 ci arriva già.
+const SEED_SPACING = 0.35;
+
+/// L'ordine in cui le note prendono i posti della spirale, dal centro in
+/// fuori: le componenti dalla più grande, ciascuna visitata in ampiezza dal
+/// suo nodo più collegato, così i vicini finiscono su posti vicini; le note
+/// senza archi per ultime, al margine, dove la repulsione le porterebbe
+/// comunque. Deterministico: a parità decide l'indice.
+function seedOrder(s: Structure): Uint32Array {
+  const n = s.n;
+  const start = new Uint32Array(n + 1);
+  for (let e = 0; e < s.m; e++) {
+    start[s.from[e] + 1]++;
+    start[s.to[e] + 1]++;
+  }
+  for (let i = 0; i < n; i++) start[i + 1] += start[i];
+  const fill = start.slice(0, n);
+  const adjacent = new Uint32Array(2 * s.m);
+  for (let e = 0; e < s.m; e++) {
+    adjacent[fill[s.from[e]]++] = s.to[e];
+    adjacent[fill[s.to[e]]++] = s.from[e];
+  }
+  const component = new Int32Array(n).fill(-1);
+  const members: number[][] = [];
+  for (let i = 0; i < n; i++) {
+    if (component[i] >= 0 || s.degree[i] === 0) continue;
+    const id = members.length;
+    const list = [i];
+    component[i] = id;
+    for (let h = 0; h < list.length; h++) {
+      const v = list[h];
+      for (let a = start[v]; a < start[v + 1]; a++) {
+        const w = adjacent[a];
+        if (component[w] < 0) {
+          component[w] = id;
+          list.push(w);
+        }
+      }
+    }
+    members.push(list);
+  }
+  members.sort((a, b) => b.length - a.length || a[0] - b[0]);
+  const order = new Uint32Array(n);
+  const placed = new Uint8Array(n);
+  let k = 0;
+  for (const list of members) {
+    let root = list[0];
+    for (const v of list) {
+      if (s.degree[v] > s.degree[root] || (s.degree[v] === s.degree[root] && v < root)) root = v;
+    }
+    const queue = [root];
+    placed[root] = 1;
+    for (let h = 0; h < queue.length; h++) {
+      const v = queue[h];
+      order[k++] = v;
+      for (let a = start[v]; a < start[v + 1]; a++) {
+        const w = adjacent[a];
+        if (!placed[w]) {
+          placed[w] = 1;
+          queue.push(w);
+        }
+      }
+    }
+  }
+  for (let i = 0; i < n; i++) if (!placed[i]) order[k++] = i;
+  return order;
+}
+
 export function seedOf(data: GraphData): number {
   return fnv1a([...new Set(data.nodes)].sort().join("\n"));
 }

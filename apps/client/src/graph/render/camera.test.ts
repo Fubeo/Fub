@@ -9,6 +9,7 @@ import {
   createCameraState,
   createMotionState,
   fit,
+  INERTIA_MS,
   MAX_SCALE,
   MIN_SCALE,
   worldToScreen,
@@ -82,14 +83,21 @@ describe("camera", () => {
     expect(st.ty).toBeCloseTo(-300, 1);
   });
 
-  it("stepCamera fa decadere l'inerzia di 0.9 per frame", () => {
-    let st = { ...createMotionState(), tx: 100, ty: 100, targetTx: 100, targetTy: 100, vx: 80, vy: 40 };
+  it("stepCamera: l'inerzia decade nel tempo e sposta vista e bersaglio insieme", () => {
+    let st = { ...createMotionState(), tx: 100, ty: 100, targetTx: 100, targetTy: 100, vx: 1, vy: 0.5 };
     st = stepCamera(st, 16.7);
-    expect(st.vx).toBeCloseTo(72, 10);
-    expect(st.vy).toBeCloseTo(36, 10);
+    expect(st.vx).toBeCloseTo(Math.exp(-16.7 / INERTIA_MS), 10);
+    // Vista e bersaglio si muovono dello stesso tratto: niente elastico.
+    expect(st.tx).toBeCloseTo(st.targetTx, 10);
     for (let i = 0; i < 300; i++) st = stepCamera(st, 16.7);
-    expect(Math.abs(st.vx)).toBeLessThan(0.1);
-    expect(Math.abs(st.vy)).toBeLessThan(0.1);
+    expect(st.vx).toBe(0);
+    expect(st.vy).toBe(0);
+    // Lo spostamento totale è v·τ (meno la coda sotto la soglia di riposo),
+    // a qualunque frequenza di frame.
+    expect(Math.abs(st.tx - (100 + INERTIA_MS))).toBeLessThan(2);
+    let slow = { ...createMotionState(), tx: 100, targetTx: 100, vx: 1 };
+    for (let i = 0; i < 150; i++) slow = stepCamera(slow, 33.4);
+    expect(Math.abs(slow.tx - st.tx)).toBeLessThan(1);
   });
 
   it("stepCamera è pura: non tocca lo stato in ingresso", () => {
@@ -100,17 +108,19 @@ describe("camera", () => {
     expect(out).not.toBe(input);
   });
 
-  it("createCameraState: pan con inerzia e zoom sul bersaglio", () => {
+  it("createCameraState: il pan è immediato, l'inerzia viene dal rilascio", () => {
     const cs = createCameraState();
     expect(cs.ready()).toBe(true);
 
     cs.pan(30, -10);
     expect(cs.state().tx).toBe(30);
     expect(cs.state().ty).toBe(-10);
-    expect(cs.ready()).toBe(false); // inerzia in corso
-    // l'inerzia decade e la camera si riassesta sul target
-    for (let i = 0; i < 200; i++) cs.step(16.7);
-    expect(cs.state().tx).toBeCloseTo(30, 5);
+    expect(cs.ready()).toBe(true); // il pan non lascia inerzia
+
+    cs.fling(0.5, 0);
+    expect(cs.ready()).toBe(false);
+    for (let i = 0; i < 300; i++) cs.step(16.7);
+    expect(Math.abs(cs.state().tx - (30 + 0.5 * INERTIA_MS))).toBeLessThan(2);
     expect(cs.ready()).toBe(true);
   });
 

@@ -91,6 +91,31 @@ describe("quadtree — Barnes-Hut", () => {
     expect(maxRel).toBeLessThan(1);
   });
 
+  it("a theta = 0.9 l'approssimazione resta vicina: le celle stanno nel loro centro di massa", () => {
+    // Il centro di massa era Σm·x non diviso per la massa: le celle
+    // approssimate stavano in un punto inventato e la forza valeva una
+    // frazione di quella vera. Qui la si confronta su 800 nodi sparsi, dove
+    // l'approssimazione lavora davvero.
+    const s = graphTest(800, 0);
+    let seed = 3;
+    const rnd = (): number => ((seed = (seed * 1103515245 + 12345) >>> 0) / 4294967296);
+    for (let i = 0; i < s.n; i++) {
+      s.x[i] = (rnd() - 0.5) * 1000;
+      s.y[i] = (rnd() - 0.5) * 1000;
+    }
+    const q = build(s, new QuadtreePool());
+    const rep = organicConfig().repulsion;
+    let err = 0;
+    let size = 0;
+    for (let i = 0; i < s.n; i++) {
+      const [fxo, fyo] = exactRepulsion(s, i, rep);
+      const [fxb, fyb] = bhRepulsion(q, s, i, 0.9, rep);
+      err += Math.hypot(fxb - fxo, fyb - fyo);
+      size += Math.hypot(fxo, fyo);
+    }
+    expect(err / size).toBeLessThan(0.05);
+  });
+
   it("il pool si riusa senza allocare: due costruzioni danno lo stesso albero", () => {
     const s = graphTest(30, 20);
     const pool = new QuadtreePool();

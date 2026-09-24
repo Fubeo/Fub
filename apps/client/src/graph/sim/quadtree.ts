@@ -183,6 +183,18 @@ export class QuadtreePool implements Quadtree {
     for (let i = 0; i < n; i++) {
       this.insert(root, i, s.x[i], s.y[i], s.mass[i], 0);
     }
+    // L'inserimento accumula Σm·x: diviso per la massa diventa il centro di
+    // massa che `visit` usa come posizione della cella. Senza questa riga le
+    // celle approssimate stavano in un punto inventato, lontano, e oltre i
+    // 400 nodi la repulsione era una frazione di quella vera: i vault grandi
+    // collassavano in un disco.
+    for (let c = 0; c < this.used; c++) {
+      const m = this.mass[c];
+      if (m > 0) {
+        this.cmx[c] /= m;
+        this.cmy[c] /= m;
+      }
+    }
   }
 
   /// Inserimento ricorsivo: aggiorna il centro di massa lungo il percorso e
@@ -252,7 +264,7 @@ export function build(s: Structure, pool: QuadtreePool): Quadtree {
 }
 
 /// Visita l'albero col criterio di apertura di Barnes-Hut. Per ogni cella
-/// vista dal punto (x, y): se il suo semi-lato s soddisfa s/d < theta con
+/// vista dal punto (x, y): se il suo lato s soddisfa s/d < theta con
 /// d = distanza al centro di massa, chiama `f` una volta sola con massa
 /// totale e centro di massa della cella; altrimenti scende nei figli. Il
 /// figlio che contiene (x, y) si scende **sempre**: approssimarlo
@@ -306,8 +318,10 @@ function visitNode(q: Quadtree, i: number, t2: number, x: number, y: number, f: 
     const dx = q.cmx[fk] - x;
     const dy = q.cmy[fk] - y;
     const d2 = dx * dx + dy * dy;
-    const sm = q.halfSize[fk];
-    if (sm * sm < t2 * d2) {
+    // Il criterio classico: lato della cella su distanza, non semilato — col
+    // semilato un theta di 0.9 valeva 1.8 e l'errore raddoppiava.
+    const side = 2 * q.halfSize[fk];
+    if (side * side < t2 * d2) {
       f(dx, dy, d2, q.mass[fk]);
     } else {
       visitNode(q, fk, t2, x, y, f);

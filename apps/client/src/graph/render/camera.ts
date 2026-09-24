@@ -43,6 +43,14 @@ export const MAX_SCALE = 8;
 /// Costante di tempo dell'inseguimento esponenziale, in millisecondi.
 const TIME_CONSTANT = 90;
 
+/// Costante di tempo dell'inerzia del pan, in millisecondi: dopo il rilascio
+/// la vista scorre ancora per circa `INERTIA_MS` × velocità, poi si ferma.
+export const INERTIA_MS = 300;
+
+/// Sotto questa velocità (px/ms) l'inerzia è finita: meno di un decimo di
+/// pixel per frame.
+const INERTIA_REST = 0.005;
+
 export function worldToScreen(c: Camera, p: Point): Point {
   return { x: p.x * c.scale + c.tx, y: p.y * c.scale + c.ty };
 }
@@ -86,7 +94,7 @@ export interface MotionState {
   targetScale: number;
   targetTx: number;
   targetTy: number;
-  /// Inerzia del pan, in px di schermo per frame.
+  /// Inerzia del pan, in px di schermo per millisecondo.
   vx: number;
   vy: number;
 }
@@ -96,22 +104,34 @@ export function createMotionState(): MotionState {
 }
 
 /// Un passo di inseguimento. Pura: stesso stato + stesso dt → stesso
-/// risultato, e non tocca lo stato in ingresso. L'inerzia decade di 0.9 «per
-/// frame» per scelta dichiarata: l'inerzia è un gesto, non una fisica, e
-/// legarla a dt significherebbe misurare il tempo di un sentimento.
+/// risultato, e non tocca lo stato in ingresso.
+///
+/// L'inerzia sposta **insieme** la camera e il suo bersaglio: prima muoveva
+/// solo la corrente, e l'inseguimento la riportava indietro verso un bersaglio
+/// rimasto fermo — la vista scattava avanti e tornava come un elastico. Lo
+/// spostamento è l'integrale esatto di v·e^(−t/τ) sul passo, quindi la stessa
+/// spinta porta alla stessa distanza a 30, 60 o 144 Hz.
 export function stepCamera(st: MotionState, dt: number): MotionState {
   const k = 1 - Math.exp(-dt / TIME_CONSTANT);
-  const tx = st.tx + st.vx;
-  const ty = st.ty + st.vy;
+  const decay = Math.exp(-dt / INERTIA_MS);
+  const driftX = st.vx * INERTIA_MS * (1 - decay);
+  const driftY = st.vy * INERTIA_MS * (1 - decay);
+  const tx = st.tx + driftX;
+  const ty = st.ty + driftY;
+  const targetTx = st.targetTx + driftX;
+  const targetTy = st.targetTy + driftY;
+  const vx = st.vx * decay;
+  const vy = st.vy * decay;
+  const resting = Math.abs(vx) < INERTIA_REST && Math.abs(vy) < INERTIA_REST;
   return {
     scale: st.scale + (st.targetScale - st.scale) * k,
-    tx: tx + (st.targetTx - tx) * k,
-    ty: ty + (st.targetTy - ty) * k,
+    tx: tx + (targetTx - tx) * k,
+    ty: ty + (targetTy - ty) * k,
     targetScale: st.targetScale,
-    targetTx: st.targetTx,
-    targetTy: st.targetTy,
-    vx: st.vx * 0.9,
-    vy: st.vy * 0.9,
+    targetTx,
+    targetTy,
+    vx: resting ? 0 : vx,
+    vy: resting ? 0 : vy,
   };
 }
 
@@ -125,7 +145,11 @@ export interface CameraState {
   set(c: Camera, jump?: boolean): void;
   setReducedMotion(reduced: boolean): void;
   zoom(factor: number, x: number, y: number): void;
+  /// Sposta la vista di (dx, dy) px, subito e senza inerzia: è il gesto che
+  /// segue il puntatore. Ferma un'inerzia ancora in corso.
   pan(dx: number, dy: number): void;
+  /// Lascia andare la vista alla velocità del gesto (px/ms): l'inerzia.
+  fling(vx: number, vy: number): void;
   centerOn(worldX: number, worldY: number, scale: number, v: Viewport): void;
   fit(b: WorldBound, v: Viewport): void;
   step(dt: number): Camera;
@@ -163,18 +187,22 @@ export function createCameraState(reducedMotion = false): CameraState {
       if (reduced) arrive();
     },
     pan(dx, dy) {
-      // Il pan muove insieme corrente e bersaglio e deposita la velocità
-      // nell'inerzia: al rilascio la camera continua, poi l'inseguimento la
-      // riporta morbida sul punto di arrivo.
+      // Il pan muove insieme corrente e bersaglio: la vista resta attaccata
+      // al puntatore. L'inerzia la decide il rilascio (`fling`), con la
+      // velocità vera del gesto.
       st = {
         ...st,
         tx: st.tx + dx,
         ty: st.ty + dy,
         targetTx: st.targetTx + dx,
         targetTy: st.targetTy + dy,
-        vx: reduced ? 0 : st.vx + dx,
-        vy: reduced ? 0 : st.vy + dy,
+        vx: 0,
+        vy: 0,
       };
+    },
+    fling(vx, vy) {
+      if (reduced) return;
+      st = { ...st, vx, vy };
     },
     centerOn(worldX, worldY, scale, v) {
       // Come per zoom: si sposta il bersaglio; la corrente lo insegue con
@@ -198,8 +226,8 @@ export function createCameraState(reducedMotion = false): CameraState {
         Math.abs(st.scale - st.targetScale) < 0.001 &&
         Math.abs(st.tx - st.targetTx) < 0.5 &&
         Math.abs(st.ty - st.targetTy) < 0.5 &&
-        Math.abs(st.vx) < 0.1 &&
-        Math.abs(st.vy) < 0.1
+        st.vx === 0 &&
+        st.vy === 0
       );
     },
   };

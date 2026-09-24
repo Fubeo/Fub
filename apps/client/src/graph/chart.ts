@@ -24,7 +24,7 @@ import {
 } from "./sim/types";
 import type { Quadtree } from "./sim/quadtree";
 import { QuadtreePool, build } from "./sim/quadtree";
-import { DT_MAX, calculateTier, step, type EngineState } from "./sim/engine";
+import { DT, DT_MAX, calculateTier, step, type EngineState } from "./sim/engine";
 import type { WorldBound, Camera, CameraState, Viewport } from "./render/camera";
 import { createCameraState, fit } from "./render/camera";
 import type { Painter, DrawState } from "./render/painter";
@@ -43,10 +43,6 @@ const ACTIVE_THRESHOLD = 0.02;
 /// differito al momento in cui c'è davvero una superficie — questo chiude
 /// strutturalmente il bug 2-1 (la sim non parte con k = 0 e scala 1).
 const MIN_VIEW_SIZE = 50;
-/// Passi di quiete prima del secondo fit: il grafo si è disteso, il fit
-/// iniziale era sulla semina e ora contiene il grafo vero. Morbido: il loop
-/// resta acceso finché la camera non converge, poi si spegne.
-const QUIET_FIT_STEPS = 30;
 /// Fattore dell'EMA dei millisecondi per frame: un filtro lento, perché il
 /// tier non deve oscillare a ogni capriccio del GC.
 const EMA_ALPHA = 0.1;
@@ -160,10 +156,19 @@ export function createChart(options: ChartOptions = {}): Chart {
   let emaFrameMs = 16.7;
   let firstTime = 0;
   let lastTime = 0;
+  /// Il loop si era spento: il prossimo frame lo riaccende, e il tempo
+  /// trascorso da allora è sonno, non durata di un frame.
+  let resuming = true;
   let W = -1;
   let H = -1;
   let initialFitDone = false;
-  let quietFitDone = false;
+  /// Mentre il grafo si distende la vista lo segue: il fit iniziale è sulla
+  /// semina, più stretta della forma finale. Finisce quando la sim si spegne
+  /// la prima volta o quando l'utente prende la vista.
+  let followingLayout = true;
+  /// L'utente ha già mosso la vista (pan, zoom, centra, fit)? Da quel momento
+  /// l'inquadratura è sua: la vista smette di seguire il grafo.
+  let cameraTouched = false;
   // I listener che aggiungiamo al canvas per l'hover; tenuti per rimuoverli.
   const onMove = (e: PointerEvent): void => {
     if (!s || !cameraState) return;
@@ -283,7 +288,13 @@ export function createChart(options: ChartOptions = {}): Chart {
       firstTime = t;
       lastTime = t;
     }
-    const dtS = Math.min(Math.max(0, (t - lastTime) / 1000), DT_MAX);
+    // Il frame che riaccende il loop non misura la pausa: contata come un
+    // frame lungo, alzava la media dei tempi a ogni risveglio, e dopo qualche
+    // gesto il grafo passava al livello «lento» — Barnes-Hut e le etichette
+    // dei nodi minori spente — anche con sei note.
+    const woke = resuming;
+    resuming = false;
+    const dtS = woke ? DT : Math.min(Math.max(0, (t - lastTime) / 1000), DT_MAX);
     const dtMs = dtS * 1000;
     lastTime = t;
     const elapsedMs = t - firstTime;
@@ -309,17 +320,21 @@ export function createChart(options: ChartOptions = {}): Chart {
 
     if (engineState.alpha > ACTIVE_THRESHOLD) {
       step(s, physics, engineState, q, dtS);
-      // Secondo fit, alla prima quiete: il grafo si è disteso e il fit
-      // iniziale (sulla semina) è rimasto indietro. Morbido: il loop resta
-      // acceso finché la camera non converge.
-      if (initialFitDone && !quietFitDone && engineState.quietSince >= QUIET_FIT_STEPS && v) {
-        quietFitDone = true;
-        cameraState.fit(bound(), v);
+      // La vista segue il grafo che si distende: il bersaglio è il fit di
+      // adesso e la camera lo insegue morbida. L'ultimo giro, a sim spenta,
+      // lascia il bersaglio sul grafo fermo; poi il loop si spegne quando la
+      // camera è arrivata.
+      if (initialFitDone && followingLayout && v) {
+        if (cameraTouched) followingLayout = false;
+        else {
+          cameraState.fit(bound(), v);
+          if (engineState.alpha <= ACTIVE_THRESHOLD) followingLayout = false;
+        }
       }
     }
 
     const cam: Camera = cameraState.step(dtMs);
-    emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + dtMs * EMA_ALPHA;
+    if (!woke) emaFrameMs = emaFrameMs * (1 - EMA_ALPHA) + dtMs * EMA_ALPHA;
 
     const state: DrawState = {
       s,
@@ -345,6 +360,7 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
 
     if (active()) requestRedraw();
+    else resuming = true;
   }
 
   function mount(h: HTMLElement): void {
@@ -368,10 +384,24 @@ export function createChart(options: ChartOptions = {}): Chart {
       canvas.addEventListener("pointerleave", onLeave);
     }
     const interactionCanvas = canvas ?? document.createElement("canvas");
+    // L'interazione muove la camera per conto dell'utente: ogni suo gesto
+    // segna la vista come sua, e il fit automatico non la riprende più.
+    const camera = cameraState;
+    const touch = (): void => {
+      cameraTouched = true;
+    };
+    const userCamera: CameraState = {
+      ...camera,
+      zoom: (factor, x, y) => (touch(), camera.zoom(factor, x, y)),
+      pan: (dx, dy) => (touch(), camera.pan(dx, dy)),
+      fling: (vx, vy) => (touch(), camera.fling(vx, vy)),
+      centerOn: (x, y, scale, view) => (touch(), camera.centerOn(x, y, scale, view)),
+      fit: (b, view) => (touch(), camera.fit(b, view)),
+    };
     interaction = interactionFactory({
       canvas: interactionCanvas,
       structureRef: () => s as Structure,
-      cameraState,
+      cameraState: userCamera,
       isVisible,
       actions: {
         open: (id: string) => openExternal(id),
@@ -458,10 +488,11 @@ export function createChart(options: ChartOptions = {}): Chart {
     }
   }
 
+  /// Riscalda la sim. La vista non torna a seguire il grafo: dopo un drag o
+  /// un «Riscalda» resta dov'è, invece di reinquadrarsi da sola.
   function warm(level: number): void {
     if (engineState.alpha < level) engineState.alpha = level;
     engineState.quietSince = 0;
-    quietFitDone = false;
     requestRedraw();
   }
 

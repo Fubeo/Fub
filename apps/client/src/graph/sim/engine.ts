@@ -25,6 +25,11 @@ export const DT_MAX = 1 / 30;
 /// «quieto» (px²/s²). Il grafico la usa per mostrare le etichette.
 export const QUIET_THRESHOLD = 0.25;
 
+/// Sotto questa temperatura lo smorzamento cresce col freddo, fino a
+/// moltiplicare l'attrito per `ANNEAL_FLOOR` all'alpha zero.
+export const ANNEAL_ALPHA = 0.12;
+export const ANNEAL_FLOOR = 0.55;
+
 /// Stato persistente del motore fra i passi. `alpha` è la temperatura: decade
 /// per `cooling` e l'integrazione (chart.ts) la può riportare a 1
 /// con un riscaldo. `quietSince` conta i passi consecutivi sotto soglia: il
@@ -55,7 +60,13 @@ export function step(
 
   const n = s.n;
   const maxV = config.maxSpeed;
-  const friction = config.friction;
+  // L'attrito è «per passo a 60 Hz»: lo si porta al dt vero, o a 30 fps il
+  // grafo avrebbe metà dello smorzamento al secondo e oscillerebbe di più. Col
+  // freddo si aggiunge smorzamento (ricottura): sotto `ANNEAL_ALPHA` il moto
+  // residuo si spegne dolcemente, e quando il loop si ferma non resta niente
+  // di congelato a mezz'aria.
+  const heat = state.alpha >= ANNEAL_ALPHA ? 1 : state.alpha / ANNEAL_ALPHA;
+  const friction = Math.pow(config.friction * (ANNEAL_FLOOR + (1 - ANNEAL_FLOOR) * heat), dtEff * 60);
   for (let i = 0; i < n; i++) {
     const fixed = s.fixed[i];
     if (fixed === 1) {

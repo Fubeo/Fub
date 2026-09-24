@@ -117,7 +117,22 @@ Questo confine deve restare stabile:
 Il Canvas occupa una superficie separata dallo stato testuale e dall'elenco
 delle note. L'elenco si apre con mouse o tastiera, mostra 50 note per pagina e
 scorre nel proprio spazio, senza intercettare i gesti del grafo. L'inquadratura
-iniziale attende che la superficie abbia dimensioni valide.
+iniziale attende che la superficie abbia dimensioni valide, poi segue il grafo
+mentre si distende; smette al primo gesto dell'utente sulla vista o quando la
+simulazione si spegne, e un riscaldo successivo non la riprende.
+
+La simulazione integra in secondi: attrito e raffreddamento valgono per
+secondo, e i coefficienti della configurazione sono scalati da una costante di
+tempo, così un vault di qualche centinaio di note si assesta in pochi secondi a
+qualunque frequenza di frame. La repulsione cala come 1/d, quindi la densità del
+grafo disteso non dipende dal numero di note. Sotto la soglia di raffreddamento
+lo smorzamento cresce, e il loop si ferma su un grafo già fermo.
+
+Un nodo si afferra dopo tre pixel di spostamento, dal punto in cui è stato
+preso; sotto la soglia il gesto è un click. Al rilascio il nodo conserva poca
+della velocità del trascinamento. Il pan segue il puntatore senza inerzia e,
+al rilascio, prosegue con la velocità reale del gesto. La rotella normalizza
+righe e pagine in pixel, e il pinch del trackpad ha una sensibilità propria.
 
 La modularizzazione del renderer è tracciata nell'issue
 [#12](https://github.com/Fubeo/Fub/issues/12). La prova di scala e durata è
