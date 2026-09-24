@@ -2,8 +2,9 @@
    la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
    contesto di sessione, quindi le view che la seguono lo sanno. */
 /* **Il segmented control**: un gruppo di opzioni che si escludono, dentro una
-   cornice sola. L'accesa la dice il fondo attivo più una tacca d'accento
-   corta e centrata; il fondo del gruppo resta il gradino del pannello.
+   cornice sola. L'accesa la dice il fondo attivo con un'ombra appena
+   accennata, e l'inchiostro pieno contro quello attenuato delle altre; il
+   fondo del gruppo resta il gradino del pannello, senza filetto.
 
    Ce n'erano tre — le modalità del pannello, le schede delle impostazioni, il
    commutatore del tema — e ognuna riscriveva la stessa cornice e lo stesso
@@ -23,7 +24,7 @@
   gap: var(--space-1);
   padding: var(--space-1);
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
 }
 /* Due misure, e sono le uniche due cose che distinguono i tre esemplari: uno
@@ -57,33 +58,21 @@
   line-height: var(--leading-normal);
   padding: var(--space-1) var(--space-3);
   transition:
-    background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
+    background var(--duration-med) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-med) var(--ease);
 }
 .segmented-option:hover {
   background: var(--overlay-hover);
   color: var(--text);
 }
+/* L'accesa: il fondo attivo e un'ombra di contatto. Il riquadro a fuoco non
+   serve qui — l'attributo lo dice già a chi ascolta, e il fondo lo dice a chi
+   guarda. */
 .segmented-option[aria-pressed="true"],
 .segmented-option[aria-selected="true"],
 .segmented-option[aria-checked="true"] {
   background: var(--bg-active);
   color: var(--text);
-}
-/* La tacca corta e centrata: dice «questa» senza un filetto lime. Il riquadro
-   a fuoco non serve qui — l'attributo lo dice già a chi ascolta, e il fondo
-   lo dice a chi guarda. */
-.segmented-option[aria-pressed="true"]::after,
-.segmented-option[aria-selected="true"]::after,
-.segmented-option[aria-checked="true"]::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 1px;
-  width: 12px;
-  height: 2px;
-  border-radius: var(--radius-xs);
-  transform: translateX(-50%);
-  background: var(--accent);
-  pointer-events: none;
+  box-shadow: var(--shadow-sm);
 }

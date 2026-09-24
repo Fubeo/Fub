@@ -50,12 +50,14 @@
   /* --- i raggi ----------------------------------------------------------- */
 
   /* Quattro raggi per quattro intenzioni: il segno appena smussato,
-     il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda. */
+     il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda.
+     Sono morbidi e non tondi: un angolo appena più largo toglie spigoli
+     all'insieme senza che nessun componente sembri una bolla. */
 
-  --radius-xs: 3px;
+  --radius-xs: 4px;
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
   --radius-pill: 999px;
 
   /* --- la tipografia ----------------------------------------------------- */
@@ -98,8 +100,12 @@
   --text-2xl: 19px;
   --text-3xl: 23px;
   --text-reading: 16px;
-  --weight-medium: 600;
-  --weight-bold: 700;
+  /* I pesi sono un gradino sotto quelli di prima (600 e 700): Inter e
+     Literata sono variabili, e in una scocca minimale la gerarchia la porta
+     la misura, non l'inchiostro. Un'etichetta a 600 in ogni riga faceva di
+     ogni riga un titolo. */
+  --weight-medium: 500;
+  --weight-bold: 600;
   --leading-tight: 1.35;
   --leading-normal: 1.5;
   --leading-relaxed: 1.7;
@@ -118,36 +124,44 @@
      standard; `ease-out` decade sull'ingresso (parte veloce, atterra fermo);
      `ease-in` accelera sul press. Non c'è una durata «live»: la scocca non
      respira. Ogni nome nuovo lo spende la pelle, o è debito — la lezione di
-     `--duration-med`. */
+     `--duration-med`.
 
-  --duration-fast: 120ms;
-  --duration-med: 180ms;
-  --duration-slow: 240ms;
-  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-in: cubic-bezier(0.3, 0, 1, 1);
+     Le durate sono più distese di prima (120/180/240 ms) e le curve più
+     morbide: l'ingresso è un'uscita quintica, che copre quasi tutto il tragitto
+     nel primo terzo e poi si posa per il resto, e l'uscita è una cubica che
+     parte piano invece di strappare. Il moto si sente come un respiro, non
+     come uno scatto. `slow` resta ben sotto il tetto di sicurezza di
+     `ui/motion.ts` (600 ms), che chiude comunque una superficie appesa. */
+
+  --duration-fast: 180ms;
+  --duration-med: 260ms;
+  --duration-slow: 420ms;
+  --ease: cubic-bezier(0.25, 0.1, 0.25, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.32, 0, 0.67, 0);
 
   /* --- l'elevazione: dalla carta al dialogo ------------------------------ */
 
-  /* Cinque piani. In luce scura la superficie sale e l'ombra non finge di
-     staccare dal nero; in luce chiara la superficie resta quieta e cresce
-     l'ombra. Il filetto appartiene alla stessa riga, non a un componente. */
+  /* Cinque piani. In luce scura la superficie sale di un filo e, dal flottante
+     in su, l'ombra lunga e morbida torna a staccare; in luce chiara ciò che
+     galleggia è della carta stessa, e lo solleva l'ombra. Il filetto
+     appartiene alla stessa riga, non a un componente. */
 
-  --elevation-paper-surface: #ffffff;
-  --elevation-paper-border: #ffffff;
+  --elevation-paper-surface: #fefcf9;
+  --elevation-paper-border: #fefcf9;
   --elevation-paper-shadow: none;
-  --elevation-base-surface: #fafafb;
-  --elevation-base-border: #f5f5f7;
-  --elevation-base-shadow: 0 1px 2px rgb(20 20 40 / 4%);
-  --elevation-chrome-surface: #fafafb;
-  --elevation-chrome-border: #f1f1f3;
-  --elevation-chrome-shadow: 0 2px 6px rgb(20 20 40 / 7%);
-  --elevation-floating-surface: #fafafb;
-  --elevation-floating-border: #e7e7ec;
-  --elevation-floating-shadow: 0 6px 18px rgb(20 20 40 / 12%);
-  --elevation-dialog-surface: #fafafb;
-  --elevation-dialog-border: #dedee4;
-  --elevation-dialog-shadow: 0 12px 32px rgb(20 20 40 / 18%);
+  --elevation-base-surface: #f9f7f4;
+  --elevation-base-border: #f5f3ef;
+  --elevation-base-shadow: 0 1px 2px rgb(45 38 30 / 3%);
+  --elevation-chrome-surface: #f9f7f4;
+  --elevation-chrome-border: #f1efeb;
+  --elevation-chrome-shadow: 0 1px 3px rgb(45 38 30 / 4%);
+  --elevation-floating-surface: #fefcf9;
+  --elevation-floating-border: #eeebe6;
+  --elevation-floating-shadow: 0 1px 2px rgb(45 38 30 / 5%), 0 10px 28px rgb(45 38 30 / 9%);
+  --elevation-dialog-surface: #fefcf9;
+  --elevation-dialog-border: #eae7e2;
+  --elevation-dialog-shadow: 0 2px 6px rgb(45 38 30 / 5%), 0 28px 64px rgb(45 38 30 / 14%);
 
   /* --- le superfici: la scala, dalla carta in su ------------------------- */
 
@@ -157,8 +171,8 @@
      perché quattro valori scelti separatamente non hanno un posto in cui
      contraddirsi.
 
-     Il fondo è la **carta** (`--doc-bg`, più giù), che è l'estremo: il nero al
-     buio, il bianco in luce. Il corpo dell'app le sta appena sopra, la scocca
+     Il fondo è la **carta** (`--doc-bg`, più giù), che è l'estremo: l'antracite
+     al buio, l'avorio in luce. Il corpo dell'app le sta appena sopra, la scocca
      sopra di lui, e ciò che galleggia sopra ancora. È il verso di un editor —
      la pagina è la superficie estrema e il resto ci galleggia — e non quello di
      prima, dove titlebar, rail, statusbar, corpo dell'app e carta erano lo
@@ -171,32 +185,32 @@
      resta tale quando il puntatore se n'è andato. */
 
   /* Il corpo dell'app: ciò che sta dietro tutto. */
-  --bg: #fafafb;
+  --bg: #f9f7f4;
   /* Titlebar, rail, statusbar. La scocca sta **sopra** la carta, non accanto. */
-  --bg-chrome: #f5f5f7;
+  --bg-chrome: #f5f3ef;
   /* Ciò che galleggia: pannelli, menu, popover, modali, toast. */
-  --bg-elev: #f1f1f3;
+  --bg-elev: #f1efeb;
   /* Un riquadro **dentro** un pannello: la traccia di un controllo
      segmentato, un banner, una pastiglia, la riga di una lista. */
-  --bg-panel: #ececf0;
+  --bg-panel: #eeebe6;
   /* Il campo: dove si scrive. E basta. */
-  --bg-input: #e7e7ec;
+  --bg-input: #eae7e2;
   /* La riga sotto il puntatore. È uno stato, e sta un passo sopra il campo. */
-  --bg-hover: #e2e3e8;
+  --bg-hover: #e6e3de;
   /* La riga **selezionata**, il segmento premuto. Prima non c'era e si
      riusava l'hover, cioè si diceva «il puntatore è qui» per dire «questa è
      quella scelta»: due cose che devono poter valere insieme. */
-  --bg-active: #dedee4;
+  --bg-active: #e3dfd9;
   /* Il velo del bottone fantasma: un velo sul testo, non un secondo grigio.
      In alpha perché deve restare un velo sopra qualunque superficie, e le
      superfici adesso sono sette. */
-  --overlay-hover: rgb(0 0 0 / 6%);
+  --overlay-hover: rgb(45 38 30 / 5%);
   /* Il filetto è **il gradino dopo lo stato**, a due passi di distanza: un
      bordo separa due superfici, quindi deve stare oltre la più lontana delle
      due, e la scala sa già dov'è. Non gli si chiede 3:1 — un filetto non è un
      controllo e pretenderglielo trasformerebbe l'interfaccia in un
      wireframe — ma nemmeno lo si sceglie a mano. */
-  --border: #d5d5db;
+  --border: #dbd7d1;
 
   /* --- gli inchiostri della shell ---------------------------------------- */
 
@@ -207,14 +221,14 @@
      produce due valori diversi nelle due luci senza che nessuno li abbia
      scelti. */
 
-  /* Il testo della shell. La mira non è la soglia: è il rapporto che il
-     foglio scritto a mano già dava, misurato. Al buio è più bassa di un punto
-     e non per scelta — con sette superfici la più alta è chiara abbastanza da
-     abbassare il soffitto: sopra `--bg-active` nessun colore arriva a 12,8:1. */
-  --text: #202123;
+  /* Il testo della shell. La mira sta ben sopra la soglia, ma sotto il
+     massimo: un bianco pieno sull'antracite abbaglia, e un testo appena
+     velato si legge più a lungo. Si misura sulla superficie più chiara
+     (`--bg-active`), quindi sulla carta il rapporto è più alto. */
+  --text: #2a2826;
   /* I sottotitoli, le didascalie, i secondi. Restano testo, quindi la mira
      sta sopra la soglia del testo con un margine e non sul filo. */
-  --muted: #5b5b66;
+  --muted: #605c56;
 
   /* --- l'accento --------------------------------------------------------- */
 
@@ -224,19 +238,21 @@
      selezione); `--accent-soft` è un **inchiostro**, sta sopra le superfici, e
      gli tocca la soglia del testo.
 
-     La tinta è una sola, e il lime è la decisione di prodotto di `bdc3203`.
-     Le due mire dell'accento sono diverse, e non per gusto: al buio l'accento è
-     la cosa più chiara dello schermo e il contrasto gli viene gratis; in luce è
-     un pieno che porta il proprio testo sopra, e spingerlo oltre lo farebbe
-     diventare un'oliva scura — cioè non più un accento. */
+     La tinta è una sola, quella della decisione di prodotto di `bdc3203`, ma a
+     croma dimezzato: una salvia, non un lime. Le due mire dell'accento sono
+     diverse, e non per gusto: al buio l'accento è fra le cose più chiare dello
+     schermo e il contrasto gli viene gratis; in luce è un pieno che porta il
+     proprio testo sopra, e sta abbastanza giù — un muschio — perché quel testo
+     sia il bianco: un bottone salvia chiaro con l'inchiostro nero sopra si
+     legge come fango, non come un invito. */
 
-  --accent: #578700;
-  --accent-soft: #335400;
+  --accent: #4c6a28;
+  --accent-soft: #3a521d;
   /* Il testo **sopra** l'accento. Era `white` cablato in due regole, ed è la
      riga che un tema chiaro non poteva ereditare: su un accento chiaro il
      bianco sparisce. Adesso non è più una scelta né in una luce né
      nell'altra — è un conto fra due candidati, e vince quello che regge. */
-  --accent-contrast: #000000;
+  --accent-contrast: #ffffff;
 
   /* --- i quattro intenti ------------------------------------------------- */
 
@@ -254,19 +270,22 @@
      un fondo che non copre), e il controcolore (per un pieno). Le tinte sono
      quattro e stanno lontane fra loro: il riuscito è **più freddo** del lime
      apposta, perché un verde uguale all'accento direbbe «primario» dove voleva
-     dire «fatto». */
+     dire «fatto».
 
-  --danger: #a92e2f;
-  --danger-wash: rgb(169 46 47 / 12%);
+     I croma sono contenuti (0,1–0,13): un intento deve farsi notare quando
+     parla, non colorare la scocca quando tace. */
+
+  --danger: #9d3d39;
+  --danger-wash: rgb(157 61 57 / 12%);
   --danger-contrast: #ffffff;
-  --warning: #7a5500;
-  --warning-wash: rgb(122 85 0 / 14%);
+  --warning: #7f5300;
+  --warning-wash: rgb(127 83 0 / 14%);
   --warning-contrast: #ffffff;
-  --success: #006943;
-  --success-wash: rgb(0 105 67 / 14%);
+  --success: #0e6945;
+  --success-wash: rgb(14 105 69 / 14%);
   --success-contrast: #ffffff;
-  --info: #005da5;
-  --info-wash: rgb(0 93 165 / 12%);
+  --info: #216090;
+  --info-wash: rgb(33 96 144 / 12%);
   --info-contrast: #ffffff;
 
   /* --- l'anello del fuoco (§12.4) ---------------------------------------- */
@@ -287,7 +306,7 @@
      bottone primario sarebbe lime su lime. Sono parte della forma dell'anello,
      e la regola che le consuma sta nella struttura. */
 
-  --focus-ring: #375900;
+  --focus-ring: #4c6331;
   --focus-ring-width: 2px;
   --focus-ring-offset: 1px;
 
@@ -298,10 +317,10 @@
      dialog della tabella, così un nome pubblico resta additivo senza diventare
      una seconda scala. */
 
-  --scrim: rgb(20 20 30 / 35%);
-  --shadow-sm: 0 1px 2px rgb(20 20 40 / 4%);
-  --shadow-md: 0 6px 18px rgb(20 20 40 / 12%);
-  --shadow-lg: 0 12px 32px rgb(20 20 40 / 18%);
+  --scrim: rgb(45 38 30 / 18%);
+  --shadow-sm: 0 1px 2px rgb(45 38 30 / 3%);
+  --shadow-md: 0 1px 2px rgb(45 38 30 / 5%), 0 10px 28px rgb(45 38 30 / 9%);
+  --shadow-lg: 0 2px 6px rgb(45 38 30 / 5%), 0 28px 64px rgb(45 38 30 / 14%);
 
   /* --- il grafo ---------------------------------------------------------- */
 
@@ -311,11 +330,11 @@
      superficie, non essendo raggiungibile dal foglio di stile, è quella che si
      dimentica per prima quando si cambia tema. */
 
-  --graph-node: #70717e;
+  --graph-node: #77716b;
   /* Il nodo della nota aperta è l'accento, e lo dice ripetendone il valore. */
-  --graph-node-active: #578700;
+  --graph-node-active: #4c6a28;
   /* Il nodo sotto il puntatore: la tinta del riuscito, che qui vuol dire «questo». */
-  --graph-node-hover: #007a4f;
+  --graph-node-hover: #317857;
 
   /* --- la superficie del documento --------------------------------------- */
 
@@ -324,22 +343,24 @@
      note diverse. Li usano `.markdown-preview` (Lettura), il tema della live
      preview e il tema dell'editor, che prima portava i propri.
 
-     La carta è il **fondo della scala**: il nero al buio, il bianco in luce. È
-     l'unico posto in cui il nero OLED conta davvero, ed è dove è finito. */
+     La carta è il **fondo della scala**: un antracite caldo al buio, un avorio
+     in luce. Sono l'estremo della scala senza essere il nero o il bianco puri,
+     che su una pagina lunga affaticano l'occhio. */
 
-  /* La carta. Zero passi: è l'estremo da cui tutto il resto si allontana, e
-     l'unico token del foglio che non ha una tinta — il nero e il bianco non
-     ne hanno una. */
-  --doc-bg: #ffffff;
-  /* La riga sotto il cursore: un gradino della carta, non un colore a parte. */
-  --doc-active-line: #f5f5f7;
+  /* La carta. Zero passi: è l'estremo da cui tutto il resto si allontana.
+     Porta la tinta dei neutri a un croma minimo, quanto basta perché la
+     pagina sia carta e non uno schermo spento. */
+  --doc-bg: #fefcf9;
+  /* La riga sotto il cursore: il gradino più vicino alla carta, non un colore
+     a parte. Dice dove si scrive senza disegnare una fascia sulla pagina. */
+  --doc-active-line: #f9f7f4;
   /* Il testo selezionato. È il fondo **più lontano** su cui una specie di
      sintassi possa finire, quindi è lui a decidere quanto scure possono
      essere le dieci: portarlo un gradino più in là abbassa il soffitto di
      tutta la tavolozza, e si vede subito perché la generazione si rifiuta. */
-  --doc-selection: #e2e3e8;
+  --doc-selection: #e6e3de;
   /* Il suggerimento dell'editor: galleggia sulla carta come un pannello sul corpo. */
-  --doc-tooltip-bg: #f1f1f3;
+  --doc-tooltip-bg: #f1efeb;
   /* Riempimenti e righe in alpha su grigio: reggono su qualunque fondo, ed è
      il motivo per cui valgono identici nelle due luci. Sono la sola famiglia
      di colori che i due fogli dichiarano con lo stesso valore, e
@@ -350,30 +371,30 @@
   --doc-fill-soft: rgb(135 135 135 / 10%);
   --doc-rule: rgb(135 135 135 / 45%);
   --doc-rule-soft: rgb(135 135 135 / 28%);
-  --doc-highlight: rgb(255 205 0 / 45%);
+  --doc-highlight: rgb(240 200 80 / 38%);
   /* Il corpo della nota. Sopra tutti e tre i fondi della carta, non solo la pagina. */
-  --doc-fg: #313138;
+  --doc-fg: #34312e;
   /* Un wikilink. Il quarto fondo è la pagina **sotto un velo**: `--doc-fill`
      è `rgb(135 135 135 / 16%)`, cioè un velo e non un colore, e un link dentro
      un riempimento ci finisce sopra. La tabella dei token quella coppia non
      poteva vederla — si rifiuta, giustamente, di misurare ciò che ha un alfa,
      perché non sa cosa c'è sotto. Qui sotto ci sta la carta, e si sa: il velo
      si compone e il conto si fa. */
-  --doc-link: #0a529f;
+  --doc-link: #145785;
   /* Il titolo reso usa l'inchiostro del corpo: la gerarchia passa da
      misura e respiro, non dal colore. Resta un nome proprio perché la
      domanda «di che colore è un `<h1>` reso» è diversa da «di che
      colore è il corpo». `--syn-heading` lo ripete per gli altri
      linguaggi; il testo del titolo in Sorgente usa `doc-fg`, cioè lo
      stesso valore. */
-  --doc-heading: #313138;
+  --doc-heading: #34312e;
   /* Il rosso **del documento**: un wikilink rotto. Non è `--danger`, che è il
      rosso della shell: stessa tinta, fondi diversi, e per questo due valori. */
-  --doc-danger: #a52a2b;
+  --doc-danger: #993836;
   /* I numeri di riga sono testo che qualcuno legge, non decorazione. */
-  --doc-gutter-fg: #5e5e68;
+  --doc-gutter-fg: #635e59;
   /* Il cursore di scrittura: non è testo, ma è la cosa che si cerca con gli occhi. */
-  --doc-caret: #2e5bda;
+  --doc-caret: #006aaa;
 
   /* --- i colori della sintassi ------------------------------------------- */
 
@@ -396,6 +417,11 @@
      saltare all'occhio. Sono le due il cui lavoro **è** stare a una chiarezza
      diversa dalle altre.
 
+     I croma sono tenuti bassi (0,07–0,11): una tavolozza di sintassi quieta si
+     legge come testo colorato, una satura come un albero di Natale. Le tinte
+     restano distinte, ed è la tinta — non la saturazione — a separare le
+     specie.
+
      E `SOTTO_AA` va a zero. Sette specie su dieci stavano sotto la soglia del
      testo nella luce chiara dal giorno in cui quel tema è nato (`087a40f`), ed
      era un debito dichiarato perché ritoccarle una alla volta avrebbe lasciato
@@ -403,30 +429,30 @@
      si chiede alla famiglia un rapporto, e la famiglia trova **una** chiarezza.
      Era esattamente l'operazione che prenderle in coppia serviva a evitare. */
 
-  --syn-keyword: #872b96;
-  --syn-name: #a2262f;
-  --syn-function: #0059b2;
-  --syn-literal: #804f00;
-  --syn-type: #755600;
-  --syn-operator: #00667d;
+  --syn-keyword: #744981;
+  --syn-name: #8c443a;
+  --syn-function: #2b5f92;
+  --syn-literal: #814f22;
+  --syn-type: #705a12;
+  --syn-operator: #236775;
   /* Il commento è la sola specie che resta **fuori dalla famiglia**, e per la
      ragione per cui la famiglia esiste: le altre nove devono vedersi come una
      tavolozza, e il commento deve vedersi **indietro**. Prendere la chiarezza
      delle altre lo porterebbe avanti, cioè gli toglierebbe il suo lavoro. La
      sua mira è sopra la soglia del testo e non un dito più su. */
-  --syn-comment: #626373;
-  --syn-string: #316b18;
+  --syn-comment: #6a635b;
+  --syn-string: #3e6840;
   /* Un titolo ha lo stesso colore reso e in scrittura, e restano due nomi
      perché sono due domande diverse: «di che colore è un `<h1>` reso» e «di
      che colore è il testo che il parser ha marcato come titolo». Prima erano
      lo stesso valore ricopiato, e ricopiare è come si diverge. */
-  --syn-heading: #313138;
+  --syn-heading: #34312e;
   /* Ciò che il parser non riesce a leggere. Fuori dalla famiglia anche lui, e
      per il verso opposto al commento: deve saltare all'occhio, quindi sta un
      gradino **avanti** alle altre. Al buio era `#ffffff`, che non è un colore
      scelto — è l'assenza di una scelta; adesso porta la tinta del guasto, che
      è ciò che vuol dire. */
-  --syn-invalid: #aa0017;
+  --syn-invalid: #9a2929;
 
   /* --- ciò che vale per tutta la pagina ---------------------------------- */
 

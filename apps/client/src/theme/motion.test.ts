@@ -46,12 +46,12 @@ import skin from "./serie/skin.css?raw";
 /// il contratto: se il foglio ne dichiara uno diverso, è il foglio che deve
 /// cedere, non il banco ad adattarsi.
 const MOTION = {
-  "duration-fast": "120ms",
-  "duration-med": "180ms",
-  "duration-slow": "240ms",
-  ease: "cubic-bezier(0.2, 0.8, 0.2, 1)",
-  "ease-out": "cubic-bezier(0.16, 1, 0.3, 1)",
-  "ease-in": "cubic-bezier(0.3, 0, 1, 1)",
+  "duration-fast": "180ms",
+  "duration-med": "260ms",
+  "duration-slow": "420ms",
+  ease: "cubic-bezier(0.25, 0.1, 0.25, 1)",
+  "ease-out": "cubic-bezier(0.22, 1, 0.36, 1)",
+  "ease-in": "cubic-bezier(0.32, 0, 0.67, 0)",
 } as const;
 
 const MOTION_TOKEN = Object.keys(MOTION) as readonly (keyof typeof MOTION)[];

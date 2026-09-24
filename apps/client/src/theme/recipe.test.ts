@@ -111,12 +111,18 @@ describe("la scala delle superfici sale, e sale sempre", () => {
     expect(increasing, `i fondi della carta: ${PAPER_BACKGROUNDS.join(", ")}`).toBe(true);
   });
 
-  it("la carta è l'estremo, e il nero OLED è finito lì", () => {
-    // È la decisione di prodotto della seduta, scritta come presidio: il nero
-    // resta, e resta sotto la nota — che è dove è grande.
-    expect(palette("dark").get("doc-bg")).toBe("#000000");
-    expect(palette("light").get("doc-bg")).toBe("#ffffff");
-    expect(palette("dark").get("bg")).not.toBe("#000000");
+  it.each(LIGHTS)("%s: la carta è l'estremo della scala, ma non il nero o il bianco puri", (light) => {
+    // La carta è la superficie più lontana da tutto il resto — la più scura al
+    // buio, la più chiara in luce — e non è il nero o il bianco pieni: quelli
+    // affaticano chi legge a lungo, ed è la scelta del ridisegno quieto.
+    const values = palette(light);
+    const paper = fromHex(values.get("doc-bg")!).l;
+    const others = SURFACE_SCALE.filter((n) => n !== "doc-bg").map((n) => fromHex(values.get(n)!).l);
+    expect(
+      others.every((l) => (light === "dark" ? l > paper : l < paper)),
+      "la carta sta all'estremo della scala",
+    ).toBe(true);
+    expect(values.get("doc-bg")).not.toBe(light === "dark" ? "#000000" : "#ffffff");
   });
 });
 
@@ -154,7 +160,7 @@ describe("i cinque livelli di elevazione", () => {
     }
   });
 
-  it("al buio sale la luce; in chiaro cresce l'ombra", () => {
+  it("al buio sale la luce; l'ombra solleva ciò che galleggia in entrambe", () => {
     const dark = palette("dark");
     const light = palette("light");
     const darkSurfaces = ELEVATION_LEVELS.map((level) => dark.get(`elevation-${level}-surface`));
@@ -162,7 +168,15 @@ describe("i cinque livelli di elevazione", () => {
     const lightShadows = ELEVATION_LEVELS.map((level) => light.get(`elevation-${level}-shadow`));
 
     expect(new Set(darkSurfaces).size).toBe(5);
-    expect(new Set(darkShadows)).toEqual(new Set(["none"]));
+    // La carta non ha ombra in nessuna luce; il flottante e il dialogo sì, e
+    // ognuno la propria: un menu e una modale non stanno alla stessa altezza.
+    expect(darkShadows[0]).toBe("none");
+    expect(lightShadows[0]).toBe("none");
+    for (const shadows of [darkShadows, lightShadows]) {
+      expect(shadows[3]).not.toBe("none");
+      expect(shadows[4]).not.toBe("none");
+      expect(shadows[3]).not.toBe(shadows[4]);
+    }
     expect(new Set(lightShadows).size).toBe(5);
   });
 });

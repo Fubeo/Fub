@@ -174,11 +174,17 @@ describe("i token si leggono davvero dal foglio", () => {
   it("le due tavolozze sono piene, e sono due", () => {
     expect(Object.keys(PALETTES.dark).length).toBeGreaterThan(50);
     // Il riconoscimento passa dalla **carta**, che nella ricetta è l'estremo
-    // dichiarato (0 al buio, 1 in luce) e non un valore che si ricava: un `--bg`
+    // dichiarato della scala (zero passi) e non un gradino: un `--bg`
     // scritto qui farebbe diventare rosso il presidio del contrasto il giorno in
     // cui cambia il passo della scala, che è un'altra cosa e ha un altro banco.
-    expect(PALETTES.dark["doc-bg"], "al buio la carta è il nero").toBe("#000000");
-    expect(PALETTES.light["doc-bg"], "in luce la carta è il bianco").toBe("#ffffff");
+    expect(
+      contrast(PALETTES.dark["doc-bg"]!, "#000000"),
+      "al buio la carta è un antracite, vicino al nero",
+    ).toBeLessThan(1.5);
+    expect(
+      contrast(PALETTES.light["doc-bg"]!, "#ffffff"),
+      "in luce la carta è un avorio, vicino al bianco",
+    ).toBeLessThan(1.1);
     // I valori non-colore identici fra i fogli (la scala, il moto, i quattro
     // alpha) li presidia `struttura.test.ts`: qui conta il contrasto, non la
     // gemellarità del vocabolario.

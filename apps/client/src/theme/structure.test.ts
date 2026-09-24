@@ -243,11 +243,11 @@ describe("i due fogli hanno i valori non-colore identici", () => {
     // la ricetta ricava. Dalla §31.2 un `--bg` è il gradino `n` di una scala, e
     // il suo esadecimale cambia se cambia il passo: scriverlo qui vorrebbe dire
     // far diventare rosso il presidio della struttura per una ragione che con la
-    // struttura non c'entra. La carta invece è **l'estremo**, dichiarato tale
-    // nella ricetta (0 al buio, 1 in luce), e `color-scheme` è la riga con cui
-    // ciascun foglio dice in che luce sta. Nessuna delle due si ricava.
-    expect(DARK["doc-bg"], "al buio la carta è il nero, e resta l'estremo").toBe("#000000");
-    expect(LIGHT["doc-bg"], "in luce la carta è il bianco").toBe("#ffffff");
+    // struttura non c'entra. La carta invece è **l'estremo** della scala in
+    // ciascuna luce, e `color-scheme` è la riga con cui ciascun foglio dice in
+    // che luce sta: basta che la carta differisca fra i due.
+    expect(DARK["doc-bg"], "il foglio scuro dichiara la carta").toBeDefined();
+    expect(DARK["doc-bg"], "la carta scura non è quella chiara").not.toBe(LIGHT["doc-bg"]);
     expect(dark, "il foglio scuro si dichiara scuro al motore").toContain("color-scheme: dark;");
     expect(light, "il foglio chiaro si dichiara chiaro").toContain("color-scheme: light;");
   });

@@ -47,10 +47,12 @@
 // passo.
 //
 // Il fondo della scala è la **carta**: la superficie del documento. È l'estremo
-// — il nero al buio, il bianco in luce — e tutto il resto sale da lì. Il nero
-// OLED non si perde: si sposta dove è grande, cioè sotto la nota che si sta
-// leggendo, invece di stare sotto la scocca. Ed è il verso di ogni editor: la
-// pagina è la superficie estrema, la scocca ci galleggia sopra.
+// della scala — la superficie più scura al buio, la più chiara in luce — e
+// tutto il resto sale da lì. Non è però il nero o il bianco puri: è un
+// antracite caldo e un avorio appena tinto. Il nero pieno e il bianco pieno
+// affaticano chi legge a lungo, e sono i due valori in cui un'interfaccia
+// minimale smette di essere quieta e diventa dura. Ed è il verso di ogni
+// editor: la pagina è la superficie estrema, la scocca ci galleggia sopra.
 //
 // # Cosa questo file **non** decide
 //
@@ -81,17 +83,20 @@ const HIGH_CONTRAST = { text: 7, ui: 4.5 } as const;
 /// della generazione: con un passo solo, i primi tre gradini della luce scura
 /// uscivano tutti `#000000`.
 ///
-/// La ragione è che sotto la carta nera lo spazio a otto bit **finisce**. OKLab
-/// è percettivamente uniforme e per un grigio vale `L = Y^(1/3)`: a `L` 0,034 la
+/// La ragione è che vicino al nero lo spazio a otto bit **finisce**. OKLab è
+/// percettivamente uniforme e per un grigio vale `L = Y^(1/3)`: a `L` 0,034 la
 /// luminanza è quattro centomillesimi, e in sRGB quel valore è il codice zero.
 /// Vicino al bianco succede l'opposto — un codice solo copre una frazione di
-/// gradino percettivo — e infatti in luce si cammina benissimo. Non è un difetto
-/// di OKLab: è la densità della codifica, e la ricetta la deve sapere.
+/// gradino percettivo. Non è un difetto di OKLab: è la densità della codifica,
+/// e la ricetta la deve sapere.
 ///
-/// Lo **stacco** separa la carta nera dalla scocca antracite; il **passo**
-/// mantiene raccolte le superfici successive. La pagina resta nera, ma
-/// navigazione e controlli non si confondono con il documento. In luce
-/// chiara basta lo stesso passo per la carta e per le superfici successive.
+/// Adesso la carta scura sta in un antracite caldo (`L` 0,2) e non più nel
+/// nero, e lì la codifica è abbastanza densa da camminare a passi piccoli: lo
+/// **stacco** resta, ma basta appena più di un passo per separare la pagina
+/// dalla scocca. Le superfici sono vicine fra loro apposta — la gerarchia la
+/// fanno il filetto e l'ombra, non un salto di luce — ed è la differenza fra
+/// un'interfaccia che si sente e una che sta indietro. In luce chiara la carta
+/// è un avorio (`L` 0,99), non il bianco pieno, per la stessa ragione.
 const LIGHT: Record<
   Light,
   {
@@ -101,8 +106,8 @@ const LIGHT: Record<
     readonly schema: string;
   }
 > = {
-  dark: { paper: 0, gap: 0.18, step: 0.024, schema: "dark" },
-  light: { paper: 1, gap: 0.014, step: 0.014, schema: "light" },
+  dark: { paper: 0.2, gap: 0.026, step: 0.018, schema: "dark" },
+  light: { paper: 0.992, gap: 0.016, step: 0.012, schema: "light" },
 };
 
 /// Dove sta il gradino `n`: la carta, e poi lo stacco più i passi che restano.
@@ -113,6 +118,15 @@ function stepClarity(light: Light, steps: number): number {
   const { paper, gap, step } = LIGHT[light];
   if (steps === 0) return paper;
   return paper + direction(light) * (gap + step * (steps - 1));
+}
+
+/// Il croma dei neutri al gradino `n`. Parte dalla carta con un filo di tinta —
+/// la carta è carta, non uno schermo spento — e cresce col gradino: una
+/// superficie lontana dalla carta ha più posto per portare una tinta senza
+/// diventare colorata. Una sola funzione per gradini ed elevazione, così la
+/// carta e il piano `paper` restano lo stesso colore.
+function neutralChroma(steps: number): number {
+  return Math.min(0.009, 0.004 + 0.0006 * steps);
 }
 
 /// Il verso in cui ci si allontana dalla carta: verso l'alto al buio, verso il
@@ -126,15 +140,17 @@ function direction(light: Light): 1 | -1 {
 /// si distingue da un grigio ereditato, e due tinte diverse farebbero dei due
 /// fogli due tavolozze invece di una vista in due luci.
 ///
-/// Il numero non è inventato: è dove stanno **già** i neutri dei fogli scritti a
-/// mano (`--border` 285,4°, `--muted` 285,9°, `--text` 286,3°, e gli stessi tre
-/// in luce fra 285,5° e 286,4°). Chi li ha scelti uno per uno ha scelto ogni
-/// volta la stessa direzione senza avere un posto in cui dirlo; qui c'è.
-const NEUTRAL = 285;
+/// È una pietra calda: 75° è la direzione della carta non sbiancata, e a croma
+/// quasi nullo un grigio caldo si legge come quiete, dove quello freddo di
+/// prima (285°, un grigio violaceo) si leggeva come schermo. Il croma resta
+/// sotto la soglia in cui una superficie diventa «beige»: la tinta si sente,
+/// non si vede.
+const NEUTRAL = 75;
 
-/// La tinta dell'accento: il lime della decisione di prodotto (`bdc3203`),
-/// misurato dai valori che c'erano — 128,8° al buio e 130,8° in luce, cioè due
-/// arrotondamenti dello stesso colore.
+/// La tinta dell'accento: la stessa della decisione di prodotto (`bdc3203`) e
+/// del default della preferenza (`appearance.accent`), ma a croma dimezzato.
+/// A 0,2 era un lime che gridava da ogni tacca; a 0,1 la stessa tinta è una
+/// salvia, e un accento quieto è ciò che lascia al testo il primo piano.
 const ACCENT = 130;
 
 // ---------------------------------------------------------------------------
@@ -256,12 +272,14 @@ const SCALE: readonly Group[] = [
     title: "i raggi",
     prose:
       "Quattro raggi per quattro intenzioni: il segno appena smussato,\n" +
-      "il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda.",
+      "il controllo, il gruppo e la superficie flottante. La pastiglia resta tonda.\n" +
+      "Sono morbidi e non tondi: un angolo appena più largo toglie spigoli\n" +
+      "all'insieme senza che nessun componente sembri una bolla.",
     entries: [
-      { name: "radius-xs", type: "letterale", value: "3px" },
+      { name: "radius-xs", type: "letterale", value: "4px" },
       { name: "radius-sm", type: "letterale", value: "6px" },
-      { name: "radius-md", type: "letterale", value: "8px" },
-      { name: "radius-lg", type: "letterale", value: "12px" },
+      { name: "radius-md", type: "letterale", value: "10px" },
+      { name: "radius-lg", type: "letterale", value: "14px" },
       { name: "radius-pill", type: "letterale", value: "999px" },
     ],
   },
@@ -321,8 +339,17 @@ const SCALE: readonly Group[] = [
       { name: "text-2xl", type: "letterale", value: "19px" },
       { name: "text-3xl", type: "letterale", value: "23px" },
       { name: "text-reading", type: "letterale", value: "16px" },
-      { name: "weight-medium", type: "letterale", value: "600" },
-      { name: "weight-bold", type: "letterale", value: "700" },
+      {
+        name: "weight-medium",
+        type: "letterale",
+        value: "500",
+        prose:
+          "I pesi sono un gradino sotto quelli di prima (600 e 700): Inter e\n" +
+          "Literata sono variabili, e in una scocca minimale la gerarchia la porta\n" +
+          "la misura, non l'inchiostro. Un'etichetta a 600 in ogni riga faceva di\n" +
+          "ogni riga un titolo.",
+      },
+      { name: "weight-bold", type: "letterale", value: "600" },
       { name: "leading-tight", type: "letterale", value: "1.35" },
       { name: "leading-normal", type: "letterale", value: "1.5" },
       { name: "leading-relaxed", type: "letterale", value: "1.7" },
@@ -348,14 +375,21 @@ const SCALE: readonly Group[] = [
       "standard; `ease-out` decade sull'ingresso (parte veloce, atterra fermo);\n" +
       "`ease-in` accelera sul press. Non c'è una durata «live»: la scocca non\n" +
       "respira. Ogni nome nuovo lo spende la pelle, o è debito — la lezione di\n" +
-      "`--duration-med`.",
+      "`--duration-med`.\n" +
+      "\n" +
+      "Le durate sono più distese di prima (120/180/240 ms) e le curve più\n" +
+      "morbide: l'ingresso è un'uscita quintica, che copre quasi tutto il tragitto\n" +
+      "nel primo terzo e poi si posa per il resto, e l'uscita è una cubica che\n" +
+      "parte piano invece di strappare. Il moto si sente come un respiro, non\n" +
+      "come uno scatto. `slow` resta ben sotto il tetto di sicurezza di\n" +
+      "`ui/motion.ts` (600 ms), che chiude comunque una superficie appesa.",
     entries: [
-      { name: "duration-fast", type: "letterale", value: "120ms" },
-      { name: "duration-med", type: "letterale", value: "180ms" },
-      { name: "duration-slow", type: "letterale", value: "240ms" },
-      { name: "ease", type: "letterale", value: "cubic-bezier(0.2, 0.8, 0.2, 1)" },
-      { name: "ease-out", type: "letterale", value: "cubic-bezier(0.16, 1, 0.3, 1)" },
-      { name: "ease-in", type: "letterale", value: "cubic-bezier(0.3, 0, 1, 1)" },
+      { name: "duration-fast", type: "letterale", value: "180ms" },
+      { name: "duration-med", type: "letterale", value: "260ms" },
+      { name: "duration-slow", type: "letterale", value: "420ms" },
+      { name: "ease", type: "letterale", value: "cubic-bezier(0.25, 0.1, 0.25, 1)" },
+      { name: "ease-out", type: "letterale", value: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      { name: "ease-in", type: "letterale", value: "cubic-bezier(0.32, 0, 0.67, 0)" },
     ],
   },
 ];
@@ -374,23 +408,28 @@ type ElevationSpec = Readonly<{
   shadow: Readonly<Record<Light, string>>;
 }>;
 
-/// La tabella livello × luce. Al buio ogni piano guadagna chiarezza e l'ombra
-/// resta spenta; in luce le superfici restano raccolte e la profondità cresce
-/// nell'ombra. Superficie, filetto e ombra escono sempre dalla stessa riga.
+/// La tabella livello × luce. Al buio ogni piano guadagna un filo di chiarezza
+/// e, dal flottante in su, un'ombra lunga e morbida: su un antracite l'ombra
+/// torna a staccare, cosa che sul nero pieno non poteva fare. In luce le
+/// superfici restano raccolte e la profondità cresce nell'ombra. Le ombre sono
+/// doppie — un contatto corto e un alone largo e tenue — perché un'ombra sola
+/// abbastanza larga da sollevare è anche abbastanza scura da sporcare.
+/// Superficie, filetto e ombra escono sempre dalla stessa riga.
 const ELEVATION_TABLE: readonly ElevationSpec[] = [
   { name: "paper", surface: { dark: 0, light: 0 }, border: { dark: 0, light: 0 }, shadow: { dark: "none", light: "none" } },
-  { name: "base", surface: { dark: 1, light: 1 }, border: { dark: 2, light: 2 }, shadow: { dark: "none", light: "0 1px 2px rgb(20 20 40 / 4%)" } },
-  { name: "chrome", surface: { dark: 2, light: 1 }, border: { dark: 4, light: 3 }, shadow: { dark: "none", light: "0 2px 6px rgb(20 20 40 / 7%)" } },
-  { name: "floating", surface: { dark: 3, light: 1 }, border: { dark: 6, light: 5 }, shadow: { dark: "none", light: "0 6px 18px rgb(20 20 40 / 12%)" } },
-  { name: "dialog", surface: { dark: 4, light: 1 }, border: { dark: 9, light: 7 }, shadow: { dark: "none", light: "0 12px 32px rgb(20 20 40 / 18%)" } },
+  { name: "base", surface: { dark: 1, light: 1 }, border: { dark: 3, light: 2 }, shadow: { dark: "none", light: "0 1px 2px rgb(45 38 30 / 3%)" } },
+  { name: "chrome", surface: { dark: 2, light: 1 }, border: { dark: 4, light: 3 }, shadow: { dark: "0 1px 0 rgb(0 0 0 / 12%)", light: "0 1px 3px rgb(45 38 30 / 4%)" } },
+  { name: "floating", surface: { dark: 3, light: 0 }, border: { dark: 6, light: 4 }, shadow: { dark: "0 1px 2px rgb(0 0 0 / 22%), 0 10px 28px rgb(0 0 0 / 30%)", light: "0 1px 2px rgb(45 38 30 / 5%), 0 10px 28px rgb(45 38 30 / 9%)" } },
+  { name: "dialog", surface: { dark: 4, light: 0 }, border: { dark: 7, light: 5 }, shadow: { dark: "0 2px 6px rgb(0 0 0 / 22%), 0 28px 72px rgb(0 0 0 / 42%)", light: "0 2px 6px rgb(45 38 30 / 5%), 0 28px 64px rgb(45 38 30 / 14%)" } },
 ];
 
 const ELEVATION: Group = {
   title: "l'elevazione: dalla carta al dialogo",
   prose:
-    "Cinque piani. In luce scura la superficie sale e l'ombra non finge di\n" +
-    "staccare dal nero; in luce chiara la superficie resta quieta e cresce\n" +
-    "l'ombra. Il filetto appartiene alla stessa riga, non a un componente.",
+    "Cinque piani. In luce scura la superficie sale di un filo e, dal flottante\n" +
+    "in su, l'ombra lunga e morbida torna a staccare; in luce chiara ciò che\n" +
+    "galleggia è della carta stessa, e lo solleva l'ombra. Il filetto\n" +
+    "appartiene alla stessa riga, non a un componente.",
   entries: ELEVATION_TABLE.flatMap((level): Entry[] => [
     { name: `elevation-${level.name}-surface`, type: "elevazione", steps: level.surface },
     { name: `elevation-${level.name}-border`, type: "elevazione", steps: level.border },
@@ -434,8 +473,8 @@ const COLOR: readonly Group[] = [
       "perché quattro valori scelti separatamente non hanno un posto in cui\n" +
       "contraddirsi.\n" +
       "\n" +
-      "Il fondo è la **carta** (`--doc-bg`, più giù), che è l'estremo: il nero al\n" +
-      "buio, il bianco in luce. Il corpo dell'app le sta appena sopra, la scocca\n" +
+      "Il fondo è la **carta** (`--doc-bg`, più giù), che è l'estremo: l'antracite\n" +
+      "al buio, l'avorio in luce. Il corpo dell'app le sta appena sopra, la scocca\n" +
       "sopra di lui, e ciò che galleggia sopra ancora. È il verso di un editor —\n" +
       "la pagina è la superficie estrema e il resto ci galleggia — e non quello di\n" +
       "prima, dove titlebar, rail, statusbar, corpo dell'app e carta erano lo\n" +
@@ -487,7 +526,7 @@ const COLOR: readonly Group[] = [
       {
         name: "overlay-hover",
         type: "letterale",
-        value: { dark: "rgb(255 255 255 / 8%)", light: "rgb(0 0 0 / 6%)" },
+        value: { dark: "rgb(255 250 240 / 6%)", light: "rgb(45 38 30 / 5%)" },
         prose:
           "Il velo del bottone fantasma: un velo sul testo, non un secondo grigio.\n" +
           "In alpha perché deve restare un velo sopra qualunque superficie, e le\n" +
@@ -522,18 +561,18 @@ const COLOR: readonly Group[] = [
         h: NEUTRAL,
         c: 0.005,
         above: SURFACES,
-        targetContrast: { dark: 11, light: 12 },
+        targetContrast: { dark: 9, light: 11 },
         prose:
-          "Il testo della shell. La mira non è la soglia: è il rapporto che il\n" +
-          "foglio scritto a mano già dava, misurato. Al buio è più bassa di un punto\n" +
-          "e non per scelta — con sette superfici la più alta è chiara abbastanza da\n" +
-          "abbassare il soffitto: sopra `--bg-active` nessun colore arriva a 12,8:1.",
+          "Il testo della shell. La mira sta ben sopra la soglia, ma sotto il\n" +
+          "massimo: un bianco pieno sull'antracite abbaglia, e un testo appena\n" +
+          "velato si legge più a lungo. Si misura sulla superficie più chiara\n" +
+          "(`--bg-active`), quindi sulla carta il rapporto è più alto.",
       },
       {
         name: "muted",
         type: "inchiostro",
         h: NEUTRAL,
-        c: 0.018,
+        c: 0.01,
         above: SURFACES,
         targetContrast: 5,
         prose:
@@ -551,27 +590,29 @@ const COLOR: readonly Group[] = [
       "selezione); `--accent-soft` è un **inchiostro**, sta sopra le superfici, e\n" +
       "gli tocca la soglia del testo.\n" +
       "\n" +
-      "La tinta è una sola, e il lime è la decisione di prodotto di `bdc3203`.\n" +
-      "Le due mire dell'accento sono diverse, e non per gusto: al buio l'accento è\n" +
-      "la cosa più chiara dello schermo e il contrasto gli viene gratis; in luce è\n" +
-      "un pieno che porta il proprio testo sopra, e spingerlo oltre lo farebbe\n" +
-      "diventare un'oliva scura — cioè non più un accento.",
+      "La tinta è una sola, quella della decisione di prodotto di `bdc3203`, ma a\n" +
+      "croma dimezzato: una salvia, non un lime. Le due mire dell'accento sono\n" +
+      "diverse, e non per gusto: al buio l'accento è fra le cose più chiare dello\n" +
+      "schermo e il contrasto gli viene gratis; in luce è un pieno che porta il\n" +
+      "proprio testo sopra, e sta abbastanza giù — un muschio — perché quel testo\n" +
+      "sia il bianco: un bottone salvia chiaro con l'inchiostro nero sopra si\n" +
+      "legge come fango, non come un invito.",
     entries: [
       {
         name: "accent",
         type: "inchiostro",
         h: ACCENT,
-        c: 0.2,
+        c: 0.1,
         above: SURFACES,
-        targetContrast: { dark: 9, light: 3.2 },
+        targetContrast: { dark: 6.5, light: 4.6 },
       },
       {
         name: "accent-soft",
         type: "inchiostro",
         h: ACCENT,
-        c: 0.16,
+        c: 0.085,
         above: SURFACES,
-        targetContrast: { dark: 11, light: 6.5 },
+        targetContrast: { dark: 8, light: 6.5 },
       },
       {
         name: "accent-contrast",
@@ -602,18 +643,21 @@ const COLOR: readonly Group[] = [
       "un fondo che non copre), e il controcolore (per un pieno). Le tinte sono\n" +
       "quattro e stanno lontane fra loro: il riuscito è **più freddo** del lime\n" +
       "apposta, perché un verde uguale all'accento direbbe «primario» dove voleva\n" +
-      "dire «fatto».",
+      "dire «fatto».\n" +
+      "\n" +
+      "I croma sono contenuti (0,1–0,13): un intento deve farsi notare quando\n" +
+      "parla, non colorare la scocca quando tace.",
     entries: [
-      { name: "danger", type: "inchiostro", h: 25, c: 0.16, above: SURFACES, targetContrast: 5 },
+      { name: "danger", type: "inchiostro", h: 25, c: 0.13, above: SURFACES, targetContrast: 5 },
       { name: "danger-wash", type: "velo", from: "danger", alpha: { dark: 18, light: 12 } },
       { name: "danger-contrast", type: "controcolore", above: "danger" },
-      { name: "warning", type: "inchiostro", h: 80, c: 0.16, above: SURFACES, targetContrast: 5 },
+      { name: "warning", type: "inchiostro", h: 75, c: 0.12, above: SURFACES, targetContrast: 5 },
       { name: "warning-wash", type: "velo", from: "warning", alpha: { dark: 18, light: 14 } },
       { name: "warning-contrast", type: "controcolore", above: "warning" },
-      { name: "success", type: "inchiostro", h: 160, c: 0.14, above: SURFACES, targetContrast: 5 },
+      { name: "success", type: "inchiostro", h: 160, c: 0.1, above: SURFACES, targetContrast: 5 },
       { name: "success-wash", type: "velo", from: "success", alpha: { dark: 18, light: 14 } },
       { name: "success-contrast", type: "controcolore", above: "success" },
-      { name: "info", type: "inchiostro", h: 250, c: 0.14, above: SURFACES, targetContrast: 5 },
+      { name: "info", type: "inchiostro", h: 245, c: 0.1, above: SURFACES, targetContrast: 5 },
       { name: "info-wash", type: "velo", from: "info", alpha: { dark: 18, light: 12 } },
       { name: "info-contrast", type: "controcolore", above: "info" },
     ],
@@ -641,9 +685,9 @@ const COLOR: readonly Group[] = [
         name: "focus-ring",
         type: "inchiostro",
         h: ACCENT,
-        c: 0.12,
+        c: 0.08,
         above: SURFACES,
-        targetContrast: { dark: 10, light: 6 },
+        targetContrast: { dark: 8, light: 5 },
       },
       { name: "focus-ring-width", type: "letterale", value: "2px" },
       { name: "focus-ring-offset", type: "letterale", value: "1px" },
@@ -660,7 +704,7 @@ const COLOR: readonly Group[] = [
       {
         name: "scrim",
         type: "letterale",
-        value: { dark: "rgb(0 0 0 / 45%)", light: "rgb(20 20 30 / 35%)" },
+        value: { dark: "rgb(10 8 6 / 50%)", light: "rgb(45 38 30 / 18%)" },
       },
       { name: "shadow-sm", type: "eco", source: "elevation-base-shadow" },
       { name: "shadow-md", type: "eco", source: "elevation-floating-shadow" },
@@ -680,7 +724,7 @@ const COLOR: readonly Group[] = [
         name: "graph-node",
         type: "inchiostro",
         h: NEUTRAL,
-        c: 0.02,
+        c: 0.012,
         above: SURFACES,
         targetContrast: { dark: 5, light: 3.6 },
       },
@@ -694,7 +738,7 @@ const COLOR: readonly Group[] = [
         name: "graph-node-hover",
         type: "inchiostro",
         h: 160,
-        c: 0.12,
+        c: 0.09,
         above: SURFACES,
         targetContrast: { dark: 7, light: 4 },
         prose: "Il nodo sotto il puntatore: la tinta del riuscito, che qui vuol dire «questo».",
@@ -709,24 +753,26 @@ const COLOR: readonly Group[] = [
       "note diverse. Li usano `.markdown-preview` (Lettura), il tema della live\n" +
       "preview e il tema dell'editor, che prima portava i propri.\n" +
       "\n" +
-      "La carta è il **fondo della scala**: il nero al buio, il bianco in luce. È\n" +
-      "l'unico posto in cui il nero OLED conta davvero, ed è dove è finito.",
+      "La carta è il **fondo della scala**: un antracite caldo al buio, un avorio\n" +
+      "in luce. Sono l'estremo della scala senza essere il nero o il bianco puri,\n" +
+      "che su una pagina lunga affaticano l'occhio.",
     entries: [
       {
         name: "doc-bg",
         type: "gradino",
         steps: 0,
-        chroma: 0,
         prose:
-          "La carta. Zero passi: è l'estremo da cui tutto il resto si allontana, e\n" +
-          "l'unico token del foglio che non ha una tinta — il nero e il bianco non\n" +
-          "ne hanno una.",
+          "La carta. Zero passi: è l'estremo da cui tutto il resto si allontana.\n" +
+          "Porta la tinta dei neutri a un croma minimo, quanto basta perché la\n" +
+          "pagina sia carta e non uno schermo spento.",
       },
       {
         name: "doc-active-line",
         type: "gradino",
-        steps: 2,
-        prose: "La riga sotto il cursore: un gradino della carta, non un colore a parte.",
+        steps: 1,
+        prose:
+          "La riga sotto il cursore: il gradino più vicino alla carta, non un colore\n" +
+          "a parte. Dice dove si scrive senza disegnare una fascia sulla pagina.",
       },
       {
         name: "doc-selection",
@@ -762,22 +808,22 @@ const COLOR: readonly Group[] = [
       {
         name: "doc-highlight",
         type: "letterale",
-        value: { dark: "rgb(255 205 0 / 28%)", light: "rgb(255 205 0 / 45%)" },
+        value: { dark: "rgb(230 190 90 / 24%)", light: "rgb(240 200 80 / 38%)" },
       },
       {
         name: "doc-fg",
         type: "inchiostro",
         h: NEUTRAL,
-        c: 0.012,
+        c: 0.008,
         above: PAPER,
-        targetContrast: { dark: 9, light: 10 },
+        targetContrast: { dark: 8.5, light: 10 },
         prose: "Il corpo della nota. Sopra tutti e tre i fondi della carta, non solo la pagina.",
       },
       {
         name: "doc-link",
         type: "inchiostro",
-        h: 255,
-        c: 0.14,
+        h: 245,
+        c: 0.1,
         above: [...PAPER, "doc-bg+doc-fill"],
         targetContrast: 6,
         prose:
@@ -804,7 +850,7 @@ const COLOR: readonly Group[] = [
         name: "doc-danger",
         type: "inchiostro",
         h: 25,
-        c: 0.16,
+        c: 0.13,
         above: PAPER,
         targetContrast: 5.5,
         prose:
@@ -815,7 +861,7 @@ const COLOR: readonly Group[] = [
         name: "doc-gutter-fg",
         type: "inchiostro",
         h: NEUTRAL,
-        c: 0.015,
+        c: 0.01,
         above: PAPER,
         targetContrast: 5,
         prose: "I numeri di riga sono testo che qualcuno legge, non decorazione.",
@@ -823,8 +869,8 @@ const COLOR: readonly Group[] = [
       {
         name: "doc-caret",
         type: "inchiostro",
-        h: 265,
-        c: 0.2,
+        h: 245,
+        c: 0.13,
         above: PAPER,
         targetContrast: 4.5,
         prose: "Il cursore di scrittura: non è testo, ma è la cosa che si cerca con gli occhi.",
@@ -853,6 +899,11 @@ const COLOR: readonly Group[] = [
       "saltare all'occhio. Sono le due il cui lavoro **è** stare a una chiarezza\n" +
       "diversa dalle altre.\n" +
       "\n" +
+      "I croma sono tenuti bassi (0,07–0,11): una tavolozza di sintassi quieta si\n" +
+      "legge come testo colorato, una satura come un albero di Natale. Le tinte\n" +
+      "restano distinte, ed è la tinta — non la saturazione — a separare le\n" +
+      "specie.\n" +
+      "\n" +
       "E `SOTTO_AA` va a zero. Sette specie su dieci stavano sotto la soglia del\n" +
       "testo nella luce chiara dal giorno in cui quel tema è nato (`087a40f`), ed\n" +
       "era un debito dichiarato perché ritoccarle una alla volta avrebbe lasciato\n" +
@@ -860,16 +911,16 @@ const COLOR: readonly Group[] = [
       "si chiede alla famiglia un rapporto, e la famiglia trova **una** chiarezza.\n" +
       "Era esattamente l'operazione che prenderle in coppia serviva a evitare.",
     entries: [
-      { name: "syn-keyword", type: "inchiostro", h: 322, c: 0.18, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
-      { name: "syn-name", type: "inchiostro", h: 22, c: 0.16, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
-      { name: "syn-function", type: "inchiostro", h: 255, c: 0.16, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
-      { name: "syn-literal", type: "inchiostro", h: 70, c: 0.12, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
-      { name: "syn-type", type: "inchiostro", h: 85, c: 0.13, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
+      { name: "syn-keyword", type: "inchiostro", h: 318, c: 0.1, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
+      { name: "syn-name", type: "inchiostro", h: 30, c: 0.1, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
+      { name: "syn-function", type: "inchiostro", h: 250, c: 0.1, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
+      { name: "syn-literal", type: "inchiostro", h: 60, c: 0.09, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
+      { name: "syn-type", type: "inchiostro", h: 90, c: 0.09, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
       {
         name: "syn-operator",
         type: "inchiostro",
-        h: 220,
-        c: 0.11,
+        h: 215,
+        c: 0.07,
         above: PAPER,
         targetContrast: { dark: 5.5, light: 5 },
         family: "sintassi",
@@ -878,7 +929,7 @@ const COLOR: readonly Group[] = [
         name: "syn-comment",
         type: "inchiostro",
         h: NEUTRAL,
-        c: 0.025,
+        c: 0.016,
         above: PAPER,
         targetContrast: 4.6,
         prose:
@@ -888,7 +939,7 @@ const COLOR: readonly Group[] = [
           "delle altre lo porterebbe avanti, cioè gli toglierebbe il suo lavoro. La\n" +
           "sua mira è sopra la soglia del testo e non un dito più su.",
       },
-      { name: "syn-string", type: "inchiostro", h: 138, c: 0.13, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
+      { name: "syn-string", type: "inchiostro", h: 145, c: 0.08, above: PAPER, targetContrast: { dark: 5.5, light: 5 }, family: "sintassi" },
       {
         name: "syn-heading",
         type: "eco",
@@ -903,7 +954,7 @@ const COLOR: readonly Group[] = [
         name: "syn-invalid",
         type: "inchiostro",
         h: 25,
-        c: 0.22,
+        c: 0.15,
         above: PAPER,
         targetContrast: { dark: 7, light: 6 },
         prose:
@@ -1087,15 +1138,13 @@ function resolveValue(
       return typeof entry.value === "string" ? entry.value : entry.value[light];
 
     case "gradino": {
-      // Il croma dei neutri cresce col gradino: una superficie lontana dalla
-      // carta ha più posto per portare una tinta senza diventare colorata.
-      const chroma = entry.chroma ?? Math.min(0.008, 0.0012 * entry.steps);
+      const chroma = entry.chroma ?? neutralChroma(entry.steps);
       return toHex({ l: stepClarity(light, entry.steps), c: chroma, h: NEUTRAL });
     }
 
     case "elevazione": {
       const steps = entry.steps[light];
-      const chroma = entry.chroma ?? Math.min(0.008, 0.0012 * steps);
+      const chroma = entry.chroma ?? neutralChroma(steps);
       return toHex({ l: stepClarity(light, steps), c: chroma, h: NEUTRAL });
     }
 

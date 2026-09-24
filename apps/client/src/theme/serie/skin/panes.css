@@ -51,24 +51,12 @@
   background: var(--overlay-hover);
   color: var(--text);
 }
+/* L'attiva si legge dal fondo, senza marcatori: nei riquadri che non hanno il
+   fuoco resta un gradino sotto, e l'inchiostro pieno la separa dalle altre. */
 .tab[aria-selected="true"] {
-  background: var(--bg-active);
+  background: var(--bg-panel);
   color: var(--text);
   box-shadow: none;
-}
-/* Il marcatore è corto e sta sotto l'etichetta, non un filetto a tutta
-   larghezza: l'attiva si legge dal fondo, il lime è solo l'accento. */
-.tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 2px;
-  width: 14px;
-  height: 2px;
-  border-radius: var(--radius-xs);
-  transform: translateX(-50%);
-  background: var(--muted);
-  pointer-events: none;
 }
 .tab-name {
   display: inline-flex;
@@ -100,19 +88,20 @@
   color: inherit;
 }
 
-/* Quale riquadro ha il fuoco si legge dalla tab davanti: il marcatore è lime
-   solo nel riquadro a fuoco, muto negli altri. Il filetto resta il filetto. */
-.pane.focus .tab[aria-selected="true"]::after {
-  background: var(--accent);
+/* Quale riquadro ha il fuoco si legge dalla tab davanti: nel riquadro a
+   fuoco sale al fondo attivo, negli altri resta al gradino del pannello. */
+.pane.focus .tab[aria-selected="true"] {
+  background: var(--bg-active);
 }
 /* La riga sotto le tab: briciole a sinistra, modalità e menu a destra. La
    struttura dà solo il contenitore; qui il ritmo: briciole che si accorciano,
    versione che non ruba spazio, bottone del menu come gli altri fantasmi. */
+/* Sta sulla carta e senza filetto: briciole e modalità galleggiano sopra la
+   nota invece di chiudere una seconda striscia sotto le tab. */
 .pane-toolbar {
   gap: var(--space-3);
-  padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-soft, var(--bg));
+  padding: var(--space-2) var(--space-4);
+  background: var(--doc-bg);
   font-size: var(--text-sm);
 }
 .pane-toolbar .muted {
@@ -152,6 +141,12 @@
    documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
    fare sulla nota, non di che colore è. La colonna è quella di Live: il frame
    porta inset e misura, il contenuto non raddoppia il padding. */
+/* Il riquadro intero è carta, non solo la colonna: in Lettura la misura resta
+   al centro, e ai suoi lati deve continuare la pagina, non comparire il fondo
+   dell'app come una seconda colonna. */
+.pane-editor {
+  background: var(--doc-bg);
+}
 .pane-preview {
   padding: var(--space-8) var(--space-7) var(--space-10);
   background: var(--doc-bg);

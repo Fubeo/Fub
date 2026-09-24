@@ -261,7 +261,9 @@ button.primary:active,
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
-  transition: background var(--duration-fast) var(--ease);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 .tree-row:hover {
   background: var(--bg-hover);
@@ -269,22 +271,14 @@ button.primary:active,
 /* La nota aperta. Lo stato si legge da dove è annunciato e non da una classe
    scritta accanto: nell'albero è il `treeitem` a essere selezionato — è lui a
    contenere il sottoalbero — fra le appuntate è la riga a essere «quella
-   corrente», che in una lista piatta si dice `aria-current`. */
+   corrente», che in una lista piatta si dice `aria-current`.
+   La dice il fondo, e basta: la barra d'accento che le stava accanto ripeteva
+   la stessa cosa in un secondo colore. I colori forzati la riportano dalla
+   struttura. */
 [role="treeitem"][aria-selected="true"] > .tree-row,
 .tree-row[aria-current="true"] {
   background: var(--bg-active);
   color: var(--text);
-}
-[role="treeitem"][aria-selected="true"] > .tree-row::before,
-.tree-row[aria-current="true"]::before {
-  content: "";
-  position: absolute;
-  left: var(--space-2);
-  top: var(--space-2);
-  bottom: var(--space-2);
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
 }
 .row-name {
   flex: 1;
@@ -356,10 +350,10 @@ button.primary:active,
 .space-chip:hover {
   background: var(--bg-hover);
 }
-/* Quale spazio è acceso lo diceva solo il contorno, e a nessun altro. */
+/* Quale spazio è acceso lo dice il fondo attivo, come ogni altra scelta
+   della scocca. */
 .space-chip[aria-pressed="true"] {
   background: var(--bg-active);
-  box-shadow: inset 0 -2px 0 var(--accent);
 }
 .space-chip.add {
   color: var(--muted);
@@ -386,10 +380,10 @@ button.primary:active,
   z-index: var(--z-picker);
   width: 232px;
   padding: var(--space-4);
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  background: var(--elevation-floating-surface);
+  border: 1px solid var(--elevation-floating-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-floating-shadow);
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -615,8 +609,9 @@ progress::-moz-progress-bar {
    la griglia lascia tutto lo spazio all'anteprima — e la modalità viaggia nel
    contesto di sessione, quindi le view che la seguono lo sanno. */
 /* **Il segmented control**: un gruppo di opzioni che si escludono, dentro una
-   cornice sola. L'accesa la dice il fondo attivo più una tacca d'accento
-   corta e centrata; il fondo del gruppo resta il gradino del pannello.
+   cornice sola. L'accesa la dice il fondo attivo con un'ombra appena
+   accennata, e l'inchiostro pieno contro quello attenuato delle altre; il
+   fondo del gruppo resta il gradino del pannello, senza filetto.
 
    Ce n'erano tre — le modalità del pannello, le schede delle impostazioni, il
    commutatore del tema — e ognuna riscriveva la stessa cornice e lo stesso
@@ -636,7 +631,7 @@ progress::-moz-progress-bar {
   gap: var(--space-1);
   padding: var(--space-1);
   background: var(--bg-panel);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
 }
 /* Due misure, e sono le uniche due cose che distinguono i tre esemplari: uno
@@ -670,35 +665,23 @@ progress::-moz-progress-bar {
   line-height: var(--leading-normal);
   padding: var(--space-1) var(--space-3);
   transition:
-    background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease);
+    background var(--duration-med) var(--ease),
+    color var(--duration-fast) var(--ease),
+    box-shadow var(--duration-med) var(--ease);
 }
 .segmented-option:hover {
   background: var(--overlay-hover);
   color: var(--text);
 }
+/* L'accesa: il fondo attivo e un'ombra di contatto. Il riquadro a fuoco non
+   serve qui — l'attributo lo dice già a chi ascolta, e il fondo lo dice a chi
+   guarda. */
 .segmented-option[aria-pressed="true"],
 .segmented-option[aria-selected="true"],
 .segmented-option[aria-checked="true"] {
   background: var(--bg-active);
   color: var(--text);
-}
-/* La tacca corta e centrata: dice «questa» senza un filetto lime. Il riquadro
-   a fuoco non serve qui — l'attributo lo dice già a chi ascolta, e il fondo
-   lo dice a chi guarda. */
-.segmented-option[aria-pressed="true"]::after,
-.segmented-option[aria-selected="true"]::after,
-.segmented-option[aria-checked="true"]::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 1px;
-  width: 12px;
-  height: 2px;
-  border-radius: var(--radius-xs);
-  transform: translateX(-50%);
-  background: var(--accent);
-  pointer-events: none;
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── skin/panes.css ─────────────────────────────────────────────────────── */
@@ -756,24 +739,12 @@ progress::-moz-progress-bar {
   background: var(--overlay-hover);
   color: var(--text);
 }
+/* L'attiva si legge dal fondo, senza marcatori: nei riquadri che non hanno il
+   fuoco resta un gradino sotto, e l'inchiostro pieno la separa dalle altre. */
 .tab[aria-selected="true"] {
-  background: var(--bg-active);
+  background: var(--bg-panel);
   color: var(--text);
   box-shadow: none;
-}
-/* Il marcatore è corto e sta sotto l'etichetta, non un filetto a tutta
-   larghezza: l'attiva si legge dal fondo, il lime è solo l'accento. */
-.tab[aria-selected="true"]::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: 2px;
-  width: 14px;
-  height: 2px;
-  border-radius: var(--radius-xs);
-  transform: translateX(-50%);
-  background: var(--muted);
-  pointer-events: none;
 }
 .tab-name {
   display: inline-flex;
@@ -805,19 +776,20 @@ progress::-moz-progress-bar {
   color: inherit;
 }
 
-/* Quale riquadro ha il fuoco si legge dalla tab davanti: il marcatore è lime
-   solo nel riquadro a fuoco, muto negli altri. Il filetto resta il filetto. */
-.pane.focus .tab[aria-selected="true"]::after {
-  background: var(--accent);
+/* Quale riquadro ha il fuoco si legge dalla tab davanti: nel riquadro a
+   fuoco sale al fondo attivo, negli altri resta al gradino del pannello. */
+.pane.focus .tab[aria-selected="true"] {
+  background: var(--bg-active);
 }
 /* La riga sotto le tab: briciole a sinistra, modalità e menu a destra. La
    struttura dà solo il contenitore; qui il ritmo: briciole che si accorciano,
    versione che non ruba spazio, bottone del menu come gli altri fantasmi. */
+/* Sta sulla carta e senza filetto: briciole e modalità galleggiano sopra la
+   nota invece di chiudere una seconda striscia sotto le tab. */
 .pane-toolbar {
   gap: var(--space-3);
-  padding: var(--space-1) var(--space-3);
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-soft, var(--bg));
+  padding: var(--space-2) var(--space-4);
+  background: var(--doc-bg);
   font-size: var(--text-sm);
 }
 .pane-toolbar .muted {
@@ -857,6 +829,12 @@ progress::-moz-progress-bar {
    documento — gli stessi dell'editor. Passare a Lettura cambia cosa si può
    fare sulla nota, non di che colore è. La colonna è quella di Live: il frame
    porta inset e misura, il contenuto non raddoppia il padding. */
+/* Il riquadro intero è carta, non solo la colonna: in Lettura la misura resta
+   al centro, e ai suoi lati deve continuare la pagina, non comparire il fondo
+   dell'app come una seconda colonna. */
+.pane-editor {
+  background: var(--doc-bg);
+}
 .pane-preview {
   padding: var(--space-8) var(--space-7) var(--space-10);
   background: var(--doc-bg);
@@ -2853,7 +2831,6 @@ progress::-moz-progress-bar {
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-2);
-  border-bottom: 1px solid var(--elevation-chrome-border);
   background: var(--bg);
   flex-shrink: 0;
   overflow-x: auto;
@@ -2862,7 +2839,6 @@ progress::-moz-progress-bar {
 .inspector-tab {
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
   color: var(--muted);
@@ -2877,8 +2853,7 @@ progress::-moz-progress-bar {
   border-radius: var(--radius-sm);
   transition:
     background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
+    color var(--duration-fast) var(--ease);
 }
 
 .inspector-tab:hover {
@@ -2887,9 +2862,8 @@ progress::-moz-progress-bar {
 }
 
 .inspector-tab[aria-selected="true"] {
-  color: var(--accent-soft);
+  color: var(--text);
   background: var(--bg-active);
-  border-bottom-color: var(--accent);
 }
 
 /* L'etichetta segue lo spazio: quando la barra è stretta resta la sola icona
@@ -2908,8 +2882,8 @@ progress::-moz-progress-bar {
  * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
  * entrambi i temi. */
 .setting-row--theme {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   padding: var(--space-4);
 }
@@ -2986,8 +2960,8 @@ progress::-moz-progress-bar {
   min-width: 200px;
   max-width: 360px;
   flex: 1;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border: 1px solid transparent;
   padding-inline: var(--space-6);
   text-align: left;
   justify-content: flex-start;
@@ -2999,7 +2973,7 @@ progress::-moz-progress-bar {
 .rail-shell {
   gap: var(--space-3);
   padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--elevation-chrome-border);
 }
 
 /* `.rail-btn` è la classe dei bottoni della rail: quelli shell e quelli delle
@@ -3029,9 +3003,8 @@ progress::-moz-progress-bar {
 }
 
 .rail-btn[aria-pressed="true"] {
-  color: var(--accent-soft);
+  color: var(--text);
   background: var(--bg-active);
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .rail-btn svg {
@@ -3073,7 +3046,14 @@ progress::-moz-progress-bar {
    Gli stati li possiede `ui/motion.ts`: lo stesso attributo governa entrata,
    uscita, riannodamento e puntatore. View Transitions può avvolgere la
    mutazione, ma questi keyframe restano il fallback completo. Transform e
-   opacity, mai geometria. Il moto ridotto resta un pavimento della struttura. */
+   opacity, mai geometria. Il moto ridotto resta un pavimento della struttura.
+
+   Il gesto è uno solo, declinato in tre misure: una superficie **si posa**.
+   Arriva da poco più in basso e appena più piccola, e si assesta con la curva
+   d'uscita lunga del foglio; se ne va più in fretta di come è arrivata,
+   scivolando di metà strada con la curva standard — che parte subito, così
+   l'Esc non sembra ignorato, e si spegne piano. La scala è minima (1–2%) apposta: si
+   sente come profondità, non si vede come zoom. */
 
 @keyframes fub-enter-fade {
   from { opacity: 0; }
@@ -3084,20 +3064,20 @@ progress::-moz-progress-bar {
   to { opacity: 0; }
 }
 @keyframes fub-enter-rise {
-  from { opacity: 0; transform: translateY(var(--space-4)); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(var(--space-5)) scale(0.985); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes fub-exit-rise {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(var(--space-4)); }
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(var(--space-3)) scale(0.99); }
 }
 @keyframes fub-enter-rise-sm {
-  from { opacity: 0; transform: translateY(var(--space-2)); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(calc(-1 * var(--space-2))) scale(0.98); }
+  to { opacity: 1; transform: none; }
 }
 @keyframes fub-exit-rise-sm {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(var(--space-2)); }
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(calc(-1 * var(--space-1))) scale(0.99); }
 }
 
 [data-shell-motion="pre-enter"],
@@ -3105,7 +3085,12 @@ progress::-moz-progress-bar {
   pointer-events: none !important;
 }
 
-[data-shell-motion="pre-enter"] {
+/* Il fotogramma di partenza e quello d'arrivo dell'uscita. Il secondo serve:
+   fra la fine del keyframe e `animationend`, che chiude la superficie, passa
+   almeno un fotogramma, e senza questa riga la superficie ci torna piena —
+   un lampo proprio mentre se ne va. */
+[data-shell-motion="pre-enter"],
+[data-shell-motion="exit"] {
   opacity: 0;
 }
 
@@ -3113,13 +3098,13 @@ progress::-moz-progress-bar {
   animation: fub-enter-fade var(--duration-slow) var(--ease-out);
 }
 .modale[data-shell-motion="exit"] {
-  animation: fub-exit-fade var(--duration-med) var(--ease-in);
+  animation: fub-exit-fade var(--duration-med) var(--ease);
 }
 .modale[data-shell-motion="enter"] .palette-box {
   animation: fub-enter-rise var(--duration-slow) var(--ease-out);
 }
 .modale[data-shell-motion="exit"] .palette-box {
-  animation: fub-exit-rise var(--duration-med) var(--ease-in);
+  animation: fub-exit-rise var(--duration-med) var(--ease);
 }
 .settings-panel[data-shell-motion="enter"],
 .icon-picker[data-shell-motion="enter"] {
@@ -3127,13 +3112,18 @@ progress::-moz-progress-bar {
 }
 .settings-panel[data-shell-motion="exit"],
 .icon-picker[data-shell-motion="exit"] {
-  animation: fub-exit-rise var(--duration-med) var(--ease-in);
+  animation: fub-exit-rise var(--duration-med) var(--ease);
+}
+/* Il menu nasce dal punto in cui lo si è chiesto: l'origine è l'angolo in
+   alto a sinistra, che è dove sta il puntatore. */
+.context-menu {
+  transform-origin: top left;
 }
 .context-menu[data-shell-motion="enter"] {
   animation: fub-enter-rise-sm var(--duration-med) var(--ease-out);
 }
 .context-menu[data-shell-motion="exit"] {
-  animation: fub-exit-rise-sm var(--duration-fast) var(--ease-in);
+  animation: fub-exit-rise-sm var(--duration-fast) var(--ease);
 }
 
 /* Il moto è della scocca, mai del foglio. La scrittura sta ferma. */
@@ -3153,9 +3143,9 @@ progress::-moz-progress-bar {
   z-index: 1000;
   max-width: min(32rem, calc(100vw - 1rem));
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev);
+  border: 1px solid var(--elevation-floating-border);
+  border-radius: var(--radius-md);
+  background: var(--elevation-floating-surface);
   color: var(--text);
   box-shadow: var(--shadow-md);
   font-size: var(--text-sm);
@@ -3171,7 +3161,8 @@ progress::-moz-progress-bar {
 .titlebar-shortcut {
   margin-left: var(--space-1);
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
+  background: var(--bg-panel);
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-family: var(--font-mono);

@@ -4,9 +4,9 @@
   z-index: 1000;
   max-width: min(32rem, calc(100vw - 1rem));
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--bg-elev);
+  border: 1px solid var(--elevation-floating-border);
+  border-radius: var(--radius-md);
+  background: var(--elevation-floating-surface);
   color: var(--text);
   box-shadow: var(--shadow-md);
   font-size: var(--text-sm);
@@ -22,7 +22,8 @@
 .titlebar-shortcut {
   margin-left: var(--space-1);
   padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
+  background: var(--bg-panel);
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-family: var(--font-mono);

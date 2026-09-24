@@ -80,7 +80,6 @@
   align-items: center;
   gap: var(--space-1);
   padding: var(--space-2);
-  border-bottom: 1px solid var(--elevation-chrome-border);
   background: var(--bg);
   flex-shrink: 0;
   overflow-x: auto;
@@ -89,7 +88,6 @@
 .inspector-tab {
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
   color: var(--muted);
@@ -104,8 +102,7 @@
   border-radius: var(--radius-sm);
   transition:
     background var(--duration-fast) var(--ease),
-    color var(--duration-fast) var(--ease),
-    border-color var(--duration-fast) var(--ease);
+    color var(--duration-fast) var(--ease);
 }
 
 .inspector-tab:hover {
@@ -114,9 +111,8 @@
 }
 
 .inspector-tab[aria-selected="true"] {
-  color: var(--accent-soft);
+  color: var(--text);
   background: var(--bg-active);
-  border-bottom-color: var(--accent);
 }
 
 /* L'etichetta segue lo spazio: quando la barra è stretta resta la sola icona
@@ -135,8 +131,8 @@
  * di aspetto che le stanno attorno. --bg-elev è la superficie sollevata in
  * entrambi i temi. */
 .setting-row--theme {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   padding: var(--space-4);
 }
@@ -213,8 +209,8 @@
   min-width: 200px;
   max-width: 360px;
   flex: 1;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
+  background: var(--bg-panel);
+  border: 1px solid transparent;
   padding-inline: var(--space-6);
   text-align: left;
   justify-content: flex-start;
@@ -226,7 +222,7 @@
 .rail-shell {
   gap: var(--space-3);
   padding-bottom: var(--space-6);
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--elevation-chrome-border);
 }
 
 /* `.rail-btn` è la classe dei bottoni della rail: quelli shell e quelli delle
@@ -256,9 +252,8 @@
 }
 
 .rail-btn[aria-pressed="true"] {
-  color: var(--accent-soft);
+  color: var(--text);
   background: var(--bg-active);
-  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .rail-btn svg {

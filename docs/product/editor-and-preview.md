@@ -20,8 +20,12 @@ Il commutatore nella barra di ciascun riquadro legge la dichiarazione della
 propria superficie; con una sola modalità non mostra un selettore.
 Le scorciatoie seguono il riquadro attivo.
 
-Il tema di serie mantiene il lime per indicatori, focus e azioni primarie.
-La selezione usa un fondo neutro e un segno laterale; i titoli usano
+Il tema di serie è quieto: neutri caldi, una carta antracite al buio e avorio
+in luce (mai il nero o il bianco puri), e un accento salvia desaturato per
+focus e azioni primarie. La selezione del testo usa un fondo neutro; nella
+scocca la voce scelta si legge dal fondo, senza tacche d'accento. Le superfici
+che si aprono si posano con un moto lento e morbido; con il moto ridotto
+compaiono subito. I titoli usano
 l'inchiostro del documento in tutte e tre le modalità — solo i `#` restano
 sintassi colorata — e i link resi usano lo stesso inchiostro dei wikilink.
 Il ritmo verticale è lo stesso in Live e Lettura: un passo sotto ogni

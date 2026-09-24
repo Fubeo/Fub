@@ -27,7 +27,9 @@
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
-  transition: background var(--duration-fast) var(--ease);
+  transition:
+    background var(--duration-fast) var(--ease),
+    color var(--duration-fast) var(--ease);
 }
 .tree-row:hover {
   background: var(--bg-hover);
@@ -35,22 +37,14 @@
 /* La nota aperta. Lo stato si legge da dove è annunciato e non da una classe
    scritta accanto: nell'albero è il `treeitem` a essere selezionato — è lui a
    contenere il sottoalbero — fra le appuntate è la riga a essere «quella
-   corrente», che in una lista piatta si dice `aria-current`. */
+   corrente», che in una lista piatta si dice `aria-current`.
+   La dice il fondo, e basta: la barra d'accento che le stava accanto ripeteva
+   la stessa cosa in un secondo colore. I colori forzati la riportano dalla
+   struttura. */
 [role="treeitem"][aria-selected="true"] > .tree-row,
 .tree-row[aria-current="true"] {
   background: var(--bg-active);
   color: var(--text);
-}
-[role="treeitem"][aria-selected="true"] > .tree-row::before,
-.tree-row[aria-current="true"]::before {
-  content: "";
-  position: absolute;
-  left: var(--space-2);
-  top: var(--space-2);
-  bottom: var(--space-2);
-  width: 3px;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
 }
 .row-name {
   flex: 1;
