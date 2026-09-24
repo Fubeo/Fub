@@ -16,7 +16,7 @@ describe("il ricongiungimento delle bozze orfane", () => {
   interface TestBuffer {
     dirty: boolean;
     text: string;
-    base: WriteBase;
+    base: WriteBase | null;
   }
 
   class TestStore implements DraftBufferStore {
@@ -30,7 +30,7 @@ describe("il ricongiungimento delle bozze orfane", () => {
       return this.buffers.get(doc);
     }
 
-    restore(doc: string, text: string, base: WriteBase): void {
+    restore(doc: string, text: string, base: WriteBase | null): void {
       this.buffers.set(doc, { text, dirty: true, base });
     }
   }
@@ -85,16 +85,35 @@ describe("il ricongiungimento delle bozze orfane", () => {
     });
   });
 
-  it("senza buffer la bozza diventa il buffer, e chi non sapeva la base detta", () => {
+  it("senza buffer la bozza di una nota mai salvata diventa il buffer, e detta", () => {
     const buffer = new TestStore();
 
-    const rejoined = rejoinDrafts([draft("nuova.md", "il testo non salvato")], buffer);
+    const rejoined = rejoinDrafts(
+      [{ ...draft("nuova.md", "il testo non salvato"), exists: false }],
+      buffer,
+    );
 
     expect(rejoined).toHaveLength(1);
     expect(buffer.buffers.get("nuova.md")).toMatchObject({
       text: "il testo non salvato",
       dirty: true,
       base: { kind: "dictated" },
+    });
+  });
+
+  it("una bozza incerta su un file che c'è non detta: rientra senza base", () => {
+    const buffer = new TestStore([["nota.md", clean("il testo sul disco")]]);
+
+    const rejoined = rejoinDrafts(
+      [{ ...draft("nota.md", "il testo non salvato"), current: "la revisione del disco" }],
+      buffer,
+    );
+
+    expect(rejoined).toHaveLength(1);
+    expect(buffer.buffers.get("nota.md")).toMatchObject({
+      text: "il testo non salvato",
+      dirty: true,
+      base: null,
     });
   });
 

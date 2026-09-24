@@ -550,21 +550,24 @@ function registerCommands(): void {
     title: "commands.doc.conflict.mine",
     description: "commands.doc.conflict.mine.desc",
     layer: "document",
-    run: () => void resolveKeepingMine(),
+    run: () => void resolveKeepingMine(activeDoc()),
   });
   registerShellCommand({
     id: "shell.doc.conflict.theirs",
     title: "commands.doc.conflict.theirs",
     description: "commands.doc.conflict.theirs.desc",
     layer: "document",
-    run: () => void resolveDiscardingMine(),
+    run: () => void resolveDiscardingMine(activeDoc()),
   });
 }
 
 /// «Vince il mio testo»: la sessione esegue la decisione, questa funzione
 /// aggiorna soltanto ciò che la shell disegna.
-async function resolveKeepingMine(): Promise<void> {
-  const doc = activeDoc();
+///
+/// Il documento arriva da chi ha chiesto la decisione, non si rilegge qui: fra
+/// la conferma e la risoluzione il riquadro attivo può essere cambiato, e la
+/// scelta vale per la nota che il dialogo nominava.
+async function resolveKeepingMine(doc: string | null): Promise<void> {
   if (!doc) {
     notify(t("document.conflict_none"), "info");
     return;
@@ -577,8 +580,7 @@ async function resolveKeepingMine(): Promise<void> {
 /// documento. Gli editor seguono perché la sessione ha diffuso il testo
 /// autorevole alle superfici sottoscritte; qui restano il ridisegno della
 /// lettura e delle scritte di stato.
-async function resolveDiscardingMine(): Promise<void> {
-  const doc = activeDoc();
+async function resolveDiscardingMine(doc: string | null): Promise<void> {
   if (!doc) {
     notify(t("document.conflict_none"), "info");
     return;
@@ -587,6 +589,10 @@ async function resolveDiscardingMine(): Promise<void> {
   if (outcome.kind === "none") {
     notify(t("document.conflict_none"), "info");
     return;
+  }
+  // La lettura mancata lascia il conflitto aperto: la scelta si può ripetere.
+  if (outcome.kind === "discarded" && outcome.reload.kind === "unavailable") {
+    notify(t("document.reload_failed", { doc }), "guasto");
   }
   redrawReading(doc);
   drawSave();
@@ -1404,9 +1410,14 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
       showCanvasError(r, tab.doc, error);
       return;
     }
+    forgetFailedShow(r, tab, generation);
     throw error;
   }
   if (generation !== r.loadGeneration || r.shown !== tab) return;
+  // Durante le due attese un altro riquadro può aver cambiato la sessione, e
+  // la sottoscrizione non riporta ciò che è passato prima di lei: il testo da
+  // montare si prende adesso, senza attese fino a `attachSurface`.
+  const text = documentSessions.text(tab.doc) ?? source.text;
 
   let surface: EditorSurface;
   try {
@@ -1422,7 +1433,10 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     );
   } catch (error) {
     r.editorEl.replaceChildren();
-    if (source.formatId !== "canvas") throw error;
+    if (source.formatId !== "canvas") {
+      forgetFailedShow(r, tab, generation);
+      throw error;
+    }
     showCanvasError(r, tab.doc, error);
     return;
   }
@@ -1430,6 +1444,7 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   const mode = selectedMode(r);
   if (!mode) {
     destroySurface(r);
+    forgetFailedShow(r, tab, generation);
     throw new Error(`surface ${surface.surfaceId} declares no modes`);
   }
   surface.setMode(mode.id);
@@ -1437,10 +1452,13 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
   if (theme) surface.setTheme?.(theme);
   if (isMarkdownSurface(surface)) surface.setSyntaxForms(forms);
   try {
-    surface.setDoc(source.text);
+    surface.setDoc(text);
   } catch (error) {
     destroySurface(r);
-    if (source.formatId !== "canvas") throw error;
+    if (source.formatId !== "canvas") {
+      forgetFailedShow(r, tab, generation);
+      throw error;
+    }
     showCanvasError(r, tab.doc, error);
     return;
   }
@@ -1453,6 +1471,13 @@ async function show(r: Pane, tab: Tab | null): Promise<void> {
     mountDocumentAttachments(r, tab.doc);
     void mountInlineLinks(r, tab.doc);
   }
+}
+
+/// Un montaggio fallito non lascia la tab «mostrata»: senza superficie, la
+/// prossima sincronizzazione deve poter riprovare invece di trovarla già a
+/// posto. Vale solo per il caricamento ancora corrente.
+function forgetFailedShow(r: Pane, tab: Tab, generation: number): void {
+  if (generation === r.loadGeneration && r.shown === tab && !r.surface) r.shown = null;
 }
 
 async function mountInlineLinks(r: Pane, doc: string): Promise<void> {
@@ -1761,8 +1786,8 @@ function drawConflict(r: Pane, doc: string | null): void {
       notify(t("document.conflict.cancel"), "info");
       return;
     }
-    if (choice === "mine") await resolveKeepingMine();
-    else await resolveDiscardingMine();
+    if (choice === "mine") await resolveKeepingMine(current);
+    else await resolveDiscardingMine(current);
   };
   mine.addEventListener("click", () => void ask("mine"));
   theirs.addEventListener("click", () => void ask("theirs"));
@@ -2013,7 +2038,8 @@ async function reloadDocument(id: string): Promise<void> {
 export async function reloadCurrent(): Promise<void> {
   const doc = state.currentDoc;
   if (!doc) return;
-  await documentSessions.forceReload(doc);
+  const outcome = await documentSessions.forceReload(doc);
+  if (outcome.kind === "unavailable") notify(t("document.reload_failed", { doc }), "guasto");
   redrawReading(doc);
   drawSave();
   redrawTabs(doc);

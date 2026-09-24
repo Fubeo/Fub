@@ -99,6 +99,23 @@ describe("cosa entra nella webview", () => {
     expect(external("#sezione")).toBe(false);
   });
 
+  it("un indirizzo remoto travestito da relativo resta remoto", () => {
+    // Il parser URL del browser, con una base http/https, legge `\` come `/`
+    // e salta tab e a capo: queste forme non cominciano con `//`, ma ne sono
+    // l'equivalente.
+    for (const disguised of ["\\\\remoto.invalid/pixel.png","/\\remoto.invalid/pixel.png", "\\/remoto.invalid/x", "/\t/remoto.invalid/x"]) {
+      expect(isAllowedResource(disguised), disguised).toBe(false);
+      expect(isAllowedLink(disguised), disguised).toBe(false);
+      expect(external(disguised), disguised).toBe(true);
+    }
+    // I relativi veri restano tali, anche con un separatore alla Windows.
+    for (const relative of ["assets/foto.png", "../allegati/foto.png", "/assets/foto.png", "assets\\foto.png", "foto con spazi.png"]) {
+      expect(isAllowedResource(relative), relative).toBe(true);
+      expect(isAllowedLink(relative), relative).toBe(true);
+      expect(external(relative), relative).toBe(false);
+    }
+  });
+
   it("le due metà del prefisso sono la stessa espressione, non due", () => {
     // È la riga che tiene insieme lo scrivere e il cercare. Se qualcuno
     // prefissasse l'`id` e non il frammento — o li prefissasse in due modi —

@@ -199,7 +199,10 @@ autorevole o trasformare un cambio remoto in un undo locale.
 
 La `DocumentSession` accoda le scritture per documento. Il core applica la
 revisione di base. Un contenuto esterno più recente produce un conflitto
-esplicito.
+esplicito. Un conflitto non si ritenta da solo: autosave e flush aspettano la
+scelta dell'utente, e «Usa disco» scarta il buffer e la bozza solo dopo aver
+letto il file. Una bozza recuperata senza revisione di base, su un file che
+esiste, rientra direttamente in conflitto invece di sovrascriverlo.
 
 Il rilascio dell'ultima tab esegue il flush della scrittura e, se necessario,
 della bozza prima di chiudere la sessione; il lifecycle del riquadro e

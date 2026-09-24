@@ -849,6 +849,7 @@ const IT = { // --- la scocca --------------------------------------------------
 "document.save_conflict":
   "{doc} è cambiato su disco da quando l'hai aperto: non è stato scritto niente, e le tue modifiche sono ancora qui. Scegli quale testo tenere dalla palette dei comandi.",
 "document.conflict_none": "Nessun conflitto da risolvere su questo documento.",
+"document.reload_failed": "{doc} non è stato riletto dal disco: il testo e il suo stato restano quelli di prima.",
 "preview.open_failed": "Non riesco ad aprire «{page}»: {reason}",
 "preview.target_missing": "Il documento di destinazione non esiste.",
 "mermaid.diagram": "Diagramma Mermaid",
@@ -1791,6 +1792,7 @@ const EN: Record<Key, string> = { "app.skip_to_editor": "Skip to the editor",
 "document.save_conflict":
   "{doc} changed on disk since you opened it: nothing was written, and your edits are still here. Choose which text to keep from the command palette.",
 "document.conflict_none": "No conflict to resolve for this document.",
+"document.reload_failed": "{doc} could not be reread from disk: its text and state are unchanged.",
 "preview.open_failed": "Cannot open “{page}”: {reason}",
 "preview.target_missing": "The destination document does not exist.",
 "mermaid.diagram": "Mermaid diagram",

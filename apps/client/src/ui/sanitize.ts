@@ -234,7 +234,7 @@ export function isAllowedStyle(value: string): boolean {
 export function isAllowedLink(value: string): boolean {
   const v = value.trim();
   if (v === "" || v.startsWith("#")) return true;
-  if (!hasScheme(v)) return !v.startsWith("//"); // relativo sì, protocol-relative no
+  if (!hasScheme(v)) return staysRelative(v); // relativo sì, protocol-relative no
   try {
     return LINK_SCHEMES.has(new URL(v).protocol);
   } catch {
@@ -253,7 +253,7 @@ export const VAULT_SRC_ATTRIBUTE = "data-vault-src";
 export function isAllowedResource(value: string, remoteAllowed = false): boolean {
   const v = value.trim();
   if (v === "") return false;
-  if (!hasScheme(v)) return !v.startsWith("//");
+  if (!hasScheme(v)) return staysRelative(v);
   if (!remoteAllowed) return false;
   try {
     return LINK_SCHEMES.has(new URL(v).protocol);
@@ -265,7 +265,27 @@ export function isAllowedResource(value: string, remoteAllowed = false): boolean
 /// Un link che esce dall'app va aperto senza dargli in mano la finestra che lo
 /// ha aperto (`window.opener`) né il referrer.
 export function external(href: string): boolean {
-  return /^https?:/i.test(href.trim());
+  const v = href.trim();
+  if (!hasScheme(v)) return !staysRelative(v);
+  return /^https?:/i.test(v.replace(/[\t\n\r]/g, ""));
+}
+
+/// L'origine fittizia contro cui si risolve un riferimento senza schema. È
+/// `https` di proposito: nelle basi speciali il parser URL tratta `\` come
+/// `/` e salta tab e a capo, quindi `\\host/x` o `/\t/host/x` vi diventano
+/// indirizzi remoti come nella webview servita via http.
+const RELATIVE_BASE = new URL("https://fub.invalid/nota/");
+
+/// Un riferimento senza schema è relativo soltanto se il parser del browser —
+/// lo stesso che poi lo userà — lo lascia sulla stessa origine. Controllare il
+/// testo (`//`) non basta: le forme equivalenti sono più di quelle che si
+/// scrivono a mano.
+function staysRelative(v: string): boolean {
+  try {
+    return new URL(v, RELATIVE_BASE).origin === RELATIVE_BASE.origin;
+  } catch {
+    return false;
+  }
 }
 
 function hasScheme(v: string): boolean {

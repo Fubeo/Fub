@@ -1965,3 +1965,84 @@ describe("la palette flussa prima di un comando che scrive", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("i riquadri dopo un'attesa", () => {
+  /// Divide dal registro e non col tasto: una tastiera dei gesti precedenti,
+  /// su un `document` che nessuno smonta, riceverebbe anche lei l'accordo.
+  async function splitRight(): Promise<void> {
+    const registry = await import("./ui/commands");
+    await registry.allCommands().find((entry) => entry.id === "shell.pane.split.right")?.run?.();
+  }
+
+  /// Due riquadri: il primo su Benvenuto, il secondo su Riunione, col fuoco.
+  async function twoPanes(): Promise<void> {
+    await splitRight();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+    document.querySelector<HTMLElement>("#file-list .tree-row.folder")?.click();
+    await waitFor("la cartella si apre", () => rowsOfNote().length === 3);
+    [...document.querySelectorAll<HTMLElement>(".pane")][1]!
+      .dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    row("Riunione").click();
+    await waitFor(
+      "Riunione arriva nel secondo riquadro",
+      () => editorViews()[1]?.state.doc.toString().includes("Appunti") === true,
+    );
+    await settle();
+  }
+
+  it("il banner del conflitto risolve la nota che nomina, non quella col fuoco", async () => {
+    const host = await start(VAULT);
+    await twoPanes();
+    const views = editorViews();
+    views[0]!.dispatch({ changes: { from: 0, insert: "mio A " } });
+    views[1]!.dispatch({ changes: { from: 0, insert: "mio B " } });
+    await host.module.api.writeDocument("Benvenuto.md", "disco A\n", { kind: "dictated" });
+    await host.module.api.writeDocument("note/Riunione.md", "disco B\n", { kind: "dictated" });
+    const banners = () => [...document.querySelectorAll<HTMLElement>(".pane")]
+      .map((pane) => pane.querySelector<HTMLElement>("[data-banner='document.conflict.body']"));
+    await waitFor("entrambe le note vanno in conflitto", () => banners().every((b) => b && !b.hidden));
+
+    // Il fuoco resta sul secondo riquadro: si sceglie dal banner del primo.
+    const useDisk = banners()[0]!.querySelectorAll<HTMLButtonElement>("button")[1]!;
+    useDisk.click();
+    await waitFor("Benvenuto torna al disco", () => editorTexts()[0]?.startsWith("disco A") === true);
+    await settle();
+
+    expect(editorTexts()[1]).toContain("mio B");
+    expect(banners()[1]?.hidden, "il conflitto di Riunione resta da decidere").toBe(false);
+    expect(host.files()["note/Riunione.md"]).toBe("disco B\n");
+  });
+
+  it("una lettura fallita non lascia la linguetta mostrata senza editor", async () => {
+    const host = await start(VAULT);
+    const { openDocument, synchronize } = await import("./panels/document");
+    const restore = host.fault("readDocument");
+    await openDocument("note/Spesa.md").catch(() => {});
+    expect(textToVideo()).not.toContain("pane, latte");
+    restore();
+
+    await synchronize();
+    await settle();
+
+    expect(textToVideo()).toContain("pane, latte");
+  });
+
+  it("il secondo editor si monta col testo che la sessione ha adesso", async () => {
+    const host = await start(VAULT);
+    // Le forme sintattiche passano da `queryIndex`: frenarlo ferma il secondo
+    // riquadro dopo aver letto il buffer e prima di montare l'editor.
+    const unlock = host.throttle("queryIndex");
+    await splitRight();
+    await settle();
+    const first = editorViews()[0]!;
+    first.dispatch({ changes: { from: first.state.doc.length, insert: " [durante il montaggio]" } });
+    unlock();
+    await waitFor("il secondo riquadro si apre", () => editorViews().length === 2);
+    await settle();
+
+    const texts = editorTexts();
+    expect(texts[1]).toBe(texts[0]);
+    expect(texts[1]).toContain("[durante il montaggio]");
+  });
+});

@@ -91,7 +91,10 @@ export interface DraftBuffer {
 
 export interface DraftBufferStore {
   get(doc: string): DraftBuffer | undefined;
-  restore(doc: string, text: string, base: WriteBase): void;
+  /// `base === null`: la bozza non sa da quale versione del file sia partita e
+  /// il file c'è. Nessuna base la rende sicura da scrivere, quindi il buffer
+  /// rientra fermo in attesa di una scelta dell'utente.
+  restore(doc: string, text: string, base: WriteBase | null): void;
 }
 
 /// Il ricongiungimento, come decisione sul buffer: quali bozze rientrano nel
@@ -117,10 +120,15 @@ export function rejoinDrafts(
     // diversa — e sovrascriverlo la farebbe sparire. Una sessione pulita è
     // invece solo il disco riletto da poco, e la bozza è più nuova di lei.
     if (buffers.get(b.doc)?.dirty) continue;
+    // Detta soltanto la nota che non esiste: lì non c'è niente da coprire.
+    // `incerta` non detta mai — coprirebbe un file di cui non si sa niente.
+    const kind = caseOf(b);
     buffers.restore(
       b.doc,
       b.text,
-      b.base === null ? { kind: "dictated" } : { kind: "descends_from", value: b.base },
+      kind === "incerta"
+        ? null
+        : b.base === null ? { kind: "dictated" } : { kind: "descends_from", value: b.base },
     );
     rejoined.push(b);
   }

@@ -329,7 +329,13 @@ export class DocumentSession implements DraftBuffer {
     };
   }
 
-  restoreDraft(text: string, base: WriteBase): void {
+  /**
+   * `base === null` è una bozza di cui non si sa da quale versione del file sia
+   * partita, mentre il file c'è: nessuna base la rende sicura da scrivere. Il
+   * buffer rientra allora in conflitto, cioè fermo finché l'utente non sceglie
+   * fra il suo testo e il disco — «Mantieni il mio» è l'unica via che detta.
+   */
+  restoreDraft(text: string, base: WriteBase | null): void {
     if (!this.#isOpen()) return;
     this.#activityGeneration++;
     this.#externalGeneration++;
@@ -337,9 +343,9 @@ export class DocumentSession implements DraftBuffer {
     this.#clearSaveTimer();
     this.#clearDraftTimer();
     this.#state.text = text;
-    this.#state.base = copyBase(base);
+    this.#state.base = base === null ? { kind: "dictated" } : copyBase(base);
     this.#state.dirty = true;
-    this.#state.result = "ok";
+    this.#state.result = base === null ? "conflitto" : "ok";
     this.#state.echoes = 0;
     this.#emit({ kind: "changed", id: this.#id });
     this.#fanOut({ kind: "text", text });
@@ -372,58 +378,77 @@ export class DocumentSession implements DraftBuffer {
     if (this.#state.dirty) return { kind: "dirty" };
     return this.#reloadFromDisk(++this.#externalGeneration);
   }
-  /** Reread a document after an explicit command invalidated the buffer. */
+  /**
+   * Reread a document after an explicit command invalidated the buffer.
+   *
+   * Il buffer si scarta solo quando il disco è stato letto: una lettura fallita
+   * lascia testo, stato sporco ed esito com'erano, invece di spacciare per
+   * salvato un testo che il disco non contiene più. Nel frattempo niente parte
+   * da solo: i timer si fermano subito e si riarmano se la lettura manca.
+   */
   async forceReload(): Promise<ReloadResult> {
     if (!this.#isOpen()) return { kind: "missing" };
     this.#activityGeneration++;
     const generation = ++this.#externalGeneration;
-    this.#draftGeneration++;
     this.#clearSaveTimer();
     this.#clearDraftTimer();
-    this.#state.dirty = false;
-    this.#state.result = "ok";
-    this.#state.echoes = 0;
-    this.#emit({ kind: "changed", id: this.#id });
-    return this.#reloadFromDisk(generation);
+    const reload = await this.#reloadFromDisk(generation, () => {
+      this.#draftGeneration++;
+      this.#state.dirty = false;
+      this.#state.result = "ok";
+      this.#state.echoes = 0;
+      this.#emit({ kind: "changed", id: this.#id });
+      return true;
+    });
+    if (reload.kind === "unavailable" && this.#state.dirty) {
+      this.scheduleSave();
+      this.scheduleDraft();
+    }
+    return reload;
   }
 
+  /**
+   * «Usa disco» scarta il buffer e la bozza soltanto dopo che il disco è stato
+   * letto: se la lettura manca, il conflitto resta aperto con il testo
+   * dell'utente e la sua bozza, e la scelta si può ripetere.
+   */
   async resolveConflict(choice: ConflictChoice): Promise<ConflictResolutionResult> {
     if (!this.#isOpen() || this.#state.result !== "conflitto") return { kind: "none" };
     if (choice === "mine") {
       await this.saveKeepingMine();
       return { kind: "kept" };
     }
-    this.discardChanges();
-    await this.discardDraft();
-    return { kind: "discarded", reload: await this.#reloadFromDisk(++this.#externalGeneration) };
+    const reload = await this.#reloadFromDisk(++this.#externalGeneration, () => {
+      if (this.#state.result !== "conflitto") return false;
+      this.discardChanges();
+      return true;
+    });
+    if (reload.kind === "reloaded") await this.discardDraft();
+    return { kind: "discarded", reload };
   }
 
-  #reloadFromDisk(generation: number): Promise<DiskReloadResult> {
+  /**
+   * Legge il disco e lo applica come testo pulito. Senza `discard` la rilettura
+   * vale solo per un buffer pulito; con `discard` il chiamante scarta il buffer
+   * **dopo** la lettura riuscita e soltanto se è ancora valida, e un `false`
+   * rende la lettura superata.
+   */
+  #reloadFromDisk(generation: number, discard?: () => boolean): Promise<DiskReloadResult> {
     const id = this.#id;
+    const current = (): boolean =>
+      this.#isOpen() &&
+      this.#id === id &&
+      this.#externalGeneration === generation &&
+      (discard !== undefined || !this.#state.dirty);
     return this.#api.readDocument(id).then(
       (source) => {
-        if (
-          !this.#isOpen() ||
-          this.#id !== id ||
-          this.#externalGeneration !== generation ||
-          this.#state.dirty
-        ) {
+        if (!current() || (discard !== undefined && !discard())) {
           return { kind: "stale" as const };
         }
         const changed = this.#applyCleanReload(source.text, source.revision);
         return { kind: "reloaded" as const, text: this.#state.text, changed };
       },
-      () => {
-        if (
-          !this.#isOpen() ||
-          this.#id !== id ||
-          this.#externalGeneration !== generation ||
-          this.#state.dirty
-        ) {
-          return { kind: "stale" as const };
-        }
-        return { kind: "unavailable" as const };
-      },
+      () => (current() ? { kind: "unavailable" as const } : { kind: "stale" as const }),
     );
   }
 
@@ -646,8 +671,17 @@ export class DocumentSession implements DraftBuffer {
     return this.#state.lifecycle === "open";
   }
 
+  /**
+   * Gli eventi raccontano fatti già accaduti e non si aspettano: chi salva non
+   * resta in coda dietro al ridisegno della shell. Un ascoltatore asincrono che
+   * fallisce non disfa il fatto, ma non sparisce nemmeno come rifiuto orfano.
+   */
   #emit(event: DocumentSessionEvent): void {
-    this.#hooks.emit(event);
+    const pending = this.#hooks.emit(event);
+    if (!pending) return;
+    pending.catch((error: unknown) => {
+      console.error(`Fub: ascoltatore della sessione fallito su «${event.kind}»`, error);
+    });
   }
 
   #clearSaveTimer(): void {
@@ -668,12 +702,15 @@ export class DocumentSession implements DraftBuffer {
   }
 
   async #writeBuffer(id: string): Promise<void> {
+    // Un conflitto aspetta una decisione (`saveKeepingMine` o lo scarto): né
+    // l'autosave né un flush lo riprovano per conto loro.
     if (
       !this.#isOpen() ||
       this.#state.suspended ||
       this.#state.pendingDeletion ||
       this.#id !== id ||
-      !this.#state.dirty
+      !this.#state.dirty ||
+      this.#state.result === "conflitto"
     ) return;
     const text = this.#state.text;
     const base = copyBase(this.#state.base);
@@ -705,7 +742,7 @@ export class DocumentSession implements DraftBuffer {
       this.#state.dirty = false;
       void this.#dropDraft(this.#id);
     }
-    await this.#emit({ kind: "saved", id: this.#id });
+    this.#emit({ kind: "saved", id: this.#id });
   }
 
   #writeDraft(id: string): Promise<void> {
@@ -986,8 +1023,8 @@ export class DocumentSessionCollection implements DraftBufferStore {
     return (await this.#sessions.get(id)?.forceReload()) ?? { kind: "missing" };
   }
 
-  restore(id: string, text: string, base: WriteBase): void {
-    const session = this.#sessions.get(id) ?? this.#create(id, text, base);
+  restore(id: string, text: string, base: WriteBase | null): void {
+    const session = this.#sessions.get(id) ?? this.#create(id, text, base ?? { kind: "dictated" });
     session.restoreDraft(text, base);
   }
 

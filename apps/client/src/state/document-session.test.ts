@@ -258,6 +258,90 @@ describe("decisioni del ciclo di vita della sessione", () => {
     });
   });
 
+  it("una ricarica forzata fallita lascia testo e stato com'erano", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "modifica locale");
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => {
+      throw new Error("disco non leggibile");
+    });
+
+    const outcome = await sessions.forceReload("nota.md");
+
+    expect(outcome).toEqual({ kind: "unavailable" });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "modifica locale",
+      dirty: true,
+      result: "ok",
+      saveState: "non_salvato",
+    });
+  });
+
+  it("«usa disco» con la lettura fallita tiene aperti il conflitto e la bozza", async () => {
+    api.writeDocument = vi.fn(async () => {
+      throw { kind: "conflict", message: "revisione superata" };
+    });
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo locale");
+    await sessions.flush("nota.md");
+    api.readDocument = vi.fn(async (): Promise<DocumentSource> => {
+      throw new Error("disco non leggibile");
+    });
+
+    const outcome = await sessions.resolveConflict("nota.md", "theirs");
+
+    expect(outcome).toEqual({ kind: "discarded", reload: { kind: "unavailable" } });
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "testo locale",
+      dirty: true,
+      result: "conflitto",
+    });
+    expect(api.discardDraft).not.toHaveBeenCalled();
+  });
+
+  it("una bozza incerta rientra ferma: niente autosave, niente flush, finché non si sceglie", async () => {
+    const sessions = new DocumentSessionCollection(api);
+    await sessions.read("nota.md");
+
+    const rejoined = sessions.rejoin([
+      { doc: "nota.md", at: 1, base: null, exists: true, current: "rev-1", text: "testo vecchio" },
+    ]);
+
+    expect(rejoined).toHaveLength(1);
+    expect(sessions.inspect("nota.md")).toMatchObject({
+      text: "testo vecchio",
+      dirty: true,
+      result: "conflitto",
+    });
+    expect(setTimeout).not.toHaveBeenCalled();
+    await sessions.flushPendingSave();
+    await sessions.flush("nota.md");
+    expect(api.writeDocument).not.toHaveBeenCalled();
+
+    // «Mantieni il mio» è la scelta esplicita che detta.
+    await sessions.resolveConflict("nota.md", "mine");
+    expect(api.writeDocument).toHaveBeenCalledWith("nota.md", "testo vecchio", { kind: "dictated" });
+  });
+
+  it("un ascoltatore asincrono che fallisce non fa fallire il salvataggio", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const sessions = new DocumentSessionCollection(api);
+    sessions.subscribe((event) =>
+      event.kind === "saved" ? Promise.reject(new Error("ridisegno fallito")) : undefined,
+    );
+    await sessions.read("nota.md");
+    acceptText(sessions, "nota.md", "testo locale");
+
+    await expect(sessions.flush("nota.md")).resolves.toBe(false);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(sessions.inspect("nota.md")).toMatchObject({ dirty: false, result: "ok" });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("saved"), expect.any(Error));
+    error.mockRestore();
+  });
+
   it("sposta keep/discard nel proprietario autorevole", async () => {
     api.writeDocument = vi.fn(async () => {
       throw { kind: "conflict", message: "revisione superata" };
